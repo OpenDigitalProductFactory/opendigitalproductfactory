@@ -4,6 +4,7 @@ import {
   ORGANIZATION_JOIN_ACTION_TYPES,
   parseOrganizationJoinDispatchParameters,
   parseOrganizationJoinPackage,
+  parseOrganizationJoinPackageMaterial,
   parseOrganizationJoinRequest,
   requiredOrganizationTrustRole,
 } from "./organization-join-action";
@@ -28,6 +29,27 @@ function joinPackage(overrides: Record<string, string> = {}): string {
     "",
   ].join("\n");
 }
+
+describe("parseOrganizationJoinPackageMaterial", () => {
+  it("exposes the enrollment token to the member portal while the preview never carries it", () => {
+    const material = parseOrganizationJoinPackageMaterial(joinPackage(), NOW);
+    expect(material.ok).toBe(true);
+    if (!material.ok) throw new Error(material.reason);
+    expect(material.value.enrollmentToken).toBe("token-safe_123");
+    expect(material.value.intendedPeer).toBe("windows-dev.local");
+    expect(material.value.intendedSans).toEqual(["windows-dev.local", "192.168.1.42"]);
+    const preview = parseOrganizationJoinPackage(joinPackage(), NOW);
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) throw new Error(preview.reason);
+    expect("enrollmentToken" in preview.value).toBe(false);
+  });
+
+  it("refuses the same tampered, expired and malformed files the preview refuses", () => {
+    expect(parseOrganizationJoinPackageMaterial(joinPackage({ expires_at: String(Math.floor(NOW.getTime() / 1000) - 1) }), NOW)).toEqual({ ok: false, reason: "join-package-expired" });
+    expect(parseOrganizationJoinPackageMaterial(joinPackage({ enrollment_token: "bad token!" }), NOW)).toEqual({ ok: false, reason: "invalid-enrollment-authority" });
+    expect(parseOrganizationJoinPackageMaterial(["DPF_ORGANIZATION_JOIN_V1", "package_id=x"].join("\n"), NOW).ok).toBe(false);
+  });
+});
 
 describe("organization join action registry", () => {
   it("contains exactly the two founder-approved action types and binds their host roles", () => {

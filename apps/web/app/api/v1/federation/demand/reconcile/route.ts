@@ -7,7 +7,6 @@ import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
 import { validateFederationCloudEvent } from "@/lib/federation/cloud-event-guard";
 import { compareIncomingDemandDigest, type DemandDigestDb } from "@/lib/federation/demand-digest";
 import { bindPeerInstallationIdentity } from "@/lib/federation/channel-demand";
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const ERROR_STATUS: Record<string, number> = {
   missing_authorization: 401,
@@ -18,9 +17,6 @@ const ERROR_STATUS: Record<string, number> = {
 };
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  if (!envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
-    return NextResponse.json({ ok: false, error: "federation_exchange_disabled" }, { status: 404 });
-  }
   const authz = await resolveFederationLinkAuth(request.headers.get("authorization"));
   if (!authz.ok) {
     return NextResponse.json(

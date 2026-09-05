@@ -26,8 +26,11 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
   resolveAutonomousWorkTools: (...args: unknown[]) => autonomous.resolveTools(...args),
 }));
 vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: vi.fn() }));
+vi.mock("./mcp/external-approval-location-lookup", () => ({
+  withTaskRunApprovalLocation: vi.fn(async (value: unknown) => value),
+}));
 
-import { executeRemoteTaskAttempt } from "./mcp-task-execution";
+import { executeRemoteTaskAttempt, remoteTaskConversation } from "./mcp-task-execution";
 
 const writerToolName = "record_initiative_evidence";
 const parsed = {
@@ -117,6 +120,63 @@ describe("remote task terminal-writer postcondition", () => {
         executedToolCount: 2,
       },
     });
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      apiTokenId: "PAT-WRITER-DURATION",
+      tokenScope: "write",
+    }));
+  });
+
+  it("parks an approval-required terminal writer even when the tool did not project TaskRun state", async () => {
+    autonomous.execute.mockResolvedValue({
+      content: "The objective mapping is ready for exact approval.",
+      executedTools: [{
+        name: writerToolName,
+        args: { operation: "objective-mapping" },
+        result: {
+          success: false,
+          error: "approval_required",
+          message: "Approval is required.",
+          data: { envelopeId: "ENV-OBJECTIVE-MAPPING" },
+        },
+      }],
+    });
+
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-APPROVAL-PROJECTION", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-APPROVAL", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed,
+      idempotentReplay: true,
+      resumeKind: "terminal-writer",
+      capacityAttempt: 1,
+      terminalWriterAttempt: 2,
+    });
+
+    expect(db.updateTaskRun).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-MCP-APPROVAL-PROJECTION" },
+      data: expect.objectContaining({
+        status: "input-required",
+        completedAt: null,
+        progressPayload: expect.objectContaining({
+          requiresApproval: true,
+          approvalEnvelopeId: "ENV-OBJECTIVE-MAPPING",
+        }),
+      }),
+    });
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-APPROVAL-PROJECTION",
+        status: "input-required",
+        idempotentReplay: true,
+        resumedFromTerminalWriterWait: true,
+        requiresApproval: true,
+      },
+    });
+    expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "completed" }),
+    }));
   });
 });
 
@@ -222,5 +282,33 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     const outcome = await attempt();
 
     expect(outcome).toMatchObject({ result: { waitReason: "missing-terminal-writer" } });
+  });
+});
+
+describe("remoteTaskConversation", () => {
+  it("merges hydrated terminal-writer context into the sole system prompt", () => {
+    expect(remoteTaskConversation({
+      systemPrompt: "Review independently.",
+      prompt: "Record the exact governed receipt.",
+      resumeKind: "terminal-writer",
+      terminalWriterContext: "Immutable artifact evidence",
+    })).toEqual({
+      systemPrompt: "Review independently.\n\nImmutable artifact evidence",
+      chatHistory: [
+        { role: "user", content: "Record the exact governed receipt." },
+      ],
+    });
+  });
+
+  it("keeps an ordinary task system prompt and user history unchanged", () => {
+    expect(remoteTaskConversation({
+      systemPrompt: "Review independently.",
+      prompt: "Inspect the artifact.",
+    })).toEqual({
+      systemPrompt: "Review independently.",
+      chatHistory: [
+        { role: "user", content: "Inspect the artifact." },
+      ],
+    });
   });
 });

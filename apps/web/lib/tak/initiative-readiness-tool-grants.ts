@@ -63,6 +63,7 @@ export type InitiativeReviewBindingPacket = {
   itemId: string;
   gate: InitiativeRecoveryGate;
   expectedCurrentBaselineId: string | null;
+  eligibleEvidenceActivityIds?: string[];
   artifactRef: {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
@@ -124,7 +125,7 @@ export type InitiativeReviewerRecovery = {
      * caller hunting for missing grants instead of supplying what is actually
      * missing.
      */
-    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact";
+    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact" | "no-eligible-evidence";
     nextAction: string;
   }>;
   /**
@@ -152,7 +153,9 @@ export type InitiativeRecoveryDispatchContext = {
  * a pure routing decision over evidence it is handed.
  */
 export type InitiativeRecoveryCanonicalArtifact =
-  | { resolved: true; path: string; providerBlobId: string }
+  // A retained baseline already owns its immutable commit. Newly discovered
+  // branch artifacts omit it and inherit the Workroom head below.
+  | { resolved: true; path: string; providerBlobId: string; commitSha?: string }
   | { resolved: false; nextAction: string };
 
 type ReviewerRouteDb = {
@@ -178,6 +181,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
   dispatchContext: InitiativeRecoveryDispatchContext | null;
   canonicalArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
+  eligibleEvidenceActivityIds?: readonly string[];
 }): Promise<InitiativeReviewerRecovery> {
   const requirements = [...input.decision.blockers, ...input.decision.unmet];
   const requested: Array<{
@@ -271,6 +275,19 @@ export async function resolveInitiativeReviewerRecovery(input: {
         });
         continue;
       }
+      const eligibleEvidenceActivityIds = entry.gate === "objective-mapping"
+        ? normalizeEligibleEvidenceActivityIds(input.eligibleEvidenceActivityIds)
+        : null;
+      if (entry.gate === "objective-mapping" && !eligibleEvidenceActivityIds) {
+        escalations.push({
+          accountableRole: entry.role,
+          toolName: entry.route.toolName,
+          grant: entry.route.lane.grant,
+          reason: "no-eligible-evidence",
+          nextAction: "Record bounded passing evidence for this backlog item after the current objective baseline, then retry objective mapping. Do not invent or infer activity IDs.",
+        });
+        continue;
+      }
       const packet = requestCoworkerPacket({
         decision: input.decision,
         gate: entry.gate,
@@ -280,6 +297,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
         independent: entry.route.lane.independent,
         artifact: bindable && artifact?.resolved ? artifact : null,
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
+        eligibleEvidenceActivityIds,
       });
       reviewerRoutes.push({
         accountableRole: entry.role,
@@ -368,7 +386,7 @@ const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
   ARTIFACT_AUTHOR_REQUIRED: "Sign the design commit off (git commit -s), push the rewritten sha, then re-sync the workroom head with adopt_worktree.",
   CLASSIFICATION_REQUIRED: "Classify the demand before shaping it: set the investment bucket and score inputs on the backlog item.",
   AUTHORIZATION_DENIED: "The caller's authority does not cover this transition. Re-run from a principal holding the required capability.",
-  CAPSULE_IDENTITY_MISMATCH: "The workroom's recorded branch and head no longer match the claim. Re-sync with adopt_worktree(headBranch, headSha).",
+  CAPSULE_IDENTITY_MISMATCH: "The claim did not match the workroom's recorded identity. The reasons above name which fields differ: a stale branch or head re-syncs with adopt_worktree(headBranch, headSha), an expired lease renews with heartbeat_workroom, and a terminal or foreign-held room needs a new claim.",
   DELIVERY_EVIDENCE_REQUIRED: "Record delivery evidence for the merged change with record_execution_evidence.",
   ACCEPTANCE_EVIDENCE_REQUIRED: "Record acceptance evidence against the objective baseline before closing the item.",
   OBJECTIVE_RECONCILIATION_REQUIRED: "Reconcile delivered outcomes against the objective baseline with record_product_outcome_observation.",
@@ -408,6 +426,14 @@ function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadine
  * the whole need and the broader search grant is not issued.
  */
 const IMMUTABLE_READER_TOOL = "read_source_at_version";
+const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
+
+function normalizeEligibleEvidenceActivityIds(value: readonly string[] | undefined): string[] | null {
+  if (!value || value.length === 0 || value.length > MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS) return null;
+  const normalized = value.map((entry) => entry.trim());
+  if (normalized.some((entry) => !entry) || new Set(normalized).size !== normalized.length) return null;
+  return [...normalized].sort();
+}
 
 function requestCoworkerPacket(args: {
   decision: InitiativeReadinessDecision;
@@ -417,18 +443,20 @@ function requestCoworkerPacket(args: {
   dispatch: InitiativeRecoveryDispatchContext;
   independent: boolean;
   /** Null for a lane whose writer the binding contract does not cover. */
-  artifact: { path: string; providerBlobId: string } | null;
+  artifact: { path: string; providerBlobId: string; commitSha?: string } | null;
   expectedCurrentBaselineId: string | null;
+  eligibleEvidenceActivityIds: string[] | null;
 }) {
   const reviewConstraint = args.independent ? "independently " : "";
+  const reviewSha = args.artifact?.commitSha ?? args.dispatch.headSha;
   const mappingInstruction = args.gate === "objective-mapping"
-    ? " Map every current OBJ-* and AC-* statement to post-baseline evidence and submit the proposal with record_initiative_evidence(operation='objective-mapping')."
+    ? ` Map every current OBJ-* and AC-* statement to post-baseline evidence using only these eligible activity IDs: ${args.eligibleEvidenceActivityIds?.join(", ")}. Submit the proposal with record_initiative_evidence(operation='objective-mapping').`
     : "";
   const base = {
     targetAgent: args.targetAgentId,
-    objective: `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
+    objective: `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at Workroom head ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
       args.artifact
-        ? ` Read ${args.artifact.path} at that commit with ${IMMUTABLE_READER_TOOL},`
+        ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_READER_TOOL},`
         : ""
     } record a governed receipt only when the gate passes.${mappingInstruction}`,
     questionPacketSummary: `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`,
@@ -447,10 +475,13 @@ function requestCoworkerPacket(args: {
       itemId: args.decision.subject.id,
       gate: args.gate,
       expectedCurrentBaselineId: args.expectedCurrentBaselineId,
+      ...(args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
+        ? { eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds }
+        : {}),
       artifactRef: {
         kind: "repo-blob-at-commit" as const,
         repositoryFullName: args.dispatch.repositoryFullName,
-        commitSha: args.dispatch.headSha,
+        commitSha: reviewSha,
         path: args.artifact.path,
         providerBlobId: args.artifact.providerBlobId,
       },

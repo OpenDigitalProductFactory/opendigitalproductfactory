@@ -31,6 +31,8 @@
     "./installation-operating-intent": "./src/installation-operating-intent.ts",
     "./federation-pairing-types": "./src/federation-pairing-types.ts",
     "./federated-demand-contract": "./src/federated-demand-contract.ts",
+    "./federated-work-contract": "./src/federated-work-contract.ts",
+    "./federation-health": "./src/federation-health.ts",
     "./federated-operational-posture-contract": "./src/federated-operational-posture-contract.ts",
     "./federated-channel": "./src/federated-channel.ts",
     "./founder-shared-portfolio": "./src/founder-shared-portfolio.ts",

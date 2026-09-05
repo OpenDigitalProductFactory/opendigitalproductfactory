@@ -101,7 +101,7 @@ model TaxJurisdictionReference {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  registrations TaxRegistration[]
+  registrations    TaxRegistration[]
   mileageRatePlans MileageRatePlan[] @relation("MileageRatePlanJurisdiction")
   payrollTaxRules PayrollTaxRule[]
 
@@ -289,27 +289,27 @@ enum TaxDepositCadence {
 /// for the same reason the rates are: the authority sets them, they change, and
 /// an uncited figure must never drive a filing (BI-4EB27955).
 model TaxDepositSchedule {
-  id                 String            @id @default(cuid())
-  taxDepositScheduleId String          @unique
-  registrationId     String
-  cadence            TaxDepositCadence
-  effectiveFrom      DateTime
-  effectiveTo        DateTime?
+  id                   String            @id @default(cuid())
+  taxDepositScheduleId String            @unique
+  registrationId       String
+  cadence              TaxDepositCadence
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
   /// Total liability observed in the lookback window that produced `cadence`.
-  lookbackTotal      Decimal?
+  lookbackTotal        Decimal?
   /// The published threshold this determination was made against.
-  lookbackThreshold  Decimal?
-  lookbackStart      DateTime?
-  lookbackEnd        DateTime?
+  lookbackThreshold    Decimal?
+  lookbackStart        DateTime?
+  lookbackEnd          DateTime?
   /// Where the threshold came from. Without it the determination is unciteable.
-  sourceUrl          String?
-  determinedAt       DateTime          @default(now())
-  notes              String?
-  lifecycle          RecordLifecycle   @default(active)
-  lifecycleAt        DateTime?
-  lifecycleReason    String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  sourceUrl            String?
+  determinedAt         DateTime          @default(now())
+  notes                String?
+  lifecycle            RecordLifecycle   @default(active)
+  lifecycleAt          DateTime?
+  lifecycleReason      String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   registration TaxRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
@@ -405,13 +405,13 @@ enum TaxPeriodComponentKind {
 /// and adding payroll's two would have made four, with every family's columns
 /// dead weight on every other family's rows.
 model TaxObligationPeriodComponent {
-  id            String                 @id @default(cuid())
-  taxObligationPeriodComponentId String        @unique
-  periodId      String
-  componentKind TaxPeriodComponentKind
-  amount        Decimal                @default(0)
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
+  id                             String                 @id @default(cuid())
+  taxObligationPeriodComponentId String                 @unique
+  periodId                       String
+  componentKind                  TaxPeriodComponentKind
+  amount                         Decimal                @default(0)
+  createdAt                      DateTime               @default(now())
+  updatedAt                      DateTime               @updatedAt
 
   period TaxObligationPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
 
@@ -445,7 +445,7 @@ model TaxObligationPeriod {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  registration     TaxRegistration     @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registration     TaxRegistration                @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   artifacts        TaxFilingArtifact[]
   components       TaxObligationPeriodComponent[]
   issues           TaxIssue[]
@@ -1071,17 +1071,17 @@ model RecurringSchedule {
   updatedAt       DateTime  @updatedAt
 
   // The support contract this schedule renews, if it was minted from one.
-  subscriptionId String?             @unique
+  subscriptionId       String?             @unique
   // W19 fold (BI-99C76A90, pass §3.2-c): billing cadence delegates to the ONE
   // canonical RFC-5545 RecurrenceSchedule primitive. Expand phase: nullable and
   // dual-read (`frequency` stays authoritative until the operator-reviewed
   // backfill in the W19 migration plan doc flips the convention).
-  recurrenceScheduleId String?       @unique
-  account        CustomerAccount     @relation(fields: [accountId], references: [id])
-  createdBy      User?               @relation("RecurringScheduleCreations", fields: [createdById], references: [id])
-  subscription   Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  recurrenceSchedule RecurrenceSchedule? @relation(fields: [recurrenceScheduleId], references: [id], onDelete: Restrict)
-  lineItems      RecurringLineItem[]
+  recurrenceScheduleId String?             @unique
+  account              CustomerAccount     @relation(fields: [accountId], references: [id])
+  createdBy            User?               @relation("RecurringScheduleCreations", fields: [createdById], references: [id])
+  subscription         Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  recurrenceSchedule   RecurrenceSchedule? @relation(fields: [recurrenceScheduleId], references: [id], onDelete: Restrict)
+  lineItems            RecurringLineItem[]
 
   @@index([accountId])
   @@index([status])
@@ -1188,7 +1188,7 @@ model ExpenseItem {
   createdAt      DateTime @default(now())
 
   claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
-  trip Trip? @relation("TripExpenseItem")
+  trip  Trip?        @relation("TripExpenseItem")
 
   @@index([claimId])
 }
@@ -1216,7 +1216,7 @@ model FixedAsset {
   notes                   String?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
-  vehicle Vehicle? @relation("VehicleFixedAsset")
+  vehicle                 Vehicle?  @relation("VehicleFixedAsset")
 
   @@index([status])
   @@index([category])
@@ -1261,10 +1261,10 @@ model LedgerAccount {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent       LedgerAccount?  @relation("LedgerAccountTree", fields: [parentId], references: [id])
-  children     LedgerAccount[] @relation("LedgerAccountTree")
-  journalLines JournalLine[]
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent            LedgerAccount?     @relation("LedgerAccountTree", fields: [parentId], references: [id])
+  children          LedgerAccount[]    @relation("LedgerAccountTree")
+  journalLines      JournalLine[]
   payComponentLines PayComponentLine[] @relation("PayComponentLedgerAccount")
 
   @@unique([organizationId, code])
@@ -1306,6 +1306,38 @@ model JournalEntry {
   @@index([sourceType, sourceId])
 }
 
+enum FinancialFundRestriction {
+  unrestricted
+  temporarily_restricted @map("temporarily-restricted")
+  permanently_restricted @map("permanently-restricted")
+}
+
+/// Donor restriction and purpose dimension. The journal remains the monetary
+/// authority; this model gives posted lines and donations a durable fund key.
+model FinancialFund {
+  id             String                   @id @default(cuid())
+  fundRef        String                   @unique
+  organizationId String
+  fundKey        String
+  name           String
+  description    String?
+  restriction    FinancialFundRestriction @default(unrestricted)
+  purpose        String?
+  currency       String                   @default("USD")
+  effectiveFrom  DateTime                 @default(now())
+  effectiveTo    DateTime?
+  isActive       Boolean                  @default(true)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  journalLines JournalLine[]
+  donations    StorefrontDonation[]
+
+  @@unique([organizationId, fundKey])
+  @@index([organizationId, isActive, restriction])
+}
+
 model JournalLine {
   id                String   @id @default(cuid())
   journalEntryId    String
@@ -1319,14 +1351,20 @@ model JournalLine {
   // Optional analytical dimensions (ACDOCA-style rich line): who the posting relates to.
   customerAccountId String?
   contactId         String?
+  fundId            String?
+  subjectKindSlug   String?
+  subjectRef        String?
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())
 
-  journalEntry JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
-  account      LedgerAccount @relation(fields: [accountId], references: [id])
+  journalEntry JournalEntry   @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      LedgerAccount  @relation(fields: [accountId], references: [id])
+  fund         FinancialFund? @relation(fields: [fundId], references: [id], onDelete: Restrict)
 
   @@index([journalEntryId])
   @@index([accountId])
+  @@index([fundId])
+  @@index([subjectKindSlug, subjectRef])
 }
 
 // ---------------------------------------------------------------------------
@@ -1348,7 +1386,7 @@ enum MileageRatePurposeKind {
 
 model MileageRatePlan {
   id                String          @id @default(cuid())
-  mileageRatePlanId            String          @unique
+  mileageRatePlanId String          @unique
   organizationId    String
   jurisdictionRefId String?
   name              String
@@ -1370,17 +1408,17 @@ model MileageRatePlan {
 }
 
 model MileageRate {
-  id            String                @id @default(cuid())
-  mileageRateId        String                @unique
+  id            String                 @id @default(cuid())
+  mileageRateId String                 @unique
   planId        String
   purposeKind   MileageRatePurposeKind @default(business)
-  amountPerMile Decimal               @db.Decimal(10, 4)
-  currency      String                @default("USD")
+  amountPerMile Decimal                @db.Decimal(10, 4)
+  currency      String                 @default("USD")
   effectiveFrom DateTime
   effectiveTo   DateTime?
   sourceUrl     String?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
 
   plan  MileageRatePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   trips Trip[]          @relation("TripMileageRate")

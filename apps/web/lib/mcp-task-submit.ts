@@ -16,7 +16,10 @@ import { createTaskMessage } from "@/lib/tak/task-records";
 import {
   deterministicExternalTaskRunId,
   parseResourceWaitProjection,
+  REMOTE_TASK_REQUEST_DIGEST_VERSION,
+  matchingRemoteTaskRequestDigest,
   remoteTaskRequestDigest,
+  remoteTaskRequestMatches,
 } from "./mcp-task-capacity-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import {
@@ -35,13 +38,24 @@ import {
   type PersistedTerminalReaderExecution,
 } from "./mcp-task-terminal-writer-context";
 import {
+  enqueuePersistedRemoteTaskSubmission,
+  externalMcpTaskAsyncEnabled,
+  initialRemoteTaskDispatchProjection,
+} from "./mcp-task-background-dispatch";
+import { tasksLifecycleEnabled } from "./mcp/tasks-lifecycle";
+import {
   createTerminalWriterEscalation,
   recoverTerminalWriterEscalation,
   terminalWriterEscalationMessage,
   terminalWriterEscalationStructuredContent,
   terminalWriterEscalationWaitReason,
 } from "./mcp-task-terminal-writer-escalation";
-
+import {
+  parseTerminalWriterWait,
+  projectRemoteTaskReplay,
+  type TerminalWriterWait,
+} from "./mcp-task-replay-projection";
+import { durableInferenceTaskMetadata, parseDurableInferenceTaskRecipeId, type DurableInferenceTaskRecipeId } from "./mcp-task-durable-inference-contract";
 export {
   parseInitiativeReviewBinding,
   validateInitiativeReviewAuthorityScope,
@@ -83,6 +97,7 @@ export type RemoteTaskSubmitParams = {
   authorityScope?: string[];
   collaborationKind?: "handoff" | "summon";
   initiativeReviewBinding?: InitiativeReviewBinding;
+  recipeId?: DurableInferenceTaskRecipeId;
 };
 
 export type RemoteTaskSubmitAuth = {
@@ -95,6 +110,21 @@ export type RemoteTaskSubmitAuth = {
 export type RemoteTaskSubmitOutcome =
   | { kind: "invalid_params"; message: string }
   | { kind: "result"; result: Record<string, unknown> };
+
+const DURABLE_INFERENCE_SUBMIT_KEYS = new Set([
+  "agentId",
+  "routeContext",
+  "title",
+  "objective",
+  "prompt",
+  "idempotencyKey",
+  "riskClass",
+  "threadId",
+  "authorityScope",
+  "collaborationKind",
+  "initiativeReviewBinding",
+  "recipeId",
+]);
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -112,15 +142,20 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
   const prompt = optionalString(params["prompt"]);
   const idempotencyKey = optionalString(params["idempotencyKey"]);
   const riskClass = optionalString(params["riskClass"]);
-
+  const durableRecipe = parseDurableInferenceTaskRecipeId(params["recipeId"]);
   if (!agentId) return "tasks/submit requires params.agentId (string)";
   if (!routeContext) return "tasks/submit requires params.routeContext (string)";
   if (!objective) return "tasks/submit requires params.objective (string)";
   if (!prompt) return "tasks/submit requires params.prompt (string)";
   if (!idempotencyKey) return "tasks/submit requires params.idempotencyKey (string)";
-  if (!riskClass || !REMOTE_RISK_CLASSES.includes(riskClass as RemoteRiskClass)) {
-    return `tasks/submit requires params.riskClass (${REMOTE_RISK_CLASSES.join(" | ")})`;
+  if (!riskClass || !REMOTE_RISK_CLASSES.includes(riskClass as RemoteRiskClass)) return `tasks/submit requires params.riskClass (${REMOTE_RISK_CLASSES.join(" | ")})`;
+  if (!durableRecipe.ok) return durableRecipe.error;
+  const durableRecipeId = durableRecipe.data.recipeId;
+  if (durableRecipeId) {
+    const unknownKey = Object.keys(params).find((key) => !DURABLE_INFERENCE_SUBMIT_KEYS.has(key));
+    if (unknownKey) return `tasks/submit durable-inference recipe does not accept params.${unknownKey}`;
   }
+  if (durableRecipeId && riskClass !== "read") return "tasks/submit durable-inference recipe requires params.riskClass read";
 
   const authorityScope = Array.isArray(params["authorityScope"])
     ? params["authorityScope"].filter((value): value is string => typeof value === "string" && value.trim().length > 0)
@@ -128,9 +163,8 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
   const initiativeReviewBinding = params["initiativeReviewBinding"] === undefined
     ? undefined
     : parseInitiativeReviewBinding(params["initiativeReviewBinding"]);
-  if (params["initiativeReviewBinding"] !== undefined && !initiativeReviewBinding) {
-    return "tasks/submit requires a valid immutable initiativeReviewBinding";
-  }
+  if (params["initiativeReviewBinding"] !== undefined && !initiativeReviewBinding) return "tasks/submit requires a valid immutable initiativeReviewBinding";
+  if (durableRecipeId && (initiativeReviewBinding || (authorityScope?.length ?? 0) > 0)) return "tasks/submit durable-inference recipe does not accept tool authority or initiative review bindings";
   if (initiativeReviewBinding) {
     const scopeError = validateInitiativeReviewAuthorityScope(initiativeReviewBinding, authorityScope);
     if (scopeError) return `tasks/submit ${scopeError}`;
@@ -150,6 +184,7 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
     collaborationKind: params["collaborationKind"] === "handoff" || params["collaborationKind"] === "summon"
       ? params["collaborationKind"]
       : undefined,
+    ...(durableRecipeId ? { recipeId: durableRecipeId } : {}),
   };
 }
 
@@ -167,24 +202,6 @@ export type ExistingRemoteTask = {
   updatedAt: Date;
 };
 
-type TerminalWriterWait = {
-  schemaVersion: 1;
-  kind: "missing-terminal-writer";
-  writerToolName: string;
-  resumeMode: "same-taskrun";
-  attempt: number;
-  observedAt: string;
-  dispatchContract?: "required-tool-call";
-  noncompliance?: "prose-without-required-writer";
-};
-
-function storedRequestDigest(existing: ExistingRemoteTask): string | null {
-  const metadata = existing.a2aMetadata && typeof existing.a2aMetadata === "object"
-    ? existing.a2aMetadata as Record<string, unknown>
-    : {};
-  return optionalString(metadata["requestDigest"]);
-}
-
 function approvalEnvelopeIdFromWriterAttempt(result: unknown): string | null {
   if (!result || typeof result !== "object" || Array.isArray(result)) return null;
   const row = result as Record<string, unknown>;
@@ -194,88 +211,38 @@ function approvalEnvelopeIdFromWriterAttempt(result: unknown): string | null {
   return optionalString((data as Record<string, unknown>)["envelopeId"]);
 }
 
-function parseTerminalWriterWait(value: unknown): TerminalWriterWait | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const candidate = (value as Record<string, unknown>)["terminalWriterWait"];
-  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
-  const wait = candidate as Record<string, unknown>;
-  if (
-    wait["schemaVersion"] !== 1
-    || wait["kind"] !== "missing-terminal-writer"
-    || !optionalString(wait["writerToolName"])
-    || wait["resumeMode"] !== "same-taskrun"
-    || !Number.isInteger(wait["attempt"])
-    || Number(wait["attempt"]) < 1
-    || !optionalString(wait["observedAt"])
-    || (wait["dispatchContract"] !== undefined && wait["dispatchContract"] !== "required-tool-call")
-    || (wait["noncompliance"] !== undefined && wait["noncompliance"] !== "prose-without-required-writer")
-  ) return null;
-  return wait as TerminalWriterWait;
-}
-
-function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): RemoteTaskSubmitOutcome {
-  const storedDigest = storedRequestDigest(existing);
-  if (storedDigest && storedDigest !== requestDigest) {
-    return {
-      kind: "result",
-      result: {
-        content: remoteTaskContent(
-          "This requestKey is already bound to a different external coworker request. Retry with the original immutable packet or use a new requestKey.",
-        ),
-        structuredContent: {
-          error: "idempotency_conflict",
-          action: "Retry with the original immutable packet or use a new requestKey.",
-          taskRunId: existing.taskRunId,
-        },
-        isError: true,
-      },
-    };
-  }
-  const terminalWriterEscalation = recoverTerminalWriterEscalation(existing.progressPayload);
-  const terminalWriterWait = parseTerminalWriterWait(existing.progressPayload);
-  const resourceWait = parseResourceWaitProjection(existing.progressPayload);
-  return {
-    kind: "result",
-    result: {
-      taskRunId: existing.taskRunId,
-      status: existing.status,
-      idempotentReplay: true,
-      requiresApproval: existing.status === "input-required" && !terminalWriterWait && !terminalWriterEscalation,
-      ...(terminalWriterEscalation ? {
-        resumable: false,
-        waitReason: terminalWriterEscalationWaitReason(terminalWriterEscalation),
-        content: remoteTaskContent(terminalWriterEscalationMessage(terminalWriterEscalation)),
-        structuredContent: terminalWriterEscalationStructuredContent(terminalWriterEscalation),
-        isError: false,
-      } : terminalWriterWait ? {
-        resumable: true,
-        waitReason: terminalWriterWait.kind,
-      } : resourceWait ? {
-        resumable: true,
-        waitReason: "provider-capacity",
-      } : {}),
-      progressPayload: existing.progressPayload,
-      a2aMetadata: existing.a2aMetadata,
-    },
-  };
+function replayOrConflict(existing: ExistingRemoteTask, parsed: RemoteTaskSubmitParams): RemoteTaskSubmitOutcome {
+  const metadata = existing.a2aMetadata && typeof existing.a2aMetadata === "object"
+    && !Array.isArray(existing.a2aMetadata)
+    ? existing.a2aMetadata as Record<string, unknown>
+    : null;
+  const hasStoredDigest = optionalString(metadata?.["requestDigest"]) !== null;
+  return projectRemoteTaskReplay({
+    existing,
+    // Rows from before immutable request digests preserve the historical
+    // idempotent projection. Versioned rows must match their exact packet.
+    requestMatches: !hasStoredDigest || remoteTaskRequestMatches(existing.a2aMetadata, parsed),
+  });
 }
 
 async function reserveTerminalWriterReplay(input: {
   existing: ExistingRemoteTask;
-  requestDigest: string;
+  parsed: RemoteTaskSubmitParams;
   terminalToolPolicy: NonNullable<ReturnType<typeof createInitiativeReviewTerminalToolPolicy>>;
 }): Promise<{
   wait: TerminalWriterWait;
   readerExecutions: PersistedTerminalReaderExecution[];
   bootstrapReaderEvidence: boolean;
 } | null> {
-  if (storedRequestDigest(input.existing) !== input.requestDigest) return null;
+  if (!remoteTaskRequestMatches(input.existing.a2aMetadata, input.parsed)) return null;
   if (recoverTerminalWriterEscalation(input.existing.progressPayload)) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
-  const isProjectedWait = input.existing.status === "input-required" && existingWait !== null;
+  const isProjectedWait = existingWait !== null
+    && ["input-required", "stalled", "failed"].includes(input.existing.status);
   const isRecoverableCompletedExit = input.existing.status === "completed" && !existingWait;
   if (!isProjectedWait && !isRecoverableCompletedExit) return null;
+  if (existingWait && existingWait.writerToolName !== input.terminalToolPolicy.writerToolName) return null;
 
   const [readerExecutions, successfulWriter, writerAttempt] = await Promise.all([
     persistedTerminalReaderExecutions(input.existing.taskRunId),
@@ -304,17 +271,22 @@ async function reserveTerminalWriterReplay(input: {
     const proposalEnvelopeId = writerAttempt.success === false
       ? approvalEnvelopeIdFromWriterAttempt(writerAttempt.result)
       : null;
-    if (!proposalEnvelopeId) return null;
-    const declinedProposalEnvelope = await prisma.coworkerActionEnvelope.findFirst({
-      where: {
-        id: proposalEnvelopeId,
-        taskRunId: input.existing.taskRunId,
-        manifestActionId: input.terminalToolPolicy.writerToolName,
-        status: "declined",
-      },
-      select: { id: true },
-    });
-    if (declinedProposalEnvelope?.id !== proposalEnvelopeId) return null;
+    if (proposalEnvelopeId) {
+      const declinedProposalEnvelope = await prisma.coworkerActionEnvelope.findFirst({
+        where: {
+          id: proposalEnvelopeId,
+          taskRunId: input.existing.taskRunId,
+          manifestActionId: input.terminalToolPolicy.writerToolName,
+          status: "declined",
+        },
+        select: { id: true },
+      });
+      if (declinedProposalEnvelope?.id !== proposalEnvelopeId) return null;
+    } else if (
+      writerAttempt.success !== false
+      || !existingWait
+      || !["stalled", "failed"].includes(input.existing.status)
+    ) return null;
   }
 
   const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"
@@ -401,7 +373,7 @@ export async function resumeWaitingRemoteTask(input: {
         updatedAt: true,
       },
     }) as ExistingRemoteTask | null;
-    return latest ? replayOrConflict(latest, input.requestDigest) : null;
+    return latest ? replayOrConflict(latest, input.parsed) : null;
   }
   return executeRemoteTaskAttempt({
     run: {
@@ -428,6 +400,12 @@ export async function submitRemoteCoworkerTask(input: {
   const parsed = parseRemoteTaskSubmitParams(input.params);
   if (typeof parsed === "string") {
     return { kind: "invalid_params", message: parsed };
+  }
+  if (parsed.recipeId && !tasksLifecycleEnabled()) {
+    return {
+      kind: "invalid_params",
+      message: "tasks/submit durable-inference recipe requires the MCP Tasks lifecycle surface",
+    };
   }
 
   const { token, userContext } = input;
@@ -460,6 +438,9 @@ export async function submitRemoteCoworkerTask(input: {
       )
     : null;
   const taskRunId = deterministicExternalTaskRunId(token.tokenId, parsed.idempotencyKey);
+  const durableInitialDispatch = parsed.recipeId
+    ? initialRemoteTaskDispatchProjection(taskRunId, new Date())
+    : null;
   const existingQuery: Prisma.TaskRunFindFirstArgs = {
     where: {
       userId: token.userId,
@@ -486,14 +467,12 @@ export async function submitRemoteCoworkerTask(input: {
   const existing = await prisma.taskRun.findFirst(existingQuery);
 
   if (existing) {
-    const replay = replayOrConflict(existing, requestDigest);
+    const matchedRequestDigest = matchingRemoteTaskRequestDigest(existing.a2aMetadata, parsed);
+    const requestMatches = matchedRequestDigest !== null;
+    const replay = replayOrConflict(existing, parsed);
     if (
-      storedRequestDigest(existing) === requestDigest
-      && recoverTerminalWriterEscalation(existing.progressPayload)
-    ) return replay;
-    if (
-      storedRequestDigest(existing) === requestDigest
-      && existing.status === "input-required"
+      requestMatches
+      && (existing.status === "input-required" || (existing.status === "completed" && terminalToolPolicy))
     ) {
       const resumed = await resumeApprovedRemoteTask({
         existing,
@@ -504,22 +483,22 @@ export async function submitRemoteCoworkerTask(input: {
       if (resumed) return resumed;
     }
     if (
-      storedRequestDigest(existing) === requestDigest
+      requestMatches
       && existing.status === "submitted"
     ) {
       const resumed = await resumeWaitingRemoteTask({
         existing,
-        requestDigest,
+        requestDigest: matchedRequestDigest ?? requestDigest,
         token,
         userContext,
         parsed,
       });
       if (resumed) return resumed;
     }
-    if (storedRequestDigest(existing) === requestDigest && terminalToolPolicy) {
+    if (requestMatches && terminalToolPolicy) {
       const recovered = await recoverStaleApprovalOnReplay({
         existing,
-        requestDigest,
+        requestDigest: matchedRequestDigest ?? requestDigest,
         writerToolName: terminalToolPolicy.writerToolName,
         token,
         userContext,
@@ -527,10 +506,16 @@ export async function submitRemoteCoworkerTask(input: {
       });
       if (recovered) return recovered;
     }
+    // The retry budget limits inference, not exact approved execution or
+    // renewal requiring fresh owner approval through the existing authority path.
+    if (
+      requestMatches
+      && recoverTerminalWriterEscalation(existing.progressPayload)
+    ) return replay;
     const terminalWriterReservation = terminalToolPolicy
       ? await reserveTerminalWriterReplay({
           existing,
-          requestDigest,
+          parsed,
           terminalToolPolicy,
         })
       : null;
@@ -710,6 +695,8 @@ export async function submitRemoteCoworkerTask(input: {
       metadata: {
         idempotencyKey: parsed.idempotencyKey,
         requestDigest,
+        requestDigestVersion: REMOTE_TASK_REQUEST_DIGEST_VERSION,
+        requestObjective: parsed.objective,
         collaborationKind: parsed.collaborationKind ?? null,
         riskClass: parsed.riskClass,
         apiTokenId: token.tokenId,
@@ -718,29 +705,44 @@ export async function submitRemoteCoworkerTask(input: {
         requestedAgentId: parsed.agentId,
         requestedThreadId: parsed.threadId ?? null,
         initiativeReviewBinding: parsed.initiativeReviewBinding ?? null,
+        ...(parsed.recipeId ? { durableInference: durableInferenceTaskMetadata(parsed.recipeId) } : {}),
       },
+      ...(parsed.recipeId && durableInitialDispatch ? {
+        deferredSubmission: {
+          content: parsed.prompt,
+          metadata: {
+            source: "mcp.tasks/submit",
+            idempotencyKey: parsed.idempotencyKey,
+            riskClass: parsed.riskClass,
+            apiTokenId: token.tokenId,
+          },
+          progressPayload: { dispatch: durableInitialDispatch },
+        },
+      } : {}),
     });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
       const concurrent = await prisma.taskRun.findFirst(existingQuery);
-      if (concurrent) return replayOrConflict(concurrent, requestDigest);
+      if (concurrent) return replayOrConflict(concurrent, parsed);
     }
     throw error;
   }
 
-  await createTaskMessage({
-    taskRunId: run.taskRunId,
-    taskRunRecordId: run.id,
-    contextId: run.contextId,
-    role: "user",
-    content: parsed.prompt,
-    metadata: {
-      source: "mcp.tasks/submit",
-      idempotencyKey: parsed.idempotencyKey,
-      riskClass: parsed.riskClass,
-      apiTokenId: token.tokenId,
-    },
-  });
+  if (!parsed.recipeId) {
+    await createTaskMessage({
+      taskRunId: run.taskRunId,
+      taskRunRecordId: run.id,
+      contextId: run.contextId,
+      role: "user",
+      content: parsed.prompt,
+      metadata: {
+        source: "mcp.tasks/submit",
+        idempotencyKey: parsed.idempotencyKey,
+        riskClass: parsed.riskClass,
+        apiTokenId: token.tokenId,
+      },
+    });
+  }
 
   if (parsed.riskClass === "high-risk") {
     await prisma.taskRun.update({
@@ -765,6 +767,15 @@ export async function submitRemoteCoworkerTask(input: {
         content: remoteTaskContent("Remote task submitted and paused for employee approval."),
         isError: false,
       }, { taskRunId: run.taskRunId, callerUserId: token.userId }),
+    };
+  }
+
+  if (parsed.recipeId || externalMcpTaskAsyncEnabled()) {
+    return {
+      kind: "result",
+      result: await enqueuePersistedRemoteTaskSubmission(run.taskRunId, {
+        projectionAlreadyPersisted: Boolean(parsed.recipeId),
+      }),
     };
   }
 

@@ -149,19 +149,28 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // it joins the deliberation trail as the `architect` branch and rides
       // along on review.architectureAdvisory so the coworker can fold concerns
       // into the spec, but it cannot gate pass/fail.
+      // BI-B3AB7FC9: every reviewer call carries who asked and which build it
+      // is for. Without this the three calls metered as agentId "unknown" /
+      // contextKey "routed-call" — 30% of a day's spend that no screen could
+      // name while the local model runner sat at 100%.
+      const attribution = {
+        ...(context?.agentId ? { agentId: context.agentId } : {}),
+        ...(context?.threadId ? { threadId: context.threadId } : {}),
+        buildId,
+      };
       const [r1settled, r2settled, archSettled] = await Promise.allSettled([
-        routeAndCall(messages, "You are a design reviewer.", "internal"),
+        routeAndCall(messages, "You are a design reviewer.", "internal", attribution),
         routeAndCall(
           messages,
           "You are an independent design reviewer. Focus especially on security, data integrity, edge cases, and accessibility gaps the primary reviewer may have missed.",
           "internal",
-          { budgetClass: "minimize_cost" },
+          { ...attribution, budgetClass: "minimize_cost" },
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
           `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.`,
           "internal",
-          { budgetClass: "minimize_cost" },
+          { ...attribution, budgetClass: "minimize_cost" },
         ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
@@ -282,6 +291,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
             phase: "ideate",
             reviewerBranches,
             ...(context?.threadId ? { threadId: context.threadId } : {}),
+            ...(context?.agentId ? { agentId: context.agentId } : {}),
           });
         }
       } catch (err) {

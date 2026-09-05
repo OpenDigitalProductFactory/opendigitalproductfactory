@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 696,
+  "pageCount": 697,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -461,6 +461,7 @@
         "recurring-obligation-work-shape-and-documentation-robustness",
         "1-the-finding-in-one-picture",
         "2-what-was-verified-not-asserted",
+        "21-self-tasks-now-span-two-modules-runtime-2026-09-02",
         "3-the-generalization-obligations-are-a-family-not-a-feature",
         "31-coverage-of-the-four-watch-types-today",
         "32-vertical-and-archetype-nuance",
@@ -2447,6 +2448,7 @@
         "the-coordinator-is-the-workroom-process-overseer",
         "the-gate-which-scope-decides",
         "what-the-gate-does-to-the-turn",
+        "where-the-declared-shapes-live-runtime-2026-09-02",
         "what-is-actually-enforced-today",
         "the-shapes-next-steps-after-the-gate",
         "setting-the-posture-and-the-default-for-rooms",
@@ -3444,6 +3446,7 @@
         "the-descent-bound-how-far-the-directive-carries",
         "counterexample-the-58-hour-run-bi-980fe9f5",
         "what-still-requires-approval-even-under-autonomous-directives",
+        "direction-authority-and-recovery-are-different-questions",
         "what-the-agent-should-do-mid-autonomous-run",
         "anti-pattern",
         "related-principles"
@@ -3585,13 +3588,11 @@
       "publishedPortal": false,
       "anchors": [
         "rule",
-        "applies-to",
         "why",
         "how-to-apply",
-        "decision-dimensions",
+        "decision-dimensions-and-existing-enforcement",
         "examples",
-        "when-this-does-not-apply",
-        "see-also"
+        "related-principles"
       ]
     },
     "docs/founder-kernel/wiki/principles/consult-specs-first.md": {
@@ -3919,6 +3920,7 @@
       "publishedPortal": false,
       "anchors": [
         "governance-approves-evidence-not-provenance",
+        "evidence-must-serve-a-decision",
         "the-rule",
         "two-ways-this-gets-violated",
         "how-to-apply",
@@ -3937,11 +3939,10 @@
       "anchors": [
         "rule",
         "why",
-        "applies-to",
         "how-to-apply",
         "decision-dimensions",
         "examples",
-        "sources"
+        "related-principles"
       ]
     },
     "docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md": {
@@ -5145,6 +5146,7 @@
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
         "login",
+        "network-exposure-after-install",
         "day-to-day",
         "edge-node-whats-running-and-why",
         "llm-provider",
@@ -5172,6 +5174,7 @@
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
         "login",
+        "network-exposure-after-install",
         "day-to-day",
         "llm-provider",
         "voice-stt-tts",
@@ -5278,6 +5281,7 @@
         "quick-start",
         "what-the-installer-does",
         "login",
+        "network-exposure-after-install",
         "day-to-day",
         "declare-what-the-installation-is-for",
         "work-created-on-an-installation-lives-only-there",
@@ -5621,6 +5625,9 @@
         "how-an-installation-advertises-its-own-address",
         "local-network-peers-over-http",
         "same-company-installations",
+        "what-survives-a-reinstall",
+        "backlog-sync-between-your-own-installations",
+        "joining-is-the-only-step",
         "customer-and-reseller-operation",
         "founder-hub-business-management",
         "privacy-and-recovery-behavior"
@@ -8821,6 +8828,20 @@
         "quarantine-renames-the-key-it-does-not-retire-the-row",
         "preventing-recurrence",
         "related"
+      ]
+    },
+    "docs/runbooks/2026-09-05-security-sweep-credential.md": {
+      "publicHref": "/runbooks/2026-09-05-security-sweep-credential/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "security-sweep-credential-read-all-three-alert-surfaces",
+        "symptom",
+        "credential-order-what-the-workflows-try",
+        "operator-step-once-by-a-repository-admin",
+        "verify-the-sweep-is-complete",
+        "rollback"
       ]
     },
     "docs/runbooks/bet5-windows-self-upgrade.md": {
@@ -12287,6 +12308,9 @@
         "overview",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
+        "the-ward-for-a-shelter",
+        "rescue-operations",
+        "when-the-ward-is-full",
         "confirming-an-operational-suggestion",
         "which-installation-you-are-on",
         "correcting-the-identity",

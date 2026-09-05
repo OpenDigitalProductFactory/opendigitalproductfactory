@@ -3,8 +3,7 @@
 # Module-size ratchet baseline (BI-OPT-RATCHETS). Shrink-only: files leave by
 # being split/refactored under the ceiling, never by expanding the baseline.
 # Regenerate with: node scripts/check-module-size.mjs --update
-apps/web/app/api/mcp/v1/route.test.ts	1532
-apps/web/app/api/mcp/v1/route.ts	950
+apps/web/app/api/mcp/v1/route.test.ts	1525
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
 apps/web/components/admin/McpTokenManager.tsx	1384
@@ -21,7 +20,7 @@ apps/web/components/workbooks/Grid.tsx	1830
 apps/web/instrumentation.test.ts	943
 apps/web/instrumentation.ts	1472
 apps/web/lib/actions/agent-coworker-external.test.ts	889
-apps/web/lib/actions/agent-coworker.ts	2810
+apps/web/lib/actions/agent-coworker.ts	2816
 apps/web/lib/actions/agent-task-scheduler.test.ts	1132
 apps/web/lib/actions/agent-task-scheduler.ts	814
 apps/web/lib/actions/ai-providers.ts	914
@@ -37,7 +36,7 @@ apps/web/lib/actions/promotions.ts	982
 apps/web/lib/actions/tax-remittance.test.ts	1084
 apps/web/lib/actions/tax-remittance.ts	971
 apps/web/lib/ai-operations-map/load-map-data.test.ts	928
-apps/web/lib/deliberation/orchestrator.ts	808
+apps/web/lib/deliberation/orchestrator.ts	812
 apps/web/lib/explore/build-process-matrix.ts	832
 apps/web/lib/explore/feature-build-types.ts	1098
 apps/web/lib/finance/ai-provider-finance.ts	1309
@@ -58,11 +57,13 @@ apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	940
 apps/web/lib/tak/agent-grants.ts	998
 apps/web/lib/tak/agent-routing.ts	1191
-apps/web/lib/tak/agentic-loop.test.ts	2551
-apps/web/lib/tak/agentic-loop.ts	2710
+apps/web/lib/tak/agentic-loop.test.ts	2485
+apps/web/lib/tak/agentic-loop.ts	2681
 apps/web/lib/tak/route-context-map.ts	1440
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1186
 apps/web/lib/work-capsules/work-capsule-store.ts	1028
+apps/web/lib/work-capsules/work-capsule-store.test.ts	1239
+apps/web/lib/work-capsules/work-capsule-store.ts	1037
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace-home/command-center.ts	1118

@@ -112,6 +112,12 @@ const sessionCookieName = isSandboxEnv
 const publicUrl = process.env.PUBLIC_URL ?? "";
 const isHttps = publicUrl.startsWith("https://");
 
+// Exported for the automation sign-in route (BI-9369DEB5), which must issue
+// the SAME cookie under the SAME encoding salt so `auth()` reads it as a
+// normal session. One definition; the route never restates the rule.
+export const SESSION_COOKIE_NAME = sessionCookieName;
+export const SESSION_COOKIE_SECURE = isHttps;
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
   session: { strategy: "jwt" },

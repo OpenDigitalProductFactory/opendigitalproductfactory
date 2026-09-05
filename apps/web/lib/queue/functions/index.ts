@@ -127,6 +127,17 @@ import {
 import { indexIntegritySweep } from "./index-integrity-sweep";
 import { localModelInstall } from "./local-model-install";
 import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
+import {
+  mcpTaskRunDispatchReconciliation,
+  mcpTaskRunExecute,
+} from "./mcp-task-run-execute";
+import {
+  asyncInferenceOperationOutbox,
+  asyncInferenceOperationReconciliation,
+  asyncInferenceOperationRun,
+  asyncInferenceOperationTaskRunTransition,
+} from "./async-inference-operation";
+import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -196,6 +207,9 @@ export const scheduledFunctions = [
   indexIntegritySweep, // BI-D9C20A97: daily live-database btree/collation integrity sweep
   postmarkCallbackDispatchSweep,
   nonprodLeaseWaitReconciliation,
+  mcpTaskRunDispatchReconciliation,
+  asyncInferenceOperationReconciliation,
+  asyncInferenceOperationOutbox,
 ];
 
 export const eventFunctions = [
@@ -240,6 +254,10 @@ export const eventFunctions = [
   workPatternExperimentRun,
   dataControlOperationRecoveryRequested,
   nonprodCapacityAvailable,
+  mcpTaskRunExecute,
+  asyncInferenceOperationRun,
+  asyncInferenceOperationTaskRunTransition,
+  asyncOperationTaskHub,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

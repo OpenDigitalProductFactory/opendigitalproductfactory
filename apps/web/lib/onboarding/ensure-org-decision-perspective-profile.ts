@@ -4,6 +4,15 @@ import { DECISION_DOMAIN_CLASSES } from "@/lib/decision-perspective/types";
 
 /** Platform fallback our organization profiles chain to (material.ts:14). */
 export const ORG_PERSPECTIVE_FALLBACK_PROFILE_ID = "dpf-organizational-principles";
+/**
+ * The fallback profile's own version row. The kernel-consult ledger records a
+ * decision only when the governing profile has BOTH a profile row and a
+ * version row; the fallback used to be ensured as a profile alone, so every
+ * WWWD `principle_decide` on an install that resolved to it returned
+ * `ledger.recorded=false, reason: profile-not-provisioned` — a ruling nobody
+ * could cite (BI-218EC195). Mirrors DPF_ORGANIZATIONAL_PRINCIPLES_PROFILE.
+ */
+export const ORG_PERSPECTIVE_FALLBACK_VERSION_ID = `${ORG_PERSPECTIVE_FALLBACK_PROFILE_ID}-v1`;
 
 const PLAN_READINESS_DOMAIN_CLASS = "plan-readiness";
 const DEFAULT_AUTONOMY_POLICY = {
@@ -65,6 +74,22 @@ export async function ensureOrgDecisionPerspectiveProfile(
       autonomyPolicy: DEFAULT_AUTONOMY_POLICY,
       status: "active",
     },
+  });
+
+  await db.decisionPerspectiveProfileVersion.upsert({
+    where: { versionId: ORG_PERSPECTIVE_FALLBACK_VERSION_ID },
+    update: {},
+    create: {
+      versionId: ORG_PERSPECTIVE_FALLBACK_VERSION_ID,
+      profileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
+      versionNumber: 1,
+      materialFingerprint: `seed:${ORG_PERSPECTIVE_FALLBACK_PROFILE_ID}:v1`,
+      changeSummary: "Initial organizational principle fallback profile.",
+    },
+  });
+  await db.decisionPerspectiveProfile.update({
+    where: { profileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID },
+    data: { currentVersionId: ORG_PERSPECTIVE_FALLBACK_VERSION_ID },
   });
 
   await db.decisionPerspectiveProfile.upsert({

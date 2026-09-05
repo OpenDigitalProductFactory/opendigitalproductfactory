@@ -264,6 +264,12 @@ The entire animal surface in the shipped product is `/storefront/animals`:
 is a storefront surface — the public section, the storefront admin manager, the catalog API.
 There are no operational surfaces at all.
 
+One read-only staff surface has since been added on top of the same row: `/storefront/animals/waiting`,
+the **adoption waiting list** (BI-899D7F00) — every animal with status `available`, longest wait
+first, with whole days since `publishedAt`; future-dated listings sit last with no count, undated
+last of all, capped at the 100 longest-waiting and saying so. It is the newsletter-picking page
+the owner asked for five times; it adds no field and no model.
+
 Verified absent — searches over `packages/db/prisma/schema/*.prisma` returning zero:
 `StrayReport`/`FieldReport`/`IntakeRequest`, `Kennel`, `Euthan*`, `Vaccinat*`/`Immuniz*`,
 `Microchip`, `Foster`, `WalkIn`. Apparent hits for "tier" (`riskTier`, `hitlTier`) and
@@ -382,6 +388,31 @@ move, and why the two numbers are reported apart.
   `Unavailable` on 2026-08-27 because a hardcoded default recorded USD gifts as GBP; the writer
   was corrected and the tile now totals each currency instead of refusing outright. Worth
   recording: the refusal was always correct behaviour — the defect was upstream of it.
+
+**Re-verified on the next build, `v2026.09.02` — two rows firm up, the figure does not move.**
+
+- **10:00 medical.** §6c scored this partial because a `New event` control had appeared. On
+  `v2026.09.01` that control did not actually work: the dialog closed as though it had saved and
+  the POST returned `503`, so no slot was ever recorded. On `v2026.09.02` the same booking
+  **persists across a reload**. The row was right in the end, but it had been scored from the
+  presence of a control rather than from a saved record — worth naming, because *control exists*
+  and *write succeeds* are different measurements and only the second one is the step.
+- **16:00 numbers.** The cockpit now states the population: **`Animals in care — 6 animals · 4 on
+  hold · 1 available · 1 pending`**, ahead of any money, and the adoption recorded during the run
+  moved `Animals placed` to 1. Kennels-free is still unanswerable and intakes are still not
+  recorded as intakes, so the row stays partial.
+
+Operability stays **0.40**. Both changes improved a step that was already partial rather than
+converting one, which is the pattern this whole tranche has followed: the product has become
+markedly less misleading without becoming more capable. Nothing reaches *completed*, and the two
+steps still impossible — rounds and foster placement — are both waiting on the same keystone.
+
+**A measurement caution earned during this re-run.** Three apparent defects — a `503` on the
+calendar write, an animal status change that fired no request at all, and a "Reload to reconnect"
+banner — were all one thing: the portal was mid-upgrade and restarting underneath the run. Every
+one of them would have been filed as a product defect. Before recording a failed step, confirm the
+install is healthy and serving the build you think it is; a run against a restarting container
+measures the restart.
 
 **Still measured absent, and the reason:** no volunteer or foster-carer worker class on the People
 surface, no ward or foster-home work location, and no rescue role. The archetype declares all of
@@ -624,4 +655,4 @@ The archetype may be described as supported when:
 
 An archetype below **0.6 coverage** must not be described as supported in external material, and
 below **0.8 operability** must not be described as operable. Current: **0.05 coverage**
-(2026-08-25), **0.30 operability** (2026-08-26).
+(2026-08-25), **0.40 operability** (2026-09-01, §6c).

@@ -276,3 +276,54 @@ describe("a mask with nothing to redact does not fence the turn (BI-67CAF494)", 
     expect(result.routeContext.residencyPolicy).toBe("local_only");
   });
 });
+
+// BI-40EF7C44. A receipt could say a match landed at `messages[0].content` and
+// nothing more — ambiguous between a real user turn and a block the coworker
+// path prepended, which imply opposite fixes. `rawPayloadStored` is false by
+// design, so the payload cannot be read back to settle it. A LABEL can be
+// persisted where the content cannot.
+describe("a receipt says WHAT the matched message was, never what it said", () => {
+  const payload = (messageOrigins?: ("turn" | "thread-checkpoint" | "user-briefing")[]) =>
+    screenInferencePayload({
+      messages: [
+        { role: "user", content: "Reconcile the payroll against the invoice." },
+        { role: "user", content: "What needs my attention?" },
+      ],
+      ...(messageOrigins ? { messageOrigins } : {}),
+      systemPrompt: "You help with operations.",
+      taskType: "conversation",
+      routeContext: { sensitivity: "internal" },
+    });
+
+  it("labels the match with the origin the caller declared", () => {
+    const row = payload(["user-briefing", "turn"]).receipt.matchProvenance
+      ?.find((m) => m.path.startsWith("messages[0]"));
+
+    expect(row?.origin).toBe("user-briefing");
+  });
+
+  it("defaults an unlabelled message to a real turn", () => {
+    const row = payload().receipt.matchProvenance
+      ?.find((m) => m.path.startsWith("messages[0]"));
+
+    expect(row?.origin).toBe("turn");
+  });
+
+  it("changes no verdict — the label is diagnostic, not an input", () => {
+    const labelled = payload(["user-briefing", "turn"]);
+    const unlabelled = payload();
+
+    expect(labelled.receipt.routeEffect).toBe(unlabelled.receipt.routeEffect);
+    expect(labelled.receipt.measuredSensitivity).toBe(unlabelled.receipt.measuredSensitivity);
+    expect(labelled.receipt.classifiedDataClasses)
+      .toEqual(unlabelled.receipt.classifiedDataClasses);
+  });
+
+  it("still stores no payload values", () => {
+    const receipt = payload(["user-briefing", "turn"]).receipt;
+
+    expect(receipt.rawPayloadStored).toBe(false);
+    expect(JSON.stringify(receipt)).not.toContain("payroll");
+    expect(JSON.stringify(receipt)).not.toContain("invoice");
+  });
+});

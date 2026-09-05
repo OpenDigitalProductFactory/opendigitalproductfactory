@@ -43,6 +43,32 @@ function remoteTaskContent(text: string) {
   return [{ type: "text", text }];
 }
 
+function approvalRequiredEnvelopeId(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const result = value as Record<string, unknown>;
+  if (result["success"] !== false || result["error"] !== "approval_required") return null;
+  const data = result["data"];
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  return optionalString((data as Record<string, unknown>)["envelopeId"]);
+}
+
+export function remoteTaskConversation(input: {
+  systemPrompt: string;
+  prompt: string;
+  resumeKind?: "capacity" | "terminal-writer";
+  terminalWriterContext?: string;
+}): {
+  systemPrompt: string;
+  chatHistory: Array<{ role: "user"; content: string }>;
+} {
+  return {
+    systemPrompt: input.resumeKind === "terminal-writer" && input.terminalWriterContext
+      ? `${input.systemPrompt}\n\n${input.terminalWriterContext}`
+      : input.systemPrompt,
+    chatHistory: [{ role: "user", content: input.prompt }],
+  };
+}
+
 export async function executeRemoteTaskAttempt(input: {
   run: { id: string; taskRunId: string; contextId: string | null };
   threadId: string;
@@ -129,15 +155,18 @@ export async function executeRemoteTaskAttempt(input: {
     : input.resumeKind === "terminal-writer"
       ? { resumedFromTerminalWriterWait: true }
       : { resumedFromCapacity: true };
-  const effectiveSystemPrompt = input.resumeKind === "terminal-writer" && input.terminalWriterContext
-    ? `${agent.systemPrompt}\n\n${input.terminalWriterContext}`
-    : agent.systemPrompt;
+  const conversation = remoteTaskConversation({
+    systemPrompt: agent.systemPrompt,
+    prompt: parsed.prompt,
+    resumeKind: input.resumeKind,
+    terminalWriterContext: input.terminalWriterContext,
+  });
 
   try {
     const result = await executeAutonomousAgenticLoop({
-      systemPrompt: effectiveSystemPrompt,
+      systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: [{ role: "user", content: parsed.prompt }],
+      chatHistory: conversation.chatHistory,
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,
@@ -148,6 +177,7 @@ export async function executeRemoteTaskAttempt(input: {
       threadId: input.threadId,
       taskRunId: run.taskRunId,
       apiTokenId: token.tokenId,
+      tokenScope: token.capability,
       taskType: "external-mcp",
       agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
       ...(effortWarrant ? { effortWarrant } : {}),
@@ -172,12 +202,22 @@ export async function executeRemoteTaskAttempt(input: {
       ? null
       : await prisma.taskRun.findUnique({
           where: { taskRunId: run.taskRunId },
-          select: { status: true },
+          select: { status: true, progressPayload: true },
         });
+    // The loop is not trusted to self-report a missing writer: main enforces this
+    // at the completion boundary (#4925, #4930) so a review cannot pass without
+    // the governed writer having been attempted. Ported verbatim into the async
+    // flow, which previously relied on result.failure alone.
     const terminalWriterWasAttempted = terminalToolPolicy
       ? (result.executedTools ?? []).some((tool) => tool.name === terminalToolPolicy.writerToolName)
         || result.proposal?.name === terminalToolPolicy.writerToolName
       : false;
+    const terminalWriterApprovalEnvelopeId = terminalToolPolicy
+      ? (result.executedTools ?? [])
+          .filter((tool) => tool.name === terminalToolPolicy.writerToolName)
+          .map((tool) => approvalRequiredEnvelopeId(tool.result))
+          .find((envelopeId): envelopeId is string => envelopeId !== null) ?? null
+      : null;
     const terminalWriterMissing = terminalToolPolicy !== null && !terminalWriterWasAttempted;
     // BI-8B8731EE: a resource wait is NOT a writer-contract failure, and this
     // branch would otherwise swallow it. `terminalWriterMissing` is true for any
@@ -186,6 +226,42 @@ export async function executeRemoteTaskAttempt(input: {
     // unreachable and every deferral was reported as a missing receipt writer.
     // Let the resource wait win; it resumes on the same TaskRun either way.
     const resourceWaitOwnsThisTurn = preInferenceResourceWait(result) !== null;
+    if (terminalWriterApprovalEnvelopeId && terminalToolPolicy) {
+      const priorProgress = currentRun?.progressPayload
+        && typeof currentRun.progressPayload === "object"
+        && !Array.isArray(currentRun.progressPayload)
+        ? currentRun.progressPayload as Record<string, unknown>
+        : {};
+      await prisma.taskRun.update({
+        where: { taskRunId: run.taskRunId },
+        data: {
+          status: "input-required",
+          completedAt: null,
+          progressPayload: {
+            ...priorProgress,
+            summary: result.content,
+            riskClass: parsed.riskClass,
+            executedToolCount: result.executedTools?.length ?? 0,
+            requiresApproval: true,
+            approvalEnvelopeId: terminalWriterApprovalEnvelopeId,
+            ...resumedFlag,
+          },
+        },
+      });
+      return {
+        kind: "result",
+        result: await withTaskRunApprovalLocation({
+          taskRunId: run.taskRunId,
+          status: "input-required",
+          idempotentReplay: input.idempotentReplay,
+          ...resumedFlag,
+          requiresApproval: true,
+          content: remoteTaskContent(result.content),
+          executedToolCount: result.executedTools?.length ?? 0,
+          isError: false,
+        }, { taskRunId: run.taskRunId, callerUserId: token.userId }),
+      };
+    }
     if (
       !resourceWaitOwnsThisTurn
       && (result.failure?.kind === "terminal-writer-missing" || terminalWriterMissing)

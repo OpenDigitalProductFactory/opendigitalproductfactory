@@ -44,11 +44,21 @@ principleOverlapScan:
 
 Operator-ratified 2026-05-18 in the PR #761 discussion, when evaluating how to handle a draft stuck in `ideate` after the implementation PR had already landed independently. The principle-based answer: *use the gates with the available evidence; never mark complete to bypass the gates.*
 
+## Evidence must serve a decision
+
+Evidence exists to resolve a named uncertainty, verify a meaningful claim, or protect a concrete constraint. Required fields, receipt counts, and reviewer counts do not justify themselves. Before adding or retaining a blocking step, identify the decision or protection it serves, what information could change the outcome, and why existing evidence does not suffice. This is a design test, not another required form.
+
+Remove, consolidate, or automate steps that add no decision value or necessary protection. Reuse valid evidence by reference; do not make contributors rewrite identical facts into successive formats or obtain duplicate reviews merely to advance status. Reopen only the evidence affected by a changed artifact, assumption, risk, or authority. Scale verification to consequence, reversibility, uncertainty, and changed behavior; additional collection stops when it would not change the decision or satisfy a still-unmet protection.
+
+An infrastructure failure is not an adverse judgment of the artifact. Report it as unverified or inconclusive and use the supported recovery path. Never fabricate a receipt, a test pass, or an independent finding to make status advance. Independence and actual permission constraints remain valid; the producing client or brand does not determine evidence quality.
+
+Judge the process by outcomes, defects prevented, elapsed time, rework, and human attention consumed. Repeated approvals and stalled work are reasons to examine the process itself. Founder correction: 2026-09-05, BI-DC0F14E0.
+
 ## The rule
 
 When a phase gate is invoked:
 
-1. **Read the evidence fields the gate requires** (`designDoc`, `buildPlan`, `verificationOut`, `acceptanceMet`, `phaseHandoff`, etc.).
+1. **Read the relevant evidence for the gate's named decision or protection** (`designDoc`, `buildPlan`, `verificationOut`, `acceptanceMet`, `phaseHandoff`, etc.).
 2. **Run the gate's evaluation against that evidence** — does it pass on quality, completeness, and the gate's specific predicates?
 3. **Advance if the evaluation passes; block if it fails.** The decision is identical regardless of who or what produced the evidence.
 

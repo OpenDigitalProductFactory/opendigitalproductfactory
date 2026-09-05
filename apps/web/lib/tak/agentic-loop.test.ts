@@ -7,7 +7,6 @@ import {
   buildRepeatedQuestionNudge,
   buildRepeatedToolStopMessage,
   buildRuntimeLimitToolLoopMessage,
-  buildMaxIterationsExhaustedMessage,
   detectToolRefusedDespiteAvailability,
   phaseRequiresToolCall,
   detectUnsavedEvidence,
@@ -279,71 +278,6 @@ describe("buildRuntimeLimitToolLoopMessage (BI-0C19AFDD)", () => {
 // configured provider is active but wasn't eligible" (banner) and "My usual AI
 // was unavailable" (this message). The message branched on the `downgraded`
 // boolean, which conflated a dispatch failure with pre-dispatch ineligibility.
-describe("buildMaxIterationsExhaustedMessage (BI-F4D3B9E9d)", () => {
-  const anyTools = [{ name: "query_backlog", result: { ok: true } as never }];
-
-  it("says 'unavailable' only when a dispatch actually failed", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "provider-unavailable",
-      executedTools: anyTools,
-    });
-    expect(msg).toContain("My usual AI was unavailable");
-    expect(msg).toContain("query_backlog");
-  });
-
-  it("never claims 'unavailable' when the provider was merely ineligible", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "not-eligible",
-      executedTools: anyTools,
-    });
-    // The exact contradiction with the downgrade banner.
-    expect(msg).not.toContain("was unavailable");
-    expect(msg).toContain("wasn't a fit for this particular request");
-  });
-
-  it("does not tell an owner to connect a provider they already have connected", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "not-eligible",
-      executedTools: anyTools,
-    });
-    // Old copy: "Connecting a stronger provider (Claude, Gemini, or OpenAI)…"
-    expect(msg).not.toMatch(/connecting a stronger provider/i);
-    expect(msg).toMatch(/shorter request/i);
-  });
-
-  it("points at restoring the failed provider when one genuinely failed", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "provider-unavailable",
-      executedTools: anyTools,
-    });
-    expect(msg).toContain("Platform > AI > Providers");
-  });
-
-  it("adds no downgrade lead at all on a healthy-provider exhaustion", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: null,
-      executedTools: anyTools,
-    });
-    expect(msg).not.toMatch(/my usual ai/i);
-    expect(msg).toMatch(/^I made several attempts/);
-    expect(msg).toMatch(/smaller piece/i);
-  });
-
-  it("falls back to a generic work note when no tools ran", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: null,
-      executedTools: [],
-    });
-    expect(msg).toContain("I worked through several attempts");
-  });
-
-  it("always names the safety limit rather than an opaque failure", () => {
-    for (const downgradeReason of ["provider-unavailable", "not-eligible", null] as const) {
-      const msg = buildMaxIterationsExhaustedMessage({ downgradeReason, executedTools: anyTools });
-      expect(msg).toContain("safety limit");
-    }
-  });
-});
 
 describe("buildToolSessionHintMessage — review-fail veto + tool-error notes in the messages tail", () => {
   // BI-56804810: these notes now ride in a per-turn user message (not tool
@@ -1120,7 +1054,6 @@ describe("runAgenticLoop", () => {
       success: true,
       message: "Found files",
     });
-
     await runAgenticLoop({
       ...baseParams,
       taskRunId: "TR-SCHED-TESTRUN",
@@ -1163,13 +1096,14 @@ describe("runAgenticLoop", () => {
       ...baseParams,
       taskRunId: "TR-MCP-TESTRUN",
       apiTokenId: "tok_remote",
+      tokenScope: "write",
     });
-
     expect(governedExecuteTool).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
           taskRunId: "TR-MCP-TESTRUN",
           apiTokenId: "tok_remote",
+          tokenScope: "write",
         }),
       }),
     );

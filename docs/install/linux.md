@@ -156,6 +156,23 @@ Login credentials are written to `.env` in the install directory:
 - **Password:** `ADMIN_PASSWORD` in `.env` (randomly generated on first
   install). Change it after first login.
 
+## Network exposure after install
+
+A default install listens on this machine only. Every published port (the
+portal on 3000 and 1455, postgres 5432, redis 6379, inngest 8288, the sandbox
+on 3035) binds to `127.0.0.1`, so nothing on your LAN can reach the portal
+or its admin login. This is set by one value in the install's `.env`:
+
+```
+DPF_HOST_BIND_ADDRESS=127.0.0.1
+```
+
+To serve the LAN deliberately, set it to `0.0.0.0` and run `docker compose
+up -d` again. An install created before this key existed keeps the exposure
+it already had: the upgrade writes `0.0.0.0` into its `.env` and says so in a
+comment, so LAN access does not vanish silently. Remote access without LAN
+exposure goes through `PUBLIC_URL` and the edge path.
+
 ## Day-to-day
 
 | Task | Command |

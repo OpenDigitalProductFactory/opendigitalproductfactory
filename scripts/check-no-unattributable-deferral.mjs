@@ -38,28 +38,43 @@ import { dirname, join } from "node:path";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** How many lines around the `status: "deferred"` line count as the same write. */
-const WINDOW = 12;
+/** How many lines around the `status:` line count as the same write. 24, not
+ *  12: the work-sync mirror built its `data` object 19 lines above the upsert
+ *  that consumed it, and the guard read the two as unrelated. */
+const WINDOW = 24;
 
 const SCOPE_RE = /^(apps\/web\/.*|packages\/[^/]+\/src\/.*)\.tsx?$/;
 const TEST_RE = /\.(test|spec)\.tsx?$/;
 const DEFERRED_RE = /status:\s*["']deferred["']/;
+// A status copied through from another record — `status: item.status`,
+// `status: input.status`, `status: row.status`. This is the second class the
+// guard exists for (BI-9DA5F179, 2026-09-02): the same-organization work-sync
+// mirror copied a peer's `deferred` verbatim and parked 18 items with nothing
+// attached, and no literal "deferred" appeared anywhere in the file. A
+// pass-through status can be `deferred` at runtime, so it must carry (or
+// spread) the deferral exactly as a literal write must.
+const PASSTHROUGH_STATUS_RE = /\bstatus:\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.status\b/;
 // A BacklogItem write, as opposed to a return value or a `where` filter that
 // merely mentions the same string.
 const BACKLOG_WRITE_RE = /backlogItem\s*\.\s*(update|updateMany|create|createMany|upsert)/i;
 const ATTRIBUTED_RE = /deferReason|\.\.\.\s*\w*[Dd]efer\w*/;
+// A `payload: { ..., status: x.status }` line is a JSON snapshot column on a
+// provenance row (FederatedRecordMirror), not the BacklogItem's own status.
+const SNAPSHOT_LINE_RE = /\bpayload\s*:\s*\{/;
 
 export function findUnattributableDeferrals(path, text) {
   const lines = text.split(/\r?\n/);
   const hits = [];
   lines.forEach((line, index) => {
-    if (!DEFERRED_RE.test(line)) return;
+    const literal = DEFERRED_RE.test(line);
+    const passthrough = !literal && PASSTHROUGH_STATUS_RE.test(line) && !SNAPSHOT_LINE_RE.test(line);
+    if (!literal && !passthrough) return;
     const from = Math.max(0, index - WINDOW);
     const to = Math.min(lines.length, index + WINDOW + 1);
     const window = lines.slice(from, to).join("\n");
     if (!BACKLOG_WRITE_RE.test(window)) return; // not a BacklogItem write
     if (ATTRIBUTED_RE.test(window)) return; // carries or spreads the deferral
-    hits.push({ path, line: index + 1, text: line.trim() });
+    hits.push({ path, line: index + 1, text: line.trim(), kind: literal ? "literal" : "passthrough" });
   });
   return hits;
 }

@@ -49,6 +49,7 @@ function canOpen(
 export function buildBreadcrumbTrail(
   pathname: string,
   capabilities: ReadonlySet<string>,
+  labelOverrides: Readonly<Record<string, string>> = {},
 ): Crumb[] {
   const record = getRouteNavRecord(pathname);
 
@@ -60,7 +61,7 @@ export function buildBreadcrumbTrail(
     while (current && !seen.has(current.path)) {
       seen.add(current.path);
       if (canOpen(current.capabilityKey, capabilities)) {
-        trail.unshift({ label: current.label, href: current.path });
+        trail.unshift({ label: labelOverrides[current.key] ?? current.label, href: current.path });
       }
       if (current.parentPath === current.path) break;
       current = getRouteNavRecord(current.parentPath);
@@ -84,7 +85,13 @@ export function buildBreadcrumbTrail(
   return trail;
 }
 
-export function ShellBreadcrumb({ capabilities }: { capabilities: readonly string[] }) {
+export function ShellBreadcrumb({
+  capabilities,
+  labelOverrides = {},
+}: {
+  capabilities: readonly string[];
+  labelOverrides?: Readonly<Record<string, string>>;
+}) {
   const pathname = usePathname();
   const granted = useMemo(() => new Set(capabilities), [capabilities]);
 
@@ -93,7 +100,7 @@ export function ShellBreadcrumb({ capabilities }: { capabilities: readonly strin
   // EP-NAV-COHERENCE P5 (BI-74158F1A).
   if (pathname.startsWith("/portfolio")) return null;
 
-  const trail = buildBreadcrumbTrail(pathname, granted);
+  const trail = buildBreadcrumbTrail(pathname, granted, labelOverrides);
 
   // A single crumb (you are on a domain home) needs no trail.
   if (trail.length < 2) return null;

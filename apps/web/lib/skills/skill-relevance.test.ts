@@ -115,7 +115,7 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
   /** Frozen per-role eligible counts. Lower one when you genuinely reduce a
    *  role's set; never raise one without saying why in the PR. */
   const ELIGIBLE_BASELINE: Record<string, number> = {
-    "admin-assistant": 6,
+    "admin-assistant": 7,
     "build-specialist": 29,
     // 9 -> 10: compliance-requirements-review was added to back
     // svc-compliance-pci-requirements, whose backingSkillId resolved to nothing
@@ -126,22 +126,40 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "compliance-officer": 10,
     coo: 8,
     "customer-advisor": 9,
-    "data-architect": 8,
-    "doc-specialist": 10,
+    "data-architect": 9,
+    "doc-specialist": 11,
     "documentation-specialist": 10,
-    "ea-architect": 12,
-    "external-catalog-scout": 7,
+    "ea-architect": 13,
+    "external-catalog-scout": 8,
     "external-coding-agent": 18,
     "farm-ranch-steward": 6,
-    "hr-specialist": 8,
-    "inventory-specialist": 13,
+    "hr-specialist": 9,
+    "inventory-specialist": 14,
     "market-research-analyst": 7,
     "marketing-specialist": 12,
     "onboarding-coo": 6,
-    "ops-coordinator": 12,
+    "ops-coordinator": 13,
     "platform-engineer": 32,
     "portfolio-advisor": 14,
     "software-engineer": 14,
+
+    // +1 each: one recurring skill authored per active-roster coworker so its
+    // cadence lives in its own definition rather than only in a registry.
+    // Roles previously absent sat at 0 eligible — 6 wildcard + 1 authored = 7.
+    "data-steward": 7,
+    "dispatcher": 7,
+    "external-claude-code": 7,
+    "external-codex": 7,
+    "external-grok": 7,
+    "legal-operations-counsel": 7,
+    "licensing-specialist": 7,
+    "soc-incident-commander": 7,
+    "soc-investigator": 7,
+    "soc-threat-hunter": 7,
+    "soc-triage-analyst": 7,
+    "storefront-advisor": 7,
+    "ux-accessibility-agent": 7,
+
   };
 
   function parseCorpus() {

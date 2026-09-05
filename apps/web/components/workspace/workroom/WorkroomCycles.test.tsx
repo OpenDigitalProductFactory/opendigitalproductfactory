@@ -77,6 +77,21 @@ function room(): WorkroomView {
     context: { refs: [], digest: null, sensitivityCeiling: "high" }, receipts: [], sourceRefs: [],
     structure: null,
     posture: null,
+    processOverseer: {
+      shapeKey: null,
+      shapeVersion: null,
+      collaborationShape: null,
+      processOverseerPrincipalRef: null,
+      processOverseerSource: "none",
+      currentStageKey: null,
+      nextPermittedStageKey: null,
+      observed: { participantCount: 0, receiptKinds: [], proposedGrantCount: 0, budgetUsage: [], stopConditionHits: [], reviewDue: false },
+      deviations: [],
+      disposition: "not-applicable",
+      interventionReason: "No executable work shape is declared.",
+      checkedAt: "2026-08-02T09:00:00.000Z",
+      reconciliationKey: "work-room-conformance:fixture",
+    },
     projection: { confidence: "high", incompleteBoundary: false, sourceHealth: "ok" },
   };
 }

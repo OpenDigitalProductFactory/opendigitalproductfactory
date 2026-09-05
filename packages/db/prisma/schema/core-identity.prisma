@@ -6,86 +6,86 @@ enum PrincipalSensitivity {
 }
 
 model User {
-  id                             String                        @id @default(cuid())
-  email                          String                        @unique
-  passwordHash                   String
-  isActive                       Boolean                       @default(true)
-  isSuperuser                    Boolean                       @default(false)
-  createdAt                      DateTime                      @default(now())
-  approvedProposals              AgentActionProposal[]         @relation("ProposalDecisions")
-  agentThreads                   AgentThread[]
-  apiTokens                      ApiToken[]
-  mcpApiTokens                   McpApiToken[]
-  ownedOAuthClients              OAuthClient[]                   @relation("OAuthClientOwner")
-  oauthAuthorizationCodes        OAuthAuthorizationCode[]
-  oauthRefreshTokens             OAuthRefreshToken[]
-  backlogSubmissions             BacklogItem[]                 @relation("BacklogSubmissions")
-  customEvalDimsApproved         CustomEvalDimension[]         @relation("CustomEvalDimensionApprover")
-  customEvalDimsCreated          CustomEvalDimension[]         @relation("CustomEvalDimensionCreator")
-  grantedDelegations             DelegationGrant[]             @relation("DelegationGrantGrantor")
-  employeeProfile                EmployeeProfile?
-  authoredEmploymentEvents       EmploymentEvent[]
-  workerClassificationsDetermined WorkerClassificationDetermination[] @relation("ClassificationDeterminedBy")
-  epicSubmissions                Epic[]                        @relation("EpicSubmissions")
-  externalEvidenceRecords        ExternalEvidenceRecord[]
-  featureBuilds                  FeatureBuild[]
-  improvementReviews             ImprovementProposal[]         @relation("ImprovementReviews")
-  improvementSubmissions         ImprovementProposal[]         @relation("ImprovementSubmissions")
-  notifications                  Notification[]
-  notificationSubscriptions      NotificationSubscription[]    @relation("NotificationSubscriptionUser")
-  requestedPasswordResetTokens   PasswordResetToken[]          @relation("PasswordResetRequestedBy")
-  passwordResetTokens            PasswordResetToken[]          @relation("PasswordResetForUser")
-  issueReports                   PlatformIssueReport[]
-  policyRulesCreated             PolicyRule[]                  @relation("PolicyRuleCreator")
-  pushDevices                    PushDeviceRegistration[]
-  taskRequirementsApproved       TaskRequirement[]             @relation("TaskRequirementApprover")
-  taskRequirementsCreated        TaskRequirement[]             @relation("TaskRequirementCreator")
-  teamMemberships                TeamMembership[]
-  groups                         UserGroup[]
-  userSkills                     UserSkill[]                   @relation("UserSkillCreator")
-  invoicesCreated                Invoice[]                     @relation("InvoiceCreations")
-  invoiceDocumentsCreated        InvoiceDocument[]
-  paymentsCreated                Payment[]                     @relation("PaymentCreations")
-  journalEntriesCreated          JournalEntry[]                @relation("JournalEntryCreations")
-  journalEntriesPosted           JournalEntry[]                @relation("JournalEntryPostings")
-  engagementAssignments          Engagement[]                  @relation("EngagementAssignments")
-  opportunityAssignments         Opportunity[]                 @relation("OpportunityAssignments")
-  activitiesCreated              Activity[]                    @relation("ActivityCreations")
-  quotesCreated                  Quote[]                       @relation("QuoteCreations")
-  billsCreated                   Bill[]                        @relation("BillCreations")
-  posCreated                     PurchaseOrder[]               @relation("PurchaseOrderCreations")
-  approvalRules                  ApprovalRule[]                @relation("ApprovalRuleApprover")
-  billApprovals                  BillApproval[]                @relation("BillApprovalResponses")
-  recurringSchedulesCreated      RecurringSchedule[]           @relation("RecurringScheduleCreations")
-  expenseApprovals               ExpenseClaim[]                @relation("ExpenseApprovals")
-  platformSetupProgress          PlatformSetupProgress?        @relation("UserSetupProgress")
-  taskRuns                       TaskRun[]
-  businessModelRoleAssignments   BusinessModelRoleAssignment[]
-  platformDevConfigs             PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
-  platformDevDcoAcceptances      PlatformDevConfig[]           @relation("PlatformDevDcoAcceptedBy")
-  privatePathRules               PrivatePathRule[]             @relation("PrivatePathRuleCreatedBy")
-  platformDevFeedbackOptIns      PlatformDevConfig[]           @relation("PlatformDevUpstreamFeedbackOptInBy")
-  agentModelConfigs              AgentModelConfig[]            @relation("AgentModelConfiguredBy")
-  knowledgeArticles              KnowledgeArticle[]            @relation("KnowledgeArticleAuthor")
-  knowledgeRevisions             KnowledgeArticleRevision[]    @relation("KnowledgeRevisionCreator")
-  wikiRevisions                  WikiPageRevision[]            @relation("WikiRevisionCreator")
-  wikiIngestEvents               WikiIngestEvent[]             @relation("WikiIngestEventUser")
-  workItemAssignments            WorkItem[]                    @relation("WorkItemAssignee")
-  workSchedule                   WorkSchedule?
-  adminActivities                AdminActivity[]
-  userFacts                      UserFact[]
-  decisionEscalationsResolved    EscalationCapture[]           @relation("DecisionEscalationResolverUser")
-  triggeredDecisionInteractions  DecisionInteraction[]         @relation("DecisionInteractionTriggeredByUser")
-  weightAdjustmentProposalsRuled WeightAdjustmentProposal[]
+  id                               String                              @id @default(cuid())
+  email                            String                              @unique
+  passwordHash                     String
+  isActive                         Boolean                             @default(true)
+  isSuperuser                      Boolean                             @default(false)
+  createdAt                        DateTime                            @default(now())
+  approvedProposals                AgentActionProposal[]               @relation("ProposalDecisions")
+  agentThreads                     AgentThread[]
+  apiTokens                        ApiToken[]
+  mcpApiTokens                     McpApiToken[]
+  ownedOAuthClients                OAuthClient[]                       @relation("OAuthClientOwner")
+  oauthAuthorizationCodes          OAuthAuthorizationCode[]
+  oauthRefreshTokens               OAuthRefreshToken[]
+  backlogSubmissions               BacklogItem[]                       @relation("BacklogSubmissions")
+  customEvalDimsApproved           CustomEvalDimension[]               @relation("CustomEvalDimensionApprover")
+  customEvalDimsCreated            CustomEvalDimension[]               @relation("CustomEvalDimensionCreator")
+  grantedDelegations               DelegationGrant[]                   @relation("DelegationGrantGrantor")
+  employeeProfile                  EmployeeProfile?
+  authoredEmploymentEvents         EmploymentEvent[]
+  workerClassificationsDetermined  WorkerClassificationDetermination[] @relation("ClassificationDeterminedBy")
+  epicSubmissions                  Epic[]                              @relation("EpicSubmissions")
+  externalEvidenceRecords          ExternalEvidenceRecord[]
+  featureBuilds                    FeatureBuild[]
+  improvementReviews               ImprovementProposal[]               @relation("ImprovementReviews")
+  improvementSubmissions           ImprovementProposal[]               @relation("ImprovementSubmissions")
+  notifications                    Notification[]
+  notificationSubscriptions        NotificationSubscription[]          @relation("NotificationSubscriptionUser")
+  requestedPasswordResetTokens     PasswordResetToken[]                @relation("PasswordResetRequestedBy")
+  passwordResetTokens              PasswordResetToken[]                @relation("PasswordResetForUser")
+  issueReports                     PlatformIssueReport[]
+  policyRulesCreated               PolicyRule[]                        @relation("PolicyRuleCreator")
+  pushDevices                      PushDeviceRegistration[]
+  taskRequirementsApproved         TaskRequirement[]                   @relation("TaskRequirementApprover")
+  taskRequirementsCreated          TaskRequirement[]                   @relation("TaskRequirementCreator")
+  teamMemberships                  TeamMembership[]
+  groups                           UserGroup[]
+  userSkills                       UserSkill[]                         @relation("UserSkillCreator")
+  invoicesCreated                  Invoice[]                           @relation("InvoiceCreations")
+  invoiceDocumentsCreated          InvoiceDocument[]
+  paymentsCreated                  Payment[]                           @relation("PaymentCreations")
+  journalEntriesCreated            JournalEntry[]                      @relation("JournalEntryCreations")
+  journalEntriesPosted             JournalEntry[]                      @relation("JournalEntryPostings")
+  engagementAssignments            Engagement[]                        @relation("EngagementAssignments")
+  opportunityAssignments           Opportunity[]                       @relation("OpportunityAssignments")
+  activitiesCreated                Activity[]                          @relation("ActivityCreations")
+  quotesCreated                    Quote[]                             @relation("QuoteCreations")
+  billsCreated                     Bill[]                              @relation("BillCreations")
+  posCreated                       PurchaseOrder[]                     @relation("PurchaseOrderCreations")
+  approvalRules                    ApprovalRule[]                      @relation("ApprovalRuleApprover")
+  billApprovals                    BillApproval[]                      @relation("BillApprovalResponses")
+  recurringSchedulesCreated        RecurringSchedule[]                 @relation("RecurringScheduleCreations")
+  expenseApprovals                 ExpenseClaim[]                      @relation("ExpenseApprovals")
+  platformSetupProgress            PlatformSetupProgress?              @relation("UserSetupProgress")
+  taskRuns                         TaskRun[]
+  businessModelRoleAssignments     BusinessModelRoleAssignment[]
+  platformDevConfigs               PlatformDevConfig[]                 @relation("PlatformDevConfiguredBy")
+  platformDevDcoAcceptances        PlatformDevConfig[]                 @relation("PlatformDevDcoAcceptedBy")
+  privatePathRules                 PrivatePathRule[]                   @relation("PrivatePathRuleCreatedBy")
+  platformDevFeedbackOptIns        PlatformDevConfig[]                 @relation("PlatformDevUpstreamFeedbackOptInBy")
+  agentModelConfigs                AgentModelConfig[]                  @relation("AgentModelConfiguredBy")
+  knowledgeArticles                KnowledgeArticle[]                  @relation("KnowledgeArticleAuthor")
+  knowledgeRevisions               KnowledgeArticleRevision[]          @relation("KnowledgeRevisionCreator")
+  wikiRevisions                    WikiPageRevision[]                  @relation("WikiRevisionCreator")
+  wikiIngestEvents                 WikiIngestEvent[]                   @relation("WikiIngestEventUser")
+  workItemAssignments              WorkItem[]                          @relation("WorkItemAssignee")
+  workSchedule                     WorkSchedule?
+  adminActivities                  AdminActivity[]
+  userFacts                        UserFact[]
+  decisionEscalationsResolved      EscalationCapture[]                 @relation("DecisionEscalationResolverUser")
+  triggeredDecisionInteractions    DecisionInteraction[]               @relation("DecisionInteractionTriggeredByUser")
+  weightAdjustmentProposalsRuled   WeightAdjustmentProposal[]
   decisionResolutionProposalsRuled DecisionResolutionProposal[]
-  perspectiveMaterialReviewed    PerspectiveMaterial[]
-  scheduledAgentTasks            ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
-  addedLocalities                City[]                        @relation("CityAddedByUser")
-  workbooksCreated               Workbook[]                    @relation("WorkbookCreatedBy")
-  workbookShares                 WorkbookShare[]               @relation("WorkbookShareUser")
-  workbookRowsCreated            WorkbookRow[]                 @relation("WorkbookRowCreatedBy")
-  workbookViewsCreated           WorkbookView[]                @relation("WorkbookViewCreatedBy")
-  payrollTaxRulesRatified        PayrollTaxRule[]              @relation("PayrollTaxRuleRatifiedBy")
+  perspectiveMaterialReviewed      PerspectiveMaterial[]
+  scheduledAgentTasks              ScheduledAgentTask[]                @relation("ScheduledAgentTaskOwner")
+  addedLocalities                  City[]                              @relation("CityAddedByUser")
+  workbooksCreated                 Workbook[]                          @relation("WorkbookCreatedBy")
+  workbookShares                   WorkbookShare[]                     @relation("WorkbookShareUser")
+  workbookRowsCreated              WorkbookRow[]                       @relation("WorkbookRowCreatedBy")
+  workbookViewsCreated             WorkbookView[]                      @relation("WorkbookViewCreatedBy")
+  payrollTaxRulesRatified          PayrollTaxRule[]                    @relation("PayrollTaxRuleRatifiedBy")
 }
 
 model UserGroup {
@@ -435,6 +435,11 @@ model Organization {
   marketingAssetVariants            MarketingAssetVariant[]
   marketingBattlecards              MarketingBattlecard[]
   workEngagements                   WorkEngagement[]
+  animalProfiles                    AnimalProfile[]
+  animalCustodyEpisodes             AnimalCustodyEpisode[]
+  animalCustodyEvents               AnimalCustodyEvent[]
+  animalAdoptionApplications        AnimalAdoptionApplication[]
+  animalPlacements                  AnimalPlacement[]
   marketingKpiCheckpoints           MarketingKpiCheckpoint[]
   marketingAutomationCandidates     MarketingAutomationCandidate[]
   taxProfile                        OrganizationTaxProfile?
@@ -460,6 +465,7 @@ model Organization {
   mediaAssets                       MediaAsset[]
   ledgerAccounts                    LedgerAccount[]
   journalEntries                    JournalEntry[]
+  financialFunds                    FinancialFund[]
   patientProfiles                   PatientProfile[]
   patientAuthorizationDecisions     AuthorizationDecisionLog[]
   storefrontBookings                StorefrontBooking[]                @relation("StorefrontBookingOrganization")
@@ -491,6 +497,7 @@ model Organization {
   careResources                     CareResource[]
   careSchedulingPolicies            CareSchedulingPolicy[]
   careAppointments                  CareAppointment[]
+  careRecords                       CareRecord[]
   careIntakePackets                 CareIntakePacket[]
   aiProviderConnections             AiProviderConnection[]
   partnerAccounts                   PartnerAccount[]
@@ -519,11 +526,11 @@ model Organization {
   workforceCandidateFacts           WorkforceCandidateFact[]
   gearInterfaces                    GearInterface[]
   staffingConstraintRules           StaffingConstraintRule[]
-  vehicles                 Vehicle[]                @relation("VehicleOrganization")
-  trips                    Trip[]                   @relation("TripOrganization")
-  tripClassificationRules  TripClassificationRule[] @relation("TripRuleOrganization")
-  driverLocationConsents   DriverLocationConsent[]  @relation("DriverConsentOrganization")
-  mileageRatePlans         MileageRatePlan[]        @relation("MileageRatePlanOrganization")
+  vehicles                          Vehicle[]                          @relation("VehicleOrganization")
+  trips                             Trip[]                             @relation("TripOrganization")
+  tripClassificationRules           TripClassificationRule[]           @relation("TripRuleOrganization")
+  driverLocationConsents            DriverLocationConsent[]            @relation("DriverConsentOrganization")
+  mileageRatePlans                  MileageRatePlan[]                  @relation("MileageRatePlanOrganization")
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -702,8 +709,8 @@ model McpApiToken {
   resource      String?
   publicScopes  String[]  @default([])
 
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  oauthClient   OAuthClient? @relation(fields: [oauthClientId], references: [id], onDelete: SetNull)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oauthClient OAuthClient? @relation(fields: [oauthClientId], references: [id], onDelete: SetNull)
 
   @@index([userId, revokedAt])
   @@index([tokenHash])

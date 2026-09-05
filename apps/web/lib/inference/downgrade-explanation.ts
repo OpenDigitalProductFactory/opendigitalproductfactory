@@ -20,7 +20,13 @@
 // Reads only routing metadata (statuses, reason strings, endpoint names) — never
 // prompts, tool payloads, credentials, or detected values.
 
-/** Plain-language cause classes, derived from `getExclusionReasonV2` output. */
+/**
+ * Plain-language cause classes, derived from `getExclusionReasonV2` output.
+ *
+ * Carried on `RoutedInferenceResult.downgradeCause` so the copy printed BELOW a
+ * downgrade banner argues from the constraint the banner actually named, rather
+ * than re-deriving it and contradicting it (BI-FB184D69).
+ */
 export type DowngradeCause =
   | "context-window"
   | "capability"
@@ -111,6 +117,44 @@ export function escalationCameOnlyFromHistory(
     sawEarlier = true;
   }
   return sawEarlier;
+}
+
+/**
+ * The cause that ACTUALLY held this turn back.
+ *
+ * `excludedReasons` arrives in routing's own ranking order, so the first
+ * survivable cause belongs to the best route the owner could otherwise have
+ * used — clear it and the turn moves. The old code unioned every cause into one
+ * sentence, which read as though each were equally responsible. On the reported
+ * install eight of nine exclusions were residency and exactly one was a missing
+ * `toolUse` capability; the banner billed both, and the owner reasonably chased
+ * the capability. Only residency was binding (BI-FB184D69).
+ *
+ * A "not switched on" endpoint is never returned: that is the disabled-provider
+ * branch's story, and describing it inside "your configured providers stayed
+ * available" is the contradiction BI-F4D3B9E9(d) removed.
+ */
+export function bindingCause(excludedReasons: readonly string[]): DowngradeCause | null {
+  const causes = excludedReasons
+    .map(classifyExclusionReason)
+    .filter((cause) => cause !== "provider-off");
+  // A named cause outranks the catch-all regardless of position: "it wasn't
+  // eligible" tells the owner nothing they can act on.
+  return causes.find((cause) => cause !== "unknown") ?? causes[0] ?? null;
+}
+
+/** How many DISTINCT other causes were in play, for a count-only mention. */
+function otherCauseCount(
+  excludedReasons: readonly string[],
+  binding: DowngradeCause | null,
+): number {
+  if (!binding) return 0;
+  const distinct = new Set(
+    excludedReasons
+      .map(classifyExclusionReason)
+      .filter((cause) => cause !== "provider-off" && cause !== binding),
+  );
+  return distinct.size;
 }
 
 export type LocalFallbackBannerInput = {
@@ -206,21 +250,23 @@ export function buildLocalFallbackBanner(input: LocalFallbackBannerInput): strin
       } at Platform > AI > Providers to restore full capability.`,
     );
   } else {
-    const causes = new Set(input.excludedReasons.map(classifyExclusionReason));
-    // A "not switched on" endpoint (status unconfigured/inactive) must never be
-    // described inside a "your configured providers stayed available" sentence —
-    // that reads as a contradiction, which is the whole class of bug being fixed
-    // here. Genuinely-off providers are named by the branch above instead.
-    causes.delete("provider-off");
-    // Drop "unknown" when a specific cause is also present — a named reason is
-    // strictly more useful than the catch-all phrasing.
-    if (causes.size > 1) causes.delete("unknown");
-    const phrases = [...causes].map(causePhrase);
+    const binding = bindingCause(input.excludedReasons);
+    const others = otherCauseCount(input.excludedReasons, binding);
     parts.push(
-      phrases.length > 0
-        ? `Your configured providers stayed available, but ${joinNames(phrases)}.`
+      binding
+        ? `Your configured providers stayed available, but ${causePhrase(binding)}.`
         : "Your configured providers stayed available but none was eligible for this request.",
     );
+    // Named without being co-billed. An owner who reads two causes joined by
+    // "and" cannot tell which one to act on, and acting on the wrong one costs
+    // them another failed run (BI-FB184D69).
+    if (others > 0) {
+      parts.push(
+        others === 1
+          ? "One other provider was ruled out for a different reason."
+          : `${others} other providers were ruled out for different reasons.`,
+      );
+    }
   }
 
   // BI-706530B2: when the only sensitive evidence is several turns back, the
@@ -239,12 +285,16 @@ export function buildLocalFallbackBanner(input: LocalFallbackBannerInput): strin
 }
 
 /**
- * One call for the whole local-fallback banner (BI-706530B2).
+ * One call for the whole local-fallback explanation (BI-706530B2, BI-FB184D69).
  *
  * routed-inference.ts previously assembled this inline — extract the facts,
  * compute the history provenance, spread both into the builder. That is banner
  * composition living in the routing module, and it pushed routed-inference over
  * its 800-LOC ceiling. Composition belongs beside the thing being composed.
+ *
+ * It returns the binding cause alongside the banner so the copy printed BELOW
+ * the banner argues from the same constraint the banner named, rather than
+ * re-deriving it and contradicting it.
  */
 export function describeLocalFallback(input: {
   manifests: ReadonlyArray<ManifestFacts>;
@@ -252,13 +302,17 @@ export function describeLocalFallback(input: {
   sensitivity: string;
   matchProvenance: ReadonlyArray<{ path: string }> | undefined;
   messageCount: number;
-}): string {
-  return buildLocalFallbackBanner({
-    ...extractLocalFallbackFacts({
-      manifests: input.manifests,
-      candidates: input.candidates,
-      sensitivity: input.sensitivity,
-    }),
-    historicalOnly: escalationCameOnlyFromHistory(input.matchProvenance, input.messageCount),
+}): { banner: string; cause: DowngradeCause | null } {
+  const facts = extractLocalFallbackFacts({
+    manifests: input.manifests,
+    candidates: input.candidates,
+    sensitivity: input.sensitivity,
   });
+  return {
+    banner: buildLocalFallbackBanner({
+      ...facts,
+      historicalOnly: escalationCameOnlyFromHistory(input.matchProvenance, input.messageCount),
+    }),
+    cause: bindingCause(facts.excludedReasons),
+  };
 }

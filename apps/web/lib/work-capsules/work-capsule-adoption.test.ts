@@ -108,6 +108,11 @@ describe("work capsule branch adoption", () => {
       status: "working",
       backlogItemId: "BI-7D20BFDF",
       executorRef: null,
+      // Matches the input below, so this is genuine pure reuse: nothing about
+      // the room's identity differs and nothing should be written. The row used
+      // to omit worktreePath entirely, which no real row does once a location
+      // has been recorded (BI-69BBC446).
+      worktreePath: "D:/DPF-existing",
     });
 
     const result = await adoptWorktreeCapsule({
@@ -126,6 +131,40 @@ describe("work capsule branch adoption", () => {
     expect(result.capsuleId).toBe("WC-EXISTING");
     expect(db.workroom.update).not.toHaveBeenCalled();
     expect(db.workroom.create).not.toHaveBeenCalled();
+  });
+
+  // The other half of BI-69BBC446: a room whose worktreePath is still null is
+  // learning its location for the first time, not moving. Writing it is correct
+  // — the same shape as the executorRef late-bind directly above.
+  it("records a worktree path onto a bound capsule that has none yet", async () => {
+    db.workroom.findFirst.mockResolvedValueOnce({
+      id: "row-1",
+      capsuleId: "WC-NOPATH",
+      status: "working",
+      backlogItemId: "BI-7D20BFDF",
+      executorRef: null,
+      worktreePath: null,
+    });
+    db.workroom.update.mockResolvedValue({
+      id: "row-1", capsuleId: "WC-NOPATH", worktreePath: "D:/DPF-learned",
+    });
+
+    await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Learn location",
+        objective: "Record where this branch actually lives.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/existing",
+        worktreePath: "D:/DPF-learned",
+        backlogItemId: "BI-7D20BFDF",
+      },
+      actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
+    });
+
+    expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ worktreePath: "D:/DPF-learned" }),
+    }));
   });
 
   it("reactivates the same abandoned capsule when the BI and branch still match", async () => {

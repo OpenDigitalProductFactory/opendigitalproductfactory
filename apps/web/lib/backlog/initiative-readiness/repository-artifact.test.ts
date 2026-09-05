@@ -74,6 +74,82 @@ function providerFetch(signOff = "Signed-off-by: Author <author@example.com>") {
 }
 
 describe("resolveRepositoryArtifact", () => {
+  it("uses and closes the isolated production transport for immutable blob reads", async () => {
+    const frameworkFetch = vi.fn().mockRejectedValue(new Error("framework context unavailable"));
+    vi.stubGlobal("fetch", frameworkFetch);
+    const isolatedFetch = providerFetch();
+    const close = vi.fn().mockResolvedValue(undefined);
+
+    try {
+      const result = await readRepositoryProviderBlob({
+        repositoryFullName: locator.repositoryFullName,
+        commitSha: locator.commitSha,
+        path: locator.path,
+        expectedBlobId: locator.providerBlobId,
+        db: db() as never,
+        transportFactory: () => ({ fetch: isolatedFetch as unknown as typeof fetch, close }),
+      } as never);
+
+      expect(result).toEqual({ ok: true, data: bytes });
+      expect(isolatedFetch).toHaveBeenCalledTimes(1);
+      expect(frameworkFetch).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("maps production transport construction failure to an immutable-source refusal", async () => {
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      transportFactory: () => {
+        throw new Error("dispatcher unavailable");
+      },
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE" });
+  });
+
+  it("maps repository-resolution transport construction failure to a canonical-design refusal", async () => {
+    const result = await resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db() as never,
+      transportFactory: () => {
+        throw new Error("dispatcher unavailable");
+      },
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
+  });
+
+  it("reuses one isolated transport for commit provenance and blob verification", async () => {
+    const frameworkFetch = vi.fn().mockRejectedValue(new Error("framework context unavailable"));
+    vi.stubGlobal("fetch", frameworkFetch);
+    const isolatedFetch = providerFetch();
+    const close = vi.fn().mockResolvedValue(undefined);
+
+    try {
+      const result = await resolveRepositoryArtifact({
+        locator,
+        subject: { kind: "backlog-item", id: "BI-TEST" },
+        db: db() as never,
+        transportFactory: () => ({ fetch: isolatedFetch as unknown as typeof fetch, close }),
+      } as never);
+
+      expect(result).toMatchObject({ ok: true });
+      expect(isolatedFetch).toHaveBeenCalledTimes(2);
+      expect(frameworkFetch).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("retries one transient blob transport failure inside the same provider read", async () => {
     const fetchImpl = vi.fn()
       .mockRejectedValueOnce(new Error("token=must-not-leak"))
@@ -95,9 +171,41 @@ describe("resolveRepositoryArtifact", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it.each(["UND_ERR_CONNECT_TIMEOUT", "ENOTFOUND", "ECONNRESET"])("preserves safe nested transport code %s without exception text", async (code) => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error("private request details", {
+      cause: Object.assign(new Error("private endpoint and credentials"), { code }),
+    }));
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+    expect(result).toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE" });
+    if (result.ok) throw new Error("expected provider refusal");
+    expect(result.error).toContain(code);
+    expect(result.error).toContain("2 attempts");
+    expect(result.error).not.toContain("private");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not expose an arbitrary exception code", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue({ code: "PRIVATE_SECRET_VALUE", cause: null });
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName, commitSha: locator.commitSha,
+      path: locator.path, expectedBlobId: locator.providerBlobId,
+      db: db() as never, fetchImpl: fetchImpl as typeof fetch,
+    });
+    expect(result).toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE" });
+    expect(JSON.stringify(result)).not.toContain("PRIVATE_SECRET_VALUE");
+  });
+
   it.each([408, 429, 500, 502, 503, 504])("retries retryable blob HTTP %i once", async (status) => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
     const transient = vi.fn()
-      .mockResolvedValueOnce(new Response("temporarily unavailable", { status }))
+      .mockResolvedValueOnce({ ok: false, status, body: { cancel } } as unknown as Response)
       .mockResolvedValueOnce(new Response(JSON.stringify({
         type: "file",
         sha: locator.providerBlobId,
@@ -113,6 +221,7 @@ describe("resolveRepositoryArtifact", () => {
       fetchImpl: transient as typeof fetch,
     })).resolves.toEqual({ ok: true, data: bytes });
     expect(transient).toHaveBeenCalledTimes(2);
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a permanent blob status immediately without exposing its body", async () => {

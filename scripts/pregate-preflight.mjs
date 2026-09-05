@@ -4,28 +4,60 @@
 // scripts/pregate.mjs invoke it automatically before lease admission.
 //
 //   node scripts/pregate-preflight.mjs           # run the preflight
-//   node scripts/pregate-preflight.mjs --plan    # print the plan as JSON
+//   node scripts/pregate-preflight.mjs --plan    # print the plan as JSON (scoped to this diff)
+//   node scripts/pregate-preflight.mjs --scope   # print the classified change scope and what it leaves out
 //
 // Exit codes: 0 = clean (environment-skipped guards are warnings), 1 = at
 // least one guard reported a genuine violation.
 
 import {
   PREFLIGHT_SKIP_ENV,
-  buildPreflightPlan,
+  planPreflight,
   runPreflight,
 } from "./lib/pregate-preflight.mjs";
+import { classifyChangedFiles } from "./ci-change-scope.mjs";
 import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { ensureCompileReady, getChangedFilesAgainstMain } from "./lib/ensure-compile-ready.mjs";
 
+/**
+ * BI-8CDA7F95: classify the diff with the classifier the cloud trusts. When the
+ * changed files cannot be resolved (no merge base — the clone re-shallowed,
+ * BI-4EE2E5C0), the scope is unknown and EVERY guard runs.
+ */
+function resolveChangeScope(worktreePath) {
+  const changedFiles = getChangedFilesAgainstMain(worktreePath);
+  if (!Array.isArray(changedFiles)) return { changeScope: null, changedFiles: null };
+  return { changeScope: classifyChangedFiles(changedFiles), changedFiles };
+}
+
+function describeScope(changeScope) {
+  if (!changeScope) return "unknown (no merge base) — every guard runs";
+  if (changeScope.docsOnly) return "docs-only";
+  if (changeScope.mobileOnly) return "mobile-only";
+  return "full";
+}
+
 export async function main() {
-  if (process.argv.includes("--plan")) {
-    const plan = buildPreflightPlan().map((entry) => ({
+  if (process.argv.includes("--plan") || process.argv.includes("--scope")) {
+    const { changeScope } = resolveChangeScope(process.cwd());
+    const planned = planPreflight({ changeScope });
+    const project = (entry) => ({
       id: entry.id,
       name: entry.name,
       commands: entry.commands.map(([command, args]) => [command, ...args].join(" ")),
-    }));
-    process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+    });
+    // `--plan` keeps its array contract (the entries that will run, scoped to
+    // this diff); `--scope` explains the classification and what it left out.
+    const payload = process.argv.includes("--scope")
+      ? {
+        changeScope: describeScope(changeScope),
+        run: planned.entries.map((entry) => entry.id),
+        skippedByScope: planned.skippedByScope.map((entry) => ({ id: entry.id, inputs: entry.inputs })),
+      }
+      : planned.entries.map(project);
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}
+`);
     return;
   }
 
@@ -72,8 +104,21 @@ export async function main() {
     );
   }
 
+  const { changeScope } = resolveChangeScope(process.cwd());
+  const planned = planPreflight({ changeScope });
+  if (planned.skippedByScope.length > 0) {
+    process.stdout.write(
+      `[pregate-preflight] change scope ${describeScope(changeScope)}: ${planned.skippedByScope.length} guard(s) ` +
+        `declared inputs a docs-only diff cannot touch are not run (${planned.skippedByScope.map((e) => e.id).join(", ")}); ` +
+        `${planned.entries.length} guard(s) run. CI still runs every guard.\n`,
+    );
+  } else if (!changeScope) {
+    process.stdout.write("[pregate-preflight] change scope unknown (no merge base against origin/main) — every guard runs.\n");
+  }
+
   const startedAt = Date.now();
   const result = await runPreflight({
+    plan: planned.entries,
     // Failure lines are printed from the FINAL classified entries below —
     // an env-degraded guard transiently looks "failed" at finish-time and
     // must not be announced as a failure here.

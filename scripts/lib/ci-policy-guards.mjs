@@ -1,12 +1,30 @@
 import { spawnSync } from "node:child_process";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 
-function guard(legacyJobId, name, commands) {
+/**
+ * A policy guard entry.
+ *
+ * `options.inputs` (BI-8CDA7F95) DECLARES what class of change can violate the
+ * guard, so the host-side preflight can honour the change scope the cloud
+ * already trusts (scripts/ci-change-scope.mjs): a guard declared
+ * `inputs: ["code"]` reads only source, schema, compose or package manifests,
+ * and a docs-only diff (every changed path classified `docs` by
+ * config/ci-evidence-policy.json) cannot violate it. A guard with NO
+ * declaration always runs — an undeclared scope is never a reason to skip,
+ * because a wrong skip is a false green (the class BI-7B249AFE paid for).
+ * Declare `code` only after reading the guard's own enumeration of inputs;
+ * scripts/pregate-preflight.test.mjs statically checks that a declared guard's
+ * import closure references no docs/markdown inputs.
+ */
+function guard(legacyJobId, name, commands, options = {}) {
   return {
     id: legacyJobId,
     legacyJobId,
     name,
     commands,
+    inputs: Array.isArray(options.inputs) && options.inputs.length > 0
+      ? Object.freeze([...options.inputs])
+      : null,
   };
 }
 
@@ -114,7 +132,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("release-compose-pins", "Release Compose Pins", [
       conformanceTest("scripts/check-release-compose-pins.test.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("release-asset-contract", "Release Asset Contract", [
       // The consumer install has no git checkout: whatever the installer copies
       // out of the install dir must ship in the image's /dpf-release-assets.
@@ -139,7 +157,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // A guarded install step that skips in silence reads as success, and is
       // then recorded as done by Save-Progress. Optional-script guards must say so.
       conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
       // failure mode here is shell exit-status semantics, not source text.
@@ -158,11 +176,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/installer-image-identity.test.mjs",
         "scripts/salvage-sweep.test.mjs",
       ),
-    ]),
+    ], { inputs: ["code"] }),
     guard("governed-teardown-guard", "Governed Teardown Contract", [
       node("--test", "scripts/check-governed-teardown-contract.test.mjs", "scripts/governed-teardown.test.mjs"),
       node("scripts/check-governed-teardown-contract.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
       // schedule (.github/workflows/published-image-freshness.yml).
@@ -228,6 +246,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest(
         "scripts/lib/dev-preview-migrate-converge.test.mjs",
         "scripts/pregate-exit-honesty.test.mjs",
+        "scripts/pre-push-gate-slot-contract.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
@@ -235,10 +254,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
       node("scripts/check-mobile-jest-pin.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("diagram-dependency-pin-guard", "Diagram Dependency Pin Guard", [
       node("scripts/check-diagram-dependency-pins.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("override-provenance-guard", "Workspace Supply-Chain Policy", [
       node("scripts/check-override-comments.mjs"),
       conformanceTest("scripts/check-override-comments.test.mjs"),
@@ -274,13 +293,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("application-boundary-guard", "Application Boundary Guard", [
       node("--test", "scripts/check-application-boundaries.test.mjs"),
       node("scripts/check-application-boundaries.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("label-association-guard", "Label Association Guard", [
       // A <label> bound to nothing renders, screenshots and inspects correctly
       // while a screen reader announces an unlabelled field — every human check
       // passes. Ratchet: blocks NET-NEW orphans, retightens as surfaces migrate.
       node("scripts/check-label-association.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("style-drift-guard", "Style Drift Guard", [
       node("scripts/check-style-drift.mjs"),
     ]),
@@ -290,21 +309,28 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("platform-composition-single-home", "Platform Composition Single-Home Guard", [
       node("--test", "scripts/check-platform-composition-single-home.test.mjs"),
       node("scripts/check-platform-composition-single-home.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("compose-env-contract-guard", "Compose Env Contract Guard", [
       node("scripts/check-compose-env-contract.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
+    // BI-FEE77B68: every host-published port binds through DPF_HOST_BIND_ADDRESS
+    // (loopback by default). Short syntax put the admin login, postgres and
+    // redis on the LAN of every install (#4337).
+    guard("compose-bind-posture-guard", "Compose Bind Posture Guard", [
+      conformanceTest("scripts/check-compose-bind-posture.test.mjs"),
+      node("scripts/check-compose-bind-posture.mjs"),
+    ], { inputs: ["code"] }),
     guard("compose-resource-budgets-guard", "Compose Resource Budgets Guard", [
       node("--test", "scripts/check-compose-resource-budgets.test.mjs"),
       node("scripts/check-compose-resource-budgets.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("n-minus-one-caller-honesty", "N-1 Caller Honesty", [
       node("--test", "scripts/check-n-minus-one-caller-honesty.test.mjs"),
       node("scripts/check-n-minus-one-caller-honesty.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     // BI-2624B7EA: an EmploymentEvent written outside its canonical writer is a
     // log entry, which is the exact state EP-862820FD exists to remove. The
     // actuator shipped inert once and half-wired once; this closes the class.
@@ -337,7 +363,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("build-studio-surface-guard", "Build Studio Surface Guard", [
       node("--test", "scripts/check-build-studio-surface-budget.test.mjs"),
       node("scripts/check-build-studio-surface-budget.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     // BI-3F17B16B: an EP-/BI- id cited in a CHANGED doc must exist in the live
     // backlog (diff-scoped; grandfather baseline; degrades to warn-pass when no
     // live install is reachable). Closes the unbacked-doc-anchor pattern (P3).
@@ -368,7 +394,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("retention-enrollment-guard", "Retention Enrollment Guard", [
       node("--test", "scripts/check-retention-enrollment.test.mjs"),
       node("scripts/check-retention-enrollment.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     // Diff-scoped by design: repo-wide, the pattern matches 255 fixtures across 125
     // files, nearly all legitimate (far-future sentinels, deliberately-expired rows).
     // Gating on that would need a 125-file baseline — the silent allowlist this is
@@ -376,11 +402,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("test-clock-bomb-guard", "Test Clock Bomb Guard", [
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("work-unit-conformance-guard", "WorkUnit Conformance Guard", [
       node("--test", "scripts/check-work-unit-conformance.test.mjs"),
       node("scripts/check-work-unit-conformance.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("instruction-plane-guard", "Instruction Plane Guard", [
       conformanceTest("scripts/check-instruction-plane-size.test.mjs"),
       node("scripts/check-instruction-plane-size.mjs"),
@@ -397,13 +423,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("context-economy-guard", "Context Economy Guard", [
       node("--test", "scripts/check-context-economy.test.mjs"),
       node("scripts/check-context-economy.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     // Plane 4 — the standing TOOL registry, same soft shape and reusing plane 3's claim
     // review. Dispatch-time caps are governed elsewhere; this is the part that accretes.
     guard("tool-surface-guard", "Tool Surface Guard", [
       node("--test", "scripts/check-tool-surface.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("archetype-completeness-guard", "Archetype Completeness Guard", [
       node("--test", "scripts/check-archetype-completeness.test.mjs"),
       node("scripts/check-archetype-completeness.mjs"),
@@ -411,7 +437,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("stewardship-scope-guard", "Stewardship Scope Guard", [
       node("--test", "scripts/check-stewardship-scope.test.mjs"),
       node("scripts/check-stewardship-scope.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("capability-consumer-guard", "Capability Consumer Guard", [
       node("--test", "scripts/check-capability-consumers.test.mjs"),
       node("scripts/check-capability-consumers.mjs"),
@@ -440,7 +466,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("mcp-tool-pack-guard", "MCP Tool Pack Guard", [
       node("scripts/check-mcp-tool-pack.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
     ]),
@@ -475,7 +501,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("rendered-backlog-pointers", "Rendered Backlog Pointers", [
       node("--test", "scripts/check-rendered-backlog-pointers.test.mjs"),
       node("scripts/check-rendered-backlog-pointers.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     // An item written to "deferred" with no reason, trigger, review date or owner
     // is not parked, it is gone: nothing fires, nothing comes due, nobody owns
     // it. Seven items sat in exactly that state — including BI-F0715C9C — and a
@@ -484,7 +510,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("unattributable-deferral", "Unattributable Deferral", [
       node("--test", "scripts/check-no-unattributable-deferral.test.mjs"),
       node("scripts/check-no-unattributable-deferral.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("janitor-tests", "Janitor Tests", [
       node(
         "--test",
@@ -496,6 +522,16 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // Worktree lifecycle hygiene (plan 2026-08-11): the reaping classifier
         // (now with the liveness + abandoned-merge verdicts), the session
         // heartbeat liveness signal, and the root-clone fast-forward remedy.
+        // BI-0B2F0546: the platform's single answer to where its development
+        // surfaces work. A wrong base points the reaper at the wrong directory,
+        // so resolution order and provenance are pinned.
+        "scripts/lib/worktree-base.test.mjs",
+        // BI-541156EE: one worktree base, or none. Seven were found on a single
+        // host, all from the same formula handed different roots.
+        "scripts/check-single-worktree-base.test.mjs",
+        // BI-99395B29 follow-up: liveness comes from the Workroom claim, and an
+        // unreadable claim record must fail safe rather than reap on a guess.
+        "scripts/lib/worktree-liveness.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
@@ -505,6 +541,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
+        // BI-ECAE03F7: the supervisor that fences a long gate run was
+        // allowlisted OUT of CI, so nothing enforced its behaviour while it
+        // destroyed run after run. The allowlist is shrink-only and its own
+        // header prefers inventory listing; this is that move.
+        "scripts/lib/lease-supervisor.test.mjs",
         "scripts/lib/local-convergence-lock.test.mjs",
         "scripts/lib/sandbox-freshness.test.mjs",
         "scripts/sandbox-freshness-preflight.test.mjs",

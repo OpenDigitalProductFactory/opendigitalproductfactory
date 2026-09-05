@@ -367,6 +367,28 @@ test("the state's own failureReason outranks metadata either way", () => {
 
 // BI-51353470: a record whose status is queued/cancelled never ran. FAIL is a
 // claim about the diff; INCONCLUSIVE is "this is not a verdict".
+// BI-D088D06D. The writer half of the same injustice. `pregate.mjs` recovers a
+// wrapper that exited before a terminal state; that run never graded the diff.
+// It used to write status "failed", which landed here as FAIL and consumed the
+// SHA's verdict, forcing an amend. It now writes `blocked_wrapper_exited`, and
+// this asserts the round trip actually reads as infrastructure.
+test("a wrapper that exited before grading reads INCONCLUSIVE, not FAIL (BI-D088D06D)", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_wrapper_exited",
+      evidenceRecordId: "",
+      recovery: { reason: "gate-wrapper-exited-before-terminal-state" },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.notEqual(r.verdict, "FAIL");
+  assert.match(r.reason, /infrastructure/i);
+});
+
 test("a queued record that never ran is INCONCLUSIVE, not FAIL (BI-51353470)", () => {
   const r = classifySlotRecord({
     state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
@@ -454,4 +476,54 @@ test("a candidateSha/HEAD mismatch on an unfinished record is STALE in the headl
     now: NOW,
   });
   assert.equal(lines[0], "local-CI gate: STALE");
+});
+
+// BI-5529B5AC: once another slot PASSES the same branch+SHA, the losing
+// record is rewritten as `superseded`. That is not a verdict on the diff — it
+// is bookkeeping — so it must read as INCONCLUSIVE and name the winner, never
+// as FAIL.
+test("a superseded slot record is INCONCLUSIVE and names the winning slot", () => {
+  const result = classifySlotRecord({
+    state: {
+      branch: "feat/x",
+      sha: HEAD,
+      gatePassed: false,
+      status: "superseded",
+      supersededStatus: "queued",
+      supersededBy: { slotKey: "slot-1", at: "2026-09-03T01:00:00.000Z" },
+    },
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+  assert.equal(result.verdict, "INCONCLUSIVE");
+  assert.match(result.reason, /superseded/);
+  assert.match(result.reason, /slot-1/);
+});
+
+test("reconciliation still prefers the PASS over a superseded sibling", () => {
+  const passed = {
+    slotKey: "slot-1",
+    ...classifySlotRecord({
+      state: { branch: "feat/x", sha: HEAD, gatePassed: true, status: "passed", expiresAt: "2026-08-04T13:00:00.000Z" },
+      metadata: { candidateSha: HEAD },
+      headSha: HEAD,
+      headBranch: "feat/x",
+      now: NOW,
+    }),
+  };
+  const superseded = {
+    slotKey: "slot-0",
+    ...classifySlotRecord({
+      state: { branch: "feat/x", sha: HEAD, gatePassed: false, status: "superseded", supersededBy: { slotKey: "slot-1" } },
+      metadata: null,
+      headSha: HEAD,
+      headBranch: "feat/x",
+      now: NOW,
+    }),
+  };
+  const result = reconcileSlots([superseded, passed]);
+  assert.equal(result.verdict, "PASS");
+  assert.equal(result.slot, "slot-1");
 });

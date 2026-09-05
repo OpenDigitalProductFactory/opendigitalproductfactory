@@ -61,13 +61,24 @@ describe("heartbeat()", () => {
 });
 
 describe("markTaskRunWorking()", () => {
-  it("sets status='working' and lastHeartbeatAt atomically", async () => {
-    mockUpdate.mockResolvedValue({});
-    await markTaskRunWorking("TR-3");
-    expect(mockUpdate).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-3" },
+  it("sets status='working' and lastHeartbeatAt atomically, only from a non-terminal state (BI-D208E70C)", async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+    const moved = await markTaskRunWorking("TR-3");
+    expect(moved).toBe(true);
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: {
+        taskRunId: "TR-3",
+        status: { in: ["submitted", "queued", "running", "active", "working", "input-required", "auth-required"] },
+      },
       data: { status: "working", lastHeartbeatAt: expect.any(Date) },
     });
+  });
+
+  it("returns false and leaves a completed run completed (never resurrects a settled run)", async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+    const moved = await markTaskRunWorking("TR-done");
+    expect(moved).toBe(false);
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 });
 

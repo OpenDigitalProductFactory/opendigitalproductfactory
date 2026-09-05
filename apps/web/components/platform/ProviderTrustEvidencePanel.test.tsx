@@ -55,20 +55,41 @@ describe("ProviderTrustEvidencePanel", () => {
     expect(screen.getByText(/No account-specific trust evidence is linked yet/)).toBeTruthy();
   });
 
-  it("names the available declaration action and the unavailable DPA workflow honestly", () => {
+  it("names the required declaration action and marks unrelated DPA history optional", () => {
     render(<ProviderTrustEvidencePanel
       accountDeclarationSaved
       evidenceStatus="operator-attested"
       lastReviewedAt="2026-08-31T09:00:00.000Z"
+      requiredClaimKeys={["enabled-regions"]}
+      scopeHeadline="Company work needs a region guarantee"
+      scopeSummary="Public or synthetic work can be used now. Company work stays blocked until this account guarantees the required region."
       claims={[
         { claimKey: "enabled-regions", status: "missing", evidenceIds: [], evidenceAgeDays: null, expiresAt: null, nextAction: "Add evidence for this connected account." },
         { claimKey: "dpa-on-file", status: "missing", evidenceIds: [], evidenceAgeDays: null, expiresAt: null, nextAction: "Add evidence for this connected account." },
       ]}
     />);
 
-    expect(screen.getByText(/Save the enabled regions in Connected account and data terms above/)).toBeTruthy();
-    expect(screen.getByText(/No DPA evidence workflow is available on this page/)).toBeTruthy();
-    expect(screen.getByText(/reviewed supplier contract/i)).toBeTruthy();
+    expect(screen.getByText(/Confirm the required-region guarantee in Connected account and data terms above/)).toBeTruthy();
+    expect(screen.getByText("Optional here.")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("No DPA evidence workflow is available on this page");
+  });
+
+  it("does not raise attention for optional evidence history", () => {
+    render(<ProviderTrustEvidencePanel
+      accountDeclarationSaved
+      evidenceStatus="operator-attested"
+      lastReviewedAt="2026-08-31T09:00:00.000Z"
+      requiredClaimKeys={[]}
+      scopeHeadline="No action needed"
+      scopeSummary="This connection is ready for the company work represented by the current business setup."
+      claims={[
+        { claimKey: "enabled-regions", status: "missing", evidenceIds: [], evidenceAgeDays: null, expiresAt: null, nextAction: "Add evidence for this connected account." },
+        { claimKey: "dpa-on-file", status: "missing", evidenceIds: [], evidenceAgeDays: null, expiresAt: null, nextAction: "Add evidence for this connected account." },
+      ]}
+    />);
+
+    expect(screen.getByRole("status").textContent).toContain("No action needed");
+    expect(screen.getByText(/ready for the company work represented/i)).toBeTruthy();
   });
 
   it.each(["missing", "expired", "rejected", "conflicting", "superseded"] as const)(

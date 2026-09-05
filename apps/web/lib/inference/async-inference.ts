@@ -23,10 +23,17 @@ import {
 } from "@/lib/ai-provider-internals";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveOpenAiCompatibleApiBase } from "@/lib/routing/openai-base";
+import { withGeminiInteractionsApiRevision } from "@/lib/routing/gemini-interactions-contract";
+import {
+  parseAsyncInferenceOperationStatus,
+  type AsyncInferenceOperationStatus,
+} from "./async-operation-contract";
+import { providerInferenceFetch } from "./provider-inference-transport";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type AsyncOpStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "expired";
+/** @deprecated Durable callers must use AsyncInferenceOperationStatus. */
+export type AsyncOpStatus = AsyncInferenceOperationStatus;
 
 export interface AsyncOperationInfo {
   id: string;
@@ -78,6 +85,10 @@ export async function createAsyncOperation(params: {
   const op = await prisma.asyncInferenceOp.create({
     data: {
       providerId: params.providerId,
+      // This compatibility writer begins after a provider handle already
+      // exists, so it cannot truthfully claim the version-one pre-POST binding
+      // contract. Keep it explicitly legacy until all callers use admission.
+      identityVersion: 0,
       modelId: params.modelId,
       operationId: params.operationId,
       contractFamily: params.contractFamily,
@@ -116,10 +127,12 @@ export async function createAsyncOperation(params: {
 export async function pollAsyncOperation(opId: string): Promise<AsyncOpStatus> {
   const op = await prisma.asyncInferenceOp.findUnique({ where: { id: opId } });
   if (!op) return "failed";
+  assertLegacyBareIdAccess(op.identityVersion);
+  const status = parseAsyncInferenceOperationStatus(op.status);
 
   // Terminal states — no polling needed
-  if (op.status === "completed" || op.status === "failed" || op.status === "cancelled" || op.status === "expired") {
-    return op.status as AsyncOpStatus;
+  if (status === "completed" || status === "failed" || status === "cancelled" || status === "expired") {
+    return status;
   }
 
   // Check expiry
@@ -138,32 +151,56 @@ export async function pollAsyncOperation(opId: string): Promise<AsyncOpStatus> {
   }
 
   // No operation ID yet — can't poll
-  if (!op.operationId) return op.status as AsyncOpStatus;
+  if (!op.operationId) return status;
 
   // Poll the provider
   try {
-    const pollResult = await pollProvider(op.providerId, op.operationId);
+    const pollResult = await pollAsyncProviderOperation(op.providerId, op.operationId);
 
     if (pollResult.done) {
-      // Operation complete
+      const terminalStatus = pollResult.terminalStatus ?? "completed";
+      const terminalFailed = terminalStatus === "failed";
+      const progressMessage = pollResult.progressMessage
+        ?? (terminalStatus === "cancelled"
+          ? "Cancelled"
+          : terminalFailed
+            ? "Failed"
+            : "Complete");
       await prisma.asyncInferenceOp.update({
         where: { id: opId },
         data: {
-          status: "completed",
+          status: terminalStatus,
           completedAt: new Date(),
           progressPct: 100,
-          progressMessage: "Complete",
-          resultText: pollResult.text,
-          ...(pollResult.raw ? { resultData: pollResult.raw as Prisma.InputJsonValue } : {}),
+          progressMessage,
+          ...(terminalFailed
+            ? { errorMessage: pollResult.errorMessage ?? "Provider operation failed" }
+            : { resultText: pollResult.text }),
+          ...(terminalStatus === "completed" && pollResult.raw
+            ? { resultData: pollResult.raw as Prisma.InputJsonValue }
+            : {}),
         },
       });
       if (op.threadId) {
-        agentEventBus.emit(op.threadId, {
-          type: "async:complete" as any,
-          operationId: opId,
-        });
+        if (terminalFailed) {
+          agentEventBus.emit(op.threadId, {
+            type: "async:failed",
+            operationId: opId,
+            error: pollResult.errorMessage ?? "Provider operation failed",
+          });
+        } else if (terminalStatus === "cancelled") {
+          agentEventBus.emit(op.threadId, {
+            type: "async:cancelled",
+            operationId: opId,
+          });
+        } else {
+          agentEventBus.emit(op.threadId, {
+            type: "async:complete",
+            operationId: opId,
+          });
+        }
       }
-      return "completed";
+      return terminalStatus;
     }
 
     // Still running — update progress
@@ -209,15 +246,21 @@ export async function pollAsyncOperation(opId: string): Promise<AsyncOpStatus> {
 
 // ─── Provider Polling ────────────────────────────────────────────────────────
 
-interface PollResult {
+export interface AsyncProviderOperationPollResult {
   done: boolean;
+  terminalStatus?: "completed" | "failed" | "cancelled";
   text?: string;
+  errorMessage?: string;
   raw?: Record<string, unknown>;
   progressPct?: number;
   progressMessage?: string;
 }
 
-async function pollProvider(providerId: string, operationId: string): Promise<PollResult> {
+export async function pollAsyncProviderOperation(
+  providerId: string,
+  operationId: string,
+  fetchImpl: typeof fetch = providerInferenceFetch,
+): Promise<AsyncProviderOperationPollResult> {
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider?.baseUrl) throw new Error(`Provider ${providerId} not found or has no baseUrl`);
 
@@ -241,70 +284,114 @@ async function pollProvider(providerId: string, operationId: string): Promise<Po
   }
 
   if (providerId === "gemini") {
-    return pollGemini(provider.baseUrl, operationId, headers);
+    return pollGemini(provider.baseUrl, operationId, headers, fetchImpl);
   }
 
   // Generic: try GET {baseUrl}/operations/{operationId}
-  return pollGeneric(provider.baseUrl, operationId, headers);
+  return pollGeneric(provider.baseUrl, operationId, headers, fetchImpl);
 }
 
 async function pollGemini(
   baseUrl: string,
   operationId: string,
   headers: Record<string, string>,
-): Promise<PollResult> {
-  // Google LRO: GET {baseUrl}/{operationName}
-  // operationId is the full "operations/..." path
-  const url = operationId.startsWith("http")
-    ? operationId
-    : `${baseUrl}/${operationId}`;
+  fetchImpl: typeof fetch,
+): Promise<AsyncProviderOperationPollResult> {
+  // Interaction IDs are opaque provider-owned identities. Always poll beneath
+  // the configured provider base so a stored value can never redirect auth
+  // headers to an attacker-controlled host.
+  const url = `${baseUrl.replace(/\/+$/, "")}/interactions/${encodeURIComponent(operationId)}`;
 
-  const res = await fetch(url, {
+  const res = await fetchImpl(url, {
     method: "GET",
-    headers,
+    headers: withGeminiInteractionsApiRevision(headers),
     signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
   });
 
   if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
-    throw new Error(`Poll failed: HTTP ${res.status} — ${errBody.slice(0, 200)}`);
+    throw new Error(`Provider poll failed with HTTP ${res.status}`);
   }
 
   const data = (await res.json()) as Record<string, unknown>;
-  const done = data.done === true;
+  if (data.id !== operationId) {
+    throw new Error("Gemini interaction identity mismatch");
+  }
+  if (data.object !== undefined && data.object !== "interaction") {
+    throw new Error("Unexpected Gemini interaction object");
+  }
 
-  if (done) {
-    // Extract result from Google LRO response
-    const response = data.response as Record<string, unknown> | undefined;
-    const candidates = (response?.candidates as Array<{
-      content?: { parts?: Array<{ text?: string }> };
-    }>) ?? [];
-    const text = candidates[0]?.content?.parts?.map(p => p.text ?? "").join("") ?? "";
-
-    const usageMetadata = (response?.usageMetadata as Record<string, number>) ?? {};
+  const status = typeof data.status === "string" ? data.status : null;
+  if (status === "completed") {
+    const steps: unknown[] = Array.isArray(data.steps) ? data.steps : [];
+    const modelOutputs = steps.filter((step): step is Record<string, unknown> => (
+        typeof step === "object" && step !== null && !Array.isArray(step)
+        && (step as Record<string, unknown>).type === "model_output"
+      ));
+    const lastModelOutput = modelOutputs[modelOutputs.length - 1];
+    const outputContent: unknown[] = Array.isArray(lastModelOutput?.content)
+      ? lastModelOutput.content
+      : [];
+    const text = outputContent
+      .filter((item): item is Record<string, unknown> => (
+        typeof item === "object" && item !== null && !Array.isArray(item)
+        && (item as Record<string, unknown>).type === "text"
+      ))
+      .map((item) => typeof item.text === "string" ? item.text : "")
+      .join("");
+    const usage = (
+      typeof data.usage === "object" && data.usage !== null && !Array.isArray(data.usage)
+        ? data.usage
+        : {}
+    ) as Record<string, unknown>;
 
     return {
       done: true,
+      terminalStatus: "completed",
+      progressMessage: "Complete",
       text,
       raw: {
         ...data,
         usage: {
-          inputTokens: usageMetadata.promptTokenCount ?? 0,
-          outputTokens: usageMetadata.candidatesTokenCount ?? 0,
+          inputTokens: typeof usage.total_input_tokens === "number"
+            ? usage.total_input_tokens
+            : 0,
+          outputTokens: typeof usage.total_output_tokens === "number"
+            ? usage.total_output_tokens
+            : 0,
         },
       },
     };
   }
 
-  // Still running — extract progress from metadata
-  const metadata = data.metadata as Record<string, unknown> | undefined;
-  const progressPct = typeof metadata?.progress === "number" ? metadata.progress : undefined;
-  const progressMessage = typeof metadata?.status === "string" ? metadata.status : undefined;
+  if (status === "in_progress" || status === "queued") {
+    return {
+      done: false,
+      progressMessage: status,
+    };
+  }
 
+  if (status === "cancelled") {
+    return {
+      done: true,
+      terminalStatus: "cancelled",
+      progressMessage: "Cancelled",
+    };
+  }
+
+  const errorMessage = status === "requires_action"
+    ? "Gemini interaction requires_action, but no continuation path is available"
+    : status === "incomplete"
+      ? "Gemini interaction was incomplete"
+      : status === "failed"
+        ? "Gemini interaction failed"
+        : status === "budget_exceeded"
+          ? "Gemini interaction exceeded its provider budget"
+          : "Gemini interaction returned an unsupported status";
   return {
-    done: false,
-    progressPct,
-    progressMessage,
+    done: true,
+    terminalStatus: "failed",
+    errorMessage,
+    progressMessage: "Failed",
   };
 }
 
@@ -312,35 +399,80 @@ async function pollGeneric(
   baseUrl: string,
   operationId: string,
   headers: Record<string, string>,
-): Promise<PollResult> {
+  fetchImpl: typeof fetch,
+): Promise<AsyncProviderOperationPollResult> {
   const apiBase = resolveOpenAiCompatibleApiBase(baseUrl);
   const url = `${apiBase}/operations/${operationId}`;
 
-  const res = await fetch(url, {
+  const res = await fetchImpl(url, {
     method: "GET",
     headers,
     signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
   });
 
   if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
-    throw new Error(`Poll failed: HTTP ${res.status} — ${errBody.slice(0, 200)}`);
+    throw new Error(`Provider poll failed with HTTP ${res.status}`);
   }
 
   const data = (await res.json()) as Record<string, unknown>;
-  const status = data.status as string | undefined;
-  const done = status === "completed" || status === "succeeded" || data.done === true;
+  const responseId = typeof data.id === "string"
+    ? data.id
+    : typeof data.operation_id === "string"
+      ? data.operation_id
+      : null;
+  if (responseId !== null && responseId !== operationId) {
+    throw new Error("Provider operation identity mismatch");
+  }
+
+  const status = typeof data.status === "string" ? data.status.toLowerCase() : null;
+  const error = data.error;
+  const failedStatuses = new Set(["failed", "error", "errored"]);
+  const cancelledStatuses = new Set(["cancelled", "canceled"]);
+  const completedStatuses = new Set(["completed", "succeeded"]);
+  const runningStatuses = new Set([
+    "pending", "queued", "running", "in_progress", "processing",
+  ]);
+  if (status !== null
+    && !failedStatuses.has(status)
+    && !cancelledStatuses.has(status)
+    && !completedStatuses.has(status)
+    && !runningStatuses.has(status)) {
+    throw new Error("Provider operation returned an unsupported status");
+  }
+
+  if (failedStatuses.has(status ?? "") || (data.done === true && error)) {
+    return {
+      done: true,
+      terminalStatus: "failed",
+      errorMessage: "Provider operation failed",
+      progressMessage: "Failed",
+    };
+  }
+  if (cancelledStatuses.has(status ?? "")) {
+    return {
+      done: true,
+      terminalStatus: "cancelled",
+      progressMessage: "Cancelled",
+    };
+  }
+
+  const done = completedStatuses.has(status ?? "") || data.done === true;
 
   if (done) {
     const result = (data.result ?? data.response ?? data.output) as Record<string, unknown> | undefined;
     const text = typeof result?.text === "string" ? result.text : "";
-    return { done: true, text, raw: data };
+    return { done: true, terminalStatus: "completed", text, raw: data };
+  }
+
+  const running = runningStatuses.has(status ?? "") || data.done === false;
+  if (!running) {
+    throw new Error("Provider operation returned an unsupported status");
   }
 
   return {
     done: false,
     progressPct: typeof data.progress === "number" ? data.progress : undefined,
-    progressMessage: typeof data.status_message === "string" ? data.status_message : undefined,
+    progressMessage: "Provider operation in progress",
   };
 }
 
@@ -349,13 +481,14 @@ async function pollGeneric(
 export async function getAsyncOperationInfo(opId: string): Promise<AsyncOperationInfo | null> {
   const op = await prisma.asyncInferenceOp.findUnique({ where: { id: opId } });
   if (!op) return null;
+  assertLegacyBareIdAccess(op.identityVersion);
 
   return {
     id: op.id,
     providerId: op.providerId,
     modelId: op.modelId,
     operationId: op.operationId,
-    status: op.status as AsyncOpStatus,
+    status: parseAsyncInferenceOperationStatus(op.status),
     progressPct: op.progressPct,
     progressMessage: op.progressMessage,
     createdAt: op.createdAt,
@@ -369,6 +502,7 @@ export async function getAsyncOperationInfo(opId: string): Promise<AsyncOperatio
 export async function getAsyncOperationResult(opId: string): Promise<AsyncOperationResult | null> {
   const op = await prisma.asyncInferenceOp.findUnique({ where: { id: opId } });
   if (!op) return null;
+  assertLegacyBareIdAccess(op.identityVersion);
 
   const usage = op.resultData && typeof op.resultData === "object"
     ? ((op.resultData as Record<string, unknown>).usage as { inputTokens?: number; outputTokens?: number } | undefined)
@@ -378,7 +512,7 @@ export async function getAsyncOperationResult(opId: string): Promise<AsyncOperat
     id: op.id,
     providerId: op.providerId,
     modelId: op.modelId,
-    status: op.status as AsyncOpStatus,
+    status: parseAsyncInferenceOperationStatus(op.status),
     resultText: op.resultText,
     resultData: op.resultData,
     errorMessage: op.errorMessage,
@@ -391,7 +525,15 @@ export async function getAsyncOperationResult(opId: string): Promise<AsyncOperat
 
 export async function cancelAsyncOperation(opId: string): Promise<void> {
   const op = await prisma.asyncInferenceOp.findUnique({ where: { id: opId } });
-  if (!op || op.status === "completed" || op.status === "failed") return;
+  if (!op) return;
+  assertLegacyBareIdAccess(op.identityVersion);
+  const status = parseAsyncInferenceOperationStatus(op.status);
+  if (
+    status === "completed"
+    || status === "failed"
+    || status === "cancelled"
+    || status === "expired"
+  ) return;
 
   await prisma.asyncInferenceOp.update({
     where: { id: opId },
@@ -400,9 +542,14 @@ export async function cancelAsyncOperation(opId: string): Promise<void> {
 
   if (op.threadId) {
     agentEventBus.emit(op.threadId, {
-      type: "async:failed" as any,
+      type: "async:cancelled",
       operationId: opId,
-      error: "Cancelled by caller",
     });
+  }
+}
+
+function assertLegacyBareIdAccess(identityVersion: number): void {
+  if (identityVersion !== 0) {
+    throw new Error("ASYNC_OPERATION_AUTHORIZED_SCOPE_REQUIRED");
   }
 }

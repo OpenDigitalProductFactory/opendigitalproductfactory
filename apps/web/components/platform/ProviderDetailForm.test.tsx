@@ -84,7 +84,8 @@ describe("ProviderDetailForm", () => {
       />,
     );
 
-    expect(html).toContain("Provider readiness");
+    expect(html).toContain("Technical readiness");
+    expect(html).toContain("Data-use eligibility is evaluated separately");
     expect(html).toContain("Save &amp; ready provider");
     expect(html).not.toContain(">Save<");
     expect(html).not.toContain("Test &amp; Discover");

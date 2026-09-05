@@ -426,6 +426,9 @@ export type BuildReviewDeliberationInput = {
   /** Optional thread id — progress events from the deliberation layer fan
    *  out through the agent event bus for this thread. */
   threadId?: string;
+  /** Coworker that asked for the review — stamped on the bootstrapped
+   *  TaskRun so Right Now can place the run (BI-B3AB7FC9). */
+  agentId?: string;
   /** Opt-in to the debate pattern for this invocation. Omit for default
    *  peer review. */
   explicitPattern?: DeliberationPatternChoice;
@@ -451,7 +454,7 @@ export type BuildReviewDeliberationResult = {
 export async function runBuildReviewDeliberation(
   input: BuildReviewDeliberationInput,
 ): Promise<BuildReviewDeliberationResult> {
-  const { userId, buildId, phase, reviewerBranches, taskRunId, threadId, strategyProfile } = input;
+  const { userId, buildId, phase, reviewerBranches, taskRunId, threadId, agentId, strategyProfile } = input;
 
   const patternSlug: DeliberationPatternChoice =
     input.explicitPattern ?? defaultDeliberationPatternForPhase(phase);
@@ -476,6 +479,7 @@ export async function runBuildReviewDeliberation(
     patternSlug,
     taskRunId,
     threadId,
+    agentId,
     buildId,
     artifactType,
     strategyProfile: strategyProfile ?? "balanced",

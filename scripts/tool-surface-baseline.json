@@ -3,18 +3,18 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 405,
-      "reason": "The 12 banking books-loop tools (S-FIN, BI-DE27D34E): the loop existed only as UI server actions, so no coworker could keep the books current. A bookkeeper needs to set up accounts, import a statement, categorize via rules, and reconcile through governed tools; no existing tool carries account setup, CSV statement import, or transaction matching. Six reads/banking_read, six writes/banking_write; the two money-of-record writes route the governance gate.",
-      "recordedAt": "2026-08-23"
+      "value": 408,
+      "reason": "issue_organization_join_file (BI-AC7BCC58, EP-ZERO-CONFIG-FEDERATION §5.3): the authority side of the pair. Until now only a host script behind an edge node could mint the one-time join file, so an agent could never pair two installations end to end. This tool is the session-free twin of the Connections page's 'Create join file': the authority portal unlocks its provisioner key and mints the tokens itself (verified against a live step-ca), returning the file text the agent carries to import_organization_join_file on the member. Together the two tools close the pairing loop with nothing typed.",
+      "recordedAt": "2026-09-05"
     },
     "registry.packFiles": {
-      "value": 99,
-      "reason": "New statutory-rate-pack.ts (BI-8E1FD1BD): the two tools a research coworker needs to deliver a cited statutory figure — list_statutory_rate_gaps and propose_statutory_rate. They belong in no existing pack, and the alternative was what already existed: coworkers holding web_search that could research a tax rate and had no way to record it, so the finding died in a backlog item. Deliberately no ratify tool — confirming a figure is a human action on the finance surface.",
-      "recordedAt": "2026-09-01"
+      "value": 100,
+      "reason": "New federation-membership-pack.ts: organization membership (join-file import, and the issue side to follow in the next slice) is a federation-trust concern distinct from ux-verification, self-upgrade and admin packs; a dedicated pack keeps the grant (sandbox_execute) and capability (manage_platform) beside the tools they govern.",
+      "recordedAt": "2026-09-05"
     },
     "tier.coreToolNames": {
       "value": 30,
-      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs — same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
+      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs \u2014 same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
       "recordedAt": "2026-08-08"
     },
     "dispatch.maxAttachedTools": {

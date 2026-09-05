@@ -114,6 +114,7 @@ IncumbentCoverageAssessment  domain-lifecycle-managed  # Per-customer coverage v
 JobRequisition  domain-lifecycle-managed  # Requisitions close/fill through their own status lifecycle (open→closed/filled), not a time-based sweep (BI-F3AEBF68).
 WorkroomParticipant  domain-lifecycle-managed  # Roster rows cascade with their Workroom and are archived by membership lifecycle; a time sweep would drop a live room's Process Overseer.
 WorkroomRelation  domain-lifecycle-managed  # Relation rows cascade with their Workrooms; a time sweep would drop a live contains/depends-on edge.
+AsyncInferenceOperationTransition  domain-lifecycle-managed  # Ordered lifecycle evidence cascades with its owning AsyncInferenceOp; independent age purging would break cursor reconciliation and event audit truth.
 RequisitionOpening  domain-lifecycle-managed  # Headcount slots follow their parent requisition via cascade; never independently aged.
 JobPosting  domain-lifecycle-managed  # Postings are unpublished/closed by requisition lifecycle and cascade; not age-swept.
 PipelineStage  domain-lifecycle-managed  # Stage definitions follow their requisition via cascade; not independently aged.
@@ -127,6 +128,13 @@ MacVendorOui  reference-data  # IEEE OUI registry seeded from packages/db/data/o
 McpToolSession  domain-lifecycle-managed  # short-TTL discovery state; rows are removed by their own expiresAt sweep (sweepExpiredToolSessions + lazy delete on read), not the retention engine
 FederationIntroductionCandidate  derived-projection  # Reconciled from a trusted introducer, expired/withdrawn by that exchange, and cascade-removed with its introducer link; it is never an independent source of trust.
 ExternalChannelProjection  derived-projection  # Rebuilt or explicitly retired from canonical DPF source plus external-channel evidence; age alone cannot decide whether a live source-to-remote binding is still authoritative.
+AnimalProfile  domain-lifecycle-managed  # Canonical animal identity follows explicit rescue lifecycle and organization retention; public listing changes never delete it.
+AnimalCustodyEpisode  domain-lifecycle-managed  # Admission-to-outcome evidence closes through an explicit outcome and can be held; age cannot decide disposition.
+AnimalCustodyEvent  domain-lifecycle-managed  # Append-only custody evidence follows its episode; independent aging would break legal-hold and transfer history.
+AnimalAdoptionApplication  domain-lifecycle-managed  # Applications close through explicit screening decisions and remain placement provenance; age alone is not disposition.
+AnimalPlacement  domain-lifecycle-managed  # Placement and return history changes only through explicit lifecycle actions and remains custody provenance.
+CareRecord  domain-lifecycle-managed  # Care facts are corrected by supersession, may be held, and follow the animal's governed record lifecycle.
+FinancialFund  domain-lifecycle-managed  # Effective-dated fund definitions follow finance governance; purging one would make posted journal dimensions uninterpretable.
 PayComponentLine  domain-lifecycle-managed  # Payslip money lines (BI-EAC670F1); cascade-deleted with their parent Payslip and retained for as long as payroll/tax law requires that payslip. A purge window here would gut historical pay records.
 EmployeeDeductionElection  domain-lifecycle-managed  # Standing deduction instructions (BI-EAC670F1); effective-dated and retired via RecordLifecycle so a closed run still explains what it deducted and why.
 Vehicle  domain-lifecycle-managed  # Fleet/driver vehicles (BI-6D98AD8A); leave service via the RecordLifecycle convention so historical trips keep resolving their vehicle. Age alone must not delete a vehicle a prior reimbursement cites.

@@ -198,6 +198,7 @@ async function resolveExternalInitiativeReviewBinding(
   itemId: string;
   gate: string;
   expectedCurrentBaselineId?: string | null;
+  eligibleEvidenceActivityIds?: string[];
   artifactRef: InitiativeArtifactRef;
 } | null> {
   if (!taskRunId) return null;
@@ -217,6 +218,14 @@ async function resolveExternalInitiativeReviewBinding(
   const gate = typeof binding["gate"] === "string" ? binding["gate"].trim() : "";
   const rawArtifact = binding["artifactRef"];
   const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
+  const rawEligibleEvidenceActivityIds = binding["eligibleEvidenceActivityIds"];
+  const eligibleEvidenceActivityIds = Array.isArray(rawEligibleEvidenceActivityIds)
+    && rawEligibleEvidenceActivityIds.length > 0
+    && rawEligibleEvidenceActivityIds.length <= 500
+    && rawEligibleEvidenceActivityIds.every((id) => typeof id === "string" && id.trim())
+    && new Set(rawEligibleEvidenceActivityIds).size === rawEligibleEvidenceActivityIds.length
+    ? rawEligibleEvidenceActivityIds as string[]
+    : null;
   if (!itemId.startsWith("BI-") || !gate || !rawArtifact || typeof rawArtifact !== "object" || Array.isArray(rawArtifact)) {
     return null;
   }
@@ -230,6 +239,8 @@ async function resolveExternalInitiativeReviewBinding(
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
+    || (rawEligibleEvidenceActivityIds !== undefined && !eligibleEvidenceActivityIds)
+    || (gate === "objective-mapping" && !eligibleEvidenceActivityIds)
   ) return null;
   return {
     itemId,
@@ -237,6 +248,7 @@ async function resolveExternalInitiativeReviewBinding(
     ...(expectedCurrentBaselineId !== undefined
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
+    ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
     artifactRef: {
       kind: "repo-blob-at-commit",
       repositoryFullName: artifact["repositoryFullName"],
@@ -278,6 +290,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         itemId: String(params.itemId ?? ""),
         baselineId: params.baselineId,
         mappings,
+        eligibleEvidenceActivityIds: binding?.eligibleEvidenceActivityIds ?? [],
         reason: String(params.reason ?? ""),
         proposerUserId: userId,
         proposerAgentId: context?.agentId ?? null,

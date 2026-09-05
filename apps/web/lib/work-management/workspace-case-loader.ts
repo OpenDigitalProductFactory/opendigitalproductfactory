@@ -4,6 +4,7 @@ import type {
   WorkCaseState,
   WorkCaseTimelineEvent,
 } from "./case-types";
+import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 import {
   buildWorkCaseDetail,
   buildWorkCaseSummary,
@@ -26,6 +27,7 @@ import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureContext } from "./room-posture";
 import { readWorkroomShapeClaim } from "./workroom-shape-claim";
 import { readWorkroomPostureClaim } from "./workroom-posture-claim";
+import { readStoredWorkroomDriveState } from "./workroom-drive-state";
 import { deriveWorkroomShape } from "./derive-workroom-shape";
 import type { WorkroomActivityKind, WorkroomParticipantView, WorkroomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
@@ -35,6 +37,8 @@ import {
   readWorkspaceRoomPolicy,
   type WorkspaceRoomPolicyParticipant,
 } from "./workspace-room-access";
+
+export { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 
 const CLOSED_WORK_ITEM_STATUSES = ["completed", "cancelled"];
 
@@ -110,6 +114,7 @@ export type WorkspaceWorkCapsuleRecord = {
   scopeClaims?: unknown;
   activityKind?: string | null;
   decisionScope?: string | null;
+  workspaceState?: unknown;
 };
 
 /** A capsule-activity row (WorkroomActivity, physical table WorkCapsuleActivity) —
@@ -237,20 +242,6 @@ function sourceForItem(item: WorkspaceWorkItemRecord): { sourceType: string; sou
   return {
     sourceType: item.sourceType || "manual-task",
     sourceId: item.sourceId || item.itemId,
-  };
-}
-
-export function encodeWorkCaseKey(ref: { sourceType: string; sourceId: string }): string {
-  return encodeURIComponent(`${ref.sourceType}:${ref.sourceId}`);
-}
-
-export function decodeWorkCaseKey(caseKey: string): { sourceType: string; sourceId: string } | null {
-  const decoded = decodeURIComponent(caseKey);
-  const separator = decoded.indexOf(":");
-  if (separator <= 0 || separator === decoded.length - 1) return null;
-  return {
-    sourceType: decoded.slice(0, separator),
-    sourceId: decoded.slice(separator + 1),
   };
 }
 
@@ -597,6 +588,7 @@ export async function loadWorkspaceWorkCaseDetail({
         scopeClaims: true,
         activityKind: true,
         decisionScope: true,
+        workspaceState: true,
       },
       orderBy: [{ updatedAt: "desc" }],
     }),
@@ -669,6 +661,7 @@ export async function loadWorkspaceWorkCaseDetail({
     ? await structureLoader({ sourceType: source.sourceType, sourceId: source.sourceId })
     : null;
   const anchoredCapsule = capsules[0] ?? null;
+  const storedDrive = readStoredWorkroomDriveState(anchoredCapsule?.workspaceState);
   const postureContext = postureContextLoader
     ? await postureContextLoader({
         sourceType: source.sourceType,
@@ -708,6 +701,14 @@ export async function loadWorkspaceWorkCaseDetail({
     activityKind: anchoredCapsule?.activityKind ?? null,
     scopeClaims: anchoredCapsule?.scopeClaims,
     now,
+    processOverseerObservation: {
+      currentStageKey: storedDrive.currentStageKey,
+      proposedStageKey: storedDrive.currentStageKey,
+      receipts: storedDrive.receipts,
+      budgetUsage: storedDrive.budgetUsage,
+      stopConditionHits: storedDrive.stopConditionHits,
+      reviewDue: storedDrive.reviewDue,
+    },
     boundary: {
       purpose: item.description,
       outcome: null,

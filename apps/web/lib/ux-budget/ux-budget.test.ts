@@ -490,7 +490,26 @@ describe("generated route-shell registry", () => {
     // preview is deterministic and carries an explicit page-purpose contract.
     // 201 -> 202: /finance/mileage is a net-new driver-facing route (EP-MILEAGE-ABSORB)
     // — the surface that makes the mileage substrate reachable.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(205);
+    // 205 -> 206: /workspace/cases/[caseKey] is the FIRST dynamic route the sweep
+    // can measure (BI-DE67A3EC). Every "[param]" route was excluded outright
+    // because nothing minted an id; the fixture now mints a deterministic work
+    // case and publishes its path, so a detail surface is measurable at last.
+    // Eligibility for a dynamic route is earned by that minting, not asserted —
+    // an eligible-but-unresolved route fails the run rather than measuring a 404.
+    // 206 -> 207: /workspace/ward (BI-F91D0685) — the ward board reads housing and
+    // occupancy from route-owned read models with no wall-clock or live-orchestration
+    // state, so its rendered output is stable and it carries a ratified page-purpose
+    // contract.
+    // 206 -> 207: /storefront/animals/waiting (BI-899D7F00) — the adoption waiting
+    // list, read-only over AdoptableAnimal.publishedAt. The first storefront route to
+    // be measurable: the sweep fixture now provisions one pet-rescue storefront with
+    // listed animals, which is the honest fixture context the storefront-setup-required
+    // exclusions were waiting for. Its siblings keep their exclusion until each gets its own.
+    // 207 -> 206: /storefront/setup joins setup-phase-only in the same PR — once the
+    // fixture provisions a storefront the wizard navigates away and cannot be measured.
+    // Net: 206 base + /workspace/ward + /storefront/animals/waiting - /storefront/setup
+    // + six deterministic Pet Rescue operating routes = 213.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(213);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
@@ -502,6 +521,8 @@ describe("generated route-shell registry", () => {
     // fixture, so it is not measured (not a live-state exclusion, a fixture one).
     // Redirect-only routes are omitted from the page registry. Parameterized redirect
     // detection removed five compatibility shims from this count in BI-7D2C4F02.
+    // 120 -> 119: the mirror of the eligibility gain above — /workspace/cases/[caseKey]
+    // left the excluded set when the fixture began minting its id.
     expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);
   });
 
