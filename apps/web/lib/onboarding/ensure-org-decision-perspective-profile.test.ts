@@ -79,13 +79,24 @@ describe("ensureOrgDecisionPerspectiveProfile", () => {
         status: "active",
       }),
     ]);
+    // BI-218EC195: the fallback profile is a governing profile in its own
+    // right, so it carries a version too — the ledger refuses to record
+    // against a profile with no version.
     expect(fake.versions).toEqual([
+      expect.objectContaining({
+        versionId: `${ORG_PERSPECTIVE_FALLBACK_PROFILE_ID}-v1`,
+        profileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
+        versionNumber: 1,
+      }),
       expect.objectContaining({
         versionId: result.versionId,
         profileId: result.profileId,
         versionNumber: 1,
       }),
     ]);
+    expect(fake.profiles[0]).toEqual(
+      expect.objectContaining({ currentVersionId: `${ORG_PERSPECTIVE_FALLBACK_PROFILE_ID}-v1` }),
+    );
   });
 
   it("replays idempotently with the same profile and version", async () => {
@@ -101,6 +112,6 @@ describe("ensureOrgDecisionPerspectiveProfile", () => {
 
     expect(second).toEqual(first);
     expect(fake.profiles).toHaveLength(2);
-    expect(fake.versions).toHaveLength(1);
+    expect(fake.versions).toHaveLength(2); // fallback v1 + org v1 (BI-218EC195)
   });
 });
