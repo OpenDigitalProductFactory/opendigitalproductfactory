@@ -114,7 +114,7 @@ The caller cannot supply a new packet, token, binding, agent, or TaskRun id.
 
 ### 3. Dependency and integration boundary
 
-`BI-41C038CF` owns provider HTTP transport and may change how raw fetch failures
+`BI-41EB722B` owns provider HTTP transport and may change how raw fetch failures
 are produced. This child must merge after that repair for integration evidence,
 but must not edit its inference/routing transport paths. Its contract begins at
 the typed aggregate route failure and ends at the existing TaskRun worker wake.
