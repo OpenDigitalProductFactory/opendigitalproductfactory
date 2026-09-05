@@ -72,7 +72,7 @@ Work is not complete until all four pass:
 - **Documentation impact is part of done.** Decide whether a change affects users, AI coworkers, positioning, install, operations, architecture, routes, prompts or external-agent behavior; update the right docs surface in the same branch, or record a concrete no-docs-needed reason. Do not claim done while docs exposed to users or coworkers are knowingly stale.
 - **Pre-existing failures: note them and fix if feasible. Do not defer silently.**
 - **Never weaken auth to make a test pass.** Use a seeded persona at its real privilege level; if a check blocks you, that is the finding.
-- **Subagents do not read this file.** ⟦model: the injected "run the gate and fix errors" lines assume a subagent won't verify unprompted; newer models self-verify⟧ They know only what the dispatcher prompt tells them, so the dispatcher owns restating any rule the subagent must honour — the build gate, the UX verification path, theme-aware styling, and the documentation-impact check.
+- **A gate that could not run is not a verdict.** Infrastructure failure — a fenced lease, a killed child, a starved host — is recorded as inconclusive and re-runs on the same SHA. Never a FAIL against the diff. Fail closed on safety; fail open on infrastructure. → [kernel principle](docs/founder-kernel/wiki/principles/report-only-the-verdict-you-reached.md)
 
 ## 5. Backlog & Planning
 
