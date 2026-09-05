@@ -317,7 +317,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // (loopback by default). Short syntax put the admin login, postgres and
     // redis on the LAN of every install (#4337).
     guard("compose-bind-posture-guard", "Compose Bind Posture Guard", [
-      node("--test", "scripts/check-compose-bind-posture.test.mjs"),
+      conformanceTest("scripts/check-compose-bind-posture.test.mjs"),
       node("scripts/check-compose-bind-posture.mjs"),
     ], { inputs: ["code"] }),
     guard("compose-resource-budgets-guard", "Compose Resource Budgets Guard", [
