@@ -5,7 +5,7 @@ title: Objective-mapping evidence contract and correction
 
 # Objective-mapping evidence contract and correction
 
-**Backlog item:** `BI-0F8E39D5`  
+**Backlog item:** `BI-0F8E39D5`
 **Parent contract:** `docs/superpowers/specs/2026-09-01-completion-readiness-recovery-design.md`
 
 ## Decision summary
