@@ -183,6 +183,10 @@ Verdict: **ready to plan, not yet ready to build.** The plan can be written now.
 
 Estimated size of this work: `large` (schema + policy + three consumers), decomposed into 4–6 `medium` children under EP-129D11FD.
 
+## 6.1 Plan and backlog coverage
+
+Implementation plan: `docs/superpowers/plans/2026-09-05-work-shape-taxonomy-implementation.md` (Workroom `WC-FFEB51C2`, branch `doc/work-shape-plan`). Seven children under `EP-129D11FD`, dependency-ordered: `BI-218EC195` (ledger seals rulings) → `BI-B90F7CBB` (registry) → `BI-02470C7E` (claim asks) → `BI-B269FC72` (readiness v3) → `BI-AFE8BB73` (delivery from trunk) and `BI-F2FEC1EB` (expedite lane) → `BI-D03BE728` (visibility, matrix, docs). The parent `BI-B5C8FEFC` closes against the §4 gate table as its objective baseline and the plan's completion gate as its acceptance.
+
 ## 7. What this does not change
 
 - The PR gate itself (tests, typecheck, DCO, local-CI lease, deterministic guards). Every shape runs it. DORA's finding is about *external* approval, not about automated verification.
