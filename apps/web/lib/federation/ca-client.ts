@@ -79,6 +79,10 @@ export const caRequest: CaRequest = (input) => {
   const url = new URL(`${input.caUrl}${input.path}`);
   const payload = input.body === undefined ? undefined : JSON.stringify(input.body);
   const candidates = [url.hostname, "localhost", "127.0.0.1"];
+  // Which phases the request reached — reported on a timeout so a stall is
+  // attributable (name resolution, TCP connect, TLS, or the CA itself).
+  const reached: string[] = [];
+  const startedAt = Date.now();
   return new Promise<CaResponse>((resolve, reject) => {
     const req = httpsRequest(
       {
@@ -113,7 +117,16 @@ export const caRequest: CaRequest = (input) => {
         });
       },
     );
-    req.on("timeout", () => req.destroy(new Error("CA request timed out")));
+    req.on("socket", (socket) => {
+      reached.push("socket");
+      socket.once("lookup", () => reached.push("lookup"));
+      socket.once("connect", () => reached.push("connect"));
+      socket.once("secureConnect", () => reached.push("tls"));
+    });
+    req.on("response", () => reached.push("response"));
+    req.on("timeout", () => {
+      req.destroy(new Error(`CA request timed out after ${Date.now() - startedAt}ms (reached: ${reached.join(">") || "nothing"})`));
+    });
     req.on("error", reject);
     req.end(payload);
   });
