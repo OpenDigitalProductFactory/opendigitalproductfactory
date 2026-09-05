@@ -14,6 +14,7 @@ import {
 
 import { auth } from "@/lib/auth";
 import { importOrganizationJoinFile } from "@/lib/federation/organization-join-import";
+import { issueOrganizationJoinFile } from "@/lib/federation/organization-join-issue";
 import { resolveLocalFederationAuthorityUrl } from "@/lib/federation/self-authority";
 import { makeRfcId } from "@/lib/change-management/lifecycle";
 import { assertEncryptionReadyForCredentialWrite } from "@/lib/govern/credential-crypto";
@@ -365,6 +366,35 @@ export async function importOrganizationJoinFileAction(fileText: string): Promis
   });
 }
 
+export interface OrganizationJoinFileIssued {
+  fileName: string;
+  content: string;
+  intendedPeer: string;
+  expiresAt: string;
+}
+
+/**
+ * Portal-mediated issue (EP-ZERO-CONFIG-FEDERATION §5.3): the authority portal
+ * mints the join file itself — no edge node, no host script. Returned once;
+ * the browser downloads it and it expires in 30 minutes.
+ */
+export async function issueOrganizationJoinFileAction(input: { intendedPeer: string }): Promise<
+  ActionSuccess<OrganizationJoinFileIssued> | OrganizationJoinActionFailure
+> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "unauthorized", message: "Sign in required" };
+  if (!can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_platform")) {
+    return { ok: false, error: "forbidden", message: "Platform management access is required" };
+  }
+  const intendedPeer = typeof input?.intendedPeer === "string" ? input.intendedPeer.trim() : "";
+  if (!intendedPeer) return { ok: false, error: "invalid_input", message: "Choose the installation the file is for" };
+  const requestHost = await resolveLocalFederationAuthorityUrl();
+  const result = await issueOrganizationJoinFile({ intendedPeer, requestHost });
+  if (!result.issued) return joinIssueFailure(result.reason, result.detail);
+  revalidatePath(CONNECTIONS_PATH);
+  return ok({ fileName: result.fileName, content: result.packageText, intendedPeer: result.intendedPeer, expiresAt: result.expiresAt });
+}
+
 export async function getOrganizationJoinActionStatusAction(actionKey: string): Promise<
   | { ok: true; actionKey: string; actionType: string; status: string; approvalState: string; packageReady: boolean; evidence: Record<string, unknown> }
   | OrganizationJoinActionFailure
@@ -438,6 +468,23 @@ function actionFailure(reason: string): OrganizationJoinActionFailure {
       return { ok: false, error: "invalid_input", message: "The organization setup request is not valid" };
   }
 }
+function joinIssueFailure(reason: string, detail?: string): OrganizationJoinActionFailure {
+  switch (reason) {
+    case "not-the-authority":
+      return { ok: false, error: "not_ready", message: "Only the organization installation (the one that holds the organization's certificate authority) can create join files" };
+    case "invalid-intended-peer":
+      return { ok: false, error: "invalid_input", message: "The installation name is not a valid host name or address" };
+    case "own-address-unknown":
+      return { ok: false, error: "not_ready", message: "Open this page at the installation's network address (not localhost) so the file can name it" };
+    case "ca-unreachable":
+    case "provisioner-missing":
+    case "provisioner-key-locked":
+      return { ok: false, error: "not_ready", message: `The organization's certificate authority could not issue the file${detail ? ` (${detail})` : ""}` };
+    default:
+      return { ok: false, error: "internal_error", message: "The join file could not be created" };
+  }
+}
+
 function joinImportFailure(reason: string, detail?: string): OrganizationJoinActionFailure {
   switch (reason) {
     case "join-package-expired":
