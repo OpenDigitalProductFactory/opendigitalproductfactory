@@ -57,8 +57,7 @@ introduces an unused duplicate field.
 - Dependencies: none
 - Rationale: persistence and reconstruction are the two sides of one immutable
   packet contract and cannot be deployed independently.
-- Receipt: pending immutable plan publication and
-  `record_plan_backlog_coverage`.
+- Receipt: `cmtnut9ww026z01n9wzgyqmvu`
 
 ## Rollback
 
