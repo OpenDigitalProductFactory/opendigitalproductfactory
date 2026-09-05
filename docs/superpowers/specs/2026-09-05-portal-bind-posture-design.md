@@ -35,7 +35,7 @@ Candidate causes ruled out by running them:
 3. `scripts/installer/install-release-assets.mjs` `updateEnv`: when `.env` already exists and lacks the key, append `DPF_HOST_BIND_ADDRESS=0.0.0.0` with a comment naming this decision; when `.env` is new, append `127.0.0.1`. Tests in `install-release-assets.test.mjs`.
 4. `apps/web/app/api/automation/sign-in/route.ts`: build the redirect from `getPortalUrl()`.
 5. `docs/install/*` and `docs/user-guide` (whichever guide the docs-impact gate maps): default exposure statement and the opt-in line.
-6. File the follow-up for the remaining `request.nextUrl.origin` call sites and link it here.
+6. Follow-up for the remaining 58 `request.nextUrl.origin` call sites: BI-48092F3A.
 
 ## Boundaries
 
