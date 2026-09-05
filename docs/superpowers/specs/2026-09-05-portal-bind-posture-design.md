@@ -40,6 +40,7 @@ Candidate causes ruled out by running them:
 ## Boundaries
 
 - No change to the edge-standalone overlay: an edge node on another machine has its own compose file and its LAN purpose is stated there.
+- The OS overlays (`docker-compose.linux.yml`, `docker-compose.macos.yml`) are not rewritten in this change; the ollama port (`11434`) they publish stays as declared and is the first item for BI-48092F3A's sibling follow-up once the base file has settled. The guard covers `docker-compose.yml` only, on purpose, so the scope of this PR is one file plus its manifest mirror.
 - No change to `PUBLIC_URL` semantics.
 - `HOSTNAME=0.0.0.0` inside the container stays; the container must listen on all interfaces of its own network namespace for Compose to publish it.
 
