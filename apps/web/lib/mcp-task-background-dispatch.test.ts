@@ -164,6 +164,97 @@ describe("external TaskRun durable dispatch", () => {
     expect(result).toEqual({ scanned: 1, enqueued: 1, exhausted: 0, raced: 0 });
   });
 
+  it("re-emits a valid provider resource wait when ordinary async reconciliation is off", async () => {
+    db.findMany.mockResolvedValue([{
+      id: "task-row-resource-wait",
+      taskRunId: "TR-RESOURCE-WAIT",
+      userId: "user-1",
+      status: "submitted",
+      updatedAt: new Date("2026-08-31T03:58:00.000Z"),
+      a2aMetadata: { trigger: "external-mcp" },
+      progressPayload: {
+        resourceWait: {
+          schemaVersion: 1,
+          kind: "provider-capacity",
+          failureKind: "busy",
+          resumeMode: "same-taskrun",
+          attempt: 1,
+          observedAt: "2026-08-31T03:58:00.000Z",
+        },
+      },
+    }]);
+    db.findUnique.mockResolvedValueOnce({
+      status: "submitted",
+      updatedAt: new Date("2026-08-31T04:00:00.001Z"),
+      progressPayload: {
+        resourceWait: {
+          schemaVersion: 1,
+          kind: "provider-capacity",
+          failureKind: "busy",
+          resumeMode: "same-taskrun",
+          attempt: 1,
+          observedAt: "2026-08-31T03:58:00.000Z",
+        },
+        dispatch: {
+          state: "pending",
+          eventId: "mcp-task-run:TR-RESOURCE-WAIT:execute:1",
+          attempt: 1,
+        },
+      },
+    });
+
+    await expect(reconcilePersistedRemoteTaskDispatches({
+      now: new Date("2026-08-31T04:00:00.000Z"),
+      includeOrdinary: false,
+    })).resolves.toEqual({ scanned: 1, enqueued: 1, exhausted: 0, raced: 0 });
+
+    expect(db.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: expect.arrayContaining([
+          expect.objectContaining({
+            status: "submitted",
+            progressPayload: {
+              path: ["resourceWait", "kind"],
+              equals: "provider-capacity",
+            },
+          }),
+        ]),
+      }),
+    }));
+    expect(queue.send).toHaveBeenCalledWith(
+      "TR-RESOURCE-WAIT",
+      "mcp-task-run:TR-RESOURCE-WAIT:execute:1",
+    );
+  });
+
+  it("fails closed on a malformed resource wait returned by a coarse scan", async () => {
+    db.findMany.mockResolvedValue([{
+      id: "task-row-invalid-wait",
+      taskRunId: "TR-INVALID-WAIT",
+      userId: "user-1",
+      status: "submitted",
+      updatedAt: new Date("2026-08-31T03:58:00.000Z"),
+      a2aMetadata: { trigger: "external-mcp" },
+      progressPayload: {
+        resourceWait: {
+          schemaVersion: 1,
+          kind: "provider-capacity",
+          failureKind: "busy",
+          resumeMode: "new-taskrun",
+          attempt: 1,
+          observedAt: "2026-08-31T03:58:00.000Z",
+        },
+      },
+    }]);
+
+    await expect(reconcilePersistedRemoteTaskDispatches({
+      now: new Date("2026-08-31T04:00:00.000Z"),
+      includeOrdinary: false,
+    })).resolves.toEqual({ scanned: 1, enqueued: 0, exhausted: 0, raced: 1 });
+    expect(queue.send).not.toHaveBeenCalled();
+    expect(db.updateMany).not.toHaveBeenCalled();
+  });
+
   it("re-emits stale durable submissions and admitting workers when the generic async flag is off", async () => {
     db.findMany.mockResolvedValue([{
       taskRunId: "TR-DURABLE",

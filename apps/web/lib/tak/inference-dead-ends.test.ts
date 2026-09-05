@@ -185,6 +185,36 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
     expect(outcome.kind).toBe("model-missing");
     expect(outcome.message).not.toMatch(/busy|rate-limit/i);
   });
+
+  it("classifies an all-endpoint network outage as a transient provider wait", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"openai","error":"connect ECONNREFUSED 10.0.0.8:443"}]',
+      0,
+    );
+
+    expect(outcome.kind).toBe("busy");
+    expect(outcome.message).toBe(providersBusyHandoff());
+  });
+
+  it.each([
+    [
+      "mixed structural and network failures",
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"local","error":"provider returned an unrecognised response"}]',
+      "unknown",
+    ],
+    [
+      "authentication failures",
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"openai","error":"authentication failed"}]',
+      "credentials",
+    ],
+    [
+      "context failures",
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"local","error":"request exceeds the available context size"}]',
+      "context",
+    ],
+  ])("does not turn %s into a provider wait", (_label, message, kind) => {
+    expect(describeToolRouteFailureOutcome(message, 0).kind).toBe(kind);
+  });
 });
 
 // BI-94D44FDB. The owner-facing half: a deferral is a bounded wait, so say how

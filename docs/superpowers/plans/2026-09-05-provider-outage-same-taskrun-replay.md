@@ -21,9 +21,11 @@ recovery still strands a persisted wait when the ordinary async rollback flag
 is off. Recovery without classification never receives the network outage as a
 wait. Both changes reuse one existing state machine and must ship together.
 
-This branch contains design and planning only until the active
-`BI-41EB722B` provider-transport change is protected-merged and the initiative
-research, spec approval, plan review, and live coverage receipts are genuine.
+The active `BI-41EB722B` provider-transport change is protected-merged in the
+branch ancestry. An explicit source-only boundary permits the RED/GREEN
+implementation checkpoint while the initiative research, spec approval, plan
+review, and live coverage receipts remain missing. No readiness PASS, PR,
+release, deployment, or live replay may be claimed from that source evidence.
 
 ## Ordered implementation
 
@@ -67,14 +69,25 @@ research, spec approval, plan review, and live coverage receipts are genuine.
 
 ## Backlog coverage
 
-- Decision: atomic (pending live receipt)
+- Decision: atomic
 - Parent: `BI-A50F6B7B`
 - Tracking umbrella: `BI-F6AD1E18`
 - Deliverable: `OUTAGE-SAME-RUN` -> `BI-A50F6B7B`
-- Dependency: `BI-41EB722B` protected merge before implementation integration
+- Dependencies: `BI-41EB722B` (protected-merged before implementation integration)
 - Rationale: classifier and recovery selection are inseparable halves of the
   same already-persisted TaskRun wait contract; neither is useful alone.
 - Receipt: pending canonical baseline and `record_plan_backlog_coverage`
+
+## Source-only TDD evidence
+
+- RED on the reconciled provider-transport ancestry: the exact all-endpoint
+  network aggregate remained `unknown`, and a valid persisted resource wait was
+  not selected when `includeOrdinary` was false.
+- GREEN: focused classifier and dispatch tests pass, and linked TaskRun
+  execution/capacity-resume tests confirm the existing zero-tool wait projection,
+  immutable same-TaskRun replay, and post-tool fail-closed boundary.
+- This is implementation evidence only. It is not a research receipt, scope
+  baseline, plan-coverage receipt, semantic review, or promotion authority.
 
 ## Risks
 

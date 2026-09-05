@@ -39,7 +39,9 @@ and post-tool failures remain fail closed and cannot enter temporal replay.
 
 ## Current evidence
 
-At protected main `4e48b40a727b9a1bf02b355c69a2c661ab4af275`:
+Revalidated after normally merging protected main
+`919c8c01845e86cfee48009a37f500d0ae1882af` (the protected BI-41 provider
+transport result):
 
 1. `describeToolRouteFailureMessage` maps `All endpoints failed` to the provider
    busy handoff, but `describeToolRouteFailureOutcome` only returns `busy` for
