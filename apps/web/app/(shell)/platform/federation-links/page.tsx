@@ -195,6 +195,20 @@ export default async function FederationLinksPage() {
     })),
   ];
 
+  // Installations this authority may issue a join file for: the trusted
+  // same-organization peers it already knows by address (BI-1F69D3F8).
+  const joinCandidates = rows
+    .filter((row) => row.role === "same-org-peer" && row.linkState === "trusted")
+    .flatMap((row) => {
+      try {
+        const hostname = new URL(row.peerAuthorityUrl).hostname;
+        return hostname ? [{ hostname, displayName: row.displayName }] : [];
+      } catch {
+        return [];
+      }
+    })
+    .filter((candidate, index, all) => all.findIndex((other) => other.hostname === candidate.hostname) === index);
+
   return (
     <div className="space-y-6">
       <div>
@@ -204,7 +218,7 @@ export default async function FederationLinksPage() {
           both sides approve; either side can pause or revoke the connection.
         </p>
       </div>
-      <OrganizationJoinPanel nodes={organizationJoinNodes.ok ? organizationJoinNodes.nodes : []} />
+      <OrganizationJoinPanel nodes={organizationJoinNodes.ok ? organizationJoinNodes.nodes : []} candidates={joinCandidates} />
       <FederationLinksAdminClient
         rows={rows}
         nearbyCandidates={connectionCandidates}
