@@ -168,7 +168,13 @@ export function createOffThreadpoolLookup(
         }
         callback(null, first.address, first.family);
       },
-      (error: NodeJS.ErrnoException) => callback(error, "", 0),
+      (error: NodeJS.ErrnoException) => {
+        if (options.all) {
+          callback(error, []);
+          return;
+        }
+        callback(error, "", 0);
+      },
     );
   };
 }

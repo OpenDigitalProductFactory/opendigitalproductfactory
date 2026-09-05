@@ -31,6 +31,9 @@ const CA_TIMEOUT_MS = 15_000;
  * keeps its own agent with keep-alive off.
  */
 const caAgent = new HttpsAgent({ keepAlive: false, maxSockets: 8 });
+
+/** net.connect calls lookup with `{ all: true }` (happy-eyeballs) and expects an array then; otherwise a single address. */
+type LookupCallback = (error: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
 /**
  * Resolve the CA host without the libuv thread pool. Node's default
  * `dns.lookup` is a getaddrinfo call on that pool, and libuv caps such "slow"
@@ -57,7 +60,15 @@ export async function resolveCaHost(
   return address;
 }
 
-const offThreadpoolLookup = createOffThreadpoolLookup();
+export function offThreadpoolLookup(
+  hostname: string,
+  options: Parameters<ReturnType<typeof createOffThreadpoolLookup>>[1],
+  callback: LookupCallback,
+  resolver?: CaresResolver,
+): void {
+  const lookup = createOffThreadpoolLookup(resolver ? { resolver } : {});
+  lookup(hostname, options, callback as Parameters<typeof lookup>[2]);
+}
 
 export function caInternalUrl(env: Record<string, string | undefined> = process.env): string {
   return env.DPF_ORGANIZATION_CA_INTERNAL_URL?.trim().replace(/\/+$/, "") || DEFAULT_CA_INTERNAL_URL;
