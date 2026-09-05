@@ -14,7 +14,7 @@
 // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
 //   §"Per-source work" item 3, §"Etag persistence".
 
-import { Agent, fetch as undiciFetch } from "undici";
+import { createOffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
 
 import type { PullRequestSnapshot } from "./types";
 
@@ -63,18 +63,7 @@ export type GithubReadTransport = Readonly<{
  * boundary; callers still inject a plain Fetch implementation in tests.
  */
 export function createGithubReadTransport(): GithubReadTransport {
-  const dispatcher = new Agent();
-  const isolatedFetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
-    undiciFetch(
-      input as Parameters<typeof undiciFetch>[0],
-      { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
-    ) as unknown as Promise<Response>) as typeof fetch;
-  return {
-    fetch: isolatedFetch,
-    close: async () => {
-      await dispatcher.close();
-    },
-  };
+  return createOffThreadpoolFetchTransport();
 }
 
 /** Release an unconsumed provider response before retrying or closing its dispatcher. */

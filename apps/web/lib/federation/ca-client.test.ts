@@ -22,14 +22,14 @@ describe("resolveCaHost", () => {
     expect(v6only.lookup).not.toHaveBeenCalled();
   });
 
-  it("falls back to getaddrinfo only when the resolver has no record (hosts-file names)", async () => {
+  it("fails closed without falling back to getaddrinfo when c-ares has no record", async () => {
     const resolver = {
       resolve4: vi.fn(async () => { throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" }); }),
       resolve6: vi.fn(async () => { throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" }); }),
       lookup: vi.fn(async () => ({ address: "127.0.0.1", family: 4 })),
     };
-    expect(await resolveCaHost("host.docker.internal", resolver as never)).toEqual({ address: "127.0.0.1", family: 4 });
-    expect(resolver.lookup).toHaveBeenCalledWith("host.docker.internal");
+    await expect(resolveCaHost("host.docker.internal", resolver)).rejects.toMatchObject({ code: "ENOTFOUND" });
+    expect(resolver.lookup).not.toHaveBeenCalled();
   });
 });
 
