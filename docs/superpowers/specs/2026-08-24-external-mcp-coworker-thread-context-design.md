@@ -509,6 +509,17 @@ calls, malformed or mismatched packets, other side-effecting tools, and mission,
 spend, destructive, externally visible, legal, clinical, privacy, or safety
 actions continue through their existing approval or denial paths.
 
+Run-local enforcement override: on 2026-09-04 the authenticated operator said
+"make this change" after rejecting the owner-facing technical approval. For
+this branch and BI-921B7DC2 only, that direction authorizes implementation of
+the narrow authority-policy correction while `RESEARCH_REQUIRED` is circular:
+the only eligible research writer is blocked by the defect being repaired. It
+does not mark research or plan as passed; both remain **unrun** until a fresh
+server-bound reviewer completes them after the fix is live. It does not bypass
+tool grants, author/reviewer separation, DCO, protected PR delivery, build
+gates, or canonical-runtime verification. It expires when this PR merges or
+the branch is abandoned.
+
 Ordered fix sequence:
 
 1. Add a regression proving a bound `record_initiative_evidence` research
