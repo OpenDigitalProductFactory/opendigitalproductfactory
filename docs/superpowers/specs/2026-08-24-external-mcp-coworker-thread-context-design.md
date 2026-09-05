@@ -485,6 +485,43 @@ writer recovery retain their existing explicit token projection. This keeps
 the receipt repository's three-part requirement intact: independent reviewer,
 recorded authority decision, and authenticated write/admin token scope.
 
+### 2026-09-05 bounded technical-receipt amendment (BI-921B7DC2)
+
+The preceding exception is too narrow. It keys generic approval suppression to
+whether the initiative-readiness lane is independently reviewed. Research is a
+technical readiness receipt but is intentionally not marked independent: the
+Portfolio Advisor may verify and record reproduction evidence without being a
+second artifact approver. As a result, a fully server-bound research TaskRun is
+still wrapped in a `CoworkerActionEnvelope` and asks the business owner to
+ratify a technical finding they cannot responsibly assess.
+
+WWMD decision `DI-50CBE054E410` selected the bounded technical-review option at
+high confidence. The authority boundary is the validated server-issued
+`initiativeReviewBinding`, not the lane's independent-review flag. That packet
+already fixes one BacklogItem, one immutable artifact revision, one gate, and
+one `record_initiative_*` writer; the TaskRun authority scope and reviewer tool
+grant must match it exactly. The receipt repositories retain their own role,
+token-scope, tenant, and author/reviewer-separation checks. An explicit
+operator `hitlPolicy: "always"` continues to require approval.
+
+This does **not** create a general coworker-write exemption. Unbound writer
+calls, malformed or mismatched packets, other side-effecting tools, and mission,
+spend, destructive, externally visible, legal, clinical, privacy, or safety
+actions continue through their existing approval or denial paths.
+
+Ordered fix sequence:
+
+1. Add a regression proving a bound `record_initiative_evidence` research
+   receipt is not re-wrapped by the generic tier/side-effect policy.
+2. Rename the pure policy input from independent-review language to bounded
+   initiative-review language and derive it from the already-validated binding,
+   without adding another writer allow-list.
+3. Keep `hitlPolicy: "always"` first in precedence; keep unbound calls on the
+   generic policy.
+4. Run the focused authority tests, typecheck/preflight gates, protected CI,
+   then replay the BI-69803ACC research handoff on the canonical install and
+   verify a persisted receipt, completed TaskRun, and no owner envelope.
+
 ## Acceptance criteria traceability
 
 | BI acceptance criterion | Design coverage |
@@ -494,6 +531,7 @@ recorded authority decision, and authenticated write/admin token scope.
 | Missing/invalid identity is typed and actionable | Explicit error table and repair messages |
 | Codex/Claude/Grok/embedded/generic compatibility | Shared handler lane and host-metadata test matrix |
 | Regression reproduces and proves fixed propagation | Unit, integration, and live functional verification plan |
+| Bound research receipt does not ask the business owner to approve | 2026-09-05 bounded technical-receipt amendment; exact binding + writer/grant/scope checks remain authoritative |
 
 ## Open review questions
 
