@@ -164,7 +164,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     expect(db.createEnvelope).not.toHaveBeenCalled();
   });
 
-  it("recovers the same stale input-required review TaskRun into fresh exact approval without rerunning inference", async () => {
+  it.each([false, true])("renews stale approval without inference when reviewer retries are exhausted=%s", async (exhausted) => {
     const params = {
       agentId: "AGT-WS-PORTFOLIO",
       routeContext: "/build",
@@ -204,7 +204,11 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     const run = {
       id: "task-internal", taskRunId: approvalBinding.taskRunId, userId: "user-1",
       threadId: "thread-bi47", contextId: "thread-bi47", status: "input-required",
-      progressPayload: null,
+      progressPayload: exhausted ? { terminalWriterWait: {
+        schemaVersion: 1, kind: "missing-terminal-writer",
+        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun",
+        attempt: 3, observedAt: "2026-08-24T06:00:00.000Z",
+      } } : null,
       a2aMetadata: { idempotencyKey: params.idempotencyKey, apiTokenId: "PAT-BI47", requestDigest },
       lastHeartbeatAt: new Date(Date.now() - 20 * 60 * 1000),
       completedAt: new Date(Date.now() - 19 * 60 * 1000),
@@ -259,4 +263,168 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     expect(autonomous.create).not.toHaveBeenCalled();
     expect(autonomous.executeTool).not.toHaveBeenCalled();
   });
+  it.each(["none", "legacy", "explicit"])("consumes an approved exact-call envelope with %s retry exhaustion", async (exhaustion) => {
+    const userContext = { platformRole: "developer", isSuperuser: false };
+    const submit = (tokenId: string, params: Record<string, unknown>) => submitRemoteCoworkerTask({
+      token: { tokenId, userId: "user-1", capability: "write", source: "pat" }, userContext, params,
+    });
+    db.findUnique.mockResolvedValue({ status: "working" });
+    autonomous.executeTool.mockResolvedValue({ success: true, message: "Receipt recorded.", entityId: "REC-1" });
+    const retryProgress = exhaustion === "none" ? {} : {
+      terminalWriterWait: {
+        schemaVersion: 1, kind: "missing-terminal-writer",
+        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun",
+        attempt: 3, observedAt: "2026-08-24T06:00:00.000Z",
+      },
+      ...(exhaustion === "explicit" ? { terminalWriterEscalation: {
+        schemaVersion: 1, code: "terminal_writer_retry_exhausted",
+        writerToolName: "record_initiative_evidence", attempt: 3,
+        action: "select-different-reviewer-provider", observedAt: "2026-08-24T06:00:00.000Z",
+      } } : {}),
+    };
+    const params = {
+      agentId: "AGT-WS-BUILD",
+      routeContext: "/build/work/WC-7FF8A505",
+      objective: "Record the immutable research review.",
+      prompt: "Read the source and record the governed evidence.",
+      idempotencyKey: "research-review-approved-resume",
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-F0715C9C",
+        "tool:read_source_at_version",
+        "tool:record_initiative_evidence",
+      ],
+    };
+    db.findFirst.mockResolvedValue({
+      taskRunId: "TR-MCP-APPROVED",
+      status: "input-required",
+      updatedAt: new Date("2026-08-24T07:00:00.000Z"),
+      progressPayload: {
+        ...retryProgress,
+        requiresApproval: true,
+        approvalRecovery: {
+          schemaVersion: 1,
+          kind: "expired-approved-envelope",
+          sourceEnvelopeId: "ENV-EXPIRED",
+          replacementEnvelopeId: "ENV-APPROVED",
+          inferenceRerun: false,
+        },
+      },
+      a2aMetadata: {
+        idempotencyKey: params.idempotencyKey,
+        apiTokenId: "PAT-A",
+        requestDigest: createHash("sha256").update(JSON.stringify({
+          agentId: params.agentId,
+          routeContext: params.routeContext,
+          title: params.objective,
+          objective: params.objective,
+          prompt: params.prompt,
+          riskClass: params.riskClass,
+          authorityScope: [...params.authorityScope].sort(),
+          collaborationKind: null,
+        })).digest("hex"),
+      },
+    });
+    db.findEnvelope.mockResolvedValue({
+      id: "ENV-APPROVED",
+      threadId: "thread-external",
+      manifestActionId: "record_initiative_evidence",
+    });
+    db.findToolExecution.mockResolvedValue({
+      parameters: {
+        backlogItemId: "BI-F0715C9C",
+        decision: "pass",
+        artifactPath: "docs/superpowers/specs/design.md",
+        artifactGitSha: "abc123",
+        artifactBlobSha: "def456",
+        artifactRepository: "OpenDigitalProductFactory/opendigitalproductfactory",
+        note: "Independent research evidence is complete.",
+        findings: [],
+        _takAlignment: { verdict: "aligned" },
+      },
+      result: { data: { envelopeId: "ENV-APPROVED" } },
+    });
+
+    const outcome = await submit("PAT-A", params);
+
+    expect(autonomous.executeTool).toHaveBeenCalledWith({
+      toolName: "record_initiative_evidence",
+      args: {
+        backlogItemId: "BI-F0715C9C",
+        decision: "pass",
+        artifactPath: "docs/superpowers/specs/design.md",
+        artifactGitSha: "abc123",
+        artifactBlobSha: "def456",
+        artifactRepository: "OpenDigitalProductFactory/opendigitalproductfactory",
+        note: "Independent research evidence is complete.",
+        findings: [],
+      },
+      userId: "user-1",
+      userContext,
+      routeContext: "/build/work/WC-7FF8A505",
+      agentId: "AGT-WS-BUILD",
+      threadId: "thread-external",
+      taskRunId: "TR-MCP-APPROVED",
+      apiTokenId: "PAT-A",
+      tokenScope: "write",
+      externalAccessEnabled: true,
+    });
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: {
+        taskRunId: "TR-MCP-APPROVED",
+        status: "input-required",
+        updatedAt: new Date("2026-08-24T07:00:00.000Z"),
+      },
+      data: {
+        progressPayload: {
+          ...retryProgress,
+          approvalRecovery: {
+            schemaVersion: 1,
+            kind: "expired-approved-envelope",
+            sourceEnvelopeId: "ENV-EXPIRED",
+            replacementEnvelopeId: "ENV-APPROVED",
+            inferenceRerun: false,
+          },
+          requiresApproval: true,
+          approvalResumeReserved: true,
+        },
+      },
+    });
+    expect(db.update).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-MCP-APPROVED" },
+      data: { status: "working", lastHeartbeatAt: expect.any(Date) },
+    });
+    expect(db.update).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-MCP-APPROVED" },
+      data: {
+        status: "completed",
+        completedAt: expect.any(Date),
+        progressPayload: expect.objectContaining({
+          approvalRecovery: expect.objectContaining({
+            kind: "expired-approved-envelope",
+            sourceEnvelopeId: "ENV-EXPIRED",
+            replacementEnvelopeId: "ENV-APPROVED",
+            inferenceRerun: false,
+          }),
+          resumedFromApproval: true,
+        }),
+      },
+    });
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-APPROVED",
+        status: "completed",
+        resumedFromApproval: true,
+        executedToolCount: 1,
+      },
+    });
+    expect(autonomous.create).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    const completed = db.update.mock.calls.find(([args]) => args.data.status === "completed")?.[0];
+    expect(completed.data.progressPayload.requiresApproval).toBe(false);
+    expect(completed.data.progressPayload.terminalWriterWait).toBeUndefined();
+    expect(completed.data.progressPayload.terminalWriterEscalation).toBeUndefined();
+  });
+
 });
