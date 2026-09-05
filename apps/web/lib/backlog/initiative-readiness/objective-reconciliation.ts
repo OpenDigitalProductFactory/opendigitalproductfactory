@@ -1,3 +1,6 @@
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+
+import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evidence";
 import type { ReadinessEvidenceState } from "./types";
 
 export type ObjectiveReconciliationActivity = {
@@ -23,22 +26,38 @@ type Baseline = {
   statementIds: string[];
 };
 
-const PASS_EVIDENCE_KINDS = new Set([
-  "test_pass",
-  "build_pass",
-  "ux_verified",
-  "migration_pass",
-  "source_verified",
-  "spec_review",
-  "manual_check",
-]);
+export const MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES = 500;
 
-const FAIL_EVIDENCE_KINDS = new Set([
-  "test_fail",
-  "build_fail",
-  "ux_fail",
-  "migration_fail",
-]);
+export function objectiveEvidenceKindState(value: unknown): "pass" | "fail" | "missing" {
+  if (!isExecutionEvidenceKind(value)) return "missing";
+  const metadata = evidenceKindMetadata(value);
+  if (metadata.gateEligible && metadata.polarity === "pass") return "pass";
+  if (metadata.polarity === "fail") return "fail";
+  return "missing";
+}
+
+export function selectEligibleObjectiveEvidenceActivityIds(args: {
+  itemId: string;
+  itemRowId?: string;
+  baselineRecordedAt: Date;
+  activities: readonly ObjectiveReconciliationActivity[];
+  maximumActivityCount?: number;
+}): ActionResult<{ activityIds: string[] }> {
+  const maximum = args.maximumActivityCount ?? MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES;
+  if (args.activities.length > maximum) return err("evidence-limit-exceeded");
+  const ids = args.activities.map((activity) => activity.id);
+  if (new Set(ids).size !== ids.length) return err("duplicate-evidence-id");
+  const belongsToItem = (activity: ObjectiveReconciliationActivity) => activity.backlogItemId === args.itemId
+    || activity.backlogItemId === args.itemRowId;
+  const activityIds = args.activities
+    .filter((activity) => activity.kind === "evidence"
+      && belongsToItem(activity)
+      && activity.recordedAt >= args.baselineRecordedAt
+      && objectiveEvidenceKindState(object(activity.payload)?.evidenceKind) === "pass")
+    .map((activity) => activity.id)
+    .sort();
+  return ok({ activityIds });
+}
 
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -120,7 +139,7 @@ export function reconcileInitiativeObjectives(args: {
   if (!mapping || mapping.schemaVersion !== 1 || mapping.proposalId !== mappingActivity.id
     || mapping.baselineId !== baseline.baselineId || mapping.artifactDigest !== baseline.artifactDigest
     || subject?.kind !== "backlog-item" || subject.id !== args.itemId || !Array.isArray(mapping.mappings)) {
-    return { state: "malformed", baselineId: baseline.baselineId, evidenceRefs: [], requiredStatementIds: baseline.statementIds };
+    return { state: "missing", baselineId: baseline.baselineId, evidenceRefs: [], requiredStatementIds: baseline.statementIds };
   }
   const byStatement = new Map<string, string[]>();
   for (const raw of mapping.mappings) {
@@ -129,7 +148,7 @@ export function reconcileInitiativeObjectives(args: {
       || !Array.isArray(entry.evidenceRefs) || entry.evidenceRefs.length === 0
       || entry.evidenceRefs.some((ref) => typeof ref !== "string" || !ref.trim())
       || byStatement.has(entry.objectiveId)) {
-      return { state: "malformed", baselineId: baseline.baselineId, evidenceRefs: [], requiredStatementIds: baseline.statementIds };
+      return { state: "missing", baselineId: baseline.baselineId, evidenceRefs: [], requiredStatementIds: baseline.statementIds };
     }
     byStatement.set(entry.objectiveId, [...new Set(entry.evidenceRefs as string[])]);
   }
@@ -144,16 +163,16 @@ export function reconcileInitiativeObjectives(args: {
   for (const evidenceRef of evidenceRefs) {
     const evidence = evidenceById.get(evidenceRef);
     const payload = object(evidence?.payload);
-    const evidenceKind = payload?.evidenceKind;
+    const evidenceState = objectiveEvidenceKindState(payload?.evidenceKind);
     if (!evidence || (evidence.backlogItemId != null
         && evidence.backlogItemId !== args.itemId && evidence.backlogItemId !== args.itemRowId)
-      || evidence.recordedAt < baseline.recordedAt || typeof evidenceKind !== "string") {
-      return { state: "malformed", baselineId: baseline.baselineId, evidenceRefs, requiredStatementIds: baseline.statementIds };
+      || evidence.recordedAt < baseline.recordedAt) {
+      return { state: "missing", baselineId: baseline.baselineId, evidenceRefs, requiredStatementIds: baseline.statementIds };
     }
-    if (FAIL_EVIDENCE_KINDS.has(evidenceKind)) {
+    if (evidenceState === "fail") {
       return { state: "fail", baselineId: baseline.baselineId, evidenceRefs, requiredStatementIds: baseline.statementIds };
     }
-    if (!PASS_EVIDENCE_KINDS.has(evidenceKind)) {
+    if (evidenceState !== "pass") {
       return { state: "missing", baselineId: baseline.baselineId, evidenceRefs, requiredStatementIds: baseline.statementIds };
     }
   }

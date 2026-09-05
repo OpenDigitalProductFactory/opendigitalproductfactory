@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { ToolDefinition } from "@/lib/mcp-tools";
-import { narrowInitiativeReviewTools } from "./mcp-task-review-contract";
+import { narrowInitiativeReviewTools, parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 
 const binding = {
   writerToolName: "record_initiative_evidence",
   itemId: "BI-7D2C4F02",
   gate: "objective-mapping",
   expectedCurrentBaselineId: "baseline-08cecc05-02ef-4bf1-bfae-f250fc5e6da0",
+  eligibleEvidenceActivityIds: ["EVIDENCE-1", "EVIDENCE-2"],
   artifactRef: {
     kind: "repo-blob-at-commit" as const,
     repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
@@ -75,7 +76,22 @@ describe("narrowInitiativeReviewTools", () => {
           type: "string",
           enum: [binding.expectedCurrentBaselineId],
         },
-        objectiveMappings: evidenceWriterSchema.properties.objectiveMappings,
+        objectiveMappings: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              objectiveId: { type: "string" },
+              evidenceRefs: {
+                type: "array",
+                items: { type: "string", enum: binding.eligibleEvidenceActivityIds },
+                minItems: 1,
+                uniqueItems: true,
+              },
+            },
+            required: ["objectiveId", "evidenceRefs"],
+          },
+        },
         reason: evidenceWriterSchema.properties.reason,
       },
       required: ["operation", "baselineId", "objectiveMappings", "reason"],
@@ -124,12 +140,32 @@ describe("narrowInitiativeReviewTools", () => {
           type: "string",
           enum: [binding.expectedCurrentBaselineId],
         },
-        objectiveMappings: evidenceWriterSchema.properties.objectiveMappings,
+        objectiveMappings: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              objectiveId: { type: "string" },
+              evidenceRefs: {
+                type: "array",
+                items: { type: "string", enum: binding.eligibleEvidenceActivityIds },
+                minItems: 1,
+                uniqueItems: true,
+              },
+            },
+            required: ["objectiveId", "evidenceRefs"],
+          },
+        },
         reason: evidenceWriterSchema.properties.reason,
       },
       required: ["operation", "baselineId", "objectiveMappings", "reason"],
       additionalProperties: false,
     });
+  });
+
+  it("rejects a newly issued objective-mapping binding without finite eligible evidence", () => {
+    const withoutEvidence = { ...binding, eligibleEvidenceActivityIds: undefined };
+    expect(parseInitiativeReviewBinding(withoutEvidence)).toBeNull();
   });
 
   it("does not grant objective-mapping authority to an ordinary dependency disposition", () => {

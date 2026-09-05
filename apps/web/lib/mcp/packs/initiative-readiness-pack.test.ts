@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ok } from "@/lib/shared/action-result";
+
 const mocks = vi.hoisted(() => ({
   findTaskRun: vi.fn(),
   recordGateReceipt: vi.fn(),
   recordSpecApproval: vi.fn(),
+  recordObjectiveMapping: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -16,6 +19,7 @@ vi.mock("@/lib/backlog/initiative-readiness", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/backlog/initiative-readiness")>(),
   recordInitiativeGateReceipt: (...args: unknown[]) => mocks.recordGateReceipt(...args),
   recordInitiativeSpecApproval: (...args: unknown[]) => mocks.recordSpecApproval(...args),
+  recordInitiativeObjectiveMappingProposal: (...args: unknown[]) => mocks.recordObjectiveMapping(...args),
 }));
 
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
@@ -173,5 +177,47 @@ describe("initiative readiness reviewer tools", () => {
       expectedCurrentBaselineId: null,
     }));
     expect(result).toMatchObject({ success: true, entityId: "IBL-1" });
+  });
+
+  it("passes only the server-bound eligible evidence ids to objective-mapping persistence", async () => {
+    const eligibleEvidenceActivityIds = ["E-1", "E-2"];
+    mocks.findTaskRun.mockResolvedValue({
+      a2aMetadata: {
+        trigger: "external-mcp",
+        initiativeReviewBinding: {
+          writerToolName: "record_initiative_evidence",
+          itemId: "BI-BOUND",
+          gate: "objective-mapping",
+          expectedCurrentBaselineId: "baseline-current",
+          eligibleEvidenceActivityIds,
+          artifactRef: {
+            kind: "repo-blob-at-commit",
+            repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+            commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+            path: "docs/superpowers/specs/design.md",
+            providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+          },
+        },
+      },
+    });
+    mocks.recordObjectiveMapping.mockResolvedValue({ ...ok(), proposalId: "MAP-1" });
+
+    await initiativeReadinessPack.handlers.record_initiative_evidence!({
+      operation: "objective-mapping",
+      baselineId: "baseline-current",
+      objectiveMappings: [{ objectiveId: "OBJ-1", evidenceRefs: ["E-1"] }],
+      reason: "Bound mapping.",
+    }, "user-1", {
+      taskRunId: "TR-MCP-MAPPING",
+      agentId: "AGT-WS-ACCEPT",
+      authorityDecisionId: "AUTH-1",
+      tokenScope: "write",
+    } as never);
+
+    expect(mocks.recordObjectiveMapping).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "BI-BOUND",
+      baselineId: "baseline-current",
+      eligibleEvidenceActivityIds,
+    }));
   });
 });
