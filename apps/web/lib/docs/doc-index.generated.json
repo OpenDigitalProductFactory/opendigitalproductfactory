@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 696,
+  "pageCount": 697,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -8825,6 +8825,20 @@
         "quarantine-renames-the-key-it-does-not-retire-the-row",
         "preventing-recurrence",
         "related"
+      ]
+    },
+    "docs/runbooks/2026-09-05-security-sweep-credential.md": {
+      "publicHref": "/runbooks/2026-09-05-security-sweep-credential/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "security-sweep-credential-read-all-three-alert-surfaces",
+        "symptom",
+        "credential-order-what-the-workflows-try",
+        "operator-step-once-by-a-repository-admin",
+        "verify-the-sweep-is-complete",
+        "rollback"
       ]
     },
     "docs/runbooks/bet5-windows-self-upgrade.md": {
