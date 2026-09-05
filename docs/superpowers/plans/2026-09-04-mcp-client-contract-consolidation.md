@@ -14,7 +14,9 @@ This draft sequences three existing repair items. It does not assert design appr
 
 ## Backlog coverage
 
-Decision proposed: decomposed. Receipt: pending server validation of the published immutable plan.
+Decision proposed: decomposed. Coverage is blocked: no initiative scope baseline exists for BI-DC0F14E0. The server rejected the coverage write with `traceability-incomplete` against commit `f51bd8e6cb7002e510552190a75f7620a61cdeeb`, plan blob `bb8abc20072280332451ecdd412dacba41c1f19b`; no valid coverage receipt was issued.
+
+The prescribed recovery was executed once: `claim_backlog_item_for_work` on the existing Workroom with `workIntent: implementation`. Decision `IRD-52AD360FFE11` returned `profile: doc-only`, `verdict: allowed`, no unmet gates and no `recovery.reviewerRoutes`. Thus the coverage writer requires a spec-approved baseline that its recommended doc-only readiness route does not request. No reviewer is dispatched. Resolve this parent-profile/coverage mismatch through the existing governance owner; do not reclassify the documentation item, invent a reviewer packet or repeat identical coverage calls. Once a valid baseline and authorized route exist, rebind coverage to the then-current immutable plan and obtain independent plan review before implementation.
 
 | Deliverable key | Live BI | Requirements | Contract | Flow | Verification | Hard dependency |
 | --- | --- | --- | --- | --- | --- | --- |
