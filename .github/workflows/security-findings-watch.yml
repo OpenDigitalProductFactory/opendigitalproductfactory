@@ -68,7 +68,7 @@ jobs:
         env:
           APP_ID: ${{ secrets.SECURITY_SWEEP_APP_ID }}
         if: env.APP_ID != ''
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.SECURITY_SWEEP_APP_ID }}
           private-key: ${{ secrets.SECURITY_SWEEP_APP_PRIVATE_KEY }}
