@@ -768,7 +768,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   generate_design_system:     ["file_read"],
   // HR — query
   query_employees: ["consumer_read", "registry_read"],
-
   // Recruiting pipeline lens (BI-E64D11AE) — unified native + Greenhouse funnel.
   get_recruiting_pipeline: ["consumer_read", "registry_read"],
 
