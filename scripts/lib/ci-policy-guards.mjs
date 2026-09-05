@@ -504,6 +504,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-541156EE: one worktree base, or none. Seven were found on a single
         // host, all from the same formula handed different roots.
         "scripts/check-single-worktree-base.test.mjs",
+        // BI-99395B29 follow-up: liveness comes from the Workroom claim, and an
+        // unreadable claim record must fail safe rather than reap on a guess.
+        "scripts/lib/worktree-liveness.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
