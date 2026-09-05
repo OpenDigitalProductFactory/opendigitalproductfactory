@@ -83,23 +83,77 @@ An animal rescue opens **Operations > Ward** to answer the two questions a
 shelter asks all day: where an animal is, and how much room is left.
 
 - The board states **occupied of total** and **free** before anything else, then
-  draws the units grouped by your own ward names. A free run is an outline you
-  can see rather than a number you have to work out.
+  draws kennels and foster homes grouped by your own area names. A free place is
+  visible without counting rows.
 - **List** shows the same units as a table when you want the area and state per
   row. It carries every unit the map does.
 - A unit held out of service — a deep clean, a repair — shows its reason and is
   **not** counted as free.
 - If the shelter is holding animals with no kennel recorded, the board names
   them and says the free count covers only the animals it can place.
+- Each occupied place shows the animal's **photograph**, so you recognise who is
+  in the run without reading every label. A unit shows the name alone when no
+  photograph is on file.
+- Where someone has applied, the place says so. **"Dana is coming for them"**
+  means an approved adopter, a home check, or a meet-and-greet. **"Someone has
+  applied"** means an enquiry nobody has answered yet.
+- **Place or move** records the animal in an open kennel or foster home. Moving
+  closes the prior stay and keeps it in history.
+- **Release a current stay** closes housing without deleting the record.
+- **Housing setup** adds, pauses, returns, or retires housing. It stays folded
+  until the roster itself needs attention.
 
 Two states are deliberately different. A shelter that has recorded **no
 housing** sees "No housing recorded yet" and no free count at all, because
 having told the system about no kennels is not the same as having no room. A
 shelter whose units are all full sees a free count of zero.
 
-The same figures appear on the Operations home as **Animals in care** and
-**Kennels**, so the number you quote in a capacity conversation is the number
-the board is drawing.
+The combined figure counts animal capacity rather than resource rows. A foster
+home with three approved places contributes three; blocked and retired housing
+contributes none. The same source feeds the Operations summary, so the number
+used in a capacity conversation is the number the Ward is drawing.
+
+## Rescue operations
+
+A Pet Rescue installation opens **Operations > Rescue operations** for the
+animal journey as a whole. The workspace follows three connected value streams:
+
+1. **Intake and protect** records the animal's durable identity, admission,
+   legal hold, and safe housing decision.
+2. **Maintain health and welfare** brings daily work, appointments, medical and
+   welfare facts, corrections, and exceptions together around that same animal.
+3. **Place and support** tracks adoption applications, placements, returns, and
+   the funding used for care.
+
+Use **Animals**, **Intake**, **Housing**, **Daily care**, **Adoptions**, and
+## When the ward is full
+
+If every place is taken, the board adds a review. It is the only time it appears.
+
+The review lists the animals that have waited longest with nobody waiting for
+them, and prints the reason for each one. It also lists everybody it refused to
+consider and why — an animal under a legal hold, one with an approved adopter or
+an unanswered applicant, one still being assessed, or one that has already left
+your care. Those are never on the list, however long they have waited.
+
+**Nothing on the review acts.** There is no button. It exists so that the
+reasoning is assembled and written down for you, not so the decision is made for
+you. You decide, and you can disagree with it.
+
+If every animal is protected, the review says so and asks you to find room
+another way, rather than offering somebody up to fill the list.
+
+**Stewardship** to move between those perspectives. Housing opens the existing
+Ward board; it is not a second capacity record.
+
+Every summary identifies its source state. **Current** means the source was
+read, **No records yet** means it was read and contained no relevant facts, and
+**Unavailable** means it could not be read. The workspace never turns an
+unavailable source into a reassuring zero.
+
+The public adoption listing is optional. It presents an animal to prospective
+adopters, but it is not the animal's operational identity. Removing or changing
+a listing therefore does not erase custody, care, placement, or cost history.
 
 ## Confirming an operational suggestion
 

@@ -5,6 +5,10 @@ import { Prisma, prisma } from "@dpf/db";
 import { ok } from "@/lib/shared/action-result";
 
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
+import {
+  MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
+  selectEligibleObjectiveEvidenceActivityIds,
+} from "./objective-reconciliation";
 
 export type InitiativeObjectiveMapping = {
   objectiveId: string;
@@ -18,6 +22,7 @@ export type InitiativeObjectiveMappingProposal = {
   baselineId: string;
   artifactDigest: string;
   mappings: InitiativeObjectiveMapping[];
+  eligibleEvidenceActivityIds: string[];
   proposerPrincipalId: string;
   proposerAgentId: string;
   authorityDecisionId: string;
@@ -81,6 +86,7 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
   itemId: string;
   baselineId: string;
   mappings: InitiativeObjectiveMapping[];
+  eligibleEvidenceActivityIds: string[];
   reason: string;
   proposerUserId: string;
   proposerAgentId: string | null;
@@ -117,7 +123,7 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
     const rows = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-      select: { payload: true },
+      select: { recordedAt: true, payload: true },
     });
     const baselines = rows.map((row) => parseBaseline(row.payload));
     if (baselines.some((baseline) => !baseline)) {
@@ -128,12 +134,51 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
     if (!chain.ok) return { ok: false, code: "OBJECTIVE_BASELINE_CONFLICT", error: chain.error };
     const baseline = parsed.find((entry) => entry.baselineId === args.baselineId);
     if (!baseline) return { ok: false, code: "OBJECTIVE_BASELINE_REQUIRED", error: "The current objective baseline was not found." };
+    const baselineRecordedAt = rows.find((row) => parseBaseline(row.payload)?.baselineId === args.baselineId)?.recordedAt;
+    if (!baselineRecordedAt) {
+      return { ok: false, code: "OBJECTIVE_BASELINE_CONFLICT", error: "The current objective baseline activity is unavailable or ambiguous." };
+    }
     const statementIds = new Set([
       ...baseline.objectiveStatements.map((entry) => entry.objectiveId),
       ...baseline.acceptanceStatements.map((entry) => entry.acceptanceId),
     ]);
     const mappings = normalizeInitiativeObjectiveMappings(args.mappings, statementIds);
-    if (!mappings) return { ok: false, code: "OBJECTIVE_RECONCILIATION_REQUIRED", error: "Every proposal mapping must name one current objective or acceptance statement and at least one evidence reference." };
+    if (!mappings || mappings.length !== statementIds.size) return { ok: false, code: "OBJECTIVE_RECONCILIATION_REQUIRED", error: "Every proposal mapping must name each current objective and acceptance statement exactly once with at least one evidence reference." };
+
+    const eligibleEvidenceActivityIds = args.eligibleEvidenceActivityIds.map((id) => id.trim());
+    if (eligibleEvidenceActivityIds.length === 0
+      || eligibleEvidenceActivityIds.length > MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES
+      || eligibleEvidenceActivityIds.some((id) => !id)
+      || new Set(eligibleEvidenceActivityIds).size !== eligibleEvidenceActivityIds.length) {
+      return { ok: false, code: "OBJECTIVE_RECONCILIATION_REQUIRED", error: "The server-bound eligible evidence activity set is missing, duplicated, or unbounded." };
+    }
+    const eligibleSet = new Set(eligibleEvidenceActivityIds);
+    const mappedEvidenceRefs = [...new Set(mappings.flatMap((mapping) => mapping.evidenceRefs))];
+    if (mappedEvidenceRefs.some((id) => !eligibleSet.has(id))) {
+      return { ok: false, code: "OBJECTIVE_RECONCILIATION_REQUIRED", error: "Every evidence reference must come from the server-bound eligible activity set." };
+    }
+    const eligibleRows = await tx.backlogItemActivity.findMany({
+      where: {
+        id: { in: eligibleEvidenceActivityIds },
+        backlogItemId: item.id,
+        kind: "evidence",
+        recordedAt: { gte: baselineRecordedAt },
+      },
+      orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+      take: MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES + 1,
+      select: { id: true, backlogItemId: true, kind: true, recordedAt: true, payload: true },
+    });
+    const validatedEvidence = selectEligibleObjectiveEvidenceActivityIds({
+      itemId: item.itemId,
+      itemRowId: item.id,
+      baselineRecordedAt,
+      activities: eligibleRows,
+    });
+    if (!validatedEvidence.ok
+      || validatedEvidence.data.activityIds.length !== eligibleEvidenceActivityIds.length
+      || validatedEvidence.data.activityIds.some((id) => !eligibleSet.has(id))) {
+      return { ok: false, code: "OBJECTIVE_RECONCILIATION_REQUIRED", error: "The bound evidence set contains a missing, foreign, pre-baseline, or non-passing activity." };
+    }
 
     const proposalId = `initiative-${randomUUID()}`;
     const proposal: InitiativeObjectiveMappingProposal = {
@@ -143,6 +188,7 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
       baselineId: baseline.baselineId,
       artifactDigest: baseline.artifactDigest,
       mappings,
+      eligibleEvidenceActivityIds: [...eligibleEvidenceActivityIds].sort(),
       proposerPrincipalId,
       proposerAgentId: args.proposerAgentId!,
       authorityDecisionId: authority.decisionId,

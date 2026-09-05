@@ -187,6 +187,12 @@ function fitsRoutineMachineCadence(
   return true;
 }
 
+function isRoutineMachineCadence(events: CallEfficiencyEvent[]): boolean {
+  const minimumIntervalMs = ROUTINE_MACHINE_MIN_INTERVAL_MS[events[0]?.toolName ?? ""];
+  return minimumIntervalMs !== undefined
+    && fitsRoutineMachineCadence(events, minimumIntervalMs);
+}
+
 function surfaceLabel(e: CallEfficiencyEvent): string {
   if (e.apiTokenId) return `external-pat:${e.executionMode}`;
   return e.executionMode || "unknown";
@@ -320,6 +326,10 @@ export function analyzeCallEfficiency(
   for (const [, list] of thrashMap) {
     if (list.length < thrashThreshold) continue;
     const head = list[0]!;
+    if (isRoutineMachineCadence(list)) {
+      suppressedRoutineCadenceFindings += 1;
+      continue;
+    }
     const correlationId = eventCorrelationId(head)!;
     const waste = list.length - Math.max(2, Math.floor(thrashThreshold / 2));
     findings.push({
@@ -400,11 +410,7 @@ export function analyzeCallEfficiency(
   // High volume / high failure from tool rollup
   for (const t of topTools) {
     const toolEvents = toolMap.get(t.toolName)!.events;
-    const routineInterval = ROUTINE_MACHINE_MIN_INTERVAL_MS[t.toolName];
-    const routineCadenceHealthy = routineInterval !== undefined && fitsRoutineMachineCadence(
-      toolEvents,
-      routineInterval,
-    );
+    const routineCadenceHealthy = isRoutineMachineCadence(toolEvents);
     if (t.count >= highVolumeFloor && routineCadenceHealthy) {
       suppressedRoutineCadenceFindings += 1;
     } else if (t.count >= highVolumeFloor) {

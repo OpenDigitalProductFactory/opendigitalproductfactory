@@ -258,3 +258,73 @@ Live BI-FFBDDD96 research TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-799
 The remote-task executor is the final completion boundary for initiative reviews. When an immutable review binding creates a terminal-writer policy, the executor may persist ordinary completion only after the bound writer appears in the governed execution history or as the active bound proposal. Any other loop result—including duration, iteration, cancellation, route, circuit-breaker, or prose exits—is converted to the existing `input-required/missing-terminal-writer` projection on the same TaskRun. The conversion clears `completedAt`, preserves the request digest and immutable binding, records the bounded attempt, and creates no envelope, decision, mapping, or receipt.
 
 This is a postcondition, not a second inference policy. The agent loop still controls reader/writer surfaces and required tool choice; the executor independently prevents an incomplete result from escaping as completed. A genuine writer attempt retains existing approval and receipt handling, and non-review tasks remain unchanged.
+
+## Exact-bound stalled and failed replay liveness (BI-E2B632D2)
+
+Two live states expose the same false resumability promise. A Build Lead review
+was reaped to `stalled` while it remained in governed inference admission; a
+later objective-mapping review was left `failed` after an approved writer used
+an argument that a subsequently deployed binding repair now constrains. Both
+TaskRuns retain their request digest, immutable artifact binding, valid
+`missing-terminal-writer` marker, and zero successful writers. The replay read
+model reports both as resumable, but `reserveTerminalWriterReplay` admits neither
+state and returns the cached terminal result.
+
+- **OBJ-E2B-001:** Make every TaskRun projected as a resumable exact-bound
+  terminal-writer wait executable through the same TaskRun and request digest.
+- **OBJ-E2B-002:** Preserve the immutable review binding, writer identity,
+  evidence hydration, approval boundary, and receipt validators during replay.
+- **OBJ-E2B-003:** Keep ordinary stalled, failed, completed, and non-review
+  TaskRuns terminal; only an exact marked terminal-writer wait is eligible.
+- **OBJ-E2B-004:** Bound replay attempts and stop with the existing escalation
+  rather than retrying a rejected or unavailable writer forever.
+
+| Acceptance ID | Objectives | Acceptance criterion |
+| --- | --- | --- |
+| AC-E2B-001 | OBJ-E2B-001, OBJ-E2B-002 | An exact-bound reaper-stalled wait compare-and-sets the same TaskRun back to `working` and reaches the existing writer-only turn. |
+| AC-E2B-002 | OBJ-E2B-001, OBJ-E2B-002 | A failed exact-bound wait with a prior non-successful, non-proposal writer attempt may run a new bounded writer-only turn on the same TaskRun; no sibling identity is created. |
+| AC-E2B-003 | OBJ-E2B-002 | A live proposal or approval remains owned by approval recovery; replay neither executes stored arguments nor bypasses fresh exact approval. |
+| AC-E2B-004 | OBJ-E2B-003 | A generic stalled/failed run, changed request digest, changed writer binding, or successful writer remains unrecoverable through this path. |
+| AC-E2B-005 | OBJ-E2B-004 | The existing attempt ceiling applies to stalled and failed waits and produces the existing bounded escalation when exhausted. |
+| AC-E2B-006 | OBJ-E2B-001, OBJ-E2B-002, OBJ-E2B-003 | Canonical replay of the original objective-mapping packet records the governed mapping and allows its BI and Workroom to close. |
+
+### Ordered fix sequence
+
+1. Add regressions for the reaper-stalled wait, the corrected-prerequisite
+   failed wait, and the fail-closed exclusions above.
+2. Extend only the existing reservation eligibility and prior-attempt handling;
+   retain the request digest, immutable policy reconstruction, successful-writer
+   check, compare-and-set, hydration, approval, and receipt paths.
+3. Run the graph-linked TaskRun suites and build gates, publish through the merge
+   queue, self-upgrade canonically, then replay the unchanged original packet.
+
+This is an orchestration-liveness correction, not a second evidence or approval
+model. The prior failed attempts remain immutable audit history. Rollback is the
+single eligibility change and its tests; no schema or stored contract changes.
+
+### Approval projection is part of the same replay contract (2026-09-03)
+
+Canonical acceptance replay for BI-BFBF1BBB reached
+`record_initiative_evidence`, persisted proposal execution
+`cmtmgbxya03ke01qisordc4tb`, and created exact-bound envelope
+`cmtmgbxy603kd01qid8kg6261`. The tool result was
+`approval_required`, but the remote executor then overwrote the TaskRun as
+`completed`. After the envelope was approved, identical replay returned that
+cached completion and never executed the writer. The TaskRun therefore held an
+approved, unconsumed exact writer and no objective-mapping receipt.
+
+The executor must treat an `approval_required` result from the bound terminal
+writer as an explicit `input-required` projection even when the lower tool path
+did not mutate TaskRun state. It records the envelope id, clears `completedAt`,
+and returns the existing approval location. For already-persisted historical
+misprojections, replay may recover a `completed` TaskRun only when the current
+request digest matches, the server reconstructs an initiative-review terminal
+policy, an unexpired approved envelope belongs to that same TaskRun and user,
+and its action is the exact bound writer. The existing proposal execution
+remains the sole source of writer arguments. Generic completed tasks and writer
+mismatches remain terminal.
+
+This correction realizes AC-E2B-003 rather than weakening it: approval recovery
+continues to own live proposals, inference is not rerun, stored arguments are
+not synthesized, and the writer still passes through its ordinary authority and
+receipt validators.

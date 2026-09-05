@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 407,
-      "reason": "appoint_room_coordinator (BI-F63200A8). Conformance refuses to execute a Workroom without exactly one explicit Process Overseer, and no tool could set that role: persistWorkroomParticipantAssignment had zero callers and invite_room_participant admits a participant without ever making them coordinator. A live room woke 100 times and refused every one for want of an owner. This earns a permanent place because ownership is a standing property of every room on every install, not a one-off repair \u2014 and because the tool is deliberately callable without an acting coworker, so a stalled room can be given an owner by whoever notices it.",
-      "recordedAt": "2026-09-03"
+      "value": 409,
+      "reason": "appoint_room_coordinator (BI-F63200A8). Conformance refuses to execute a Workroom without exactly one explicit Process Overseer, and no tool could set that role: persistWorkroomParticipantAssignment had zero callers and invite_room_participant admits a participant without ever making them coordinator. A live room woke 291 times and refused every one for want of an owner. This earns a permanent place because ownership is a standing property of every room on every install, not a one-off repair \u2014 and because the tool is deliberately callable without an acting coworker, so a stalled room can be given an owner by whoever notices it.",
+      "recordedAt": "2026-09-05"
     },
     "registry.packFiles": {
-      "value": 99,
-      "reason": "New ux-verification-pack.ts: browser-verification sign-in is a delivery-surface concern distinct from self-upgrade, sandbox and admin packs, and a single-tool pack keeps the grant (sandbox_execute) and capability (manage_platform) visible next to the tool they govern.",
-      "recordedAt": "2026-09-03"
+      "value": 100,
+      "reason": "New federation-membership-pack.ts: organization membership (join-file import, and the issue side to follow in the next slice) is a federation-trust concern distinct from ux-verification, self-upgrade and admin packs; a dedicated pack keeps the grant (sandbox_execute) and capability (manage_platform) beside the tools they govern.",
+      "recordedAt": "2026-09-05"
     },
     "tier.coreToolNames": {
       "value": 30,

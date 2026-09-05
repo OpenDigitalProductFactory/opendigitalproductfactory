@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 327,
+  "pageRouteCount": 333,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
-    "detail": 254,
+    "detail": 260,
     "settings": 12,
     "form": 17,
     "public": 21,
@@ -4033,6 +4033,78 @@
       "routePath": "/workspace/my-queue",
       "shell": "detail",
       "audience": "worker",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/rescue",
+      "shell": "detail",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/rescue/adoptions",
+      "shell": "detail",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/rescue/animals",
+      "shell": "detail",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/rescue/care",
+      "shell": "detail",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/rescue/intake",
+      "shell": "detail",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/rescue/stewardship",
+      "shell": "detail",
+      "audience": "owner",
       "migrated": false,
       "exemptChecks": [
         "next-action-marker",

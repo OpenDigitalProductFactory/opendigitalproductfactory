@@ -51,9 +51,9 @@ import {
   engineKeyForProvider,
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
+import { providerInferenceFetch } from "./provider-inference-transport";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
 /** Anthropic-style content blocks for structured tool-calling messages */
 export type ContentBlock =
   | { type: "text"; text: string }
@@ -110,12 +110,12 @@ export type ChatMessage = {
   /** For role=tool messages: which tool call this result responds to */
   toolCallId?: string;
 };
-
 export type InferenceResult = {
   content: string;
   inputTokens: number;
   outputTokens: number;
   inferenceMs: number;
+  asyncOperation?: import("../routing/adapter-types").AsyncOperationStartResult;
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   /** Responses API: chain subsequent calls with this ID for conversation state. */
   responseId?: string;
@@ -642,6 +642,7 @@ export async function callProvider(
       modelId,
       plan: effectivePlan,
       provider: { baseUrl, headers },
+      fetchImpl: providerInferenceFetch,
       messages,
       systemPrompt,
       tools,
@@ -738,6 +739,7 @@ export async function callProvider(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     inferenceMs: result.inferenceMs,
+    ...(result.asyncOperation !== undefined && { asyncOperation: result.asyncOperation }),
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
     truncated: result.truncated ?? false,
@@ -777,7 +779,6 @@ export async function logTokenUsage(input: {
       );
     }
   }
-
   // Record cost metric for Prometheus
   if (costUsd > 0) {
     aiInferenceCostUsd.inc({ provider: input.providerId }, costUsd);

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "generator": "apps/web/scripts/build-page-purpose.ts",
-  "pageRouteCount": 327,
+  "pageRouteCount": 333,
   "draftCount": 313,
-  "ratifiedCount": 14,
+  "ratifiedCount": 20,
   "quarantinedCount": 0,
   "routes": [
     {
@@ -5891,6 +5891,984 @@
     {
       "schemaVersion": 1,
       "status": "intent-ratified",
+      "routePath": "/workspace/rescue",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A shelter operator deciding what needs attention across intake, welfare, housing, placement, and stewardship.",
+        "triggeringNeed": "The Rescue operations view is needed to replace generic commercial measures with animal-welfare operating facts.",
+        "prerequisites": [
+          "The user is signed in with animal-welfare access.",
+          "The installation is configured for the Pet Rescue archetype."
+        ],
+        "job": "See which animal-welfare commitment needs attention and open its operating area.",
+        "successOutcome": "The operator can distinguish current facts, an unrecorded state, and an unavailable source without treating any of them as the same zero.",
+        "findability": {
+          "parentArea": "Workspace",
+          "entryPoints": [
+            "/workspace",
+            "/workspace/rescue"
+          ],
+          "navigationLayer": "Pet Rescue operating-area navigation",
+          "discoveryCue": "The Pet Rescue workspace entry and the Rescue operations area tabs.",
+          "expectedPath": [
+            "/workspace",
+            "/workspace/rescue",
+            "/workspace/rescue"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "animal-count",
+            "housing-capacity",
+            "care-due",
+            "active-applications",
+            "posted-animal-cost"
+          ],
+          "deferredRegions": [
+            {
+              "key": "data-source-status",
+              "role": "Technical source-failure detail without exposing it as the primary operating experience.",
+              "trigger": "One or more operating sources are unavailable."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use intake, animals, housing, daily care, adoptions, and stewardship; do not describe rescue work as commercial demand capture or manufacturing.",
+          "actionLocation": "Area navigation stays immediately below the page purpose; overview signals link to the operating area they summarize.",
+          "feedbackPrimitive": "Shared status badges, notices, empty states, and stat cards distinguish Current, No records yet, and Unavailable.",
+          "disclosurePattern": "The operating summary is visible first. Source diagnostics appear only in technical details.",
+          "returnBehavior": "Every rescue area preserves the same navigation and returns to the rescue overview or workspace normally."
+        }
+      },
+      "stateScenarios": {
+        "facts-available": {
+          "statePredicate": "The area's source can be read and contains one or more records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "animal-count",
+            "housing-capacity",
+            "care-due",
+            "active-applications",
+            "posted-animal-cost"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.facts-available"
+          },
+          "prohibitedActionKeys": [
+            "invent-operational-fact"
+          ],
+          "completionSignal": "The page shows the bounded current measures for its operating area.",
+          "errorCorrection": "Correct the owning operational record; the cockpit remains a read-only projection.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "no-records": {
+          "statePredicate": "The area's source can be read but has no records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "no-records-state"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.no-records"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page says that no records exist instead of presenting an all-clear claim.",
+          "errorCorrection": "The operator records the work in its owning area; the summary does not fabricate it.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "unavailable": {
+          "statePredicate": "The area's source cannot be read or the user lacks the narrower finance permission.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "unavailable-state",
+            "data-source-status"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.source-unavailable"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page names the source as unavailable and withholds a numeric claim.",
+          "errorCorrection": "Restore the source or required permission, then reload the same route.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/workspace/rescue",
+        "taskPrompt": "See which animal-welfare commitment needs attention and open its operating area.",
+        "completionOracle": "The operator reads the area's current state or a truthful empty/unavailable state without inferring missing facts.",
+        "falseSuccessConditions": [
+          "A failed or unauthorized source renders as zero.",
+          "The page substitutes generic commercial value-chain language for animal-welfare work.",
+          "The operator must return to Build Studio to find another rescue operating area."
+        ],
+        "acceptanceThresholds": [
+          "The page uses the shared rescue navigation.",
+          "Every summary state is Current, No records yet, or Unavailable.",
+          "The route uses shared shell and report primitives with token-based styling."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:pet-rescue-workroom-review-2026-08-25"
+      },
+      "reviewRef": "BI-7A38F667",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-7A38F667",
+          "summary": "The operator asked for Pet Rescue work to follow intake, ongoing health and welfare, and placement rather than a generic commercial value chain."
+        },
+        {
+          "kind": "design-review",
+          "ref": "docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md",
+          "summary": "The approved design keeps custody, Resource capacity, care, work, adoption, finance, and storefront ownership separate while composing bounded workspace read models."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/workspace/rescue/adoptions",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A shelter operator deciding what needs attention across intake, welfare, housing, placement, and stewardship.",
+        "triggeringNeed": "The Adoptions view is needed to replace generic commercial measures with animal-welfare operating facts.",
+        "prerequisites": [
+          "The user is signed in with animal-welfare access.",
+          "The installation is configured for the Pet Rescue archetype."
+        ],
+        "job": "See active applications and placement-ready animals with no current interest.",
+        "successOutcome": "The operator can distinguish current facts, an unrecorded state, and an unavailable source without treating any of them as the same zero.",
+        "findability": {
+          "parentArea": "Workspace",
+          "entryPoints": [
+            "/workspace",
+            "/workspace/rescue"
+          ],
+          "navigationLayer": "Pet Rescue operating-area navigation",
+          "discoveryCue": "The Pet Rescue workspace entry and the Rescue operations area tabs.",
+          "expectedPath": [
+            "/workspace",
+            "/workspace/rescue",
+            "/workspace/rescue/adoptions"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "active-applications",
+            "ready-without-interest"
+          ],
+          "deferredRegions": [
+            {
+              "key": "data-source-status",
+              "role": "Technical source-failure detail without exposing it as the primary operating experience.",
+              "trigger": "One or more operating sources are unavailable."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use intake, animals, housing, daily care, adoptions, and stewardship; do not describe rescue work as commercial demand capture or manufacturing.",
+          "actionLocation": "Area navigation stays immediately below the page purpose; overview signals link to the operating area they summarize.",
+          "feedbackPrimitive": "Shared status badges, notices, empty states, and stat cards distinguish Current, No records yet, and Unavailable.",
+          "disclosurePattern": "The operating summary is visible first. Source diagnostics appear only in technical details.",
+          "returnBehavior": "Every rescue area preserves the same navigation and returns to the rescue overview or workspace normally."
+        }
+      },
+      "stateScenarios": {
+        "facts-available": {
+          "statePredicate": "The area's source can be read and contains one or more records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "active-applications",
+            "ready-without-interest"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.facts-available"
+          },
+          "prohibitedActionKeys": [
+            "invent-operational-fact"
+          ],
+          "completionSignal": "The page shows the bounded current measures for its operating area.",
+          "errorCorrection": "Correct the owning operational record; the cockpit remains a read-only projection.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "no-records": {
+          "statePredicate": "The area's source can be read but has no records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "no-records-state"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.no-records"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page says that no records exist instead of presenting an all-clear claim.",
+          "errorCorrection": "The operator records the work in its owning area; the summary does not fabricate it.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "unavailable": {
+          "statePredicate": "The area's source cannot be read or the user lacks the narrower finance permission.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "unavailable-state",
+            "data-source-status"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.source-unavailable"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page names the source as unavailable and withholds a numeric claim.",
+          "errorCorrection": "Restore the source or required permission, then reload the same route.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/workspace/rescue/adoptions",
+        "taskPrompt": "See active applications and placement-ready animals with no current interest.",
+        "completionOracle": "The operator reads the area's current state or a truthful empty/unavailable state without inferring missing facts.",
+        "falseSuccessConditions": [
+          "A failed or unauthorized source renders as zero.",
+          "The page substitutes generic commercial value-chain language for animal-welfare work.",
+          "The operator must return to Build Studio to find another rescue operating area."
+        ],
+        "acceptanceThresholds": [
+          "The page uses the shared rescue navigation.",
+          "Every summary state is Current, No records yet, or Unavailable.",
+          "The route uses shared shell and report primitives with token-based styling."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:pet-rescue-workroom-review-2026-08-25"
+      },
+      "reviewRef": "BI-7A38F667",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-7A38F667",
+          "summary": "The operator asked for Pet Rescue work to follow intake, ongoing health and welfare, and placement rather than a generic commercial value chain."
+        },
+        {
+          "kind": "design-review",
+          "ref": "docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md",
+          "summary": "The approved design keeps custody, Resource capacity, care, work, adoption, finance, and storefront ownership separate while composing bounded workspace read models."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/workspace/rescue/animals",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A shelter operator deciding what needs attention across intake, welfare, housing, placement, and stewardship.",
+        "triggeringNeed": "The Animals view is needed to replace generic commercial measures with animal-welfare operating facts.",
+        "prerequisites": [
+          "The user is signed in with animal-welfare access.",
+          "The installation is configured for the Pet Rescue archetype."
+        ],
+        "job": "See the current custody population, placement readiness, and legal holds.",
+        "successOutcome": "The operator can distinguish current facts, an unrecorded state, and an unavailable source without treating any of them as the same zero.",
+        "findability": {
+          "parentArea": "Workspace",
+          "entryPoints": [
+            "/workspace",
+            "/workspace/rescue"
+          ],
+          "navigationLayer": "Pet Rescue operating-area navigation",
+          "discoveryCue": "The Pet Rescue workspace entry and the Rescue operations area tabs.",
+          "expectedPath": [
+            "/workspace",
+            "/workspace/rescue",
+            "/workspace/rescue/animals"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "in-care",
+            "placement-ready",
+            "legal-hold"
+          ],
+          "deferredRegions": [
+            {
+              "key": "data-source-status",
+              "role": "Technical source-failure detail without exposing it as the primary operating experience.",
+              "trigger": "One or more operating sources are unavailable."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use intake, animals, housing, daily care, adoptions, and stewardship; do not describe rescue work as commercial demand capture or manufacturing.",
+          "actionLocation": "Area navigation stays immediately below the page purpose; overview signals link to the operating area they summarize.",
+          "feedbackPrimitive": "Shared status badges, notices, empty states, and stat cards distinguish Current, No records yet, and Unavailable.",
+          "disclosurePattern": "The operating summary is visible first. Source diagnostics appear only in technical details.",
+          "returnBehavior": "Every rescue area preserves the same navigation and returns to the rescue overview or workspace normally."
+        }
+      },
+      "stateScenarios": {
+        "facts-available": {
+          "statePredicate": "The area's source can be read and contains one or more records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "in-care",
+            "placement-ready",
+            "legal-hold"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.facts-available"
+          },
+          "prohibitedActionKeys": [
+            "invent-operational-fact"
+          ],
+          "completionSignal": "The page shows the bounded current measures for its operating area.",
+          "errorCorrection": "Correct the owning operational record; the cockpit remains a read-only projection.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "no-records": {
+          "statePredicate": "The area's source can be read but has no records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "no-records-state"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.no-records"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page says that no records exist instead of presenting an all-clear claim.",
+          "errorCorrection": "The operator records the work in its owning area; the summary does not fabricate it.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "unavailable": {
+          "statePredicate": "The area's source cannot be read or the user lacks the narrower finance permission.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "unavailable-state",
+            "data-source-status"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.source-unavailable"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page names the source as unavailable and withholds a numeric claim.",
+          "errorCorrection": "Restore the source or required permission, then reload the same route.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/workspace/rescue/animals",
+        "taskPrompt": "See the current custody population, placement readiness, and legal holds.",
+        "completionOracle": "The operator reads the area's current state or a truthful empty/unavailable state without inferring missing facts.",
+        "falseSuccessConditions": [
+          "A failed or unauthorized source renders as zero.",
+          "The page substitutes generic commercial value-chain language for animal-welfare work.",
+          "The operator must return to Build Studio to find another rescue operating area."
+        ],
+        "acceptanceThresholds": [
+          "The page uses the shared rescue navigation.",
+          "Every summary state is Current, No records yet, or Unavailable.",
+          "The route uses shared shell and report primitives with token-based styling."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:pet-rescue-workroom-review-2026-08-25"
+      },
+      "reviewRef": "BI-7A38F667",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-7A38F667",
+          "summary": "The operator asked for Pet Rescue work to follow intake, ongoing health and welfare, and placement rather than a generic commercial value chain."
+        },
+        {
+          "kind": "design-review",
+          "ref": "docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md",
+          "summary": "The approved design keeps custody, Resource capacity, care, work, adoption, finance, and storefront ownership separate while composing bounded workspace read models."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/workspace/rescue/care",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A shelter operator deciding what needs attention across intake, welfare, housing, placement, and stewardship.",
+        "triggeringNeed": "The Daily care view is needed to replace generic commercial measures with animal-welfare operating facts.",
+        "prerequisites": [
+          "The user is signed in with animal-welfare access.",
+          "The installation is configured for the Pet Rescue archetype."
+        ],
+        "job": "See care due today, missed work, and animal records needing attention.",
+        "successOutcome": "The operator can distinguish current facts, an unrecorded state, and an unavailable source without treating any of them as the same zero.",
+        "findability": {
+          "parentArea": "Workspace",
+          "entryPoints": [
+            "/workspace",
+            "/workspace/rescue"
+          ],
+          "navigationLayer": "Pet Rescue operating-area navigation",
+          "discoveryCue": "The Pet Rescue workspace entry and the Rescue operations area tabs.",
+          "expectedPath": [
+            "/workspace",
+            "/workspace/rescue",
+            "/workspace/rescue/care"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "care-due",
+            "missed-care",
+            "care-exceptions"
+          ],
+          "deferredRegions": [
+            {
+              "key": "data-source-status",
+              "role": "Technical source-failure detail without exposing it as the primary operating experience.",
+              "trigger": "One or more operating sources are unavailable."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use intake, animals, housing, daily care, adoptions, and stewardship; do not describe rescue work as commercial demand capture or manufacturing.",
+          "actionLocation": "Area navigation stays immediately below the page purpose; overview signals link to the operating area they summarize.",
+          "feedbackPrimitive": "Shared status badges, notices, empty states, and stat cards distinguish Current, No records yet, and Unavailable.",
+          "disclosurePattern": "The operating summary is visible first. Source diagnostics appear only in technical details.",
+          "returnBehavior": "Every rescue area preserves the same navigation and returns to the rescue overview or workspace normally."
+        }
+      },
+      "stateScenarios": {
+        "facts-available": {
+          "statePredicate": "The area's source can be read and contains one or more records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "care-due",
+            "missed-care",
+            "care-exceptions"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.facts-available"
+          },
+          "prohibitedActionKeys": [
+            "invent-operational-fact"
+          ],
+          "completionSignal": "The page shows the bounded current measures for its operating area.",
+          "errorCorrection": "Correct the owning operational record; the cockpit remains a read-only projection.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "no-records": {
+          "statePredicate": "The area's source can be read but has no records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "no-records-state"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.no-records"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page says that no records exist instead of presenting an all-clear claim.",
+          "errorCorrection": "The operator records the work in its owning area; the summary does not fabricate it.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "unavailable": {
+          "statePredicate": "The area's source cannot be read or the user lacks the narrower finance permission.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "unavailable-state",
+            "data-source-status"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.source-unavailable"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page names the source as unavailable and withholds a numeric claim.",
+          "errorCorrection": "Restore the source or required permission, then reload the same route.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/workspace/rescue/care",
+        "taskPrompt": "See care due today, missed work, and animal records needing attention.",
+        "completionOracle": "The operator reads the area's current state or a truthful empty/unavailable state without inferring missing facts.",
+        "falseSuccessConditions": [
+          "A failed or unauthorized source renders as zero.",
+          "The page substitutes generic commercial value-chain language for animal-welfare work.",
+          "The operator must return to Build Studio to find another rescue operating area."
+        ],
+        "acceptanceThresholds": [
+          "The page uses the shared rescue navigation.",
+          "Every summary state is Current, No records yet, or Unavailable.",
+          "The route uses shared shell and report primitives with token-based styling."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:pet-rescue-workroom-review-2026-08-25"
+      },
+      "reviewRef": "BI-7A38F667",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-7A38F667",
+          "summary": "The operator asked for Pet Rescue work to follow intake, ongoing health and welfare, and placement rather than a generic commercial value chain."
+        },
+        {
+          "kind": "design-review",
+          "ref": "docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md",
+          "summary": "The approved design keeps custody, Resource capacity, care, work, adoption, finance, and storefront ownership separate while composing bounded workspace read models."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/workspace/rescue/intake",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A shelter operator deciding what needs attention across intake, welfare, housing, placement, and stewardship.",
+        "triggeringNeed": "The Intake view is needed to replace generic commercial measures with animal-welfare operating facts.",
+        "prerequisites": [
+          "The user is signed in with animal-welfare access.",
+          "The installation is configured for the Pet Rescue archetype."
+        ],
+        "job": "See animals still in intake, legal holds, and the housing capacity available to receive them.",
+        "successOutcome": "The operator can distinguish current facts, an unrecorded state, and an unavailable source without treating any of them as the same zero.",
+        "findability": {
+          "parentArea": "Workspace",
+          "entryPoints": [
+            "/workspace",
+            "/workspace/rescue"
+          ],
+          "navigationLayer": "Pet Rescue operating-area navigation",
+          "discoveryCue": "The Pet Rescue workspace entry and the Rescue operations area tabs.",
+          "expectedPath": [
+            "/workspace",
+            "/workspace/rescue",
+            "/workspace/rescue/intake"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "intake-review",
+            "legal-hold",
+            "housing-free"
+          ],
+          "deferredRegions": [
+            {
+              "key": "data-source-status",
+              "role": "Technical source-failure detail without exposing it as the primary operating experience.",
+              "trigger": "One or more operating sources are unavailable."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use intake, animals, housing, daily care, adoptions, and stewardship; do not describe rescue work as commercial demand capture or manufacturing.",
+          "actionLocation": "Area navigation stays immediately below the page purpose; overview signals link to the operating area they summarize.",
+          "feedbackPrimitive": "Shared status badges, notices, empty states, and stat cards distinguish Current, No records yet, and Unavailable.",
+          "disclosurePattern": "The operating summary is visible first. Source diagnostics appear only in technical details.",
+          "returnBehavior": "Every rescue area preserves the same navigation and returns to the rescue overview or workspace normally."
+        }
+      },
+      "stateScenarios": {
+        "facts-available": {
+          "statePredicate": "The area's source can be read and contains one or more records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "intake-review",
+            "legal-hold",
+            "housing-free"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.facts-available"
+          },
+          "prohibitedActionKeys": [
+            "invent-operational-fact"
+          ],
+          "completionSignal": "The page shows the bounded current measures for its operating area.",
+          "errorCorrection": "Correct the owning operational record; the cockpit remains a read-only projection.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "no-records": {
+          "statePredicate": "The area's source can be read but has no records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "no-records-state"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.no-records"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page says that no records exist instead of presenting an all-clear claim.",
+          "errorCorrection": "The operator records the work in its owning area; the summary does not fabricate it.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "unavailable": {
+          "statePredicate": "The area's source cannot be read or the user lacks the narrower finance permission.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "unavailable-state",
+            "data-source-status"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.source-unavailable"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page names the source as unavailable and withholds a numeric claim.",
+          "errorCorrection": "Restore the source or required permission, then reload the same route.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/workspace/rescue/intake",
+        "taskPrompt": "See animals still in intake, legal holds, and the housing capacity available to receive them.",
+        "completionOracle": "The operator reads the area's current state or a truthful empty/unavailable state without inferring missing facts.",
+        "falseSuccessConditions": [
+          "A failed or unauthorized source renders as zero.",
+          "The page substitutes generic commercial value-chain language for animal-welfare work.",
+          "The operator must return to Build Studio to find another rescue operating area."
+        ],
+        "acceptanceThresholds": [
+          "The page uses the shared rescue navigation.",
+          "Every summary state is Current, No records yet, or Unavailable.",
+          "The route uses shared shell and report primitives with token-based styling."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:pet-rescue-workroom-review-2026-08-25"
+      },
+      "reviewRef": "BI-7A38F667",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-7A38F667",
+          "summary": "The operator asked for Pet Rescue work to follow intake, ongoing health and welfare, and placement rather than a generic commercial value chain."
+        },
+        {
+          "kind": "design-review",
+          "ref": "docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md",
+          "summary": "The approved design keeps custody, Resource capacity, care, work, adoption, finance, and storefront ownership separate while composing bounded workspace read models."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/workspace/rescue/stewardship",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A shelter operator deciding what needs attention across intake, welfare, housing, placement, and stewardship.",
+        "triggeringNeed": "The Stewardship view is needed to replace generic commercial measures with animal-welfare operating facts.",
+        "prerequisites": [
+          "The user is signed in with animal-welfare access.",
+          "The installation is configured for the Pet Rescue archetype."
+        ],
+        "job": "See restricted fund records and posted animal-attributed cost when finance access allows it.",
+        "successOutcome": "The operator can distinguish current facts, an unrecorded state, and an unavailable source without treating any of them as the same zero.",
+        "findability": {
+          "parentArea": "Workspace",
+          "entryPoints": [
+            "/workspace",
+            "/workspace/rescue"
+          ],
+          "navigationLayer": "Pet Rescue operating-area navigation",
+          "discoveryCue": "The Pet Rescue workspace entry and the Rescue operations area tabs.",
+          "expectedPath": [
+            "/workspace",
+            "/workspace/rescue",
+            "/workspace/rescue/stewardship"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "restricted-funds",
+            "posted-animal-cost"
+          ],
+          "deferredRegions": [
+            {
+              "key": "data-source-status",
+              "role": "Technical source-failure detail without exposing it as the primary operating experience.",
+              "trigger": "One or more operating sources are unavailable."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use intake, animals, housing, daily care, adoptions, and stewardship; do not describe rescue work as commercial demand capture or manufacturing.",
+          "actionLocation": "Area navigation stays immediately below the page purpose; overview signals link to the operating area they summarize.",
+          "feedbackPrimitive": "Shared status badges, notices, empty states, and stat cards distinguish Current, No records yet, and Unavailable.",
+          "disclosurePattern": "The operating summary is visible first. Source diagnostics appear only in technical details.",
+          "returnBehavior": "Every rescue area preserves the same navigation and returns to the rescue overview or workspace normally."
+        }
+      },
+      "stateScenarios": {
+        "facts-available": {
+          "statePredicate": "The area's source can be read and contains one or more records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "restricted-funds",
+            "posted-animal-cost"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.facts-available"
+          },
+          "prohibitedActionKeys": [
+            "invent-operational-fact"
+          ],
+          "completionSignal": "The page shows the bounded current measures for its operating area.",
+          "errorCorrection": "Correct the owning operational record; the cockpit remains a read-only projection.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "no-records": {
+          "statePredicate": "The area's source can be read but has no records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "no-records-state"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.no-records"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page says that no records exist instead of presenting an all-clear claim.",
+          "errorCorrection": "The operator records the work in its owning area; the summary does not fabricate it.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        },
+        "unavailable": {
+          "statePredicate": "The area's source cannot be read or the user lacks the narrower finance permission.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/animal-welfare/cockpit-loader.ts"
+          },
+          "essentialEvidenceKeys": [
+            "unavailable-state",
+            "data-source-status"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "pet-rescue.source-unavailable"
+          },
+          "prohibitedActionKeys": [
+            "show-unavailable-as-zero"
+          ],
+          "completionSignal": "The page names the source as unavailable and withholds a numeric claim.",
+          "errorCorrection": "Restore the source or required permission, then reload the same route.",
+          "recovery": {
+            "actionKey": "open-rescue-overview",
+            "routePath": "/workspace/rescue"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/workspace/rescue/stewardship",
+        "taskPrompt": "See restricted fund records and posted animal-attributed cost when finance access allows it.",
+        "completionOracle": "The operator reads the area's current state or a truthful empty/unavailable state without inferring missing facts.",
+        "falseSuccessConditions": [
+          "A failed or unauthorized source renders as zero.",
+          "The page substitutes generic commercial value-chain language for animal-welfare work.",
+          "The operator must return to Build Studio to find another rescue operating area."
+        ],
+        "acceptanceThresholds": [
+          "The page uses the shared rescue navigation.",
+          "Every summary state is Current, No records yet, or Unavailable.",
+          "The route uses shared shell and report primitives with token-based styling."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:pet-rescue-workroom-review-2026-08-25"
+      },
+      "reviewRef": "BI-7A38F667",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-7A38F667",
+          "summary": "The operator asked for Pet Rescue work to follow intake, ongoing health and welfare, and placement rather than a generic commercial value chain."
+        },
+        {
+          "kind": "design-review",
+          "ref": "docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md",
+          "summary": "The approved design keeps custody, Resource capacity, care, work, adoption, finance, and storefront ownership separate while composing bounded workspace read models."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
       "routePath": "/workspace/ward",
       "derived": {
         "audience": "owner",
@@ -5904,10 +6882,10 @@
         "triggeringNeed": "Finding where an animal sleeps, and how much room is left, without asking a colleague or reading a whiteboard.",
         "prerequisites": [
           "Signed in with access to the Operations family.",
-          "The shelter has recorded its housing units as kennel resources."
+          "The shelter has configured kennel or foster-home resources, or an administrator is ready to add the first one."
         ],
-        "job": "See every unit in the wards, who is in it, and which units are free.",
-        "successOutcome": "The worker can name the unit an animal is in, and say how many units are free, without counting rows.",
+        "job": "See every housing place, who is in it, what capacity is free, and place or release an animal.",
+        "successOutcome": "The worker can name an animal's housing, state the combined free capacity, and correct a placement without leaving the Ward.",
         "findability": {
           "parentArea": "Operations",
           "entryPoints": [
@@ -5924,27 +6902,38 @@
         "contentRoles": {
           "defaultVisibleKeys": [
             "lead-summary",
-            "open-ward-map"
+            "open-ward-map",
+            "place-or-move"
           ],
           "deferredRegions": [
             {
               "key": "ward-list",
               "role": "The same units as a table, adding area and state per row.",
               "trigger": "Worker chooses List."
+            },
+            {
+              "key": "housing-setup",
+              "role": "Create, pause, restore, or retire kennel and foster-home resources.",
+              "trigger": "Administrator opens Housing setup."
+            },
+            {
+              "key": "release-current-stay",
+              "role": "Close a current stay while preserving its history.",
+              "trigger": "Administrator opens Release a current stay."
             }
           ]
         },
         "familyConsistency": {
-          "terminology": "Speak the shelter's own words: wards, kennels, units, free. Never items, inventory, or slots.",
-          "actionLocation": "The map and list views switch from one control beside the occupancy count; the page itself is read-only.",
-          "feedbackPrimitive": "Occupancy is read from the drawn units and a stated free count; there are no dialogs or destructive actions.",
-          "disclosurePattern": "Occupied of total and free lead the page, then the map. The list is one control away so reading grade and word budgets pass with workspace chrome included.",
+          "terminology": "Speak the shelter's own words: wards, kennels, foster homes, housing, free. Never items, inventory, or slots.",
+          "actionLocation": "Map and list remain beside the occupancy count; routine placement is on the Ward and lower-frequency roster maintenance is disclosed below it.",
+          "feedbackPrimitive": "Shared form primitives announce pending, success, validation, permission, and conflict states; history-preserving release and retirement explain their consequence.",
+          "disclosurePattern": "Occupied of total and free lead the page, then the map and routine placement. Release and roster setup stay behind separate native disclosures.",
           "returnBehavior": "The worker returns to Operations through the same workspace navigation family."
         }
       },
       "stateScenarios": {
         "housing-recorded": {
-          "statePredicate": "The organization has at least one active kennel resource.",
+          "statePredicate": "The organization has at least one active kennel or foster-home resource.",
           "stateSource": {
             "oracleKey": "route-owned-read-model",
             "sourceRef": "apps/web/lib/ward/ward-store.ts#loadWardBoard"
@@ -5961,7 +6950,7 @@
           "prohibitedActionKeys": [
             "delete-kennel"
           ],
-          "completionSignal": "Every unit shows either its occupant or that it is free, and the free count matches the units drawn as free.",
+          "completionSignal": "Every housing resource shows its occupants or open capacity, and the combined free count matches the board.",
           "errorCorrection": "A wrong occupant is corrected by moving the animal, which closes its stay rather than deleting the record.",
           "recovery": {
             "actionKey": "open-workspace",
@@ -5985,14 +6974,14 @@
             "show-zero-free"
           ],
           "completionSignal": "The page says no housing is recorded and does not state a free count at all.",
-          "errorCorrection": "The shelter records its kennels; the page does not invent a roster on its behalf.",
+          "errorCorrection": "The shelter adds its first kennel or foster home in Housing setup; the page does not invent a roster.",
           "recovery": {
-            "actionKey": "open-workspace",
-            "routePath": "/workspace"
+            "actionKey": "open-housing-setup",
+            "routePath": "/workspace/ward"
           }
         },
         "animals-without-a-unit": {
-          "statePredicate": "The organization holds animals in care that have no open kennel stay.",
+          "statePredicate": "The organization holds animals in care that have no open housing stay.",
           "stateSource": {
             "oracleKey": "route-owned-read-model",
             "sourceRef": "apps/web/lib/ward/ward-occupancy.ts#buildWardBoard"
@@ -6018,8 +7007,8 @@
       },
       "taskProtocol": {
         "startRoute": "/workspace/ward",
-        "taskPrompt": "Find out where an animal is sleeping, and how many kennels are free.",
-        "completionOracle": "The worker names the unit an animal is in and states the free count, without counting rows and without asking a colleague.",
+        "taskPrompt": "Find where an animal is staying, state the combined free capacity, and place an unplaced animal.",
+        "completionOracle": "The worker names the housing, states the free count, and receives settled confirmation after placing the animal.",
         "falseSuccessConditions": [
           "A shelter that has recorded no kennels is shown a free count, which reads as a full or empty building it never reported.",
           "Animals in care with no kennel recorded are omitted, so the free count implies a completeness the board does not have.",
@@ -6030,7 +7019,9 @@
           "Occupied-of-total and free are stated before the map.",
           "Every unit renders either its occupant or that it is free.",
           "Unplaced animals are named, with the free count qualified.",
-          "The list flip carries the same units as the map and no fewer."
+          "The list flip carries the same units as the map and no fewer.",
+          "Routine placement remains visible; release and roster maintenance are progressively disclosed.",
+          "Every mutating form announces pending and settled success or failure."
         ]
       },
       "ratifiedBy": {

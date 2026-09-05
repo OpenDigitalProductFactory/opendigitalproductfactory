@@ -633,9 +633,11 @@ the same no-network Git wrapper and proves the same unexpired SHA-bound record
 is sufficient for later publication.
 
 **Quiescence-aware evidence recovery.** `pnpm run pregate` now preflights
-`get_quiescence_status` before the expensive gate. If the portal is actively
-draining or swapping, the gate exits before claiming the lease or running the
-full local-CI command. If the expensive gate already passed but
+`get_quiescence_status` once before the expensive gate. If the portal is actively
+draining or swapping, the gate records `blocked_quiescence`, emits
+`local_ci_quiescence_wait`, and parks with exit 75 before claiming the lease or
+running the full local-CI command. It does not poll: rerun pregate after the
+server-owned quiescence coordinator completes. If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts
 `release_nonprod_environment_lease`, and records

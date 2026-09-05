@@ -7,6 +7,7 @@ import {
   isStartupModelRevalidationEnabled,
 } from "@/lib/runtime/env-flags";
 import { isMeasurementRuntime, settleBootSync } from "@/lib/runtime/measurement-runtime";
+import { settleRenderRelevantBootReconcilers } from "@/lib/runtime/render-relevant-boot-reconcilers";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { sweepOrphanedPromoterContainers } from "@/lib/self-upgrade/promoter-sweep";
 import { reconcileSelfUpgradeAdmissions } from "@/lib/self-upgrade/admission";
@@ -1126,14 +1127,8 @@ export async function register() {
     // completed setup before the archetype declared them (BI-A30152B6). The WWWD
     // backfill above runs the same chain only when a corpus is MISSING, so a
     // healthy install short-circuits it and nothing else self-heals the rows.
-    void import("@/lib/onboarding/seed-archetype-workforce").then(({ backfillArchetypeWorkforceOnBoot }) => backfillArchetypeWorkforceOnBoot());
-    void import("@/lib/onboarding/backfill-commercial-catalog-on-boot").then(({ backfillCommercialCatalogOnBoot }) => backfillCommercialCatalogOnBoot());
-
-    // Discovery estate self-heal (BI-BAF38ED3 attribution + BI-B19C41B8 phantom
-    // products) — idempotent, cheap once healed, non-fatal, fire-and-forget.
-    void import("@/lib/onboarding/discovery-on-boot-self-heal").then(
-      ({ runDiscoveryOnBootSelfHeal }) => runDiscoveryOnBootSelfHeal(),
-    );
+    // Normal boots launch these reconcilers; measurement boot awaits one state.
+    await settleRenderRelevantBootReconcilers(measurementRuntime);
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These are correctness reconcilers, not optional maintenance — skipped
     // only under measurement runtime (an ephemeral sweep portal runs no

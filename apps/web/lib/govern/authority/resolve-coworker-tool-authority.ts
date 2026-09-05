@@ -182,9 +182,21 @@ export async function resolveInitiativeAuthorityContext(input: {
 export function deriveCoworkerApprovalPolicy(input: {
   hitlTierDefault: number;
   hitlPolicy: string | null;
+  serverBoundInitiativeReview?: boolean;
 }): CoworkerApprovalPolicy {
   const policy = input.hitlPolicy?.trim().toLowerCase() ?? "";
-  if (input.hitlTierDefault <= 1 || policy === "always") return "all";
+  // A server-issued initiative-review TaskRun is already constrained to one
+  // immutable artifact, one backlog item, one exact writer, and an eligible
+  // reviewer principal. Requiring the delegating employee to approve that
+  // writer again turns the technical review into a human proxy gate and makes
+  // the single-human installation path impossible to complete. Independence,
+  // when required by the lane, remains enforced by the receipt repository.
+  // `always` is an explicit operator policy and still wins. A numeric tier is
+  // only the coworker's generic default, so it must not re-wrap this already
+  // authorized initiative-review boundary in a second human approval.
+  if (policy === "always") return "all";
+  if (input.serverBoundInitiativeReview) return "none";
+  if (input.hitlTierDefault <= 1) return "all";
   if (
     input.hitlTierDefault === 2
     || policy === "proposal_for_external_writes"
@@ -310,6 +322,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     const approvalPolicy = deriveCoworkerApprovalPolicy({
       hitlTierDefault: agent.hitlTierDefault,
       hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
+      serverBoundInitiativeReview: Boolean(trustedBoundItemId),
     });
     const sensitivity = coerceDataSensitivity(agent.sensitivity);
     const decisionVersionIds = [

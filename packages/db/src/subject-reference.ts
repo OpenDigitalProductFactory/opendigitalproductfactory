@@ -6,6 +6,13 @@ export type SubjectReference = {
   subjectRef: string;
 };
 
+export const SUBJECT_REFERENCE_VERSION = "subject-reference.v1" as const;
+
+export type ScopedSubjectReference = SubjectReference & {
+  version: typeof SUBJECT_REFERENCE_VERSION;
+  organizationId: string;
+};
+
 export function readSubjectReference(input: unknown): SubjectReference | null {
   if (typeof input !== "object" || input === null) {
     return null;
@@ -35,5 +42,40 @@ export function patientSubjectReference(patientProfileId: string): SubjectRefere
     throw new Error("A non-empty patient profile ID is required");
   }
 
+  return reference;
+}
+
+export function readScopedSubjectReference(input: unknown): ScopedSubjectReference | null {
+  if (typeof input !== "object" || input === null) return null;
+  const candidate = input as Record<string, unknown>;
+  const base = readSubjectReference(candidate);
+  if (
+    !base ||
+    candidate.version !== SUBJECT_REFERENCE_VERSION ||
+    typeof candidate.organizationId !== "string" ||
+    candidate.organizationId.trim().length === 0
+  ) {
+    return null;
+  }
+  return {
+    version: SUBJECT_REFERENCE_VERSION,
+    organizationId: candidate.organizationId.trim(),
+    ...base,
+  };
+}
+
+export function scopedSubjectReference(input: Omit<ScopedSubjectReference, "version">): ScopedSubjectReference {
+  const reference = readScopedSubjectReference({ version: SUBJECT_REFERENCE_VERSION, ...input });
+  if (!reference) throw new Error("A valid organization-scoped subject reference is required");
+  return reference;
+}
+
+export function assertSubjectOrganization(
+  reference: ScopedSubjectReference,
+  organizationId: string,
+): ScopedSubjectReference {
+  if (reference.organizationId !== organizationId) {
+    throw new Error("Subject reference belongs to another organization");
+  }
   return reference;
 }

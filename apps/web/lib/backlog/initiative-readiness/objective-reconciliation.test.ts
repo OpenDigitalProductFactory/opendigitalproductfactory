@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { err, ok } from "@/lib/shared/action-result";
+
 import {
   reconcileInitiativeObjectives,
+  selectEligibleObjectiveEvidenceActivityIds,
   type ObjectiveReconciliationActivity,
 } from "./objective-reconciliation";
 
@@ -132,6 +135,89 @@ describe("reconcileInitiativeObjectives", () => {
         { ...activity("E-OTHER", "evidence", { evidenceKind: "test_pass" }, 3), backlogItemId: "someone-else" },
       ],
     });
-    expect(foreign.state).toBe("malformed");
+    expect(foreign.state).toBe("missing");
+  });
+
+  it("keeps a malformed newest mapping recoverable without falling back to an older pass", () => {
+    const result = reconcileInitiativeObjectives({
+      itemId: "BI-CORRECTABLE",
+      activities: [
+        activity("BASE-1", "initiative_scope_baseline", {
+          schemaVersion: 1,
+          baselineId: "BASE-1",
+          supersedesBaselineId: null,
+          artifactDigest: "sha256:design",
+          subject: { kind: "backlog-item", id: "BI-CORRECTABLE" },
+          objectiveStatements: [{ objectiveId: "OBJ-1" }],
+          acceptanceStatements: [],
+        }, 1),
+        activity("MAP-VALID-OLD", "initiative_objective_mapping", {
+          schemaVersion: 1,
+          proposalId: "MAP-VALID-OLD",
+          subject: { kind: "backlog-item", id: "BI-CORRECTABLE" },
+          baselineId: "BASE-1",
+          artifactDigest: "sha256:design",
+          mappings: [{ objectiveId: "OBJ-1", evidenceRefs: ["E-PASS"] }],
+        }, 2),
+        activity("E-PASS", "evidence", { evidenceKind: "test_pass" }, 3),
+        activity("MAP-BAD-NEW", "initiative_objective_mapping", {
+          schemaVersion: 1,
+          proposalId: "MAP-BAD-NEW",
+          subject: { kind: "backlog-item", id: "BI-CORRECTABLE" },
+          baselineId: "BASE-1",
+          artifactDigest: "sha256:design",
+          mappings: [{
+            objectiveId: "OBJ-1",
+            evidenceRefs: ["docs/superpowers/specs/not-an-activity.md"],
+          }],
+        }, 4),
+      ],
+    });
+
+    expect(result).toEqual({
+      state: "missing",
+      baselineId: "BASE-1",
+      evidenceRefs: ["docs/superpowers/specs/not-an-activity.md"],
+      requiredStatementIds: ["OBJ-1"],
+    });
+  });
+});
+
+describe("selectEligibleObjectiveEvidenceActivityIds", () => {
+  it("returns only bounded same-item post-baseline passing activities", () => {
+    const result = selectEligibleObjectiveEvidenceActivityIds({
+      itemId: "BI-2B619BC9",
+      itemRowId: "row-bi-2b",
+      baselineRecordedAt: recordedAt(10),
+      activities: [
+        { ...activity("cmtnr924q", "evidence", { evidenceKind: "test_pass" }, 11), backlogItemId: "row-bi-2b" },
+        { ...activity("cmtnr926e", "evidence", { evidenceKind: "build_pass" }, 12), backlogItemId: "BI-2B619BC9" },
+        { ...activity("cmtnr9295", "evidence", { evidenceKind: "manual_check" }, 13), backlogItemId: "row-bi-2b" },
+        { ...activity("cmtnr927v", "evidence", { evidenceKind: "source_verified" }, 14), backlogItemId: "row-bi-2b" },
+        { ...activity("pre-baseline", "evidence", { evidenceKind: "test_pass" }, 9), backlogItemId: "row-bi-2b" },
+        { ...activity("failed", "evidence", { evidenceKind: "test_fail" }, 15), backlogItemId: "row-bi-2b" },
+        { ...activity("foreign", "evidence", { evidenceKind: "test_pass" }, 15), backlogItemId: "row-other" },
+        activity("unbound", "evidence", { evidenceKind: "test_pass" }, 15),
+      ],
+      maximumActivityCount: 20,
+    });
+
+    expect(result).toEqual(ok({
+      activityIds: ["cmtnr924q", "cmtnr926e", "cmtnr927v", "cmtnr9295"],
+    }));
+  });
+
+  it("fails closed instead of truncating an unbounded activity set", () => {
+    const result = selectEligibleObjectiveEvidenceActivityIds({
+      itemId: "BI-BOUND",
+      baselineRecordedAt: recordedAt(1),
+      activities: [
+        activity("E-1", "evidence", { evidenceKind: "test_pass" }, 2),
+        activity("E-2", "evidence", { evidenceKind: "test_pass" }, 3),
+      ],
+      maximumActivityCount: 1,
+    });
+
+    expect(result).toEqual(err("evidence-limit-exceeded"));
   });
 });

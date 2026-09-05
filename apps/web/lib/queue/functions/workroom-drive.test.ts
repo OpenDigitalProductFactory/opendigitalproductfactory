@@ -131,6 +131,17 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     expect(fx.upsertAgentTask).not.toHaveBeenCalled();
     expect(fx.persist.mock.calls[0]?.[0]?.activityKind).toBe("workroom-drive-attention");
   });
+
+  it("contains delivery notification reconciliation failure after preserving the drive result", async () => {
+    const fx = effects();
+    const reconcileNotifications = vi.fn().mockRejectedValue(new Error("notification unavailable"));
+    await expect(runWorkroomDriveJob(new Date(), {
+      listRooms: async () => [room()],
+      effects: fx,
+      reconcileNotifications,
+    })).resolves.toMatchObject({ scanned: 1, dispatched: 1 });
+    expect(reconcileNotifications).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("applyDrivePlan lease expiry", () => {

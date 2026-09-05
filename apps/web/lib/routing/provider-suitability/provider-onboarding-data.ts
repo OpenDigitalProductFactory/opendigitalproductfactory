@@ -25,7 +25,7 @@ function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function catalogFacts(provider: {
+export function providerCatalogFacts(provider: {
   providerId: string;
   category: string;
   endpointType: string;
@@ -111,41 +111,57 @@ export type ProviderSuitabilitySourceContext = {
   }>;
 };
 
+export type BusinessSuitabilityContext = {
+  businessProfile: BusinessSuitabilityProfile;
+  handlesCardPayments: boolean;
+  businessContextConfigured: boolean;
+};
+
+/** Canonical business requirements, bounded to organization context only. */
+export async function loadBusinessSuitabilityContext(): Promise<BusinessSuitabilityContext> {
+  const organization = await prisma.organization.findFirst({ select: { id: true, address: true } });
+  const [businessContext, storefront] = await Promise.all([
+    organization ? prisma.businessContext.findUnique({ where: { organizationId: organization.id } }) : null,
+    prisma.storefrontConfig.findFirst({ select: { archetypeId: true, archetype: { select: { category: true } } } }),
+  ]);
+  const countryCode = parseOrgAddress(organization?.address).countryCode?.toLowerCase();
+  const locationJurisdictions = countryCode
+    ? [countryCode, ...(isEeaState(countryCode) ? ["eu"] : countryCode === "gb" ? ["uk"] : [])]
+    : [];
+  return {
+    businessContextConfigured: Boolean(businessContext),
+    handlesCardPayments: businessContext?.handlesCardPayments ?? false,
+    businessProfile: {
+      organizationId: organization?.id ?? "unconfigured-organization",
+      archetypeId: storefront?.archetypeId ?? null,
+      archetypeCategory: storefront?.archetype?.category ?? businessContext?.industry ?? null,
+      operatesIn: [...new Set([...(businessContext?.operatesIn ?? []), ...locationJurisdictions])].sort(),
+      sellsTo: businessContext?.sellsTo ?? [],
+      employsIn: businessContext?.employsIn ?? [],
+      dataResidency: businessContext?.dataResidency ?? [],
+      riskPosture: businessContext?.riskPosture === "conservative" || businessContext?.riskPosture === "balanced" || businessContext?.riskPosture === "progressive"
+        ? businessContext.riskPosture
+        : null,
+    },
+  };
+}
+
 /** Shared account/business fact loader for onboarding preview and live routing. */
 export async function loadProviderSuitabilitySourceContext(
   applicableRegulationIds: readonly string[] = [],
 ): Promise<ProviderSuitabilitySourceContext> {
-  const organization = await prisma.organization.findFirst({ select: { id: true, address: true } });
-  const [businessContext, storefront, connections] = await Promise.all([
-    organization ? prisma.businessContext.findUnique({ where: { organizationId: organization.id } }) : null,
-    prisma.storefrontConfig.findFirst({ select: { archetypeId: true, archetype: { select: { category: true } } } }),
-    prisma.aiProviderConnection.findMany({
-      where: organization ? { OR: [{ organizationId: organization.id }, { organizationId: null }] } : undefined,
+  const businessContext = await loadBusinessSuitabilityContext();
+  const profile = businessContext.businessProfile;
+  const organizationId = profile.organizationId === "unconfigured-organization" ? null : profile.organizationId;
+  const connections = await prisma.aiProviderConnection.findMany({
+      where: organizationId ? { OR: [{ organizationId }, { organizationId: null }] } : undefined,
       include: {
         provider: { select: { providerId: true, name: true, category: true, endpointType: true, catalogEntry: true, status: true } },
         trustEvidence: true,
         supplierContract: { select: { contractId: true, status: true, startDate: true, endDate: true } },
       },
       orderBy: [{ status: "asc" }, { label: "asc" }],
-    }),
-  ]);
-
-  const countryCode = parseOrgAddress(organization?.address).countryCode?.toLowerCase();
-  const locationJurisdictions = countryCode
-    ? [countryCode, ...(isEeaState(countryCode) ? ["eu"] : countryCode === "gb" ? ["uk"] : [])]
-    : [];
-  const profile: BusinessSuitabilityProfile = {
-    organizationId: organization?.id ?? "unconfigured-organization",
-    archetypeId: storefront?.archetypeId ?? null,
-    archetypeCategory: storefront?.archetype?.category ?? businessContext?.industry ?? null,
-    operatesIn: [...new Set([...(businessContext?.operatesIn ?? []), ...locationJurisdictions])].sort(),
-    sellsTo: businessContext?.sellsTo ?? [],
-    employsIn: businessContext?.employsIn ?? [],
-    dataResidency: businessContext?.dataResidency ?? [],
-    riskPosture: businessContext?.riskPosture === "conservative" || businessContext?.riskPosture === "balanced" || businessContext?.riskPosture === "progressive"
-      ? businessContext.riskPosture
-      : null,
-  };
+    });
   const regulationRows = applicableRegulationIds.length > 0
     ? await prisma.regulation.findMany({
         where: { regulationId: { in: [...new Set(applicableRegulationIds)] } },
@@ -176,7 +192,7 @@ export async function loadProviderSuitabilitySourceContext(
 
   return {
     businessProfile: profile,
-    handlesCardPayments: businessContext?.handlesCardPayments ?? false,
+    handlesCardPayments: businessContext.handlesCardPayments,
     regulationResults,
     connections: connections.map((connection) => {
       const evidence = resolveProviderTrustEvidence({
@@ -192,7 +208,7 @@ export async function loadProviderSuitabilitySourceContext(
         // downgrade (or accidentally upgrade) the onboarding recommendation.
         status: resolveRuntimeConnectionStatus(connection.provider.status, connection.status),
         facts: resolveProviderTrustFacts({
-          catalog: catalogFacts(connection.provider),
+          catalog: providerCatalogFacts(connection.provider),
           connection: evidence.posture,
         }),
       };

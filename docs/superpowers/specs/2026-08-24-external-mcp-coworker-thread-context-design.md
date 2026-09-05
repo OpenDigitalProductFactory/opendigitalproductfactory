@@ -393,6 +393,158 @@ their prior missing-thread refusal while leaving any already-created
 AgentThread and TaskRun records as immutable audit history. No destructive data
 cleanup is required.
 
+## 2026-09-03 live-acceptance amendment: bound review is the approval
+
+The deployed threadless handoff contract reached the independent reviewer, but
+the generic coworker HITL policy then treated the review receipt as an ordinary
+side effect and demanded a second employee approval. That reintroduced the
+single-human dead end at the terminal writer rather than at dispatch.
+
+The architecture decision is that an exact server-issued independent-review
+TaskRun may execute its bound `record_initiative_*_review` writer immediately.
+This is not a general HITL bypass. It applies only after the server has verified
+all of the following: external-MCP task provenance, one immutable artifact,
+one backlog-item subject, the exact writer in TaskRun authority scope, an
+active reviewer holding that writer's grant, the delegating human's capability
+and subject access, and the existing principal-level author/reviewer
+independence check. Ordinary coworker side effects and unbound review calls
+retain the coworker's configured approval policy.
+
+The missing-baseline response also names an executable external-client route.
+It directs the caller to re-enter the existing Workroom with
+`claim_backlog_item_for_work(workIntent="implementation")` and execute the
+returned spec-approval `recovery.reviewerRoutes[].requestCoworker` packet
+verbatim. The caller does not hand-author reviewer identity or artifact scope.
+
+### Live evidence
+
+- Live readiness returned `CAN-TEST` for registry repair merge
+  `6c166b1c88524f0f0c8a033c42d9ac1b544f1ccc`; the install served
+  `f28f65b95b54ae71d754a191b47435894899f33e`.
+- A hand-authored reviewer request reached `AGT-181` but its TaskRun lacked the
+  initiative writer grant and completed without a receipt. This is the
+  counter-example proving that prompt text does not confer authority.
+- Implementation readiness for `BI-B131F357` returned a server-issued route to
+  `AGT-WS-REVIEW` with exactly `tool:read_source_at_version`,
+  `tool:record_initiative_design_review`, and
+  `backlog-item:BI-B131F357`.
+- TaskRun
+  `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-EFB76C86C64C` read provider blob
+  `1b74449329dc568fc150838c9e21ae200caf25cd` at commit
+  `7b60e213ac9e679be32302e3348fa0603469f9f5`, then attempted a passing
+  `record_initiative_design_review` call as the independent reviewer.
+- The terminal writer was rejected solely with `approval_required`, producing
+  envelope `cmtme5f140ire01nvd0n5jeo4`. No self-approval, fabricated receipt,
+  direct database write, or weakened independence check was used.
+
+### 2026-09-04 deployed follow-up: tier default is not an explicit veto
+
+Release `v2026.09.04-readiness-worktype-classification.1` deployed the first
+repair at served commit `11b2a11bc400ba540e733eeccc57a2c221218323`.
+`claim_backlog_item_for_work` then returned the reachable, server-authored
+`AGT-WS-REVIEW` packet for `BI-B131F357` with the exact design blob and no
+nonexistent blocker citation. A fresh `summon_coworker` call created TaskRun
+`TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-B910BE33643C`, carrying only the
+subject scope plus `record_initiative_design_review` and
+`read_source_at_version`; dispatch itself required no approval.
+
+The reviewer read the immutable design and attempted a passing receipt, but
+the writer still returned `approval_required`. The remaining cause was policy
+precedence: `AGT-WS-REVIEW` has the registry's generic
+`hitl_tier_default: 1`, and the resolver applied that default before the exact
+server-bound independent-review exception. The architecture decision is that
+an operator-authored `hitlPolicy: "always"` remains an explicit veto, while a
+numeric tier is only a default and cannot add a human proxy gate to the exact
+review boundary. Unbound calls, ordinary side effects, and the downstream
+principal-level author/reviewer collision check remain unchanged.
+
+### 2026-09-04 live-acceptance amendment: preserve token scope through execution
+
+After the tier-policy repair shipped, governed self-upgrade
+`SUR-071C4319` installed release
+`v2026.09.04-initiative-canonical-discovery-transport.1`. The installed image
+served byte identity `c9a729fe3a562a263d648de1474c2a28f6fd3328`, which is a
+descendant of release target `90c65d227b3b42cd688235147115d2d88fdc7a9b`.
+The external Workroom then created fresh independent reviewer TaskRun
+`TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-703AB1AD13D8` with the exact
+subject, writer, and immutable design locator. Dispatch required no approval.
+
+That TaskRun exposed the next bounded transport defect. The autonomous loop
+received the submitting token id but not its server-resolved capability. Its
+writer therefore reached the receipt repository with a reviewer and an allow
+decision, but with `tokenScope=null`, and failed closed with
+`AUTHORIZATION_DENIED`. Retrying model arguments cannot repair server-owned
+authentication context.
+
+The architecture decision is to carry the already-authenticated token
+capability alongside the token id from `executeRemoteTaskAttempt`, through the
+shared autonomous execution seam, into `governedExecuteTool`. The capability is
+never accepted from model output or coworker request arguments. Direct portal
+and non-MCP autonomous runs continue to omit it, while replay and terminal
+writer recovery retain their existing explicit token projection. This keeps
+the receipt repository's three-part requirement intact: independent reviewer,
+recorded authority decision, and authenticated write/admin token scope.
+
+### 2026-09-05 bounded technical-receipt amendment (BI-921B7DC2)
+
+The preceding exception is too narrow. It keys generic approval suppression to
+whether the initiative-readiness lane is independently reviewed. Research is a
+technical readiness receipt but is intentionally not marked independent: the
+Portfolio Advisor may verify and record reproduction evidence without being a
+second artifact approver. As a result, a fully server-bound research TaskRun is
+still wrapped in a `CoworkerActionEnvelope` and asks the business owner to
+ratify a technical finding they cannot responsibly assess.
+
+WWMD decision `DI-50CBE054E410` selected the bounded technical-review option at
+high confidence. The authority boundary is the validated server-issued
+`initiativeReviewBinding`, not the lane's independent-review flag. That packet
+already fixes one BacklogItem, one immutable artifact revision, one gate, and
+one `record_initiative_*` writer; the TaskRun authority scope and reviewer tool
+grant must match it exactly. The receipt repositories retain their own role,
+token-scope, tenant, and author/reviewer-separation checks. An explicit
+operator `hitlPolicy: "always"` continues to require approval.
+
+This does **not** create a general coworker-write exemption. Unbound writer
+calls, malformed or mismatched packets, other side-effecting tools, and mission,
+spend, destructive, externally visible, legal, clinical, privacy, or safety
+actions continue through their existing approval or denial paths.
+
+Run-local enforcement override: on 2026-09-04 the authenticated operator said
+"make this change" after rejecting the owner-facing technical approval. For
+this branch and BI-921B7DC2 only, that direction authorizes implementation of
+the narrow authority-policy correction while `RESEARCH_REQUIRED` is circular:
+the only eligible research writer is blocked by the defect being repaired. It
+does not mark research or plan as passed; both remain **unrun** until a fresh
+server-bound reviewer completes them after the fix is live. It does not bypass
+tool grants, author/reviewer separation, DCO, protected PR delivery, build
+gates, or canonical-runtime verification. It expires when this PR merges or
+the branch is abandoned.
+
+**OBJ-BTRA-1:** Let a qualified technical coworker record an exact,
+server-bound initiative-readiness receipt without asking the business owner to
+approve a judgment they cannot evaluate, while preserving every consequential
+human-control boundary.
+
+| Acceptance criterion | Objective | Statement |
+|---|---|---|
+| AC-BTRA-1 | OBJ-BTRA-1 | A valid server-bound research receipt executes under generic tier and side-effect defaults without creating a CoworkerActionEnvelope. |
+| AC-BTRA-2 | OBJ-BTRA-1 | Explicit `hitlPolicy: "always"`, unbound calls, malformed or mismatched bindings, missing grants, and wrong subjects retain their existing approval or denial behavior. |
+| AC-BTRA-3 | OBJ-BTRA-1 | Non-readiness mission, spend, destructive, external, legal, clinical, privacy, and safety actions receive no authority from this exception. |
+| AC-BTRA-4 | OBJ-BTRA-1 | Canonical-runtime replay completes the technical TaskRun, persists its receipt, and leaves no owner-facing approval envelope for that call. |
+
+Ordered fix sequence:
+
+1. Add a regression proving a bound `record_initiative_evidence` research
+   receipt is not re-wrapped by the generic tier/side-effect policy.
+2. Rename the pure policy input from independent-review language to bounded
+   initiative-review language and derive it from the already-validated binding,
+   without adding another writer allow-list.
+3. Keep `hitlPolicy: "always"` first in precedence; keep unbound calls on the
+   generic policy.
+4. Run the focused authority tests, typecheck/preflight gates, protected CI,
+   then replay the BI-69803ACC research handoff on the canonical install and
+   verify a persisted receipt, completed TaskRun, and no owner envelope.
+
 ## Acceptance criteria traceability
 
 | BI acceptance criterion | Design coverage |
@@ -402,6 +554,7 @@ cleanup is required.
 | Missing/invalid identity is typed and actionable | Explicit error table and repair messages |
 | Codex/Claude/Grok/embedded/generic compatibility | Shared handler lane and host-metadata test matrix |
 | Regression reproduces and proves fixed propagation | Unit, integration, and live functional verification plan |
+| Bound research receipt does not ask the business owner to approve | 2026-09-05 bounded technical-receipt amendment; exact binding + writer/grant/scope checks remain authoritative |
 
 ## Open review questions
 

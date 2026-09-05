@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Work shapes — one taxonomy, gates proportional to size and risk
@@ -8,7 +8,7 @@ status: draft
 - **Backlog item:** BI-B5C8FEFC
 - **Profile:** cross-domain (policy spans backlog, Workroom, Build Studio, readiness)
 - **Authored:** 2026-09-02
-- **Status:** draft — 4 of 5 decisions ruled by the kernel (§5); founder input open on who may declare `break-fix`; execution readiness in §5.1
+- **Status:** active — 4 of 5 decisions ruled by the kernel (§5); decision 2 taken at its conservative default (human-only) and marked founder-revisable; execution sequence in §5.1
 - **Provenance:** BI-B3AB7FC9 (PR #4999) was a one-afternoon diagnosis-to-merge fix that could not be closed because the completion gate demanded a research receipt, a plan-coverage record, an independently approved spec baseline, acceptance evidence, and objective reconciliation. BI-28E8CB88, BI-F0715C9C and BI-3AE38A1F record the same wall from three other fixes.
 
 ## 1. Problem
@@ -152,7 +152,7 @@ Per founder direction, the five open questions were put to the kernel (`principl
 | 4 | How far does high sensitivity raise a `small`? | **To `large` gates** (overrides the author's one-step) | high · 0.73 | Destructive actions require explicit go; Never wipe the DB to fix code |
 | 5 | The 33 pre-taxonomy `done` items? | **Leave them; null shape = pre-taxonomy** | high · 1.70 | Propose, Acknowledge, Reassign; Human-in-the-Loop at Phase Boundaries |
 
-Consequences folded into §4: the `medium` row's independent review is an eligible independent reviewer's acceptance receipt (a coworker qualifies; this is not a board), and the `small` + `high` sensitivity cell carries `large` gates. Decision 2 is the only founder input still required; the spec proceeds with the narrower option (human-only) as the default until ruled, since the kernel's tie broke that way and it is the safer floor.
+Consequences folded into §4: the `medium` row's independent review is an eligible independent reviewer's acceptance receipt (a coworker qualifies; this is not a board), and the `small` + `high` sensitivity cell carries `large` gates. **Decision 2 is taken at its conservative default: only a human operator with `view_platform` may declare `break-fix`.** The kernel's tie broke that way and it is the safer floor. The founder may widen it to the operations coworker (when an incident record exists) by a one-line amendment to this section; nothing in the plan depends on which way that goes.
 
 **Gap surfaced by the ratification itself (BI-218EC195):** every call returned `ledger.recorded: false, reason: profile-not-provisioned` for `dpf-organizational-principles`. The kernel can rule but cannot seal a decision record on this install, so its rulings are advisory until that is fixed. That is a precondition for "WWMD automates approvals", not a nice-to-have: an approval nothing can cite is advice.
 
@@ -168,7 +168,7 @@ Related, adjacent items this spec now binds to: BI-C8C4031C (document the shape 
 | Reviewer capacity for `large` gates | Fragile — reviewers exist (AGT-WS-PORTFOLIO, ea-architect) but bounded-budget reviewers have stopped before their terminal receipt write | BI-8B8731EE, BI-28E8CB88 activity cmtf85p3403dy01phlttlc1z6 |
 | Plan with backlog coverage | Not yet written | §6 is the outline; the plan is the next artifact |
 
-Verdict: **ready to plan, not yet ready to build.** The plan can be written now. Building should start with BI-218EC195 so the first delivery-shape claim can bind to a sealed kernel verdict rather than an advisory one.
+Verdict: **the design is final and the plan may proceed.** Implementation is sequenced in `docs/superpowers/plans/2026-09-05-work-shape-taxonomy-implementation.md` and starts with BI-218EC195 so the first delivery-shape claim binds to a sealed kernel verdict rather than an advisory one; the two rows marked No/Fragile above are that plan's first two phases, not reasons to hold the design.
 
 ## 6. Implementation outline (for the plan that follows this spec)
 
@@ -182,6 +182,10 @@ Verdict: **ready to plan, not yet ready to build.** The plan can be written now.
 8. **Tests:** policy table tests per (shape, sensitivity, target); classifier fixtures for every rule in §3.3 including unclassified-defaults-strict; expedite abuse fixtures (missed PIR, WIP > 1, self-PIR).
 
 Estimated size of this work: `large` (schema + policy + three consumers), decomposed into 4–6 `medium` children under EP-129D11FD.
+
+## 6.1 Plan and backlog coverage
+
+Implementation plan: `docs/superpowers/plans/2026-09-05-work-shape-taxonomy-implementation.md` (Workroom `WC-FFEB51C2`, branch `doc/work-shape-plan`). Seven children under `EP-129D11FD`, dependency-ordered: `BI-218EC195` (ledger seals rulings) → `BI-B90F7CBB` (registry) → `BI-02470C7E` (claim asks) → `BI-B269FC72` (readiness v3) → `BI-AFE8BB73` (delivery from trunk) and `BI-F2FEC1EB` (expedite lane) → `BI-D03BE728` (visibility, matrix, docs). The parent `BI-B5C8FEFC` closes against the §4 gate table as its objective baseline and the plan's completion gate as its acceptance.
 
 ## 7. What this does not change
 

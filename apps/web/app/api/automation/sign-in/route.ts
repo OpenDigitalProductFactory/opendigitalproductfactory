@@ -13,6 +13,7 @@ import { encode } from "next-auth/jwt";
 
 import { apiErrorResponse } from "@/lib/api/error";
 import { SESSION_COOKIE_NAME, SESSION_COOKIE_SECURE } from "@/lib/govern/auth";
+import { getPortalUrl } from "@/lib/portal-url";
 import {
   AUTOMATION_SESSION_MAX_AGE_SECONDS,
   consumeAutomationSignIn,
@@ -40,7 +41,10 @@ export async function GET(request: NextRequest): Promise<Response> {
     maxAge: AUTOMATION_SESSION_MAX_AGE_SECONDS,
   });
 
-  const response = NextResponse.redirect(new URL(outcome.nextPath, request.nextUrl.origin), { status: 303 });
+  // Redirect back to the origin the browser used, not `request.nextUrl.origin`:
+  // the standalone server derives that from the HOSTNAME it binds (0.0.0.0 in
+  // the image), which no browser can follow (BI-FEE77B68).
+  const response = NextResponse.redirect(new URL(outcome.nextPath, await getPortalUrl()), { status: 303 });
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
     value: sessionToken,

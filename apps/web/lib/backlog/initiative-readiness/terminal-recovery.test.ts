@@ -1,11 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { err, ok } from "@/lib/shared/action-result";
+
 import { readinessRequirement } from "./readiness-guidance";
 import type { InitiativeReadinessDecision } from "./types";
 import { resolveTerminalInitiativeRecovery } from "./terminal-recovery";
 
 const baseSha = "1".repeat(40);
 const headSha = "2".repeat(40);
+const baselineCommitSha = "5".repeat(40);
+const eligibleEvidenceActivityIds = [
+  "cmtnr924q-post-baseline",
+  "cmtnr926e-post-baseline",
+  "cmtnr927v-post-baseline",
+  "cmtnr9295-post-baseline",
+];
 const decision: InitiativeReadinessDecision = {
   decisionId: "IRD-TERMINAL",
   policyVersion: "initiative-readiness.v2",
@@ -38,6 +47,9 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
   return {
     loadLiveRooms: vi.fn().mockResolvedValue(rooms),
     loadBaselinePayloads: vi.fn().mockResolvedValue(baselines),
+    loadEligibleEvidenceActivityIds: vi.fn().mockResolvedValue(ok({
+      activityIds: eligibleEvidenceActivityIds,
+    })),
     discoverArtifact: vi.fn().mockResolvedValue({
       resolved: true,
       artifact: { path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
@@ -72,8 +84,41 @@ describe("terminal initiative recovery", () => {
       },
       canonicalArtifact: { resolved: true, path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
       expectedCurrentBaselineId: "baseline-current",
+      eligibleEvidenceActivityIds,
     }));
     expect(result.reviewerRoutes).toEqual([{ gate: "objective-mapping" }]);
+  });
+
+  it("fails closed when the current baseline has no eligible post-baseline passing evidence", async () => {
+    const ports = deps();
+    ports.loadEligibleEvidenceActivityIds.mockResolvedValue(ok({ activityIds: [] }));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason: "eligible-evidence-not-found" }]);
+    expect(ports.resolveRecovery).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the post-baseline evidence inventory cannot be bounded", async () => {
+    const ports = deps();
+    ports.loadEligibleEvidenceActivityIds.mockResolvedValue(err("evidence-limit-exceeded"));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason: "eligible-evidence-unbounded" }]);
+    expect(ports.resolveRecovery).not.toHaveBeenCalled();
   });
 
   it("uses the provider-verified artifact already pinned by the current baseline", async () => {
@@ -83,6 +128,7 @@ describe("terminal initiative recovery", () => {
       artifactRef: {
         kind: "repo-blob-at-commit",
         repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
         path: "docs/superpowers/specs/pinned-design.md",
         providerBlobId: "4".repeat(40),
       },
@@ -93,6 +139,7 @@ describe("terminal initiative recovery", () => {
     expect(ports.resolveRecovery).toHaveBeenCalledWith(expect.objectContaining({
       canonicalArtifact: {
         resolved: true,
+        commitSha: baselineCommitSha,
         path: "docs/superpowers/specs/pinned-design.md",
         providerBlobId: "4".repeat(40),
       },

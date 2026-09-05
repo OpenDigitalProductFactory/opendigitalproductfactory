@@ -321,10 +321,10 @@ describe("terminal writer resumption", () => {
         }),
       },
     });
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-SAME-WRITER-RUN" },
+    expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({ // guarded working transition (BI-D208E70C)
+      where: expect.objectContaining({ taskRunId: "TR-MCP-SAME-WRITER-RUN" }),
       data: { status: "working", lastHeartbeatAt: expect.any(Date) },
-    });
+    }));
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
       taskRunId: "TR-MCP-SAME-WRITER-RUN",
       threadId: "thread-external",

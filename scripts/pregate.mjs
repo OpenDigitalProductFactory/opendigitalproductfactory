@@ -513,10 +513,12 @@ export async function reviveInterruptedQueuedGate({
 }
 
 /**
- * `gate-worktree.mjs` exits with this when the lease became a durable queue task.
- * A queued run is not a failed run and must never be recovered as one.
+ * `gate-worktree.mjs` exits with this when authoritative control-plane state
+ * parks the gate without running CI. Waiting is not failure and must never be
+ * recovered as an interrupted execution.
  */
-export const EXIT_DURABLE_QUEUE_WAIT = 75;
+export const EXIT_DURABLE_CONTROL_PLANE_WAIT = 75;
+export const EXIT_DURABLE_QUEUE_WAIT = EXIT_DURABLE_CONTROL_PLANE_WAIT;
 
 export async function recoverInterruptedGate({
   args = [],
@@ -546,8 +548,8 @@ export async function recoverInterruptedGate({
   //
   // Reproduced on a five-deep queue, unpiped and with no concurrent reader, on
   // three consecutive invocations while the position advanced 3 -> 2.
-  if (status === EXIT_DURABLE_QUEUE_WAIT) {
-    return { recovered: false, reason: "queued-durable-task" };
+  if (status === EXIT_DURABLE_CONTROL_PLANE_WAIT) {
+    return { recovered: false, reason: "durable-control-plane-wait" };
   }
   let context;
   try {

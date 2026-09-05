@@ -4,10 +4,12 @@ import {
   allFunctions,
   getInngestFunctionsForRuntime,
   scheduledFunctions,
+  eventFunctions,
 } from "./index";
 import { issueReportTriage } from "./issue-report-triage";
 import { routeWorkItem } from "./route-work-item";
 import { SCHEDULED_JOB_CATALOG } from "@/lib/operate/scheduled-jobs/catalog";
+import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 describe("getInngestFunctionsForRuntime", () => {
   it("omits scheduled cron functions unless explicitly enabled", () => {
@@ -15,6 +17,12 @@ describe("getInngestFunctionsForRuntime", () => {
 
     expect(functions).not.toContain(issueReportTriage);
     expect(functions).toContain(routeWorkItem);
+  });
+
+  it("always registers the async transition projection as an event function only", () => {
+    expect(eventFunctions).toContain(asyncOperationTaskHub);
+    expect(scheduledFunctions).not.toContain(asyncOperationTaskHub);
+    expect(getInngestFunctionsForRuntime({})).toContain(asyncOperationTaskHub);
   });
 
   it("includes scheduled cron functions when explicitly enabled", () => {

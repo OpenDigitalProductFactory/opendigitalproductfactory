@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installReleaseAssets } from "./install-release-assets.mjs";
+import { installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -63,6 +63,8 @@ test("verified release assets replace only managed files and converge durable id
   assert.match(env, /^CUSTOM_SETTING=kept$/m);
   assert.match(env, /^DPF_IMAGE_TAG=v2\.0\.0$/m);
   assert.match(env, /^GHCR_OWNER=opendigitalproductfactory$/m);
+  // The fixture .env predates the bind key, so the upgrade keeps its exposure.
+  assert.match(env, /^DPF_HOST_BIND_ADDRESS=0\.0\.0\.0$/m);
   assert.equal(await readFile(join(f.install, ".verified-release-assets-version"), "utf8"), "v2.0.0");
   await assert.rejects(readFile(join(f.source, ".env")), /ENOENT/);
   await assert.rejects(readFile(join(f.source, ".verified-release-assets-version")), /ENOENT/);
@@ -108,4 +110,18 @@ test("release promotion commits identity to the canonical install root, not the 
   const source = await readFile(new URL("../promote.sh", import.meta.url), "utf8");
   assert.match(source, /--install\s+"\$PROMOTE_INSTALL_ROOT"/);
   assert.doesNotMatch(source, /--install\s+"\$PROMOTE_SOURCE"/);
+});
+
+test("updateEnv gives a fresh install loopback and a pre-existing install its current all-interfaces exposure (BI-FEE77B68)", () => {
+  const fresh = updateEnv(null, "v2.0.0", "opendigitalproductfactory").toString("utf8");
+  assert.match(fresh, /^DPF_HOST_BIND_ADDRESS=127\.0\.0\.1$/m);
+  assert.match(fresh, /Loopback by default/);
+
+  const upgraded = updateEnv(Buffer.from("DPF_IMAGE_TAG=v1.0.0\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8");
+  assert.match(upgraded, /^DPF_HOST_BIND_ADDRESS=0\.0\.0\.0$/m);
+  assert.match(upgraded, /Kept the exposure this install had/);
+
+  const pinned = updateEnv(Buffer.from("DPF_HOST_BIND_ADDRESS=127.0.0.1\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8");
+  assert.equal((pinned.match(/^DPF_HOST_BIND_ADDRESS=/gm) ?? []).length, 1);
+  assert.match(pinned, /^DPF_HOST_BIND_ADDRESS=127\.0\.0\.1$/m);
 });
