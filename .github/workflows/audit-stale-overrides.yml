@@ -51,12 +51,27 @@ jobs:
       - name: Unit tests
         run: node --test scripts/audit-stale-overrides.test.mjs scripts/check-override-comments.test.mjs
 
+      # Same credential order as security-findings-watch.yml (BI-3E6AFF04):
+      # App installation token, else DEPENDABOT_ALERTS_TOKEN, else GITHUB_TOKEN.
+      - name: Mint a GitHub App token for the alert surfaces
+        id: app-token
+        env:
+          APP_ID: ${{ secrets.SECURITY_SWEEP_APP_ID }}
+        if: env.APP_ID != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.SECURITY_SWEEP_APP_ID }}
+          private-key: ${{ secrets.SECURITY_SWEEP_APP_PRIVATE_KEY }}
+          permission-dependabot-alerts: read
+          permission-secret-scanning-alerts: read
+          permission-security-events: read
+
       - name: Audit stale overrides
         # On scheduled/manual runs require the API (a silent skip would hide that
         # the audit didn't run). On PRs, tolerate an outage so a transient blip
         # can't block unrelated merges — it degrades to tag-coverage only.
         env:
-          GITHUB_TOKEN: ${{ secrets.DEPENDABOT_ALERTS_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.DEPENDABOT_ALERTS_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           FLAGS=""
