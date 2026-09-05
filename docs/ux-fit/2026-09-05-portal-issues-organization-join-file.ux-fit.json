@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-CDBDE152DB6E",
   "scope": {
     "files": [
-      "apps/web/components/platform/federation-links/OrganizationJoinPanel.tsx",
-      "apps/web/app/(shell)/platform/federation-links/page.tsx"
+      "apps/web/components/platform/federation-links/OrganizationJoinPanel.tsx"
     ]
   },
   "evidence": {
