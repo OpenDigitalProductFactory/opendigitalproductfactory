@@ -12,12 +12,20 @@
 // issuer (GET /provisioners). Both inject this so a fake CA runs under test.
 
 import { promises as dns, type LookupAddress } from "node:dns";
-import { request as httpsRequest } from "node:https";
+import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { checkServerIdentity as tlsCheckServerIdentity, type PeerCertificate } from "node:tls";
 
 export const DEFAULT_CA_INTERNAL_URL = "https://step-ca:9000";
 const CA_TIMEOUT_MS = 15_000;
+
+/**
+ * One fresh connection per CA request. The portal's production server
+ * replaces the global HTTPS agent with a keep-alive one; a CA request must
+ * never be handed a pooled socket the CA has since closed, so the client
+ * keeps its own agent with keep-alive off.
+ */
+const caAgent = new HttpsAgent({ keepAlive: false, maxSockets: 8 });
 
 type LookupCallback = (error: NodeJS.ErrnoException | null, address: string, family: number) => void;
 
@@ -79,6 +87,10 @@ export const caRequest: CaRequest = (input) => {
   const url = new URL(`${input.caUrl}${input.path}`);
   const payload = input.body === undefined ? undefined : JSON.stringify(input.body);
   const candidates = [url.hostname, "localhost", "127.0.0.1"];
+  // Which phases the request reached — reported on a timeout so a stall is
+  // attributable (name resolution, TCP connect, TLS, or the CA itself).
+  const reached: string[] = [];
+  const startedAt = Date.now();
   return new Promise<CaResponse>((resolve, reject) => {
     const req = httpsRequest(
       {
@@ -91,6 +103,7 @@ export const caRequest: CaRequest = (input) => {
         ca: input.rootPem,
         servername: url.hostname,
         lookup: offThreadpoolLookup,
+        agent: caAgent,
         checkServerIdentity: (_host: string, cert: PeerCertificate) => {
           let last: Error | undefined;
           for (const candidate of candidates) {
@@ -113,7 +126,16 @@ export const caRequest: CaRequest = (input) => {
         });
       },
     );
-    req.on("timeout", () => req.destroy(new Error("CA request timed out")));
+    req.on("socket", (socket) => {
+      reached.push("socket");
+      socket.once("lookup", () => reached.push("lookup"));
+      socket.once("connect", () => reached.push("connect"));
+      socket.once("secureConnect", () => reached.push("tls"));
+    });
+    req.on("response", () => reached.push("response"));
+    req.on("timeout", () => {
+      req.destroy(new Error(`CA request timed out after ${Date.now() - startedAt}ms (reached: ${reached.join(">") || "nothing"})`));
+    });
     req.on("error", reject);
     req.end(payload);
   });
