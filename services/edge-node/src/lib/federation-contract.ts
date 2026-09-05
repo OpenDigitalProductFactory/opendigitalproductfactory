@@ -1,22 +1,21 @@
-// Federation discovery — the one contract both halves of nearby-peer discovery
-// speak.
+// Runtime copy of the federation discovery contract, for the Edge Node only.
 //
-// A DPF install advertises itself at `/.well-known/dpf-federation.json`; an Edge
-// Node probes its segment for that descriptor and submits what it found to
-// `POST /api/v1/edge/federation-candidates`. Producer and acceptor therefore have
-// to agree on the same field set, the same grammar, and the same endpoint scope.
-// Defining that once here is what makes the agreement real rather than a comment
-// in two files.
+// WHY A COPY. `@dpf/validators` resolves to `src/index.ts`, and Node refuses to
+// strip TypeScript types for files under `node_modules`
+// (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). Every other Edge Node import of
+// that package is `import type`, which the compiler erases, so the package had
+// never been loaded at runtime here. The first VALUE import crashed the shipped
+// container at module load, before any flag could disable it -- and the image
+// builds cleanly, so nothing short of starting the container reveals it.
 //
-// The field set is the SAME closed allow-list the DNS-SD advertisement already
-// carries (services/edge-node-go/internal/federation/discovery.go
-// `AdvertisementTXT`): protocol, install, caps, pair — plus the organization the
-// peer belongs to, which the estate-identity contract already sanctions
-// publishing in a discovery record. No hostname, no device id, no token, no
-// organization id. Discovery is secret-free; pairing separately requires TLS and
-// a chain that validates against the pinned organization root.
+// The canonical contract is still packages/validators/src/federation-discovery.ts:
+// the Authority parses submissions with it, and this file must agree with it
+// exactly or the scanner would dial what the Authority refuses, or submit batches
+// it rejects wholesale. That agreement is not left to inspection --
+// __tests__/federation-contract-parity.test.ts imports BOTH and asserts identical
+// behaviour across a shared corpus, so drift fails CI rather than the LAN.
 //
-// Design: docs/superpowers/specs/2026-08-23-zero-touch-organization-federation-design.md §5.11
+// Delete this file the moment @dpf/validators ships runtime-loadable JS.
 
 import { z } from "zod";
 
