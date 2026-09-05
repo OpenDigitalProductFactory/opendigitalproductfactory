@@ -60,6 +60,10 @@ Acceptance AC-MCP-RECOVERY:
 
 Current reproduction: WC-375F098A / BI-154689E7, base expected f62c1edb4b5cead926f8f69913fa29b73845f9cb, head 4053e900d8d178f9a4c61b0defc79e2d69c1c5a6. Its owner tests repair; this design does not authorize another task to take over that room.
 
+Additional acceptance AC-MCP-RECOVERY 7: recovery must be valid for the actual readiness profile and plan parent. Coverage on documentation parent BI-DC0F14E0 returned `traceability-incomplete` and prescribed an implementation claim; that claim returned IRD-52AD360FFE11, `doc-only`, `allowed`, and no reviewerRoutes. `planning/plan-backlog-coverage.ts` requires a baseline unconditionally, while `backlog/initiative-readiness/evaluate.ts` exempts documentation-only work from the gates that create it. This confirms unusable recovery guidance, not that baseline enforcement should be removed. BI-CF118B6D owns this regression alongside the other recovery failures.
+
+Resolve the documentation-authoring versus implementation-parent binding in the existing planning contract. A profile-aware refusal must supply a valid supported next action or an explicit parent-binding correction with the required evidence; it must not promise reviewer routes that its recommended call cannot return. Reuse existing profile policy. Test the coverage refusal followed by its actual prescribed readiness call for doc-only, fix and feature profiles, including a documentation parent mapping feature children. Preserve immutable scope binding, feature/refactor approval and author/reviewer separation. No automatic reclassification, new umbrella or baseline exemption is authorized by this acceptance criterion. Keep the live blocking condition separate from the defect's tracking id.
+
 ## 3. Honest efficiency measurement — BI-4BB68EB6
 
 Contract CT-MCP-COVERAGE, journey FLOW-MCP-MEASURE.

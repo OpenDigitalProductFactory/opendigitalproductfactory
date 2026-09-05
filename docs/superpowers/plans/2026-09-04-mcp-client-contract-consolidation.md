@@ -20,7 +20,7 @@ The prescribed recovery was executed once: `claim_backlog_item_for_work` on the 
 
 | Deliverable key | Live BI | Requirements | Contract | Flow | Verification | Hard dependency |
 | --- | --- | --- | --- | --- | --- | --- |
-| recovery | BI-CF118B6D | AC-MCP-RECOVERY 1–6 | CT-MCP-RECOVERY | FLOW-MCP-AUTHOR | VERIFY-MCP-RECOVERY | None |
+| recovery | BI-CF118B6D | AC-MCP-RECOVERY 1–7 | CT-MCP-RECOVERY | FLOW-MCP-AUTHOR | VERIFY-MCP-RECOVERY | None |
 | coverage | BI-4BB68EB6 | AC-MCP-COVERAGE | CT-MCP-COVERAGE | FLOW-MCP-MEASURE | VERIFY-MCP-COVERAGE | None |
 | traversal | BI-3CE72645 | AC-MCP-PAGE | CT-MCP-PAGE | FLOW-MCP-LIST | VERIFY-MCP-PAGE | None |
 
@@ -39,7 +39,8 @@ Independent deliverable: BI-CF118B6D, VERIFY-MCP-RECOVERY. Grounded edit candida
 1. Reproduce missing base/head through the advertised adoption schema, handler and persisted Workroom; retain the valid identity fields. Add failing boundary cases for read/transition disagreement and misleading sign/push advice.
 2. Consolidate duplicate recovery guidance into the existing projector. Validate complete repair packets against the actual adoption input contract. Separate prerequisite errors and provider failures from confirmed reviewer absence.
 3. Project existing reviewerRoutes and TaskRun lifecycle into readiness, detail and list consumers. Use real dispatch ids for pending work and terminal state for failed, cancelled or completed work. Do not introduce a second status ledger. Check discovery responses without revealing ungranted inventory.
-4. Execute AC-MCP-RECOVERY 1–6, including the external-author journey with separate reviewer identity and persisted approval readback. Verify list/detail/readiness agree and the operator can identify the next action. Never substitute mocked reviewer authorization for the only integration test.
+4. Include `apps/web/lib/planning/plan-backlog-coverage.ts` and `apps/web/lib/backlog/initiative-readiness/evaluate.ts` in impact discovery for AC-MCP-RECOVERY 7. Reproduce the coverage refusal followed by the exact recommended readiness call on a doc-only parent. Resolve supported parent binding through existing policy and make the recovery actionable without relaxing approval or inventing a parent. Verify doc-only, fix and feature profiles and documentation parents mapping feature children; update the existing planning contract/skill to explain the supported binding.
+5. Execute AC-MCP-RECOVERY 1–7, including the external-author journey with separate reviewer identity and persisted approval readback. Verify list/detail/readiness agree and the operator can identify the next action. Never substitute mocked reviewer authorization for the only integration test. BI-CF118B6D explicitly owns the observed coverage/readiness process mismatch; tracking this defect does not itself clear the missing-baseline condition.
 
 Risk: inconsistent consumers or accidental authority expansion. Rollback: revert this slice's projection changes together; preserve existing receipts and Workroom identity. No schema migration is planned; any discovered need requires explicit design revision.
 
