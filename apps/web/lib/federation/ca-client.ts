@@ -12,12 +12,20 @@
 // issuer (GET /provisioners). Both inject this so a fake CA runs under test.
 
 import { promises as dns, type LookupAddress } from "node:dns";
-import { request as httpsRequest } from "node:https";
+import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { checkServerIdentity as tlsCheckServerIdentity, type PeerCertificate } from "node:tls";
 
 export const DEFAULT_CA_INTERNAL_URL = "https://step-ca:9000";
 const CA_TIMEOUT_MS = 15_000;
+
+/**
+ * One fresh connection per CA request. The portal's production server
+ * replaces the global HTTPS agent with a keep-alive one; a CA request must
+ * never be handed a pooled socket the CA has since closed, so the client
+ * keeps its own agent with keep-alive off.
+ */
+const caAgent = new HttpsAgent({ keepAlive: false, maxSockets: 8 });
 
 type LookupCallback = (error: NodeJS.ErrnoException | null, address: string, family: number) => void;
 
@@ -95,6 +103,7 @@ export const caRequest: CaRequest = (input) => {
         ca: input.rootPem,
         servername: url.hostname,
         lookup: offThreadpoolLookup,
+        agent: caAgent,
         checkServerIdentity: (_host: string, cert: PeerCertificate) => {
           let last: Error | undefined;
           for (const candidate of candidates) {
