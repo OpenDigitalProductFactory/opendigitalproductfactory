@@ -51,5 +51,5 @@ The vector retains compliance with applicable governance (1.0), consent state (0
 ## Related principles
 
 - [[principles/consult-scopes-before-asking]] — settle direction in the owning doctrine.
-- [[principles/governance-approves-evidence-not-provenance]] — evaluate meaningful evidence once within its scope.
-- [[principles/show-the-consequence-before-the-confirm]] — make necessary consent legible.
+- [[governance-approves-evidence-not-provenance]] — evaluate meaningful evidence once within its scope.
+- [[show-the-consequence-before-the-confirm]] — make necessary consent legible.

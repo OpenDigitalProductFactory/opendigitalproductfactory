@@ -55,5 +55,5 @@ The existing `packages/dpf-skill-pack/hooks/decision-routing-guard.mjs` checks d
 
 - [[principles/decisions-belong-to-their-scope]] — authority stays with the owning scope.
 - [[principles/human-in-the-loop-at-phase-boundaries]] — a transition does not itself require fresh consent.
-- [[principles/governance-approves-evidence-not-provenance]] — evidence serves a decision or protection.
-- [[principles/autonomous-directives-are-blanket-approval]] — reuse authorization within its scope.
+- [[governance-approves-evidence-not-provenance]] — evidence serves a decision or protection.
+- [[autonomous-directives-are-blanket-approval]] — reuse authorization within its scope.
