@@ -11,10 +11,15 @@
 // Two callers: the membership sign relay (POST /1.0/sign) and the join-file
 // issuer (GET /provisioners). Both inject this so a fake CA runs under test.
 
-import { promises as dns, type LookupAddress } from "node:dns";
+import type { LookupAddress } from "node:dns";
 import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
-import { isIP } from "node:net";
 import { checkServerIdentity as tlsCheckServerIdentity, type PeerCertificate } from "node:tls";
+
+import {
+  createOffThreadpoolLookup,
+  resolveHostnameOffThreadpool,
+  type CaresResolver,
+} from "@/lib/network/off-threadpool-fetch";
 
 export const DEFAULT_CA_INTERNAL_URL = "https://step-ca:9000";
 const CA_TIMEOUT_MS = 15_000;
@@ -29,7 +34,6 @@ const caAgent = new HttpsAgent({ keepAlive: false, maxSockets: 8 });
 
 /** net.connect calls lookup with `{ all: true }` (happy-eyeballs) and expects an array then; otherwise a single address. */
 type LookupCallback = (error: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
-
 /**
  * Resolve the CA host without the libuv thread pool. Node's default
  * `dns.lookup` is a getaddrinfo call on that pool, and libuv caps such "slow"
@@ -38,33 +42,32 @@ type LookupCallback = (error: NodeJS.ErrnoException | null, address: string | Lo
  * queue every later lookup behind them, so the relay's request never even
  * opened a socket and timed out while the same request from a fresh process
  * answered in 75 ms. `dns.resolve4/6` go through c-ares on the event loop and
- * Docker's embedded DNS answers compose service names directly; the
- * getaddrinfo path stays as the fallback for hosts only /etc/hosts knows.
+ * Docker's embedded DNS answers compose service names directly. There is no
+ * getaddrinfo fallback because that would re-enter the poisoned queue.
  */
-export async function resolveCaHost(hostname: string, resolver: Pick<typeof dns, "resolve4" | "resolve6" | "lookup"> = dns): Promise<LookupAddress> {
-  const literal = isIP(hostname);
-  if (literal) return { address: hostname, family: literal };
-  try {
-    const [address] = await resolver.resolve4(hostname);
-    if (address) return { address, family: 4 };
-  } catch {
-    // fall through to AAAA, then getaddrinfo
+export async function resolveCaHost(
+  hostname: string,
+  resolver?: CaresResolver,
+): Promise<LookupAddress> {
+  const [address] = await resolveHostnameOffThreadpool(
+    hostname,
+    {},
+    resolver ? { resolver } : {},
+  );
+  if (!address) {
+    throw Object.assign(new Error(`No DNS answer for ${hostname}`), { code: "ENOTFOUND" });
   }
-  try {
-    const [address] = await resolver.resolve6(hostname);
-    if (address) return { address, family: 6 };
-  } catch {
-    // fall through to getaddrinfo
-  }
-  return resolver.lookup(hostname);
+  return address;
 }
 
-export function offThreadpoolLookup(hostname: string, options: unknown, callback: LookupCallback, resolver?: Pick<typeof dns, "resolve4" | "resolve6" | "lookup">): void {
-  const wantsAll = typeof options === "object" && options !== null && (options as { all?: boolean }).all === true;
-  resolveCaHost(hostname, resolver).then(
-    (found) => (wantsAll ? callback(null, [found]) : callback(null, found.address, found.family)),
-    (error: NodeJS.ErrnoException) => (wantsAll ? callback(error, []) : callback(error, "", 0)),
-  );
+export function offThreadpoolLookup(
+  hostname: string,
+  options: Parameters<ReturnType<typeof createOffThreadpoolLookup>>[1],
+  callback: LookupCallback,
+  resolver?: CaresResolver,
+): void {
+  const lookup = createOffThreadpoolLookup(resolver ? { resolver } : {});
+  lookup(hostname, options, callback as Parameters<typeof lookup>[2]);
 }
 
 export function caInternalUrl(env: Record<string, string | undefined> = process.env): string {
