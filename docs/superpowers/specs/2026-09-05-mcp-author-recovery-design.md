@@ -10,6 +10,24 @@ This is the independently reviewable recovery slice of the [published consolidat
 
 ## Purpose and authority boundaries
 
+**OBJ-MCP-RECOVERY:** An external author can identify and execute the next authorized step across artifact adoption, readiness and independent review without losing valid identity or guessing unavailable writer tools.
+
+**OBJ-MCP-PROCESS:** Recovery guidance matches the actual readiness profile and scope binding, so following it produces an actionable result rather than a silent approval loop.
+
+## Scope acceptance manifest
+
+These stable entries bind the detailed AC-MCP-RECOVERY cases below to the scope baseline.
+
+| Acceptance | Objectives | Required outcome |
+| --- | --- | --- |
+| AC-MCP-RECOVERY-1 | OBJ-MCP-RECOVERY | Missing baseSha yields its exact repair and preserves the valid head; the packet conforms to adopt_worktree. |
+| AC-MCP-RECOVERY-2 | OBJ-MCP-RECOVERY | Read and transition projections agree on missing facts, responsible role and next action. |
+| AC-MCP-RECOVERY-3 | OBJ-MCP-RECOVERY | An already signed and pushed artifact is not told to be rewritten solely because baseSha is absent. |
+| AC-MCP-RECOVERY-4 | OBJ-MCP-RECOVERY | Adoption through independent reviewer dispatch reaches persisted approval readback with separate author and referee identities. |
+| AC-MCP-RECOVERY-5 | OBJ-MCP-RECOVERY | Unknown tools, missing grants or identity, inaccessible or stale artifacts and provider failures yield finite authorized recovery without an impossible writer retry loop. |
+| AC-MCP-RECOVERY-6 | OBJ-MCP-RECOVERY | Readiness and Workroom list/detail agree on prerequisite blockers and actual reviewer execution, including terminal states and real pending dispatch ids. |
+| AC-MCP-RECOVERY-7 | OBJ-MCP-PROCESS | Following coverage recovery for doc-only, fix and feature profiles produces a supported action or explicit parent-binding correction while preserving baseline and independent-review controls. |
+
 An external author must receive an executable next step when identity, evidence or reviewer prerequisites are missing. Preserve the existing initiative readiness projector, Workroom identity, reviewerRoutes, TaskRun lifecycle, scope baseline and ToolExecution ledger. No new orchestration service, ledger or receipt-writer tool. No database migration is proposed. Additive diagnostics preserve existing inputs and grant enforcement; missing identity must never become permission to self-approve.
 
 The audited process failure is a documentation parent receiving coverage recovery that cannot produce the promised reviewer route. Bind this implementation slice to its actual refactor BI, preserving that BI's feature review gates. Do not reclassify the documentation parent or exempt it from baseline validation merely to pass a test.
