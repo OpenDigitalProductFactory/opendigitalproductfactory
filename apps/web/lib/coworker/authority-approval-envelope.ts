@@ -26,7 +26,7 @@ type AuthorityApprovalDb = {
   taskRun: { updateMany(args: unknown): Promise<unknown> };
 };
 
-type MarkTaskWorking = (taskRunId: string) => Promise<void>;
+type MarkTaskWorking = (taskRunId: string) => Promise<boolean | void>;
 
 function activeEnvelopeWhere(
   approvalBindingFingerprint: string,

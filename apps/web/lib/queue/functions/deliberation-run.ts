@@ -59,7 +59,13 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
   // still caught because the watchdog accepts both values.
   try {
     const { markTaskRunWorking } = await import("@/lib/observability/heartbeat");
-    await markTaskRunWorking(input.taskRunId);
+    const moved = await markTaskRunWorking(input.taskRunId);
+    if (!moved) {
+      // Terminal or parked already — never resurrect it (BI-D208E70C).
+      console.warn(
+        `[deliberation-run] TaskRun ${input.taskRunId} is not in a working-entry state; leaving its status untouched`,
+      );
+    }
   } catch (err) {
     console.warn(
       "[deliberation-run] failed to mark TaskRun working",
@@ -347,13 +353,22 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
     consensusState: compactSummary.consensusState,
   });
 
-  // Mark TaskRun completed when the deliberation is its only work.
+  // Mark TaskRun completed when the deliberation is its only work: a run the
+  // orchestrator bootstrapped for this deliberation (whatever routeContext the
+  // caller passed — the /build review path passes "/build", BI-D208E70C), or a
+  // caller-owned run whose routeContext says deliberation is all it does.
   try {
+    const { isBootstrappedDeliberationTaskRunId } = await import(
+      "@/lib/deliberation/bootstrapped-task-run"
+    );
     const tr = await prisma.taskRun.findUnique({
       where: { taskRunId: input.taskRunId },
       select: { routeContext: true },
     });
-    if (tr?.routeContext === "deliberation") {
+    if (
+      tr?.routeContext === "deliberation" ||
+      isBootstrappedDeliberationTaskRunId(input.taskRunId)
+    ) {
       await prisma.taskRun.update({
         where: { taskRunId: input.taskRunId },
         data: { status: "completed", completedAt: new Date() },

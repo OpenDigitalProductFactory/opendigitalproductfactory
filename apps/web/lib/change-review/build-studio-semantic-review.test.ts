@@ -8,6 +8,7 @@ const db = vi.hoisted(() => ({
   taskRunFindUnique: vi.fn(),
   taskRunCreate: vi.fn(),
   taskRunUpdate: vi.fn(),
+  taskRunUpdateMany: vi.fn(async (..._args: unknown[]) => ({ count: 1 })),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -21,6 +22,7 @@ vi.mock("@dpf/db", () => ({
       findUnique: (...args: unknown[]) => db.taskRunFindUnique(...args),
       create: (...args: unknown[]) => db.taskRunCreate(...args),
       update: (...args: unknown[]) => db.taskRunUpdate(...args),
+      updateMany: (...args: unknown[]) => db.taskRunUpdateMany(...args),
     },
   },
 }));
