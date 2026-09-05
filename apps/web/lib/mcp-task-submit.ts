@@ -694,6 +694,7 @@ export async function submitRemoteCoworkerTask(input: {
         idempotencyKey: parsed.idempotencyKey,
         requestDigest,
         requestDigestVersion: REMOTE_TASK_REQUEST_DIGEST_VERSION,
+        requestObjective: parsed.objective,
         collaborationKind: parsed.collaborationKind ?? null,
         riskClass: parsed.riskClass,
         apiTokenId: token.tokenId,

@@ -152,6 +152,58 @@ describe("persisted remote TaskRun worker", () => {
     });
   });
 
+  it("reconstructs a long request from its complete durable objective", () => {
+    const objective = `Review the complete remote request packet. ${"evidence ".repeat(150)}`.trim();
+    const durableParams = { ...params, objective };
+    const reconstructed = reconstructPersistedRemoteTask(row({
+      objective: objective.slice(0, 1_000),
+      a2aMetadata: {
+        ...row().a2aMetadata,
+        requestObjective: objective,
+        requestDigest: remoteTaskRequestDigest(durableParams),
+      },
+    }));
+
+    expect(objective.length).toBeGreaterThan(1_000);
+    expect(reconstructed).toMatchObject({
+      ok: true,
+      data: { parsed: { objective } },
+    });
+  });
+
+  it("fails closed when the complete durable objective does not match the request digest", () => {
+    const objective = `Review the complete remote request packet. ${"evidence ".repeat(150)}`.trim();
+    const reconstructed = reconstructPersistedRemoteTask(row({
+      objective: objective.slice(0, 1_000),
+      a2aMetadata: {
+        ...row().a2aMetadata,
+        requestObjective: `${objective} tampered`,
+        requestDigest: remoteTaskRequestDigest({ ...params, objective }),
+      },
+    }));
+
+    expect(reconstructed).toEqual({
+      ok: false,
+      code: "request_digest_mismatch",
+      message: "Persisted remote task request does not match its immutable digest.",
+    });
+  });
+
+  it("fails closed when a present durable objective is not valid text", () => {
+    const reconstructed = reconstructPersistedRemoteTask(row({
+      a2aMetadata: {
+        ...row().a2aMetadata,
+        requestObjective: { unexpected: true },
+      },
+    }));
+
+    expect(reconstructed).toEqual({
+      ok: false,
+      code: "persisted_request_invalid",
+      message: "Persisted remote task request objective is invalid.",
+    });
+  });
+
   it("fails closed when persisted request bytes no longer match the immutable digest", () => {
     const reconstructed = reconstructPersistedRemoteTask(row({
       messages: [{ parts: [{ type: "message", text: "changed prompt" }] }],
