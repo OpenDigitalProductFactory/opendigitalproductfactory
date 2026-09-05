@@ -1450,6 +1450,9 @@
       "docs/founder-kernel/AUTHORING.md",
       "docs/founder-kernel/SCHEMA.md"
     ],
+    "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs": [
+      "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md"
+    ],
     "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
@@ -2682,6 +2685,9 @@
     "docs/founder-kernel/SCHEMA.md": [
       "apps/web/lib/queue/functions/wiki-lint.ts",
       "packages/db/src/wiki-taxonomy.ts"
+    ],
+    "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md": [
+      "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs"
     ],
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
