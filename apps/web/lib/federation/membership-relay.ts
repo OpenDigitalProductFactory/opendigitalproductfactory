@@ -198,7 +198,8 @@ export async function recordMembershipRelayEvent(db: RelayDb, entry: MembershipR
 }
 
 function readCaAnswer(status: number, body: unknown): { certPem: string; chainPems: string[] } | { refused: string } {
-  if (status === 200 && isRecord(body) && typeof body.crt === "string") {
+  // step-ca answers 201 Created (verified against a live CA); 200 is tolerated.
+  if ((status === 200 || status === 201) && isRecord(body) && typeof body.crt === "string") {
     // step-ca answers { crt, ca, certChain }: certChain is leaf-first and
     // already includes crt; an older CA may send only crt + ca.
     const chain = Array.isArray(body.certChain) ? splitPemChain(body.certChain.filter((v): v is string => typeof v === "string")) : [];

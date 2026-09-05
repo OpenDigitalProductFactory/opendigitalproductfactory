@@ -34,7 +34,8 @@ function auditDb(): RelayDb & { rows: Record<string, unknown> } {
   };
 }
 
-const caAccepts = vi.fn(async () => ({ status: 200, body: { crt: MEMBER_CERT_PEM, ca: ORG_ROOT_CERT_PEM, certChain: [MEMBER_CERT_PEM, ORG_ROOT_CERT_PEM] } }));
+// A real step-ca answers 201 Created with { crt, ca, certChain } (verified live).
+const caAccepts = vi.fn(async () => ({ status: 201, body: { crt: MEMBER_CERT_PEM, ca: ORG_ROOT_CERT_PEM, certChain: [MEMBER_CERT_PEM, ORG_ROOT_CERT_PEM] } }));
 
 beforeEach(() => {
   _resetNearbyPairingRateLimits();
