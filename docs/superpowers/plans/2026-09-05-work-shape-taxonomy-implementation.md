@@ -155,10 +155,8 @@ one line in `AGENTS.md` §5, and the delivery-shape half of `BI-C8C4031C`'s page
 
 ## Backlog coverage
 
-- Decision: decomposed (one parent, seven children, dependency-ordered).
-- Parent: `BI-B5C8FEFC`; children `BI-218EC195`, `BI-B90F7CBB`, `BI-02470C7E`,
-  `BI-B269FC72`, `BI-AFE8BB73`, `BI-F2FEC1EB`, `BI-D03BE728`, all under
-  `EP-129D11FD`.
-- Rationale: each child is one clean revert with its own tests; the ledger repair
-  goes first so the first shaped claim can bind to a sealed kernel verdict rather
-  than an advisory one.
+- Decision: decomposed
+- Parent: `BI-B5C8FEFC`
+- Receipt: pending — no initiative scope baseline exists for BI-B5C8FEFC (spec-approval by an independent reviewer has not been recorded) and the portal could not reach the repository provider to issue the reviewer packet (2026-09-05 03:00Z); record_plan_backlog_coverage refused with traceability-incomplete
+- Rationale: each child is one clean revert with its own tests; the ledger repair goes first so the first shaped claim binds to a sealed kernel verdict rather than an advisory one.
+- Dependencies: BI-218EC195 -> `BI-218EC195` (none); delivery-registry -> `BI-B90F7CBB` (none); claim-asks -> `BI-02470C7E` (BI-B90F7CBB); readiness-v3 -> `BI-B269FC72` (BI-B90F7CBB, BI-02470C7E); delivery-from-trunk -> `BI-AFE8BB73` (BI-B269FC72); expedite-lane -> `BI-F2FEC1EB` (BI-B90F7CBB, BI-B269FC72); visibility-and-matrix -> `BI-D03BE728` (BI-02470C7E, BI-B269FC72)
