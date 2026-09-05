@@ -52,10 +52,12 @@ one short-lived setup exchange; it is never a password or bearer credential.
 
 When the second installation does not yet trust the organization's private
 HTTPS authority, use **Connect your own installations** on the Connections
-page. On the organization installation, choose **Create join file**, enter the
-joining installation's reported host name, confirm it, and download the file
-when ready. Move the `.dpfjoin` file to the joining computer within its 5- to
-15-minute lifetime. On that installation, choose **Join this installation**,
+page. On the organization installation, choose **Create join file**, pick the
+joining installation from the connected installations it already knows (or
+name another one), confirm it, and the one-time file downloads at once. The
+organization installation creates the file itself; no Edge node or host
+script is involved. Move the `.dpfjoin` file to the joining computer within
+its 30-minute lifetime. On that installation, choose **Join this installation**,
 select the file, check the safe preview, and confirm. Choosing the file is the
 whole step: the joining installation checks the file, generates its own key,
 asks the organization installation to certify it, and keeps the result in its
@@ -63,7 +65,7 @@ own state directory. No command line, certificate copying, CA password, Edge
 node, or installer rerun is required, and nothing is typed. Within a few
 minutes the connection appears on both Connections pages as trusted, with no
 approval to click. An automation agent can do the same through the
-`import_organization_join_file` tool.
+`issue_organization_join_file` and `import_organization_join_file` tools.
 
 The file carries the public-root fingerprint and one-time enrollment authority;
 it never carries the organization's CA private key. It works only for the named
