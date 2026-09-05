@@ -31,3 +31,7 @@ At main `961ef9c8cf`, `.github/workflows/security-findings-watch.yml:64` and `au
 ## Rollback
 
 Delete the two secrets; the step is skipped and the fallback chain is what runs today.
+
+## Live-run correction (2026-09-05)
+
+The first run with the App secrets (run 33975611589) failed at the mint step with 422 "The permissions requested are not granted to this installation": the explicit `permission-*` inputs named Dependabot alerts by a key the API does not use (`vulnerability_alerts` is the real key). The inputs are removed; the token now carries exactly the installation's granted set. Credential owner: the production installation that stewards the open-source project, as steward of the open-source project (founder direction, 2026-09-05).

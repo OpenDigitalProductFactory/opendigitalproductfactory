@@ -4,7 +4,7 @@ status: active
 
 # Security sweep credential: read all three alert surfaces
 
-**Backlog item:** BI-3E6AFF04 · **Workflows:** `security-findings-watch.yml`, `audit-stale-overrides.yml` · **Standing report:** issue #4389
+**Owner:** the production installation that stewards the open-source project, as steward of the open-source project (founder, 2026-09-05) · **Backlog item:** BI-3E6AFF04 · **Workflows:** `security-findings-watch.yml`, `audit-stale-overrides.yml` · **Standing report:** issue #4389
 
 ## Symptom
 
