@@ -54,22 +54,25 @@ version or live acceptance. Reuse these additions and their tests.
 
 ## Contracts and objectives
 
-- OBJ-DC-1 / CT-DC-DELIVERY: delivery evidence identifies repository, PR, authored
-  head, merge commit, observed state/time, and verification provenance. A squash
-  merge closes the correct delivery; a later unmerged head cannot inherit it.
-- OBJ-DC-2 / CT-DC-HANDOFF: authoring ends only after a durable handoff records BI,
-  Workroom, source revision, delivered scope, acceptance contracts, evidence links,
-  unresolved risks, responsible controller, and next event. No full transcript is
-  required to continue. Scope added after that receipt creates a new attempt.
-- OBJ-DC-3 / CT-DC-ACCEPTANCE: release membership uses the merge commit included in
-  the served artifact, scoped to repository and installation. A passing pre-merge
-  build never substitutes for operational acceptance.
-- OBJ-DC-4 / CT-DC-WAIT: waiting has a persisted identity and continuation; it holds
-  no inference worker, client heartbeat, runtime lease, or required open client.
-- OBJ-DC-5 / CT-DC-CLEANUP: archive and cleanup are acknowledged idempotent steps.
-  Dirty, pinned, active, conflicted, and unmerged source remains protected.
-- OBJ-DC-6 / CT-DC-COST: measure execution, waiting, replay, cache use, and attention
-  separately. Idle saved conversations are not counted as inference spending.
+Each objective below is the scope baseline for one contract (CT-DC-*). The acceptance
+table that follows binds every AC-DC-* criterion to the objectives it proves.
+
+- **OBJ-DC-1:** Delivery evidence identifies repository, PR, authored head, merge commit, observed state/time, and verification provenance; a squash merge closes the correct delivery and a later unmerged head cannot inherit it (contract CT-DC-DELIVERY).
+- **OBJ-DC-2:** Authoring ends only after a durable handoff records BI, Workroom, source revision, delivered scope, acceptance contracts, evidence links, unresolved risks, responsible controller, and next event; no full transcript is required to continue, and scope added after that receipt creates a new attempt (contract CT-DC-HANDOFF).
+- **OBJ-DC-3:** Release membership uses the merge commit included in the served artifact, scoped to repository and installation; a passing pre-merge build never substitutes for operational acceptance (contract CT-DC-ACCEPTANCE).
+- **OBJ-DC-4:** Waiting has a persisted identity and continuation; it holds no inference worker, client heartbeat, runtime lease, or required open client (contract CT-DC-WAIT).
+- **OBJ-DC-5:** Archive and cleanup are acknowledged idempotent steps; dirty, pinned, active, conflicted, and unmerged source remains protected (contract CT-DC-CLEANUP).
+- **OBJ-DC-6:** Execution, waiting, replay, cache use, and attention are measured separately; idle saved conversations are not counted as inference spending (contract CT-DC-COST).
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-DC-1 | OBJ-DC-1 | Squash merge, a new head after merge, stale or unknown provider state, an installed runtime without Git, and duplicate or out-of-order events all resolve to the correct delivery. |
+| AC-DC-2 | OBJ-DC-2, OBJ-DC-5 | A crash between steps, an active dirty worker, a missing host, and a retry lose no acceptance and perform no unsafe deletion. |
+| AC-DC-3 | OBJ-DC-4 | Waiting consumes no worker; a fresh task resumes from the handoff; unmerged source remains protected. |
+| AC-DC-4 | OBJ-DC-4 | A canceled waiter is never admitted; a predecessor cannot kill its successor; a queued receipt actually executes. |
+| AC-DC-5 | OBJ-DC-3 | Identical integration evidence is reused; a changed tree, lock, or check identity forces the appropriate verification. |
+| AC-DC-6 | OBJ-DC-3 | Ten obligations with three compatible checks run three checks and keep ten results; tenant separation, duplicate dispatch, and rollback hold; a failure creates exactly one corrective item. |
+| AC-DC-7 | OBJ-DC-6 | Billed, estimated, and unknown costs are distinguishable; a 10,000-row cursor fixture completes; no idle-task billing is assumed. |
 
 ## State, data, and ownership
 
@@ -238,10 +241,9 @@ to make a queue look healthy.
 ## Review readiness
 
 The source audit found the schema/owners above and the kernel recommended this
-option set. Independent initiative review is pending: the connected development
-MCP session returned "No granted tools matched" for record_initiative_evidence,
-record_initiative_design_review, record_initiative_architecture_review, and
-record_initiative_plan_review. Tool-marketplace lookup returned no matching route.
-This is an access/discovery prerequisite, not a product design decision or a request
-for the operator to restate implementation authorization. Preserve this artifact
-and resume review using the authorized reviewer route when it is available.
+option set. Independent initiative review runs through the server-issued reviewer
+routes (request_coworker with the initiative-review binding from the readiness
+recovery packet); authors do not hold the receipt writers directly, and that is
+the intended authority split, not a blocker. Reviewer receipts are bound to the
+immutable blob of this file at the reviewed commit, so any edit after a receipt
+requires the affected gates to be re-recorded at the new head.
