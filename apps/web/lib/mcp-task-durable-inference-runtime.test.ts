@@ -25,6 +25,7 @@ import {
   ensureDurableInferenceTaskRecipes,
 } from "./mcp-task-durable-inference-runtime";
 import {
+  DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID,
   DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
   DURABLE_INFERENCE_TASK_RECIPE_ID,
 } from "./mcp-task-durable-inference-contract";
@@ -32,7 +33,7 @@ import {
 const selectedRecipe = {
   id: "recipe-db-1",
   providerId: "gemini",
-  modelId: "gemini-3.1-pro-preview",
+  modelId: DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID,
   contractFamily: DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
   version: 1,
   status: "champion",
@@ -63,7 +64,13 @@ beforeEach(() => {
 });
 
 describe("durable-inference TaskRun runtime", () => {
-  it("idempotently seeds an explicit async champion recipe for active Gemini models", async () => {
+  it("seeds only the server-certified Gemini background model", async () => {
+    db.findProfiles.mockResolvedValueOnce([
+      { modelId: "gemini-2.5-pro" },
+      { modelId: DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID },
+      { modelId: "gemini-3-pro-image-preview" },
+    ]);
+
     await expect(ensureDurableInferenceTaskRecipes()).resolves.toEqual({
       seeded: 1,
       validated: 1,
@@ -74,6 +81,7 @@ describe("durable-inference TaskRun runtime", () => {
     expect(db.findProfiles).toHaveBeenCalledWith({
       where: {
         providerId: "gemini",
+        modelId: DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID,
         modelStatus: { in: ["active", "degraded"] },
         modelClass: { in: ["chat", "reasoning"] },
       },
@@ -91,10 +99,16 @@ describe("durable-inference TaskRun runtime", () => {
         responsePolicy: { strictSchema: false, stream: false },
       }),
     });
+    expect(db.findRecipe).toHaveBeenCalledTimes(1);
+    expect(db.createRecipe).toHaveBeenCalledTimes(1);
   });
 
-  it("does not seed a closed bounded recipe for managed agents without a token ceiling", async () => {
-    db.findProfiles.mockResolvedValueOnce([{ modelId: "deep-research-pro-preview-12-2025" }]);
+  it("does not seed a recipe for Gemini models without certified background support", async () => {
+    db.findProfiles.mockResolvedValueOnce([
+      { modelId: "gemini-2.5-pro" },
+      { modelId: "deep-research-pro-preview-12-2025" },
+      { modelId: "gemini-3-pro-image-preview" },
+    ]);
 
     await expect(ensureDurableInferenceTaskRecipes()).resolves.toEqual({
       seeded: 0,
@@ -129,6 +143,7 @@ describe("durable-inference TaskRun runtime", () => {
         interactionMode: "background",
         budgetClass: "quality_first",
         allowedProviders: ["gemini"],
+        preferredModelId: DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID,
         tools: [],
         toolChoice: "none",
         durableAsyncOperation: {
@@ -165,6 +180,23 @@ describe("durable-inference TaskRun runtime", () => {
     expect(result).toEqual({ asyncOperationId: "async-op-1", recipeId: "recipe-db-1" });
   });
 
+  it("fails before routing when the certified background model is unavailable", async () => {
+    db.findProfiles.mockResolvedValueOnce([{ modelId: "gemini-2.5-pro" }]);
+
+    await expect(admitDurableInferenceTask({
+      taskRunId: "TR-MCP-DURABLE-1",
+      requestKey: "durable:1",
+      requestDigest: "a".repeat(64),
+      prompt: "Produce a bounded market summary.",
+      userId: "user-1",
+      agentId: "AGT-WS-RESEARCH",
+      threadId: "thread-1",
+      routeContext: "/research",
+      recipeId: DURABLE_INFERENCE_TASK_RECIPE_ID,
+    })).rejects.toThrow("DURABLE_INFERENCE_BACKGROUND_MODEL_UNAVAILABLE");
+    expect(inference.route).not.toHaveBeenCalled();
+  });
+
   it("fails closed when routing does not select the seeded async recipe", async () => {
     inference.route.mockResolvedValueOnce({
       asyncOperationId: undefined,
@@ -197,6 +229,34 @@ describe("durable-inference TaskRun runtime", () => {
       routeDecision: {
         explorationMode: "challenger",
         executionPlan: { ...selectedRecipe, recipeId: "candidate-recipe" },
+      },
+    });
+
+    await expect(admitDurableInferenceTask({
+      taskRunId: "TR-MCP-DURABLE-1",
+      requestKey: "durable:1",
+      requestDigest: "a".repeat(64),
+      prompt: "Produce a bounded market summary.",
+      userId: "user-1",
+      agentId: "AGT-WS-RESEARCH",
+      threadId: "thread-1",
+      routeContext: "/research",
+      recipeId: DURABLE_INFERENCE_TASK_RECIPE_ID,
+    })).rejects.toThrow("DURABLE_INFERENCE_ASYNC_RECIPE_NOT_SELECTED");
+  });
+
+  it("rejects an async route result for a model outside the certified recipe", async () => {
+    inference.route.mockResolvedValueOnce({
+      asyncOperationId: "async-op-wrong-model",
+      routeDecision: {
+        explorationMode: "champion",
+        executionPlan: {
+          ...selectedRecipe,
+          recipeId: selectedRecipe.id,
+          modelId: "gemini-2.5-pro",
+          maxTokens: 4_096,
+          providerSettings: {},
+        },
       },
     });
 

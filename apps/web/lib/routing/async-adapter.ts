@@ -14,6 +14,7 @@
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
+import { withGeminiInteractionsApiRevision } from "./gemini-interactions-contract";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,10 @@ export const asyncAdapter: ExecutionAdapterHandler = {
     try {
       res = await fetch(url, {
         method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
+        headers: withGeminiInteractionsApiRevision({
+          ...headers,
+          "Content-Type": "application/json",
+        }),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(30_000), // start should be fast
       });
