@@ -8,7 +8,7 @@ status: active
 - **Workroom:** `WC-59101F34`
 - **Profile:** feature
 - **Parent design:** [`2026-09-03-local-first-agentic-delivery-throughput-design.md`](2026-09-03-local-first-agentic-delivery-throughput-design.md), especially §§6–7
-- **Dependency:** `BI-801313EB` supplies the durable async-operation lifecycle; this slice consumes its public projection without owning that persistence.
+- **Dependency:** `BI-801313EB` supplies the durable async-operation lifecycle. This slice consumes its public projection and owns the narrow Workroom-to-TaskRun admission adapter required for Task Hub delivery; the core operation schema, provider worker, and transition state machine remain unchanged.
 
 ## Problem
 
@@ -28,9 +28,24 @@ This feature is a read model and notification projection over existing authority
 | Human attention | `Notification` plus the attention realtime bus | Emit one deduplicated semantic notification for a durable actionable/terminal transition. |
 | Branch and review navigation | Workroom branch/PR fields | Render secure same-origin or validated provider links; never reconstruct Git authority. |
 
-`BI-801313EB` owns operation persistence, resume/cancel semantics, and worker integration. This slice does not modify its schema, lifecycle, or inference workers. It consumes the core's authorized `listPrismaAuthorizedAsyncOperations` query through public TaskRun/Workroom identities and adds one narrow consumer for the core's already-published `inference/async-operation.transitioned` event. The consumer is a projection accelerator only: it re-reads the canonical transition and server-owned binding before changing the existing Workroom/Notification projections.
+`BI-801313EB` owns operation persistence, resume/cancel semantics, and worker integration. This slice does not modify its schema or provider state machine. It consumes the core's authorized `listPrismaAuthorizedAsyncOperations` query through public TaskRun/Workroom identities and adds one narrow consumer for the core's already-published `inference/async-operation.transitioned` event. The consumer is a projection accelerator only: it re-reads the canonical transition and server-owned binding before changing the existing Workroom/Notification projections.
 
 This task-hub slice neither defines nor replaces a queue, worker, retry policy, or dead-letter mechanism. Those reliability and idempotency contracts remain entirely in the async-operation core; the hub consumes only its authorized read model alongside existing Workroom facts.
+
+### Live acceptance repair: Workroom-backed TaskRun admission
+
+Live acceptance found a producer-side contract gap rather than a Task Hub consumer defect. A server-authorized Workroom request could admit the closed `background.mcp-durable-inference-one-shot` contract directly against `Workroom`. The generic row was durable, but the closed worker correctly refused it with `DURABLE_INFERENCE_TASKRUN_BINDING_MISSING`; no terminal transition therefore existed for Task Hub to deliver.
+
+For that one closed contract family, the production admission boundary must bridge a Workroom authority to a canonical TaskRun before provider dispatch:
+
+1. authorize the public Workroom and actor against committed server records;
+2. derive one server-owned TaskRun identity from the authorized internal Workroom identity plus immutable request key and digest;
+3. atomically create or replay that TaskRun and link the Workroom only when no conflicting TaskRun is already linked;
+4. admit the async operation against the canonical TaskRun with its first wake deferred;
+5. compare-and-swap the exact operation id into TaskRun durable progress; and
+6. enqueue the first provider wake only after that projection is durable.
+
+The bridge never trusts a caller-supplied TaskRun id. Missing human attribution, malformed immutable identity, authorization denial, conflicting Workroom linkage, metadata drift, or operation-id drift fails before dispatch. Replays must reuse the same TaskRun and operation; advisory duplicate wakes remain harmless under the core's existing leases and fences. Other Workroom-bound async contract families keep the generic Workroom binding and are unaffected.
 
 ## Research and alternatives
 
@@ -172,7 +187,7 @@ The create/adopt controls remain below the operational overview and preserve the
 | --- | --- | --- |
 | AC-DTH-001 | OBJ-DTH-001, OBJ-DTH-002 | Pure projection tests cover every group, owner/stage/progress, branch/PR, latest transition, and stable Workroom identity. |
 | AC-DTH-002 | OBJ-DTH-003, OBJ-DTH-005 | Store tests prove fixed `take`, server-owned time window, cursor validation/order, bounded activity include, snapshot/upsert/remove, stale-event rejection, and listener cleanup. |
-| AC-DTH-003 | OBJ-DTH-004 | Notification and event-consumer tests prove canonical `(operationId,sequence)` re-read, deterministic existing-ledger activity and dedupe identity, fail-closed Workroom resolution, semantic deep links, bounded recency, and no progress-only notification. |
+| AC-DTH-003 | OBJ-DTH-004 | Admission and event-consumer tests prove the closed TaskRun contract creates/replays one server-owned Workroom-linked TaskRun before first wake, canonical `(operationId,sequence)` re-read, deterministic existing-ledger activity and dedupe identity, fail-closed Workroom resolution, semantic deep links, bounded recency, and no progress-only notification. |
 | AC-DTH-004 | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-006 | Component tests cover grouped rows, loading/reconnecting/partial/empty/error, semantic actions, accessible names, and retained confirmed content. |
 | AC-DTH-005 | OBJ-DTH-006 | Measured UX-fit manifest covers desktop/mobile, light/dark, keyboard/focus, overflow, and route budget. |
 | AC-DTH-006 | OBJ-DTH-007 | Legacy Workroom grouping/presentation is removed from the table and shared by page, stream, and notifications; module-size and duplication guards pass. |
