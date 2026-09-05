@@ -39,6 +39,12 @@ Founder correction, 2026-09-05, recorded under BI-DC0F14E0: the platform overcor
 
 A low-confidence result calls for examining the uncertainty, not automatically asking the founder to ratify a score. Missing empirical evidence should be investigated; a real doctrine conflict, unresolvable trade-off, missing consent, or changed authority goes to its owner. Never report an inconclusive result as a decision or a verification pass.
 
+## Decision dimensions and existing enforcement
+
+The retained vector weights the same objectives after consolidation: less human cognitive load (-0.9) and operator effort (-0.4), relevant evidence (0.7), legible consequences (0.6), grounded facts (0.5), and compliance with applicable authority (0.5). None measures consultation count. The low procedural weight (0.3) remains appropriate: this rule routes a decision rather than choosing the substantive design. Consulting unrelated scopes adds cost without increasing those benefits.
+
+The existing `packages/dpf-skill-pack/hooks/decision-routing-guard.mjs` checks decision-shaped questions for consultation markers; it does not require three scope receipts. Cite the actual WWMD reasoning and existing decision ledger when escalating. Never add a marker to pretend consultation occurred. The hook's `[operator-owned]` path remains for a genuinely operator-owned decision. Its regression suite covers cold asks and legitimate ledger-bearing questions. A governance-freshness warning calls for checking the applicable doctrine and actual decision service; it does not invalidate an unchanged founder instruction. The cold "Option 1/2/3, you pick" question remains an anti-pattern.
+
 ## Examples
 
 - An authorized MCP repair has an agreed direction and passing affected tests. Publishing its existing evidence to the next stage is execution work; the agent does not ask the founder to choose the same direction again.

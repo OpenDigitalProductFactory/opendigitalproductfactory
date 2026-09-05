@@ -38,6 +38,10 @@ At a transition, use the existing decision, authorization, and relevant verifica
 
 A production-affecting action follows its actual permission and consent contract. Its phase label neither grants permission nor invalidates permission already given. Where a tool requires a proposal or specific approval, use it; WWMD judgment does not substitute for that authorization.
 
+## Decision dimensions
+
+The vector retains compliance with applicable governance (1.0), consent state (0.65), legible consequences (0.7), reduced cognitive load (-0.6), and speed to value (0.5). Compliance and consent describe whether required protections and actual authorization are satisfied, not the quantity or recency of approval clicks. Reusing valid authorization therefore preserves those benefits while reducing interruption cost; skipping required consent lowers compliance and consent-state features. This interpretation supports the revised direction without reversing any cost axis or changing the numeric weights merely to force a preferred result.
+
 ## Examples
 
 - The operator authorizes implementing and delivering a named repair. The agent performs the scoped work and verification, then proceeds through the authorized delivery path without asking whether to continue at each stage.
