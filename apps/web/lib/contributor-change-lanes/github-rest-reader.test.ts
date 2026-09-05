@@ -11,14 +11,6 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-it("keeps the GitHub transport native in the standalone production build", async () => {
-  const { default: config } = await import("../../next.config.mjs");
-  const { default: manifest } = await import("../../package.json");
-  expect(config.serverExternalPackages).toContain("undici");
-  expect(manifest.dependencies.undici).toBeTruthy();
-  expect(config.transpilePackages).not.toContain("undici");
-});
-
 const mocks = vi.hoisted(() => ({
   credentialFindUnique: vi.fn(),
   platformDevConfigFindUnique: vi.fn(),

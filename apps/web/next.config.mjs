@@ -36,11 +36,7 @@ const config = {
   // "Cannot find package" at runtime in the production image and every document
   // upload 500s. (These are app-level deps; their symlink lives in
   // apps/web/node_modules, which the standalone trace omits without this.)
-  // The shipped Turbopack-bundled Undici reproducibly times out connecting to
-  // GitHub while native Node loading succeeds against the same immutable blob.
-  // Keep its Node transport external; a new Agent alone does not isolate it
-  // from bundler transformation. See the MCP recovery plan's runtime evidence.
-  serverExternalPackages: ["pdf-parse", "mammoth", "read-excel-file", "undici"],
+  serverExternalPackages: ["pdf-parse", "mammoth", "read-excel-file"],
   turbopack: {
     root: turbopackRoot,
   },
