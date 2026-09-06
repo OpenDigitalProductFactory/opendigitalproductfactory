@@ -273,7 +273,7 @@ export async function completeBacklogItemTransition(args: {
       const activities = await tx.backlogItemActivity.findMany({
         where: { backlogItemId: lockedItem.id, kind: { in: [
           "initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage",
-          "initiative_objective_mapping", "evidence",
+          "initiative_objective_mapping", "evidence", "break_fix_declared",
         ] } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         take: 500,

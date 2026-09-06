@@ -872,11 +872,12 @@
     },
     {
       "key": "initiative_design_review",
-      "description": "Record independent design, specification, and plan-review receipts.",
+      "description": "Record independent design, specification, plan-review, and break-fix post-implementation review receipts.",
       "category": "governance",
       "sensitivity": "confidential",
       "honored_by_tools": [
-        "record_initiative_design_review"
+        "record_initiative_design_review",
+        "record_initiative_post_implementation_review"
       ],
       "implies": []
     },

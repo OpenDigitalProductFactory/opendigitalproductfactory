@@ -216,6 +216,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   claim_backlog_item_for_work: ["work_capsule_adopt"],
   start_external_work: ["work_capsule_adopt"],
   claim_workroom_scope: ["work_capsule_write"],
+  declare_break_fix: ["work_capsule_write"],
   record_workroom_evidence: ["work_capsule_write"],
   record_agent_activity: ["work_capsule_write"],
   heartbeat_workroom: ["work_capsule_write"],
