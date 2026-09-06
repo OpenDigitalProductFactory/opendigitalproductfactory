@@ -7,6 +7,18 @@ status: active
 **Date:** 2026-09-01 · **Epic:** EP-WORKROOM-CLOSEOUT
 **Backlog:** BI-9FF39058, BI-33E1E5D7, BI-154689E7, BI-75565393, BI-946E5359
 
+## September 4 correction and successor
+
+The [delivery closeout and cost-efficiency addendum](2026-09-04-delivery-closeout-cost-efficiency-design.md)
+corrects two assumptions below: branch-head ancestry does not prove delivery after
+a squash merge, and a stored PR URL does not prove an open PR. The current code
+implements delivered/paused classification, but its callers do not reliably supply
+delivery evidence in an installed runtime without Git. The statements below about
+local reachability as the universal delivery signal and a terminal room implying a
+terminal client are superseded by the addendum. Existing cleanup safety remains in
+force. Delivery closeout and operational acceptance become independently durable;
+the authoring session can finish while acceptance awaits deployment.
+
 ## Problem
 
 A Workroom accumulates four loose ends over its life: the **room** row (status), the
