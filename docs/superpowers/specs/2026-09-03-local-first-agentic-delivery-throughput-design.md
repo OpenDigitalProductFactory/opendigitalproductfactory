@@ -10,6 +10,28 @@ status: draft
 **Primary epic:** `EP-ABB3AC9D` — change-delivery latency  
 **Co-owning epics:** `EP-WORK-CONVERGENCE` — work projection; `EP-056D2A5E` — local capacity and contention
 
+## Provider admission delivery slice (2026-09-06)
+
+`BI-06AE6833`, Workroom `WC-27D00458`, implements only the provider-admission
+contract in sections 11 and 15.1. The execution/visualization work in
+`WC-4A72DC95` retains its existing ownership and scope.
+
+Remove the semantic review wrapper's blanket local-capacity probe. The shared
+completion adapter already calls `assertProviderDispatchCapacity` for the selected
+provider; verify the primary and fallback paths reach that boundary. Declare
+ordinary platform review as internal and retain full payload screening, explicit
+residency, provider clearance and export obligations. An external surface alone
+does not make a payload public. Do not relax mixed secret or regulated content.
+
+Verify external review while local CI is active, queued or unavailable; local
+fallback must still refuse dispatch under those conditions. Preserve independent
+specialist branches and infrastructure-inconclusive outcomes. Run the affected
+review, provider-capacity, fallback and screening tests; then exercise a real
+review on the installed release with eligible external inference. No migration,
+new provider setting or second admission policy is needed. Rollback is the scoped
+review-wrapper change. Refactoring removes one duplicate admission predicate
+rather than introducing a new controller.
+
 ## 1. Decision in one paragraph
 
 Make the Workroom the visible delivery rail for Build Studio and every coding client, then run delivery as bounded campaigns whose independently shippable leaves can execute across the two local DPF installations. Keep one backlog, one Workroom identity, one immutable gate identity, and one evidence packet. Add a durable review-tail controller so work ends at verified merge/closeout rather than at PR creation. Measure throughput as verified outcomes per time, token, and human intervention—not PRs or lines changed alone. Keep canonical DPF instructions provider-neutral and apply model/version-specific prompt behavior through evaluated execution profiles. Cloud CI remains the protected safety net and contingency lane; local machines are the chosen capacity investment.
