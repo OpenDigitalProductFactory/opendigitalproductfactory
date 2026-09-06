@@ -36,6 +36,7 @@ Candidate causes ruled out by running them:
 4. `apps/web/app/api/automation/sign-in/route.ts`: build the redirect from `getPortalUrl()`.
 5. `docs/install/*` and `docs/user-guide` (whichever guide the docs-impact gate maps): default exposure statement and the opt-in line.
 6. Follow-up for the remaining 58 `request.nextUrl.origin` call sites: BI-48092F3A.
+7. `scripts/promote.sh` (BI-55A30F8B, found on the first production self-upgrade after step 2 shipped): the promoter recreates the portal in its step 4, but step 3 above only runs in its step 7, so the first promotion binds every port to loopback with the old `.env` and a LAN install goes dark. Before any compose command, when the compose env file predates the key, the promoter exports `DPF_HOST_BIND_ADDRESS=0.0.0.0` (process environment wins over `--env-file`) and emits `step=host-bind-address-preserved`. An env file that carries the key, or an operator-set variable, is left alone. Test `promote-host-bind-address.test.mjs`, registered in the self-upgrade acceptance workflow.
 
 ## Boundaries
 
