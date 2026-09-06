@@ -196,4 +196,18 @@ describe("workSync requires an established link, not a typed name", () => {
         .workSync,
     ).toBe("same-organization");
   });
+
+  it("states the live health sentence as the rationale when one is known (EP-ZERO-CONFIG-FEDERATION §5.7)", () => {
+    const line = "In step with operator-production: 1,620 items mirrored here, last copy 3 minutes ago.";
+    const snapshot = buildInstallationOperatingProfileSnapshot({
+      intent: intent({ pairedProductionInstallationRef: "operator-production", primaryPurpose: "evolve-dpf" }),
+      environmentClass: "development",
+    });
+    const profile = resolveInstanceStance(snapshot, { sourceCapable: false, pairingIsEstablished: true, workSyncHealthLine: line });
+    expect(profile.workSync).toBe("same-organization");
+    expect(profile.rationale.workSync).toBe(line);
+    // Without a link the sentence is never shown: a declared peer is intent, not evidence.
+    const unlinked = resolveInstanceStance(snapshot, { sourceCapable: false, pairingIsEstablished: false, workSyncHealthLine: line });
+    expect(unlinked.rationale.workSync).not.toBe(line);
+  });
 });

@@ -48,11 +48,34 @@ export async function heartbeat(taskRunId: string): Promise<boolean> {
   }
 }
 
-export async function markTaskRunWorking(taskRunId: string): Promise<void> {
-  await prisma.taskRun.update({
-    where: { taskRunId },
+/**
+ * States a TaskRun can be moved INTO `working` from. Anything else is terminal
+ * or parked and stays where it is: a completed run must never be resurrected
+ * by a late worker that did not know it was already settled (BI-D208E70C — the
+ * async deliberation runner re-marked runs the orchestrator had completed,
+ * and 295 of them ended up "stalled" on the live install).
+ */
+export const TASK_RUN_WORKING_ENTRY_STATES = [
+  "submitted",
+  "queued",
+  "running",
+  "active",
+  "working",
+  "input-required",
+  "auth-required",
+] as const;
+
+/**
+ * Returns whether the row transitioned (or was already working). A false
+ * result means the run is terminal or parked and the caller must not treat
+ * itself as its owner.
+ */
+export async function markTaskRunWorking(taskRunId: string): Promise<boolean> {
+  const result = await prisma.taskRun.updateMany({
+    where: { taskRunId, status: { in: [...TASK_RUN_WORKING_ENTRY_STATES] } },
     data: { status: "working", lastHeartbeatAt: new Date() },
   });
+  return result.count > 0;
 }
 
 /**

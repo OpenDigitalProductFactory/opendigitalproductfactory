@@ -634,6 +634,12 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   // obligations forbid auto-purge. Raw SecurityEvent/Detection telemetry purges
   // on the security-audit window above; the CASE is retained.
   { model: "securityCase", label: "Security cases", regulatoryBasis: "Security incident record (breach-notification / forensic / legal-hold)", minRetentionYears: 7 },
+  // Break-glass risk-acceptance records (BI-4512E7D2). An operator's informed
+  // decision to let a provider serve data its account is not verified-safe for —
+  // and its revocation — are the record a security or data-protection review
+  // turns on. Retained (never auto-purged) so an expired/revoked override remains
+  // provable after the fact; low volume (rare operator actions), so no growth risk.
+  { model: "providerClearanceOverride", label: "Provider clearance overrides", regulatoryBasis: "Security decision audit — informed risk-acceptance of provider data exposure", minRetentionYears: 7 },
   { model: "complianceAuditLog", label: "Compliance audit log", regulatoryBasis: "Compliance change audit", minRetentionYears: 7 },
   { model: "complianceAudit", label: "Compliance audits", regulatoryBasis: "Audit record retention", minRetentionYears: 7 },
   { model: "auditFinding", label: "Audit findings", regulatoryBasis: "Audit record retention", minRetentionYears: 7 },

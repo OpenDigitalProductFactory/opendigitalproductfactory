@@ -7,7 +7,6 @@ import {
   buildRepeatedQuestionNudge,
   buildRepeatedToolStopMessage,
   buildRuntimeLimitToolLoopMessage,
-  buildMaxIterationsExhaustedMessage,
   detectToolRefusedDespiteAvailability,
   phaseRequiresToolCall,
   detectUnsavedEvidence,
@@ -279,71 +278,6 @@ describe("buildRuntimeLimitToolLoopMessage (BI-0C19AFDD)", () => {
 // configured provider is active but wasn't eligible" (banner) and "My usual AI
 // was unavailable" (this message). The message branched on the `downgraded`
 // boolean, which conflated a dispatch failure with pre-dispatch ineligibility.
-describe("buildMaxIterationsExhaustedMessage (BI-F4D3B9E9d)", () => {
-  const anyTools = [{ name: "query_backlog", result: { ok: true } as never }];
-
-  it("says 'unavailable' only when a dispatch actually failed", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "provider-unavailable",
-      executedTools: anyTools,
-    });
-    expect(msg).toContain("My usual AI was unavailable");
-    expect(msg).toContain("query_backlog");
-  });
-
-  it("never claims 'unavailable' when the provider was merely ineligible", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "not-eligible",
-      executedTools: anyTools,
-    });
-    // The exact contradiction with the downgrade banner.
-    expect(msg).not.toContain("was unavailable");
-    expect(msg).toContain("wasn't a fit for this particular request");
-  });
-
-  it("does not tell an owner to connect a provider they already have connected", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "not-eligible",
-      executedTools: anyTools,
-    });
-    // Old copy: "Connecting a stronger provider (Claude, Gemini, or OpenAI)…"
-    expect(msg).not.toMatch(/connecting a stronger provider/i);
-    expect(msg).toMatch(/shorter request/i);
-  });
-
-  it("points at restoring the failed provider when one genuinely failed", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "provider-unavailable",
-      executedTools: anyTools,
-    });
-    expect(msg).toContain("Platform > AI > Providers");
-  });
-
-  it("adds no downgrade lead at all on a healthy-provider exhaustion", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: null,
-      executedTools: anyTools,
-    });
-    expect(msg).not.toMatch(/my usual ai/i);
-    expect(msg).toMatch(/^I made several attempts/);
-    expect(msg).toMatch(/smaller piece/i);
-  });
-
-  it("falls back to a generic work note when no tools ran", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: null,
-      executedTools: [],
-    });
-    expect(msg).toContain("I worked through several attempts");
-  });
-
-  it("always names the safety limit rather than an opaque failure", () => {
-    for (const downgradeReason of ["provider-unavailable", "not-eligible", null] as const) {
-      const msg = buildMaxIterationsExhaustedMessage({ downgradeReason, executedTools: anyTools });
-      expect(msg).toContain("safety limit");
-    }
-  });
-});
 
 describe("buildToolSessionHintMessage — review-fail veto + tool-error notes in the messages tail", () => {
   // BI-56804810: these notes now ride in a per-turn user message (not tool
@@ -636,6 +570,56 @@ describe("runAgenticLoop", () => {
     agentId: "software-engineer",
     threadId: "thread-1",
   };
+
+  // Preserve typed pre-inference causes even after this TaskRun banked reader work.
+  it.each([
+    ["Local provider dispatch deferred: local-ci-queued-capacity-reservation", "capacity", false],
+    ["Provider is overloaded, status: 529", "busy", false],
+    ["required-terminal-writer-not-enforceable: claude-code-cli cannot require record_initiative_evidence", "required-terminal-writer-not-enforceable", true],
+  ])("keeps a pre-inference refusal classified (%s) instead of blaming the writer", async (message, expectedKind, banksReader) => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const deferral = new Error(message);
+    deferral.name = expectedKind === "capacity" ? "LocalProviderCapacityDeferredError" : "Error";
+    if (banksReader) {
+      mockRoute.mockResolvedValueOnce(mockResult({ content: "Read.", toolCalls: [{ id: "r1", name: "search_project_files", arguments: { query: "bound source" } }] })).mockRejectedValueOnce(deferral);
+      vi.mocked(executeTool).mockResolvedValueOnce({ success: true, message: "Bound source" });
+    } else mockRoute.mockRejectedValue(deferral);
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      terminalToolPolicy: {
+        writerToolName: "record_initiative_evidence",
+        readerToolNames: ["search_project_files"],
+        minimumSuccessfulReaderCalls: 1,
+        maximumReaderCalls: 3,
+      },
+    });
+
+    expect(result.failure?.kind).toBe(expectedKind);
+    expect(result.failure?.kind).not.toBe("terminal-writer-missing");
+    expect(result.content).not.toContain("could not be dispatched");
+    expect(result.executedTools).toHaveLength(banksReader ? 1 : 0);
+  });
+
+  it("still blames the writer when the route fails for a reason it cannot classify", async () => {
+    // The unclassified path is unchanged: without a known cause there is nothing
+    // truer to say than that the receipt was not recorded.
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValue(new Error("something entirely unexpected"));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      terminalToolPolicy: {
+        writerToolName: "record_initiative_evidence",
+        readerToolNames: ["read_source_at_version"],
+        minimumSuccessfulReaderCalls: 1,
+        maximumReaderCalls: 3,
+      },
+    });
+
+    expect(result.failure?.kind).toBe("terminal-writer-missing");
+    expect(result.content).toContain("record_initiative_evidence");
+  });
 
   it("points to the real provider surface when no tool-capable endpoint is active", async () => {
     const mockRoute = vi.mocked(routeAndCall);
@@ -1070,7 +1054,6 @@ describe("runAgenticLoop", () => {
       success: true,
       message: "Found files",
     });
-
     await runAgenticLoop({
       ...baseParams,
       taskRunId: "TR-SCHED-TESTRUN",
@@ -1113,13 +1096,14 @@ describe("runAgenticLoop", () => {
       ...baseParams,
       taskRunId: "TR-MCP-TESTRUN",
       apiTokenId: "tok_remote",
+      tokenScope: "write",
     });
-
     expect(governedExecuteTool).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
           taskRunId: "TR-MCP-TESTRUN",
           apiTokenId: "tok_remote",
+          tokenScope: "write",
         }),
       }),
     );

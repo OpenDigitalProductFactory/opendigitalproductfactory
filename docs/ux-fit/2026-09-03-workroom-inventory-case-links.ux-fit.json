@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "reuse the canonical Workspace case-detail route for every Workroom inventory row",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/workrooms/WorkroomInventory.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "pre-existing-route",
+    "measured": {
+      "/ops/workrooms": {
+        "defaultVisibleWords": 203,
+        "leadBandWords": 18,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  },
+  "notes": {
+    "routeMeasurement": "The change replaces only each row link target. It adds no visible words, controls, fields, choices, landmarks, or navigation layers, so the served arrival metrics remain the committed /ops/workrooms baseline.",
+    "fit": "The inventory remains the Platform operations shortcut; the canonical destination stays Workspace case detail. Backlog-bound Workrooms use backlog-item:<BI-*>, while unbound rooms use work-capsule:<WC-*>, matching the route loader's source-of-truth contract.",
+    "failureState": "Rows without a backlog item still resolve to their Work Capsule case instead of constructing a malformed capsule-only URL. The component test covers both link variants.",
+    "aiBoundary": "The link navigates only and never starts coworker work or mutates state."
+  }
+}

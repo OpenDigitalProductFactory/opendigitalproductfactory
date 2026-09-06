@@ -335,3 +335,53 @@ describe("readRegistryReleaseCandidate", () => {
     expect(result).toEqual({ ok: false, reason: "source-revision-invalid" });
   });
 });
+
+describe("registry-unavailable carries the HTTP status", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // `registry-unavailable` is raised from three different non-OK responses and
+  // is also the bounded-fallback reason, so on its own it cannot distinguish a
+  // rate limit from a 5xx or a refused token. A live install logged it twice
+  // with no way to tell which (BI-52C6FE5A).
+  it.each([429, 503])("reports HTTP %i behind registry-unavailable", async (status) => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => new Response("", { status })),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("registry-unavailable");
+    expect(result.detail).toBe(`HTTP ${status}`);
+  });
+
+  it("leaves detail unset when the failure is not an HTTP status", async () => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("registry-unavailable");
+    expect(result.detail).toBeUndefined();
+  });
+});

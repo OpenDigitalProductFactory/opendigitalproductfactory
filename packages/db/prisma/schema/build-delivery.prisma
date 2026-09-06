@@ -418,50 +418,50 @@ model ExternalEvidenceRecord {
 }
 
 model NonProductionEnvironmentLease {
-  id                  String    @id @default(cuid())
-  leaseId             String    @unique
+  id                   String    @id @default(cuid())
+  leaseId              String    @unique
   // Stable identity for one gate attempt. Repeated claims with the same key
   // observe the same queued/admitted row instead of creating polling races.
-  claimKey            String?   @unique
-  environmentKey      String
+  claimKey             String?   @unique
+  environmentKey       String
   // Mirrors "<environmentKey>:<slotKey>" only while admitted. slotKey retains
   // the assigned slot for terminal audit/telemetry; activeKey becomes NULL.
   // The @@unique below makes "at most one active lease per environmentKey" a DB
   // invariant at capacity one (Postgres allows many NULLs). Phase 2 expands the
   // same invariant to independently isolated slot keys.
-  activeKey           String?
-  slotKey             String?
-  status              String    @default("queued")
-  ownerProvider       String
-  ownerSessionId      String
-  purpose             String
-  worktreePath        String?
-  branchName          String?
-  buildId             String?
-  taskRunId           String?
+  activeKey            String?
+  slotKey              String?
+  status               String    @default("queued")
+  ownerProvider        String
+  ownerSessionId       String
+  purpose              String
+  worktreePath         String?
+  branchName           String?
+  buildId              String?
+  taskRunId            String?
   // Typed host-resource admission. Null retains compatibility for preview and
   // local-CI leases created before BI-30EDD4B0.
-  resourceClass       String?
-  expectedMemoryBytes BigInt?
-  ownerPid            Int?     @map("ownerProcessId")
+  resourceClass        String?
+  expectedMemoryBytes  BigInt?
+  ownerPid             Int?      @map("ownerProcessId")
   ownerProcessIdentity String?
   // Null means a legacy singleton-only claimant. Version 1 proves the runner
   // can bind the server-assigned slot manifest before any host mutation.
-  slotManifestVersion Int?
-  url                 String
-  ports               Int[]     @default([])
-  cleanupCommand      String?
-  evidenceRecordId    String?
-  requestedTtlMs      Int       @default(900000)
-  expiresAt           DateTime
-  releasedAt          DateTime?
-  queuedAt            DateTime?
-  admittedAt          DateTime?
-  cancelledAt         DateTime?
-  heartbeatAt         DateTime?
-  phase               String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  slotManifestVersion  Int?
+  url                  String
+  ports                Int[]     @default([])
+  cleanupCommand       String?
+  evidenceRecordId     String?
+  requestedTtlMs       Int       @default(900000)
+  expiresAt            DateTime
+  releasedAt           DateTime?
+  queuedAt             DateTime?
+  admittedAt           DateTime?
+  cancelledAt          DateTime?
+  heartbeatAt          DateTime?
+  phase                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@unique([activeKey])
   @@index([environmentKey, status])
@@ -1082,6 +1082,7 @@ model TaskRun {
   stallEvents          StallEvent[]
   actionEnvelopes      CoworkerActionEnvelope[]
   workrooms            Workroom[]               @relation("WorkroomTaskRun")
+  asyncInferenceOps    AsyncInferenceOp[]        @relation("TaskRunAsyncInferenceOperations")
 
   @@index([userId, status])
   @@index([threadId])

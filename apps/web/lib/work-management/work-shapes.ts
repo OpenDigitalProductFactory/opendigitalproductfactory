@@ -22,6 +22,8 @@
 // admits a coworker anchor, so coworker-owned standing work fits as-is.
 
 import type { WorkroomShapeKey } from "./room-shapes";
+import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
+import { STANDING_SHAPES } from "./standing-operations-shapes";
 
 /** §8.11.1 trigger vocabulary, verbatim and closed. */
 export const WORK_SHAPE_TRIGGER_CLASSES = [
@@ -204,12 +206,16 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
   },
 };
 
+
+/** The full registry: the anchor compliance shape plus the standing operations. */
+const ALL_SHAPES: Record<string, WorkShapeDefinition> = { ...SHAPES, ...STANDING_SHAPES, ...COWORKER_STANDING_SHAPES };
+
 export function listWorkShapes(): WorkShapeDefinition[] {
-  return Object.values(SHAPES);
+  return Object.values(ALL_SHAPES);
 }
 
 export function getWorkShape(key: string): WorkShapeDefinition | null {
-  return SHAPES[key] ?? null;
+  return ALL_SHAPES[key] ?? null;
 }
 
 /** Agent ids that a declared shape names as accountable for at least one stage. */

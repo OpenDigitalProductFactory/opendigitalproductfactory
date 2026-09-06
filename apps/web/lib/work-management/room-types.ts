@@ -9,6 +9,7 @@ import type {
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureView } from "./room-posture";
+import type { WorkroomShapeConformance } from "./workroom-shape-conformance";
 
 export type WorkroomMode = "finite" | "standing";
 
@@ -252,6 +253,8 @@ export interface WorkroomView {
    * default: a surface must say "we don't know" rather than imply a decision.
    */
   posture: WorkroomPostureView | null;
+  /** Executable-shape reconciliation projected for the room at read time. */
+  processOverseer: WorkroomShapeConformance;
   projection: {
     confidence: WorkCaseProjectionConfidence;
     incompleteBoundary: boolean;

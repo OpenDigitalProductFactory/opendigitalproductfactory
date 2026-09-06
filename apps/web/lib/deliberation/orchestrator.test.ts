@@ -217,7 +217,9 @@ describe("orchestrateDeliberation — review pattern", () => {
       decision: "escalate",
       confidence: 0,
     }));
-    expect(mocks.taskRunUpdateMany).toHaveBeenCalledWith(
+    // BI-D208E70C: no dispatcher → the async runner owns completion, so the
+    // orchestrator must NOT settle the bootstrapped TaskRun it just created.
+    expect(mocks.taskRunUpdateMany).not.toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ taskRunId: "taskrun-1" }),
         data: expect.objectContaining({ status: "completed" }),

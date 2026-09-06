@@ -81,6 +81,7 @@ function baseInput(
     substrateReachable: true,
     substrateEmpty: false,
     coordinatorHasProcessCoordinationAuthority: true,
+    coordinatorEligibility: { jsi: "eligible", authorityBinding: "eligible" },
     now: new Date("2026-09-01T00:00:00.000Z"),
     ...extras,
   };
@@ -258,26 +259,43 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
     expect(plan.attentionPrincipalRef).toBe("person:owner");
   });
 
-  it("never executes a governed-decision advance even when the principal is an agent", () => {
-    const governedAgent: WorkShapeDefinitionContract = {
-      ...definition,
-      stages: [
-        {
-          key: "decide",
-          title: "Decide",
-          accountablePrincipalRef: "agent:watcher",
-          advance: { kind: "governed-decision", condition: "sealed", decisionScope: "wwmd" },
-          evidence: ["decision-record"],
-        },
-      ],
-    };
-    const plan = resolveDrivePlan(baseInput({
-      definition: governedAgent,
-      postureLevel: "assertive",
-    }));
+  const governedAgentShape: WorkShapeDefinitionContract = {
+    ...definition,
+    stages: [
+      {
+        key: "decide",
+        title: "Decide",
+        accountablePrincipalRef: "agent:watcher",
+        advance: { kind: "governed-decision", condition: "sealed", decisionScope: "wwmd" },
+        evidence: ["decision-record"],
+      },
+    ],
+  };
+
+  it("does NOT execute a governed agent stage on posture level alone (assertive, no preauthorized boundary → attention)", () => {
+    // Assertive level is not enough; only the explicit preauthorized BOUNDARY drives a governed stage.
+    const plan = resolveDrivePlan(baseInput({ definition: governedAgentShape, postureLevel: "assertive" }));
     expect(plan.action).toBe("attention");
     expect(plan.reason).toBe("governed_decision");
     expect(plan.taskId).toBeNull();
+    expect(plan.agentId).toBeNull();
+  });
+
+  it("EP-4614F35E: DISPATCHES a governed AGENT review stage at full proactivity (preauthorized boundary)", () => {
+    const plan = resolveDrivePlan(baseInput({ definition: governedAgentShape, actionBoundary: "preauthorized" }));
+    expect(plan.action).toBe("dispatch_agent");
+    expect(plan.agentId).toBe("watcher");
+    expect(plan.taskId).not.toBeNull();
+  });
+
+  it("EP-4614F35E: a governed ROLE stage still raises attention even at full proactivity (independence: humans review agent work)", () => {
+    const governedRole: WorkShapeDefinitionContract = {
+      ...definition,
+      stages: [{ ...governedAgentShape.stages[0], accountablePrincipalRef: "role:acceptance-reviewer" }],
+    };
+    const plan = resolveDrivePlan(baseInput({ definition: governedRole, actionBoundary: "preauthorized" }));
+    expect(plan.action).toBe("attention"); // NOT dispatched — a human reviews
+    expect(plan.reason).toBe("governed_decision");
     expect(plan.agentId).toBeNull();
   });
 

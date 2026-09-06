@@ -42,8 +42,58 @@ import {
   classifyLocalCiOverride,
 } from "../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import {
+  LOCAL_CI_SLOT_KEYS,
+  createLocalCiSlotManifest,
+} from "./lib/local-ci-slot-manifest.mjs";
+import { resolveWorktreeContext } from "./pregate-status.mjs";
 
 export { LOCAL_CI_OVERRIDE_REASON_CODES, classifyLocalCiOverride };
+
+/**
+ * BI-5529B5AC. Gate state is written PER SLOT (scripts/lib/local-ci-slot-manifest.mjs):
+ * slot-0 → dpf-local-ci-gate.json, slot-1 → dpf-local-ci-gate-slot-1.json.
+ * This tool used to open the slot-0 file only, so a PASS earned on slot-1 read
+ * as "no evidence" here even while `pregate:status` reported PASS. Choose the
+ * record the way the reader does — a PASS bound to HEAD on ANY slot wins —
+ * then fall back to a recorded override for HEAD, then to slot-0 (the legacy
+ * answer) so the messages below keep their meaning.
+ *
+ * @param {{ headSha: string, records: Array<{ slotKey: string, state: any }>, now?: number }} input
+ * @returns {{ slotKey: string, state: any } | null}
+ */
+export function selectLocalCiStateRecord({ headSha, records, now = Date.now() }) {
+  const usable = (records || []).filter((r) => r && r.state && typeof r.state === "object");
+  if (usable.length === 0) return null;
+  const forHead = usable.filter((r) => headSha && r.state.sha === headSha);
+  const livePass = forHead.find((r) => {
+    if (r.state.gatePassed !== true || r.state.evidencePending === true) return false;
+    const expiry = Date.parse(r.state.expiresAt || "");
+    return !Number.isFinite(expiry) || expiry > now;
+  });
+  if (livePass) return livePass;
+  const override = forHead.find((r) => r.state.skipped && r.state.skipReason);
+  if (override) return override;
+  return usable.find((r) => r.slotKey === LOCAL_CI_SLOT_KEYS[0]) || forHead[0] || usable[0];
+}
+
+function readLocalCiSlotRecords() {
+  const context = resolveWorktreeContext();
+  if (!context) return [];
+  return LOCAL_CI_SLOT_KEYS.map((slotKey) => {
+    const manifest = createLocalCiSlotManifest({
+      slotKey,
+      rootClone: context.rootClone,
+      gitCommonDir: context.gitCommonDir,
+      candidateGitDir: context.candidateGitDir,
+    });
+    try {
+      return { slotKey, state: JSON.parse(readFileSync(manifest.evidence.state, "utf8")) };
+    } catch {
+      return null;
+    }
+  }).filter(Boolean);
+}
 
 // `gh pr checks --json` normalizes every check into a `bucket`:
 //   pass | fail | pending | skipping | cancel
@@ -315,12 +365,13 @@ function fetchPrState(prArg) {
   // only proves anything when pr:health runs from the branch's own worktree;
   // for remote PRs a commit trailer is the durable signal; PR body remains a
   // compatibility fallback for older contributions.
+  // Every slot's record is consulted, not just slot-0 (BI-5529B5AC).
   let stateRecord = null;
   try {
-    const stateFile = execFileSync("git", ["rev-parse", "--git-path", "dpf-local-ci-gate.json"], {
-      encoding: "utf8",
-    }).trim();
-    stateRecord = JSON.parse(readFileSync(stateFile, "utf8"));
+    stateRecord = selectLocalCiStateRecord({
+      headSha: meta.headRefOid,
+      records: readLocalCiSlotRecords(),
+    })?.state ?? null;
   } catch {
     /* no local gate record — attestation/docs-only carry the verdict */
   }

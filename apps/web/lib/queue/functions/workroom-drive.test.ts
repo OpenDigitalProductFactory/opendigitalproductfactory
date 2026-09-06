@@ -45,6 +45,7 @@ function room(over: Partial<WorkroomDriveRoom> = {}): WorkroomDriveRoom {
     reviewDue: false,
     substrateReachable: true,
     substrateEmpty: false,
+    coordinatorEligibility: { jsi: "eligible", authorityBinding: "eligible" },
     ...over,
   };
 }
@@ -90,6 +91,12 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
       workroomDriveTaskId("WC-TEST", "obligation-assurance-watch"),
       workroomDriveTaskId("WC-TEST", "obligation-assurance-watch"),
     ]);
+    expect(fx.persist.mock.calls[0]?.[0]?.snapshot).toMatchObject({
+      conformance: {
+        disposition: "continue",
+        reconciliationKey: expect.stringMatching(/^work-room-conformance:/),
+      },
+    });
   });
 
   it("leaves the stage eligible when a live lease is still held", async () => {
@@ -123,6 +130,17 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     expect(result.dispatched).toBe(0);
     expect(fx.upsertAgentTask).not.toHaveBeenCalled();
     expect(fx.persist.mock.calls[0]?.[0]?.activityKind).toBe("workroom-drive-attention");
+  });
+
+  it("contains delivery notification reconciliation failure after preserving the drive result", async () => {
+    const fx = effects();
+    const reconcileNotifications = vi.fn().mockRejectedValue(new Error("notification unavailable"));
+    await expect(runWorkroomDriveJob(new Date(), {
+      listRooms: async () => [room()],
+      effects: fx,
+      reconcileNotifications,
+    })).resolves.toMatchObject({ scanned: 1, dispatched: 1 });
+    expect(reconcileNotifications).toHaveBeenCalledTimes(1);
   });
 });
 

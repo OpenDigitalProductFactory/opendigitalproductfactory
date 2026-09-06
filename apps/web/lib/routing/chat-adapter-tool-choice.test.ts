@@ -25,6 +25,7 @@ function request(providerId: string, baseUrl: string): AdapterRequest {
     modelId: "review-model",
     plan: plan(providerId),
     provider: { baseUrl, headers: { "Content-Type": "application/json" } },
+    fetchImpl: globalThis.fetch,
     messages: [{ role: "user", content: "Record the assessment." }],
     systemPrompt: "Use the governed writer.",
     tools: [writer],

@@ -85,8 +85,13 @@ upgrade. Nothing is lost by waiting.
 
 ## Recovery And Help
 
-- If an upgrade fails, open the deployment log for the retryable diagnosis, then
-  re-run the upgrade.
+- If an upgrade fails, the status card states the cause in plain language — for
+  example **The server ran out of memory** or **A software download failed** —
+  along with whether re-running is likely to help. Some causes (your changes
+  clashing with the update, uncommitted local edits) will not clear on a retry
+  and say so; those need a decision rather than another attempt.
+- The deployment log remains the full diagnosis behind that summary. Read it
+  when the stated cause is not enough, not to discover what the cause was.
 - If dispatch is indeterminate, leave the action alone while the server
   reconciles the admitted `SUR-*` run. A definite pre-dispatch refusal is shown
   against that same run identity and means no upgrade mutation began.
@@ -102,5 +107,5 @@ upgrade. Nothing is lost by waiting.
 
 - triggering an upgrade outside an approved deployment window
 - treating a failed, rolled-back deployment as if the swap had succeeded
-- re-running an upgrade without first reading the failure diagnosis in the log
+- re-running an upgrade the card has already said a retry will not fix
 - starting expensive local-CI work while the portal reports active quiescence

@@ -23,17 +23,30 @@ import {
   recordInitiativeObjectiveMappingProposal,
 } from "./objective-mapping-repository";
 
-function transactionDb() {
+const baselineRecordedAt = new Date("2026-09-04T12:00:00.000Z");
+
+function transactionDb(evidence = [{
+  id: "E-1",
+  backlogItemId: "row-1",
+  kind: "evidence",
+  recordedAt: new Date("2026-09-04T12:01:00.000Z"),
+  payload: { evidenceKind: "test_pass" },
+}]) {
   return {
     $queryRaw: vi.fn(async () => []),
     backlogItemActivity: {
-      findMany: vi.fn(async () => [{ payload: {
-        baselineId: "baseline-1",
-        supersedesBaselineId: null,
-        artifactDigest: "sha256:design",
-        objectiveStatements: [{ objectiveId: "OBJ-TEST-001" }],
-        acceptanceStatements: [],
-      } }]),
+      findMany: vi.fn(async (query: { where?: { kind?: string } }) => query.where?.kind === "evidence"
+        ? evidence
+        : [{
+            recordedAt: baselineRecordedAt,
+            payload: {
+              baselineId: "baseline-1",
+              supersedesBaselineId: null,
+              artifactDigest: "sha256:design",
+              objectiveStatements: [{ objectiveId: "OBJ-TEST-001" }],
+              acceptanceStatements: [],
+            },
+          }]),
       create: mocks.create.mockImplementation(async ({ data }) => data),
     },
   };
@@ -43,7 +56,8 @@ function proposalArgs() {
   return {
     itemId: "BI-PLATFORM",
     baselineId: "baseline-1",
-    mappings: [{ objectiveId: "OBJ-TEST-001", evidenceRefs: ["verification:unit-1"] }],
+    mappings: [{ objectiveId: "OBJ-TEST-001", evidenceRefs: ["E-1"] }],
+    eligibleEvidenceActivityIds: ["E-1"],
     reason: "Proposed evidence for independent terminal reconciliation.",
     proposerUserId: "user-1",
     proposerAgentId: "agent-1",
@@ -92,10 +106,9 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
   it("records platform-scoped authority with the canonical platform sentinel", async () => {
     const result = await recordInitiativeObjectiveMappingProposal(proposalArgs());
 
-    expect(result).toMatchObject({
-      ok: true,
-      proposal: { authoritySnapshot: { organizationId: "platform" } },
-    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.proposal).toMatchObject({ authoritySnapshot: { organizationId: "platform" } });
     expect(mocks.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         payload: expect.objectContaining({
@@ -103,6 +116,35 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
         }),
       }),
     });
+  });
+
+  it("rejects the live malformed source-document evidence reference before appending", async () => {
+    const args = proposalArgs();
+    args.mappings = [{
+      objectiveId: "OBJ-TEST-001",
+      evidenceRefs: ["docs/superpowers/specs/2026-08-30-some-design.md"],
+    }];
+
+    await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_RECONCILIATION_REQUIRED",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", []],
+    ["foreign", [{ id: "E-1", backlogItemId: "row-other", kind: "evidence", recordedAt: new Date("2026-09-04T12:01:00.000Z"), payload: { evidenceKind: "test_pass" } }]],
+    ["pre-baseline", [{ id: "E-1", backlogItemId: "row-1", kind: "evidence", recordedAt: new Date("2026-09-04T11:59:00.000Z"), payload: { evidenceKind: "test_pass" } }]],
+    ["failing", [{ id: "E-1", backlogItemId: "row-1", kind: "evidence", recordedAt: new Date("2026-09-04T12:01:00.000Z"), payload: { evidenceKind: "test_fail" } }]],
+  ])("rejects %s activity rows even when their ids appear in the binding", async (_label, evidence) => {
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(evidence)));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_RECONCILIATION_REQUIRED",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it("rejects tenant-bound authority for a platform-scoped initiative", async () => {

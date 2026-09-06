@@ -434,11 +434,13 @@ export async function loadLivingBusinessProjection(
   const config = (await db.storefrontConfig.findFirst({
     select: {
       id: true,
+      organizationId: true,
       timezone: true,
       archetype: { select: { archetypeId: true, name: true } },
     },
   })) as {
     id: string;
+    organizationId: string;
     timezone: string;
     archetype: { archetypeId: string; name: string } | null;
   } | null;
@@ -587,6 +589,7 @@ export async function loadLivingBusinessProjection(
     loadArchetypeOutcomeFacts({
       archetypeId,
       storefrontId: config.id,
+      organizationId: config.organizationId,
       since: in90,
       db,
       runtime,

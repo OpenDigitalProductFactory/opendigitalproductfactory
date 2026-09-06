@@ -2,6 +2,10 @@ import type { ActivityContract } from "@/lib/routing/activity-contract";
 import type { ModelClass } from "@/lib/routing/model-card-types";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { RouteDecisionActor } from "@/lib/routing/route-decision-attribution";
+import type {
+  AsyncOperationAuthorityActor,
+  AsyncOperationAuthorityRequest,
+} from "./async-operation-authority";
 
 /** Caller-owned constraints and preferences for canonical routing plus dispatch. */
 export interface RouteAndCallOptions {
@@ -13,6 +17,10 @@ export interface RouteAndCallOptions {
    * so omitting this is the safe default and changes nothing.
    */
   systemPromptInstructionSpans?: string[];
+  /** What each entry of `messages` is — a label per index, never content. */
+  messageOrigins?: readonly import(
+    "@/lib/inference/data-screening/types"
+  ).MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   preferredProviderId?: string;
@@ -54,6 +62,31 @@ export interface RouteAndCallOptions {
   minimumDimensions?: Record<string, number>;
   requiredModelClass?: ModelClass;
   interactionMode?: "sync" | "background";
+  /**
+   * Semantic authority for a durable async route. The server resolves this to
+   * the exact TaskRun/Workroom row; callers cannot pass an internal scope key.
+   */
+  durableAsyncOperation?: {
+    request: AsyncOperationAuthorityRequest;
+    actor: AsyncOperationAuthorityActor;
+    /** Closed callers can constrain the selected plan before durable admission. */
+    expectedExecution?: {
+      providerId: string;
+      contractFamily: string;
+      executionAdapter: "async";
+      explorationMode: "champion";
+      plans: readonly {
+        recipeId: string;
+        modelId: string;
+        maxTokens: number;
+        providerSettings: Readonly<Record<string, unknown>>;
+        toolPolicy: Readonly<Record<string, unknown>>;
+        responsePolicy: Readonly<Record<string, unknown>>;
+      }[];
+    };
+    /** The closed caller persists its TaskRun projection before the first wake. */
+    deferInitialWake?: boolean;
+  };
   threadId?: string;
   maxDurationMs?: number;
   persistDecision?: boolean;

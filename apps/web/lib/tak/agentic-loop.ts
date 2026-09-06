@@ -2,6 +2,8 @@
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
 import { routeAndCall, type RouteAndCallOptions, type RoutedInferenceResult } from "@/lib/routed-inference";
+import type { DowngradeCause } from "@/lib/inference/downgrade-explanation";
+import type { MessageOrigin } from "@/lib/inference/data-screening/types";
 import {
   detectRepeatedToolCall,
   detectApproachingRepeatedToolCall,
@@ -532,45 +534,8 @@ export function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]):
   ].join(" ");
 }
 
-/**
- * Plain-English message for when the loop hits MAX_ITERATIONS without
- * producing a text-only response. Replaces the prior generic "I ran into
- * a limit while working on this. Try breaking your request into smaller
- * steps." which obscured the actual cause (usually: preferred provider
- * unavailable → fallback model overwhelmed by the tool surface). Respects
- * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
- *
- * BI-F4D3B9E9(d): this branched on `downgraded`, which conflated "a dispatch
- * failed" with "nothing was eligible" — so it printed "My usual AI was
- * unavailable" directly beneath a banner that had just said "your configured
- * provider is active but wasn't eligible". One of the two was always wrong.
- * It now branches on the routed `downgradeReason` so both statements describe
- * the same cause, and it no longer tells an owner to connect a provider they
- * already have connected.
- */
-export function buildMaxIterationsExhaustedMessage(params: {
-  downgradeReason: "provider-unavailable" | "not-eligible" | null;
-  executedTools: ExecutedTool[];
-}): string {
-  const toolSummary = summarizeExecutedToolNames(params.executedTools);
-  const downgradeLead = params.downgradeReason === "provider-unavailable"
-    ? "My usual AI was unavailable, so I worked through a backup that wasn't able to keep up. "
-    : params.downgradeReason === "not-eligible"
-      ? "My usual AI wasn't a fit for this particular request, so I worked through a backup that wasn't able to keep up. "
-      : "";
-  const workNote = toolSummary
-    ? `I made several attempts (${toolSummary}) but couldn't complete a final answer before hitting my safety limit.`
-    : "I worked through several attempts but couldn't complete a final answer before hitting my safety limit.";
-  // Honest copy (G2, 2026-05-23): no false re-route promises. Point at the fix
-  // that matches the actual cause — an owner whose providers are all connected
-  // and merely ineligible must not be told to connect one (BI-F4D3B9E9(d)).
-  const suggestion = params.downgradeReason === "provider-unavailable"
-    ? "Reconnecting or restoring that provider at Platform > AI > Providers unlocks the work I'm built for. Otherwise, try a narrower question."
-    : params.downgradeReason === "not-eligible"
-      ? "A shorter request usually routes back to the stronger model. The note above says what ruled it out."
-      : "Try the same question again, or break it into a smaller piece.";
-  return `${downgradeLead}${workNote} ${suggestion}`;
-}
+import { buildMaxIterationsExhaustedMessage } from "./max-iterations-message";
+export { buildMaxIterationsExhaustedMessage };
 
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
@@ -980,7 +945,6 @@ function truncateMessageContent(content: string, maxChars: number, label: string
   return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
 }
 
-
 function compactAgenticMessages(
   messages: ChatMessage[],
   maxContextTokens?: number | null,
@@ -1048,6 +1012,8 @@ export type RunAgenticLoopParams = {
   systemPrompt: string;
   /** Instruction spans in `systemPrompt`; see RouteAndCallOptions (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
+  /** What each `chatHistory` entry is — labels only (BI-40EF7C44). */
+  messageOrigins?: readonly MessageOrigin[];
   sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
@@ -1143,6 +1109,7 @@ export type RunAgenticLoopParams = {
    * call records the same token id in ToolExecution audit rows.
    */
   apiTokenId?: string | null;
+  tokenScope?: "read" | "write" | "admin";
   /**
    * Governed Hermes learning Slice 1: active coworker skill for this run.
    * When set, every governed tool call records the same skillId in
@@ -1172,7 +1139,6 @@ export type RunAgenticLoopParams = {
   enableExecutionPlan?: boolean;
   /** Bounded evidence-reader surface with a reserved governed writer step. */
   terminalToolPolicy?: TerminalToolPolicy;
-
 };
 
 export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<AgenticResult> {
@@ -1203,6 +1169,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     chatHistory,
     systemPrompt,
     systemPromptInstructionSpans,
+    messageOrigins,
     sensitivity,
     tools,
     toolsForProvider,
@@ -1294,6 +1261,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const routeOptions: RouteAndCallOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
+    ...(messageOrigins?.length ? { messageOrigins } : {}),
     taskType: turnRoute.taskType,
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
@@ -1402,21 +1370,16 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     proposal: null,
     ...extra,
   });
+  const terminalFailure = (message: string, source = lastResult): AgenticResult =>
+    completeResult(message, source, { failure: { kind: "terminal-writer-missing", message } });
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
   let ctxPeakTokens = 0; // Peak assembled context (est. tokens) this turn — dumb-zone gauge.
   let resolvedMaxContextTokens: number | null = null; // BI-9679EB1A: learned from the first dispatch; sizes compaction + the gauge to the real window.
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
-  // Grant-starvation circuit breaker: an agent whose profile lacks the grants
-  // for the tools it was handed keeps emitting tool calls that all return
-  // `forbidden_grant`. Without this, the loop burns the full MAX_ITERATIONS /
-  // MAX_DURATION with executedTools=0 (observed 2026-07-06: build-architect on
-  // a build-pipeline thread spun ~500s, iter=200, zero tools executed). The
-  // repetition detector doesn't fire because the model keeps trying DIFFERENT
-  // forbidden tools; the nudge cap (1) is spent after the first iteration. We
-  // count consecutive forbidden_grant rejections and reset on ANY tool success,
-  // so a legitimately mixed grant surface (some tools allowed) never trips it.
+  // Stop grant-starved agents before they burn the full turn trying different
+  // forbidden tools. Reset on any success so mixed grant surfaces remain valid.
   let forbiddenGrantStreak = 0;
   const forbiddenGrantTools = new Set<string>(); // names seen rejected, for the blocked message
   let previousResponseId: string | undefined; // Responses API conversation chaining
@@ -1702,12 +1665,32 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
       if (params.terminalToolPolicy) {
+        // BI-8B8731EE. A THROW from routeAndCall means the model never ran, so
+        // this is not the reviewer declining its writer contract.
+        //
+        // `failure` above already classifies why. Preserve an adapter capability
+        // refusal on every required-writer call; preserve RESOURCE waits only
+        // before any tool work, because the platform already knows what
+        // to do with it: `preInferenceResourceWait` projects a `provider-capacity`
+        // wait that resumes on the same TaskRun. Rewriting it to
+        // `terminal-writer-missing` made that handling unreachable for every
+        // governed reviewer route and reported a reservation that clears itself
+        // in ~195s as a failure of the writer contract.
+        //
+        // Measured cost of the substitution: five dispatches spent auditing
+        // grants, autonomy tiers and tool surfaces that were correct throughout.
+        // Capacity/busy is preserved only before tool work, mirroring
+        // `preInferenceResourceWait`. Once a reader runs, its work is banked and
+        // the resumable writer wait is better than a resource wait. An adapter
+        // refusal is still pre-inference for the current writer call, though,
+        // so preserve it regardless of completed reader work.
+        if (failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
+          return completeResult(failure.message, null, { failure });
+        }
         const message = routeOptions.toolChoice === "required"
           ? `The required governed writer ${params.terminalToolPolicy.writerToolName} could not be dispatched. The same TaskRun remains resumable. No receipt was created.`
           : `The governed review route failed before ${params.terminalToolPolicy.writerToolName} could be recorded. The same TaskRun remains resumable. No receipt was created.`;
-        return completeResult(message, null, {
-          failure: { kind: "terminal-writer-missing", message },
-        });
+        return terminalFailure(message, null);
       }
       return {
         content: failure.message,
@@ -1780,7 +1763,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           continue;
         }
         if (exit.kind === "input-required") {
-          return completeResult(exit.message, result, { failure: { kind: "terminal-writer-missing", message: exit.message } });
+          return terminalFailure(exit.message, result);
         }
       }
 
@@ -2536,6 +2519,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             threadId,
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
+            tokenScope: params.tokenScope,
             skillId: tracker.activeSkillId ?? undefined,
             // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
             // to the tool surface (actions/agent-coworker.ts). Flag the turn so
@@ -2586,7 +2570,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
 
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
       if (toolResult.success && params.terminalToolPolicy?.readerToolNames.includes(tc.name)) {
-        terminalToolSurfaceOverride = null;
+        terminalToolSurfaceOverride = null; terminalToolNudges = 0;
       }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
@@ -2626,6 +2610,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     `executedTools=${executedTools.length}. ` +
     `This may indicate the model needs more room or is stuck in a loop.`,
   );
+  if (params.terminalToolPolicy) {
+    const terminalExit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, Math.max(1, terminalToolNudges));
+    if (terminalExit.kind === "input-required") {
+      return terminalFailure(terminalExit.message);
+    }
+  }
   const fallbackContent = lastResult?.content?.trim() ?? "";
   const fallbackIsRawToolUse = fallbackContent.length > 0 && extractToolCalls(fallbackContent).length > 0;
   const fallbackIsFabricated = detectFabrication(
@@ -2643,6 +2633,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // that predate the field fall back to the unavailable reading only when they
     // actually reported a downgrade.
     downgradeReason: lastResult?.downgradeReason ?? (downgraded ? "provider-unavailable" : null),
+    // The same binding cause the banner named, so the advice below it addresses
+    // the constraint the owner was actually told about (BI-FB184D69).
+    cause: lastResult?.downgradeCause ?? null,
     executedTools,
   });
   return {

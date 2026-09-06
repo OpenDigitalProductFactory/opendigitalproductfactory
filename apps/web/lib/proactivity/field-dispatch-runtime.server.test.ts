@@ -43,16 +43,29 @@ describe("buildUserAwareFieldDispatchNotificationProposals", () => {
   });
 
   it("applies acknowledged user proactivity overrides to running-late field-dispatch proposals", async () => {
+    // BI-87C9C91C: the override reaches the proposal through the ROUTE CONTEXT.
+    // The agent-scoped fact alongside it is legacy and must be inert — a
+    // coworker identity no longer carries a proactivity preference.
     mocks.prisma.userFact.findMany.mockResolvedValue([
       {
-        id: "fact-quiet-dispatcher",
-        key: "aiCoworkerProactivity:agent:dispatcher",
+        id: "fact-quiet-storefront",
+        key: "aiCoworkerProactivity:route-context:/storefront",
         value: JSON.stringify({
-          scopeKey: "agent:dispatcher",
+          scopeKey: "route-context:/storefront",
           level: "quiet",
           acknowledgedAt: "2026-06-30T18:30:00.000Z",
         }),
         createdAt: new Date("2026-06-30T18:30:00.000Z"),
+      },
+      {
+        id: "fact-legacy-dispatcher",
+        key: "aiCoworkerProactivity:agent:dispatcher",
+        value: JSON.stringify({
+          scopeKey: "agent:dispatcher",
+          level: "assertive",
+          acknowledgedAt: "2026-06-30T18:30:00.000Z",
+        }),
+        createdAt: new Date("2026-06-30T18:35:00.000Z"),
       },
     ]);
     const actions = planDepartureActions({
@@ -80,17 +93,23 @@ describe("buildUserAwareFieldDispatchNotificationProposals", () => {
         proactivity: {
           resolvedLevel: "quiet",
           preferenceSource: "user-override",
-          userOverrideScopeKey: "agent:dispatcher",
+          userOverrideScopeKey: "route-context:/storefront",
           actionBoundary: "advise",
         },
       },
     });
     expect(late?.parameters.proactivity.evidenceRefs).toEqual(
       expect.arrayContaining([
-        { kind: "user-fact", id: "fact-quiet-dispatcher" },
+        { kind: "user-fact", id: "fact-quiet-storefront" },
         { kind: "dispatch-event", id: "running-late" },
       ]),
     );
+    // The legacy agent-scoped fact is newer and asserts the opposite level; if it
+    // were still consulted it would win. It must not appear at all.
+    expect(late?.parameters.proactivity.evidenceRefs).not.toContainEqual({
+      kind: "user-fact",
+      id: "fact-legacy-dispatcher",
+    });
   });
 
   it("carries active proactivity cooldown facts into field-dispatch proposal metadata", async () => {

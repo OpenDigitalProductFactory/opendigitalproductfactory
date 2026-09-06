@@ -218,7 +218,7 @@ describe("loadInstallationIdentityView", () => {
     const { store, db } = configStore({ [OPERATING_INTENT_CONFIG_KEY]: CONFIRMED_DEV_INTENT }, [
       {
         linkId: "FL-0001",
-        linkState: "active",
+        linkState: "trusted",
         relationshipPreset: "same-organization",
         peerLabel: "dpf-prod-acme",
         revokedAt: null,

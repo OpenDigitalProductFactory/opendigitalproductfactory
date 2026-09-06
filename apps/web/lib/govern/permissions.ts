@@ -47,6 +47,8 @@ export type CapabilityKey =
   | "manage_compliance"
   | "view_finance"
   | "manage_finance"
+  | "view_animal_welfare"
+  | "operate_animal_welfare"
   | "operate_marketing"
   | "publish_marketing"
   | "manage_tool_evaluations"
@@ -89,6 +91,8 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_compliance:           { roles: ["HR-000", "HR-200"] },
   view_finance:                { roles: ["HR-000", "HR-200"] },
   manage_finance:              { roles: ["HR-000", "HR-200"] },
+  view_animal_welfare:         { roles: ["HR-000", "HR-500"] },
+  operate_animal_welfare:      { roles: ["HR-000", "HR-500"] },
   operate_marketing:           { roles: ["HR-000", "HR-200", "HR-300"] },
   publish_marketing:           { roles: ["HR-000", "HR-200"] },
   manage_tool_evaluations:     { roles: ["HR-000", "HR-300"] },

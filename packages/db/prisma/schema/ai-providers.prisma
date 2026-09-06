@@ -1,23 +1,23 @@
 model ModelProvider {
-  id                       String                    @id @default(cuid())
-  providerId               String                    @unique
+  id                       String                      @id @default(cuid())
+  providerId               String                      @unique
   name                     String
   families                 Json
-  status                   String                    @default("unconfigured")
-  updatedAt                DateTime                  @updatedAt
+  status                   String                      @default("unconfigured")
+  updatedAt                DateTime                    @updatedAt
   authHeader               String?
   computeWatts             Float?
   cliEngine                String? // "claude" | "codex" | "grok" | "opencode" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable). "opencode" = local OpenAI-compatible endpoint (Docker Model Runner / Ollama).
-  costModel                String                    @default("token")
+  costModel                String                      @default("token")
   electricityRateKwh       Float?
-  enabledFamilies          Json                      @default("[]")
+  enabledFamilies          Json                        @default("[]")
   endpoint                 String?
   inputPricePerMToken      Float?
   outputPricePerMToken     Float?
-  category                 String                    @default("direct")
+  category                 String                      @default("direct")
   baseUrl                  String?
-  authMethod               String                    @default("api_key")
-  supportedAuthMethods     Json                      @default("[\"api_key\"]")
+  authMethod               String                      @default("api_key")
+  supportedAuthMethods     Json                        @default("[\"api_key\"]")
   consoleUrl               String?
   docsUrl                  String?
   billingLabel             String?
@@ -26,34 +26,34 @@ model ModelProvider {
   oauthClientId            String?
   oauthRedirectUri         String?
   costPerformanceNotes     String?
-  endpointType             String                    @default("llm")
+  endpointType             String                      @default("llm")
   serviceKind              String?
-  sensitivityClearance     String[]                  @default([])
-  capabilityTier           String                    @default("basic")
-  costBand                 String                    @default("free")
-  taskTags                 String[]                  @default([])
+  sensitivityClearance     String[]                    @default([])
+  capabilityTier           String                      @default("basic")
+  costBand                 String                      @default("free")
+  taskTags                 String[]                    @default([])
   mcpTransport             String?
   maxConcurrency           Int?
-  catalogVisibility        String                    @default("visible")
+  catalogVisibility        String                      @default("visible")
   catalogEntry             Json?
   avgLatencyMs             Float?
-  codegen                  Int                       @default(50)
-  contextRetention         Int                       @default(50)
-  conversational           Int                       @default(50)
-  instructionFollowing     Int                       @default(50)
+  codegen                  Int                         @default(50)
+  contextRetention         Int                         @default(50)
+  conversational           Int                         @default(50)
+  instructionFollowing     Int                         @default(50)
   maxContextTokens         Int?
   maxOutputTokens          Int?
-  modelRestrictions        String[]                  @default([])
-  profileSource            String                    @default("seed")
-  reasoning                Int                       @default(50)
-  recentFailureRate        Float                     @default(0)
+  modelRestrictions        String[]                    @default([])
+  profileSource            String                      @default("seed")
+  reasoning                Int                         @default(50)
+  recentFailureRate        Float                       @default(0)
   retiredAt                DateTime?
   retiredReason            String?
-  structuredOutput         Int                       @default(50)
-  supportsStreaming        Boolean                   @default(true)
-  supportsStructuredOutput Boolean                   @default(false)
-  supportsToolUse          Boolean                   @default(false)
-  toolFidelity             Int                       @default(50)
+  structuredOutput         Int                         @default(50)
+  supportsStreaming        Boolean                     @default(true)
+  supportsStructuredOutput Boolean                     @default(false)
+  supportsToolUse          Boolean                     @default(false)
+  toolFidelity             Int                         @default(50)
   userFacingDescription    Json?
   authMode                 String?
   credentialOwnerMode      String?
@@ -61,6 +61,7 @@ model ModelProvider {
   financeProfile           AiProviderFinanceProfile?
   capacityStatus           ProviderCapacityStatus?
   connections              AiProviderConnection[]
+  clearanceOverrides       ProviderClearanceOverride[]
 }
 
 // A configured account/channel for a provider catalog entry. Contract and
@@ -434,14 +435,36 @@ model CustomEvalDimension {
 
 // ─── EP-INF-009d: Async/Long-Running Inference Operations ──────────
 model AsyncInferenceOp {
-  id             String  @id @default(cuid())
-  providerId     String
-  modelId        String
-  operationId    String? // Provider's operation/interaction ID
-  contractFamily String
-  requestContext Json // Serialized request params
+  id                String  @id @default(cuid())
+  providerId        String
+  modelId           String
+  operationId       String? // Provider's operation/interaction ID
+  contractFamily    String
+  requestContext    Json // Screened, credential-free request params
 
-  status String @default("pending") // pending | running | completed | failed | cancelled | expired
+  // Stored as text so the additive migration remains compatible with the
+  // pre-lifecycle Prisma client. The database CHECK constraint and the shared
+  // application parser enforce the closed lifecycle vocabulary.
+  status String @default("pending")
+
+  // identityVersion=0 preserves legacy rows. Every durable-worker admission is
+  // version 1 and must bind exactly one TaskRun or Workroom before enqueue.
+  identityVersion   Int     @default(0)
+  authorityScopeKey String?
+  requestKey        String?
+  requestDigest     String?
+  bindingDigest     String?
+  taskRunId         String?
+  workroomId        String?
+
+  checkpointSequence Int @default(0)
+  transitionSequence Int @default(0)
+  startClaimFence    Int @default(0)
+  startAttemptedAt   DateTime?
+  leaseOwner         String?
+  leaseExpiresAt     DateTime?
+  cancelRequestedAt  DateTime?
+  nextPollAt         DateTime?
 
   resultText   String? @db.Text // Final text result
   resultData   Json? // Full structured result
@@ -451,6 +474,7 @@ model AsyncInferenceOp {
   progressMessage String?
 
   createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   startedAt   DateTime?
   completedAt DateTime?
   expiresAt   DateTime // Hard deadline
@@ -458,9 +482,35 @@ model AsyncInferenceOp {
   threadId      String? // Event bus key for SSE progress
   callerContext Json? // Opaque caller context
 
+  taskRun       TaskRun? @relation("TaskRunAsyncInferenceOperations", fields: [taskRunId], references: [id], onDelete: Restrict)
+  workroom      Workroom? @relation("WorkroomAsyncInferenceOperations", fields: [workroomId], references: [id], onDelete: Restrict)
+  transitions   AsyncInferenceOperationTransition[]
+
   @@index([status])
   @@index([providerId, status])
   @@index([threadId])
+  @@index([taskRunId, status])
+  @@index([workroomId, status])
+  @@index([status, nextPollAt])
+  @@index([leaseExpiresAt])
+  @@index([authorityScopeKey, createdAt, id])
+  @@unique([authorityScopeKey, requestKey])
+}
+
+model AsyncInferenceOperationTransition {
+  id               String   @id @default(cuid())
+  operationId      String
+  sequence         Int
+  status           String
+  checkpoint       Json     @default("{}")
+  occurredAt       DateTime @default(now())
+  deliveryAttempts Int      @default(0)
+  deliveredAt      DateTime?
+  operation        AsyncInferenceOp @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@unique([operationId, sequence])
+  @@index([operationId, occurredAt])
+  @@index([deliveredAt, occurredAt])
 }
 
 model AiProviderFinanceProfile {

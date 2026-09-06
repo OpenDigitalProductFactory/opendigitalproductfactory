@@ -124,6 +124,15 @@ action; it never fabricates a critical code finding. GitHub/CI correlation is
 written to the same evidence streams as `semantic-change-review.outcome`, and
 inconclusive samples are excluded from precision and unique-yield denominators.
 
+Nor can a reviewer pass a change it could not read. Where the change is not
+present in what the reviewer can see, it answers `cannot-verify`, which is
+recorded as `inconclusive` with reason `reviewer-could-not-verify-change` and
+rides the same retry path. Inability to review is never a code finding: a
+finding about the code asserts the code was read, and `pass` or `fail` asserts
+that THIS change was reviewed. A reviewer that reports the change as absent
+while still answering `pass` is corrected to `inconclusive` rather than
+published (BI-82902891).
+
 ## Design grounding
 
 - Existing specs/plans reviewed: the shared Change Reviewer control plan and

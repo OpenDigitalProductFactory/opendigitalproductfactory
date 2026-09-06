@@ -514,3 +514,57 @@ export function formatClassifiedExcerpt(
     `---`;
   return `${head}\n${rawLog}`;
 }
+
+/**
+ * Longest operator-facing failure reason we persist on a run row. The column is
+ * a status line, not a log: the full output already lives in `failureLog`.
+ */
+export const FAILURE_REASON_MAX = 200;
+
+/** A structured leading token, matching the `class: detail` shape skip reasons use. */
+const STRUCTURED_PREFIX = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:_[a-z0-9-]+)*):/;
+
+/**
+ * Derive a short, operator-readable reason for a failed self-upgrade run.
+ *
+ * Why this exists: `skipRun` has always written a structured `reason`
+ * ("activity-in-flight: coworker.reasoning-loop") that the Upgrade Center
+ * renders in plain language, while `failRun` wrote only `failureLog` — so
+ * every FAILED run showed the operator nothing but a raw Docker log behind a
+ * tooltip. Measured on this install: 55 of 55 failed runs had no reason, and
+ * that produced two multi-day invisible outages (four consecutive daily
+ * failures 2026-07-26..29, and the Git-LFS breakage of 2026-08-29).
+ *
+ * The classification this returns is not new judgement: `failRun` already
+ * classified the same log to fingerprint the corrective BI and then discarded
+ * the result. This keeps ONE classification and lets the run row carry it too.
+ *
+ * Never throws — a reason is diagnostic garnish, and must not be able to fail
+ * the write that records the failure itself.
+ */
+export function deriveFailureReason(log: string): string {
+  const text = (log ?? "").trim();
+  if (!text) return "unknown";
+
+  let className: BuildFailureClass = "unknown";
+  try {
+    className = classifyBuildFailure({ log: text }).class;
+  } catch {
+    // Fall through to the structured-prefix path below.
+  }
+  if (className !== "unknown") return className;
+
+  // No known class. The pipeline's own wrappers (`promoter-readiness-failed:`,
+  // `lfs-unmaterialized:`, `merge-conflict:`) are already the right shape, so
+  // prefer the first structured line over a bare "unknown".
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const match = STRUCTURED_PREFIX.exec(line);
+    if (match) return line.slice(0, FAILURE_REASON_MAX);
+    break;
+  }
+
+  const firstLine = text.split("\n").find((l) => l.trim().length > 0)?.trim() ?? "";
+  return `unknown: ${firstLine}`.slice(0, FAILURE_REASON_MAX);
+}

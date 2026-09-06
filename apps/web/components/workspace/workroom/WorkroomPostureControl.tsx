@@ -16,7 +16,7 @@ import { WORKROOM_SHAPE_KEYS, type WorkroomShapeKey } from "@/lib/work-managemen
  * existed and did not.
  *
  * Until this shipped, pace and priority were settable ONLY per coworker
- * (CoworkerPriorityControl, CoworkerProactivitySetting) — which answers "how
+ * (CoworkerPriorityControl) — which answers "how
  * does this coworker behave", not "how does work in THIS room behave". The room
  * displayed a posture nobody could change from the portal.
  *

@@ -162,6 +162,31 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     expect(gitUtils.gitShow).toHaveBeenCalledWith({ ref: "v1.0.0", path: "apps/web/x.ts" });
   });
 
+  it("read_source_at_version default page carries a 25 KB design spec in three reads or fewer (BI-8B8731EE)", async () => {
+    // A governed reviewer has six bounded reads before it must write its
+    // receipt. The old 40-line / 3,000-char default spent all six on a
+    // 25 KB spec and never reached the writer.
+    const line = "- gate row: requirement, evidence, reviewer, stop condition, budget.\n";
+    const content = line.repeat(Math.ceil(25_000 / line.length));
+    gitUtils.gitShow.mockResolvedValue({ content });
+    let cursor: string | undefined;
+    let reads = 0;
+    let assembled = "";
+    do {
+      const page = await versionHistoryPack.handlers.read_source_at_version(
+        { path: "docs/superpowers/specs/big.md", ...(cursor ? { cursor } : {}) },
+        "u1",
+      );
+      reads += 1;
+      const data = page.data as { content: string; hasMore: boolean; nextCursor: string | null };
+      assembled += data.content;
+      cursor = data.nextCursor ?? undefined;
+      if (!data.hasMore) break;
+    } while (reads < 10);
+    expect(assembled).toBe(content);
+    expect(reads).toBeLessThanOrEqual(3);
+  });
+
   it("read_source_at_version cursor makes progress through a line longer than maxChars", async () => {
     gitUtils.gitShow.mockResolvedValue({ content: "abcdefghij\nlast\n" });
     const first = await versionHistoryPack.handlers.read_source_at_version(

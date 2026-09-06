@@ -168,6 +168,64 @@ describe("updateProviderConnectionPosture", () => {
     });
   });
 
+  it("preserves region entitlement and evidence when the current setup has no region requirement", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      id: "connection-db-1",
+      entitlements: { enabledRegions: ["us"], regionalProcessing: true },
+      evidenceStatus: "operator-attested",
+    });
+    mockPrisma.aiProviderConnection.update.mockResolvedValue({});
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "inactive" });
+
+    await updateProviderConnectionPosture({
+      providerId: "zai",
+      accountClass: "enterprise",
+      noTraining: true,
+    });
+
+    expect(mockPrisma.aiProviderConnection.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        entitlements: expect.objectContaining({ enabledRegions: ["us"], regionalProcessing: true }),
+      }),
+    }));
+    expect(mockRecordProviderTrustEvidence).not.toHaveBeenCalledWith(expect.objectContaining({ claimKey: "enabled-regions" }));
+    expect(mockSupersedeProviderTrustEvidenceClaim).not.toHaveBeenCalledWith(expect.objectContaining({ claimKey: "enabled-regions" }));
+  });
+
+  it("records a normalized direct-provider region guarantee on the exact connection", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      id: "connection-db-1",
+      entitlements: {},
+      evidenceStatus: "unreviewed",
+    });
+    mockPrisma.aiProviderConnection.update.mockResolvedValue({});
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "inactive" });
+
+    await updateProviderConnectionPosture({
+      providerId: "zai",
+      accountClass: "enterprise",
+      noTraining: true,
+      enabledRegions: [" US ", "us"],
+      regionalProcessing: true,
+    });
+
+    expect(mockPrisma.aiProviderConnection.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        entitlements: expect.objectContaining({ enabledRegions: ["us"], regionalProcessing: true }),
+      }),
+    }));
+    expect(mockRecordProviderTrustEvidence).toHaveBeenCalledWith(expect.objectContaining({
+      providerConnectionDbId: "connection-db-1",
+      claimKey: "regional-processing",
+      assertedValue: true,
+    }));
+    expect(mockRecordProviderTrustEvidence).toHaveBeenCalledWith(expect.objectContaining({
+      providerConnectionDbId: "connection-db-1",
+      claimKey: "enabled-regions",
+      assertedValue: ["us"],
+    }));
+  });
+
   it("records OpenRouter controls on the exact connection without creating enterprise proof", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
       entitlements: {},

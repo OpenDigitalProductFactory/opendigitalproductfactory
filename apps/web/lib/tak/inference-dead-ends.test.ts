@@ -176,6 +176,34 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
     expect(outcome.message).toMatch(/model.*unavailable|available model/i);
   });
 
+  it("preserves an unenforceable required writer before the generic all-endpoints branch", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      'All endpoints failed for initiative-review. Attempts: [{"endpointId":"codex","error":"required-terminal-writer-not-enforceable: codex-cli cannot require record_initiative_evidence"}]',
+      1,
+    );
+
+    expect(outcome.kind).toBe("required-terminal-writer-not-enforceable");
+    expect(outcome.message).toMatch(/inference was not started|model was not run/i);
+    expect(outcome.message).toMatch(/required governed.*writer|required tool choice/i);
+    expect(outcome.message).not.toBe(providersBusyHandoff());
+  });
+
+  it.each([
+    ["Provider is overloaded, status: 529", "busy"],
+    ["Local provider dispatch deferred: local-ci-active-capacity-reservation", "capacity"],
+  ])("does not let an earlier CLI capability miss hide a later enforcing adapter refusal (%s)", (lastError, kind) => {
+    const outcome = describeToolRouteFailureOutcome(
+      `All endpoints failed for initiative-review. Attempts: ${JSON.stringify([
+        { endpointId: "codex", error: "required-terminal-writer-not-enforceable: codex-cli cannot require the writer" },
+        { endpointId: "enforcing", error: lastError },
+      ])}`,
+      1,
+    );
+
+    expect(outcome.kind).toBe(kind);
+    expect(outcome.kind).not.toBe("required-terminal-writer-not-enforceable");
+  });
+
   it("keeps the bounded reconciliation signal classified as model-missing", () => {
     const outcome = describeToolRouteFailureOutcome(
       "Provider model inventory changed for docker-model-runner. Attempts: []",
@@ -184,6 +212,49 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
 
     expect(outcome.kind).toBe("model-missing");
     expect(outcome.message).not.toMatch(/busy|rate-limit/i);
+  });
+
+  it("classifies an all-endpoint network outage as a transient provider wait", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"openai","error":"connect ECONNREFUSED 10.0.0.8:443"}]',
+      0,
+    );
+
+    expect(outcome.kind).toBe("busy");
+    expect(outcome.message).toBe(providersBusyHandoff());
+  });
+
+  it("ignores a non-dispatched CLI capability miss when every enforcing adapter has a network outage", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      `All endpoints failed for initiative-review. Attempts: ${JSON.stringify([
+        { endpointId: "claude-cli", error: "required-terminal-writer-not-enforceable: claude-cli cannot require the writer" },
+        { endpointId: "enforcing-http", error: "Network error calling enforcing-http: fetch failed" },
+      ])}`,
+      1,
+    );
+
+    expect(outcome.kind).toBe("busy");
+    expect(outcome.message).toBe(providersBusyHandoff());
+  });
+
+  it.each([
+    [
+      "mixed structural and network failures",
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"local","error":"provider returned an unrecognised response"}]',
+      "unknown",
+    ],
+    [
+      "authentication failures",
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"openai","error":"authentication failed"}]',
+      "credentials",
+    ],
+    [
+      "context failures",
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"local","error":"request exceeds the available context size"}]',
+      "context",
+    ],
+  ])("does not turn %s into a provider wait", (_label, message, kind) => {
+    expect(describeToolRouteFailureOutcome(message, 0).kind).toBe(kind);
   });
 });
 
@@ -210,13 +281,23 @@ describe("the capacity reply names the window when it knows one", () => {
 
   it("puts the window in the step, not in a separate sentence to skim past", () => {
     const message = localCapacityHeldHandoff(false, new Date("2026-08-23T20:17:00.000Z"), now);
-    expect(message).toMatch(/^1\. Send the message again in about 3 minutes/m);
+    expect(message).toMatch(/^1\. Send the message again in about 3 minutes at the earliest/m);
     expect(message).toMatch(/Nothing is misconfigured/);
   });
 
-  it("falls back to the generic wait when no window is known", () => {
+  // BI-EBE25715: with no window we do not know how long the host stays
+  // reserved, and a queue behind the current claim can make it indefinite.
+  // Saying "a couple of minutes" was a promise the platform cannot keep.
+  it("admits it cannot tell how long when no window is known", () => {
     const message = localCapacityHeldHandoff(false, null, now);
-    expect(message).toMatch(/^1\. Give it a couple of minutes/m);
+    expect(message).toMatch(/I can't tell from here how long that will be/);
+    expect(message).not.toMatch(/couple of minutes/);
+  });
+
+  it("frames a known window as the EARLIEST it could free, not a promise", () => {
+    const message = localCapacityHeldHandoff(false, new Date("2026-08-23T20:17:00.000Z"), now);
+    expect(message).toMatch(/at the earliest/);
+    expect(message).toMatch(/nothing else is waiting for this machine/);
   });
 
   it("reads the window off the thrown error the routing layer produced", () => {

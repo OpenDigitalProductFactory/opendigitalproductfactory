@@ -7,7 +7,7 @@
 // docs/superpowers/specs/2026-07-17-needs-you-cognitive-load-redesign-design.md
 // (deferred surface: proactivity confirm/adjust).
 
-import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "./proactivity-resolver";
+import { resolveProactivityPlan } from "./proactivity-resolver";
 import type { ProactivityLevel } from "./proactivity-types";
 import {
   ownerFacingAreaForPortfolio,
@@ -58,23 +58,22 @@ export function groupRosterByArea(rows: ProactivityRosterRow[]): ProactivityArea
   return [...byKey.values()].sort((a, b) => a.area.order - b.area.order);
 }
 
-/** Pure projection: given the coworker list and any owner overrides, resolve the
- *  level each coworker acts at. When no override exists the resolver returns the
- *  posture-derived default; an override marks the row as owner-set. */
+/** Pure projection: the level each coworker acts at when it is working outside
+ *  any workroom.
+ *
+ *  BI-87C9C91C: this used to layer a saved per-coworker override on top. Those
+ *  overrides no longer influence resolution anywhere, so reading one here would
+ *  display a level nothing honours — a report that lies. The row now shows the
+ *  derived default only, and `isOverride` is always false. */
 export function deriveProactivityRoster(
   agents: ProactivityRosterAgent[],
-  overrides: Record<string, ProactivityLevel>,
 ): ProactivityRosterRow[] {
   return agents.map((agent) => {
-    const input = { activityFamily: "scheduled-task", agentId: agent.agentId } as const;
-    const saved = overrides[agent.agentId];
-    const plan = saved
-      ? resolveProactivityPlanForLevel(input, saved, "user-override")
-      : resolveProactivityPlan(input);
+    const plan = resolveProactivityPlan({ activityFamily: "scheduled-task" });
     return {
       ...agent,
       level: plan.resolvedLevel,
-      isOverride: Boolean(saved),
+      isOverride: false,
       explanation: plan.explanation,
       area: areaForPortfolio(agent.portfolioSlug),
     };

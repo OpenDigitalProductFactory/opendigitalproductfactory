@@ -236,6 +236,13 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // Operator-authored floor plans can expose internal room, table, equipment,
   // and site geometry plus references to live operational entities.
   OperationalSceneLayout: "confidential",
+  AnimalProfile: "confidential",
+  AnimalCustodyEpisode: "confidential",
+  AnimalCustodyEvent: "confidential",
+  AnimalAdoptionApplication: "confidential",
+  AnimalPlacement: "confidential",
+  CareRecord: "confidential",
+  FinancialFund: "internal",
   Engagement: "confidential",
   Opportunity: "confidential",
   Quote: "confidential",
@@ -295,6 +302,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   PushDeviceRegistration: "confidential",
   ExternalEvidenceRecord: "confidential",
   AsyncInferenceOp: "confidential",
+  AsyncInferenceOperationTransition: "confidential",
   // Connection posture can reference the restricted ModelProvider catalog and
   // credential/contract records. Copying it without those parents creates an
   // invalid preview and exposes organization-specific provider governance.
@@ -326,6 +334,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   UserGroup: "restricted",
   CredentialEntry: "restricted",
   DataPolicyException: "restricted",
+  ProviderClearanceOverride: "restricted",
   OAuthPendingFlow: "restricted",
   ModelProvider: "restricted",
   DiscoveredModel: "restricted",

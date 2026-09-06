@@ -104,7 +104,28 @@ function stripSelfTests(entries) {
     .filter((entry) => entry.commands.length > 0);
 }
 
-export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES } = {}) {
+/**
+ * BI-8CDA7F95: does this guard apply to the classified change scope?
+ *
+ * The scope comes from scripts/ci-change-scope.mjs — the same classifier
+ * ci.yml branches on — so host and cloud agree on what "docs-only" means. A
+ * guard is skipped ONLY when it DECLARES `inputs` that a docs-only diff cannot
+ * touch (`inputs: ["code"]`, see ci-policy-guards.mjs). No declaration, no
+ * classification, or any non-docs change: the guard runs. Never skip on a
+ * guess — a wrong skip is a false green (BI-7B249AFE).
+ */
+export function guardAppliesToScope(entry, changeScope) {
+  if (!changeScope || changeScope.docsOnly !== true) return true;
+  const inputs = Array.isArray(entry?.inputs) ? entry.inputs : null;
+  if (!inputs) return true;
+  return inputs.includes("docs");
+}
+
+/**
+ * The preflight plan for a change scope: the entries to run, and the entries
+ * left out because their declared inputs cannot be touched by this diff.
+ */
+export function planPreflight({ profiles = POLICY_GUARD_PROFILES, changeScope = null } = {}) {
   const source = stripSelfTests([
     ...(profiles.source ?? []),
     ...(profiles.workspace ?? []),
@@ -114,7 +135,14 @@ export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES } = {}) {
       LOCAL_SAFE_PR_GUARD_IDS.includes(entry.id),
     ),
   );
-  return [...source, ...trailer];
+  const all = [...source, ...trailer];
+  const entries = all.filter((entry) => guardAppliesToScope(entry, changeScope));
+  const skippedByScope = all.filter((entry) => !guardAppliesToScope(entry, changeScope));
+  return { entries, skippedByScope, changeScope: changeScope ?? null };
+}
+
+export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES, changeScope = null } = {}) {
+  return planPreflight({ profiles, changeScope }).entries;
 }
 
 function defaultExecute(command, args) {

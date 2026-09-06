@@ -87,6 +87,17 @@ export function modelMissingHandoff(): string {
   });
 }
 
+export function requiredTerminalWriterNotEnforceableHandoff(): string {
+  return buildHumanHandoff({
+    blocker:
+      "None of the available AI adapters can enforce this task's required governed receipt writer, so inference was not started and no receipt was created.",
+    steps: [
+      "Activate or route this task to an AI provider adapter that supports required tool choice.",
+    ],
+    verify: "resume this same task with its unchanged evidence and record the governed receipt",
+  });
+}
+
 
 /**
  * The local model is present and healthy, but a background job on this host
@@ -139,11 +150,18 @@ export function localCapacityHeldHandoff(
       ? "I couldn't confirm the local AI model was free to use, so I held off rather than risk disrupting something else running on this machine. Nothing is misconfigured."
       : "The only AI model allowed to handle this request is tied up with a background job on this machine, so I couldn't answer. Nothing is misconfigured.",
     steps: [
+      // BI-EBE25715: `expectedFreeAt` is ONE lease's expiry, not the time until
+      // the host is actually free. When other claims are waiting behind it the
+      // reservation is re-taken the moment it clears, so "send again in about
+      // two minutes" reads as a promise the platform cannot keep — observed on
+      // a host running 9-46 queued claims, where the same turn was refused for
+      // over an hour on that advice. Name the window as the earliest it COULD
+      // free, and say plainly that it depends on what else is queued.
       window
-        ? `Send the message again in ${window}, when that job is due to finish.`
-        : "Give it a couple of minutes, then send the message again.",
+        ? `Send the message again in ${window} at the earliest — sooner only if nothing else is waiting for this machine.`
+        : "It frees up when that job finishes. I can't tell from here how long that will be, so send the message again when you want me to retry.",
     ],
-    verify: "check the moment it frees up",
+    verify: "check whether it has freed up",
   });
 }
 
@@ -207,6 +225,30 @@ function readExpectedFreeAt(error: unknown): Date | null {
   return null;
 }
 
+function isRequiredTerminalWriterNotEnforceable(error: unknown, message: string): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+  if (code === "required_terminal_writer_not_enforceable") return true;
+  const marker = /required[_-]terminal[_-]writer[_-]not[_-]enforceable/i;
+  if (!marker.test(message)) return false;
+  if (!/^All endpoints failed/i.test(message)) return true;
+  const serializedAttempts = /Attempts:\s*(\[.*\])\s*$/s.exec(message)?.[1];
+  if (!serializedAttempts) return false;
+  try {
+    const attempts = JSON.parse(serializedAttempts) as unknown;
+    return Array.isArray(attempts)
+      && attempts.length > 0
+      && attempts.every((attempt) => {
+        if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
+        const attemptError = (attempt as Record<string, unknown>)["error"];
+        return typeof attemptError === "string" && marker.test(attemptError);
+      });
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Plain-language, non-technical explanation for a turn that failed because
  * routing could not complete a tool-using call (BI-23E0714C).
@@ -239,6 +281,10 @@ function describeToolRouteFailureMessage(
 
   if (msg.startsWith("REQUEST_TOO_LARGE:")) {
     return "Your conversation is too long for this AI provider. Please start a new thread to continue.";
+  }
+
+  if (isRequiredTerminalWriterNotEnforceable(error, msg)) {
+    return requiredTerminalWriterNotEnforceableHandoff();
   }
 
   // Checked early, and before the credential and threshold branches: a deferral
@@ -342,6 +388,7 @@ export type InferenceDeadEndKind =
   | "policy-or-capability"
   | "context"
   | "busy"
+  | "required-terminal-writer-not-enforceable"
   | "terminal-writer-missing"
   | "unknown";
 
@@ -350,12 +397,44 @@ export type InferenceDeadEndOutcome = {
   message: string;
 };
 
+function isAllEndpointNetworkOutage(message: string): boolean {
+  if (!/All endpoints failed/i.test(message)) return false;
+  const attemptsMarker = message.match(/Attempts:\s*/i);
+  if (attemptsMarker?.index === undefined) return false;
+  const serializedAttempts = message.slice(attemptsMarker.index + attemptsMarker[0].length).trim();
+  let attempts: unknown;
+  try {
+    attempts = JSON.parse(serializedAttempts);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(attempts) || attempts.length === 0) return false;
+  const dispatchedAttempts = attempts.filter((attempt) => {
+    if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return true;
+    const error = (attempt as Record<string, unknown>)["error"];
+    return typeof error !== "string" || !/required-terminal-writer-not-enforceable/i.test(error);
+  });
+  if (dispatchedAttempts.length === 0) return false;
+  return dispatchedAttempts.every((attempt) => {
+    if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
+    const error = (attempt as Record<string, unknown>)["error"];
+    if (typeof error !== "string" || error.trim().length === 0) return false;
+    return /network error|fetch failed|\bECONN(?:REFUSED|RESET|ABORTED)\b|\bENOTFOUND\b|\bEAI_AGAIN\b|\bETIMEDOUT\b|\bUND_ERR_(?:CONNECT_TIMEOUT|SOCKET)\b|socket hang up|getaddrinfo|connect(?:ion)? (?:refused|reset|timed out)|connect timeout/i.test(error);
+  });
+}
+
 export function describeToolRouteFailureOutcome(
   errorMessage: string,
   toolCount: number,
   error?: unknown,
 ): InferenceDeadEndOutcome {
   const msg = errorMessage ?? "";
+  if (isRequiredTerminalWriterNotEnforceable(error, msg)) {
+    return {
+      kind: "required-terminal-writer-not-enforceable",
+      message: requiredTerminalWriterNotEnforceableHandoff(),
+    };
+  }
   if (/model[_ ]not[_ ]found|model not found|provider model inventory changed/i.test(msg)) {
     return { kind: "model-missing", message: modelMissingHandoff() };
   }
@@ -365,6 +444,7 @@ export function describeToolRouteFailureOutcome(
   if (/No credential|auth(?:entication|orization)? (?:failed|error)|unauthorized/i.test(msg)) return { kind: "credentials", message };
   if (/No eligible endpoints|toolUse required|tool-capable/i.test(msg)) return { kind: "policy-or-capability", message };
   if (/rate.?limit|overload|\bbusy\b|status(?:Code)?[\"']?:\s*(?:429|529)/i.test(msg)) return { kind: "busy", message };
+  if (isAllEndpointNetworkOutage(msg)) return { kind: "busy", message };
   return { kind: "unknown", message };
 }
 

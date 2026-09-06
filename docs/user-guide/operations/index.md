@@ -218,8 +218,11 @@ Five stances, each shown with the reason it resolved that way:
   worktree, or not from this directory at all.
 - **Paired installation** — whether a paired installation may be read, written
   through an approved link, or is absent.
-- **Work sync** — whether the work this installation owns is mirrored to a
-  paired installation, so it survives a teardown, or has nowhere to go.
+- **Work sync** — whether this installation's backlog and a paired
+  installation's backlog copy each other every few minutes, so work survives a
+  teardown and a development box sees the production backlog, or whether there
+  is nowhere to copy to. The copies are read-only; each item changes only where
+  it was created.
 
 An installation that has not said what it is counts as production, so every
 brake stays on until someone declares otherwise.

@@ -299,6 +299,60 @@ model CareAppointment {
   @@index([rescheduledFromAppointmentId])
 }
 
+enum CareRecordKind {
+  condition
+  allergy
+  medication
+  vaccination
+  procedure
+  weight
+  observation
+  behavior
+  note
+}
+
+/// Longitudinal, subject-agnostic care fact. Corrections append a new record and
+/// link the prior fact instead of overwriting clinical or welfare history.
+model CareRecord {
+  id                 String          @id @default(cuid())
+  careRecordId       String          @unique
+  organizationId     String
+  subjectKindSlug    String
+  subjectRef         String
+  kind               CareRecordKind
+  lifecycle          RecordLifecycle @default(active)
+  lifecycleAt        DateTime?
+  lifecycleReason    String?
+  code               String?
+  display            String?
+  value              String?
+  quantity           Decimal?
+  unit               String?
+  effectiveAt        DateTime
+  effectiveUntil     DateTime?
+  detail             Json?
+  source             String          @default("operator")
+  sourceRef          String?
+  authorPrincipalRef String
+  sensitivity        String          @default("internal")
+  retentionPolicyKey String?
+  legalHold          Boolean         @default(false)
+  correctsId         String?         @unique
+  successorId        String?         @unique
+  correctionReason   String?
+  recordedAt         DateTime        @default(now())
+  createdAt          DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  corrects     CareRecord?  @relation("CareRecordCorrection", fields: [correctsId], references: [id], onDelete: Restrict)
+  correctedBy  CareRecord?  @relation("CareRecordCorrection")
+  successor    CareRecord?  @relation("CareRecordSuccessor", fields: [successorId], references: [id], onDelete: Restrict)
+  predecessor  CareRecord?  @relation("CareRecordSuccessor")
+
+  @@index([organizationId, subjectKindSlug, subjectRef, effectiveAt])
+  @@index([organizationId, kind, lifecycle, effectiveAt])
+}
+
 /// Practitioner allocation with a denormalized immutable-at-version footprint.
 /// PostgreSQL exclusion constraints arbitrate concurrent ordinary allocations.
 model CareAppointmentParticipant {

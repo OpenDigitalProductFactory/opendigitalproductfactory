@@ -3,7 +3,10 @@ import {
   buildWorkroomCycle,
   evaluateWorkroomCyclePolicy,
   type WorkroomCycleCarrierCandidate,
+  type WorkroomCyclePolicyDecision,
+  type WorkroomShapeConformanceContext,
 } from "./room-cycle";
+import { evaluateWorkroomLifecycleConformance } from "./workroom-shape-conformance";
 import {
   parseStoredWorkroomCycle,
   parseStoredWorkroomOutcome,
@@ -63,6 +66,7 @@ export interface OpenWorkroomCycleInput {
   actor: { type: "user" | "agent"; id: string };
   idempotencyKey: string;
   policy: Omit<WorkCasePolicyInput, "action">;
+  shapeConformance: WorkroomShapeConformanceContext;
   now?: Date;
 }
 
@@ -70,6 +74,7 @@ export class WorkroomCycleStoreError extends Error {
   constructor(
     readonly reason: "room_not_found" | "finite_room" | "active_cycle_exists" | "policy_denied" | "cycle_not_found",
     message: string,
+    readonly decision?: WorkroomCyclePolicyDecision,
   ) {
     super(message);
     this.name = "WorkroomCycleStoreError";
@@ -148,8 +153,13 @@ export async function openWorkroomCycle(input: OpenWorkroomCycleInput): Promise<
   return input.db.withinRoomLock(input.roomWorkItemId, async (tx) => {
     const room = await tx.getRoom(input.roomWorkItemId);
     if (!room) throw new WorkroomCycleStoreError("room_not_found", "Work Room was not found.");
-    const policy = evaluateWorkroomCyclePolicy({ operation: "open-cycle", cycle: null, policy: input.policy });
-    if (!policy.ok) throw new WorkroomCycleStoreError("policy_denied", policy.message);
+    const policy = evaluateWorkroomCyclePolicy({
+      operation: "open-cycle",
+      cycle: null,
+      policy: input.policy,
+      shapeConformance: input.shapeConformance,
+    });
+    if (!policy.ok) throw new WorkroomCycleStoreError("policy_denied", policy.message, policy);
 
     const cycles = await tx.listCycles(room.id);
     const existing = cycles.find((item) => parseStoredWorkroomCycle(item.evidence)?.cycleKey === input.cycleKey);
@@ -218,10 +228,19 @@ export async function applyWorkroomCarryOver(input: {
   roomWorkItemId: string;
   commands: readonly import("./room-cycle").WorkroomCarryOverCommand[];
   actor: OpenWorkroomCycleInput["actor"];
+  shapeConformance: WorkroomShapeConformanceContext;
 }): Promise<{ createdItemIds: string[]; reusedItemIds: string[] }> {
   return input.db.withinRoomLock(input.roomWorkItemId, async (tx) => {
     const room = await tx.getRoom(input.roomWorkItemId);
     if (!room) throw new WorkroomCycleStoreError("room_not_found", "Work Room was not found.");
+    const conformance = evaluateWorkroomLifecycleConformance({
+      operation: "carry-over",
+      hasDeclaredWorkShape: input.shapeConformance.hasDeclaredWorkShape,
+      conformance: input.shapeConformance.result,
+    });
+    if (!conformance.ok) {
+      throw new WorkroomCycleStoreError("policy_denied", conformance.message, conformance);
+    }
     const cycles = await tx.listCycles(room.id);
     const createdItemIds: string[] = [];
     const reusedItemIds: string[] = [];
@@ -292,6 +311,7 @@ export async function completeWorkroomCycle(input: {
   actor: OpenWorkroomCycleInput["actor"];
   idempotencyKey: string;
   policy: Omit<WorkCasePolicyInput, "action">;
+  shapeConformance: WorkroomShapeConformanceContext;
   now?: Date;
 }): Promise<{ messageId: string | null; idempotent: boolean }> {
   return input.db.withinRoomLock(input.roomWorkItemId, async (tx) => {
@@ -310,8 +330,13 @@ export async function completeWorkroomCycle(input: {
     if (existing) return { messageId: existing.messageId, idempotent: true };
 
     const view = buildWorkroomCycle(cycleCandidate(cycle)!);
-    const policy = evaluateWorkroomCyclePolicy({ operation: "complete-cycle", cycle: view, policy: input.policy });
-    if (!policy.ok) throw new WorkroomCycleStoreError("policy_denied", policy.message);
+    const policy = evaluateWorkroomCyclePolicy({
+      operation: "complete-cycle",
+      cycle: view,
+      policy: input.policy,
+      shapeConformance: input.shapeConformance,
+    });
+    if (!policy.ok) throw new WorkroomCycleStoreError("policy_denied", policy.message, policy);
     const completedAt = input.now ?? new Date(input.packet.completedAt);
     await tx.completeCycle(cycle.id, completedAt);
     const message = await tx.appendMessage({

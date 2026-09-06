@@ -12,6 +12,7 @@ import {
   classifyId,
   extractAnchorIds,
   interpretToolResponse,
+  isTruncatedListing,
   listChangedFiles,
   parseAnchorBaseline,
   serializeAnchorBaseline,
@@ -209,4 +210,35 @@ test("an unresolvable BASE_SHA must not exit 0 with OK (BI-B6433DC6)", () => {
   assert.doesNotMatch(out, /\bOK\.\s*$/m);
   assert.match(out, /cannot resolve|did not run/i);
   assert.match(out, /git fetch --deepen/);
+});
+
+// A live install with 115 epics returned only the first 100, and the plan citing
+// a correctly filed epic in the tail was failed as "does NOT exist in the live
+// backlog". Absence has to be proven; a short page never proves it.
+test("a truncated epic catalog is not evidence that a cited epic is missing", () => {
+  const truncated = JSON.stringify({
+    result: { epics: [{ epicId: "EP-AAAA1111" }], total: 115, fetched: 100, truncated: true },
+  });
+  assert.equal(isTruncatedListing(truncated), true);
+  // The listing genuinely contains no EP-5102F494, and the old guard called that
+  // missing. Truncation must divert it to "unknown" before that check is reached.
+  assert.equal(interpretToolResponse("epic", "EP-5102F494", truncated), "missing");
+});
+
+test("a complete epic catalog is trusted, so a real miss is still caught", () => {
+  const complete = JSON.stringify({
+    result: { epics: [{ epicId: "EP-AAAA1111" }], total: 1, fetched: 1, truncated: false },
+  });
+  assert.equal(isTruncatedListing(complete), false);
+  assert.equal(interpretToolResponse("epic", "EP-AAAA1111", complete), "exists");
+  assert.equal(interpretToolResponse("epic", "EP-NOTREAL0", complete), "missing");
+});
+
+test("fetched short of total counts as truncated even without the flag", () => {
+  assert.equal(isTruncatedListing(JSON.stringify({ result: { total: 115, fetched: 100 } })), true);
+  assert.equal(isTruncatedListing(JSON.stringify({ result: { total: 100, fetched: 100 } })), false);
+});
+
+test("an unparseable listing is never treated as a complete one", () => {
+  assert.equal(isTruncatedListing("<html>gateway timeout</html>"), true);
 });

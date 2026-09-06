@@ -70,7 +70,10 @@ describe("coworker self-task reachability (BI-B05E5D30)", () => {
     // The resolver must not invent reachability — an unregistered coworker is
     // skipped by the sweep exactly as before.
     expect(selfTaskRegistryKey("coo")).toBeNull();
-    expect(selfTaskRegistryKey("AGT-WS-EA")).toBeNull();
+    // A canonical id with no self-task. Was AGT-WS-EA until ea-architect gained
+    // one; the assertion is about the RESOLVER not inventing reachability, so it
+    // needs any unregistered canonical id, not that specific coworker.
+    expect(selfTaskRegistryKey("AGT-WS-REVIEW")).toBeNull();
     expect(selfTaskRegistryKey("no-such-agent")).toBeNull();
   });
 

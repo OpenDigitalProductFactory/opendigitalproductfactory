@@ -39,6 +39,13 @@ export interface AdapterRequest {
   modelId: string;
   plan: RoutedExecutionPlan;
   provider: ResolvedProvider;
+  /**
+   * Server-owned provider transport. HTTP adapters must use this instead of
+   * process-global fetch so long-lived inference never re-enters the libuv
+   * getaddrinfo queue. CLI adapters accept the common request shape but do not
+   * use this field.
+   */
+  fetchImpl: typeof fetch;
   messages: ChatMessage[];
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;
@@ -51,6 +58,17 @@ export interface AdapterRequest {
    * those keep the legacy text-described tool path.
    */
   mcpSession?: AdapterMcpSession;
+}
+
+/**
+ * Provider-owned identity returned when an adapter accepts a long-running
+ * operation. The platform creates its own durable AsyncInferenceOp identity
+ * from this value; keeping the two names distinct prevents callers from
+ * accidentally treating a provider handle as the platform record id.
+ */
+export interface AsyncOperationStartResult {
+  status: "accepted";
+  providerOperationId: string;
 }
 
 /** Normalized output from an execution adapter */
@@ -66,6 +84,8 @@ export interface AdapterResult {
     cacheReadInputTokens?: number;
   };
   inferenceMs: number;
+  /** Present only when this dispatch started a provider-side async operation. */
+  asyncOperation?: AsyncOperationStartResult;
   raw?: Record<string, unknown>;
   /** Responses API: the response ID for chaining subsequent calls. */
   responseId?: string;

@@ -106,6 +106,8 @@ import { buildLifecyclePack } from "./packs/build-lifecycle-pack";
 import { buildReviewPack } from "./packs/build-review-pack";
 import { buildChangePack } from "./packs/build-change-pack";
 import { gateContextPack } from "./packs/gate-context-pack";
+import { federationMembershipPack } from "./packs/federation-membership-pack";
+import { uxVerificationPack } from "./packs/ux-verification-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -126,6 +128,8 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   workCapturePack,
   activityRoutingPack,
   selfUpgradePack,
+  uxVerificationPack,
+  federationMembershipPack,
   coworkerServiceCatalogPack,
   coworkerToolGrantPack,
   coworkerEstablishPack,

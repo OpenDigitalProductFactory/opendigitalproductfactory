@@ -711,8 +711,8 @@ export async function recordPlanBacklogCoverage(args: {
         ok: false as const,
         code: "traceability-incomplete" as const,
         error: `BacklogItem ${currentParent.itemId} has no initiative scope baseline, so plan coverage cannot be bound to a governed scope. `
-          + "A baseline is written only when the initiative's spec-approval gate passes: call `record_initiative_design_review` with gate=`spec-approval`, decision=`pass`, and a canonical design under `docs/superpowers/specs/`. "
-          + "That gate requires a reviewer independent of the artifact's author, so the author cannot record it — an independent reviewer must, which on this platform means an in-platform reviewer coworker holding the `initiative_design_review` grant. "
+          + "A baseline is written only when the initiative's spec-approval gate passes. From an external client, call `claim_backlog_item_for_work` for the existing Workroom identity with workIntent=`implementation`, then execute the returned `recovery.reviewerRoutes` spec-approval `request_coworker` packet verbatim. "
+          + "That server-issued packet binds `record_initiative_design_review` to the canonical design under `docs/superpowers/specs/`, an exact immutable repository version, and an eligible reviewer independent of the artifact's author; the author cannot record it. "
           + "Until this item carries a baseline, record the plan's coverage table in the plan itself and state the blocking CONDITION — \"no initiative scope baseline exists for <item>\" — rather than citing a backlog id, which goes stale when that id closes.",
       };
     }

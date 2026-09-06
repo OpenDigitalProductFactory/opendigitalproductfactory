@@ -131,16 +131,20 @@ function matchesRequestedAction(
  * profile ownership, promotion provenance, and delegation are loaded here.
  */
 export async function resolveAndPersistPolicyActionAuthority(
-  { execution, authorityInput, approvalBinding }: Parameters<PolicyAuthorityProjectionAttempt>[0],
+  input: Parameters<PolicyAuthorityProjectionAttempt>[0],
   db: PolicyAuthorityDb = prisma as unknown as PolicyAuthorityDb,
+  overrides: {
+    produceJudgment?: (input: Parameters<PolicyAuthorityProjectionAttempt>[0]) => Promise<void>;
+  } = {},
 ): ReturnType<PolicyAuthorityProjectionAttempt> {
+    const { execution, authorityInput, approvalBinding } = input;
     if (!PROJECTABLE_ACTIONS.has(execution.toolName)) return { outcome: "not-authorized" };
     const actingHumanUserId = authorityInput.authContext.actingHumanUserId;
     const actingAgentId = authorityInput.authContext.actingAgentId;
     if (!actingHumanUserId || !actingAgentId || !authorityInput.subject) return { outcome: "not-authorized" };
 
     const now = authorityInput.now ?? new Date();
-    const candidates = await db.decisionInteraction.findMany({
+    const findCandidates = () => db.decisionInteraction.findMany({
       where: {
         gateKey: { in: ["kernel-consult", "build-studio", "backlog-triage", "org-business", "profession"] },
         createdAt: { gte: new Date(now.getTime() - MAX_JUDGMENT_AGE_MS) },
@@ -164,6 +168,7 @@ export async function resolveAndPersistPolicyActionAuthority(
         profileVersion: { select: { versionId: true, promotedByPrincipalId: true } },
       },
     });
+    let candidates = await findCandidates();
 
     const grantIds = authorityInput.authContext.delegationGrantIds;
     const grant = grantIds.length > 0
@@ -189,6 +194,8 @@ export async function resolveAndPersistPolicyActionAuthority(
         })
       : null;
 
+    let producedJudgment = false;
+    while (true) {
     for (const row of candidates) {
       const payload = record(row.outcomePayload);
       const storedBinding = actionBinding(payload);
@@ -291,5 +298,19 @@ export async function resolveAndPersistPolicyActionAuthority(
         expiresAt: projection.expiresAt,
       };
     }
-    return { outcome: "not-authorized" };
+    if (producedJudgment) return { outcome: "not-authorized" };
+    producedJudgment = true;
+    try {
+      const produceJudgment = overrides.produceJudgment
+        ?? (await import("./policy-action-judgment")).producePolicyActionJudgment;
+      await produceJudgment(input);
+      candidates = await findCandidates();
+    } catch (error) {
+      console.warn(
+        "[policy-action-authority] WWMD judgment unavailable:",
+        error instanceof Error ? error.message : String(error),
+      );
+      return { outcome: "not-authorized" };
+    }
+    }
 }

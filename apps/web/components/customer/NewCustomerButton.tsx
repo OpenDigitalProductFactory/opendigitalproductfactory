@@ -23,7 +23,21 @@ function matchSummary(candidate: DedupCandidate): string {
   return [...new Set(parts)].join(", ");
 }
 
-export function NewCustomerButton() {
+type NewCustomerCopy = {
+  buttonLabel: string;
+  title: string;
+  nameLabel: string;
+  namePlaceholder: string;
+};
+
+const DEFAULT_COPY: NewCustomerCopy = {
+  buttonLabel: "+ New Account",
+  title: "New Customer Account",
+  nameLabel: "Account Name *",
+  namePlaceholder: "e.g. Riverside Medical Group",
+};
+
+export function NewCustomerButton({ copy = DEFAULT_COPY }: { copy?: NewCustomerCopy }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -101,7 +115,7 @@ export function NewCustomerButton() {
         onClick={() => setOpen(true)}
         className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
       >
-        + New Account
+        {copy.buttonLabel}
       </button>
     );
   }
@@ -114,7 +128,7 @@ export function NewCustomerButton() {
       />
       <div className="fixed top-20 right-8 z-50 w-[420px] bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg shadow-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--dpf-border)]">
-          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">New Customer Account</h2>
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">{copy.title}</h2>
           <button
             onClick={() => {
               setOpen(false);
@@ -196,12 +210,12 @@ export function NewCustomerButton() {
         ) : (
           <form onSubmit={handleSubmit} className="p-4 space-y-4">
             <div>
-              <label className={labelClasses}>Account Name *</label>
+              <label className={labelClasses}>{copy.nameLabel}</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Riverside Medical Group"
+                placeholder={copy.namePlaceholder}
                 required
                 autoFocus
                 className={inputClasses}

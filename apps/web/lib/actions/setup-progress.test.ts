@@ -205,6 +205,33 @@ describe("setup-progress", () => {
       expect(ctx?.orgName).toBe("Acme Ltd");
       expect(ctx?.suggestedCurrency).toBe("EUR");
     });
+
+    // BI-575F0046 Slice 2: readiness is computed live rather than read from the
+    // stored blob, because a stored answer goes stale the moment the owner
+    // connects a provider or completes its trust review.
+    it("computes cloud readiness live, not from the stored context", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue({
+        context: { orgName: "Acme Ltd", cloudProviderReadiness: "ready" },
+      });
+      (prisma as any).modelProvider = {
+        findMany: async () => [
+          { providerId: "chatgpt", name: "ChatGPT", status: "active", sensitivityClearance: ["public"] },
+        ],
+      };
+
+      expect((await getSetupContext())?.cloudProviderReadiness).toBe("public-only");
+    });
+
+    it("says it does not know rather than guessing when providers cannot be read", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue({
+        context: { orgName: "Acme Ltd" },
+      });
+      (prisma as any).modelProvider = {
+        findMany: async () => { throw new Error("db down"); },
+      };
+
+      expect((await getSetupContext())?.cloudProviderReadiness).toBeUndefined();
+    });
   });
 
   describe("updateSetupContext", () => {

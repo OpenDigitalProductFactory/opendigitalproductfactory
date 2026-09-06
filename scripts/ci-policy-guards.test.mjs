@@ -10,12 +10,14 @@ import {
 } from "./lib/ci-policy-guards.mjs";
 
 const EXPECTED_LEGACY_JOBS = [
+  "actuator-inputs-writable",
   "application-boundary-guard",
   "archetype-completeness-guard",
   "build-studio-namespace-guard",
   "build-studio-surface-guard",
   "bundle-boundary-guard",
   "capability-consumer-guard",
+  "compose-bind-posture-guard",
   "compose-env-contract-guard",
   "compose-resource-budgets-guard",
   "context-economy-guard",
@@ -78,6 +80,7 @@ const EXPECTED_LEGACY_JOBS = [
   "test-clock-bomb-guard",
   "test-cwd-independence-guard",
   "tool-surface-guard",
+  "unattributable-deferral",
   "ux-fit-gate",
   "ux-primitive-adoption-guard",
   "work-unit-conformance-guard",

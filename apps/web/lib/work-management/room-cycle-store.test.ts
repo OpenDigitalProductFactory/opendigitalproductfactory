@@ -103,6 +103,7 @@ function openInput(db: WorkroomCycleStoreDb, cycleKey = "2026-W31") {
     actor: { type: "user" as const, id: "user-finance" },
     idempotencyKey: `open:${cycleKey}`,
     policy: policy(),
+    shapeConformance: { hasDeclaredWorkShape: false, result: null },
     now: new Date("2026-07-27T09:00:00.000Z"),
   };
 }
@@ -123,6 +124,22 @@ describe("Work Room cycle store", () => {
         enforcementMode: "governed-action",
       },
     });
+  });
+
+  it("refuses a shaped lifecycle write before mutating when conformance is missing", async () => {
+    const state = harness();
+    await expect(openWorkroomCycle({
+      ...openInput(state.db),
+      shapeConformance: { hasDeclaredWorkShape: true, result: null },
+    })).rejects.toMatchObject({
+      reason: "policy_denied",
+      decision: {
+        reason: "shape_conformance_denied",
+        deviationCodes: ["missing_conformance_result"],
+      },
+    });
+    expect(state.cycles).toHaveLength(0);
+    expect(state.messages).toHaveLength(0);
   });
 
   it("makes retries idempotent and rejects a second active logical cycle", async () => {
@@ -156,6 +173,7 @@ describe("Work Room cycle store", () => {
       actor: { type: "user" as const, id: "user-finance" },
       idempotencyKey: "complete:2026-W31",
       policy: policy(),
+      shapeConformance: { hasDeclaredWorkShape: false, result: null },
       now: new Date("2026-08-01T16:00:00.000Z"),
     };
 
@@ -185,12 +203,14 @@ describe("Work Room cycle store", () => {
       roomWorkItemId: room.id,
       commands,
       actor: { type: "user", id: "user-finance" },
+      shapeConformance: { hasDeclaredWorkShape: false, result: null },
     });
     const second = await applyWorkroomCarryOver({
       db: state.db,
       roomWorkItemId: room.id,
       commands,
       actor: { type: "user", id: "user-finance" },
+      shapeConformance: { hasDeclaredWorkShape: false, result: null },
     });
 
     expect(first.createdItemIds).toHaveLength(1);

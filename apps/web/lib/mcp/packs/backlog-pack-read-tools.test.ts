@@ -127,6 +127,50 @@ describe("backlog deferral read projection", () => {
     expect(result).toMatchObject({ success: true, data: { workrooms: [active], activeWorkrooms: [active] } });
   });
 
+  it("passes the persisted terminal readiness decision through the canonical item read", async () => {
+    const terminalActivity = {
+      id: "activity-terminal",
+      kind: "initiative_readiness_decision",
+      gateKey: null,
+      recordedAt: new Date("2026-08-31T17:26:02.028Z"),
+      payload: { schemaVersion: 1, target: "completion", verdict: "allowed" },
+    };
+    mocks.findUnique.mockResolvedValue({
+      ...baseItem,
+      id: "row-bi",
+      itemId: "BI-COMPLETE",
+      title: "Completed work",
+      status: "done",
+      body: null,
+      createdAt: new Date("2026-08-01T00:00:00Z"),
+      completedAt: new Date("2026-08-31T17:26:02.028Z"),
+      deferOwnerPrincipal: null,
+      epic: null,
+      digitalProduct: null,
+      organization: null,
+      productLine: null,
+      businessProduct: null,
+      demandEvidenceLinks: [],
+      activities: [terminalActivity],
+    });
+    mocks.projectReadiness.mockReturnValue({
+      governed: true,
+      artifactHints: { hasSpec: true, hasPlan: true },
+      decisions: { completion: { verdict: "allowed" } },
+    });
+
+    const result = await getBacklogItem({ itemId: "BI-COMPLETE" });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: { status: "done", readiness: { decisions: { completion: { verdict: "allowed" } } } },
+    });
+    expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({
+      item: expect.objectContaining({ itemId: "BI-COMPLETE", status: "done" }),
+      activities: [terminalActivity],
+    }));
+  });
+
   it("builds the nonconformant filter from the canonical projection fields", async () => {
     await listBacklogItems({ deferralConformance: "nonconformant" });
 

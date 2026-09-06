@@ -53,6 +53,8 @@ import { listLocalBranches } from "./git-scanner";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
+import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
+import { workCapsuleActor as actor } from "./handler-actor";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -77,26 +79,6 @@ export function workCapsuleToolEnums() {
   };
 }
 
-async function actor(userId: string, context: ToolContext) {
-  const { ensureAgentPrincipalIdentity, syncUserPrincipal } = await import("@/lib/identity/principal-linking");
-  const agentId = context?.agentId ?? null;
-  let principalId: string | null = null;
-
-  try {
-    if (agentId) {
-      const synced = await ensureAgentPrincipalIdentity(agentId);
-      principalId = synced?.id ?? null;
-    } else {
-      const synced = await syncUserPrincipal(userId);
-      principalId = synced?.id ?? null;
-    }
-  } catch {
-    principalId = null;
-  }
-
-  return { userId, agentId, principalId };
-}
-
 function stringParam(params: Record<string, unknown>, key: string): string | null {
   const value = params[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -108,8 +90,14 @@ function numberParam(params: Record<string, unknown>, key: string): number | nul
 }
 
 function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
+  // Every key the tool schema advertises under scopeProperties must appear here.
+  // This function picks fields explicitly, so a field added to the schema and to
+  // the normalizer but not to this list is accepted by the caller, dropped here,
+  // and answered `success: true` — the same defect `backlogItemId` had on
+  // adopt_worktree. scope-input-parity.test.ts is what keeps the two in step.
   return {
     workroomShape: params.workroomShape,
+    workShape: params.workShape,
     decisionScope: params.decisionScope,
     portfolioRole: params.portfolioRole,
     servedPersona: params.servedPersona,
@@ -504,18 +492,23 @@ export async function createWorkCapsuleTool(
     return invalidScopeResult(error);
   }
 
-  const capsule = await createWorkCapsule({
-    db: workCapsuleDb(),
-    input: {
-      title,
-      objective,
-      source,
-      idempotencyKey,
-      executorKind: validatedExecutorKind, repositoryFullName: stringParam(params, "repositoryFullName"),
-      scope: parseScopeInput(params),
-    },
-    actor: await actor(userId, context),
+  // BI-CB3AEBBF: bind the named backlog item onto the column subject lookups
+  // read, not just onto outcomeAnchor. See create-workroom-binding.ts.
+  const resolvedActor = await actor(userId, context);
+  const bound = await createWorkroomBoundToBacklogItem({
+    db: workCapsuleDb() as unknown as BacklogBindingReader, params, title,
+    create: (backlogItemId) => createWorkCapsule({
+      db: workCapsuleDb(),
+      input: {
+        title, objective, source, idempotencyKey, backlogItemId,
+        executorKind: validatedExecutorKind, repositoryFullName: stringParam(params, "repositoryFullName"),
+        scope: parseScopeInput(params),
+      },
+      actor: resolvedActor,
+    }),
   });
+  if (!bound.created) return bound.refusal;
+  const capsule = bound.capsule;
   await ensureCapsuleWorkItemAnchorNonFatal(capsule, "created");
   return {
     success: true,
@@ -796,3 +789,11 @@ export async function recordAgentActivityTool(
     data: { capsule: renewedCapsule },
   };
 }
+
+/**
+ * Test-only surface. `parseScopeInput` is internal, but the schema/handler
+ * parity guard has to call the real function — a test that re-implements the
+ * pick list is exactly the test that would have passed while workShape was
+ * being dropped.
+ */
+export const __testing__ = { parseScopeInput };

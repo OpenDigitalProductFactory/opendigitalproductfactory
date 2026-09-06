@@ -6,6 +6,7 @@ import { callProvider, InferenceError } from "@/lib/ai-inference";
 import { resolveLocalToolCeiling } from "./local-tool-ceiling";
 import { resolveLocalToolFidelityCeiling } from "./local-tool-fidelity";
 import type { ChatMessage } from "@/lib/ai-inference";
+import type { AsyncOperationStartResult } from "./adapter-types";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
@@ -110,7 +111,11 @@ export interface FallbackResult {
   // metering so the `compute` cost model (watts × time) can price local
   // inference. Optional because a screened/stub path may not measure it.
   inferenceMs?: number;
+  /** Typed provider start handle preserved across the fallback projection. */
+  asyncOperation?: AsyncOperationStartResult;
   downgraded: boolean;
+  /** Distinguishes a failed dispatch from a configured route that was ineligible. */
+  downgradeReason: "provider-unavailable" | "not-eligible" | null;
   downgradeMessage: string | null;
   responseId?: string;
   /** True when the provider stopped at the output-token ceiling (BI-1D144CC1). */
@@ -257,6 +262,7 @@ export async function callWithFallbackChain(
   let overloadRetried = false;
   let transientRetried = false;
   let authRefreshRetried = false;
+  let selectedAdapterCannotEnforceRequiredTerminalWriter = false;
   const agentId = outcomeAttribution?.agentId?.trim() || mcpSession?.agentId?.trim() || null;
   const traceId = outcomeAttribution?.traceId?.trim() || decision.traceId?.trim() || null;
   const agentMessageId = outcomeAttribution?.agentMessageId?.trim() || null;
@@ -384,7 +390,14 @@ export async function callWithFallbackChain(
         decision.preferenceResolution?.fallbackUsed === true;
       const unavailablePreference =
         decision.preferenceResolution?.unavailable[0] ?? null;
-      const downgraded = i > 0 || preferenceMiss;
+      const capabilityFallback = i > 0
+        && selectedAdapterCannotEnforceRequiredTerminalWriter;
+      const downgradeReason = i > 0
+        ? capabilityFallback ? "not-eligible" : "provider-unavailable"
+        : preferenceMiss
+          ? "not-eligible"
+          : null;
+      const downgraded = downgradeReason !== null;
       const raw = result.raw && typeof result.raw === "object"
         ? result.raw as Record<string, unknown>
         : null;
@@ -399,10 +412,16 @@ export async function callWithFallbackChain(
             ? { inputTokens: result.inputTokens, outputTokens: result.outputTokens }
             : undefined,
         inferenceMs: result.inferenceMs,
+        ...(result.asyncOperation !== undefined && {
+          asyncOperation: result.asyncOperation,
+        }),
         truncated: result.truncated,
         downgraded,
+        downgradeReason,
         downgradeMessage: downgraded
-          ? preferenceMiss
+          ? capabilityFallback
+            ? `The selected AI adapter cannot enforce this task's required governed writer. Using ${provider.name} instead.`
+            : preferenceMiss
             ? unavailablePreference
               ? `Preferred ${unavailablePreference.kind} "${unavailablePreference.value}" is unavailable. Using ${provider.name} instead. Check AI Workforce settings to fix.`
               : `A configured AI routing preference is unavailable. Using ${provider.name} instead. Check AI Workforce settings to fix.`
@@ -421,6 +440,11 @@ export async function callWithFallbackChain(
       }
       const errMsg = e instanceof Error ? e.message : String(e);
       attempts.push({ endpointId: entry.providerId, error: errMsg });
+      if (e instanceof InferenceError && e.code === "required_terminal_writer_not_enforceable") {
+        if (i === 0) selectedAdapterCannotEnforceRequiredTerminalWriter = true;
+        console.info(`[callWithFallbackChain] ${entry.providerId} adapter cannot enforce the required terminal writer; trying the next candidate.`);
+        continue;
+      }
       console.warn(`[callWithFallbackChain] ${entry.providerId} failed: ${errMsg}`);
 
       if (e instanceof InferenceError) {
@@ -436,7 +460,23 @@ export async function callWithFallbackChain(
           // to an incompatible provider. Max 2 retries with backoff.
           const retryMs = extractRetryAfterMs(e.headers) ?? 30_000;
           const isSelectedEndpoint = i === 0;
-          if (isSelectedEndpoint && !rateLimitRetried) {
+          // A LOCAL pool check that refused before the call left the process is
+          // not an upstream 429: nothing was asked of the provider, and the
+          // reset is wall-clock, so waiting here cannot make it answer sooner.
+          // The pool check throws precisely to cause fallback, and honouring
+          // the wait defeated it — the review lane spent its whole 300s budget
+          // sleeping on a saturated codex pool while a healthy provider sat at
+          // index 1, and every governed review ended `missing-terminal-writer`
+          // with the model never bound (BI-52C6FE5A).
+          //
+          // Skipping the wait is only correct when somewhere else can serve the
+          // call. On a single-provider install the saturated pool IS the whole
+          // chain, and the wait is the only recovery there is — dropping it
+          // there would turn a 30s delay into an immediate hard failure. So the
+          // skip is conditional on an untried entry actually existing.
+          const hasUntriedAlternative = i < chain.length - 1;
+          const skipWaitForLocalPool = e.localPoolExhausted === true && hasUntriedAlternative;
+          if (isSelectedEndpoint && !rateLimitRetried && !skipWaitForLocalPool) {
             rateLimitRetried = true;
             const waitMs = Math.min(retryMs, 60_000);
             console.log(`[callWithFallbackChain] Rate limited on pinned provider ${entry.providerId}. Waiting ${waitMs / 1000}s before retry...`);

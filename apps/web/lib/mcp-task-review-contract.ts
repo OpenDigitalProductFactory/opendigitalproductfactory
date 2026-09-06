@@ -5,6 +5,14 @@ export type InitiativeReviewBinding = {
   itemId: string;
   gate: string;
   expectedCurrentBaselineId?: string | null;
+  eligibleEvidenceActivityIds?: string[];
+  workroomRef?: {
+    kind: "workroom-head";
+    workroomId: string;
+    repositoryFullName: string;
+    branchName: string;
+    headSha: string;
+  };
   artifactRef: {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
@@ -14,15 +22,29 @@ export type InitiativeReviewBinding = {
   };
 };
 
+const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
+
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-export function requiredToolNames(authorityScope: readonly string[] | undefined): string[] {
+function boundedUniqueStrings(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS) return null;
+  const values = value.map(optionalString);
+  if (values.some((entry) => !entry)) return null;
+  const normalized = values as string[];
+  return new Set(normalized).size === normalized.length ? [...normalized].sort() : null;
+}
+
+function scopedToolNames(authorityScope: readonly string[] | undefined): string[] {
   return [...new Set((authorityScope ?? []).flatMap((entry) => {
     const name = entry.startsWith("tool:") ? entry.slice("tool:".length).trim() : "";
     return name ? [name] : [];
-  }))].slice(0, 4);
+  }))];
+}
+
+export function requiredToolNames(authorityScope: readonly string[] | undefined): string[] {
+  return scopedToolNames(authorityScope).slice(0, 4);
 }
 
 export function requiresInitiativeReviewEffort(toolNames: readonly string[]): boolean {
@@ -56,6 +78,18 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
   const path = optionalString(artifactRef["path"]);
   const providerBlobId = optionalString(artifactRef["providerBlobId"]);
   const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
+  const rawEligibleEvidenceActivityIds = binding["eligibleEvidenceActivityIds"];
+  const eligibleEvidenceActivityIds = rawEligibleEvidenceActivityIds === undefined
+    ? undefined
+    : boundedUniqueStrings(rawEligibleEvidenceActivityIds);
+  const rawWorkroomRef = binding["workroomRef"];
+  const workroomRef = rawWorkroomRef && typeof rawWorkroomRef === "object" && !Array.isArray(rawWorkroomRef)
+    ? rawWorkroomRef as Record<string, unknown>
+    : null;
+  const workroomId = optionalString(workroomRef?.["workroomId"]);
+  const workroomRepositoryFullName = optionalString(workroomRef?.["repositoryFullName"]);
+  const branchName = optionalString(workroomRef?.["branchName"]);
+  const headSha = optionalString(workroomRef?.["headSha"]);
   if (
     !writerToolName?.startsWith("record_initiative_")
     || !itemId?.startsWith("BI-")
@@ -68,6 +102,16 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
+    || (rawEligibleEvidenceActivityIds !== undefined && !eligibleEvidenceActivityIds)
+    || (rawWorkroomRef !== undefined && (
+      workroomRef?.["kind"] !== "workroom-head"
+      || !workroomId
+      || !workroomRepositoryFullName
+      || !branchName
+      || !headSha
+    ))
+    || (workroomRef && workroomRepositoryFullName !== repositoryFullName)
+    || (gate === "objective-mapping" && !eligibleEvidenceActivityIds)
   ) return null;
   return {
     writerToolName,
@@ -75,6 +119,18 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
     gate,
     ...(expectedCurrentBaselineId !== undefined
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
+      : {}),
+    ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
+    ...(workroomRef && workroomId && workroomRepositoryFullName && branchName && headSha
+      ? {
+        workroomRef: {
+          kind: "workroom-head" as const,
+          workroomId,
+          repositoryFullName: workroomRepositoryFullName,
+          branchName,
+          headSha,
+        },
+      }
       : {}),
     artifactRef: {
       kind: "repo-blob-at-commit",
@@ -90,9 +146,16 @@ export function validateInitiativeReviewAuthorityScope(
   binding: InitiativeReviewBinding,
   authorityScope: readonly string[] | undefined,
 ): string | null {
-  const exactTools = requiredToolNames(authorityScope);
+  const exactTools = scopedToolNames(authorityScope);
   if (!exactTools.includes(binding.writerToolName)) {
     return "initiativeReviewBinding writer must match the exact tool authority scope";
+  }
+  const immutableReaderNames = new Set(["read_source_at_version", "search_source_at_version"]);
+  if (!exactTools.includes("read_source_at_version")) {
+    return "initiativeReviewBinding requires read_source_at_version in the exact tool authority scope";
+  }
+  if (exactTools.some((name) => name !== binding.writerToolName && !immutableReaderNames.has(name))) {
+    return "initiativeReviewBinding tool authority scope may contain only the bound writer and immutable readers";
   }
   if (!authorityScope?.includes(`backlog-item:${binding.itemId}`)) {
     return "initiativeReviewBinding item must match the backlog authority scope";
@@ -113,6 +176,7 @@ export function narrowInitiativeReviewTools<T extends {
   if (!binding) return input;
   const exactNames = new Set(requiredNames);
   const currentBaselineId = optionalString(binding.expectedCurrentBaselineId);
+  const eligibleEvidenceActivityIds = binding.eligibleEvidenceActivityIds ?? [];
   const compactResearchReceipt = binding.gate === "research"
     && binding.writerToolName === "record_initiative_evidence";
   const objectiveMappingProposal = binding.writerToolName === "record_initiative_evidence"
@@ -147,6 +211,22 @@ export function narrowInitiativeReviewTools<T extends {
     const narrowedProperties = Object.fromEntries(
       writerPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
     );
+    const objectiveMappings = narrowedProperties["objectiveMappings"];
+    const objectiveMappingsSchema = objectiveMappings && typeof objectiveMappings === "object" && !Array.isArray(objectiveMappings)
+      ? objectiveMappings as Record<string, unknown>
+      : {};
+    const mappingItems = objectiveMappingsSchema["items"] && typeof objectiveMappingsSchema["items"] === "object"
+      && !Array.isArray(objectiveMappingsSchema["items"])
+      ? objectiveMappingsSchema["items"] as Record<string, unknown>
+      : {};
+    const mappingProperties = mappingItems["properties"] && typeof mappingItems["properties"] === "object"
+      && !Array.isArray(mappingItems["properties"])
+      ? mappingItems["properties"] as Record<string, unknown>
+      : {};
+    const evidenceRefs = mappingProperties["evidenceRefs"] && typeof mappingProperties["evidenceRefs"] === "object"
+      && !Array.isArray(mappingProperties["evidenceRefs"])
+      ? mappingProperties["evidenceRefs"] as Record<string, unknown>
+      : {};
     return {
       type: "object",
       properties: objectiveMappingProposal
@@ -154,6 +234,21 @@ export function narrowInitiativeReviewTools<T extends {
             ...narrowedProperties,
             operation: { type: "string", enum: ["objective-mapping"] },
             baselineId: { type: "string", enum: [currentBaselineId] },
+            objectiveMappings: {
+              ...objectiveMappingsSchema,
+              items: {
+                ...mappingItems,
+                properties: {
+                  ...mappingProperties,
+                  evidenceRefs: {
+                    ...evidenceRefs,
+                    items: { type: "string", enum: eligibleEvidenceActivityIds },
+                    minItems: 1,
+                    uniqueItems: true,
+                  },
+                },
+              },
+            },
           }
         : narrowedProperties,
       required: requiredWriterNames,
