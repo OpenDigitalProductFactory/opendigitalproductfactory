@@ -346,6 +346,7 @@ describe("terminal tool policy", () => {
     expect(applyTerminalToolSurface(resumed, [], providerTools)).toEqual([
       { type: "function", function: { name: policy.writerToolName } },
     ]);
+    expect(applyTerminalToolSurface(resumed, [writer(false)], providerTools)).toEqual([]);
     expect(resolveTerminalToolCall(resumed, [], "read_source_at_version")).toMatchObject({
       kind: "refuse",
       result: { error: "terminal_writer_phase_reader_refused" },

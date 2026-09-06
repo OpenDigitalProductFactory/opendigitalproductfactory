@@ -390,11 +390,11 @@ export function applyTerminalToolSurface(
   records: readonly TerminalToolRecord[],
   providerTools: readonly Record<string, unknown>[],
 ): Array<Record<string, unknown>> {
+  const progress = summarizeTerminalToolProgress(policy, records);
+  if (progress.writerAttempted) return [];
   if (policy.terminalPhase === "writer-only") {
     return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
   }
-  const progress = summarizeTerminalToolProgress(policy, records);
-  if (progress.writerAttempted) return [];
   if (progress.evidenceAvailable) return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
   if (progress.readerBudgetExhausted) return [];
   if (progress.partialEvidence) return selectTerminalToolSurface(providerTools, ["read_source_at_version"]);
