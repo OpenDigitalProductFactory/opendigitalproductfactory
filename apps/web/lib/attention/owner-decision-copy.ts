@@ -25,6 +25,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "compliance-source-freshness": "Renew this compliance evidence?",
   "coworker-envelope": "Authorize this coworker record?",
   "skill-proposal": "Approve this change to a coworker skill?",
+  "workroom-stall": "Who should own this stuck work?",
 };
 
 const SPECIALIST: Record<AttentionSource, string> = {
@@ -49,6 +50,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "compliance-source-freshness": "Legal and compliance",
   "coworker-envelope": "Digital workforce",
   "skill-proposal": "Digital workforce",
+  "workroom-stall": "Digital workforce",
 };
 
 export function specialistFor(source: AttentionSource): string {

@@ -37,7 +37,9 @@ type BacklogTerminalItem = {
   epicId: string | null;
   claimedAt: Date | null;
   createdAt: Date;
+  digitalProductId: string | null;
   activeBuild: { kind: string; verificationOut: unknown; uxVerificationStatus: string | null } | null;
+  productObjectiveWork?: { id: string }[];
 };
 
 type BacklogTerminalActivity = ObjectiveReconciliationActivity & {
@@ -106,6 +108,19 @@ function deliveryReasons(result: ResolveCompletionEvidenceResult): string[] {
  */
 export type ResolveMergeDelivery = (args: { itemRowId: string; itemId: string }) => Promise<boolean>;
 
+/**
+ * Candidate source roots the merge signal probes, in order. The portal runtime has
+ * no working checkout at cwd, but it DOES mount the host source tree the self-upgrade
+ * pipeline runs git against (`/host-dpf`), so reachability stays LOCAL and procedural
+ * — no GitHub API, no LLM (platform-function-never-depends-on-a-client). The first
+ * root whose trunk ref resolves wins; if none does, the signal is false and the
+ * caller falls back to the recorded manifest.
+ */
+function mergeSignalRoots(): string[] {
+  const roots = [process.env.DPF_REPO_ROOT, process.env.DPF_HOST_SOURCE_ROOT, "/host-dpf", process.cwd()];
+  return [...new Set(roots.filter((r): r is string => Boolean(r)))];
+}
+
 async function defaultResolveMergeDelivery({ itemId }: { itemRowId: string; itemId: string }): Promise<boolean> {
   try {
     const room = await (prisma as unknown as {
@@ -116,13 +131,48 @@ async function defaultResolveMergeDelivery({ itemId }: { itemRowId: string; item
       select: { headSha: true },
     });
     if (!room?.headSha) return false;
-    const repoRoot = process.env.DPF_REPO_ROOT || process.cwd();
-    if (!(await trunkRefExists(repoRoot))) return false;
-    return (await isReachableFromTrunk(repoRoot, room.headSha)) === true;
+    for (const root of mergeSignalRoots()) {
+      if (!(await trunkRefExists(root))) continue;
+      return (await isReachableFromTrunk(root, room.headSha)) === true;
+    }
+    return false;
   } catch {
     return false;
   }
 }
+
+/**
+ * The direct-merge-platform predicate (EP-4614F35E, kernel-ratified DI-54AECB341524).
+ * A merge through the gates completes an item WITHOUT the full independent-reviewer
+ * lifecycle ONLY for platform self-development — maintainer changes that landed via
+ * CI + the merge queue + PR review. Demand-driven customer feature work is excluded
+ * and keeps the full lifecycle: it carries a Build Studio build, a DigitalProduct,
+ * or a linked product objective, any of which fails this predicate. The boundary is
+ * deliberately tight — when in doubt it does NOT recognize, so governance fails safe.
+ */
+export function isDirectMergePlatformWork(item: {
+  scopeKind: string | null;
+  digitalProductId: string | null;
+  activeBuild: unknown | null;
+  productObjectiveWork?: { id: string }[];
+}): boolean {
+  const platformScoped = item.scopeKind === "platform" || item.scopeKind === "common";
+  const noBuild = item.activeBuild == null;
+  const noProduct = item.digitalProductId == null;
+  const noObjective = (item.productObjectiveWork?.length ?? 0) === 0;
+  return platformScoped && noBuild && noProduct && noObjective;
+}
+
+/**
+ * Whether a design spec is present for the item. Injectable; the default is
+ * non-blocking (true) because absence of a spec CORPUS on a given runtime is not
+ * absence of a spec (spec-plan-search §caveat), and for direct-merge platform work
+ * the PR review is itself the design review. An install that wants to REQUIRE a
+ * discoverable spec injects a strict scanner. Kept out of the DB transaction to
+ * avoid a fragile filesystem dependency on the hot completion path.
+ */
+export type ResolveHasDesignSpec = (args: { itemId: string }) => Promise<boolean>;
+const defaultResolveHasDesignSpec: ResolveHasDesignSpec = async () => true;
 
 export async function completeBacklogItemTransition(args: {
   db?: BacklogTerminalDb;
@@ -139,6 +189,7 @@ export async function completeBacklogItemTransition(args: {
     reconcileObjectives?: ReconcileObjectives;
     projectReadiness?: ProjectReadiness;
     resolveMergeDelivery?: ResolveMergeDelivery;
+    resolveHasDesignSpec?: ResolveHasDesignSpec;
   };
 }): Promise<GovernedTerminalTransitionResult> {
   const db = args.db ?? (prisma as unknown as BacklogTerminalDb);
@@ -155,8 +206,9 @@ export async function completeBacklogItemTransition(args: {
         select: {
           id: true, itemId: true, status: true, workType: true, type: true, source: true,
           scopeKind: true, archetypeCategories: true, archetypeIds: true, organizationId: true,
-          epicId: true, claimedAt: true, createdAt: true,
+          epicId: true, claimedAt: true, createdAt: true, digitalProductId: true,
           activeBuild: { select: { kind: true, verificationOut: true, uxVerificationStatus: true } },
+          productObjectiveWork: { select: { id: true }, take: 1 },
         },
       });
       if (!found) throw new Error(`Backlog item ${args.itemId} not found.`);
@@ -164,8 +216,9 @@ export async function completeBacklogItemTransition(args: {
       lockedItem = await tx.backlogItem.findUnique({ where: { id: found.id }, select: {
         id: true, itemId: true, status: true, workType: true, type: true, source: true,
         scopeKind: true, archetypeCategories: true, archetypeIds: true, organizationId: true,
-        epicId: true, claimedAt: true, createdAt: true,
-        activeBuild: { select: { kind: true, verificationOut: true, uxVerificationStatus: true } },
+        epicId: true, claimedAt: true, createdAt: true, digitalProductId: true,
+          activeBuild: { select: { kind: true, verificationOut: true, uxVerificationStatus: true } },
+          productObjectiveWork: { select: { id: true }, take: 1 },
       } });
       if (!lockedItem) throw new Error(`Backlog item ${args.itemId} disappeared during terminal evaluation.`);
       if (lockedItem.status !== args.expectedStatus) {
@@ -193,9 +246,25 @@ export async function completeBacklogItemTransition(args: {
         itemRowId: lockedItem.id,
         itemId: lockedItem.itemId,
       });
-      // A merge through branch protection (CI + the merge queue) is authoritative
-      // delivery evidence and supersedes a missing/hand-built manifest (BI-B04A0203).
+      // EP-4614F35E (kernel DI-54AECB341524): recognize a merge through the code
+      // gates (CI + merge queue + PR review) as completing DIRECT-MERGE PLATFORM
+      // work — the governance appropriate to maintainer changes — without the full
+      // demand-driven-feature reviewer lifecycle. Bounded by a tight predicate so
+      // customer feature work keeps every gate; a real objective conflict/malformed
+      // reconciliation is NEVER waved through.
+      const hasDesignSpec = await (args.dependencies?.resolveHasDesignSpec ?? defaultResolveHasDesignSpec)({
+        itemId: lockedItem.itemId,
+      });
+      const recognizeMergeThroughGates =
+        mergedThroughGates && isDirectMergePlatformWork(lockedItem) && hasDesignSpec;
+      // A merge through branch protection is authoritative delivery evidence and
+      // supersedes a missing/hand-built manifest (BI-B04A0203).
       const delivery = mergedThroughGates ? "pass" : deliveryState(completion);
+      // Recognized platform work: the merge is the acceptance too — but only when
+      // reconciliation is not in a real conflict/malformed state (those still block).
+      const acceptancePass =
+        reconciliation.state === "pass" ||
+        (recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
       const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
         item: { ...lockedItem, activeBuildKind: lockedItem.activeBuild?.kind ?? null },
         activities: activities as InitiativeReadinessActivity[],
@@ -203,10 +272,11 @@ export async function completeBacklogItemTransition(args: {
         transitionObject: { kind: "backlog-item", id: lockedItem.id, expectedVersion: args.expectedStatus, targetState: "done" },
         authorization: "pass",
         capsuleIdentity: "pass",
+        recognizeMergeThroughGates,
         completion: {
           deliveryEvidence: delivery,
-          acceptanceEvidence: reconciliation.state === "pass" ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
-          objectiveReconciliation: reconciliation.state === "pass" ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+          acceptanceEvidence: acceptancePass ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+          objectiveReconciliation: acceptancePass ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
           objectiveBaselineConflict: reconciliation.state === "conflict",
           projectionError: reconciliation.state === "malformed",
           evidenceRefs: {

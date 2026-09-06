@@ -348,6 +348,17 @@ export function projectBacklogItemReadiness(args: {
   capsuleIdentity: ReadinessEvidenceState;
   planCoverage?: ReadinessEvidenceState;
   artifactHints?: { hasSpec: boolean; hasPlan: boolean };
+  /**
+   * EP-4614F35E / merge-through-gates completion: when true, the design-side and
+   * plan lanes (research, canonical design, spec-approval, objective baseline,
+   * artifact author, architecture review, plan, plan-review, plan-coverage,
+   * traceability) are recognized as satisfied because the item's PR merged
+   * through the code gates (CI + the merge queue + PR review) — the governance
+   * appropriate to direct-merge platform work. The CALLER is responsible for the
+   * predicate (merged + platform/common + no build/product/objective + a design
+   * spec); this projector only applies the coercion. Kernel-ratified DI-54AECB341524.
+   */
+  recognizeMergeThroughGates?: boolean;
   completion?: {
     deliveryEvidence: ReadinessEvidenceState;
     acceptanceEvidence: ReadinessEvidenceState;
@@ -377,35 +388,40 @@ export function projectBacklogItemReadiness(args: {
   const coverage = args.planCoverage ?? projectPlanCoverage(args.activities, baseline.current);
   const dependency = state(evidence, "dependency-disposition");
   const archetypeProvisioning = state(evidence, "archetype-provisioning");
+  // merge-through-gates recognition (EP-4614F35E): coerce the design/plan lanes to
+  // pass because the code gates already governed this direct-merge platform work.
+  // The caller owns the predicate; here it is a pure state coercion.
+  const recognizeMerge = args.recognizeMergeThroughGates === true;
+  const pass = (s: ReadinessEvidenceState): ReadinessEvidenceState => (recognizeMerge ? "pass" : s);
   const facts: InitiativeReadinessFacts = {
     subject: { kind: "backlog-item", id: args.item.itemId },
     transitionObject: args.transitionObject,
     profile: profile ?? "doc-only",
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
-    canonicalDesign: baselineState,
-    canonicalDesignAmbiguous: baseline.ambiguous,
-    research: state(evidence, "research"),
-    specApproval: state(evidence, "spec-approval"),
+    canonicalDesign: pass(baselineState),
+    canonicalDesignAmbiguous: recognizeMerge ? false : baseline.ambiguous,
+    research: pass(state(evidence, "research")),
+    specApproval: pass(state(evidence, "spec-approval")),
     specialistReviews: {
-      architecture: state(evidence, "architecture-review"),
+      architecture: pass(state(evidence, "architecture-review")),
       data: state(evidence, "data-review"),
       ux: state(evidence, "ux-fit-review"),
       security: state(evidence, "security-review"),
       compliance: state(evidence, "compliance-review"),
       domain: state(evidence, "domain-review"),
     },
-    plan: coverage,
-    planReview: state(evidence, "plan-review"),
-    planCoverage: coverage,
-    traceability: coverage,
+    plan: pass(coverage),
+    planReview: pass(state(evidence, "plan-review")),
+    planCoverage: pass(coverage),
+    traceability: pass(coverage),
     dependencies: dependency === "missing" ? "not-applicable" : dependency,
     authorization: args.authorization,
-    artifactAuthor: baselineState,
+    artifactAuthor: pass(baselineState),
     capsuleIdentity: args.capsuleIdentity,
     deliveryEvidence: args.completion?.deliveryEvidence ?? "missing",
     acceptanceEvidence: args.completion?.acceptanceEvidence ?? "missing",
-    objectiveBaseline: baselineState,
+    objectiveBaseline: pass(baselineState),
     objectiveBaselineConflict: args.completion?.objectiveBaselineConflict,
     objectiveReconciliation: args.completion?.objectiveReconciliation ?? "missing",
     archetypeProvisioning: {

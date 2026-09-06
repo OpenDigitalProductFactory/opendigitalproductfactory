@@ -31,6 +31,9 @@ install, and that observation is the acceptance criterion.
 
 Deliverable: a room can be given an owner, and the live room advances.
 
+**Merged 2026-09-06** as `3201bf879` (PR #5099). Deploy to the live install is held by the
+release batch valve (3 of 10 accumulated), so the on-install observable is not yet claimed.
+
 Files:
 - `apps/web/lib/mcp/packs/room-messaging-pack.ts` (the appointment tool)
 - `apps/web/lib/work-management/room-participant-assignment.server.ts` (existing writer — its
@@ -84,6 +87,13 @@ Steps:
    by nothing.
 
 **Observable:** the paused room appears in the owner's attention surface.
+
+**Delivered 2026-09-06** (`workroom-stall` source). Verified against the live database, not
+only in tests: the query returns all twelve standing rooms as stalled — `WC-A69BCABB` at 331
+consecutive refusals and the other eleven at 207-209, every one on
+`missing_explicit_coordinator`. The seam check earned its keep: the raw SQL used the Prisma
+model name `WorkroomActivity` rather than the physical `WorkCapsuleActivity`, which compiles,
+type-checks and passes every unit test while returning nothing at runtime.
 
 ## Phase D — relation-derived hierarchy
 
