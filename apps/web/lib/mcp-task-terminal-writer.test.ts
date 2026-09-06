@@ -342,6 +342,77 @@ describe("terminal writer resumption", () => {
     });
   });
 
+  it("resumes an input-required correction after a schema-invalid writer attempt without an envelope", async () => {
+    const correctionParams = { ...params, idempotencyKey: "invalid-writer-correction" };
+    const metadata = await persistedMetadata("PAT-WRITER-CORRECTION", correctionParams);
+    vi.clearAllMocks();
+    const updatedAt = new Date("2026-09-06T15:50:56.680Z");
+    db.findFirst.mockResolvedValue({
+      id: "task-internal",
+      taskRunId: "TR-MCP-WRITER-CORRECTION",
+      threadId: "thread-external",
+      contextId: "thread-external",
+      status: "input-required",
+      updatedAt,
+      progressPayload: {
+        terminalWriterWait: {
+          schemaVersion: 1,
+          kind: "missing-terminal-writer",
+          writerToolName: "record_initiative_evidence",
+          resumeMode: "same-taskrun",
+          attempt: 1,
+          observedAt: "2026-09-06T15:50:56.679Z",
+        },
+      },
+      a2aMetadata: metadata,
+    });
+    db.findEnvelope.mockResolvedValue(null);
+    db.findToolExecutions.mockResolvedValue([persistedReaderExecution]);
+    db.findToolExecution.mockImplementation(async (query: { where?: { toolName?: unknown; success?: unknown } }) => {
+      if (query.where?.toolName !== "record_initiative_evidence" || query.where?.success === true) return null;
+      return {
+        id: "schema-invalid-writer",
+        toolName: "record_initiative_evidence",
+        success: false,
+        result: {
+          success: false,
+          error: "Every proposal mapping must name each current objective and acceptance statement exactly once.",
+        },
+      };
+    });
+    db.updateMany.mockResolvedValue({ count: 1 });
+    db.update.mockResolvedValue({});
+    db.findUnique.mockResolvedValue({ status: "working" });
+    autonomous.execute.mockResolvedValue({
+      content: "Corrected proposal recorded.",
+      executedTools: [{ name: "record_initiative_evidence", result: { success: true } }],
+    });
+
+    const outcome = await submit("PAT-WRITER-CORRECTION", correctionParams);
+
+    expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { taskRunId: "TR-MCP-WRITER-CORRECTION", status: "input-required", updatedAt },
+      data: expect.objectContaining({
+        status: "working",
+        progressPayload: expect.objectContaining({
+          terminalWriterWait: expect.objectContaining({ attempt: 2 }),
+        }),
+      }),
+    }));
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      taskRunId: "TR-MCP-WRITER-CORRECTION",
+      threadId: "thread-external",
+    }));
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-WRITER-CORRECTION",
+        idempotentReplay: true,
+        resumedFromTerminalWriterWait: true,
+      },
+    });
+  });
+
   it("bootstraps persisted immutable reader evidence when the resumable TaskRun has no reader rows", async () => {
     const metadata = await persistedMetadata("PAT-WRITER-ZERO-READER");
     vi.clearAllMocks();
