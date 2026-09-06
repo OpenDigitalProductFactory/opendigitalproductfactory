@@ -4,8 +4,8 @@ Status: proposed acceptance scope, 2026-09-06. Audience: external contributors a
 development operators. This document does not activate a campaign or grant reset,
 peer-write, business-policy or reviewer authority. All cases below are **not run**.
 
-Scope revision: 2. Adds new-server admission and separate client/peer authentication
-checks. The catalog inventory retains its independent discovery revision.
+Scope revision: 3. Identity determines whether development-companion sync admission
+applies. The catalog inventory retains its independent discovery revision.
 
 ## Portable contract and local ownership
 
@@ -49,9 +49,45 @@ These are source observations, not results on a restored installation.
 
 ## External campaign protocol
 
-### First exercise: admit a new member against the organization's master work list
+### Identity wizard selects the applicable next steps
 
-Before testing business features, exercise connection and initial synchronization.
+The instance-definition wizard owns this branch of onboarding. Only a confirmed
+identity declaring **this is a development server of another instance** enters
+the development-backlog sync setup and admission sequence below. Reuse the existing
+environment, purpose and `pairedProductionInstallationRef` contracts and identity
+change preview; do not introduce a second identity store or a free-standing
+"add sync" task for the operator to remember after setup.
+
+| Confirmed identity | Wizard continuation |
+|---|---|
+| Development instance of a named, resolved parent instance | Establish or reuse authorized membership/trust; connect to that parent's agreed master work inventory; show initial sync and reconcile it before marking development work ready. |
+| Standalone development instance, with no parent relationship | Continue standalone development setup; do not require a master backlog, invent a parent or enable this paired-development sync branch. |
+| Business/production instance, or another non-companion identity | Continue the corresponding business setup; omit development-backlog sync prompts and admission requirements. |
+| Identity or parent selection unconfirmed, invalid or unresolved | Preserve the draft and identify what remains to resolve. Do not guess a relationship or treat discovery as confirmation. |
+
+Purpose alone (including `evolve-dpf`), presence on the LAN, a shared organization
+name, or possession of credentials cannot establish this relationship. Persist the
+confirmed declaration first; resolve the selected parent to a verified installation
+and bind trust/sync evidence to that identity revision. A display name alone is
+not sufficient binding. Identity chooses the workflow and never grants permissions.
+This scopes the development-companion onboarding requirement; it does not disable
+other separately authorized federation or business-sharing capabilities.
+
+For the paired-development branch, the wizard shows the selected parent, connection
+state, sync progress and actual remaining mismatch. Failure allows retry/resume;
+identity may be saved, but development readiness stays incomplete until required
+work is reconciled. Back/reload/retry must not create duplicate links or imports.
+Changing the parent invalidates old-target admission evidence. Leaving the paired
+identity cancels or re-evaluates pending onboarding work, with late responses bound
+to the old revision rejected; it does not silently delete work or revoke existing
+links. Those remain separate governed actions. The same confirmed identity and
+readiness must reach the agent's MCP briefing. Show business-language status in the
+wizard; detailed campaign scripts and teardown stay with the external agent.
+
+### First exercise for a development companion: reconcile the master's work list
+
+For the confirmed paired-development identity, before testing business features,
+exercise connection and initial synchronization as the wizard's logical next step.
 The organization's durable hub supplies the agreed master work inventory; the
 new member must prove it has the required work before selecting an epic. This is
 a proposed admission criterion over existing services, not a shipped installer gate.
@@ -214,6 +250,7 @@ by the assertions. Unavailable infrastructure cannot become a product pass.
 | ACR-016 | External client discovers the target OAuth issuer/resource, authenticates through its supported browser or headless flow, and obtains only effective authorized tools. | Wrong audience, expired/revoked token, insufficient grants and refresh/reconnect failure stay explicit; no peer token reuse or silent privilege increase. Verify PAT migration policy without changing it. | MCP authentication |
 | ACR-017 | New member proves organization membership and mutual trust; reinstall of the same logical member preserves its own durable identity and valid peer links. | Expired/wrong-root/wrong-organization proof, unreachable callback, duplicate active identity or upgrade exposure regression blocks admission. A fresh server cannot clone the hub identity. | Enrollment/connections |
 | ACR-018 | New member reconciles the agreed master work selection across all required origins to a recorded watermark before opening a scenario. | Hub-visible member-origin mirrors omitted by ordinary export, missing page/scope/evidence or concurrent edits produce an explicit unresolved set; no empty or partial sync is called complete. | Initial sync/admission |
+| ACR-019 | Confirming development-of-another identity in the instance wizard selects the named parent's connection and backlog-sync continuation; standalone and business identities skip it. | Unconfirmed identity, unresolved parent, purpose-only inference, parent change, late old-target result, back/reload/retry and failed sync cannot bypass readiness or duplicate setup. Identity saves independently of sync readiness; no implicit permission, link revocation or data deletion. | Identity wizard/continuation |
 
 Start with a business whose users can give feedback; restaurant and pet rescue
 provide contrasting rehearsal examples, followed by trades and rental where
