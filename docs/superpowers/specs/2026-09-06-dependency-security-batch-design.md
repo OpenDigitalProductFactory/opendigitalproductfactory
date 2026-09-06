@@ -22,12 +22,19 @@ Sources: https://github.com/advisories/GHSA-vcc3-ghjq-m6fr and https://github.co
 
 ## Objectives and acceptance
 
-- OBJ-1: Remove the vulnerable decoder algorithm from the installed graph.
-- AC-1: A frozen install resolves a patched decoder and the adversarial input completes within a bounded child-process timeout.
-- OBJ-2: Preserve the existing mobile query parser contract.
-- AC-2: Exercise the actual query-string consumer, including valid UTF-8, malformed bytes, plus signs, and repeated query keys.
-- OBJ-3: Keep dependency changes reviewable and reproducible.
-- AC-3: Fresh-store regeneration reports only the declared changed package set, a second resolution is stable, provenance and applicable security checks pass, and the PR reports exact verification limits.
+**OBJ-1:** Remove the vulnerable decoder algorithm from the installed graph.
+
+**OBJ-2:** Preserve the existing mobile query parser contract.
+
+**OBJ-3:** Keep dependency changes reviewable and reproducible.
+
+| Acceptance | Objective | Required result | Verification |
+| --- | --- | --- | --- |
+| AC-1 | OBJ-1 | A frozen install resolves a patched decoder and the adversarial input completes within a bounded child-process timeout. | Dependency-consumer regression test |
+| AC-2 | OBJ-2 | Exercise the actual query-string consumer, including valid UTF-8, malformed bytes, plus signs, and repeated query keys. | Dependency-consumer compatibility test |
+| AC-3 | OBJ-3 | Fresh-store regeneration reports only the declared changed package set, a second resolution is stable, provenance and applicable security checks pass, and the PR reports exact verification limits. | Lockfile regeneration and required PR checks |
+
+An additional research probe on 2026-09-06 adapted only the upstream v0.5.0 export syntax in memory and injected it into the actual installed query-string consumer. Plus-space decoding, UTF-8 emoji, truncated malformed input, repeated query keys, and 2,000 malformed bytes all retained the expected result. The adversarial case completed in 0.524 ms. This confirms module-format adaptation is viable without changing the upstream algorithm; it does not replace frozen-install verification of the eventual patch.
 
 ## Ordered fix sequence
 
