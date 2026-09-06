@@ -53,6 +53,7 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
       activityIds: eligibleEvidenceActivityIds,
     })),
     loadObjectiveMappingHistory: vi.fn().mockResolvedValue(ok({ history: [] })),
+    verifyHistoricalArtifact: vi.fn().mockResolvedValue(ok(new Uint8Array([1]))),
     discoverArtifact: vi.fn().mockResolvedValue({
       resolved: true,
       artifact: { path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
@@ -194,8 +195,11 @@ describe("terminal initiative recovery", () => {
     ports.loadObjectiveMappingHistory.mockResolvedValue(ok({ history: [{
       taskRunId: "TR-MCP-PRIOR",
       status: "input-required",
+      targetAgent: routePacket.targetAgent,
       objective: routePacket.objective,
+      questionPacketSummary: routePacket.questionPacketSummary,
       idempotencyKey: `initiative-readiness:BI-TERMINAL:objective-mapping:${headSha}`,
+      requiredToolNames: routePacket.requiredToolNames,
       binding: {
         writerToolName: "record_initiative_evidence",
         itemId: "BI-TERMINAL",
@@ -218,6 +222,182 @@ describe("terminal initiative recovery", () => {
       reason: "objective-mapping-prior-authority-active",
       nextAction: expect.stringContaining("TR-MCP-PRIOR"),
     }]);
+  });
+
+  it("releases the exact Pet Rescue legacy identity only after an ancestor-bound provider blob mismatch", async () => {
+    const legacyBaseline = {
+      baselineId: "baseline-ancestor",
+      supersedesBaselineId: null,
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: "6".repeat(40),
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "7".repeat(40),
+      },
+    };
+    const current = {
+      baselineId: "baseline-current",
+      supersedesBaselineId: "baseline-ancestor",
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "3".repeat(40),
+      },
+    };
+    const ports = deps([room], [legacyBaseline, current]);
+    ports.loadObjectiveMappingHistory.mockResolvedValue(ok({ history: [{
+      taskRunId: "TR-MCP-PET-LEGACY",
+      status: "input-required",
+      targetAgent: "AGT-WS-PORTFOLIO",
+      objective: `For BI-TERMINAL in ${room.capsuleId} on ${room.repositoryFullName}#${room.headBranch} at Workroom head ${headSha}, address objective-mapping using record_initiative_evidence.`,
+      questionPacketSummary: `objective-mapping for BI-TERMINAL at ${headSha.slice(0, 12)}`,
+      idempotencyKey: `initiative-readiness:BI-TERMINAL:objective-mapping:${headSha}`,
+      requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+      binding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping",
+        expectedCurrentBaselineId: "baseline-ancestor",
+        artifactRef: {
+          ...legacyBaseline.artifactRef,
+          commitSha: headSha,
+        },
+      },
+      actionEnvelopeStatuses: [],
+      // The five live failures were immutable reader executions. They remain
+      // auditable but are not writer authority and must never be projected as
+      // record_initiative_evidence history.
+      writerExecutions: [],
+    }] }));
+    ports.verifyHistoricalArtifact.mockResolvedValue({
+      ok: false,
+      code: "IMMUTABLE_BLOB_MISMATCH",
+      error: "Repository provider blob identity does not match the requested locator.",
+    });
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(ports.verifyHistoricalArtifact).toHaveBeenCalledWith({
+      repositoryFullName: room.repositoryFullName,
+      commitSha: headSha,
+      path: legacyBaseline.artifactRef.path,
+      expectedBlobId: legacyBaseline.artifactRef.providerBlobId,
+    });
+    expect(result.reviewerRoutes).toMatchObject([{ gate: "objective-mapping" }]);
+  });
+
+  it.each([
+    ["provider unavailable", { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "provider timeout" }, "objective-mapping-history-unavailable"],
+    ["valid stale artifact", ok(new Uint8Array([1])), "objective-mapping-identity-conflict"],
+  ])("fails closed for a %s historical artifact", async (_label, verification, reason) => {
+    const legacyBaseline = {
+      baselineId: "baseline-ancestor",
+      supersedesBaselineId: null,
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: "6".repeat(40),
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "7".repeat(40),
+      },
+    };
+    const current = {
+      baselineId: "baseline-current",
+      supersedesBaselineId: "baseline-ancestor",
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "3".repeat(40),
+      },
+    };
+    const ports = deps([room], [legacyBaseline, current]);
+    ports.loadObjectiveMappingHistory.mockResolvedValue(ok({ history: [{
+      taskRunId: "TR-MCP-PET-LEGACY",
+      status: "input-required",
+      targetAgent: "AGT-WS-PORTFOLIO",
+      objective: `For BI-TERMINAL in ${room.capsuleId} on ${room.repositoryFullName}#${room.headBranch} at Workroom head ${headSha}, address objective-mapping using record_initiative_evidence.`,
+      questionPacketSummary: `objective-mapping for BI-TERMINAL at ${headSha.slice(0, 12)}`,
+      idempotencyKey: `initiative-readiness:BI-TERMINAL:objective-mapping:${headSha}`,
+      requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+      binding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping",
+        expectedCurrentBaselineId: "baseline-ancestor",
+        artifactRef: { ...legacyBaseline.artifactRef, commitSha: headSha },
+      },
+      actionEnvelopeStatuses: [],
+      writerExecutions: [],
+    }] }));
+    ports.verifyHistoricalArtifact.mockResolvedValue(verification);
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason }]);
+  });
+
+  it("does not query or release an artifact whose claimed baseline is not a retained ancestor", async () => {
+    const current = {
+      baselineId: "baseline-current",
+      supersedesBaselineId: null,
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "3".repeat(40),
+      },
+    };
+    const ports = deps([room], [current]);
+    ports.loadObjectiveMappingHistory.mockResolvedValue(ok({ history: [{
+      taskRunId: "TR-MCP-UNRETAINED",
+      status: "input-required",
+      targetAgent: "AGT-WS-PORTFOLIO",
+      objective: `For BI-TERMINAL in ${room.capsuleId} on ${room.repositoryFullName}#${room.headBranch} at Workroom head ${headSha}, address objective-mapping using record_initiative_evidence.`,
+      questionPacketSummary: `objective-mapping for BI-TERMINAL at ${headSha.slice(0, 12)}`,
+      idempotencyKey: `initiative-readiness:BI-TERMINAL:objective-mapping:${headSha}`,
+      requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+      binding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping",
+        expectedCurrentBaselineId: "baseline-not-retained",
+        artifactRef: {
+          ...current.artifactRef,
+          commitSha: headSha,
+          providerBlobId: "7".repeat(40),
+        },
+      },
+      actionEnvelopeStatuses: [],
+      writerExecutions: [],
+    }] }));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(ports.verifyHistoricalArtifact).not.toHaveBeenCalled();
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason: "objective-mapping-identity-conflict" }]);
   });
 
   it("fails closed when the current baseline has no eligible post-baseline passing evidence", async () => {
