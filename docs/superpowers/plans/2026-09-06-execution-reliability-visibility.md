@@ -127,3 +127,63 @@ attempts; never delete evidence or reinterpret a v2 occurrence as v1.
 Completion requires architecture decision, amended specs, implemented/released
 slice, seven scenario proofs, portal navigation screenshots and explicit remaining
 gaps. This plan and a passing unit suite alone do not complete the goal.
+
+## Observed baseline and UX fit — 2026-09-06
+
+Decision: fits-with-guardrails. Workspace owns the operational experience;
+Products / Architecture owns the definition and realization views. The primary
+persona is the operator locating delayed work and deciding whether an authorized
+action is needed. Extend local page navigation and contextual drill-through only.
+The canonical room stays at `/workspace/cases/[caseKey]`; `/ops/workrooms` is its
+inventory, and `/ea/workrooms` and `/ea/views/[id]` are architecture entry points.
+
+Authenticated inspection of the development install found:
+
+| Surface / source | Observed | Required correction |
+| --- | --- | --- |
+| `/ops/workrooms` | 27 live rooms; 173 retained records; inventory rows emphasize executor, branch and lease | Retain bounded inventory; expose actual waiting cause and next owner/action, not lease freshness as execution progress |
+| `/workspace/cases/backlog-item%3ABI-06AE6833` | No immediate attention needed; Assign owner; missing outcome, scope, participants and authority; no reviewer task shown | Join the exact initiative-review binding to the room; distinguish missing boundary facts from an actual reviewer wait |
+| `/ea/workrooms` | Zero active team definitions and zero live links, despite active operational rooms | Display a definition-to-occurrence projection gap; zero linked definitions is not zero operational work |
+| TaskRun database, read-only | Research and architecture at missing-terminal-writer attempt 1; design review at attempt 2 after an identical replay; zero tools executed and no receipts | Preserve same task and immutable artifact; show provider noncompliance, bounded attempts, responsible recovery and missing receipt separately |
+| Source `shape-projection.ts` | Earlier stages become passed from coarse case-state order; terminal states mark current stage passed | Remove unsupported success inference; distinguish recorded state from verified stage completion, including cancellation |
+
+The exact reviewed spec blob remains `d5d9fce0746b45ef46ec00a9d760295780027376`
+at source commit `cd5aaf90caa84472ac849bc55686ead1d9d44795`. Live observations
+used `v2026.09.05-wwmd-decision-value.1`; they do not verify these proposed changes.
+The Workroom evidence records the three TaskRun IDs and replay result. The writer
+contract repair is already owned under BI-8B8731EE; consume its governed release,
+then resume the retained review task. Do not create another repair initiative.
+
+Reuse `WorkroomShapeSection`, `WorkroomShape`, the EA canvas, and
+`ArchitectureDrillthroughPanel`. Reporting controls use report-kit `FilterBar`,
+`DataTable`, `StatusBadge`, `Notice` and `EmptyState`; source-state interpretation
+belongs in the shared projection, not component-local color or status maps.
+Selecting a step navigates/inspects only. Any recovery command uses the existing
+authorization and preview contract; a graph click must not dispatch a coworker.
+
+The first viewport shows the operation, actual state, named wait and next action.
+The inspector progressively reveals why, owner, permitted transitions, evidence,
+and affected work. Keyboard-selectable nodes and the list share stable IDs and
+selection. URL context retains view, search, filter and selection on back navigation.
+Layout order follows definition and containment identity, not changing status or
+timestamps. A failed read retains the last observed timestamp with an explicit stale
+label; missing data is unknown. Simulation uses separate labeled input and cannot
+write runtime evidence. Measure the UX-fit manifest against served DOM before merge.
+
+Conway and nesting acceptance follows the existing operating standard §§9.1–9.5,
+not a new organization chart: separate structural containment from spawn provenance,
+dependencies, blocks and contributions; a cycle is a child room only when it needs
+independent accountability/control/outcome evidence. Portfolio placement is
+aspect-based. Show applicable versioned archetype/profile requirements and instance
+tailoring, including human/physical evidence obligations where applicable. A parent
+rollup cannot accept a child's outcome or grant the child's executor authority.
+The source-delivery reviewer slice exercises software execution and independent
+human/AI review boundaries. It must explicitly report physical/archetype scenario
+coverage still absent rather than imply those business requirements are verified.
+
+Baseline source checks: 62 existing tests passed in the governed worktree across
+`work-capsule-store.test.ts`, `scope-input-parity.test.ts` and
+`workroom-shape-claim.test.ts`. The parity test covers `create_workroom`'s parser,
+not the separate adoption parser. This baseline therefore does not disprove the
+reported adoption defect. Add behavior coverage through both creation and adoption,
+with persisted/read-back mixed claims, rather than only widening a structural test.
