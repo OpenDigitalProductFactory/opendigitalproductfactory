@@ -29,6 +29,23 @@ const initiativeReviewProperties = {
       itemId: { type: "string" },
       gate: { type: "string" },
       expectedCurrentBaselineId: { type: ["string", "null"] },
+      eligibleEvidenceActivityIds: {
+        type: "array",
+        items: { type: "string" },
+        maxItems: 500,
+      },
+      workroomRef: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["workroom-head"] },
+          workroomId: { type: "string" },
+          repositoryFullName: { type: "string" },
+          branchName: { type: "string" },
+          headSha: { type: "string" },
+        },
+        required: ["kind", "workroomId", "repositoryFullName", "branchName", "headSha"],
+        additionalProperties: false,
+      },
       artifactRef: {
         type: "object",
         properties: {

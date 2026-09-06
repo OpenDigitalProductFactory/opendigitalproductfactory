@@ -71,8 +71,12 @@ describe("coworker pack — registration", () => {
 
   it.each(["request_coworker", "summon_coworker"])("%s advertises the immutable initiative-review packet", (toolName) => {
     const schema = coworkerPack.definitions.find((definition) => definition.name === toolName)?.inputSchema;
-    expect(schema?.properties).toHaveProperty("requiredToolNames");
-    expect(schema?.properties).toHaveProperty("initiativeReviewBinding");
+    const properties = (schema as { properties?: Record<string, unknown> } | undefined)?.properties;
+    expect(properties).toHaveProperty("requiredToolNames");
+    expect(properties).toHaveProperty("initiativeReviewBinding");
+    const bindingSchema = properties?.["initiativeReviewBinding"] as { properties?: Record<string, unknown> };
+    expect(bindingSchema.properties).toHaveProperty("eligibleEvidenceActivityIds");
+    expect(bindingSchema.properties).toHaveProperty("workroomRef");
   });
 });
 

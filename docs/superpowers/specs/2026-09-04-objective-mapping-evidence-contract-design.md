@@ -61,6 +61,19 @@ governed mapping that supersedes it.
 or unbounded evidence never contributes to coverage and never produces a
 readiness PASS.
 
+**OBJ-OMEC-KEY:** The server derives the objective-mapping request identity
+from the complete immutable review packet, including the Workroom head,
+baseline, artifact, reviewer, tools, and normalized eligible evidence set.
+Byte-identical packets reuse one TaskRun; a changed server-proved evidence set
+uses one deterministic successor key rather than colliding with an obsolete
+packet at the same Workroom head.
+
+**OBJ-OMEC-SUPERSESSION:** A successor key is issued only for an evidence-set
+change inside the same immutable Workroom, baseline, and artifact identity.
+Caller-invented suffixes, identity drift, or a prior current packet with active
+approval or authoritative writer/receipt state fail closed while all historical
+TaskRuns and envelopes remain auditable.
+
 ## Architecture and data flow
 
 The terminal recovery adapter already loads the current validated baseline and
@@ -100,6 +113,40 @@ uses an older mapping as a substitute and never converts malformed evidence to
 PASS. Baseline-chain corruption and conflicting baseline identities remain
 hard `malformed` projection errors.
 
+### Versioned request identity and historical recovery
+
+The original packet key ended at the Workroom head:
+`initiative-readiness:<BI>:objective-mapping:<head>`. That identity is too
+coarse once `eligibleEvidenceActivityIds` becomes required, because the remote
+task digest correctly hashes the binding. The live BI-SIG TaskRun ending
+`5AFED05D3098` and BI-2B TaskRun ending `42F4B2BBCDF2` therefore own coarse
+keys with historical packet shapes that omit the evidence authority; an exact
+current packet necessarily produces `idempotency_conflict`.
+
+New objective-mapping packets carry an explicit `workroomRef` and use a
+versioned request key whose suffix is the SHA-256 of canonical JSON over:
+
+1. the target reviewer and exact required tools;
+2. the Workroom id, repository, branch, and head;
+3. the writer, BI, gate, and current baseline;
+4. the immutable artifact repository, commit, path, and provider blob; and
+5. the sorted finite eligible evidence activity ids.
+
+The key is an idempotency identity, not an authorization token. The external
+adapter recomputes it from the supplied packet and rejects arbitrary key churn;
+the existing repository and approval boundaries remain the write authority.
+Historical exact packets remain stored and are never rewritten.
+
+Before returning a successor packet, terminal recovery inspects prior
+objective-mapping TaskRuns in the same BI/head lane. A historical packet that
+lacks the now-required evidence authority may be superseded only when its
+immutable artifact, baseline, and Workroom identity still match and it has no
+active proposed/approved envelope or authoritative receipt. A current packet
+with the same normalized evidence set returns the same key. A different current
+evidence set may advance only after the prior request is terminal and has no
+successful authoritative writer or receipt. Any other invariant drift or
+unbounded/ambiguous history produces a typed no-route result.
+
 ## Acceptance
 
 | Acceptance ID | Objective IDs | Required outcome |
@@ -110,6 +157,10 @@ hard `malformed` projection errors.
 | AC-OMEC-004 | OBJ-OMEC-WRITER | Exact same-BI, at/after-baseline passing activity IDs append one complete mapping under the current baseline. |
 | AC-OMEC-005 | OBJ-OMEC-CORRECTION, OBJ-OMEC-FAIL-CLOSED | A malformed newest mapping remains non-passing but yields the objective-mapping recovery requirement; a later valid row supersedes it and can reconcile. |
 | AC-OMEC-006 | OBJ-OMEC-CORRECTION, OBJ-OMEC-FAIL-CLOSED | Reconciliation never falls back to an older valid row when the newest row is malformed, and baseline-chain corruption remains a hard projection failure. |
+| AC-OMEC-007 | OBJ-OMEC-KEY | Exact BI-SIG and BI-2B historical coarse-key fixtures receive deterministic versioned keys when their new server packets add the required evidence set, without modifying either historical TaskRun. |
+| AC-OMEC-008 | OBJ-OMEC-KEY | Reissuing a byte-identical packet, including the same evidence ids in a different input order, produces the same key and therefore the same TaskRun identity. |
+| AC-OMEC-009 | OBJ-OMEC-SUPERSESSION, OBJ-OMEC-FAIL-CLOSED | The external adapter rejects a caller-invented suffix, and recovery rejects changed Workroom, baseline, or artifact identity rather than minting another key. |
+| AC-OMEC-010 | OBJ-OMEC-SUPERSESSION, OBJ-OMEC-FAIL-CLOSED | A prior active proposed/approved envelope, or a successful writer/receipt on a current packet, blocks evidence-set supersession; declined/failed obsolete packet history remains auditable and may recover. |
 
 ## Ordered fix sequence
 
@@ -127,9 +178,12 @@ hard `malformed` projection errors.
    guards, semantic review, DCO, and protected CI. If the shared heavy local
    lane is occupied, record it as INCONCLUSIVE under the operator's explicit
    boundary; never infer PASS or weaken protected checks.
-7. Publish through one protected PR and canonical release, verify the served
-   SHA, then use the server-issued correction packet to append a real BI-2B
-   mapping and prove objective reconciliation without database mutation.
+7. Add RED fixtures for BI-SIG `5AFED05D3098` and BI-2B
+   `42F4B2BBCDF2`, then derive and validate the versioned request identity and
+   guard evidence-only supersession against historical TaskRun state.
+8. Publish through one protected PR and canonical release, verify the served
+   SHA, then use the server-issued correction packets to append real BI-SIG and
+   BI-2B mappings and prove objective reconciliation without database mutation.
 
 ## Failure, compatibility, and rollback
 
@@ -139,6 +193,9 @@ hard `malformed` projection errors.
   ordered, and capped. More eligible evidence than the cap yields no route; it
   is never silently truncated into incomplete authority.
 - Existing valid mapping activities and baseline receipts are unchanged.
+- Historical coarse keys, TaskRuns, tool executions, and envelopes remain
+  immutable. Versioned keys apply only to newly issued objective-mapping
+  packets; they do not rename or mutate a prior identity.
 - No migration, new table, new tool, role, or approval bypass is introduced.
 - Rollback is the source commit. Malformed audit rows remain immutable and
   continue to block PASS until a governed correction exists.
