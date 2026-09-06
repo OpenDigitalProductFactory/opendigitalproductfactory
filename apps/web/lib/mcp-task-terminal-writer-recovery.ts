@@ -72,7 +72,7 @@ export async function reserveTerminalWriterReplay(input: {
         toolName: input.terminalToolPolicy.writerToolName,
       },
       orderBy: { createdAt: "desc" },
-      select: { id: true, success: true, result: true },
+      select: { id: true, success: true, result: true, parameters: true },
     }),
   ]);
   if (successfulWriter) return null;
@@ -120,6 +120,7 @@ export async function reserveTerminalWriterReplay(input: {
       ? { validationFailure: {
           error: String((writerAttempt.result as Record<string, unknown>).error),
           message: String((writerAttempt.result as Record<string, unknown>).message ?? "Receipt validation failed."),
+          ...(writerAttempt.parameters ? { proposal: writerAttempt.parameters } : {}),
         } } : {}),
   };
   const reserved = await reserveTaskRunGenerationWorking({

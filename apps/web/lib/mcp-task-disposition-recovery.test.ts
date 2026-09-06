@@ -166,7 +166,7 @@ describe("disposition correction", () => {
     });
     db.findToolExecutions.mockResolvedValue([persistedReaderExecution]);
     db.findToolExecution.mockImplementation(async (query: { where?: { success?: boolean } }) => query.where?.success
-      ? null : { id: "rejected-writer", success: false, result: {
+      ? null : { id: "rejected-writer", success: false, parameters: { decision: "pass", findings: [{ issue: "Original boundary concern", severity: "important" }] }, result: {
         success: false, error: "malformed-receipt", message: "A passing spec approval cannot introduce findings.",
       } });
     db.findEnvelope.mockResolvedValue(null);
@@ -177,6 +177,8 @@ describe("disposition correction", () => {
       taskRunId: "TR-MCP-DISPOSITION",
       systemPrompt: expect.stringContaining("A passing spec approval cannot introduce findings."),
     }));
+    expect(autonomous.execute.mock.calls[0][0].systemPrompt).toContain("Original boundary concern");
+    expect(autonomous.execute.mock.calls[0][0].systemPrompt).toContain("Explain any retracted or contradicted finding in reason");
     expect(outcome).toMatchObject({ kind: "result", result: { taskRunId: "TR-MCP-DISPOSITION" } });
   });
 

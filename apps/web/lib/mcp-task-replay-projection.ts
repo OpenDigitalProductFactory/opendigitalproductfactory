@@ -1,4 +1,5 @@
 import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
+import type { Prisma } from "@dpf/db";
 import {
   recoverTerminalWriterEscalation,
   terminalWriterEscalationMessage,
@@ -15,7 +16,7 @@ export type TerminalWriterWait = {
   observedAt: string;
   dispatchContract?: "required-tool-call";
   noncompliance?: "prose-without-required-writer";
-  validationFailure?: { error: string; message: string };
+  validationFailure?: { error: string; message: string; proposal?: Prisma.JsonValue };
 };
 
 type TerminalWriterDispatchFailure = {
