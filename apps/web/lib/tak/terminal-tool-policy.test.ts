@@ -307,11 +307,28 @@ describe("terminal tool policy", () => {
     expect(buildTerminalToolReminder(policy, [read()])).toContain(`Call ${policy.writerToolName} now`);
   });
 
-  it("treats any governed writer attempt as terminal without declaring it valid", () => {
-    expect(resolveTerminalTextExit(policy, [read(), writer(false)], 0)).toEqual({ kind: "complete" });
+  it("does not treat a rejected governed writer as a completed receipt", () => {
+    expect(resolveTerminalTextExit(policy, [read(), writer(false)], 0)).toMatchObject({
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      message: expect.stringContaining("did not produce a receipt"),
+    });
     expect(summarizeTerminalToolProgress(policy, [read(), writer(false)])).toMatchObject({
       writerAttempted: true,
     });
+  });
+
+  it("accepts only a successful writer or a persisted approval envelope as terminal", () => {
+    const approval = {
+      name: policy.writerToolName,
+      result: {
+        success: false,
+        error: "approval_required",
+        data: { envelopeId: "ENV-1" },
+      },
+    } satisfies TerminalToolRecord;
+    expect(resolveTerminalTextExit(policy, [read(), writer(true)], 0)).toEqual({ kind: "complete" });
+    expect(resolveTerminalTextExit(policy, [read(), approval], 0)).toEqual({ kind: "complete" });
   });
 
   it("enters a writer-only terminal phase from persisted immutable evidence", () => {
@@ -411,6 +428,7 @@ describe("agent loop terminal writer integration", () => {
     expect(seventhTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
     expect(vi.mocked(governedExecuteTool).mock.calls.filter(([call]) => call.toolName === "read_source_at_version")).toHaveLength(6);
     expect(result.executedTools.at(-1)).toMatchObject({ name: policy.writerToolName, result: { success: false } });
+    expect(result.failure).toMatchObject({ kind: "terminal-writer-missing" });
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(8);
   });
 

@@ -71,6 +71,10 @@ remains frozen and is not a test target.
 - `apps/web/lib/tak/agentic-loop.test.ts`
 - `apps/web/lib/mcp-task-execution.ts`
 - `apps/web/lib/mcp-task-execution.test.ts`
+- `apps/web/lib/mcp-task-replay-projection.ts`
+- `apps/web/lib/mcp-task-replay-projection.test.ts`
+- `apps/web/lib/tak/terminal-tool-policy.ts`
+- `apps/web/lib/tak/terminal-tool-policy.test.ts`
 
 No schema, migration, public route, role, grant, approval, writer, receipt, or UI
 surface change is expected.
@@ -79,7 +83,8 @@ surface change is expected.
 
 - Decision: atomic
 - Parent: `BI-8B8731EE`
-- Receipt: pending immutable plan publication and canonical readiness writer
+- Receipt: blocked-by: the required terminal-writer path being repaired cannot yet obtain its canonical readiness writer
+- Dependencies: none
 - Rationale: capability refusal, fallback semantics, typed cause preservation,
   and same-TaskRun projection form one fail-closed dispatch contract. Shipping
   any subset either continues to send prose-only writer turns or hides the real

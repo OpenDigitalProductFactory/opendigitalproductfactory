@@ -178,6 +178,133 @@ describe("remote task terminal-writer postcondition", () => {
       data: expect.objectContaining({ status: "completed" }),
     }));
   });
+
+  it("does not complete when the governed writer ran but produced neither receipt nor approval", async () => {
+    autonomous.execute.mockResolvedValue({
+      content: "The governed writer rejected the assessment.",
+      executedTools: [{
+        name: writerToolName,
+        args: { decision: "pass" },
+        result: {
+          success: false,
+          error: "CANONICAL_DESIGN_REQUIRED",
+          message: "No canonical receipt was created.",
+        },
+      }],
+    });
+
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-WRITER-REJECTED", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-REJECTED", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed,
+      idempotentReplay: true,
+      resumeKind: "terminal-writer",
+      capacityAttempt: 1,
+      terminalWriterAttempt: 2,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        status: "input-required",
+        idempotentReplay: true,
+        resumable: true,
+        waitReason: "missing-terminal-writer",
+      },
+    });
+    expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "completed" }),
+    }));
+  });
+
+  it.each([
+    ["record_initiative_evidence", 2, true, "required-terminal-writer-not-enforceable"],
+    ["record_initiative_design_review", 2, true, "required-terminal-writer-not-enforceable"],
+    ["record_initiative_evidence", 3, false, "terminal-writer-retry-exhausted"],
+  ])("parks %s before inference when no routed adapter can force the writer (attempt %i)", async (
+    requiredWriter,
+    writerAttempt,
+    resumable,
+    waitReason,
+  ) => {
+    autonomous.execute.mockResolvedValue({
+      content: "No eligible adapter can enforce the required terminal writer.",
+      executedTools: [],
+      failure: {
+        kind: "required-terminal-writer-not-enforceable",
+        message: "required-terminal-writer-not-enforceable: no eligible adapter can force the sole writer",
+      },
+    });
+    const bound = {
+      ...parsed,
+      authorityScope: parsed.authorityScope
+        .filter((scope) => !scope.startsWith("tool:record_initiative_"))
+        .concat(`tool:${requiredWriter}`),
+      initiativeReviewBinding: {
+        ...parsed.initiativeReviewBinding,
+        writerToolName: requiredWriter,
+      },
+    };
+
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-7ECDD7A53D18", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-BOUND", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed: bound,
+      idempotentReplay: true,
+      resumeKind: "terminal-writer",
+      capacityAttempt: 1,
+      terminalWriterAttempt: writerAttempt,
+    });
+
+    expect(db.updateTaskRun).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-MCP-7ECDD7A53D18" },
+      data: expect.objectContaining({
+        status: "input-required",
+        completedAt: null,
+        progressPayload: expect.objectContaining({
+          executedToolCount: 0,
+          terminalWriterWait: expect.objectContaining({
+            kind: "missing-terminal-writer",
+            writerToolName: requiredWriter,
+            resumeMode: "same-taskrun",
+            attempt: writerAttempt,
+          }),
+          terminalWriterDispatchFailure: expect.objectContaining({
+            code: "required-terminal-writer-not-enforceable",
+            writerToolName: requiredWriter,
+          }),
+          ...(resumable ? {} : {
+            terminalWriterEscalation: expect.objectContaining({
+              code: "terminal_writer_retry_exhausted",
+              writerToolName: requiredWriter,
+              attempt: writerAttempt,
+            }),
+          }),
+        }),
+      }),
+    });
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-7ECDD7A53D18",
+        status: "input-required",
+        idempotentReplay: true,
+        resumedFromTerminalWriterWait: true,
+        requiresApproval: false,
+        resumable,
+        waitReason,
+        structuredContent: resumable
+          ? { error: "required-terminal-writer-not-enforceable" }
+          : expect.objectContaining({ error: "terminal_writer_retry_exhausted" }),
+        executedToolCount: 0,
+        isError: true,
+      },
+    });
+  });
 });
 
 // BI-8B8731EE. A governed reviewer route that never reached a model is NOT a

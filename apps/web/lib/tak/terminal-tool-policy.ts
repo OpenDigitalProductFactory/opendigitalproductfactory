@@ -25,7 +25,7 @@ type ImmutableReaderArtifactRef = {
 export type TerminalToolRecord = {
   name: string;
   args?: Record<string, unknown>;
-  result: { success: boolean; data?: Record<string, unknown> };
+  result: { success: boolean; error?: string; data?: Record<string, unknown> };
 };
 
 const INITIATIVE_REVIEW_READER_NAMES = [
@@ -360,6 +360,20 @@ function providerToolName(tool: Record<string, unknown>): string | null {
     : null;
 }
 
+function writerReachedTerminalBoundary(
+  policy: TerminalToolPolicy,
+  records: readonly TerminalToolRecord[],
+): boolean {
+  return records.some((record) => record.name === policy.writerToolName && (
+    record.result.success
+    || (
+      record.result.error === "approval_required"
+      && typeof record.result.data?.["envelopeId"] === "string"
+      && record.result.data["envelopeId"].trim().length > 0
+    )
+  ));
+}
+
 export function selectTerminalToolSurface(
   providerTools: readonly Record<string, unknown>[],
   allowedToolNames: readonly string[],
@@ -380,7 +394,7 @@ export function applyTerminalToolSurface(
     return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
   }
   const progress = summarizeTerminalToolProgress(policy, records);
-  if (progress.writerAttempted) return [...providerTools];
+  if (progress.writerAttempted) return [];
   if (progress.evidenceAvailable) return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
   if (progress.readerBudgetExhausted) return [];
   if (progress.partialEvidence) return selectTerminalToolSurface(providerTools, ["read_source_at_version"]);
@@ -392,6 +406,9 @@ export function buildTerminalToolReminder(
   records: readonly TerminalToolRecord[],
 ): string {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (progress.writerAttempted) {
+    return `The sole ${policy.writerToolName} attempt did not produce a receipt or approval envelope. Stop without another tool call.`;
+  }
   if (policy.terminalPhase === "writer-only") {
     return `Immutable evidence is already persisted. Call ${policy.writerToolName} now; do not read again or respond with prose first.`;
   }
@@ -408,7 +425,15 @@ export function resolveTerminalTextExit(
   nudgesUsed: number,
 ): TerminalTextExitDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
-  if (progress.writerAttempted) return { kind: "complete" };
+  if (writerReachedTerminalBoundary(policy, records)) return { kind: "complete" };
+  if (progress.writerAttempted) {
+    return {
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      writerToolName: policy.writerToolName,
+      message: `The sole ${policy.writerToolName} attempt did not produce a receipt or approval envelope. The same TaskRun remains resumable.`,
+    };
+  }
   if (progress.readerBudgetExhausted && !progress.evidenceAvailable) {
     return {
       kind: "input-required",

@@ -176,6 +176,34 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
     expect(outcome.message).toMatch(/model.*unavailable|available model/i);
   });
 
+  it("preserves an unenforceable required writer before the generic all-endpoints branch", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      'All endpoints failed for initiative-review. Attempts: [{"endpointId":"codex","error":"required-terminal-writer-not-enforceable: codex-cli cannot require record_initiative_evidence"}]',
+      1,
+    );
+
+    expect(outcome.kind).toBe("required-terminal-writer-not-enforceable");
+    expect(outcome.message).toMatch(/inference was not started|model was not run/i);
+    expect(outcome.message).toMatch(/required governed.*writer|required tool choice/i);
+    expect(outcome.message).not.toBe(providersBusyHandoff());
+  });
+
+  it.each([
+    ["Provider is overloaded, status: 529", "busy"],
+    ["Local provider dispatch deferred: local-ci-active-capacity-reservation", "capacity"],
+  ])("does not let an earlier CLI capability miss hide a later enforcing adapter refusal (%s)", (lastError, kind) => {
+    const outcome = describeToolRouteFailureOutcome(
+      `All endpoints failed for initiative-review. Attempts: ${JSON.stringify([
+        { endpointId: "codex", error: "required-terminal-writer-not-enforceable: codex-cli cannot require the writer" },
+        { endpointId: "enforcing", error: lastError },
+      ])}`,
+      1,
+    );
+
+    expect(outcome.kind).toBe(kind);
+    expect(outcome.kind).not.toBe("required-terminal-writer-not-enforceable");
+  });
+
   it("keeps the bounded reconciliation signal classified as model-missing", () => {
     const outcome = describeToolRouteFailureOutcome(
       "Provider model inventory changed for docker-model-runner. Attempts: []",

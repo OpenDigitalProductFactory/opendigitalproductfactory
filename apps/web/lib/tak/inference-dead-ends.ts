@@ -87,6 +87,17 @@ export function modelMissingHandoff(): string {
   });
 }
 
+export function requiredTerminalWriterNotEnforceableHandoff(): string {
+  return buildHumanHandoff({
+    blocker:
+      "None of the available AI adapters can enforce this task's required governed receipt writer, so inference was not started and no receipt was created.",
+    steps: [
+      "Activate or route this task to an AI provider adapter that supports required tool choice.",
+    ],
+    verify: "resume this same task with its unchanged evidence and record the governed receipt",
+  });
+}
+
 
 /**
  * The local model is present and healthy, but a background job on this host
@@ -214,6 +225,30 @@ function readExpectedFreeAt(error: unknown): Date | null {
   return null;
 }
 
+function isRequiredTerminalWriterNotEnforceable(error: unknown, message: string): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+  if (code === "required_terminal_writer_not_enforceable") return true;
+  const marker = /required[_-]terminal[_-]writer[_-]not[_-]enforceable/i;
+  if (!marker.test(message)) return false;
+  if (!/^All endpoints failed/i.test(message)) return true;
+  const serializedAttempts = /Attempts:\s*(\[.*\])\s*$/s.exec(message)?.[1];
+  if (!serializedAttempts) return false;
+  try {
+    const attempts = JSON.parse(serializedAttempts) as unknown;
+    return Array.isArray(attempts)
+      && attempts.length > 0
+      && attempts.every((attempt) => {
+        if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
+        const attemptError = (attempt as Record<string, unknown>)["error"];
+        return typeof attemptError === "string" && marker.test(attemptError);
+      });
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Plain-language, non-technical explanation for a turn that failed because
  * routing could not complete a tool-using call (BI-23E0714C).
@@ -246,6 +281,10 @@ function describeToolRouteFailureMessage(
 
   if (msg.startsWith("REQUEST_TOO_LARGE:")) {
     return "Your conversation is too long for this AI provider. Please start a new thread to continue.";
+  }
+
+  if (isRequiredTerminalWriterNotEnforceable(error, msg)) {
+    return requiredTerminalWriterNotEnforceableHandoff();
   }
 
   // Checked early, and before the credential and threshold branches: a deferral
@@ -349,6 +388,7 @@ export type InferenceDeadEndKind =
   | "policy-or-capability"
   | "context"
   | "busy"
+  | "required-terminal-writer-not-enforceable"
   | "terminal-writer-missing"
   | "unknown";
 
@@ -363,6 +403,12 @@ export function describeToolRouteFailureOutcome(
   error?: unknown,
 ): InferenceDeadEndOutcome {
   const msg = errorMessage ?? "";
+  if (isRequiredTerminalWriterNotEnforceable(error, msg)) {
+    return {
+      kind: "required-terminal-writer-not-enforceable",
+      message: requiredTerminalWriterNotEnforceableHandoff(),
+    };
+  }
   if (/model[_ ]not[_ ]found|model not found|provider model inventory changed/i.test(msg)) {
     return { kind: "model-missing", message: modelMissingHandoff() };
   }
