@@ -33,6 +33,26 @@ Consequences measured on the live install (2026-08-28 to 2026-09-02):
 
 The pressure this creates is documented in BI-28E8CB88: the path of least resistance is to author research docs and plans *after the fact* to satisfy the projector. That converts a reporting defect into falsified governance history.
 
+## 1.1 Objectives and acceptance
+
+Objective statements and acceptance criteria are marked so a spec-approval receipt can mint the scope baseline from this document (`baseline-manifest.ts`). Each acceptance row names the objectives it proves.
+
+- **OBJ-SHAPE-TAXONOMY:** One delivery-shape taxonomy (break-fix, small, medium, large, xlarge) is the fifth Workroom shape axis, declared or derived at claim time, and every governance gate is keyed by (shape, sensitivity, target).
+- **OBJ-PROPORTIONAL-GATES:** No shape owes an artifact the work does not naturally produce: small and medium mint their objective baseline from the item body, large from an approved spec, xlarge from a decomposition hypothesis; completion requirements are conditional on shape.
+- **OBJ-DELIVERY-TRUNK:** A merged SHA reachable from main with green required checks satisfies delivery evidence for every shape, read from the Workroom head or the linked PR, without a manifest or a bound Workroom.
+- **OBJ-EXPEDITE-AUDITED:** A break-fix lane skips pre-authorisation, owes a post-implementation review receipt within 48 hours, is limited to one open per installation, and is surfaced as a share on Right Now.
+- **OBJ-SEALED-RULINGS:** Kernel rulings that shape this policy are sealed in the decision ledger with a decision id, so a shaped claim binds to a recorded verdict rather than advice.
+
+| Acceptance | Objectives | Statement |
+|---|---|---|
+| AC-SMALL-CLOSES-ON-MERGE | OBJ-SHAPE-TAXONOMY, OBJ-PROPORTIONAL-GATES, OBJ-DELIVERY-TRUNK | A small fix claimed with a declared shape closes on merge with a runtime check and no spec, plan, or reconciliation receipt. |
+| AC-CLAIM-ASKS-FOR-SHAPE | OBJ-SHAPE-TAXONOMY | A claim whose shape is not declared and not confidently derivable is refused with the five-shape pick list, and an unattended caller stops with attention routed to the owner. |
+| AC-LARGE-KEEPS-GATES | OBJ-PROPORTIONAL-GATES | A large item still owes an approved spec, a plan with coverage, architecture review, and acceptance evidence against its baseline. |
+| AC-HIGH-SENSITIVITY-RAISES | OBJ-PROPORTIONAL-GATES | A small item at high sensitivity owes the large gates; lowering a shape is a recorded override visible on the item. |
+| AC-BREAK-FIX-PIR | OBJ-EXPEDITE-AUDITED | A break-fix declared by a human closes on its PIR receipt; a second declaration while one is open is refused; a missed PIR flips the item to input-required. |
+| AC-PRE-TAXONOMY-UNTOUCHED | OBJ-PROPORTIONAL-GATES | An item with no shape keeps today's profile behaviour and a done item is never re-blocked. |
+| AC-LEDGER-RECORDS | OBJ-SEALED-RULINGS | principle_decide on the live install returns a decision id with ledger.recorded true. |
+
 ## 2. Research & Benchmarking
 
 Seven bodies of practice were compared (full citations in the research appendix, §8). What they converge on:
