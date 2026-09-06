@@ -48,23 +48,39 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
 REAPED_LEASE=false
 REAPED_COUNT=0
 
-# --- 1. Release any held nonprod lease / work capsule via the DPF MCP --------
+# --- 1. Release THIS session's nonprod lease(s) / work capsule via the DPF MCP
+#
+# Owner-scoped on purpose (BI-B0122A22): the release tool requires a leaseId and
+# the server refuses a release by a different owner, so we first list the live
+# leases, keep only the ones this session_id owns, and release each by id. The
+# former `{"environmentKey":...}` call was refused by the server every time and
+# only ever produced a misleading `lease_released:true` audit line.
 MCP_ENDPOINT="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
-if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ] && command -v curl >/dev/null 2>&1; then
-  for _call in \
-    'release_nonprod_environment_lease|{"environmentKey":"local-integration-ci"}' \
-    'release_capsule_scope|{}'; do
-    _name="${_call%%|*}"
-    _args="${_call#*|}"
-    _body="$(printf '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"%s","arguments":%s}}' "$_name" "$_args")"
-    if curl -s --max-time 5 -X POST "$MCP_ENDPOINT" \
-        -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
-        -H "Content-Type: application/json" \
-        -H "Accept: application/json, text/event-stream" \
-        --data "$_body" >/dev/null 2>&1; then
+mcp_call() {
+  _body="$(printf '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"%s","arguments":%s}}' "$1" "$2")"
+  curl -s --max-time 5 -X POST "$MCP_ENDPOINT" \
+    -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    --data "$_body" 2>/dev/null
+}
+if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ] && [ -n "$SESSION_ID" ] && command -v curl >/dev/null 2>&1; then
+  _listing="$(mcp_call list_nonprod_environment_leases '{}')"
+  # The tool result travels as JSON text inside the JSON-RPC envelope; pull every
+  # leaseId whose ownerSessionId is this session, from active and queued alike.
+  _mine="$(printf '%s' "$_listing" \
+    | tr -d '\\' \
+    | grep -oE '"leaseId":"NPEL-[A-Z0-9]+"[^}]*"ownerSessionId":"'"$SESSION_ID"'"' \
+    | grep -oE 'NPEL-[A-Z0-9]+' \
+    | sort -u)"
+  for _lease in $_mine; do
+    if mcp_call release_nonprod_environment_lease \
+        "$(printf '{"leaseId":"%s","ownerSessionId":"%s"}' "$_lease" "$SESSION_ID")" \
+        | grep -q '"success":true'; then
       REAPED_LEASE=true
     fi
   done
+  mcp_call release_capsule_scope '{}' >/dev/null || true
 fi
 
 # --- 2. Reap THIS session's orphaned MCP/node sidecars -----------------------

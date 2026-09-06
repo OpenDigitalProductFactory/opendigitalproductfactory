@@ -85,6 +85,8 @@ The `SessionStart` `root-clone-freshness` hook (`packages/dpf-skill-pack/hooks/r
 
 The worktree janitor (`scripts/worktree-janitor.mjs`, fleet backstop; and the SessionEnd reaper) removes merged+clean worktrees. Two safety rails keep it from removing a worktree out from under work:
 
+The SessionEnd reaper (`scripts/hooks/session-reaper.sh`) also terminates the ending session's own node sidecars and releases the leases that session owns. It is scoped on purpose: a process counts as the session's only when its command line names the session's worktree *outside* `node_modules` (shared binaries prove nothing about ownership) and names no other worktree; and a lease is released only when its `ownerSessionId` is the ending session. A session started in the root clone therefore never reaps a sibling worktree's local-CI gate run, which is how three gate runs died by SIGTERM on 2026-09-06 (BI-B0122A22).
+
 - **Live-session gate.** A session writes a gitignored `.dpf-session-heartbeat.json` marker into its worktree, refreshed every turn by the `worktree-session-heartbeat` hook (SessionStart/Stop) and removed on SessionEnd. The janitor treats a fresh marker (TTL default 60 min, `DPF_WORKTREE_SESSION_HEARTBEAT_TTL_MIN`) as `KEEP`, **outranking** Tier-A eligibility — because a live session's tree first becomes Tier-A the moment its own PR merges, which is exactly when it must not be reaped.
 - **Abandoned-merge quarantine.** A worktree with `MERGE_HEAD` present and **no** live session is classified `FLAG_ABANDONED_MERGE`: surfaced in the janitor summary and never auto-reaped, since an interrupted merge can hide un-reconciled work. A *live* session's in-progress merge is kept, not flagged.
 
