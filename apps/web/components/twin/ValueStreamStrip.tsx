@@ -59,7 +59,7 @@ function StageTiles({ stages, label }: { stages: TwinStageFlow[]; label: string 
               ) : (
                 <span className="text-sm font-semibold text-[var(--dpf-muted)]">
                   <span aria-hidden>—</span>
-                  <span className="sr-only">Not tracked yet</span>
+                  <span className="sr-only">Untracked</span>
                 </span>
               )}
               {stage.longestWait ? (
@@ -88,9 +88,9 @@ export function ValueStreamStrip({ stages, className = "" }: ValueStreamStripPro
       {own.length > 0 && inherited.length > 0 ? (
         <details data-dpf-disclosure className="mt-1 text-dpf-caption text-[var(--dpf-muted)]">
           <summary className="cursor-pointer text-[var(--dpf-accent)]">
-            {inherited.length} inherited backbone stages
+            {inherited.length} inherited
           </summary>
-          <StageTiles stages={inherited} label="Inherited backbone stages" />
+          <StageTiles stages={inherited} label="Inherited stages" />
         </details>
       ) : null}
       {anyUntracked ? (

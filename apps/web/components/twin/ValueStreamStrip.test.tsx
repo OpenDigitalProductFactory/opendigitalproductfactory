@@ -62,7 +62,7 @@ describe("ValueStreamStrip", () => {
       expect(tile.textContent).toContain("—");
     }
     // and it is legible to a screen reader, not only to the eye
-    expect(screen.getAllByText("Not tracked yet")).toHaveLength(2);
+    expect(screen.getAllByText("Untracked")).toHaveLength(2);
   });
 
   it("still names every stage of the operator's day", () => {
@@ -100,9 +100,9 @@ describe("ValueStreamStrip", () => {
     const details = document.querySelector("details[data-dpf-disclosure]");
     expect(details).not.toBeNull();
     expect(details?.hasAttribute("open")).toBe(false);
-    expect(screen.getByText("2 inherited backbone stages")).toBeTruthy();
+    expect(screen.getByText("2 inherited")).toBeTruthy();
     expect(screen.getByLabelText("Value stream").textContent).toContain("Deliver daily care");
     expect(screen.getByLabelText("Value stream").textContent).not.toContain("Attract");
-    expect(screen.getByLabelText("Inherited backbone stages").textContent).toContain("Attract");
+    expect(screen.getByLabelText("Inherited stages").textContent).toContain("Attract");
   });
 });
