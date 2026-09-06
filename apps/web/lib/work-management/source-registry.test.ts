@@ -4,14 +4,12 @@ import { WORK_ITEM_SOURCE_TYPES } from "@/lib/queue/queue-types";
 
 import {
   WORK_CASE_ACCOUNT_RESOLVER_SOURCE_KEYS,
-  WORK_CASE_ROOM_TRIGGER_KINDS,
   WORK_CASE_SOURCE_REGISTRY,
-  getWorkCaseRoomTrigger,
   getWorkCaseSourceEntry,
   getWorkroomDefinitionIdentity,
-  narrowRoomToolGrant,
-  resolveRoomToolGrantForSource,
 } from "./source-registry";
+import { WORK_CASE_ROOM_TRIGGER_KINDS, narrowRoomToolGrant } from "./room-definition-contract";
+import { getWorkCaseRoomTrigger, resolveRoomToolGrantForSource } from "./room-definition-resolvers";
 
 describe("Work Case source registry", () => {
   it("covers every existing WorkItem source type", () => {
