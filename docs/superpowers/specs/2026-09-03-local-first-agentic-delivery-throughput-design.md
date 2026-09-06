@@ -10,6 +10,28 @@ status: draft
 **Primary epic:** `EP-ABB3AC9D` — change-delivery latency  
 **Co-owning epics:** `EP-WORK-CONVERGENCE` — work projection; `EP-056D2A5E` — local capacity and contention
 
+## Provider admission delivery slice (2026-09-06)
+
+`BI-06AE6833`, Workroom `WC-27D00458`, implements only the provider-admission
+contract in sections 11 and 15.1. The execution/visualization work in
+`WC-4A72DC95` retains its existing ownership and scope.
+
+Remove the semantic review wrapper's blanket local-capacity probe. The shared
+completion adapter already calls `assertProviderDispatchCapacity` for the selected
+provider; verify the primary and fallback paths reach that boundary. Declare
+ordinary platform review as internal and retain full payload screening, explicit
+residency, provider clearance and export obligations. An external surface alone
+does not make a payload public. Do not relax mixed secret or regulated content.
+
+Verify external review while local CI is active, queued or unavailable; local
+fallback must still refuse dispatch under those conditions. Preserve independent
+specialist branches and infrastructure-inconclusive outcomes. Run the affected
+review, provider-capacity, fallback and screening tests; then exercise a real
+review on the installed release with eligible external inference. No migration,
+new provider setting or second admission policy is needed. Rollback is the scoped
+review-wrapper change. Refactoring removes one duplicate admission predicate
+rather than introducing a new controller.
+
 ## 1. Decision in one paragraph
 
 Make the Workroom the visible delivery rail for Build Studio and every coding client, then run delivery as bounded campaigns whose independently shippable leaves can execute across the two local DPF installations. Keep one backlog, one Workroom identity, one immutable gate identity, and one evidence packet. Add a durable review-tail controller so work ends at verified merge/closeout rather than at PR creation. Measure throughput as verified outcomes per time, token, and human intervention—not PRs or lines changed alone. Keep canonical DPF instructions provider-neutral and apply model/version-specific prompt behavior through evaluated execution profiles. Cloud CI remains the protected safety net and contingency lane; local machines are the chosen capacity investment.
@@ -81,12 +103,25 @@ The sponsor segments are disclosed advertising. Treat their numbers as vendor cl
 
 ### Outcomes
 
-1. The operator can see every active delivery, its branch/PR, owner, blocker, next action, and verified result in Build Studio.
-2. Build Studio can decompose one bounded objective into independently shippable BIs/PRs and coordinate them to terminal delivery.
-3. The two local installations can execute separate ready leaves without duplicate ownership or a shared mutable filesystem.
-4. PR checks, review findings, repair, takeover, merge, deployment verification, and closeout form one durable convergence loop.
-5. Model and prompt changes are promoted by measured delivery outcomes.
-6. Twenty percent of campaign capacity is reserved for evidence-backed refactoring/deletion that reduces future delivery cost.
+1. **OBJ-DELIVERY-VISIBILITY:** The operator can see every active delivery, its branch/PR, owner, blocker, next action, and verified result in Build Studio.
+2. **OBJ-DELIVERY-CAMPAIGN:** Build Studio can decompose one bounded objective into independently shippable BIs/PRs and coordinate them to terminal delivery.
+3. **OBJ-DELIVERY-PLACEMENT:** The two local installations can execute separate ready leaves without duplicate ownership or a shared mutable filesystem.
+4. **OBJ-DELIVERY-CONVERGENCE:** PR checks, review findings, repair, takeover, merge, deployment verification, and closeout form one durable convergence loop.
+5. **OBJ-DELIVERY-MEASUREMENT:** Model and prompt changes are promoted by measured delivery outcomes.
+6. **OBJ-DELIVERY-REFACTOR:** Twenty percent of campaign capacity is reserved for evidence-backed refactoring/deletion that reduces future delivery cost.
+
+These identifiers preserve the existing six outcomes; the provider-admission
+slice does not claim completion of the other delivery owners' work.
+
+| Acceptance | Objectives | Requirement | Evidence |
+| --- | --- | --- | --- |
+| AC-DELIVERY-VISIBILITY | OBJ-DELIVERY-VISIBILITY | Pipeline, thread and attention views agree with current canonical records, and expose stale sources and the next action. | Section 7 runtime UX cases; BI-9DC43E17 |
+| AC-DELIVERY-CAMPAIGN | OBJ-DELIVERY-CAMPAIGN | A bounded campaign dispatches only ready independent leaves and records a terminal outcome for each. | Section 9 campaign integration cases; BI-1CB9D97B |
+| AC-DELIVERY-PLACEMENT | OBJ-DELIVERY-PLACEMENT | Paired installations run distinct authorized leaves without duplicate writers; unavailable capacity leaves a recoverable wait. | Section 10 placement cases; BI-8D56F777 |
+| AC-DELIVERY-CONVERGENCE | OBJ-DELIVERY-CONVERGENCE | Exact-revision receipts, bounded recovery, takeover and protected merge lead to verified closeout; stale evidence never advances new work. | Section 15.1 recovery and interruption cases; BI-06AE6833 |
+| AC-DELIVERY-ADMISSION | OBJ-DELIVERY-CONVERGENCE | Eligible external review completes while local capacity is unavailable; local fallback and sensitive mixed payload remain constrained. | Section 11 provider-boundary tests and live review; BI-06AE6833 |
+| AC-DELIVERY-MEASUREMENT | OBJ-DELIVERY-MEASUREMENT | Profile comparisons report complete outcome cohorts, quality, time and attributable cost with missing coverage labelled. | Section 13 scorecard verification; BI-69803ACC and BI-A472354E |
+| AC-DELIVERY-REFACTOR | OBJ-DELIVERY-REFACTOR | The campaign records its refactoring allocation and removed duplicate contracts with verified consumers. | Section 15.1 consolidation evidence |
 
 ### Constraints
 

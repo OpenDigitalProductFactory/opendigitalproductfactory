@@ -29,12 +29,32 @@ Source implementation waits for that contract and exact-artifact plan review.
 | Key | Existing item | Depends on | Objectives | Acceptance |
 | --- | --- | --- | --- | --- |
 | binding | BI-06AE6833 | none | OBJ-EXEC-01 | AC-EXEC-01 |
-| recovery | BI-801313EB | binding | OBJ-EXEC-02 | AC-EXEC-02, AC-EXEC-03, AC-EXEC-04, AC-EXEC-05 |
+| admission | BI-06AE6833, WC-27D00458 | none | OBJ-DELIVERY-CONVERGENCE | AC-DELIVERY-ADMISSION |
+| recovery | BI-801313EB | binding, admission | OBJ-EXEC-02 | AC-EXEC-02, AC-EXEC-03, AC-EXEC-04, AC-EXEC-05 |
 | portal | BI-9DC43E17 | binding, recovery | OBJ-EXEC-03, OBJ-EXEC-04 | AC-EXEC-06, AC-EXEC-07, AC-EXEC-08, AC-EXEC-09 |
 
 Each row is independently reviewable/revertible and uses existing ownership.
 BI-801313EB currently has another paused Workroom; arrange governed handoff before
 editing its implementation. No forced co-claim or duplicate initiative is implied.
+
+The admission deliverable is independently owned by WC-27D00458 on
+`fix/semantic-review-provider-admission`. Its
+[focused plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/6b9f44a491048dd5ffca9a2ac3faf9ce11e31652/docs/superpowers/plans/2026-09-06-semantic-review-provider-admission.md)
+provides the implementation/verification contract (blob
+`6aea5e981af361ee0d918016b117b062c78c36f1`, coverage receipt
+`cmtqbi3et0eog01ncylwzwyx0`); this task must not edit
+`routed-semantic-review.ts` or duplicate that runtime change. This row maps the
+existing work into the combined decomposition, not a second assignment.
+
+Baseline coordination, 2026-09-06: retain approved baseline
+`baseline-524959f8-8508-4c5a-afbf-8bc285f77587` at
+`7d22b24673c138036685312387a425984c7a330d` until the admission PR lands. The
+combined specification preserves its provider-admission section and every
+OBJ-DELIVERY / AC-DELIVERY identifier, adding the execution/visibility objectives.
+Only then request one explicit combined baseline supersession with dispositions
+for every retained objective. Do not replay older spec-approval requests with
+`expectedCurrentBaselineId=null`. Neither the current shared baseline nor this
+proposed mapping is permission to declare the broader initiative complete.
 
 ## 1. Shape round trip
 
