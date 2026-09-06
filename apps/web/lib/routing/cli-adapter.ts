@@ -27,6 +27,8 @@ import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
+import { isSideEffectingGrant } from "./grant-capability";
+
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -407,10 +409,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
         const grants = grantMap[name];
         if (grants) {
           for (const g of grants) requestedScopes.add(g);
-          // A grant ending in _write / _create / _triage / _promote /
-          // _execute / _approve indicates a side-effecting tool — bump
-          // capability accordingly.
-          if (grants.some((g) => /_(write|create|triage|promote|execute|approve)$/.test(g))) {
+          if (grants.some(isSideEffectingGrant)) {
             sideEffectingNames.add(name);
           }
         }

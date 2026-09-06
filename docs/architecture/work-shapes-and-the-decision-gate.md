@@ -416,7 +416,37 @@ clamp. The load-bearing rule mirrors the two-level rule above: a derivation may 
 action boundary and may never widen it, so shape can restrict autonomy but never grant it.
 Design: [Work Posture](../superpowers/specs/2026-08-22-workroom-work-posture-design.md).
 
-## Related
+## Encoding and visualization
+
+The activity definition is typed TypeScript in `WorkShapeDefinition`; the room
+stores a `key@version` reference in `scopeClaims`. The collaboration shape has its
+own `workroomShape` entry. Occurrence state and receipts live in the existing
+Workroom/cycle/task records. These are DPF contracts, not BPMN XML or SysML text.
+
+| View | Purpose | Current implementation boundary |
+| --- | --- | --- |
+| Workroom Overview/Details | Explain current progress, evidence and what holds the work | `shape-projection.ts` builds the five-stage DPF graph rendered by `WorkroomShape`; it is not a BPMN editor or a full rendering of every activity definition |
+| BPMN | Process tasks, gateways, waits, recovery paths and ownership lanes | `process-extract.ts` and `reconcile-process.ts` project selected state machines; WorkShape recovery extraction needs explicit coverage |
+| SysML v2 | Requirements, interfaces, allocation to components and verification evidence | Existing EA notation and Parity Engine; use stable source keys rather than a separately maintained model |
+
+The [SysML reference](../Reference/sysml-v2.md) owns notation selection; ArchiMate
+remains the enterprise view and C4 the lightweight software explanation. Current
+views derive from registered definitions, transition rules and canonical receipts.
+Target-state sketches must be labeled as such until implemented and verified.
+
+The [reviewer recovery amendment](../superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md#81-reviewer-recovery-and-receipt-settlement)
+defines the planned extension of `pull-request-flow-watch@1.0.0`, its version
+compatibility requirements and the operator display. A declared shape never proves
+that automatic replacement or gate advancement is running.
+
+**Existing-room binding gap, observed 2026-09-05:** `adopt_worktree` accepted a
+shape update for `WC-4D4BB6EC` but returned unchanged empty `scopeClaims`. The
+adoption handler drops `workShape`, and the store does not update scope on reuse.
+Readback, not tool success text, determines whether a shape is active. The recovery
+amendment assigns repair and round-trip verification to `BI-06AE6833`; do not create
+a duplicate room or edit the database to make a diagram look configured.
+
+## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
 - [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI and the composition rule

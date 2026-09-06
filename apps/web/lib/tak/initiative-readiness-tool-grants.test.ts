@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness";
 
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-submit";
+import { validateObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 
 import { resolveInitiativeReviewerRecovery } from "./initiative-readiness-tool-grants";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
@@ -111,6 +112,25 @@ describe("initiative readiness recovery routing", () => {
       .toContain("Map every current OBJ-* and AC-* statement to post-baseline evidence");
     expect(recovery.reviewerRoutes[0]?.requestCoworker.objective)
       .toContain(eligibleEvidenceActivityIds.join(", "));
+    const packet = recovery.reviewerRoutes[0]!.requestCoworker;
+    expect(packet.initiativeReviewBinding).toMatchObject({
+      workroomRef: {
+        kind: "workroom-head",
+        workroomId: dispatchContext.workroomId,
+        repositoryFullName: dispatchContext.repositoryFullName,
+        branchName: dispatchContext.branchName,
+        headSha: dispatchContext.headSha,
+      },
+    });
+    expect(packet.requestKey).toMatch(/:packet-v2:[a-f0-9]{64}$/u);
+    expect(validateObjectiveMappingRequestKey({
+      targetAgent: packet.targetAgent,
+      objective: packet.objective,
+      questionPacketSummary: packet.questionPacketSummary,
+      requiredToolNames: packet.requiredToolNames!,
+      binding: packet.initiativeReviewBinding as Parameters<typeof validateObjectiveMappingRequestKey>[0]["binding"],
+      requestKey: packet.requestKey,
+    })).toBe(true);
   });
 
   it("fails closed instead of issuing an open-ended mapping packet when no eligible evidence exists", async () => {
