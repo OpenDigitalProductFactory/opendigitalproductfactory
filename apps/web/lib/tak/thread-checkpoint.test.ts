@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   advanceThreadCheckpoint,
+  buildBoundedResumePacket,
   formatCheckpointMessage,
   CHECKPOINT_FOLD_BATCH,
   CHECKPOINT_SUMMARY_CHAR_CAP,
@@ -8,6 +9,103 @@ import {
   type CheckpointMessage,
   type ThreadCheckpointState,
 } from "./thread-checkpoint";
+
+describe("bounded resume packets", () => {
+  it("AC-FEAF-006: downgrades an oversized history to explicit metadata-only continuation", () => {
+    const result = buildBoundedResumePacket({
+      summary: "bounded summary",
+      recentMessages: ["x".repeat(2_000), "y".repeat(2_000)],
+      evidenceRefs: ["receipt-1", "receipt-2"],
+      maxItems: 4,
+      maxBytes: 300,
+    });
+
+    expect(result).toMatchObject({
+      mode: "metadata-only",
+      payload: {
+        summary: "bounded summary",
+        evidenceRefs: ["receipt-1", "receipt-2"],
+        omittedMessageCount: 2,
+      },
+      metrics: { payloadDowngradeCount: 1 },
+    });
+    expect(result.payload.recentMessages).toBeUndefined();
+    expect(result.reason).toContain("configured resume budget");
+    expect(result.serializedBytes).toBeLessThanOrEqual(300);
+    expect(result.originalBytes).toBeGreaterThan(4_000);
+  });
+
+  it("AC-FEAF-006: returns a bounded handoff reason when evidence metadata alone exceeds the ceiling", () => {
+    const result = buildBoundedResumePacket({
+      summary: null,
+      recentMessages: [],
+      evidenceRefs: Array.from({ length: 20 }, (_, index) => `receipt-${index}-${"z".repeat(40)}`),
+      maxItems: 4,
+      maxBytes: 180,
+    });
+
+    expect(result).toMatchObject({
+      mode: "handoff-required",
+      payload: { omittedMessageCount: 0 },
+      metrics: { payloadDowngradeCount: 1 },
+    });
+    expect(result.reason).toContain("evidence metadata");
+    expect(result.serializedBytes).toBeLessThanOrEqual(180);
+  });
+
+  it("AC-FEAF-006: keeps the fallback payload within the smallest supported byte ceiling", () => {
+    const result = buildBoundedResumePacket({
+      summary: null,
+      recentMessages: ["oversized"],
+      evidenceRefs: ["receipt-1"],
+      maxItems: 0,
+      maxBytes: 2,
+    });
+
+    expect(result).toMatchObject({
+      mode: "handoff-required",
+      payload: {},
+      metrics: { payloadDowngradeCount: 1 },
+    });
+    expect(result.serializedBytes).toBe(2);
+  });
+
+  it("rejects an impossible resume byte ceiling", () => {
+    expect(() => buildBoundedResumePacket({
+      summary: null,
+      recentMessages: [],
+      evidenceRefs: [],
+      maxItems: 0,
+      maxBytes: 1,
+    })).toThrowError("maxBytes must be at least 2");
+  });
+
+  it("rejects a non-integer or negative item ceiling", () => {
+    for (const maxItems of [-1, 0.5]) {
+      expect(() => buildBoundedResumePacket({
+        summary: null,
+        recentMessages: [],
+        evidenceRefs: [],
+        maxItems,
+        maxBytes: 2,
+      })).toThrowError("maxItems must be a non-negative integer");
+    }
+  });
+
+  it("AC-FEAF-006: budgets UTF-8 bytes rather than JavaScript code units", () => {
+    const result = buildBoundedResumePacket({
+      summary: null,
+      recentMessages: ["😀".repeat(40)],
+      evidenceRefs: [],
+      maxItems: 1,
+      maxBytes: 120,
+    });
+
+    expect(result.mode).toBe("metadata-only");
+    expect(result.originalBytes).toBeGreaterThan(120);
+    expect(result.serializedBytes).toBeLessThanOrEqual(120);
+  });
+});
 
 function msg(id: number, role: "user" | "assistant", ms: number): CheckpointMessage {
   return { id: `m${id}`, role, content: `${role} message ${id}`, createdAt: new Date(ms) };

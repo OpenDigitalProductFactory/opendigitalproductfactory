@@ -12,6 +12,7 @@ import { resolveCloudProviderReadiness } from "@/lib/inference/cloud-provider-re
 import { CloudProviderUnclearedNotice } from "@/components/workspace-home/CloudProviderUnclearedNotice";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
+import { RescueWorkspaceEntry } from "@/components/animal-welfare/RescueWorkspaceEntry";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 import { resolveWorkspaceHomeContribution } from "@/lib/workspace-home/registry";
 import { loadWorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
@@ -103,6 +104,9 @@ export default async function WorkspacePage() {
       {workspaceHomeResolution.mode !== "unconfigured" && cloudReadiness.state === "public-only" && (
         <CloudProviderUnclearedNotice providerNames={cloudReadiness.providerNames} />
       )}
+      {workspaceHomeResolution.mode === "vertical" && workspaceHomeResolution.contribution.id === "home-pet-rescue" ? (
+        <RescueWorkspaceEntry />
+      ) : null}
       {twinPresentation ? (
         // Operator-confirmed placement (parent spec §9 option c): the operational
         // twin is the main workspace view, a dedicated hero with the cockpit folded

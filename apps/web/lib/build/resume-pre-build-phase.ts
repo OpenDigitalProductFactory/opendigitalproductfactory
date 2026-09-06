@@ -188,6 +188,101 @@ function hasDesignDoc(designDoc: unknown): boolean {
   return designDoc != null && typeof designDoc === "object" && Object.keys(designDoc as object).length > 0;
 }
 
+// ── Review-incomplete backoff (BI-96885B6B) ──────────────────────────────────
+//
+// A design review that could not be COMPLETED (no reviewer responded — the
+// pinned provider was rate-limited, the local model hit its output cap, …)
+// says nothing about the design. The fix loop already knows this and leaves the
+// build recoverable instead of regenerating (BI-D33F968A). But the periodic
+// resume sweep runs every 30 minutes, sees `decision: "fail"` and re-enters the
+// loop, which re-runs the reviewer twice more: three model calls per review,
+// nine per tick, forever. Live repro FB-FCAC756D: round 167, 170 reviewDesignDoc
+// calls in 2.5 days, the local model runner pegged the whole time, and nothing
+// between ticks ever changed.
+//
+// So a review-incomplete strand backs off exponentially. The streak is DERIVED
+// from the build's own activity trail (the fix loop's "No reviewer could
+// complete" line), not from a new column: the trail is exactly what the loop
+// writes, so it cannot drift from what actually happened, and — like the
+// age-out cap — it is immune to the resume churn touching `updatedAt`.
+//
+// 30m → 1h → 2h → 4h → 6h (cap). The 7-day age-out still terminates the strand;
+// this only stops it burning inference in between. A completed verdict (pass or
+// a real fail) breaks the streak, so a provider that recovers is used at once.
+
+/** Base delay: one resume tick. Doubles per consecutive incomplete outcome. */
+export const REVIEW_INCOMPLETE_BACKOFF_BASE_MS = 30 * 60 * 1000;
+/** Ceiling so a long provider outage still gets probed a few times a day. */
+export const REVIEW_INCOMPLETE_BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
+
+/** The fix loop's terminal line for an outcome it could not complete (ideate-on-approval.ts). */
+const REVIEW_INCOMPLETE_ACTIVITY_RE = /^No reviewer could complete a design review/;
+/** The fix loop's intermediate retry line — part of the same attempt, not a new outcome. */
+const REVIEW_INCOMPLETE_RETRY_RE = /^Design review could not be completed — re-reviewing/;
+
+export type ReviewIncompleteStreak = { streak: number; lastAt: Date | null };
+
+/**
+ * Pure decision: given how many consecutive resume attempts ended review-incomplete
+ * and when the last one ended, is the next attempt due yet? Returns the
+ * next-eligible instant when it is not. No DB; unit-tested.
+ */
+export function reviewIncompleteBackoff(args: {
+  streak: number;
+  lastAt: Date | null;
+  now: Date;
+  baseMs?: number;
+  maxMs?: number;
+}): { due: true } | { due: false; nextAt: Date; waitMs: number } {
+  const { streak, lastAt, now } = args;
+  const baseMs = args.baseMs ?? REVIEW_INCOMPLETE_BACKOFF_BASE_MS;
+  const maxMs = args.maxMs ?? REVIEW_INCOMPLETE_BACKOFF_MAX_MS;
+  if (streak <= 0 || !lastAt) return { due: true };
+  const delayMs = Math.min(maxMs, baseMs * 2 ** (streak - 1));
+  const nextAt = new Date(lastAt.getTime() + delayMs);
+  if (now.getTime() >= nextAt.getTime()) return { due: true };
+  return { due: false, nextAt, waitMs: nextAt.getTime() - now.getTime() };
+}
+
+/**
+ * Walk the build's design-fix-loop trail newest-first and count consecutive
+ * review-incomplete outcomes. Intermediate retry lines belong to the attempt
+ * that produced them; any other fix-loop line (a regeneration, a pass, an
+ * escalation) ends the streak. Pure over the rows; unit-tested.
+ */
+export function countReviewIncompleteStreak(
+  rows: ReadonlyArray<{ summary: string | null; createdAt: Date }>,
+): ReviewIncompleteStreak {
+  let streak = 0;
+  let lastAt: Date | null = null;
+  for (const row of rows) {
+    const summary = row.summary ?? "";
+    if (REVIEW_INCOMPLETE_ACTIVITY_RE.test(summary)) {
+      streak += 1;
+      if (!lastAt) lastAt = row.createdAt;
+      continue;
+    }
+    if (REVIEW_INCOMPLETE_RETRY_RE.test(summary)) continue;
+    break;
+  }
+  return { streak, lastAt };
+}
+
+async function readReviewIncompleteStreak(buildId: string): Promise<ReviewIncompleteStreak> {
+  const rows = await prisma.buildActivity.findMany({
+    where: { buildId, tool: "design_fix_loop" },
+    orderBy: { createdAt: "desc" },
+    take: 60,
+    select: { summary: true, createdAt: true },
+  });
+  return countReviewIncompleteStreak(rows);
+}
+
+function formatWait(ms: number): string {
+  const mins = Math.max(1, Math.round(ms / 60_000));
+  return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
 /** Subset of the persisted designReview JSON the decompose-gate guard reads. */
 type DesignReviewForGate = {
   decision?: string;
@@ -398,6 +493,26 @@ export async function resumePreBuildPhase(params: {
       const designReviewFailed =
         (build.designReview as { decision?: string } | null)?.decision === "fail";
       if (designReviewFailed) {
+        // BI-96885B6B: an INCOMPLETE review (no reviewer responded) is a provider
+        // outcome, not a design verdict. Re-entering the fix loop every tick just
+        // re-fires the reviewer against the same outage. Back off exponentially,
+        // derived from the trail the loop itself writes; a real verdict resets it.
+        const reviewIncomplete =
+          (build.designReview as { reviewIncomplete?: boolean } | null)?.reviewIncomplete === true;
+        if (reviewIncomplete) {
+          const { streak, lastAt } = await readReviewIncompleteStreak(buildId);
+          const backoff = reviewIncompleteBackoff({ streak, lastAt, now: new Date() });
+          if (!backoff.due) {
+            return {
+              kind: "skipped",
+              phase,
+              reason:
+                `design review could not be completed ${streak}x in a row (no reviewer responded — provider ` +
+                `rate-limited or unavailable; the design is not at fault). Backing off: next retry in ` +
+                `${formatWait(backoff.waitMs)} (${backoff.nextAt.toISOString()}). Not re-running reviewDesignDoc.`,
+            };
+          }
+        }
         const { dispatchDesignReviewFixLoop } = await import("@/lib/build/ideate-on-approval");
         const outcome = await dispatchDesignReviewFixLoop({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchDesignReviewFixLoop", detail: outcome.kind };

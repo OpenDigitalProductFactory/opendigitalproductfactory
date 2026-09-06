@@ -5,7 +5,7 @@ import { convergeUxSweepFixture } from "./ux-sweep-fixture-core.mjs";
 
 const NOW = new Date("2026-07-28T19:30:00.000Z");
 
-function fixtureDb({ setupComplete, hasQueue = true }) {
+function fixtureDb({ setupComplete, hasQueue = true, hasArchetype = true, hasStorefront = false }) {
   const calls = {
     create: [],
     decisionInteractionUpdateMany: [],
@@ -14,6 +14,9 @@ function fixtureDb({ setupComplete, hasQueue = true }) {
     updateMany: [],
     workItemCreate: [],
     workroomCreate: [],
+    storefrontCreate: [],
+    sectionCreate: [],
+    animalCreate: [],
   };
 
   return {
@@ -50,6 +53,43 @@ function fixtureDb({ setupComplete, hasQueue = true }) {
         async updateMany(args) {
           calls.updateMany.push(args);
           return { count: 1 };
+        },
+      },
+      organization: {
+        async findFirst() {
+          return { id: "org-platform" };
+        },
+      },
+      storefrontArchetype: {
+        async findFirst() {
+          return hasArchetype ? { id: "arch-pet-rescue" } : null;
+        },
+      },
+      storefrontConfig: {
+        async findFirst() {
+          return hasStorefront ? { id: "storefront-existing" } : null;
+        },
+        async create(args) {
+          calls.storefrontCreate.push(args);
+          return { id: "storefront-created" };
+        },
+      },
+      storefrontSection: {
+        async findFirst() {
+          return hasStorefront ? { id: "section-existing" } : null;
+        },
+        async create(args) {
+          calls.sectionCreate.push(args);
+          return { id: "section-created" };
+        },
+      },
+      adoptableAnimal: {
+        async findUnique(args) {
+          return hasStorefront ? { id: `animal-${args.where.animalRef}` } : null;
+        },
+        async create(args) {
+          calls.animalCreate.push(args);
+          return { id: "animal-created" };
         },
       },
       workQueue: {
@@ -134,6 +174,7 @@ test("refreshes the running root portal heartbeat even when setup is already com
     setupChanged: false,
     setupProgressId: "setup-existing",
     refreshedRuntimeTargets: 1,
+    storefront: { storefrontId: "storefront-created", storefrontCreated: true, animalsCreated: 4 },
     convergedWeeklyDigestInputs: {
       coworkerMemoryNotes: 2,
       researchProposals: 3,
@@ -159,6 +200,7 @@ test("completes first-run setup and refreshes the heartbeat in one fixture conve
     setupChanged: true,
     setupProgressId: "setup-created",
     refreshedRuntimeTargets: 1,
+    storefront: { storefrontId: "storefront-created", storefrontCreated: true, animalsCreated: 4 },
     convergedWeeklyDigestInputs: {
       coworkerMemoryNotes: 2,
       researchProposals: 3,
@@ -264,4 +306,39 @@ test("reports why no case was minted rather than returning a broken key", async 
   assert.equal(result.workCase.caseKey, null);
   assert.match(result.workCase.reason, /no work queue/);
   assert.equal(fixture.calls.workItemCreate.length, 0);
+});
+
+test("provisions one pet-rescue storefront with listed animals so /storefront/animals/waiting is measurable (BI-899D7F00)", async () => {
+  const fixture = fixtureDb({ setupComplete: true });
+  const result = await convergeUxSweepFixture(fixture.db, NOW, { dbNull: DB_NULL });
+  assert.deepEqual(result.storefront, { storefrontId: "storefront-created", storefrontCreated: true, animalsCreated: 4 });
+  assert.equal(fixture.calls.storefrontCreate.length, 1);
+  assert.equal(fixture.calls.storefrontCreate[0].data.organizationId, "org-platform");
+  assert.equal(fixture.calls.storefrontCreate[0].data.archetypeId, "arch-pet-rescue");
+  assert.equal(fixture.calls.sectionCreate[0].data.type, "animals-available");
+  const animals = fixture.calls.animalCreate.map((c) => c.data);
+  assert.deepEqual(animals.map((a) => a.status), ["available", "available", "available", "available"]);
+  // The four cover every ordering rule the owner decided: two dated (longest
+  // first), one future-dated (left out of the ordering), one undated (last).
+  const day = 24 * 60 * 60 * 1000;
+  assert.equal(animals[0].publishedAt.getTime(), NOW.getTime() - 94 * day);
+  assert.ok(animals[2].publishedAt.getTime() > NOW.getTime());
+  assert.equal(animals[3].publishedAt, null);
+});
+
+test("is idempotent for the storefront fixture: an existing storefront, section and animals are left alone", async () => {
+  const fixture = fixtureDb({ setupComplete: true, hasStorefront: true });
+  const result = await convergeUxSweepFixture(fixture.db, NOW, { dbNull: DB_NULL });
+  assert.deepEqual(result.storefront, { storefrontId: "storefront-existing", storefrontCreated: false, animalsCreated: 0 });
+  assert.equal(fixture.calls.storefrontCreate.length, 0);
+  assert.equal(fixture.calls.sectionCreate.length, 0);
+  assert.equal(fixture.calls.animalCreate.length, 0);
+});
+
+test("provisions no storefront when the seed carries no pet-rescue archetype, and still converges the rest", async () => {
+  const fixture = fixtureDb({ setupComplete: true, hasArchetype: false });
+  const result = await convergeUxSweepFixture(fixture.db, NOW, { dbNull: DB_NULL });
+  assert.equal(result.storefront, null);
+  assert.equal(fixture.calls.storefrontCreate.length, 0);
+  assert.equal(fixture.calls.updateMany.length, 1);
 });

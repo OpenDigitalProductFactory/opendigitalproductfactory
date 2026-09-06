@@ -71,13 +71,29 @@ async function atomicWrite(path, bytes) {
   finally { await rm(temporary, { force: true }); }
 }
 
-function updateEnv(bytes, releaseTag, ghcrOwner) {
+// BI-FEE77B68: compose publishes every host port through this variable. A
+// fresh install gets loopback (kernel decision DI-946636F6E8F6). An install
+// that predates the key keeps the all-interfaces exposure it already has, and
+// says so in its .env, rather than losing LAN access on an upgrade.
+export const HOST_BIND_KEY = "DPF_HOST_BIND_ADDRESS";
+export const HOST_BIND_FRESH = "127.0.0.1";
+export const HOST_BIND_PRE_EXISTING = "0.0.0.0";
+
+export function updateEnv(bytes, releaseTag, ghcrOwner) {
   let text = bytes?.toString("utf8") ?? "";
+  const preExisting = text.trim().length > 0;
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
   for (const [key, value] of [["DPF_IMAGE_TAG", releaseTag], ["GHCR_OWNER", ghcrOwner]]) {
     const pattern = new RegExp(`^${key}=.*$`, "gm");
     if (pattern.test(text)) text = text.replace(pattern, `${key}=${value}`);
     else text += `${text && !text.endsWith("\n") ? newline : ""}${key}=${value}${newline}`;
+  }
+  if (!new RegExp(`^${HOST_BIND_KEY}=`, "m").test(text)) {
+    const value = preExisting ? HOST_BIND_PRE_EXISTING : HOST_BIND_FRESH;
+    const why = preExisting
+      ? "# Kept the exposure this install had before DPF_HOST_BIND_ADDRESS existed (BI-FEE77B68). Set 127.0.0.1 to serve this machine only."
+      : "# Loopback by default (BI-FEE77B68). Set 0.0.0.0 to serve the LAN.";
+    text += `${text && !text.endsWith("\n") ? newline : ""}${why}${newline}${HOST_BIND_KEY}=${value}${newline}`;
   }
   return Buffer.from(text);
 }

@@ -39,6 +39,7 @@ import {
   buildEffectiveRequestContract,
   buildInitialRouteContext,
 } from "@/lib/inference/route-contract-builder";
+import { assertDurableExecutionConstraint } from "./durable-execution-constraint";
 import { persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
@@ -61,6 +62,10 @@ import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 import type { EndpointPreferences } from "@/lib/routing/preference-finalization";
 import { describeLocalFallback, type DowngradeCause } from "./downgrade-explanation";
+import {
+  admitRoutedAsyncOperation,
+  routeUsesDurableAsyncAdapter,
+} from "./async-operation-routed-admission";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
@@ -190,7 +195,14 @@ async function prepareRoute(
   // The calling coworker's own posture (if any) layers above org/platform, so a
   // per-coworker priority actually tunes that coworker's runs. Single-org install
   // → null org id; non-coworker runs pass null agentId (platform default).
-  const posture = await resolveDispatchPosture(options?.agentId ?? null, taskType);
+  // A durable caller that supplies an exact execution constraint has already
+  // closed every route-affecting policy. Saved Golden Triangle posture is an
+  // ambient preference, not authority to change that immutable plan. Keep the
+  // agent on the durable authority/audit binding, but do not let its saved (or
+  // inherited organization/platform) posture alter routing context or effort.
+  const posture = options?.durableAsyncOperation?.expectedExecution
+    ? null
+    : await resolveDispatchPosture(options?.agentId ?? null, taskType);
   const initialRouteContext = buildInitialRouteContext({
     sensitivity,
     options,
@@ -596,7 +608,60 @@ async function routeAndCallAttempt(
   }
 
   // 5. Dispatch — background (async) or foreground (sync)
+  // An async adapter performs a side-effecting provider start. It may only be
+  // reached through the durable background admission/worker path, where the
+  // provider handle cannot be discarded by a foreground response boundary.
+  if (routeUsesDurableAsyncAdapter(decision)
+    && options?.interactionMode !== "background") {
+    throw new Error("ASYNC_OPERATION_BACKGROUND_REQUIRED");
+  }
+  // Supplying durable authority is an explicit at-most-once provider boundary,
+  // not a hint. A missing/mis-seeded async recipe must fail before the generic
+  // background branch can call a provider directly and discard its handle.
+  if (options?.durableAsyncOperation && !routeUsesDurableAsyncAdapter(decision)) {
+    throw new Error("ASYNC_OPERATION_EXECUTION_PLAN_REQUIRED");
+  }
+  const expectedExecution = options?.durableAsyncOperation?.expectedExecution;
+  if (expectedExecution) assertDurableExecutionConstraint(decision, expectedExecution);
   if (options?.interactionMode === "background") {
+    if (routeUsesDurableAsyncAdapter(decision)) {
+      const admitted = await admitRoutedAsyncOperation({
+        decision,
+        messages,
+        systemPrompt,
+        tools: toolsStripped ? undefined : dispatchScreenInput.tools,
+        screeningInput: dispatchScreenInput,
+        options,
+        traceId,
+      });
+      await persistRoutedTokenUsage({
+        traceId,
+        agentId: options.agentId ?? "unknown",
+        providerId: admitted.providerId,
+        contextKey: routedContextKey(options),
+        inputTokens: 0,
+        outputTokens: 0,
+        inferenceMs: 0,
+        recordZeroUsage: true,
+        requirePersistence: true,
+      });
+      return {
+        providerId: admitted.providerId,
+        modelId: admitted.modelId,
+        content: "",
+        toolCalls: [],
+        inputTokens: 0,
+        outputTokens: 0,
+        downgraded: false,
+        downgradeMessage: null,
+        downgradeReason: null,
+        toolsStripped,
+        routeDecision: decision,
+        asyncOperationId: admitted.operationId,
+        ...routedRehydrationHandle(prepared.rehydrationHandle),
+      };
+    }
+
     // EP-INF-009d: Start async operation, return immediately
     const result = await callWithFallbackChain(
       decision,
@@ -610,37 +675,6 @@ async function routeAndCallAttempt(
       dispatchScreenInput,
     );
     applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
-
-    // If the adapter returned an operation ID (async adapter), create tracking record
-    const operationId = (result as any).raw?.operationId as string | undefined;
-    if (operationId) {
-      const { createAsyncOperation } = await import("@/lib/async-inference");
-      const asyncOpId = await createAsyncOperation({
-        providerId: result.providerId,
-        modelId: result.modelId,
-        operationId,
-        contractFamily: contract.contractFamily,
-        requestContext: { taskType, sensitivity, messages: messages.length },
-        threadId: options?.threadId,
-        maxDurationMs: options?.maxDurationMs,
-      });
-
-      return {
-        providerId: result.providerId,
-        modelId: result.modelId,
-        content: "",
-        toolCalls: [],
-        inputTokens: 0,
-        outputTokens: 0,
-        downgraded: false,
-        downgradeMessage: null,
-        downgradeReason: null,
-        toolsStripped,
-        routeDecision: decision,
-        asyncOperationId: asyncOpId,
-        ...routedRehydrationHandle(prepared.rehydrationHandle),
-      };
-    }
 
     // Every adapter dispatch persists TokenUsage (BI-28858D2F).
     void persistRoutedTokenUsage({
@@ -663,7 +697,8 @@ async function routeAndCallAttempt(
       downgraded: result.downgraded,
       downgradeMessage: result.downgradeMessage,
       // Background path: only a real dispatch failure downgrades here.
-      downgradeReason: result.downgraded ? "provider-unavailable" : null,
+      downgradeReason: result.downgradeReason
+        ?? (result.downgraded ? "provider-unavailable" : null),
       toolsStripped,
       truncated: result.truncated ?? false,
       routeDecision: decision,
@@ -739,11 +774,12 @@ async function routeAndCallAttempt(
     downgraded: result.downgraded || fellToLocal,
     downgradeMessage: result.downgradeMessage ?? localFallbackBanner,
     // Opposite causes; never both for one turn (BI-F4D3B9E9d).
-    downgradeReason: result.downgraded
-      ? "provider-unavailable"
-      : fellToLocal
-        ? "not-eligible"
-        : null,
+    downgradeReason: result.downgradeReason
+      ?? (result.downgraded
+        ? "provider-unavailable"
+        : fellToLocal
+          ? "not-eligible"
+          : null),
     downgradeCause: localFallback?.cause ?? null,
     toolsStripped,
     truncated: result.truncated ?? false,
@@ -753,4 +789,3 @@ async function routeAndCallAttempt(
     ...routedRehydrationHandle(prepared.rehydrationHandle),
   };
 }
-

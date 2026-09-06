@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { dirname, join, resolve, sep } from "node:path";
 
-import { resolveWorktreeBase, WORKTREE_BASE_ENV } from "./worktree-base.mjs";
+import { resolveWorktreeBase, resolveOwningClone, WORKTREE_BASE_ENV } from "./worktree-base.mjs";
 
 const ROOT_CLONE = resolve(`${sep}srv`, "dpf-source-root");
 const DECLARED = resolve(`${sep}srv`, "declared-worktrees");
@@ -74,5 +74,53 @@ describe("resolveWorktreeBase", () => {
       resolveWorktreeBase({ rootClone: ROOT_CLONE, env: {} }).source,
     ];
     assert.deepEqual(sources, ["install-config", "env", "derived"]);
+  });
+});
+
+// Seven worktree bases were found on one host, every one produced by the SAME
+// formula handed a different root. The root must therefore come from the
+// repository, never from wherever the caller happens to be standing
+// (BI-541156EE).
+describe("resolveOwningClone", () => {
+  const fakeGit = (out) => (_cmd, _args, _opts) => out;
+
+  it("returns the clone that owns the worktrees, from the git common dir", () => {
+    assert.equal(
+      resolveOwningClone({ cwd: "/anywhere", exec: fakeGit("/srv/dpf-source-root/.git\n") }),
+      resolve("/srv/dpf-source-root"),
+    );
+  });
+
+  it("gives the SAME answer from inside a linked worktree", () => {
+    // --git-common-dir points at the owning clone even from a worktree, which
+    // is the property that makes the answer unambiguous.
+    assert.equal(
+      resolveOwningClone({ cwd: "/srv/dpf-worktrees/topic", exec: fakeGit("/srv/dpf-source-root/.git") }),
+      resolve("/srv/dpf-source-root"),
+    );
+  });
+
+  it("resolves a relative common dir against the caller's cwd", () => {
+    assert.equal(
+      resolveOwningClone({ cwd: resolve("/srv/dpf-source-root"), exec: fakeGit(".git") }),
+      resolve("/srv/dpf-source-root"),
+    );
+  });
+
+  it("REFUSES outside a repository instead of inventing a base", () => {
+    // This is the actual defect: a client hook derived a base from the
+    // installed instance, which is not a git repository, and produced a pile of
+    // 141 worktrees at a location nothing else agreed on.
+    assert.throws(
+      () => resolveOwningClone({ cwd: "/srv/install", exec: () => { throw new Error("not a git repository"); } }),
+      /cannot own worktrees/,
+    );
+  });
+
+  it("refuses an empty common dir rather than resolving to the filesystem root", () => {
+    assert.throws(
+      () => resolveOwningClone({ cwd: "/srv/x", exec: fakeGit("   ") }),
+      /no common dir/,
+    );
   });
 });

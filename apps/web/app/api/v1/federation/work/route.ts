@@ -19,6 +19,7 @@ import {
 import { apiErrorResponse } from "@/lib/api/error";
 import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
 import { resolveFederationIdentity, type FederationIdentityDb } from "@/lib/federation/demand-identity";
+import { recordReachedAtHost, type ReachedAtDb } from "@/lib/federation/reached-at";
 import { buildFederatedWorkPage, type WorkPageDb } from "@/lib/federation/work-page";
 
 const ERROR_STATUS: Record<string, number> = {
@@ -45,6 +46,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (authz.role !== "same-org-peer") {
     return apiErrorResponse("LINK_NOT_SAME_ORGANIZATION", "Work sync is available only to a same-organization peer.", 403);
   }
+  // A trusted same-organization peer just reached us at this Host: that is one
+  // of our own addresses, learned without anyone typing it (reached-at.ts).
+  void recordReachedAtHost(prisma as unknown as ReachedAtDb, request.headers.get("x-forwarded-host") ?? request.headers.get("host"));
 
   const url = new URL(request.url);
   const cursor = url.searchParams.get("cursor");

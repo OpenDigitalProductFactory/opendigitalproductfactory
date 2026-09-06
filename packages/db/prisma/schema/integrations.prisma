@@ -76,7 +76,7 @@ model IntegrationCredential {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  externalChannelProjections          ExternalChannelProjection[] @relation("ExternalChannelProjectionCredential")
+  externalChannelProjections           ExternalChannelProjection[] @relation("ExternalChannelProjectionCredential")
   externalChannelProjectionConnections ExternalChannelProjection[] @relation("ExternalChannelProjectionConnection")
 
   @@index([provider, status])
@@ -88,33 +88,33 @@ model IntegrationCredential {
 // connectionId is the stable IntegrationCredential.integrationId value, never
 // the rotatable credential row id. credentialId is optional audit provenance.
 model ExternalChannelProjection {
-  id                String                         @id @default(cuid())
-  externalChannelProjectionId String                         @unique
-  connectorKey      String
-  connectionId      String
-  credentialId      String?
-  sourceType        ExternalChannelProjectionSourceType
-  sourceRef         String
-  sourceVersion     String
-  resourceKind      ExternalChannelResourceKind
-  locale            String                         @default("und")
-  externalRef       String?
-  externalUrl       String?
-  localFingerprint  String
-  remoteFingerprint String?
-  remoteModifiedAt  DateTime?
-  state             ExternalChannelProjectionState @default(reserved)
-  metadata          Json                           @default("{}")
-  reservedAt        DateTime                       @default(now())
-  projectedAt       DateTime?
-  observedAt        DateTime?
-  driftedAt         DateTime?
-  detachedAt        DateTime?
-  lifecycle         RecordLifecycle                 @default(active)
-  lifecycleAt       DateTime?
-  lifecycleReason   String?
-  createdAt         DateTime                       @default(now())
-  updatedAt         DateTime                       @updatedAt
+  id                          String                              @id @default(cuid())
+  externalChannelProjectionId String                              @unique
+  connectorKey                String
+  connectionId                String
+  credentialId                String?
+  sourceType                  ExternalChannelProjectionSourceType
+  sourceRef                   String
+  sourceVersion               String
+  resourceKind                ExternalChannelResourceKind
+  locale                      String                              @default("und")
+  externalRef                 String?
+  externalUrl                 String?
+  localFingerprint            String
+  remoteFingerprint           String?
+  remoteModifiedAt            DateTime?
+  state                       ExternalChannelProjectionState      @default(reserved)
+  metadata                    Json                                @default("{}")
+  reservedAt                  DateTime                            @default(now())
+  projectedAt                 DateTime?
+  observedAt                  DateTime?
+  driftedAt                   DateTime?
+  detachedAt                  DateTime?
+  lifecycle                   RecordLifecycle                     @default(active)
+  lifecycleAt                 DateTime?
+  lifecycleReason             String?
+  createdAt                   DateTime                            @default(now())
+  updatedAt                   DateTime                            @updatedAt
 
   connectionCredential IntegrationCredential  @relation("ExternalChannelProjectionConnection", fields: [connectionId], references: [integrationId], onDelete: Restrict)
   credential           IntegrationCredential? @relation("ExternalChannelProjectionCredential", fields: [credentialId], references: [id], onDelete: SetNull)

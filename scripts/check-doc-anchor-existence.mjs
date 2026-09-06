@@ -128,6 +128,26 @@ export function interpretToolResponse(kind, id, body) {
 }
 
 /** POST one MCP tools/call. Returns the raw response text, or null on failure. */
+/**
+ * True when a catalog response admits it did not return everything. The tool
+ * reports `total`/`fetched`/`truncated`; any of those signalling a short read
+ * means an id absent from the page is not evidence the id does not exist.
+ */
+export function isTruncatedListing(body) {
+  let parsed;
+  try {
+    parsed = typeof body === "string" ? JSON.parse(body) : body;
+  } catch {
+    return true; // unparseable is not proof of completeness
+  }
+  const text = JSON.stringify(parsed?.result ?? parsed ?? null);
+  if (/"truncated"\s*:\s*true/.test(text)) return true;
+  const total = text.match(/"total"\s*:\s*(\d+)/);
+  const fetched = text.match(/"fetched"\s*:\s*(\d+)/);
+  if (total && fetched && Number(fetched[1]) < Number(total[1])) return true;
+  return false;
+}
+
 export async function callTool(endpoint, token, name, args) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -271,7 +291,17 @@ async function main() {
   const lookup = async (kind, id) => {
     if (kind === "epic") {
       if (epicListing === null) {
-        epicListing = (await callTool(endpoint, token, "list_epics", {})) ?? "unreachable";
+        // list_epics defaults to 100 rows. An install with more epics than that
+        // returned a TRUNCATED catalog, and every id past the cut read as
+        // "missing" — a correctly cited, freshly filed epic failed the guard.
+        // Ask for the documented maximum, and if the catalog is STILL truncated
+        // treat epic lookups as unverifiable rather than absent: everywhere else
+        // this guard fails open on uncertainty, and a partial listing is exactly
+        // that. Absence must be proven, never inferred from a short page.
+        const listing = await callTool(endpoint, token, "list_epics", { limit: 1000 });
+        epicListing = listing == null || isTruncatedListing(listing)
+          ? "unreachable"
+          : listing;
       }
       if (epicListing === "unreachable") return "unknown";
       return interpretToolResponse("epic", id, epicListing);

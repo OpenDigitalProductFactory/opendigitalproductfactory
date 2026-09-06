@@ -71,6 +71,16 @@ export type AutonomousWorkRunInput = {
   metadata?: Record<string, unknown>;
   proactivity?: ProactivityPlan;
   delegatedPosture?: ResolvedDelegatedPosture;
+  /**
+   * Closed deferred callers may commit their first user message in the same
+   * transaction as the submitted TaskRun. This prevents an outbox-recoverable
+   * row from existing without the immutable input needed by its worker.
+   */
+  deferredSubmission?: {
+    content: string;
+    metadata?: Record<string, unknown>;
+    progressPayload?: Prisma.InputJsonValue;
+  };
 };
 
 const TRIGGER_PREFIX: Record<AutonomousWorkTrigger, string> = {
@@ -102,6 +112,9 @@ function createPublicTaskRunId(trigger: AutonomousWorkTrigger): string {
 export async function createAutonomousWorkRun(
   input: AutonomousWorkRunInput,
 ): Promise<AutonomousWorkRunRef> {
+  if (input.deferredSubmission && input.trigger !== "external-mcp") {
+    throw new Error("Deferred submission is restricted to external MCP work.");
+  }
   const threadId = input.threadId ?? null;
   const a2aMetadata = {
     trigger: input.trigger,
@@ -114,25 +127,45 @@ export async function createAutonomousWorkRun(
   return prisma.$transaction(async (tx) => {
     const source = taskRunSourceForTrigger(input.trigger);
     await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
-    return tx.taskRun.create({
-    data: {
-      taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
-      userId: input.userId,
-      threadId,
-      contextId: threadId,
-      initiatingAgentId: input.agentId,
-      currentAgentId: input.agentId,
-      parentTaskRunId: input.parentTaskRunId ?? null,
-      routeContext: input.routeContext,
-      title: input.title,
-      objective: input.objective.slice(0, 1000),
-      source,
-      status: initialStatusForTrigger(input.trigger),
-      authorityScope: input.authorityScope ?? [],
-      a2aMetadata,
-    },
-    select: { id: true, taskRunId: true, contextId: true },
+    const taskRun = await tx.taskRun.create({
+      data: {
+        taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
+        userId: input.userId,
+        threadId,
+        contextId: threadId,
+        initiatingAgentId: input.agentId,
+        currentAgentId: input.agentId,
+        parentTaskRunId: input.parentTaskRunId ?? null,
+        routeContext: input.routeContext,
+        title: input.title,
+        objective: input.objective.slice(0, 1000),
+        source,
+        status: input.deferredSubmission ? "submitted" : initialStatusForTrigger(input.trigger),
+        authorityScope: input.authorityScope ?? [],
+        a2aMetadata,
+        ...(input.deferredSubmission?.progressPayload
+          ? { progressPayload: input.deferredSubmission.progressPayload }
+          : {}),
+      },
+      select: { id: true, taskRunId: true, contextId: true },
     });
+    if (input.deferredSubmission) {
+      await tx.taskMessage.create({
+        data: {
+          id: randomUUID(),
+          messageId: `tm_${randomUUID()}`,
+          taskRunId: taskRun.id,
+          contextId: taskRun.contextId,
+          role: "user",
+          parts: [{ type: "message", text: input.deferredSubmission.content }],
+          referenceTaskIds: [],
+          ...(input.deferredSubmission.metadata
+            ? { metadata: input.deferredSubmission.metadata as Prisma.InputJsonValue }
+            : {}),
+        },
+      });
+    }
+    return taskRun;
   }, { isolationLevel: "Serializable" });
 }
 
@@ -341,6 +374,7 @@ export async function executeAutonomousAgenticLoop(input: {
   featureBuildId?: string | null;
   modelRequirements?: Record<string, unknown>;
   apiTokenId?: string | null;
+  tokenScope?: "read" | "write" | "admin";
   /**
    * Governed Hermes learning Slice 1: when the user message invokes a specific
    * coworker skill (via the canonical `Use the <id> skill.` marker), the
@@ -487,6 +521,7 @@ export async function executeAutonomousAgenticLoop(input: {
         threadId: input.threadId,
         taskRunId: input.taskRunId,
         apiTokenId: input.apiTokenId,
+        tokenScope: input.tokenScope,
         taskType: input.taskType,
         effortWarrant: input.effortWarrant,
         terminalToolPolicy: input.terminalToolPolicy,

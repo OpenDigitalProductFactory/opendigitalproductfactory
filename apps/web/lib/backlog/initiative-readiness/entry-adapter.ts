@@ -11,6 +11,7 @@ import type {
   ReadinessEvidenceState,
   ReadinessTarget,
 } from "./types";
+import { READINESS_CODES, READINESS_EVIDENCE_LANES, READINESS_PROFILES } from "./types";
 
 export type InitiativeReadinessActivity = {
   id: string;
@@ -23,6 +24,7 @@ export type InitiativeReadinessActivity = {
 export type InitiativeReadinessItem = {
   id: string;
   itemId: string;
+  status?: string | null;
   type?: string | null;
   source?: string | null;
   workType?: string | null;
@@ -123,6 +125,93 @@ function validAuthoritySnapshot(value: Record<string, unknown> | null): boolean 
     && validString(value.organizationId)
     && validString(value.actionKey)
     && validString(value.policyVersion);
+}
+
+function validTransitionObject(value: Record<string, unknown> | null): boolean {
+  return Boolean(value
+    && ["backlog-item", "epic", "feature-build", "work-capsule", "task-run"].includes(String(value.kind))
+    && validString(value.id)
+    && validString(value.expectedVersion)
+    && ["complete", "done"].includes(String(value.targetState)));
+}
+
+function validRequirementResult(value: unknown): boolean {
+  const requirement = object(value);
+  return Boolean(requirement
+    && READINESS_CODES.includes(requirement.code as (typeof READINESS_CODES)[number])
+    && ["pass", "fail", "missing", "malformed", "stale", "not-applicable", "blocked"].includes(String(requirement.state))
+    && validString(requirement.accountableRole)
+    && validStringArray(requirement.evidenceRefs)
+    && READINESS_EVIDENCE_LANES.includes(requirement.evidenceLane as (typeof READINESS_EVIDENCE_LANES)[number])
+    && validStringArray(requirement.unreadEvidenceRefs)
+    && (requirement.nextAction === null || typeof requirement.nextAction === "string"));
+}
+
+function validRequirementResults(value: unknown): boolean {
+  return Array.isArray(value) && value.every(validRequirementResult);
+}
+
+function persistedTerminalCompletionDecision(
+  activities: readonly InitiativeReadinessActivity[],
+  item: InitiativeReadinessItem,
+): InitiativeReadinessDecision | null {
+  if (item.status !== "done") return null;
+  const candidates = [...activities]
+    .filter((activity) => activity.kind === "initiative_readiness_decision")
+    .sort((left, right) => {
+      const byTime = right.recordedAt.getTime() - left.recordedAt.getTime();
+      if (byTime !== 0) return byTime;
+      const leftDecisionId = object(left.payload)?.decisionId;
+      const rightDecisionId = object(right.payload)?.decisionId;
+      return String(rightDecisionId ?? "").localeCompare(String(leftDecisionId ?? ""));
+    });
+  for (const activity of candidates) {
+    const payload = object(activity.payload);
+    const subject = object(payload?.subject);
+    const transitionObject = object(payload?.transitionObject);
+    const satisfied = Array.isArray(payload?.satisfied) ? payload.satisfied : null;
+    const unmet = Array.isArray(payload?.unmet) ? payload.unmet : null;
+    const blockers = Array.isArray(payload?.blockers) ? payload.blockers : null;
+    if (!payload
+      || payload.schemaVersion !== 1
+      || payload.enforcementState !== "enforced"
+      || payload.target !== "completion"
+      || payload.verdict !== "allowed"
+      || subject?.kind !== "backlog-item"
+      || subject.id !== item.itemId
+      || !validString(payload.decisionId)
+      || !validString(payload.policyVersion)
+      || !READINESS_PROFILES.includes(payload.profile as (typeof READINESS_PROFILES)[number])
+      || !validString(payload.evaluatedAt)
+      || !validTransitionObject(transitionObject)
+      || !satisfied
+      || !unmet
+      || !blockers
+      || !validRequirementResults(satisfied)
+      || !validRequirementResults(unmet)
+      || !validRequirementResults(blockers)
+      || unmet.length !== 0
+      || blockers.length !== 0
+      || !validString(payload.factsDigest)
+      || !validString(payload.authorityDecisionId)
+      || !validAuthoritySnapshot(object(payload.authoritySnapshot))) {
+      continue;
+    }
+    return {
+      decisionId: payload.decisionId,
+      policyVersion: payload.policyVersion,
+      subject: subject as InitiativeReadinessDecision["subject"],
+      transitionObject: transitionObject as InitiativeReadinessDecision["transitionObject"],
+      profile: payload.profile as InitiativeReadinessDecision["profile"],
+      target: "completion",
+      verdict: "allowed",
+      satisfied: satisfied as InitiativeReadinessDecision["satisfied"],
+      unmet: unmet as InitiativeReadinessDecision["unmet"],
+      blockers: blockers as InitiativeReadinessDecision["blockers"],
+      evaluatedAt: payload.evaluatedAt,
+    };
+  }
+  return null;
 }
 
 function projectGateReceipt(
@@ -346,7 +435,9 @@ export function projectBacklogItemReadinessSummary(args: {
   hasPlan: boolean;
   evaluatedAt: string;
 }) {
+  const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item);
   const decisions = Object.fromEntries((["design", "plan", "implementation", "completion"] as const).map((target) => {
+    if (target === "completion" && terminalCompletion) return [target, terminalCompletion];
     const projected = projectBacklogItemReadiness({
       item: args.item,
       activities: args.activities,

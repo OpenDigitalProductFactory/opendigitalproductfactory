@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { isMeasurementRuntime, settleBootSync } from "./measurement-runtime";
+import {
+  isMeasurementRuntime,
+  settleBootSync,
+  settleBootSyncs,
+} from "./measurement-runtime";
 
 describe("isMeasurementRuntime", () => {
   it("is off by default — production and dev boots are unchanged", () => {
@@ -52,5 +56,65 @@ describe("settleBootSync", () => {
         throw new Error("boot sync failed");
       }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("settleBootSyncs", () => {
+  it("settles render-relevant reconcilers in order under measurement runtime", async () => {
+    const events: string[] = [];
+
+    await settleBootSyncs(true, [
+      async () => {
+        events.push("start:workforce");
+        await Promise.resolve();
+        events.push("end:workforce");
+      },
+      async () => {
+        events.push("start:catalog");
+        await Promise.resolve();
+        events.push("end:catalog");
+      },
+      async () => {
+        events.push("start:discovery");
+        await Promise.resolve();
+        events.push("end:discovery");
+      },
+    ]);
+
+    expect(events).toEqual([
+      "start:workforce",
+      "end:workforce",
+      "start:catalog",
+      "end:catalog",
+      "start:discovery",
+      "end:discovery",
+    ]);
+  });
+
+  it("starts every reconciler without blocking normal production boot", async () => {
+    const started: string[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await settleBootSyncs(false, [
+      async () => {
+        started.push("workforce");
+        await gate;
+      },
+      async () => {
+        started.push("catalog");
+        await gate;
+      },
+      async () => {
+        started.push("discovery");
+        await gate;
+      },
+    ]);
+
+    expect(started).toEqual(["workforce", "catalog", "discovery"]);
+    release();
+    await gate;
   });
 });

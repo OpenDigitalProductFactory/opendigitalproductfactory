@@ -69,7 +69,7 @@ async function fetchAlerts(surface) {
       return {
         ok: false,
         alerts: [],
-        reason: "403 — the default GITHUB_TOKEN cannot read this surface; set the DEPENDABOT_ALERTS_TOKEN secret (security_events scope)",
+        reason: "403 — the default GITHUB_TOKEN cannot read this surface; set the SECURITY_SWEEP_APP_ID + SECURITY_SWEEP_APP_PRIVATE_KEY secrets (GitHub App) or DEPENDABOT_ALERTS_TOKEN (fine-grained PAT) — see BI-3E6AFF04",
       };
     }
     if (!res.ok) return { ok: false, alerts: [], reason: `HTTP ${res.status}` };

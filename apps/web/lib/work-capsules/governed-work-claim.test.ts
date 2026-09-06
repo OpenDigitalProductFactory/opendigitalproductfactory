@@ -138,6 +138,31 @@ describe("claimGovernedBacklogWorkspace", () => {
       .not.toContainEqual(expect.objectContaining({ reason: "dispatch-context-required" }));
   });
 
+  it("repairs a missing base without issuing a reviewer binding or calling the provider", async () => {
+    const db = database();
+    const discover = vi.fn();
+    (db as unknown as { workroom: { findMany: ReturnType<typeof vi.fn> } }).workroom.findMany
+      .mockResolvedValueOnce([{
+        capsuleId: "WC-ENTRY",
+        repositoryFullName: input.repositoryFullName,
+        headBranch: input.headBranch,
+        headSha: "1111111111111111111111111111111111111111",
+        baseSha: null,
+        backlogItemId: "BI-ENTRY",
+      }]);
+    const result = await claimGovernedBacklogWorkspace({
+      db, input, actor, workIntent: null,
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact: discover },
+    });
+    expect(result.ok).toBe(false);
+    expect(discover).not.toHaveBeenCalled();
+    if (result.ok) throw new Error("Incomplete identity must not permit implementation");
+    expect(result.data.recovery.reviewerRoutes).toEqual([]);
+    expect(JSON.stringify(result.data.recovery)).toContain("baseSha");
+    expect(JSON.stringify(result.data.recovery)).toContain("adopt_worktree(headBranch, baseSha, headSha)");
+  });
+
   it("prefers a room bound to this item over one merely sharing its branch", async () => {
     const db = database();
     (db as unknown as { workroom: { findMany: ReturnType<typeof vi.fn> } }).workroom.findMany

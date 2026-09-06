@@ -23,7 +23,13 @@ export type OwnerDomainVocabulary = {
   guestsLabel: string;
   /** Customer-domain daily work. */
   guestFollowUpLabel: string;
+  customerSummarySubhead: string;
   reservationsLabel: string;
+  /** The stream of people reaching in, as this business names it. A storefront
+   *  is what DPF calls the product; it is not what a rescue calls its front
+   *  door, so this is vocabulary rather than a branch on one archetype. */
+  inboundHeadline: string;
+  inboundSubhead: string;
   ordersLabel: string;
   inquiriesLabel: string;
   /** People-domain daily work. */
@@ -41,6 +47,9 @@ const RESTAURANT_VOCABULARY: OwnerDomainVocabulary = {
   category: RESTAURANT_ARCHETYPE_CATEGORY,
   guestsLabel: "guests",
   guestFollowUpLabel: "Guest follow-up",
+  customerSummarySubhead: "Guests waiting on you — reservations, orders, and inquiries first.",
+  inboundHeadline: "From your guests",
+  inboundSubhead: "Reservations, orders, and inquiries waiting on you — before anything else.",
   reservationsLabel: "reservations",
   ordersLabel: "orders",
   inquiriesLabel: "inquiries",
@@ -57,6 +66,9 @@ const DEFAULT_VOCABULARY: OwnerDomainVocabulary = {
   category: null,
   guestsLabel: "customers",
   guestFollowUpLabel: "Customer follow-up",
+  customerSummarySubhead: "Customers waiting on you first — the rest of your CRM is below.",
+  inboundHeadline: "From your customers",
+  inboundSubhead: "Bookings, orders, and inquiries waiting on you — before anything else.",
   reservationsLabel: "bookings",
   ordersLabel: "orders",
   inquiriesLabel: "inquiries",
@@ -68,12 +80,37 @@ const DEFAULT_VOCABULARY: OwnerDomainVocabulary = {
   invoicesLabel: "invoices",
 };
 
+const PET_RESCUE_VOCABULARY: OwnerDomainVocabulary = {
+  isRestaurant: false,
+  category: "nonprofit-community",
+  guestsLabel: "people & partners",
+  guestFollowUpLabel: "Adoption follow-up",
+  customerSummarySubhead: "Adopters, foster families, volunteers, donors, and partners waiting on you first.",
+  inboundHeadline: "From your community",
+  inboundSubhead: "Adoption enquiries, visits, and supply requests waiting on you — before anything else.",
+  reservationsLabel: "adoption visits",
+  ordersLabel: "supply requests",
+  inquiriesLabel: "adoption enquiries",
+  staffLabel: "team & volunteers",
+  serviceReadinessLabel: "Care readiness",
+  timesheetLabel: "team hours",
+  billsLabel: "care bills",
+  depositsLabel: "donations",
+  invoicesLabel: "commitments",
+};
+
 /**
  * Resolve the owner-first vocabulary for an archetype category. Restaurant/Venue
  * Portal installs (`food-hospitality`) get restaurant nouns; everything else
  * gets a neutral small-business default (still owner-first, just archetype-neutral).
  */
-export function resolveOwnerVocabulary(category: string | null | undefined): OwnerDomainVocabulary {
+export function resolveOwnerVocabulary(
+  category: string | null | undefined,
+  archetypeId?: string | null,
+): OwnerDomainVocabulary {
+  if (["pet-rescue", "animal-shelter"].includes((archetypeId ?? "").trim().toLowerCase())) {
+    return { ...PET_RESCUE_VOCABULARY, category: category ?? null };
+  }
   if ((category ?? "").trim().toLowerCase() === RESTAURANT_ARCHETYPE_CATEGORY) {
     return RESTAURANT_VOCABULARY;
   }

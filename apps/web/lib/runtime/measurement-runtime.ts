@@ -46,3 +46,18 @@ export async function settleBootSync(
     // Boot syncs are non-fatal by contract; the task logs its own failure.
   }
 }
+
+/**
+ * Apply the boot-settlement contract to a related set of render-relevant
+ * reconcilers. Measurement mode runs them in declaration order so the first
+ * served request observes one deterministic post-reconciliation database.
+ * Normal boots still start every task without waiting for completion.
+ */
+export async function settleBootSyncs(
+  measurementRuntime: boolean,
+  tasks: ReadonlyArray<() => Promise<unknown>>,
+): Promise<void> {
+  for (const task of tasks) {
+    await settleBootSync(measurementRuntime, task);
+  }
+}

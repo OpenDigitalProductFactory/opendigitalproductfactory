@@ -87,7 +87,7 @@ reads, phase 2 lets a shelter record housing without a board to show it, phase 3
 
 ## Phases
 
-### Phase 1 — occupancy projection *(this PR)*
+### Phase 1 — occupancy projection *(delivered)*
 
 `apps/web/lib/ward/ward-occupancy.ts`, pure and fully unit-tested. Given kennels, allocations and
 animal names it produces the board: zones by the shelter's own `serviceArea`, units ordered
@@ -104,23 +104,66 @@ Properties the tests pin, each earned from the operating model rather than inven
 - No housing recorded and no housing free render differently. `summarizeKennelCapacity` returns
   `null` for the first — the same honesty the donation tile and `/performance` already keep.
 
-### Phase 2 — kennel roster and placement writes
+### Phase 2 — kennel roster and placement writes *(delivered: projection-side)*
 
-Create, rename, block and unblock a kennel; place an animal into one and release it. Kennel writes
-take their own path rather than widening the table-coupled admin route. Seed the archetype's
-declared `resourceKinds` on activation so a rescue is not asked to invent its own housing model.
+`planSeedKennels`, `buildPlacement` and `buildRelease` shape the rows: a seed roster derived from
+the archetype's declared `resourceKinds` with a stable `resourceKey` so re-seeding cannot double it,
+an allocation carrying an idempotency key so a repeated place is the same move rather than a second
+animal in the run, and a release that **closes** a stay with its reason instead of deleting the row.
 
-### Phase 3 — the board surface
+Closing rather than deleting is what keeps housing a timeline: the row saying an animal shared a
+ward with the index case has to survive that animal moving out of it.
 
-Map and list, occupancy header, per-unit occupant with photograph, empty unit as the intake
-affordance. `OperationalSceneLayout` supplies position and **tier** — cat condos stack, which is the
-requirement a flat restaurant floor never exercised.
+`ResourceCapacityAllocation.endsAt` is required and a shelter stay has no known end, so `releasedAt`
+is authoritative and `endsAt` is a ten-year horizon. The canonical substrate doc already names long
+episodes as the thing that will stress this model; a stay of years is that case, recorded here
+rather than discovered later.
 
-### Phase 4 — capacity on the cockpit
+**Still to come:** the mutation endpoints and the activation hook that call these. The shapes and
+their invariants are covered; nothing yet writes.
 
-`Kennels — N total · M free` beside the `Animals in care` tile shipped in PR #4972, closing the
-16:00 step. Deliberately last: it reads a model built earlier, and a tile built first correctly
-shows nothing.
+### Phase 3 — the board surface *(delivered)*
+
+`/workspace/ward` renders the map by default with a list flip, grouped by the shelter's own
+`serviceArea`, free units visibly empty. Chosen over list-only and map-only through
+`principle_decide` (`DI-6E711DA68A9B`, composite 9.673, margin 0.804, high confidence): list-only
+scores *negative* on "Do the work; don't task the operator" because it turns a capacity
+conversation back into counting rows, and map-only is opposed by "Every non-text element needs a
+text alternative" — which is why the list is a flip rather than a separate page.
+
+**Still to come:** per-unit photograph, the empty unit as the intake affordance, and
+`OperationalSceneLayout` for position and **tier** — cat condos stack, the requirement a flat
+restaurant floor never exercised.
+
+### Phase 4 — capacity on the cockpit *(delivered)*
+
+`Kennels — N free` beside the `Animals in care` tile from PR #4972, closing the 16:00 step. A full
+shelter reads `warning`, not a healthy zero; a shelter that has recorded no housing reads
+**"Not recorded"**, never `0 free`, because telling a manager they are full when nobody has entered
+a kennel is the failure this tile exists to avoid.
+
+### Phase 5 — the cockpit's front door *(delivered, narrowed)*
+
+Found by the owner on the running portal, in the same sitting as the missing animals: the cockpit
+led with **"From your storefront"** and **"Storefront bookings and inquiries waiting on you"**. A
+storefront is what DPF calls the product. It is not what a rescue calls the people arriving at its
+door.
+
+While this branch was held at the gate, PRs #5026 and #5028 landed on `main` and fixed most of it —
+and fixed it *better* than the version first written here. They key the vocabulary on `archetypeId`
+(`pet-rescue`, `animal-shelter`) rather than on the category, so the rescue reads *adoption
+enquiries*, *donations* and *Care readiness*; keying on `nonprofit-community`, as this branch
+originally did, would have put the same words in front of a food bank and a sports club. That work
+is taken wholesale here and the earlier approach was discarded rather than re-litigated.
+
+What those PRs did not reach is the line the owner actually pointed at. `buildWorkspaceStorefrontSummary`
+still chose its headline with `vocab.isRestaurant ? "From your guests" : "From your storefront"`, so
+every business that was not a restaurant inherited the retail default no matter how good its
+vocabulary row was. The remaining change is small and matches the shape already there:
+`inboundHeadline` and `inboundSubhead` become vocabulary fields on all three tables, the branch
+becomes a lookup, and the rescue reads **"From your community"**. A test asserts that no archetype's
+worker copy contains the product noun, so the next archetype cannot inherit another's front door by
+falling through a branch. One finance branch had identical arms and was collapsed.
 
 ## Definition of done for phase 1
 

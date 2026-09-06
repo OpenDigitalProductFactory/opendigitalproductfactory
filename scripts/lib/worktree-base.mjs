@@ -23,10 +23,64 @@
 //
 // Spec: docs/superpowers/specs/2026-09-02-platform-owned-client-configuration-design.md §1
 
+import { execFileSync } from "node:child_process";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 /** Explicit operator/install override, highest precedence after config. */
 export const WORKTREE_BASE_ENV = "DPF_WORKTREE_BASE";
+
+/**
+ * The repository that OWNS the worktrees, resolved from git rather than from
+ * wherever the caller happens to be standing.
+ *
+ * This is the whole fix for BI-541156EE. Every decider already applied the same
+ * formula — `<dirname(root)>/<basename(root)>-worktrees` — and they disagreed
+ * only about what `root` was. A Claude Code hook derived it from the client's
+ * project directory (`D:\DPF`, the installed instance) and produced
+ * `D:\DPF-worktrees`, holding 141 worktrees; the source scripts derived it from
+ * the clone (`D:\DPF-source-root`) and produced `D:\DPF-source-root-worktrees`,
+ * holding 31. Two piles from one rule.
+ *
+ * `D:\DPF` is not a git repository at all, so that base was computed from a
+ * directory that cannot own a worktree. Anchoring on the git common dir gives
+ * ONE answer from anywhere — including from inside a worktree, where the common
+ * dir still points at the owning clone — and refuses outside a repository
+ * instead of inventing a base.
+ *
+ * @param {{ cwd?: string, exec?: (cmd: string, args: string[], opts: object) => string }} [options]
+ * @returns {string} absolute path of the owning clone
+ */
+export function resolveOwningClone(options = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  const exec =
+    options.exec ??
+    ((cmd, args, opts) => execFileSync(cmd, args, { ...opts, encoding: "utf8" }));
+
+  let common;
+  try {
+    common = String(exec("git", ["rev-parse", "--git-common-dir"], { cwd })).trim();
+  } catch (err) {
+    throw new Error(
+      `resolveOwningClone: ${cwd} is not inside a git repository, so it cannot own worktrees. ` +
+        "A worktree base derived from a non-repository is how two bases appeared (BI-541156EE). " +
+        `(${err instanceof Error ? err.message : String(err)})`,
+    );
+  }
+
+  if (!common) {
+    throw new Error(`resolveOwningClone: git returned no common dir for ${cwd}`);
+  }
+
+  // `--git-common-dir` is the OWNING clone's .git even when called from inside a
+  // linked worktree, which is exactly the property that makes it unambiguous.
+  //
+  // Normalised through resolve() because git does not answer in one form: on
+  // this host the same clone came back as `D:\DPF-source-root` from the clone
+  // and `D:/DPF-source-root` from a worktree. Two spellings of one directory
+  // defeat every comparison downstream, including the single-base guard.
+  const absolute = isAbsolute(common) ? common : resolve(cwd, common);
+  return resolve(dirname(absolute));
+}
 
 /**
  * How a base was decided. Callers surface this so an unexpected location is
@@ -50,7 +104,12 @@ export const WORKTREE_BASE_ENV = "DPF_WORKTREE_BASE";
  * @returns {{ base: string, source: WorktreeBaseSource }}
  */
 export function resolveWorktreeBase(input) {
-  const { rootClone, env = {}, installConfig = null } = input ?? {};
+  const { env = {}, installConfig = null } = input ?? {};
+
+  // The owning clone, never the caller's directory. An explicit rootClone is
+  // still honoured so existing callers and tests can pass one, but it must be
+  // the repository that owns the worktrees, not wherever a client is rooted.
+  const rootClone = input?.rootClone ?? resolveOwningClone(input?.gitOptions);
 
   if (typeof rootClone !== "string" || rootClone.length === 0) {
     throw new Error("resolveWorktreeBase: rootClone is required");

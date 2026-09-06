@@ -2,9 +2,39 @@
 // platform liveness mechanisms rather than operator-tunable business cadence,
 // so they remain core-locked and deliberately have no run-now surface.
 
+import {
+  ASYNC_INFERENCE_OPERATION_OUTBOX_CRON,
+  ASYNC_INFERENCE_OPERATION_OUTBOX_INNGEST_ID,
+  ASYNC_INFERENCE_OPERATION_RECOVERY_CRON,
+  ASYNC_INFERENCE_OPERATION_RECOVERY_INNGEST_ID,
+} from "@/lib/inference/async-operation-constants";
 import type { ScheduledJobCatalogEntry } from "./catalog-types";
 
 export const FLOW_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = [
+  {
+    jobId: "async-inference-operation-reconciliation",
+    inngestId: ASYNC_INFERENCE_OPERATION_RECOVERY_INNGEST_ID,
+    name: "Async inference operation reconciliation",
+    purpose:
+      "Recovers advisory wake loss for due durable provider operations without repeating a provider-start request.",
+    cron: ASYNC_INFERENCE_OPERATION_RECOVERY_CRON,
+    cadence: "Every 2 minutes",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "async-inference-operation-outbox",
+    inngestId: ASYNC_INFERENCE_OPERATION_OUTBOX_INNGEST_ID,
+    name: "Async inference transition outbox",
+    purpose:
+      "Publishes undelivered durable operation transitions with deterministic identities so consumers can reconcile after event loss.",
+    cron: ASYNC_INFERENCE_OPERATION_OUTBOX_CRON,
+    cadence: "Every 2 minutes, offset by 1 minute",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
   {
     jobId: "mcp-task-run-dispatch-reconciliation",
     inngestId: "mcp/task-run-dispatch-reconciliation",

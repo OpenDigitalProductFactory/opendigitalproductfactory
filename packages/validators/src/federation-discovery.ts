@@ -180,8 +180,16 @@ export const federationCandidateSchema = z
       .url()
       .max(FEDERATION_ENDPOINT_MAX_LENGTH)
       .refine((value) => {
-        const protocol = new URL(value).protocol;
-        return protocol === "http:" || protocol === "https:";
+        // Guarded: zod still evaluates this refinement after `.url()` has already
+        // failed, so an unparseable value reached `new URL` and THREW out of
+        // safeParse -- turning "not a candidate" into a crash in any caller that
+        // trusted the documented null return.
+        try {
+          const protocol = new URL(value).protocol;
+          return protocol === "http:" || protocol === "https:";
+        } catch {
+          return false;
+        }
       }, "endpoint must use HTTP or HTTPS"),
     protocol: z.literal(FEDERATION_PROTOCOL_VERSION),
     capabilityDigest: z.string().regex(FEDERATION_CAPABILITY_DIGEST_RE),

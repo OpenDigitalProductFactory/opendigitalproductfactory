@@ -45,7 +45,7 @@ const ACCOUNT_DECLARATION_CLAIMS = new Set<ProviderTrustClaimKey>([
 
 function nextActionLabel(claim: ResolvedProviderTrustClaim): string {
   if (claim.claimKey === "enabled-regions") {
-    return "Save the enabled regions in Connected account and data terms above. Leaving the field empty keeps region-restricted work blocked.";
+    return "Confirm the required-region guarantee in Connected account and data terms above. Unverified region entitlement keeps region-restricted work blocked.";
   }
   if (claim.claimKey === "dpa-on-file") {
     return "No DPA evidence workflow is available on this page. Restricted work stays blocked until platform governance links a reviewed supplier contract or current DPA evidence.";
@@ -61,14 +61,23 @@ export function ProviderTrustEvidencePanel({
   evidenceStatus,
   lastReviewedAt,
   claims,
+  requiredClaimKeys = claims.map((claim) => claim.claimKey),
+  scopeHeadline,
+  scopeSummary,
+  actions = [],
 }: {
   accountDeclarationSaved: boolean;
   evidenceStatus: ProviderConnectionPosture["evidenceStatus"];
   lastReviewedAt: string | null;
   claims: ResolvedProviderTrustClaim[];
+  requiredClaimKeys?: ProviderTrustClaimKey[];
+  scopeHeadline?: string;
+  scopeSummary?: string;
+  actions?: string[];
 }) {
-  const restrictedClaimCount = claims.filter((claim) => claim.status !== "valid").length;
-  const restrictedWorkLimited = claims.length === 0 || restrictedClaimCount > 0;
+  const required = new Set(requiredClaimKeys);
+  const restrictedClaimCount = claims.filter((claim) => required.has(claim.claimKey) && claim.status !== "valid").length;
+  const restrictedWorkLimited = restrictedClaimCount > 0 || actions.length > 0;
 
   return (
     <section
@@ -88,11 +97,11 @@ export function ProviderTrustEvidencePanel({
           role="status"
           className={`rounded-full px-2 py-1 text-xs font-semibold ${restrictedWorkLimited ? "bg-[var(--dpf-warning-soft)] text-[var(--dpf-warning)]" : "bg-[var(--dpf-success-soft)] text-[var(--dpf-success)]"}`}
         >
-          {claims.length === 0
+          {scopeHeadline ?? (claims.length === 0
             ? "Restricted work not reviewed"
             : restrictedClaimCount > 0
               ? `${restrictedClaimCount} ${restrictedClaimCount === 1 ? "restriction" : "restrictions"} for restricted work`
-              : "Current for restricted work"}
+              : "Current for restricted work")}
         </span>
       </div>
 
@@ -100,7 +109,7 @@ export function ProviderTrustEvidencePanel({
         {accountDeclarationSaved && lastReviewedAt
           ? `Account declaration saved · reviewed ${dateLabel(lastReviewedAt)}.`
           : "Account declaration not yet saved."}
-        {restrictedWorkLimited
+        {scopeSummary ? ` ${scopeSummary}` : restrictedWorkLimited
           ? " General work is governed separately; sensitive or restricted work remains blocked until the evidence below is current."
           : " The current evidence supports restricted-work evaluation; routing still applies each workload's policy."}
       </p>
@@ -121,12 +130,24 @@ export function ProviderTrustEvidencePanel({
                 {claim.evidenceAgeDays == null ? "No dated evidence" : `${claim.evidenceAgeDays} days old`}
                 {claim.expiresAt ? ` · valid until ${dateLabel(claim.expiresAt)}` : ""}
               </p>
-              {claim.status !== "valid" && (
+              {claim.status !== "valid" && required.has(claim.claimKey) && (
                 <p className="mb-0 mt-1 text-xs font-medium text-[var(--dpf-text)]">Next: {nextActionLabel(claim)}</p>
+              )}
+              {claim.status !== "valid" && !required.has(claim.claimKey) && (
+                <p className="mb-0 mt-1 text-xs text-[var(--dpf-muted)]">Optional here.</p>
               )}
             </li>
           ))}
         </ul>
+      )}
+
+      {actions.length > 0 && (
+        <div className="mt-3 rounded border border-[var(--dpf-warning)] bg-[var(--dpf-warning-soft)] p-3">
+          <p className="m-0 text-xs font-semibold text-[var(--dpf-text)]">Next action</p>
+          <ul className="mb-0 mt-1 list-disc space-y-1 pl-4 text-xs text-[var(--dpf-text)]">
+            {actions.map((action) => <li key={action}>{action}</li>)}
+          </ul>
+        </div>
       )}
 
       <p className="mb-0 mt-3 text-xs text-[var(--dpf-muted)]">

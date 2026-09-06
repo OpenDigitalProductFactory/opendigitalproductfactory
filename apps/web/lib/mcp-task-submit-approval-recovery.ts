@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import type { UserContext } from "@/lib/permissions";
 import { markTaskRunWorking } from "@/lib/observability/heartbeat";
@@ -56,7 +56,9 @@ export async function resumeApprovedRemoteTask(input: {
   userContext: UserContext;
   parsed: RemoteTaskSubmitParams;
 }): Promise<RemoteTaskSubmitOutcome | null> {
-  if (input.existing.status !== "input-required") return null;
+  const recoveringCompletedProjection = input.existing.status === "completed";
+  if (input.existing.status !== "input-required" && !recoveringCompletedProjection) return null;
+  if (recoveringCompletedProjection && !input.parsed.initiativeReviewBinding) return null;
 
   const envelope = await prisma.coworkerActionEnvelope.findFirst({
     where: {
@@ -69,6 +71,10 @@ export async function resumeApprovedRemoteTask(input: {
     select: { id: true, threadId: true, manifestActionId: true },
   }) as ApprovedRemoteTaskEnvelope | null;
   if (!envelope) return null;
+  if (
+    recoveringCompletedProjection
+    && envelope.manifestActionId !== input.parsed.initiativeReviewBinding?.writerToolName
+  ) return null;
 
   const proposedExecution = await prisma.toolExecution.findFirst({
     where: {
@@ -86,10 +92,11 @@ export async function resumeApprovedRemoteTask(input: {
   const reservation = await prisma.taskRun.updateMany({
     where: {
       taskRunId: input.existing.taskRunId,
-      status: "input-required",
+      status: input.existing.status,
       updatedAt: input.existing.updatedAt,
     },
     data: {
+      ...(recoveringCompletedProjection ? { completedAt: null } : {}),
       progressPayload: {
         ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
           && !Array.isArray(input.existing.progressPayload)
@@ -122,21 +129,28 @@ export async function resumeApprovedRemoteTask(input: {
   const status = currentRun?.status === "input-required"
     ? "input-required"
     : result.success ? "completed" : "failed";
+  const progressPayload: Record<string, Prisma.InputJsonValue | null> = {
+    ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+      && !Array.isArray(input.existing.progressPayload)
+      ? input.existing.progressPayload as Prisma.InputJsonObject
+      : {}),
+    summary: result.message,
+    riskClass: input.parsed.riskClass,
+    executedToolCount: 1,
+    resumedFromApproval: true,
+    requiresApproval: status === "input-required",
+  };
+  if (status === "completed") {
+    delete progressPayload.terminalWriterWait;
+    delete progressPayload.terminalWriterEscalation;
+    delete progressPayload.terminalWriterContextFailure;
+  }
   await prisma.taskRun.update({
     where: { taskRunId: input.existing.taskRunId },
     data: {
       status,
       ...(status === "input-required" ? {} : { completedAt: new Date() }),
-      progressPayload: {
-        ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
-          && !Array.isArray(input.existing.progressPayload)
-          ? input.existing.progressPayload as Record<string, unknown>
-          : {}),
-        summary: result.message,
-        riskClass: input.parsed.riskClass,
-        executedToolCount: 1,
-        resumedFromApproval: true,
-      },
+      progressPayload,
     },
   });
 

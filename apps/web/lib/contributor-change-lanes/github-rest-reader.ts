@@ -14,6 +14,8 @@
 // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
 //   §"Per-source work" item 3, §"Etag persistence".
 
+import { createOffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
+
 import type { PullRequestSnapshot } from "./types";
 
 const GITHUB_PR_CREDENTIAL_PROVIDER_ID = "github-pr-sync";
@@ -49,6 +51,29 @@ export type GithubReaderDeps = {
 
 /** Resolved repo coordinates `{owner}/{repo}`. */
 export type RepoIdentity = { owner: string; name: string };
+
+export type GithubReadTransport = Readonly<{
+  fetch: typeof fetch;
+  close(): Promise<void>;
+}>;
+
+/**
+ * Control-plane GitHub reads must not inherit Next.js' framework-patched
+ * global fetch. Own the dispatcher explicitly and close it at the operation
+ * boundary; callers still inject a plain Fetch implementation in tests.
+ */
+export function createGithubReadTransport(): GithubReadTransport {
+  return createOffThreadpoolFetchTransport();
+}
+
+/** Release an unconsumed provider response before retrying or closing its dispatcher. */
+export async function cancelGithubResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Cleanup cannot change the typed provider verdict already established.
+  }
+}
 
 /**
  * Production GitHub PR reader. Returns the rows for the open-PR list,

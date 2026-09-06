@@ -10,6 +10,7 @@ import { resolveOwnerVocabulary } from "./vocabulary";
 
 const restaurant = resolveOwnerVocabulary("food-hospitality");
 const neutral = resolveOwnerVocabulary("retail-goods");
+const petRescue = resolveOwnerVocabulary("nonprofit-community", "pet-rescue");
 
 describe("buildCustomerOwnerSummary", () => {
   it("leads with guest follow-up in restaurant language and orders by urgency", () => {
@@ -68,6 +69,23 @@ describe("buildCustomerOwnerSummary", () => {
     );
     expect(summary.headline).toBe("Customer follow-up");
     expect(summary.subhead).toMatch(/customers/i);
+  });
+
+  it("keeps the pet-rescue follow-up band free of customer and CRM language", () => {
+    const summary = buildCustomerOwnerSummary(
+      {
+        pendingReservations: 0,
+        pendingOrders: 0,
+        newInquiries: 4,
+        unworkedEngagements: 0,
+        overdueInvoices: 0,
+        renewalsDueSoon: 0,
+      },
+      petRescue,
+    );
+    expect(summary.headline).toBe("Adoption follow-up");
+    expect(summary.subhead).not.toMatch(/customer|crm/i);
+    expect(summary.actions[0]?.title).toBe("4 new adoption enquiries to answer");
   });
 });
 

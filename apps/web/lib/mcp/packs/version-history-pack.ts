@@ -15,10 +15,17 @@ import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { createHash } from "node:crypto";
 
-const DEFAULT_READ_MAX_LINES = 40;
-const MAX_READ_LINES = 200;
-const DEFAULT_READ_MAX_CHARS = 3_000;
-const MAX_READ_CHARS = 3_200;
+// BI-8B8731EE: a governed reviewer gets a bounded number of immutable reads
+// (terminal-tool-policy maximumReaderCalls = 6) before it must write its
+// receipt. At 40 lines / 3,000 chars a page that is ~19 KB of artifact, and a
+// 25 KB design spec ran every reviewer out of budget four times in one night
+// without a verdict. A default page now carries a whole medium document, and
+// the cap allows a long one in two or three reads. Pages stay bounded: this
+// is still a paged reader, not a whole-file dump.
+const DEFAULT_READ_MAX_LINES = 200;
+const MAX_READ_LINES = 400;
+const DEFAULT_READ_MAX_CHARS = 12_000;
+const MAX_READ_CHARS = 16_000;
 const DEFAULT_SEARCH_RESULTS = 20;
 const MAX_SEARCH_RESULTS = 50;
 const MAX_SEARCH_OFFSET = 2_000;

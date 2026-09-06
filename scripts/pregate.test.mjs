@@ -408,7 +408,7 @@ test("pregate recovery ignores terminal gate states", async () => {
 // non-zero status, so it read that as an interrupted run, tried to release a
 // lease it does not own, and stamped the state `failed`. `pregate:status` then
 // reported "failed with NO recorded reason" for a queued, heartbeating lease.
-test("a queued durable-task gate is not recovered as an interrupted one", async () => {
+test("a durable control-plane wait is not recovered as an interrupted gate", async () => {
   let contextResolved = false;
   const recovered = await recoverInterruptedGate({
     args: [],
@@ -420,7 +420,7 @@ test("a queued durable-task gate is not recovered as an interrupted one", async 
     stderr: { write: () => {} },
   });
 
-  assert.deepEqual(recovered, { recovered: false, reason: "queued-durable-task" });
+  assert.deepEqual(recovered, { recovered: false, reason: "durable-control-plane-wait" });
   // It must bail before touching git or the lease at all — releasing a lease this
   // process does not own is what produced the misleading verdict.
   assert.equal(contextResolved, false);
@@ -437,7 +437,7 @@ test("a genuinely non-zero, non-queue exit still reaches recovery", async () => 
     stderr: { write: () => {} },
   });
 
-  assert.notEqual(recovered.reason, "queued-durable-task");
+  assert.notEqual(recovered.reason, "durable-control-plane-wait");
 });
 
 test("a clean exit is still not a recovery", async () => {

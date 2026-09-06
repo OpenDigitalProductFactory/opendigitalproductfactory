@@ -1,5 +1,4 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-
 // ── Mocks (must be declared before imports) ──────────────────────────────────
 
 // Mock ai-inference: provide real pure functions but avoid DB imports
@@ -172,6 +171,7 @@ function makeRequest(overrides: Partial<AdapterRequest> = {}): AdapterRequest {
       baseUrl: "http://localhost:11434",
       headers: { "Content-Type": "application/json" },
     },
+    fetchImpl: globalThis.fetch,
     messages: [{ role: "user", content: "Hello" }],
     systemPrompt: "You are helpful.",
     ...overrides,

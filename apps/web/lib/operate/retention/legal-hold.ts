@@ -1,13 +1,13 @@
 // Legal-hold awareness for the data-retention engine (BI-90A8D153, GAP 2).
 //
 // THE DEFECT
-// Three `legalHold Boolean` columns exist in the schema (PatientProfile,
-// CareIntakePacket, CareIntakeResponse) but the retention engine NEVER READ
+// Models with a `legalHold Boolean` column exist in the schema (including
+// PatientProfile, CareIntakePacket, CareIntakeResponse, and CareRecord), but the retention engine must read
 // them: execute.ts built its purge WHERE clause purely from the policy's
 // timestamp field + extraWhere, and no policy set an extraWhere on legalHold.
 // A row under legal hold on a purge-enrolled model would therefore be deleted
 // by the nightly sweep — a correctness/compliance trap. It is latent today only
-// because those three models hold 0 rows and are not purge-enrolled; it becomes
+// while those models are not purge-enrolled; it becomes
 // live the moment a regulated tenant's held model is enrolled.
 //
 // THE FIX
@@ -34,6 +34,7 @@ export const LEGAL_HOLD_MODELS: ReadonlySet<string> = new Set([
   "patientProfile",
   "careIntakePacket",
   "careIntakeResponse",
+  "careRecord",
 ]);
 
 /** The column that flags an active legal hold. Single source of truth for both

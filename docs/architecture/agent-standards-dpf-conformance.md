@@ -46,6 +46,12 @@ The companion verification rubrics intended to make future conformance claims re
 | Control Area | Status | Evidence Path | Notes | Recommended Next Step |
 |--------------|--------|---------------|-------|-----------------------|
 | Stable agent identity | Partially Implemented | `packages/db/data/agent_registry.json`, `apps/web/lib/tak/agent-routing.ts` | `DPF` already carries stable agent identifiers, model bindings, supervisors, delegates, tool grants, and memory declarations. However, these identities are still platform-local and are not yet expressed as canonical `GAID` identifiers. | Introduce canonical `GAID` identifiers and bind route-facing identities to them consistently. |
+
+Route-facing agent identity is also presentation-sensitive. Shared substrate names
+must remain truthful across archetypes: the `/customer` route uses the neutral
+**Relationship Manager** presentation and instructs the agent to follow the
+archetype-specific labels and suppressed concepts rendered by the page. Tool and
+authority identities remain stable; only owner-facing language is adapted.
 | Public/private identity scoping | Not Implemented | Current implementation review | The reviewed implementation does not yet distinguish internal private identifiers from externally accredited public identifiers. | Add explicit `priv` and `pub` identity scopes, plus governed boundary mapping rules. |
 | Agent identity document | Partially Implemented | `packages/db/data/agent_registry.json` | The registry approximates an internal `AIDoc` because it already captures model, supervisor, grants, `HITL`, delegation, and memory metadata. It is not yet a signed, resolvable, standardized identity document. | Define and publish a formal `AIDoc` schema, resolution mechanism, and signing model. |
 | Badge and assurance declarations | Not Implemented | Current implementation review | `DPF` contains useful metadata, but it does not yet publish structured badges for capability, governance, sensitivity, or fit-for-purpose, nor does it distinguish assurance levels. | Add badge schemas and evidence-backed assurance levels, starting with self-asserted and organization-attested claims. |
