@@ -105,13 +105,18 @@ function implementationRequirements(facts: InitiativeReadinessFacts): Requiremen
 }
 
 function completionRequirements(facts: InitiativeReadinessFacts): Requirement[] {
-  return [
+  const requirements = [
     ...implementationRequirements(facts),
     requirement("DELIVERY_EVIDENCE_REQUIRED", facts.deliveryEvidence, "delivery-coordinator"),
     requirement("ACCEPTANCE_EVIDENCE_REQUIRED", facts.acceptanceEvidence, "acceptance-reviewer"),
-    requirement("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
-    requirement("OBJECTIVE_RECONCILIATION_REQUIRED", facts.objectiveReconciliation, "acceptance-reviewer"),
   ];
+  if (facts.profile !== "doc-only") {
+    requirements.push(
+      requirement("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
+      requirement("OBJECTIVE_RECONCILIATION_REQUIRED", facts.objectiveReconciliation, "acceptance-reviewer"),
+    );
+  }
+  return requirements;
 }
 
 function requirementsFor(facts: InitiativeReadinessFacts, target: ReadinessTarget): Requirement[] {

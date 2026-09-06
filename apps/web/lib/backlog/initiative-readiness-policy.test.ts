@@ -132,6 +132,19 @@ describe("evaluateInitiativeReadiness", () => {
     expect(evaluateInitiativeReadiness(facts(), "completion")).toMatchObject({ verdict: "input-required" });
   });
 
+  it("closes documentation-only work from delivery and acceptance evidence without inventing an objective baseline", () => {
+    const decision = evaluateInitiativeReadiness(facts({
+      profile: "doc-only",
+      deliveryEvidence: "pass",
+      acceptanceEvidence: "pass",
+      objectiveBaseline: "missing",
+      objectiveReconciliation: "missing",
+    }), "completion");
+
+    expect(decision.verdict).toBe("allowed");
+    expect(codes(decision)).toEqual([]);
+  });
+
   it("allows planning after canonical approved design evidence", () => {
     const decision = evaluateInitiativeReadiness(facts({
       canonicalDesign: "pass",
