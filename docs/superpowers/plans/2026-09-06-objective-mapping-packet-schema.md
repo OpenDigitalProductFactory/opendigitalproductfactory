@@ -60,7 +60,7 @@ The atomic coverage contract uses these exact code and flow identifiers:
 
 - Decision: atomic
 - Parent: `BI-329AD58D`
-- Receipt: blocked-by: live coverage receipt is being recorded against this exact immutable plan after the genuine scope baseline
+- Receipt: `cmtpc8ggv037n01p7s2mzkhyn`
 - Rationale: The public schema, both coworker doors, and canonical parser form one packet contract and cannot ship safely as independent changes.
 - Dependencies: none
 
