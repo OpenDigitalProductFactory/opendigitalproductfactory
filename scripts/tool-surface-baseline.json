@@ -8,13 +8,13 @@
       "recordedAt": "2026-09-05"
     },
     "registry.packFiles": {
-      "value": 100,
-      "reason": "New federation-membership-pack.ts: organization membership (join-file import, and the issue side to follow in the next slice) is a federation-trust concern distinct from ux-verification, self-upgrade and admin packs; a dedicated pack keeps the grant (sandbox_execute) and capability (manage_platform) beside the tools they govern.",
+      "value": 101,
+      "reason": "New statutory-rate-pack.ts (BI-8E1FD1BD): the two tools a research coworker needs to deliver a cited statutory figure — list_statutory_rate_gaps and propose_statutory_rate. They belong in no existing pack, and the alternative was the status quo: coworkers holding web_search that could research a tax rate and had nowhere to record it, so the finding died in a backlog item. Deliberately no ratify tool — confirming a figure is a human action on the finance surface, and a pack that could ratify would defeat the propose/ratify split. Sits alongside federation-membership-pack (main, 2026-09-05) which took this metric to 100.",
       "recordedAt": "2026-09-05"
     },
     "tier.coreToolNames": {
       "value": 30,
-      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs \u2014 same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
+      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs — same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
       "recordedAt": "2026-08-08"
     },
     "dispatch.maxAttachedTools": {

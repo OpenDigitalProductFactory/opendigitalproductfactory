@@ -17,6 +17,7 @@
 
 import { composeToolPacks } from "./tool-registry";
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
+import { statutoryRatePack } from "./packs/statutory-rate-pack";
 import { roomMessagingPack } from "./packs/room-messaging-pack";
 import { runtimeCoordinationPack } from "./packs/runtime-coordination-pack";
 import { workCapsulesPack } from "./packs/work-capsules-pack";
@@ -111,6 +112,7 @@ import { uxVerificationPack } from "./packs/ux-verification-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
+  statutoryRatePack,
   roomMessagingPack,
   runtimeCoordinationPack,
   workCapsulesPack,
