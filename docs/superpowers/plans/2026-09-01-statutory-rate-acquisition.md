@@ -38,15 +38,15 @@ Nothing in this plan invents a figure. `PayrollTaxRule` ships empty. A statutory
 
 ## Backlog coverage
 
-**Blocking condition:** no initiative scope baseline exists for BI-8E1FD1BD, so a
-live MCP coverage receipt cannot yet be bound to a governed scope. A baseline is
-minted only by a passing `spec-approval` gate recorded by a reviewer independent
-of the author. The canonical design is
-[2026-09-01-statutory-rate-acquisition-design.md](../specs/2026-09-01-statutory-rate-acquisition-design.md).
+- Decision: atomic
+- Parent: BI-8E1FD1BD
+- Dependencies: none
+- Rationale: the table, the propose/ratify safety checks, the readiness assessment and the two MCP tools are one indivisible capability — a proposal with nowhere to land, a gate with nothing to gate, and a tool with no table each deliver nothing on their own, so no smaller slice is independently shippable or verifiable.
+- Receipt: blocked-by: no initiative scope baseline exists for BI-8E1FD1BD, because a baseline is minted only by a passing spec-approval receipt recorded by a reviewer independent of the author, and no such receipt exists yet. The reviewer route now issues correctly and the reviewer reads the artifact, but three separate platform defects had to be fixed before it could record anything (PR #4996 credential resolution, PR #5085 reviewer write capability, PR #5103 a refusal message a reviewer read as its own inverse). The chain has still produced zero receipts, so this capability lands as ordinary reviewed code and the governance record follows it rather than gating it. Founder-directed 2026-09-06.
 
-Decision: **atomic**. Dependencies: **none**. Parent: **BI-8E1FD1BD**.
+Atomic: the table, the safety checks, the readiness assessment and the two tools are one indivisible capability. A proposal with nowhere to land, a gate with nothing to gate, and a tool with no table each deliver nothing on their own, so there is no smaller shippable slice to map.
 
-Atomic. Every piece here is one indivisible capability — the table, the safety checks, the readiness assessment and the two tools are useless apart, since a proposal with nowhere to land, a gate with nothing to gate, or a tool with no table each deliver nothing on their own. Tracked under BI-8E1FD1BD with BI-4EB27955 item 3 as its schema dependency.
+The canonical design is [2026-09-01-statutory-rate-acquisition-design.md](../specs/2026-09-01-statutory-rate-acquisition-design.md). BI-4EB27955 item 3 specified this schema; the figures themselves remain with the operator.
 
 ## Known gaps this does NOT close
 
