@@ -204,7 +204,7 @@ describe("initiative readiness reviewer tools", () => {
 
     await initiativeReadinessPack.handlers.record_initiative_evidence!({
       operation: "objective-mapping",
-      baselineId: "baseline-current",
+      baselineId: "baseline-spoofed",
       objectiveMappings: [{ objectiveId: "OBJ-1", evidenceRefs: ["E-1"] }],
       reason: "Bound mapping.",
     }, "user-1", {
@@ -215,6 +215,7 @@ describe("initiative readiness reviewer tools", () => {
     } as never);
 
     expect(mocks.recordObjectiveMapping).toHaveBeenCalledWith(expect.objectContaining({
+      taskRunId: "TR-MCP-MAPPING",
       itemId: "BI-BOUND",
       baselineId: "baseline-current",
       eligibleEvidenceActivityIds,

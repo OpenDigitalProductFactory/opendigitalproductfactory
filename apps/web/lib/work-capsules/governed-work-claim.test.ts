@@ -107,6 +107,16 @@ function database(activities: unknown[] = []) {
             lifecycleStage: "production",
           },
         },
+        {
+          grantKey: "file_read",
+          agent: {
+            agentId: "AGT-INDEPENDENT-REVIEWER",
+            displayName: "Independent Design Reviewer",
+            status: "active",
+            archived: false,
+            lifecycleStage: "production",
+          },
+        },
       ]),
     },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),

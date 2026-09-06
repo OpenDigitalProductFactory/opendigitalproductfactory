@@ -283,12 +283,16 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
       const mappings = parseObjectiveMappings(params.objectiveMappings);
-      if (typeof params.baselineId !== "string" || !params.baselineId.trim() || !mappings) {
+      const baselineId = binding?.gate === "objective-mapping"
+        ? binding.expectedCurrentBaselineId
+        : params.baselineId;
+      if (typeof baselineId !== "string" || !baselineId.trim() || !mappings) {
         return { success: false, error: "malformed-receipt", message: "Objective mapping requires a current baselineId and non-empty objective/evidence mappings." };
       }
       const result = await recordInitiativeObjectiveMappingProposal({
+        taskRunId: context?.taskRunId ?? null,
         itemId: String(params.itemId ?? ""),
-        baselineId: params.baselineId,
+        baselineId,
         mappings,
         eligibleEvidenceActivityIds: binding?.eligibleEvidenceActivityIds ?? [],
         reason: String(params.reason ?? ""),
