@@ -83,9 +83,7 @@ receipts, rather than model prose, establish the governed readiness state.
 - Research receipt: `initiative-a62dd305-8953-4723-9187-4c50035d8783`.
 - Scope baseline: `baseline-65b33c6d-4c95-4f82-a8d9-ece912c4abeb`, approved by
   receipt `initiative-a9d65966-7e92-45d4-8733-cb507643e832`.
-- Coverage receipt: recorded server-side against this immutable plan revision;
-  the database activity is authoritative and the plan does not self-assert a
-  receipt before the immutable revision exists.
+- Receipt: `cmtpe2jzi06xk01p757i0tvi9`
 
 ## Source-only TDD evidence
 
