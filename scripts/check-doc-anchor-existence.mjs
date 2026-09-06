@@ -141,7 +141,12 @@ export function isTruncatedListing(body) {
     return true; // unparseable is not proof of completeness
   }
   const text = JSON.stringify(parsed?.result ?? parsed ?? null);
-  if (/"truncated"\s*:\s*true/.test(text)) return true;
+  // Two truncation shapes: the tool's own `truncated: true` page marker, and
+  // the MCP server's per-call context budget, which replaces a large result
+  // with `structuredContent._truncated: true` plus a `_preview` holding only
+  // the first few rows. A 222-epic catalog came back as a 6 KB preview naming
+  // four epics, and every other correctly cited epic read as "missing".
+  if (/"_?truncated"\s*:\s*true/.test(text)) return true;
   const total = text.match(/"total"\s*:\s*(\d+)/);
   const fetched = text.match(/"fetched"\s*:\s*(\d+)/);
   if (total && fetched && Number(fetched[1]) < Number(total[1])) return true;

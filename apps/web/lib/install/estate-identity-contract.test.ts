@@ -146,6 +146,25 @@ describe("precedence", () => {
     expect(resolved.tier).toBe("unset");
   });
 
+  // BI-CA54ACC8: production refused every membership proof with
+  // no-local-organization although its banner said "Fabrikam" — the
+  // Organization row named at setup was never an estate-name tier.
+  it("falls back to the organization named at setup, below every explicit tier", () => {
+    const resolved = resolveEstateNamePrecedence({ organizationName: "  Fabrikam " });
+    expect(resolved.estateName).toBe("Fabrikam");
+    expect(resolved.tier).toBe("organization-name");
+    expect(resolved.organizationNameValue).toBe("Fabrikam");
+
+    const declared = resolveEstateNamePrecedence({ organizationName: "Fabrikam", portalDeclaration: declaration() });
+    expect(declared.estateName).toBe("Northwind");
+    expect(declared.tier).toBe("portal-declaration");
+    expect(declared.organizationNameValue).toBe("Fabrikam");
+
+    const malformed = resolveEstateNamePrecedence({ organizationName: "   " });
+    expect(malformed.tier).toBe("unset");
+    expect(malformed.organizationNameValue).toBeUndefined();
+  });
+
   it("reports a shadowed declaration so an operator learns why theirs is not in force", () => {
     const resolved = resolveEstateNamePrecedence({
       installerState: "FromInstaller",
