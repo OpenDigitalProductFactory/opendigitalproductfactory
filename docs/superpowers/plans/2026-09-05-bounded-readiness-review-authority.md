@@ -1,5 +1,5 @@
 ---
-status: delivered-awaiting-closure
+status: binding
 ---
 
 # Bounded initiative-readiness receipt authority
