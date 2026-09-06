@@ -103,12 +103,25 @@ The sponsor segments are disclosed advertising. Treat their numbers as vendor cl
 
 ### Outcomes
 
-1. The operator can see every active delivery, its branch/PR, owner, blocker, next action, and verified result in Build Studio.
-2. Build Studio can decompose one bounded objective into independently shippable BIs/PRs and coordinate them to terminal delivery.
-3. The two local installations can execute separate ready leaves without duplicate ownership or a shared mutable filesystem.
-4. PR checks, review findings, repair, takeover, merge, deployment verification, and closeout form one durable convergence loop.
-5. Model and prompt changes are promoted by measured delivery outcomes.
-6. Twenty percent of campaign capacity is reserved for evidence-backed refactoring/deletion that reduces future delivery cost.
+1. **OBJ-DELIVERY-VISIBILITY:** The operator can see every active delivery, its branch/PR, owner, blocker, next action, and verified result in Build Studio.
+2. **OBJ-DELIVERY-CAMPAIGN:** Build Studio can decompose one bounded objective into independently shippable BIs/PRs and coordinate them to terminal delivery.
+3. **OBJ-DELIVERY-PLACEMENT:** The two local installations can execute separate ready leaves without duplicate ownership or a shared mutable filesystem.
+4. **OBJ-DELIVERY-CONVERGENCE:** PR checks, review findings, repair, takeover, merge, deployment verification, and closeout form one durable convergence loop.
+5. **OBJ-DELIVERY-MEASUREMENT:** Model and prompt changes are promoted by measured delivery outcomes.
+6. **OBJ-DELIVERY-REFACTOR:** Twenty percent of campaign capacity is reserved for evidence-backed refactoring/deletion that reduces future delivery cost.
+
+These identifiers preserve the existing six outcomes; the provider-admission
+slice does not claim completion of the other delivery owners' work.
+
+| Acceptance | Objectives | Requirement | Evidence |
+| --- | --- | --- | --- |
+| AC-DELIVERY-VISIBILITY | OBJ-DELIVERY-VISIBILITY | Pipeline, thread and attention views agree with current canonical records, and expose stale sources and the next action. | Section 7 runtime UX cases; BI-9DC43E17 |
+| AC-DELIVERY-CAMPAIGN | OBJ-DELIVERY-CAMPAIGN | A bounded campaign dispatches only ready independent leaves and records a terminal outcome for each. | Section 9 campaign integration cases; BI-1CB9D97B |
+| AC-DELIVERY-PLACEMENT | OBJ-DELIVERY-PLACEMENT | Paired installations run distinct authorized leaves without duplicate writers; unavailable capacity leaves a recoverable wait. | Section 10 placement cases; BI-8D56F777 |
+| AC-DELIVERY-CONVERGENCE | OBJ-DELIVERY-CONVERGENCE | Exact-revision receipts, bounded recovery, takeover and protected merge lead to verified closeout; stale evidence never advances new work. | Section 15.1 recovery and interruption cases; BI-06AE6833 |
+| AC-DELIVERY-ADMISSION | OBJ-DELIVERY-CONVERGENCE | Eligible external review completes while local capacity is unavailable; local fallback and sensitive mixed payload remain constrained. | Section 11 provider-boundary tests and live review; BI-06AE6833 |
+| AC-DELIVERY-MEASUREMENT | OBJ-DELIVERY-MEASUREMENT | Profile comparisons report complete outcome cohorts, quality, time and attributable cost with missing coverage labelled. | Section 13 scorecard verification; BI-69803ACC and BI-A472354E |
+| AC-DELIVERY-REFACTOR | OBJ-DELIVERY-REFACTOR | The campaign records its refactoring allocation and removed duplicate contracts with verified consumers. | Section 15.1 consolidation evidence |
 
 ### Constraints
 
