@@ -501,10 +501,10 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(writer.inputSchema.properties).not.toHaveProperty("itemId");
     expect(writer.inputSchema.properties).not.toHaveProperty("gate");
     expect(writer.inputSchema.properties).not.toHaveProperty("artifactRef");
-    expect(writer.inputSchema.properties).not.toHaveProperty("findings");
-    expect(writer.inputSchema.properties).not.toHaveProperty("resolvedFindingRefs");
-    expect(writer.inputSchema.properties).not.toHaveProperty("reason");
-    expect(writer.inputSchema.required).toEqual(["decision"]);
+    expect(writer.inputSchema.properties).toHaveProperty("findings");
+    expect(writer.inputSchema.properties).toHaveProperty("resolvedFindingRefs");
+    expect(writer.inputSchema.properties).toHaveProperty("reason");
+    expect(writer.inputSchema.required).toEqual(["decision", "reason", "findings", "resolvedFindingRefs"]);
     const providerWriter = execution.toolsForProvider.find((tool) => tool.function?.name === "record_initiative_evidence")!;
     expect(providerWriter.function?.parameters?.properties).toEqual(writer.inputSchema.properties);
     expect(providerWriter.function?.parameters?.required).toEqual(writer.inputSchema.required);

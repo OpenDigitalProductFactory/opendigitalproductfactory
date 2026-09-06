@@ -129,6 +129,36 @@ export function executionPressureFenceReason(poolPolicy) {
     : null;
 }
 
+// BI-D908DA0A: a queued claim and a CLOSED pool look identical on the wire. Both
+// come back `admission.status === "queued"`, because a pool whose host rollback
+// contracted capacity to 0 has no slot to admit anyone into, so every claim is
+// parked. But they are different situations with different responses: behind a
+// queue you wait; behind a closed pool you free host memory (or wait for the
+// pressure to pass), and no amount of waiting in line helps. Observed live on
+// 2026-09-06: `effectiveCapacity: 0, rollbackReason: host-stage-headroom-low`
+// printed as "queued at position 1", which read as contention and cost a full
+// misdiagnosis. The policy carries the fact; the gate just never said it.
+export function poolClosedReason(poolPolicy) {
+  if (!poolPolicy || poolPolicy.effectiveCapacity !== 0) return null;
+  return typeof poolPolicy.rollbackReason === "string" && poolPolicy.rollbackReason
+    ? poolPolicy.rollbackReason
+    : "capacity-zero";
+}
+
+/** The one line an operator sees while a claim is parked. Says WHICH kind of wait. */
+export function describeQueuedAdmission({ admission, poolPolicy, delayMs }) {
+  const position = admission?.queuePosition ?? "?";
+  const again = Number.isFinite(delayMs)
+    ? `; observing again in ${(delayMs / 1000).toFixed(1)}s...`
+    : "";
+  const closed = poolClosedReason(poolPolicy);
+  if (closed) {
+    return `local-CI pool is CLOSED (${closed}): no slot can admit anyone until the host recovers, `
+      + `so this claim is parked at position ${position} behind host pressure, not behind other work${again}`;
+  }
+  return `local-CI admission queued at position ${position}${again}`;
+}
+
 function die(message) {
   process.stderr.write(`gate-worktree: ${message}\n`);
   process.exit(1);
@@ -1403,12 +1433,14 @@ async function main() {
     if (claimResponse?.success === true && admission?.status === "queued") {
       leaseId = canonicalLeaseId || claimResponse.entityId || leaseId;
       queuedClaimInterruptedByQuiescence = false;
+      const closedReason = poolClosedReason(claimResponse?.data?.poolPolicy);
       leaseEvents.push({
         type: "queued",
         at: new Date().toISOString(),
         queuePosition: admission.queuePosition ?? null,
         waitAgeMs: admission.waitAgeMs ?? null,
         expiresAt,
+        ...(closedReason ? { poolClosedReason: closedReason } : {}),
       });
       writeState(stateFile, {
         branch,
@@ -1444,6 +1476,7 @@ async function main() {
           claimKey,
           queuePosition: admission.queuePosition ?? null,
           resumeMode: "durable-task",
+          ...(closedReason ? { poolClosedReason: closedReason } : {}),
         }) + "\n");
         process.exit(75);
       }
@@ -1453,7 +1486,11 @@ async function main() {
       }
       const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
       claimAttempt += 1;
-      waiting(`local-CI admission queued at position ${admission.queuePosition}; observing again in ${(delayMs / 1000).toFixed(1)}s...`);
+      waiting(describeQueuedAdmission({
+        admission,
+        poolPolicy: claimResponse?.data?.poolPolicy,
+        delayMs,
+      }));
       await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
@@ -1825,6 +1862,9 @@ async function main() {
     for (const [signal, handler] of Object.entries(runSignalHandlers)) process.removeListener(signal, handler);
   }
   const runResult = supervised.result;
+  // BI-ECAE03F7: a fenced run must record WHICH fence fired, or pregate:status
+  // reports a reasonless failure against the diff.
+  const fenceReason = supervised.status === "fenced" ? String(supervised.reason || "fenced") : "";
   if (supervised.status === "fenced") {
     runResult.status = 75;
     runResult.output = `${runResult.output}\ngate-worktree: lease fenced (${supervised.reason}); child process tree terminated\n`;
@@ -2061,10 +2101,12 @@ async function main() {
 
   const capturedFailureCount = (failureSummary?.failedTests?.length || 0)
     + (failureSummary?.failedChecks?.length || 0);
-  const persistedReason = outcome.summary
-    || (capturedFailureCount === 0 && runResult.status
-      ? `no stage failed; child exited ${runResult.status} after the last completed stage`
-      : "");
+  const persistedReason = fenceReason
+    ? `${outcome.summary || "local-CI gate blocked: the lease was fenced"} (fence reason: ${fenceReason})`
+    : outcome.summary
+      || (capturedFailureCount === 0 && runResult.status
+        ? `no stage failed; child exited ${runResult.status} after the last completed stage`
+        : "");
   writeState(stateFile, {
     branch,
     sha,

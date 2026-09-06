@@ -89,6 +89,8 @@ shape; every merge, deploy, acceptance and authority-changing advance is a `gove
 and the author never holds the receipt writer. `small | medium | large | xlarge` are
 `BacklogEffortSize`; `break-fix` is the expedite lane on a small fix (post-hoc review, WIP 1).
 
+A delivery room gets its shape at the claim (`claim_backlog_item_for_work`, BI-02470C7E, design §3.3): declared by the caller as `workShape`, or derived from the item's `effortSize` and work type when every classification rule in design §3.4 agrees (`derive-delivery-shape.ts`, recorded with `source: derived` and the signals used). An implementation claim with no derivable shape is refused with `work_shape_required` and the five-shape pick list; an unattended caller gets `attentionRequired` on the refusal; `delivery-xlarge` is refused for implementation because it only ever decomposes. The shape persists as the room's `workShape` scope claim, read back by `readWorkShapeClaim` / `resolveWorkShapeClaim` like any activity shape.
+
 **This claim is what makes a room wake.** The standing-Workroom drive
 (`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) selects non-terminal,
 unarchived rooms **that carry a work-shape claim**, ordered, and bounded by

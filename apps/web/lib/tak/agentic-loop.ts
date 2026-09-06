@@ -62,13 +62,12 @@ import {
 import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
-  normalizeTerminalToolArguments,
+  normalizeTerminalToolArguments, rotateTerminalWriterProvider,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   selectTerminalToolSurface,
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
-// Re-export for importers (certification-oracles, tests) that pull from agentic-loop.
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -1757,6 +1756,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           return completeResult(result.content, result);
         }
         if (exit.kind === "nudge") {
+          rotateTerminalWriterProvider(routeOptions, result.providerId);
           terminalToolNudges++;
           terminalToolSurfaceOverride = exit.allowedToolNames;
           messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];

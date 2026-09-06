@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { validateInitiativeDisposition } from "./disposition-contract";
 
 import { Prisma, prisma } from "@dpf/db";
 
@@ -229,6 +230,8 @@ export async function recordInitiativeSpecApproval(args: {
   authorityDecisionId: string | null;
   tokenScope: string | null;
 }): Promise<RecordInitiativeSpecApprovalResult> {
+  const dispositionError = validateInitiativeDisposition("pass", [], args.resolvedFindingRefs);
+  if (dispositionError) return { ok: false, code: "malformed-receipt", error: dispositionError };
   if (!args.reviewerAgentId || !args.authorityDecisionId || !args.tokenScope) {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "Authenticated reviewer, authority decision, and token scope are required." };
   }

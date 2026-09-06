@@ -60,7 +60,11 @@ export default async function InstallationIdentityPage() {
     <div className="mx-auto w-full max-w-4xl">
       <InstallationIdentityPanel view={view} />
       <div className="px-4 pb-6 sm:px-6">
-        <EstateNameField estateName={estate.estateName} badgePreview={badgePreview} />
+        <EstateNameField
+          estateName={estate.tier === "organization-name" ? null : estate.estateName}
+          badgePreview={badgePreview}
+          organizationFallback={estate.tier === "organization-name" ? estate.estateName : null}
+        />
       </div>
     </div>
   );

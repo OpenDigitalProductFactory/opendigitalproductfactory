@@ -52,6 +52,12 @@ export async function readInstallEstateName(options: {
 /** The read this module needs from PlatformConfig, kept Prisma-free. */
 export interface EstateIdentityStore {
   readConfig(key: string): Promise<unknown>;
+  /**
+   * The Organization row's name from setup, the lowest speaking tier
+   * (BI-CA54ACC8). Optional so a store that only carries PlatformConfig keeps
+   * working; such a store simply cannot fall back to the organization name.
+   */
+  readOrganizationName?(): Promise<string | null>;
 }
 
 /**
@@ -85,11 +91,37 @@ export async function loadEstateNameResolution(
     portalDeclaration = null;
   }
 
+  let organizationName: string | null = null;
+  if (store.readOrganizationName) {
+    try {
+      organizationName = await store.readOrganizationName();
+    } catch {
+      organizationName = null;
+    }
+  }
+
   return resolveEstateNamePrecedence({
     processOverride: env[ESTATE_NAME_ENV_VAR],
     installerState,
     portalDeclaration,
+    organizationName,
   });
+}
+
+/**
+ * The reads every Prisma-backed caller composes: the PlatformConfig declaration
+ * and the Organization row's name. One builder so no surface forgets the
+ * organization tier and answers "unnamed" for an installation that was named at
+ * setup (BI-CA54ACC8).
+ */
+export function prismaEstateIdentityStore(prisma: {
+  platformConfig: { findUnique(args: { where: { key: string }; select: { value: true } }): Promise<{ value: unknown } | null> };
+  organization: { findFirst(args: { select: { name: true } }): Promise<{ name: string } | null> };
+}): EstateIdentityStore {
+  return {
+    readConfig: async (key) => (await prisma.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ?? null,
+    readOrganizationName: async () => (await prisma.organization.findFirst({ select: { name: true } }))?.name ?? null,
+  };
 }
 
 /**

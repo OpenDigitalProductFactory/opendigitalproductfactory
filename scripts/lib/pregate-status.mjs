@@ -49,6 +49,27 @@ export const PREGATE_VERDICTS = Object.freeze([
 const UNFINISHED_GATE_STATUSES = new Set(["queued", "cancelled"]);
 
 /**
+ * The pool policy the gate recorded with a parked claim (BI-D908DA0A). Read from
+ * the admission snapshot first, then the queued lease event, so an older record
+ * that carries only one of them still answers.
+ */
+export function poolClosedReasonFromState(state) {
+  const policy = state?.admission?.poolPolicy;
+  if (policy && policy.effectiveCapacity === 0) {
+    return typeof policy.rollbackReason === "string" && policy.rollbackReason
+      ? policy.rollbackReason
+      : "capacity-zero";
+  }
+  const events = Array.isArray(state?.leaseEvents) ? state.leaseEvents : [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i]?.type === "queued" && typeof events[i].poolClosedReason === "string") {
+      return events[i].poolClosedReason;
+    }
+  }
+  return null;
+}
+
+/**
  * BI-8392DA16 / BI-2AB94B5A. A `blocked_*` status is infrastructure evidence —
  * the child was killed, the sandbox drifted, or the control plane starved.
  * FAIL is a claim about the diff. These must never share a headline.
@@ -229,6 +250,16 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
       };
     }
     if (UNFINISHED_GATE_STATUSES.has(status)) {
+      // BI-D908DA0A: a claim parked because the pool had NO admissible slot is
+      // host pressure, not a queue. Say so, or the operator waits behind nobody.
+      const closed = poolClosedReasonFromState(state);
+      if (closed) {
+        return {
+          ...base,
+          verdict: "INCONCLUSIVE",
+          reason: `gate record status ${status} — the local-CI pool was CLOSED (${closed}) when this claim was parked: no slot could admit anyone, so this is host pressure, not a queue and not a failure of the diff. Free host memory or wait for the pressure to pass, then re-run pregate.`,
+        };
+      }
       return {
         ...base,
         verdict: "INCONCLUSIVE",

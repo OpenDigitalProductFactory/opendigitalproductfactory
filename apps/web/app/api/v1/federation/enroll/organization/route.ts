@@ -19,7 +19,7 @@ import { prisma } from "@dpf/db";
 import { apiErrorResponse } from "@/lib/api/error";
 import { acceptOrganizationEnrolment, type MembershipDb } from "@/lib/federation/organization-membership";
 import { resolveLocalFederationAuthorityUrl } from "@/lib/federation/self-authority";
-import { loadEstateNameResolution } from "@/lib/install/estate-identity";
+import { loadEstateNameResolution, prismaEstateIdentityStore } from "@/lib/install/estate-identity";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   let body: unknown;
@@ -32,9 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!localAuthorityUrl) {
     return apiErrorResponse("SELF_AUTHORITY_UNKNOWN", "This installation does not know its own reachable address.", 503);
   }
-  const estate = await loadEstateNameResolution({
-    readConfig: async (key: string) => (await prisma.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ?? null,
-  });
+  const estate = await loadEstateNameResolution(prismaEstateIdentityStore(prisma));
   const result = await acceptOrganizationEnrolment(prisma as unknown as MembershipDb, {
     envelope: body,
     localAuthorityUrl,

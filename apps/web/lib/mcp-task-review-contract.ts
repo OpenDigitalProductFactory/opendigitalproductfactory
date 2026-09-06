@@ -177,8 +177,6 @@ export function narrowInitiativeReviewTools<T extends {
   const exactNames = new Set(requiredNames);
   const currentBaselineId = optionalString(binding.expectedCurrentBaselineId);
   const eligibleEvidenceActivityIds = binding.eligibleEvidenceActivityIds ?? [];
-  const compactResearchReceipt = binding.gate === "research"
-    && binding.writerToolName === "record_initiative_evidence";
   const objectiveMappingProposal = binding.writerToolName === "record_initiative_evidence"
     && !!currentBaselineId
     && (
@@ -191,9 +189,7 @@ export function narrowInitiativeReviewTools<T extends {
     );
   const baseWriterNames = objectiveMappingProposal
     ? ["operation", "baselineId", "objectiveMappings", "reason"]
-    : compactResearchReceipt
-      ? ["decision"]
-      : ["decision", "reason", "findings", "resolvedFindingRefs"];
+    : ["decision", "reason", "findings", "resolvedFindingRefs"];
   const writerPropertyNames = [
     ...baseWriterNames,
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole", "supersessionDispositions"] : []),

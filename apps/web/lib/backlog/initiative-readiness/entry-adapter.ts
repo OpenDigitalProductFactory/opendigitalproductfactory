@@ -215,9 +215,27 @@ function persistedTerminalCompletionDecision(
   return null;
 }
 
+/**
+ * Which artifact a gate receipt is bound to. Every design gate binds the
+ * canonical design; plan-review binds the PLAN the coverage record names (and
+ * still accepts the design digest, which earlier receipts were bound to)
+ * (BI-B5C8FEFC, 2026-09-06: a reviewer routed to the design honestly failed
+ * plan-review because "this document is a design specification", and a
+ * receipt recorded against the plan read as stale against the design digest).
+ */
+type AcceptedDigests = { canonical: string | null; plan: string | null };
+
+function isStaleFor(gate: string, artifactDigest: unknown, digests: AcceptedDigests): boolean {
+  if (gate === "plan-review") {
+    const accepted = [digests.plan, digests.canonical].filter((value): value is string => Boolean(value));
+    return accepted.length > 0 && !accepted.includes(String(artifactDigest));
+  }
+  return Boolean(digests.canonical) && artifactDigest !== digests.canonical;
+}
+
 function projectGateReceipt(
   activity: InitiativeReadinessActivity,
-  canonicalDigest: string | null,
+  digests: AcceptedDigests,
   itemId: string,
 ): { state: ReadinessEvidenceState; malformed: boolean; gate: string | null } {
   const payload = object(activity.payload);
@@ -250,7 +268,7 @@ function projectGateReceipt(
     && (gate === "classification" || payload.selectedProfile === undefined)
     && (decision === "fail" || payload.findingRefs.length === 0);
   if (!valid) return { state: "malformed", malformed: true, gate };
-  if (canonicalDigest && payload.artifactDigest !== canonicalDigest) {
+  if (isStaleFor(gate, payload.artifactDigest, digests)) {
     return { state: "stale", malformed: false, gate };
   }
   return { state: decision as ReadinessEvidenceState, malformed: false, gate };
@@ -258,7 +276,7 @@ function projectGateReceipt(
 
 function latestGateStates(
   activities: readonly InitiativeReadinessActivity[],
-  canonicalDigest: string | null,
+  digests: AcceptedDigests,
   itemId: string,
 ): { states: Map<string, ReadinessEvidenceState>; malformed: boolean } {
   const latest = [...activities]
@@ -269,7 +287,7 @@ function latestGateStates(
   for (const activity of latest) {
     const gate = normalizeGate(activity.gateKey);
     if (gate && states.has(gate)) continue;
-    const projected = projectGateReceipt(activity, canonicalDigest, itemId);
+    const projected = projectGateReceipt(activity, digests, itemId);
     malformed ||= projected.malformed;
     if (projected.gate) states.set(projected.gate, projected.state);
   }
@@ -317,11 +335,11 @@ function unreadEvidenceByCode(
 function projectPlanCoverage(
   activities: readonly InitiativeReadinessActivity[],
   baseline: Baseline | null,
-): ReadinessEvidenceState {
+): { state: ReadinessEvidenceState; planDigest: string | null } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "plan_backlog_coverage")
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id))[0];
-  if (!latest) return "missing";
+  if (!latest) return { state: "missing", planDigest: null };
   const payload = object(latest.payload);
   const artifact = object(payload?.planArtifactRef);
   if (!payload
@@ -335,9 +353,9 @@ function projectPlanCoverage(
     || !baseline
     || payload.scopeBaselineId !== baseline.baselineId
     || payload.scopeBaselineArtifactDigest !== baseline.artifactDigest) {
-    return "malformed";
+    return { state: "malformed", planDigest: null };
   }
-  return "pass";
+  return { state: "pass", planDigest: String(payload.planArtifactDigest) };
 }
 
 export function projectBacklogItemReadiness(args: {
@@ -392,8 +410,10 @@ export function projectBacklogItemReadiness(args: {
   const inherited = parent?.current ? args.inheritedScope! : null;
   const baseline = inherited ? parent! : own;
   const digest = baseline.current?.artifactDigest ?? null;
-  const ownReceipts = latestGateStates(args.activities, digest, args.item.itemId);
-  const parentReceipts = inherited ? latestGateStates(inherited.activities, digest, inherited.parentItemId) : null;
+  const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current);
+  const digests: AcceptedDigests = { canonical: digest, plan: projectedCoverage.planDigest };
+  const ownReceipts = latestGateStates(args.activities, digests, args.item.itemId);
+  const parentReceipts = inherited ? latestGateStates(inherited.activities, digests, inherited.parentItemId) : null;
   const receipts = parentReceipts
     ? {
       states: new Map([...parentReceipts.states, ...[...ownReceipts.states].filter(([, state]) => state !== "missing")]),
@@ -409,8 +429,7 @@ export function projectBacklogItemReadiness(args: {
   const governed = profile !== null;
   const evidence = receipts.states;
   const baselineState: ReadinessEvidenceState = baseline.current ? "pass" : "missing";
-  const coverage = args.planCoverage
-    ?? projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current);
+  const coverage = args.planCoverage ?? projectedCoverage.state;
   const dependency = state(evidence, "dependency-disposition");
   const archetypeProvisioning = state(evidence, "archetype-provisioning");
   // merge-through-gates recognition (EP-4614F35E): coerce the design/plan lanes to
