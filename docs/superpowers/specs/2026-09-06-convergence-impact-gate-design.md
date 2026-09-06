@@ -84,7 +84,7 @@ The trailer is the durable record. `gate-context.mjs` advertises it before gener
 
 ## 5. Acceptance criteria
 
-| AC-ID | OBJ-ID | Statement |
+| Criterion | Objective | Statement |
 | --- | --- | --- |
 | AC-1 | OBJ-CONVERGENCE-GATE-1 | A compose change with no trailer fails the gate (test "gate FAILS a compose change") |
 | AC-2 | OBJ-CONVERGENCE-GATE-1 | A trailer with a mode and no reason fails (test "attestation is theater") |
