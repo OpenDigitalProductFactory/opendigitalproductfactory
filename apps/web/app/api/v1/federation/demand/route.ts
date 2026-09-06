@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@dpf/db";
 import type { DemandDispositionNoticeV1, DemandEnvelopeV1, DemandResponseV1 } from "@dpf/db/federated-demand-contract";
+import {
+  OPERATIONAL_POSTURE_ACTIVITIES,
+  type OperationalPostureV1,
+} from "@dpf/db/federated-operational-posture-contract";
 
 import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
 import { validateFederationCloudEvent } from "@/lib/federation/cloud-event-guard";
@@ -16,6 +20,11 @@ import {
   type DemandResponseDb,
 } from "@/lib/federation/demand-response";
 import { handleIncomingDemandDisposition } from "@/lib/federation/demand-disposition";
+import { ok } from "@/lib/shared/action-result";
+import {
+  handleIncomingOperationalPosture,
+  type OperationalPostureExchangeDb,
+} from "@/lib/federation/operational-posture-exchange";
 
 const ERROR_STATUS: Record<string, number> = {
   missing_authorization: 401,
@@ -35,6 +44,12 @@ const RESPONSE_ACTIVITIES = new Set([
   "dpf.demand.help-offered",
 ]);
 const DISPOSITION_ACTIVITIES = new Set(["dpf.demand.dispositioned", "dpf.release.applicability-published"]);
+const POSTURE_ACTIVITIES = new Set<string>(OPERATIONAL_POSTURE_ACTIVITIES);
+
+/** An accepted exchange outcome: 200 for an idempotent replay, 202 once persisted. */
+function accepted(outcome: { action: string }): NextResponse {
+  return NextResponse.json({ ...ok(), ...outcome }, { status: outcome.action === "noop" ? 200 : 202 });
+}
 
 function isInboundActivity(value: unknown): value is InboundDemandActivity {
   return typeof value === "string" && INBOUND_ACTIVITIES.has(value as InboundDemandActivity);
@@ -82,7 +97,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (response.action === "rejected") {
       return NextResponse.json({ ok: false, error: "invalid_demand_response", violations: response.violations }, { status: 422 });
     }
-    return NextResponse.json({ ok: true, ...response }, { status: response.action === "noop" ? 200 : 202 });
+    return accepted(response);
   }
 
   if (typeof event.type === "string" && DISPOSITION_ACTIVITIES.has(event.type)) {
@@ -94,7 +109,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (disposition.action === "rejected") {
       return NextResponse.json({ ok: false, error: "invalid_demand_disposition", violations: disposition.violations }, { status: 422 });
     }
-    return NextResponse.json({ ok: true, ...disposition }, { status: disposition.action === "noop" ? 200 : 202 });
+    return accepted(disposition);
+  }
+
+  if (typeof event.type === "string" && POSTURE_ACTIVITIES.has(event.type)) {
+    // Operational posture is a same-organization capability (BI-648F01A0): a
+    // service-provider, channel or community peer has no standing to report one.
+    if (authz.role !== "same-org-peer") {
+      return NextResponse.json({ ok: false, error: "link_not_same_organization" }, { status: 403 });
+    }
+    const posture = await handleIncomingOperationalPosture(
+      prisma as unknown as OperationalPostureExchangeDb,
+      authz.linkId,
+      event.data as OperationalPostureV1,
+    );
+    if (posture.action === "rejected") {
+      return NextResponse.json({ ok: false, error: "invalid_operational_posture", violations: posture.violations }, { status: 422 });
+    }
+    if (posture.action === "conflict") {
+      return NextResponse.json({ ok: false, ...posture }, { status: 409 });
+    }
+    return accepted(posture);
   }
 
   if (!isInboundActivity(event.type)) {
@@ -120,8 +155,5 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, ...result }, { status: 409 });
   }
 
-  return NextResponse.json(
-    { ok: true, ...result },
-    { status: result.action === "noop" ? 200 : 202 },
-  );
+  return accepted(result);
 }

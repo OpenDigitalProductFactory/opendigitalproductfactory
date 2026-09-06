@@ -11,9 +11,10 @@ import type {
 import { computeDemandPayloadDigest } from "@dpf/db/federated-demand-contract";
 import type { ProjectionContractSpec } from "@dpf/db/projection-serialization";
 
-import { sendDemandToPeer, type PeerPostResult } from "./client";
+import { sendDemandToPeer, sendOperationalPostureToPeer, type PeerPostResult } from "./client";
 import { buildDemandEnvelope, type ProjectableDemandSource } from "./demand-projection";
 import type { FederationIdentity } from "./demand-identity";
+import { decodeOperationalPostureOutboxPayload } from "./operational-posture-delivery";
 import { decryptPeerToken } from "./outbound";
 import { incrementVersionVector, isVersionVector, type VersionVector } from "./version-vector";
 import {
@@ -43,6 +44,7 @@ export interface DemandOutboxPayload {
 interface DemandOutboxRow {
   mirrorId: string;
   federationLinkId: string;
+  recordType?: string;
   canonicalSide?: string;
   localRecordRef?: string | null;
   version: bigint;
@@ -247,6 +249,12 @@ export function retryDelayMs(attempt: number, random: () => number = Math.random
 }
 
 type SendDemand = typeof sendDemandToPeer;
+type SendPosture = typeof sendOperationalPostureToPeer;
+
+/** Every local-canonical record type that rides the shared federation outbox. */
+export const FEDERATION_OUTBOX_RECORD_TYPES = [
+  "demand-envelope", "demand-response", "demand-disposition", "operational-posture",
+] as const;
 
 export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   now?: Date;
@@ -254,13 +262,14 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   random?: () => number;
   decryptToken?: typeof decryptPeerToken;
   send?: SendDemand;
+  sendPosture?: SendPosture;
 } = {}): Promise<{ attempted: number; delivered: number; deferred: number; deadLettered: number }> {
   const now = options.now ?? new Date();
   // Safe rolling migration: every legacy pending mirror gets one idempotent
   // canonical queue job. Existing jobs retain their own retry clock.
   const pendingMirrors = await db.federatedRecordMirror.findMany({
     where: {
-      recordType: { in: ["demand-envelope", "demand-response", "demand-disposition"] }, canonicalSide: "local", syncStatus: "pending",
+      recordType: { in: [...FEDERATION_OUTBOX_RECORD_TYPES] }, canonicalSide: "local", syncStatus: "pending",
     },
     select: { mirrorId: true },
   });
@@ -300,36 +309,56 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
     if (!job) continue;
     if (!await claimFederationDeliveryJob(db, job.itemId, now)) continue;
     const link = linkById.get(row.federationLinkId)!;
-    const payload = decodeDemandOutboxPayload(row.payload);
+    const target = {
+      peerAuthorityUrl: link.peerAuthorityUrl,
+      linkToken: "",
+      linkId: link.linkId,
+      sameOrgLan: link.role === "same-org-peer",
+    };
     const token = (options.decryptToken ?? decryptPeerToken)(link.peerTokenEnc);
     let result: PeerPostResult;
-    if (!payload) result = { ok: false, status: 0, error: "invalid outbox payload" };
-    else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
-    else result = await (options.send ?? sendDemandToPeer)(
-      {
-        peerAuthorityUrl: link.peerAuthorityUrl,
-        linkToken: token,
-        linkId: link.linkId,
-        sameOrgLan: link.role === "same-org-peer",
-      },
-      payload.activity,
-      payload.envelope,
-      { eventId: payload.eventId, now },
-    );
+    let payload: DemandOutboxPayload | null = null;
+    let acknowledged = false;
+    if (row.recordType === "operational-posture") {
+      // A posture report rides the same outbox and retry clock as demand; only
+      // the payload shape, the send helper and the acknowledgment differ.
+      const posture = decodeOperationalPostureOutboxPayload(row.payload);
+      if (!posture) result = { ok: false, status: 0, error: "invalid outbox payload" };
+      else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
+      else result = await (options.sendPosture ?? sendOperationalPostureToPeer)(
+        { ...target, linkToken: token },
+        posture.activity,
+        posture.record,
+        { eventId: posture.eventId, now },
+      );
+      acknowledged = result.ok
+        && typeof result.body === "object" && result.body !== null
+        && Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version);
+    } else {
+      payload = decodeDemandOutboxPayload(row.payload);
+      if (!payload) result = { ok: false, status: 0, error: "invalid outbox payload" };
+      else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
+      else result = await (options.send ?? sendDemandToPeer)(
+        { ...target, linkToken: token },
+        payload.activity,
+        payload.envelope,
+        { eventId: payload.eventId, now },
+      );
 
-    const responseId = payload?.envelope.specVersion === "dpf.demand-response/1"
-      ? payload.envelope.responseId
-      : null;
-    const noticeId = payload?.envelope.specVersion === "dpf.demand-disposition/1"
-      ? payload.envelope.noticeId
-      : null;
-    const acknowledged = result.ok
-      && typeof result.body === "object" && result.body !== null
-      && (noticeId
-        ? (result.body as { noticeId?: unknown }).noticeId === noticeId
-        : responseId
-        ? (result.body as { responseId?: unknown }).responseId === responseId
-        : Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version));
+      const responseId = payload?.envelope.specVersion === "dpf.demand-response/1"
+        ? payload.envelope.responseId
+        : null;
+      const noticeId = payload?.envelope.specVersion === "dpf.demand-disposition/1"
+        ? payload.envelope.noticeId
+        : null;
+      acknowledged = result.ok
+        && typeof result.body === "object" && result.body !== null
+        && (noticeId
+          ? (result.body as { noticeId?: unknown }).noticeId === noticeId
+          : responseId
+          ? (result.body as { responseId?: unknown }).responseId === responseId
+          : Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version));
+    }
     if (acknowledged) {
       delivered++;
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
