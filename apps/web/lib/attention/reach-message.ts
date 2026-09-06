@@ -56,6 +56,7 @@ const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "platform-health": "A platform service is having trouble",
   "provider-credential": "A connection needs reconnecting",
   "compliance-source-freshness": "Compliance evidence is going out of date",
+  "workroom-stall": "A room full of work has stopped moving",
 };
 
 const URGENCY_LINE: Record<ReachDecision["urgency"], string> = {

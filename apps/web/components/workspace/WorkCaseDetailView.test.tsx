@@ -264,9 +264,40 @@ describe("WorkCaseDetailView", () => {
     );
 
     expect(html).toContain("<details");
+    expect(html).toContain("Share an update");
     expect(html).toContain("Room details");
     expect(html.indexOf("Room details")).toBeLessThan(html.indexOf("A2A status"));
     expect(html.indexOf("Room details")).toBeLessThan(html.indexOf("BK-1"));
+  });
+
+  it("does not render a WorkItem comment form for source-only coworker engagements", () => {
+    const coworkerRoom: WorkroomView = {
+      ...room,
+      roomKey: "coworker-engagement%3ACE-1",
+      caseRef: {
+        caseId: "coworker-engagement:CE-1",
+        sourceType: "coworker-engagement",
+        sourceId: "CE-1",
+      },
+      title: "Prepare launch readiness.",
+      sourceRefs: [{ kind: "coworker-engagement", id: "CE-1", status: "needs-approval" }],
+    };
+    const html = renderToStaticMarkup(
+      <WorkroomBodyContent
+        detail={{
+          ...detail,
+          room: coworkerRoom,
+          workItemId: null,
+          workItemTitle: null,
+        }}
+        room={coworkerRoom}
+        mode="detail"
+        onModeChange={() => {}}
+      />,
+    );
+
+    expect(html).not.toContain("Share an update");
+    expect(html).toContain("Room details");
   });
 
   it("renders detailed activity kinds with distinct accessible labels", () => {

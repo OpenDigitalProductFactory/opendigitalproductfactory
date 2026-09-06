@@ -154,6 +154,8 @@ export function denyGuidance(verdict) {
     `This was prose until BI-0B292D84; when it was measured, 30 of 79 live branches had no claim at all. ` +
     `To comply: call adopt_worktree with this repository, headBranch and worktreePath (it binds or reuses idempotently), then claim_workroom_scope for the paths you are about to edit. ` +
     `If the lease simply lapsed, heartbeat_workroom renews it. ` +
+    `If claim_backlog_item_for_work refuses with work_shape_required, it carries a pickList of the five delivery shapes: ` +
+    `put that list to the user and re-claim with workShape set to their answer — never guess a shape. ` +
     `If adopt_worktree refuses with branch_occupied against a terminal capsule, the capsule is closed but the BRANCH may not be: check ` +
     `git rev-list --count origin/main..<branch> first. Zero unmerged commits means a genuine leftover, safe to reap. Non-zero means the capsule closed while work was still on the branch — that is unresolved, not finished, so recover it or hand it back rather than reaping it. ` +
     `If you are deliberately working outside a Workroom, prefix the command with DPF_ALLOW_UNCLAIMED_WORK=1 — that is recorded, not silent.`

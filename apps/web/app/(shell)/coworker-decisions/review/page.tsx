@@ -41,6 +41,8 @@ export const metadata = {
   title: "Decision review",
 };
 
+import { ownerRulingQueueWhere } from "@/lib/decision-perspective/owner-ruling-queue";
+
 const UNRESOLVED = ["defer", "escalate"];
 
 const OPERATOR_ACTIONABLE_WHERE: Prisma.DecisionInteractionWhereInput = {
@@ -112,6 +114,17 @@ export default async function DecisionReviewPage({
   searchParams?: ReviewSearchParams;
 }) {
   const { focus: focusDomainClass = null } = (await searchParams) ?? {};
+  // BI-EB5E9BE3: resolve the ownership boundary BEFORE the batch, so the inbox
+  // query can select on it. Previously the profile was fetched inside the same
+  // Promise.all and therefore could not narrow the inbox, which is why the
+  // predicate fell back to a route string.
+  const organizationProfileIds = (
+    await prisma.decisionPerspectiveProfile.findMany({
+      where: { kind: "organization" },
+      select: { profileId: true },
+    })
+  ).map((p) => p.profileId);
+
   const [
     conflictRows,
     unresolvedRows,
@@ -164,12 +177,8 @@ export default async function DecisionReviewPage({
       // Unresolved WWWD business decisions (no build, unanswered) — the
       // inline capture loop's inbox (BI-9677364B).
       prisma.decisionInteraction.findMany({
-        where: {
-          outcomeType: { in: UNRESOLVED },
-          buildId: null,
-          routeContext: "/coworker-business",
-          humanOutcome: { equals: Prisma.DbNull },
-        },
+        // BI-EB5E9BE3: ownership, not route. See owner-ruling-queue.ts.
+        where: ownerRulingQueueWhere(organizationProfileIds, Prisma.DbNull),
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {

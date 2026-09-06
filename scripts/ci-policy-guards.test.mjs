@@ -56,7 +56,6 @@ const EXPECTED_LEGACY_JOBS = [
   "n-minus-one-caller-honesty",
   "new-dependency-gate",
   "override-provenance-guard",
-  "owned-patch-regression",
   "package-boundary-guard",
   "platform-composition-single-home",
   "pr-health-test",

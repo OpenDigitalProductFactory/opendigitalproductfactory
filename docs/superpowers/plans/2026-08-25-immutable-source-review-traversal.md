@@ -174,6 +174,17 @@ This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after WordPress complet
 7. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST.
 8. Resume only the preserved WordPress TaskRun on a server-authorized identical-key path. Accept only genuine immutable reads plus governed `record_initiative_evidence` execution and objective-mapping receipt, then close BI-A45D744A and WC-04941646 through their normal server gates.
 
+### Phase 12 correction — require adapter enforcement (2026-09-06)
+
+Live TaskRun `...7ECDD7A53D18` disproved step 4's assumption: a governed MCP
+session and exact sole-writer surface still allowed two prose-only Claude CLI
+turns. The corrected plan is canonical in
+`docs/superpowers/plans/2026-09-06-required-terminal-writer-enforcement.md`.
+Known non-enforcing CLI adapters must now refuse before inference with
+`required-terminal-writer-not-enforceable`; only a fallback adapter with a
+server-verifiable required-call mechanism may execute the turn. The outer policy
+remains a receipt integrity backstop, not the adapter's enforcement mechanism.
+
 ## Phase 13 — Bootstrap a resumable TaskRun that has no reader rows
 
 This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after Portfolio Advisor TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-634F7FF63BF8` persisted an explicit missing-terminal-writer wait before any reader or writer tool execution. WWMD decision `DI-6A51BE456F49` keeps the exact TaskRun and request digest authoritative.

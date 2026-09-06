@@ -261,6 +261,13 @@ describe("terminal tool policy", () => {
     });
   });
 
+  it("refuses a second writer from the same provider tool-call batch", () => {
+    expect(resolveTerminalToolCall(policy, [read(), writer(false)], policy.writerToolName)).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_writer_already_attempted" },
+    });
+  });
+
   it("nudges once and then returns an explicit resumable wait when text arrives before the writer", () => {
     expect(resolveTerminalTextExit(policy, [read()], 0)).toMatchObject({
       kind: "nudge",
@@ -307,11 +314,28 @@ describe("terminal tool policy", () => {
     expect(buildTerminalToolReminder(policy, [read()])).toContain(`Call ${policy.writerToolName} now`);
   });
 
-  it("treats any governed writer attempt as terminal without declaring it valid", () => {
-    expect(resolveTerminalTextExit(policy, [read(), writer(false)], 0)).toEqual({ kind: "complete" });
+  it("does not treat a rejected governed writer as a completed receipt", () => {
+    expect(resolveTerminalTextExit(policy, [read(), writer(false)], 0)).toMatchObject({
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      message: expect.stringContaining("did not produce a receipt"),
+    });
     expect(summarizeTerminalToolProgress(policy, [read(), writer(false)])).toMatchObject({
       writerAttempted: true,
     });
+  });
+
+  it("accepts only a successful writer or a persisted approval envelope as terminal", () => {
+    const approval = {
+      name: policy.writerToolName,
+      result: {
+        success: false,
+        error: "approval_required",
+        data: { envelopeId: "ENV-1" },
+      },
+    } satisfies TerminalToolRecord;
+    expect(resolveTerminalTextExit(policy, [read(), writer(true)], 0)).toEqual({ kind: "complete" });
+    expect(resolveTerminalTextExit(policy, [read(), approval], 0)).toEqual({ kind: "complete" });
   });
 
   it("enters a writer-only terminal phase from persisted immutable evidence", () => {
@@ -329,10 +353,51 @@ describe("terminal tool policy", () => {
     expect(applyTerminalToolSurface(resumed, [], providerTools)).toEqual([
       { type: "function", function: { name: policy.writerToolName } },
     ]);
+    expect(applyTerminalToolSurface(resumed, [writer(false)], providerTools)).toEqual([]);
     expect(resolveTerminalToolCall(resumed, [], "read_source_at_version")).toMatchObject({
       kind: "refuse",
       result: { error: "terminal_writer_phase_reader_refused" },
     });
+  });
+
+  // Observed on BI-8E1FD1BD spec-approval, 2026-09-06. The reviewer had already
+  // read the artifact successfully. It then hit this refusal six times and told
+  // a human "BLOCKED - immutable evidence unavailable; all six evidence-reader
+  // attempts failed" - the exact inverse of what the refusal says - and answered
+  // with prose instead of its verdict, so the run ended with no receipt. The
+  // refusal is a SUCCESS condition wearing an error's clothes, so its wording is
+  // load-bearing: it must not contain anything a model can hear as "missing",
+  // and it must say what happens if the writer is not called.
+  it("phrases the writer-phase reader refusal so it cannot be read as missing evidence", () => {
+    const resumed = enterTerminalWriterPhase(policy);
+    const refusal = resolveTerminalToolCall(resumed, [], "read_source_at_version");
+    expect(refusal.kind).toBe("refuse");
+    const message = refusal.kind === "refuse" ? refusal.result.message : "";
+
+    // States the true state before the instruction.
+    expect(message).toMatch(/SUCCESS, NOT A FAILURE/);
+    expect(message).toMatch(/persisted/);
+    expect(message).toMatch(/[Nn]othing is missing/);
+    // Names the consequence of answering with prose.
+    expect(message).toMatch(new RegExp(policy.writerToolName));
+    expect(message).toMatch(/NO receipt/);
+    // Both verdicts are legitimate, so a reviewer does not read the nudge as
+    // pressure to pass.
+    expect(message).toMatch(/fail/i);
+    // The words that caused the inversion must not appear.
+    expect(message).not.toMatch(/\bunavailable\b/i);
+    expect(message).not.toMatch(/\bblocked\b/i);
+  });
+
+  it("phrases the evidence-complete nudge the same way", () => {
+    const resumed = enterTerminalWriterPhase(policy);
+    const nudge = resolveTerminalTextExit(resumed, [], 0);
+    expect(nudge.kind).toBe("nudge");
+    const message = nudge.kind === "nudge" ? nudge.message : "";
+    expect(message).toMatch(/succeeded|complete/);
+    expect(message).toMatch(/[Nn]othing is missing/);
+    expect(message).toMatch(/NO receipt/);
+    expect(message).not.toMatch(/\bunavailable\b/i);
   });
 });
 
@@ -411,6 +476,7 @@ describe("agent loop terminal writer integration", () => {
     expect(seventhTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
     expect(vi.mocked(governedExecuteTool).mock.calls.filter(([call]) => call.toolName === "read_source_at_version")).toHaveLength(6);
     expect(result.executedTools.at(-1)).toMatchObject({ name: policy.writerToolName, result: { success: false } });
+    expect(result.failure).toMatchObject({ kind: "terminal-writer-missing" });
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(8);
   });
 
@@ -429,6 +495,22 @@ describe("agent loop terminal writer integration", () => {
     expect(thirdTools.map((tool) => tool.function.name)).toContain(policy.writerToolName);
   });
 
+  it("executes only the first writer when a provider emits duplicates in one batch", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [
+        { id: "writer-1", name: policy.writerToolName, arguments: { decision: "pass" } },
+        { id: "writer-2", name: policy.writerToolName, arguments: { decision: "fail" } },
+      ]) as never)
+      .mockResolvedValueOnce(response("The sole governed writer attempt was rejected.") as never);
+
+    const result = await runAgenticLoop({ ...params, terminalToolPolicy: enterTerminalWriterPhase(policy) });
+
+    expect(vi.mocked(governedExecuteTool).mock.calls.filter(([call]) => call.toolName === policy.writerToolName))
+      .toHaveLength(1);
+    expect(result.executedTools.filter((tool) => tool.name === policy.writerToolName)).toHaveLength(1);
+    expect(result.failure).toMatchObject({ kind: "terminal-writer-missing" });
+  });
+
   it("returns a missing-writer failure after successful reads and two prose exits", async () => {
     vi.mocked(routeAndCall)
       .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
@@ -443,6 +525,23 @@ describe("agent loop terminal writer integration", () => {
       message: expect.stringContaining("No receipt was created"),
     });
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(3);
+  });
+
+  it("routes the terminal-writer retry away from a provider that returned prose", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("The evidence is sufficient for a judgment.") as never)
+      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "anthropic-sub" } as never)
+      .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
+
+    await runAgenticLoop(params);
+
+    const retryOptions = vi.mocked(routeAndCall).mock.calls[2]![3] as {
+      deniedProviders?: string[];
+      preferredProviderId?: string;
+    };
+    expect(retryOptions.deniedProviders).toEqual(["local"]);
+    expect(retryOptions.preferredProviderId).toBeUndefined();
   });
 
   it("returns a missing-writer failure when the review budget expires after a successful read", async () => {

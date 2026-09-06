@@ -9,6 +9,7 @@ import { orderAttention } from "./triage";
 import { loadEscalationItems } from "./sources/escalation";
 import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
+import { loadWorkroomStallItems } from "./sources/workroom-stall";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import { loadSkillProposalItems } from "./sources/skill-proposal";
@@ -105,6 +106,7 @@ export function attentionSourceLoaders(
     { source: "escalation", load: () => loadEscalationItems() },
     { source: "ai-decision", load: () => loadAiDecisionItems(db) },
     { source: "paused-ai", load: () => loadPausedAiItems(db) },
+    { source: "workroom-stall", load: () => loadWorkroomStallItems(db) },
     { source: "scheduled-task", load: () => loadScheduledTaskItems(db) },
     { source: "agent-proposal", load: () => loadAgentProposalItems(db) },
     { source: "skill-proposal", load: () => loadSkillProposalItems(db) },

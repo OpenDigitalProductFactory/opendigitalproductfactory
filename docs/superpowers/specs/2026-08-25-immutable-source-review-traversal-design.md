@@ -211,13 +211,15 @@ Only successful exact-bound rows may form hydration attempts. Each candidate att
 
 This extension changes no immutable request digest, TaskRun identity, model route or floor, grants, writer arguments, approval boundary, receipt semantics, or non-review behavior. It only separates audited failed attempts from successful immutable evidence after authority and binding validation.
 
-## CLI terminal-writer dispatch extension (2026-08-30)
+## CLI terminal-writer dispatch extension (2026-08-30; superseded 2026-09-06)
 
 Live WordPress completion TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-8139EEF334F5` exposed a final routing dead end. The same immutable request remained resumable through five attempts, but every writer-only turn ended with zero executions: the Codex CLI endpoint was rejected before inference because it cannot express provider-native `tool_choice: required`, while the Gemini and local endpoints were transiently unavailable. The terminal policy already owned the stronger invariant—only the one bound writer was exposed, prose could not complete the TaskRun, and no receipt could be inferred—but the adapter boundary did not distinguish that caller-enforced contract from an ordinary unguarded required-tool request.
 
 The caller now binds the exact terminal writer name into the resolved execution plan only while the provider surface contains exactly that writer. A CLI adapter may attempt this one call only when all of the following are true: the plan still requires tool choice, the attached surface has exactly one function, its name exactly matches the bound terminal writer, and a governed MCP session is present. Ordinary required-tool CLI requests, missing sessions, mismatched names, and multi-tool surfaces retain the existing pre-inference refusal. API adapters continue to compile native required tool choice unchanged.
 
-This is delegation of completion enforcement, not a relaxation of it. The CLI still receives only the writer schema and the explicit writer-only reminder. Its response returns to the existing terminal policy, which accepts completion only after the governed writer execution is recorded; prose remains `missing-terminal-writer`, resumable, and receipt-free. The writer continues to validate identity, arguments, approval, and persistence. No judgment, mapping, envelope, or receipt is synthesized by routing.
+That delegation is now superseded by live evidence from TaskRun `...7ECDD7A53D18`: two native-MCP writer-only CLI turns returned prose despite a write-capable token, the exact writer grant, and a sole writer surface. An MCP allow-list plus an outer postcondition is not a server-verifiable required-call mechanism.
+
+Required terminal-writer turns therefore fail-route known non-enforcing CLI adapters before inference with `required-terminal-writer-not-enforceable`. The normal fallback chain may continue only through an adapter that independently passes the same enforcement boundary. If none does, the same TaskRun returns the typed capability refusal and remains receipt-free. No judgment, mapping, envelope, or receipt is synthesized by routing.
 
 ## Zero-reader same-TaskRun recovery extension (2026-08-31)
 
@@ -228,6 +230,10 @@ The recovery reservation may bootstrap evidence only for an explicit `input-requ
 After reservation, the server invokes the already-governed `read_source_at_version` tool once at line one under the existing bounded page controls. The call uses only the immutable repository, path, commit, and blob identity from the terminal policy. Its returned content is never passed directly to the writer. The server re-queries durable ToolExecution rows for the same TaskRun, and the existing terminal-writer hydration validator must independently validate those persisted rows before evidence can enter the writer context. A failed bootstrap read, absent persisted row, binding mismatch, malformed result, or incomplete bounded hydration returns the same TaskRun to `input-required/terminal-writer-context-unavailable`; it creates no writer, envelope, baseline, mapping, or receipt.
 
 This is orchestration recovery, not an alternate evidence model. It changes no request identity, approval semantics, writer arguments, provider routing, tool grants, or receipt rules. WWMD decision `DI-6A51BE456F49` selected this repair over a replacement review identity because it preserves the immutable audit chain and makes the platform's existing resumability promise true.
+
+### Provider noncompliance rotation
+
+A required-writer provider that returns prose has demonstrated noncompliance for that bounded turn. The same TaskRun keeps its immutable binding, evidence, grants, and approval boundary, while the next in-turn writer nudge denies only that provider and lets the canonical router select another eligible endpoint. The platform never pins a replacement provider and never converts prose into a decision. If no alternative is eligible, the existing typed fail-closed refusal remains authoritative.
 
 ### Named-reference research
 

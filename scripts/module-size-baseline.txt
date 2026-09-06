@@ -56,6 +56,7 @@ apps/web/lib/self-upgrade/quiescence.ts	1621
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	940
 apps/web/lib/tak/agent-grants.ts	998
+apps/web/lib/tak/agent-grants.ts	996
 apps/web/lib/tak/agent-routing.ts	1191
 apps/web/lib/tak/agentic-loop.test.ts	2485
 apps/web/lib/tak/agentic-loop.ts	2681

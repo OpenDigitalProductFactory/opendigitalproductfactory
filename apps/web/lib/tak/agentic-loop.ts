@@ -62,13 +62,12 @@ import {
 import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
-  normalizeTerminalToolArguments,
+  normalizeTerminalToolArguments, rotateTerminalWriterProvider,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   selectTerminalToolSurface,
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
-// Re-export for importers (certification-oracles, tests) that pull from agentic-loop.
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -1668,9 +1667,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // BI-8B8731EE. A THROW from routeAndCall means the model never ran, so
         // this is not the reviewer declining its writer contract.
         //
-        // `failure` above already classifies why. When that classification is a
-        // RESOURCE wait — the host is busy, or governed local CI holds the
-        // inference capacity — say so, because the platform already knows what
+        // `failure` above already classifies why. Preserve an adapter capability
+        // refusal on every required-writer call; preserve RESOURCE waits only
+        // before any tool work, because the platform already knows what
         // to do with it: `preInferenceResourceWait` projects a `provider-capacity`
         // wait that resumes on the same TaskRun. Rewriting it to
         // `terminal-writer-missing` made that handling unreachable for every
@@ -1679,12 +1678,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         //
         // Measured cost of the substitution: five dispatches spent auditing
         // grants, autonomy tiers and tool surfaces that were correct throughout.
-        // Only PRE-INFERENCE, mirroring `preInferenceResourceWait`'s own
-        // contract. Once a reader has run, the turn is no longer "nothing
-        // happened yet": the resumable writer wait below is the better state,
-        // because the read work is banked and only the receipt is outstanding.
-        // Diverting that to a resource wait would fail the run instead.
-        if ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0) {
+        // Capacity/busy is preserved only before tool work, mirroring
+        // `preInferenceResourceWait`. Once a reader runs, its work is banked and
+        // the resumable writer wait is better than a resource wait. An adapter
+        // refusal is still pre-inference for the current writer call, though,
+        // so preserve it regardless of completed reader work.
+        if (failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
           return completeResult(failure.message, null, { failure });
         }
         const message = routeOptions.toolChoice === "required"
@@ -1757,6 +1756,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           return completeResult(result.content, result);
         }
         if (exit.kind === "nudge") {
+          rotateTerminalWriterProvider(routeOptions, result.providerId);
           terminalToolNudges++;
           terminalToolSurfaceOverride = exit.allowedToolNames;
           messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];

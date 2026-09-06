@@ -167,13 +167,21 @@ export type GitBranchSnapshot = {
 };
 
 export type PullRequestSnapshot = {
+  repositoryFullName?: string;
   number: number;
   url: string;
   title: string;
   headBranch: string;
+  headSha?: string;
   state: "open" | "merged" | "closed";
   isDraft: boolean;
   mergeStateStatus: string | null;
+  mergeCommitSha?: string | null;
+  mergedAt?: string | null;
+  providerUpdatedAt?: string;
+  observedAt?: string;
+  providerApiVersion?: string;
+  observationFingerprint?: string;
 };
 
 export type LaneProjectionInput = {

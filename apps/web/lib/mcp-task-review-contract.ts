@@ -6,6 +6,13 @@ export type InitiativeReviewBinding = {
   gate: string;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: string[];
+  workroomRef?: {
+    kind: "workroom-head";
+    workroomId: string;
+    repositoryFullName: string;
+    branchName: string;
+    headSha: string;
+  };
   artifactRef: {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
@@ -26,14 +33,18 @@ function boundedUniqueStrings(value: unknown): string[] | null {
   const values = value.map(optionalString);
   if (values.some((entry) => !entry)) return null;
   const normalized = values as string[];
-  return new Set(normalized).size === normalized.length ? normalized : null;
+  return new Set(normalized).size === normalized.length ? [...normalized].sort() : null;
 }
 
-export function requiredToolNames(authorityScope: readonly string[] | undefined): string[] {
+function scopedToolNames(authorityScope: readonly string[] | undefined): string[] {
   return [...new Set((authorityScope ?? []).flatMap((entry) => {
     const name = entry.startsWith("tool:") ? entry.slice("tool:".length).trim() : "";
     return name ? [name] : [];
-  }))].slice(0, 4);
+  }))];
+}
+
+export function requiredToolNames(authorityScope: readonly string[] | undefined): string[] {
+  return scopedToolNames(authorityScope).slice(0, 4);
 }
 
 export function requiresInitiativeReviewEffort(toolNames: readonly string[]): boolean {
@@ -71,6 +82,14 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
   const eligibleEvidenceActivityIds = rawEligibleEvidenceActivityIds === undefined
     ? undefined
     : boundedUniqueStrings(rawEligibleEvidenceActivityIds);
+  const rawWorkroomRef = binding["workroomRef"];
+  const workroomRef = rawWorkroomRef && typeof rawWorkroomRef === "object" && !Array.isArray(rawWorkroomRef)
+    ? rawWorkroomRef as Record<string, unknown>
+    : null;
+  const workroomId = optionalString(workroomRef?.["workroomId"]);
+  const workroomRepositoryFullName = optionalString(workroomRef?.["repositoryFullName"]);
+  const branchName = optionalString(workroomRef?.["branchName"]);
+  const headSha = optionalString(workroomRef?.["headSha"]);
   if (
     !writerToolName?.startsWith("record_initiative_")
     || !itemId?.startsWith("BI-")
@@ -84,6 +103,14 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
     || (rawEligibleEvidenceActivityIds !== undefined && !eligibleEvidenceActivityIds)
+    || (rawWorkroomRef !== undefined && (
+      workroomRef?.["kind"] !== "workroom-head"
+      || !workroomId
+      || !workroomRepositoryFullName
+      || !branchName
+      || !headSha
+    ))
+    || (workroomRef && workroomRepositoryFullName !== repositoryFullName)
     || (gate === "objective-mapping" && !eligibleEvidenceActivityIds)
   ) return null;
   return {
@@ -94,6 +121,17 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
+    ...(workroomRef && workroomId && workroomRepositoryFullName && branchName && headSha
+      ? {
+        workroomRef: {
+          kind: "workroom-head" as const,
+          workroomId,
+          repositoryFullName: workroomRepositoryFullName,
+          branchName,
+          headSha,
+        },
+      }
+      : {}),
     artifactRef: {
       kind: "repo-blob-at-commit",
       repositoryFullName,
@@ -108,9 +146,16 @@ export function validateInitiativeReviewAuthorityScope(
   binding: InitiativeReviewBinding,
   authorityScope: readonly string[] | undefined,
 ): string | null {
-  const exactTools = requiredToolNames(authorityScope);
+  const exactTools = scopedToolNames(authorityScope);
   if (!exactTools.includes(binding.writerToolName)) {
     return "initiativeReviewBinding writer must match the exact tool authority scope";
+  }
+  const immutableReaderNames = new Set(["read_source_at_version", "search_source_at_version"]);
+  if (!exactTools.includes("read_source_at_version")) {
+    return "initiativeReviewBinding requires read_source_at_version in the exact tool authority scope";
+  }
+  if (exactTools.some((name) => name !== binding.writerToolName && !immutableReaderNames.has(name))) {
+    return "initiativeReviewBinding tool authority scope may contain only the bound writer and immutable readers";
   }
   if (!authorityScope?.includes(`backlog-item:${binding.itemId}`)) {
     return "initiativeReviewBinding item must match the backlog authority scope";

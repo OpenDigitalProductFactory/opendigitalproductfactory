@@ -84,9 +84,8 @@ component against OSV.dev and writes `sbom/dependency-scan.{json,md}`.
   `expires` date makes the finding **re-surface** after that date, forcing
   periodic re-review.
 - **Current state.** The accepted set lives in `sbom/vuln-baseline.json` (read it
-  rather than trusting a count here); it currently holds the two `image-size`
-  advisories, accepted as no-fix-available + not-reachable + build-time-only.
-  The security `overrides` in `pnpm-workspace.yaml` floor the rest.
+  rather than trusting a count here). The security `overrides` in
+  `pnpm-workspace.yaml` floor the rest.
 
 ### The remediation ladder (when a floor won't work)
 
@@ -134,8 +133,13 @@ Use it when *all* of these hold — otherwise prefer bumping or replacing:
 Worked example: `image-size` (archived 2026-06-03 on GitHub *and* on its Codeberg
 revival; `metro` closed its own Dependabot issue as *not planned*). The ICNS
 parser's entry-walk loop never advances on a zero-length entry.
-`patches/image-size@1.2.1.patch` adds the guard, and
-`scripts/sbom/image-size-icns-loop.test.mjs` runs in the Dependency Scan workflow.
+`patches/image-size@1.2.1.patch` added the guard, with an ICNS regression test in
+the workspace guard profile. **Retired 2026-09-06 (BI-640B5249):** the routine
+`pnpm dedupe` collapsed the duplicate `metro@0.84.4` tree onto `0.84.5`, which no
+longer depends on `image-size` at all, so the package left the tree and the
+patch, its pin, its regression guard and both baseline rows went with it. That
+is the ladder's "remove the parent" rung arriving on its own — the exact-version
+pin is what made pnpm refuse the dedupe until someone looked.
 
 **Two things to know before reaching for this:**
 

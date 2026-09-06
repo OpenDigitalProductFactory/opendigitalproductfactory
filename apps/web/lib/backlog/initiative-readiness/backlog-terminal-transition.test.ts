@@ -22,10 +22,10 @@ function projected(verdict: "allowed" | "input-required") {
     blockers: [],
     evaluatedAt: "2026-08-22T08:00:00.000Z",
   };
-  return { governed: true, baselineId: "BASE-1", artifactHints: { hasSpec: true, hasPlan: true }, decision };
+  return { governed: true, baselineId: "BASE-1", inheritedFrom: null, artifactHints: { hasSpec: true, hasPlan: true }, decision };
 }
 
-function fakeDb(casCount = 1, workType = "feature") {
+function fakeDb(casCount = 1, workType = "feature", itemOverrides: Record<string, unknown> = {}) {
   const creates: unknown[] = [];
   const updateMany = vi.fn(async () => ({ count: casCount }));
   const item = {
@@ -33,7 +33,8 @@ function fakeDb(casCount = 1, workType = "feature") {
     type: "portfolio", source: "user-request", scopeKind: "platform",
     archetypeCategories: [], archetypeIds: [], organizationId: "org-1", epicId: null,
     claimedAt: new Date("2026-08-22T07:00:00.000Z"), createdAt: new Date("2026-08-22T06:00:00.000Z"),
-    activeBuild: null,
+    digitalProductId: null, activeBuild: null, productObjectiveWork: [],
+    ...itemOverrides,
   };
   const tx = {
     $queryRawUnsafe: vi.fn(async () => []),
@@ -205,5 +206,56 @@ describe("completeBacklogItemTransition", () => {
       },
     });
     expect(seen[0]?.deliveryEvidence).toBe("missing");
+  });
+
+  it("EP-4614F35E: RECOGNIZES direct-merge platform work merged through the gates (relaxes design + acceptance)", async () => {
+    // platform scope, no build, no product, no objective, merged, spec present.
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: null, activeBuild: null, productObjectiveWork: [] });
+    const seen: Array<{ recognizeMergeThroughGates?: boolean; completion: { deliveryEvidence: string; acceptanceEvidence: string; objectiveReconciliation: string } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Direct-merge platform work landed through the merge queue.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        // No objective baseline to reconcile (the whole point — merged platform work).
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => true,
+        resolveHasDesignSpec: async () => true,
+        projectReadiness: ((input: { recognizeMergeThroughGates?: boolean; completion: { deliveryEvidence: string; acceptanceEvidence: string; objectiveReconciliation: string } }) => { seen.push(input); return projected("allowed"); }) as never,
+      },
+    });
+    expect(seen[0]?.recognizeMergeThroughGates).toBe(true);
+    expect(seen[0]?.completion.deliveryEvidence).toBe("pass");
+    expect(seen[0]?.completion.acceptanceEvidence).toBe("pass");
+    expect(seen[0]?.completion.objectiveReconciliation).toBe("pass");
+  });
+
+  it("EP-4614F35E: does NOT recognize demand-driven feature work (linked DigitalProduct) even when merged", async () => {
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: "DP-1" });
+    const seen: Array<{ recognizeMergeThroughGates?: boolean; completion: { acceptanceEvidence: string } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Product feature — full lifecycle required.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => true,
+        resolveHasDesignSpec: async () => true,
+        projectReadiness: ((input: { recognizeMergeThroughGates?: boolean; completion: { acceptanceEvidence: string } }) => { seen.push(input); return projected("input-required"); }) as never,
+      },
+    });
+    expect(seen[0]?.recognizeMergeThroughGates).toBe(false);
+    // Acceptance is NOT waved through for product work with no reconciliation.
+    expect(seen[0]?.completion.acceptanceEvidence).toBe("missing");
   });
 });

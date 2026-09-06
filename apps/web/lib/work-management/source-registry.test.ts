@@ -24,6 +24,29 @@ describe("Work Case source registry", () => {
     );
   });
 
+  it("registers coworker service engagements as company-work source definitions", () => {
+    const entry = getWorkCaseSourceEntry("coworker-engagement");
+
+    expect(entry).toMatchObject({
+      sourceKey: "coworker-engagement",
+      displayLabel: "Coworker engagement",
+      owningArea: "ai-workforce",
+      domainCategory: "coworker-service",
+      defaultDecisionScope: "wwwd",
+      accountResolverKey: null,
+      roomProjection: { mode: "finite" },
+    });
+    expect(entry?.receiptPolicy).toEqual({
+      defaultReceiptKind: "governed-action",
+      receiptRequiredForConsequentialTransition: true,
+    });
+    expect(getWorkroomDefinitionIdentity("coworker-engagement")).toMatchObject({
+      definitionId: "workroom-definition:coworker-engagement",
+      label: "Coworker engagement",
+      decisionScope: "wwwd",
+    });
+  });
+
   it("documents routing, decision, transition, and receipt defaults for every source", () => {
     for (const entry of WORK_CASE_SOURCE_REGISTRY) {
       expect(entry.displayLabel.length).toBeGreaterThan(0);

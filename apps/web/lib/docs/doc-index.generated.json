@@ -2446,6 +2446,7 @@
         "shape-is-four-orthogonal-choices-not-one-taxonomy",
         "the-activity-shape-is-a-second-separate-claim-runtime-2026-09-02-bi-a967717a",
         "the-coordinator-is-the-workroom-process-overseer",
+        "appointing-one-runtime-2026-09-03-bi-f63200a8",
         "the-gate-which-scope-decides",
         "what-the-gate-does-to-the-turn",
         "where-the-declared-shapes-live-runtime-2026-09-02",
@@ -2453,7 +2454,11 @@
         "the-shapes-next-steps-after-the-gate",
         "setting-the-posture-and-the-default-for-rooms",
         "known-gaps",
-        "related"
+        "encoding-and-visualization",
+        "a-stalled-room-reaches-a-human",
+        "who-answers-for-a-room",
+        "nesting-has-to-be-written-not-just-declared",
+        "related-references"
       ]
     },
     "docs/architecture/workos-iam-equivalence-scorecard.md": {

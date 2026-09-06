@@ -8,6 +8,26 @@ export type TerminalToolPolicy = {
   persistedEvidenceAvailable?: boolean;
 };
 
+type TerminalProviderRoute = {
+  deniedProviders?: string[];
+  preferredProviderId?: string;
+};
+
+/** Route a bounded required-writer retry away from the provider that returned prose. */
+export function rotateTerminalWriterProvider(
+  options: TerminalProviderRoute,
+  providerId: string,
+): void {
+  const noncompliantProvider = providerId.trim();
+  if (!noncompliantProvider || noncompliantProvider === "unknown") return;
+  options.deniedProviders = [
+    ...new Set([...(options.deniedProviders ?? []), noncompliantProvider]),
+  ];
+  if (options.preferredProviderId === noncompliantProvider) {
+    delete options.preferredProviderId;
+  }
+}
+
 export type ImmutableReaderArguments = {
   repositoryFullName: string;
   path: string;
@@ -25,7 +45,7 @@ type ImmutableReaderArtifactRef = {
 export type TerminalToolRecord = {
   name: string;
   args?: Record<string, unknown>;
-  result: { success: boolean; data?: Record<string, unknown> };
+  result: { success: boolean; error?: string; data?: Record<string, unknown> };
 };
 
 const INITIATIVE_REVIEW_READER_NAMES = [
@@ -306,13 +326,36 @@ export function resolveTerminalToolCall(
   toolName: string,
 ): TerminalToolCallDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (toolName === policy.writerToolName && progress.writerAttempted) {
+    return {
+      kind: "refuse",
+      result: {
+        success: false,
+        error: "terminal_writer_already_attempted",
+        message: "The sole governed writer has already been attempted in this turn. No second writer call is allowed.",
+      },
+    };
+  }
   if (policy.terminalPhase === "writer-only" && policy.readerToolNames.includes(toolName)) {
+    // BI-69BBC446 follow-up. This refusal used to read "Immutable evidence is
+    // already persisted. Call <writer> now." A reviewer took six refusals in a
+    // row and reported to a human: "BLOCKED - immutable evidence unavailable;
+    // all six evidence-reader attempts failed" - the exact inverse of what the
+    // refusal said. It then wrote prose instead of its verdict, and the run
+    // ended with no receipt. A success condition phrased as an error is read as
+    // an error, so this states the state first, the consequence second, and
+    // never uses a word the model can hear as "missing".
     return {
       kind: "refuse",
       result: {
         success: false,
         error: "terminal_writer_phase_reader_refused",
-        message: `Immutable evidence is already persisted. Call ${policy.writerToolName} now.`,
+        message:
+          `SUCCESS, NOT A FAILURE: you already read the bound artifact in full and it is persisted for this `
+          + `turn. Nothing is missing and there is nothing left to retrieve. Re-reading is declined only `
+          + `because it would be redundant. You have everything you need to judge. `
+          + `Call ${policy.writerToolName} now with your assessment - a pass and a fail are equally valid. `
+          + `If you answer with prose instead, this run ends with NO receipt recorded and your review is lost.`,
       },
     };
   }
@@ -360,6 +403,20 @@ function providerToolName(tool: Record<string, unknown>): string | null {
     : null;
 }
 
+function writerReachedTerminalBoundary(
+  policy: TerminalToolPolicy,
+  records: readonly TerminalToolRecord[],
+): boolean {
+  return records.some((record) => record.name === policy.writerToolName && (
+    record.result.success
+    || (
+      record.result.error === "approval_required"
+      && typeof record.result.data?.["envelopeId"] === "string"
+      && record.result.data["envelopeId"].trim().length > 0
+    )
+  ));
+}
+
 export function selectTerminalToolSurface(
   providerTools: readonly Record<string, unknown>[],
   allowedToolNames: readonly string[],
@@ -376,11 +433,11 @@ export function applyTerminalToolSurface(
   records: readonly TerminalToolRecord[],
   providerTools: readonly Record<string, unknown>[],
 ): Array<Record<string, unknown>> {
+  const progress = summarizeTerminalToolProgress(policy, records);
+  if (progress.writerAttempted) return [];
   if (policy.terminalPhase === "writer-only") {
     return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
   }
-  const progress = summarizeTerminalToolProgress(policy, records);
-  if (progress.writerAttempted) return [...providerTools];
   if (progress.evidenceAvailable) return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
   if (progress.readerBudgetExhausted) return [];
   if (progress.partialEvidence) return selectTerminalToolSurface(providerTools, ["read_source_at_version"]);
@@ -392,6 +449,9 @@ export function buildTerminalToolReminder(
   records: readonly TerminalToolRecord[],
 ): string {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (progress.writerAttempted) {
+    return `The sole ${policy.writerToolName} attempt did not produce a receipt or approval envelope. Stop without another tool call.`;
+  }
   if (policy.terminalPhase === "writer-only") {
     return `Immutable evidence is already persisted. Call ${policy.writerToolName} now; do not read again or respond with prose first.`;
   }
@@ -408,7 +468,15 @@ export function resolveTerminalTextExit(
   nudgesUsed: number,
 ): TerminalTextExitDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
-  if (progress.writerAttempted) return { kind: "complete" };
+  if (writerReachedTerminalBoundary(policy, records)) return { kind: "complete" };
+  if (progress.writerAttempted) {
+    return {
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      writerToolName: policy.writerToolName,
+      message: `The sole ${policy.writerToolName} attempt did not produce a receipt or approval envelope. The same TaskRun remains resumable.`,
+    };
+  }
   if (progress.readerBudgetExhausted && !progress.evidenceAvailable) {
     return {
       kind: "input-required",
@@ -438,6 +506,10 @@ export function resolveTerminalTextExit(
   return {
     kind: "nudge",
     allowedToolNames: [policy.writerToolName],
-    message: `Evidence retrieval is complete. Call ${policy.writerToolName} now with your independent assessment; do not respond with prose first.`,
+    message:
+      `Evidence retrieval is complete and succeeded - nothing is missing and you have everything you need to `
+      + `judge. Call ${policy.writerToolName} now with your independent assessment; a pass and a fail are `
+      + `equally valid outcomes. Answering with prose instead of the tool call ends this run with NO receipt `
+      + `recorded.`,
   };
 }
