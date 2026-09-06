@@ -102,6 +102,13 @@ type-checks and passes every unit test while returning nothing at runtime.
 
 ## Phase D — relation-derived hierarchy
 
+**Blocked on data, then unblocked 2026-09-06.** The relation table held ZERO rows on this
+install: `deriveStandingRooms` had no consumer, so the declared tree was never materialized
+and the five parent rooms floated unlinked (`BI-AEAA90A9`). An escalation projection written
+first would have passed every test and observed nothing. The drive tick now reconciles
+containment before driving — 13 relations across the 18 standing rooms — so the escalation
+walk below finally has a tree to walk.
+
 Deliverable: nesting means delegation and escalation, not just containment.
 
 Files:
