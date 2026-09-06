@@ -258,7 +258,7 @@ export function deriveNearbyDiscoveryHealth({
       status: "unavailable",
       label: "Enrollment conflict",
       detail:
-        "Multiple installer-managed Edge Nodes claim this installation. Review Edge Nodes before relying on nearby discovery.",
+        "Multiple installer-managed Edge Nodes claim this installation. One that has been silent for a week beside a live one retires itself within the hour; two live ones need a person to review Edge Nodes.",
     };
   }
   if (selection.status !== "found" || !readiness || !discoveryCapability) {

@@ -19,6 +19,7 @@ import { prisma } from "@dpf/db";
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import { auth } from "@/lib/auth";
 import { issueBootstrapToken } from "@/lib/edge-node/enrollment";
+import { revokeEdgeNode, type RevokeEdgeNodeDb } from "@/lib/edge-node/revoke";
 import { resolveNativeReleaseAssets } from "@/lib/edge-node/native-release-assets";
 import {
   buildRemoteProvisioningPlan,
@@ -380,59 +381,15 @@ export async function revokeEdgeNodeAction(
 ): Promise<LifecycleActionResult> {
   const gate = await assertManagePlatform();
   if (!gate.ok) return gate;
-  if (!edgeNodeId || typeof edgeNodeId !== "string") {
-    return { ok: false, error: "invalid_input", message: "edgeNodeId required" };
-  }
-  if (!reason || typeof reason !== "string" || !reason.trim()) {
-    return {
-      ok: false,
-      error: "invalid_input",
-      message: "revocation reason required",
-    };
-  }
-
-  const node = await prisma.edgeNode.findUnique({
-    where: { id: edgeNodeId },
-    select: { id: true, trustState: true },
+  // Single revocation home (lib/edge-node/revoke.ts): the janitor and
+  // enrollment-time supersession retire nodes through the same transaction.
+  const result = await revokeEdgeNode(prisma as unknown as RevokeEdgeNodeDb, {
+    edgeNodeId,
+    reason: typeof reason === "string" ? reason : "",
   });
-  if (!node) {
-    return { ok: false, error: "not_found", message: "Edge Node not found" };
+  if (result.status !== "revoked") {
+    return { ok: false, error: result.status, message: result.message };
   }
-  // Revoking an already-revoked node is idempotent (no-op).
-  if (node.trustState === "revoked") {
-    return { ok: true, edgeNodeId, trustState: "revoked" };
-  }
-
-  // Revoke the node + null its tokenHash so any further request
-  // bearing the now-orphaned token fails at the auth-resolution
-  // step (resolveEdgeNodeAuth looks up by hash and finds nothing).
-  // The Phase 0 schema stores a single tokenHash per EdgeNode row —
-  // there's no separate EdgeNodeToken table to clear; the hash on
-  // the row IS the credential. Re-enrollment is operator-explicit
-  // per spec § Re-enrollment.
-  const revocationReason = reason.trim();
-  const revokedAt = new Date();
-  await prisma.$transaction([
-    prisma.edgeNode.update({
-      where: { id: edgeNodeId },
-      data: {
-        trustState: "revoked",
-        revokedAt,
-        revocationReason,
-        tokenHash: null,
-        tokenPrefix: null,
-        tokenRotatedAt: null,
-      },
-    }),
-    prisma.edgeNodeCertificate.updateMany({
-      where: { edgeNodeId, status: { not: "revoked" } },
-      data: {
-        status: "revoked",
-        revokedAt,
-        revocationReason: `node_revoked:${revocationReason}`,
-      },
-    }),
-  ]);
   revalidatePath(ADMIN_PATH);
   return { ok: true, edgeNodeId, trustState: "revoked" };
 }

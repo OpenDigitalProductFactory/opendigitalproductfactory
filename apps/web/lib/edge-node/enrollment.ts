@@ -29,6 +29,10 @@
 import { randomUUID } from "crypto";
 
 import { prisma } from "@dpf/db";
+
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+
+import { supersedeStaleInstallerNodes, type StaleSupersessionDb } from "./stale-supersession";
 import {
   EDGE_NODE_ALIAS_KIND,
   EDGE_NODE_ENROLLMENT_CAPABILITIES,
@@ -412,6 +416,18 @@ export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> 
       });
     }
   });
+
+  // An installer-managed re-enrollment is the moment a previous, long-silent
+  // installer enrollment becomes provably obsolete. Retire it now rather than
+  // leaving "Enrollment conflict" for a human (BI-D4F79CE2). Best-effort: a
+  // failure here must not fail the enrollment that just succeeded.
+  if (effectiveAutoApprove) {
+    try {
+      await supersedeStaleInstallerNodes(prisma as unknown as StaleSupersessionDb, { now });
+    } catch (error) {
+      console.warn(`[edge-enrollment] stale-enrollment supersession skipped: ${getErrorMessage(error)}`);
+    }
+  }
 
   return {
     ok: true,
