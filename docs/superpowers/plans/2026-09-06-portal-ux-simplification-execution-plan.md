@@ -39,15 +39,31 @@ decomposition, create/reuse successor BIs and obtain coverage before code. Do no
 reuse the same BI for a train of unrelated PRs or leave residual accepted work
 only in this table. No new implementation BIs are created by this framework pass.
 
-Within each slice reserve roughly **20% of implementation effort for refactoring**:
+The operator has reset the allocation to **80% refactoring/consolidation and
+20% net new**, superseding the previous 20% refactoring allowance. Treat the
+net-new portion as a ceiling, not a target to spend. Each slice first inventories
+and collapses existing redundancy, including the unnecessary internal details
+inside individual cards, rows, drawers and controls:
 Workspace converges duplicate launch/readiness projection; trust converges message
 classification and failure presentation; AI removes duplicate grant/status joins;
 Business converges label definitions; empty states remove copied panels; Customer
 reuses existing launcher and receipt context. Verify exact files and duplication
-in the source before committing to removal. Record planned/actual effort and the
-removed pattern in the scorecard; unused allocation does not justify unrelated
-cleanup. In this documentation pass, refactoring means consolidating measurement
+in the source before committing to removal. Record planned/actual effort in both
+categories, the removed pattern and migrated consumers in the scorecard. Inventory
+external services, packages, tools and user handoffs needed for the job; consolidate
+redundant dependency paths into existing platform capability where evidence supports
+it. Preserve necessary integrations and prove compatibility, recovery and rollback
+before removing one. A net-new feature must identify a gap reuse/refactoring cannot
+close. In this documentation pass, refactoring means consolidating measurement
 rules in the framework and replacing competing first-view instructions with links.
+
+Every priority row also carries item-level acceptance: inspect fields, metadata,
+status badges, actions and diagnostic controls inside the sampled items. Give
+each unnecessary detail a disposition and verify the remaining summary still
+supports action, decision and trust. Moving all internals into one expanded
+drawer or renaming them does not satisfy this criterion. Shared-item or dependency
+refactors take precedence over adding more cards, pages and feature entry points;
+the Customer net-new stream remains subordinate to this consolidation program.
 
 ### Workroom and cross-cutting findings
 
@@ -148,8 +164,9 @@ called done.
 4. Feature fit before new surface area. Every UI-impacting plan must answer the
    owner area, route family, persona, nav layer, component convergence, source
    truth, empty/failure state, AI boundary, and verification evidence questions.
-5. Refactor inside each slice. Reserve about 20% of the work for removing mixed
-   concepts, duplicated patterns, or leaky abstractions discovered by the slice.
+5. Use the operator's 80% refactoring/consolidation, 20% net-new allocation.
+   Collapse mixed concepts, duplicated patterns, item-level internal exposure
+   and unnecessary dependency burden before adding capability.
 6. Build Studio remains out of this execution path until its own UX/runtime
    evidence is reliable enough to own UX refactors.
 

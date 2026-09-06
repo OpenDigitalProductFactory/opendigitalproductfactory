@@ -7,6 +7,12 @@ It extends the [usability standards](../platform-usability-standards.md), not th
 runtime schema. Use the [scorecard](../testing/portal-ux-scorecard-template.md)
 for each route, persona, state and task combination.
 
+Operator direction, clarified 2026-09-06: allocate **80% to refactoring and
+consolidation, 20% to net-new capability**. This supersedes the earlier 20%
+refactoring allowance. The primary work is to collapse the existing spread of
+surfaces, repeated representations and unnecessary dependency burden. The
+net-new allocation is a ceiling for justified gaps, not a quota to fill.
+
 ## 1. Evaluate a job, not a screenshot
 
 Write the contract first: **When [trigger], [persona] needs to [job], so that
@@ -36,6 +42,30 @@ zero failures.
 
 ## 2. Rubric and decision rules
 
+### Inspect inside every item
+
+Audit the contents of cards, table rows, badges, menus, drawers, forms and
+workroom entries as well as the page around them. A compact card can still expose
+its implementation: provider/model selection, capability/grant matrices, process
+phases, retry state, storage relationships, provenance fields and configuration
+switches. Translating these into friendlier words does not establish that the
+user needs them. For every field or control ask: **Does this persona need this
+information now to act, decide or trust the outcome?**
+
+Classify each item detail as **keep visible**, **summarize**, **disclose on demand**,
+**operator-only**, **merge with canonical representation**, or **remove from this
+surface**. Name its consumer and purpose. A removal from presentation does not
+delete canonical data or required audit evidence. Essential consequences,
+permissions, meaningful uncertainty and next steps stay visible. Useful business
+references remain available; unauthorized content never reaches the client.
+
+For example, a worker's work item may need its job, due time, blocker and next
+action. Its provider, model, orchestration phase, tool grants and retry counters
+belong in authorized diagnostics when there is a real diagnostic job. This is a
+design example, not a claim that those fields were observed on a particular page.
+An accordion full of duplicated internals is only a concealment change; separately
+prove that redundant components, projections and dependency paths were converged.
+
 Score each applicable dimension separately: **0** = observed failure of the
 anchor; **1** = works only with assistance, avoidable traversal or partial
 coverage; **2** = anchor passes for the primary task and adverse state; **3** =
@@ -51,7 +81,7 @@ a platform quality percentage.
 | Progressive disclosure | Orientation and primary action remain visible; secondary information has a named, accessible disclosure trigger; deeper evidence is reachable | Hidden primary verb, default expanded diagnostics, disclosure that loses context |
 | Time and distance to action | Recorded path meets the task's predeclared interaction/time target; action is near its motivating object | Detours, scrolling to unrelated footer actions, excessive pointer or keyboard travel |
 | Cognitive load | Existing shell budget passes or documented legacy debt improves; competing first-view choices do not increase; participant recognizes location and change | Choice count, misclicks, repeated rereading, unfamiliar status labels |
-| Data model leakage | Normal work has no unjustified raw IDs, enums, schema/provider/phase labels or null strings; authorized diagnostics remain available | Exact visible text, location, persona, business need or absence of one |
+| Data model leakage | Each item exposes only details needed for the persona's action, decision or trust; unnecessary internal fields and controls are removed, summarized or properly disclosed, even when their labels sound human | Item/field inventory and disposition; raw IDs, enums, schema/provider/phase labels, null strings, unnecessary metadata and configuration |
 | Workroom relevance | Page explicitly chooses summary, linked room or no room; work in motion/blocked/decision states follow canonical work identity and evidence | Duplicate tasks, all stored rooms called live, recursive tree dumping, invented room status |
 | AI context and trust | Context binds to the work object/room; launch preview identifies scope and next step; required confirmation precedes effect; receipt or safe failure follows | Prompt/tool/provider leakage, incidental navigation starting work, false success, missing receipt |
 | Navigation | Canonical home, local state and contextual command each serve distinct intents; destination and return path preserve object context | Duplicate nav layers, feature in global rail, label/destination mismatch, shellless dead end |
@@ -91,7 +121,8 @@ universal usability thresholds. Use the same fixture and geometry before/after.
 | Visible choices | Count enabled links, buttons, selectable options and disclosure triggers actually visible in the viewport, partitioned into shell and task content; repeated links count as separate affordances. Record disabled controls separately | Compare like-for-like; justify increases by the task. This is distinct from canonical `maxChoicesPerControl` |
 | Primary action distance | Record above-fold yes/no, scroll pixels from arrival, click/tap count, route changes, and focus stops from main content. Pointer travel is the sum of straight-line distances between successive target centers in CSS pixels, with the starting point recorded | First useful action/decision visible on action homes; minimize unnecessary travel while retaining required review and confirmation |
 | Navigation layers | Count simultaneously visible sets of navigation choices: rail, section nav, local tabs. Record breadcrumbs as orientation and filters as data selection separately; note duplicated intent regardless of count | No duplicate intent; normally global + section and at most one necessary local layer, with any additional layer justified |
-| Internal leakage | Count occurrences and distinct values of raw IDs/enums/schema/provider/phase/null labels. Record exact example and classification: useful business reference, authorized diagnostic, unnecessary leakage | Zero unnecessary leakage in normal-work defaults; an order number needed to find an order is not a defect |
+| Internal leakage | Inventory fields and controls within every sampled item; count unnecessary details, affected items and total items inspected, plus raw ID/enum occurrences. Record their visible/disclosed/operator-only scope and disposition | Zero unnecessary internal detail in normal-work defaults; human wording does not excuse irrelevant content |
+| Redundancy and dependencies | Count duplicate representations/components and external tools, services, packages or manual handoffs required for the named job. Record before/after consumers, canonical replacement and retained dependency rationale | Prove retired duplication and reduced setup/failure burden without losing the task; a hidden card or transitive package-count reduction alone is not a consolidation outcome |
 | Time to action/outcome | Observe seconds from settled arrival to first useful action, and separately to completion oracle. Record wall-clock load/provider wait separately. For estimates, list read/decision/interaction/wait assumptions and a range | Compare observed medians and ranges at the same task; never call estimated savings realized savings |
 | Workroom relevance | Classify no room / summary / linked active room / detail; record parent-child path, unresolved decisions, evidence freshness, and return behavior | Show the depth needed for this job; opening a room is success only for a find/open task |
 | AI trust | Trace trigger -> preview/context -> confirmation -> work state -> result/receipt; test provider failure and retry | Navigation never starts AI work; match current confirmation contract; retries do not duplicate the promised effect |
@@ -169,8 +200,9 @@ competing skill. The navigation principles live in the spine.
    seam or missing task outcome defers implementation of that surface.
 3. **Implementation entry:** one BI, governed branch and PR-sized scope; current
    initiative readiness and immutable coverage receipts remain mandatory where
-   applicable. Reserve about 20% of effort for in-scope refactoring, with exact
-   duplicate helpers, status maps or launcher patterns named after inspection.
+   applicable. Allocate 80% of effort to refactoring/consolidation and at most
+   20% to justified net-new capability. Name what is merged, retired or removed,
+   including unnecessary per-item detail and external dependency paths.
 4. **Before merge:** existing source gates and UX-fit manifest plus measured
    before/after scorecard, browser task, failure/permission check, mobile and
    manual accessibility evidence. A valid `propose-n-pick` manifest records a
@@ -186,6 +218,33 @@ automatic enforcement. Any later automation extends those existing contracts
 under a scoped BI; it must fail visibly when it cannot measure.
 
 ## 6. Architecture decision and research
+
+The subsequent operator-directed 80/20 allocation is authoritative for this
+revision; the WWMD result below establishes contract reuse, not the effort ratio.
+
+### Consolidation and dependency review
+
+Start each slice with an inventory of competing route homes, cards, components,
+read projections, helpers and external dependencies serving the same user job.
+Choose the existing canonical implementation, migrate its consumers and retire
+redundancy. Track planned and actual effort by refactoring versus net new, not
+by lines of code: replacement code can be refactoring when it preserves the job
+and removes a competing implementation. A new drawer is not itself consolidation.
+
+For each external dependency record the job it enables, callers/data flows,
+setup and credentials the user must manage, operational failure modes, and the
+existing platform capability that could absorb its role. Decide retain,
+consolidate, replace or retire with evidence. Preserve integrations that provide
+necessary external data or execution. Do not rebuild a mature external service
+merely to lower the dependency count. Implementation requires consumer mapping,
+compatibility/data migration where applicable, failure-path checks and rollback;
+this planning revision does not disconnect services or uninstall packages.
+
+Net-new work must demonstrate that reuse, consolidation or refactoring cannot
+deliver the accepted outcome. Prefer a smaller addition that closes that gap;
+record what existing surface or dependency it replaces, or why no replacement
+is possible. Measure success as fewer concepts, duplicate representations,
+unnecessary item details and dependency failure points while preserving outcomes.
 
 WWMD `DI-BED2443DAD54` selected `extend-purpose-contracts`, composite 8.422,
 margin 4.687, high confidence, usable and autonomy-eligible, no blockers or

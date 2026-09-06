@@ -2088,11 +2088,13 @@
         "portal-page-and-flow-evaluation-framework",
         "1-evaluate-a-job-not-a-screenshot",
         "2-rubric-and-decision-rules",
+        "inspect-inside-every-item",
         "3-measurement-protocol",
         "4-workroom-centered-disclosure",
         "archetype-sentinels-without-ia-forks",
         "5-standing-ux-design-and-fit-gate",
-        "6-architecture-decision-and-research"
+        "6-architecture-decision-and-research",
+        "consolidation-and-dependency-review"
       ]
     },
     "docs/architecture/principle-decide-mcda-identity.md": {
@@ -10736,7 +10738,8 @@
         "measures",
         "rubric",
         "task-and-state-evidence",
-        "disposition-and-refactoring"
+        "disposition-and-refactoring",
+        "item-detail-and-dependency-inventory"
       ]
     },
     "docs/testing/pr-health.md": {

@@ -38,6 +38,9 @@ One row set per viewport and scenario; do not merge mobile and desktop results.
 | Pointer distance and start / keyboard focus stops | U | U | | |
 | Nav layers / repeated-intent pairs / return-state preserved | U | U | | |
 | Leakage occurrences / distinct values / justified exceptions | U | U | | |
+| Items inspected / items exposing unnecessary internals / unnecessary details | U | U | | |
+| Duplicate surfaces/components/projections retired / consumers migrated | U | U | | |
+| External dependencies / setup steps / failure points retained or removed | U | U | | |
 | Time to useful action / outcome / separate load and provider wait | U | U | | |
 | Workroom depth / parent return / blocking child / evidence freshness | U | U | | |
 | AI preview / confirmation / receipt / safe retry | U | U | | |
@@ -75,13 +78,25 @@ One row set per viewport and scenario; do not merge mobile and desktop results.
 
 ## Disposition and refactoring
 
+### Item-detail and dependency inventory
+
+| Item / field / control | Persona need now | Current exposure | Keep / summarize / disclose / operator-only / merge / remove | Canonical owner and acceptance proof |
+| --- | --- | --- | --- | --- |
+| | | | | |
+
+| Dependency or duplicate implementation | Job and consumers | User setup / failure burden | Retain / consolidate / replace / retire and rationale | Migration, verification and rollback |
+| --- | --- | --- | --- | --- |
+| | | | | |
+
 - Blockers, including unmeasured safety/task scenarios:
 - Evidence coverage: observed / source-verified / estimated / proposed:
 - Fit verdict: fits / fits-with-guardrails / defer / reject:
 - Runtime verdict: passed / failed / inconclusive / not run:
 - Finding -> user harm -> existing BI -> bounded PR slice:
 - Reuse choice / exact duplication to remove / compatibility and rollback:
-- Refactoring allocation: planned about 20%; actual effort and removed duplication:
+- Effort allocation: planned 80% refactoring/consolidation, at most 20% net new; actual effort in both categories and variance rationale:
+- Net-new gap that existing capability cannot satisfy; evidence reuse/refactoring is insufficient:
+- Removed item-level internals, retired duplication and dependency burden (not merely hidden):
 - Required edits, accountable owner and review trigger:
 - Gate/UX-fit manifest and canonical Workroom evidence references:
 - Participant results (individual attempts, assistance, timing, order); or human evidence pending:

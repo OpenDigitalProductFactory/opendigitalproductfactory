@@ -138,6 +138,14 @@ ten dimensions. Fewer words, links or cards are useful only when the user can
 still recognize the work, reach its action and trust the result. Do not start a
 layout from the database entities or require every page to become a dashboard.
 
+The operator's revised allocation is **80% refactoring and consolidation, 20%
+net new**. Collapse existing redundancy before adding surfaces. Inspect the guts
+of each item: a card, row or drawer must not expose fields, statuses, controls or
+dependency details merely because they exist internally. The framework's
+item-detail inventory and dependency review define what to keep, summarize,
+disclose, restrict, merge or remove. This includes unnecessary details with
+perfectly readable labels, not only raw IDs and technical jargon.
+
 1. Audience before system map. A founder/operator, dispatcher, clinic scheduler, retail worker, contributor, and customer should not all see the same first screen.
 2. The primary shell is a memory aid, not a database menu. Navigation should group by user intent and work object.
 3. Every number, status pill, and readiness cell must either drill into the objects that produced it or render as non-clickable explanatory status.
@@ -411,6 +419,11 @@ Verification:
 - Prefer small PR-sized slices.
 - Use MCP/backlog state before filing new work.
 - For any incoming UI plan, run the §4.1 fit gate and capture the result in the plan or a linked audit before implementation starts.
-- Keep refactoring inside each slice rather than accumulating cleanup debt. Spend roughly 20% of implementation effort removing mixed concepts, duplicated patterns, or leaky abstractions discovered by that slice.
+- Allocate 80% of implementation effort to refactoring/consolidation and at most
+  20% to justified net-new capability. Retire duplicate surfaces, components,
+  projections and unnecessary external dependency paths; remove unnecessary
+  internal detail from individual items. Record actual removals and migrated
+  consumers, not only reduced visible counts. New work must prove an existing
+  capability cannot be reused or refactored to deliver the outcome.
 - Do not route this through Build Studio until Build Studio can produce reliable UX verification evidence.
 - No slice is done with screenshots alone. Each UI slice needs a persona task outcome and a failure-mode check.
