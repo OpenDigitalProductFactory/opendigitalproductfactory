@@ -12,7 +12,7 @@ status: draft
 
 - Decision: atomic
 - Parent: `BI-9FF39058`
-- Receipt: blocked-by: the immutable plan must be committed before the governed coverage recorder can bind it
+- Receipt: `cmtpex02m096t01p76d75uhb2`
 - Rationale: The observation schema, exact selector, freshness semantics, and
   reaper consumer form one safety invariant. Shipping any phase independently
   would either lose squash-merge delivery or allow stale or mismatched provider
