@@ -140,9 +140,14 @@ export function classifyConvergenceSurfaces(changedFiles, { registry, readFile }
  * Accepted shapes after the colon: `<mode> — <reason>`, `<mode>: <reason>`,
  * `<mode> (<reason>)`, `<mode> <reason>`.
  */
+// Fenced code blocks (``` or ~~~) in a PR body. A quoted trailer example is
+// documentation, not an attestation — this gate's own PR failed on "<mode>".
+const FENCED_BLOCK_RE = /^[ \t]*(```|~~~)[^\n]*\n[\s\S]*?^[ \t]*\1[ \t]*$/gm;
+
 export function parseConvergenceDecisions(text) {
   const decisions = [];
-  for (const m of String(text ?? "").matchAll(TRAILER_RE)) {
+  const unfenced = String(text ?? "").replace(FENCED_BLOCK_RE, "");
+  for (const m of unfenced.matchAll(TRAILER_RE)) {
     const value = m[1].trim();
     const mm = /^([a-z][a-z-]*)\s*(?:[—:–-]\s*|\(\s*)?(.*?)\)?$/s.exec(value);
     if (!mm) { decisions.push({ raw: value, mode: null, reason: "" }); continue; }

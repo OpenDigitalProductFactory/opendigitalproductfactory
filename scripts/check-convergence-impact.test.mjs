@@ -112,6 +112,19 @@ test("parses every accepted trailer shape", () => {
   assert.equal(parsed[3].reason, "this script is CI-only and never copied into an image");
 });
 
+test("a trailer quoted inside a fenced code block is an example, not an attestation", () => {
+  const fence = "```";
+  const example = `${TRAILER_NAME}: <mode> — <mechanism or reason, 20+ chars>`;
+  const real = `${TRAILER_NAME}: auto-converges — the ordinary image swap carries the COPY closure`;
+  const body = ["Add a trailer like:", fence, example, fence, "", real].join("\n");
+  const parsed = parseConvergenceDecisions(body);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].mode, "auto-converges");
+  // A body that ONLY quotes the example still has no attestation.
+  assert.deepEqual(parseConvergenceDecisions(["Add:", fence, example, fence].join("\n")), []);
+  assert.deepEqual(parseConvergenceDecisions(["~~~text", example, "~~~"].join("\n")), []);
+});
+
 test("trailer name is case-insensitive and body text without it yields nothing", () => {
   assert.equal(parseConvergenceDecisions("convergence-impact-decision: auto-converges — via the promoter compose path").length, 1);
   assert.deepEqual(parseConvergenceDecisions("Docs-Impact-Decision: no user-facing change"), []);
