@@ -17,6 +17,9 @@ A completion reviewer receives only the finite post-baseline evidence activity
 IDs that the server has already proved eligible. The governed writer can append
 one mapping only from that set, and a malformed latest mapping can be corrected
 through one deterministic successor without hiding or reinterpreting history.
+A provider-proven impossible historical artifact cannot strand the current
+mapping forever, and every bound reviewer route proves the same reviewer holds
+both immutable-reader and writer authority before dispatch.
 
 ## Backlog coverage
 
@@ -32,7 +35,7 @@ through one deterministic successor without hiding or reinterpreting history.
 
 | Deliverable | Backlog item | Requirements | Contracts | Flow | Verification |
 | --- | --- | --- | --- | --- | --- |
-| `objective-mapping-evidence-contract` | `BI-0F8E39D5` | `OBJ-OMEC-PACKET`, `OBJ-OMEC-WRITER`, `OBJ-OMEC-CORRECTION`, `OBJ-OMEC-FAIL-CLOSED`, `OBJ-OMEC-KEY`, `OBJ-OMEC-SUPERSESSION` | `InitiativeReviewBinding`, `request_coworker`, `record_initiative_evidence`, `objective-mapping-repository` | `eligible-evidence-to-packet`, `packet-to-versioned-task`, `approved-writer-to-mapping`, `malformed-mapping-to-governed-correction` | `AC-OMEC-001`, `AC-OMEC-002`, `AC-OMEC-003`, `AC-OMEC-004`, `AC-OMEC-005`, `AC-OMEC-006`, `AC-OMEC-007`, `AC-OMEC-008`, `AC-OMEC-009`, `AC-OMEC-010` |
+| `objective-mapping-evidence-contract` | `BI-0F8E39D5` | `OBJ-OMEC-PACKET`, `OBJ-OMEC-WRITER`, `OBJ-OMEC-CORRECTION`, `OBJ-OMEC-FAIL-CLOSED`, `OBJ-OMEC-KEY`, `OBJ-OMEC-SUPERSESSION`, `OBJ-OMEC-INVALID-HISTORY`, `OBJ-OMEC-REACHABILITY` | `InitiativeReviewBinding`, `request_coworker`, `record_initiative_evidence`, `objective-mapping-repository`, `readRepositoryProviderBlob`, reviewer grant routing | `eligible-evidence-to-packet`, `packet-to-versioned-task`, `approved-writer-to-mapping`, `malformed-mapping-to-governed-correction`, `provider-invalid-history-to-current-packet`, `dual-grant-reviewer-to-bound-route` | `AC-OMEC-001`, `AC-OMEC-002`, `AC-OMEC-003`, `AC-OMEC-004`, `AC-OMEC-005`, `AC-OMEC-006`, `AC-OMEC-007`, `AC-OMEC-008`, `AC-OMEC-009`, `AC-OMEC-010`, `AC-OMEC-011`, `AC-OMEC-012`, `AC-OMEC-013`, `AC-OMEC-014` |
 
 ## Ordered implementation and verification
 
@@ -58,10 +61,18 @@ through one deterministic successor without hiding or reinterpreting history.
 8. Publish through one protected PR and compatible canonical release, verify
    exact served SHA/CAN-TEST, and close the real preserved items only from
    genuine mapping receipts and reconciled completion decisions.
+9. Reproduce the exact Pet Rescue historical binding whose commit/path resolves
+   to a different blob. Validate the row against the retained baseline chain,
+   and let only an exact provider `IMMUTABLE_BLOB_MISMATCH` classify it as
+   non-authoritative audit history; all provider ambiguity remains fail closed.
+10. Query the immutable reader grant with each bound writer grant and select a
+    reviewer only when the same active production agent holds both. Keep generic
+    plan coverage writer-only. Prove the full fail-closed matrix and the one
+    deterministic Pet Rescue successor packet.
 
 ## Atomicity rationale
 
-The six objectives are not independently safe releases. The packet and schema
+The eight objectives are not independently safe releases. The packet and schema
 without repository validation would make model output look authoritative; the
 repository repair without deterministic request identity would keep exact
 historical tasks stranded; correction without supersession guards could fork
@@ -75,6 +86,9 @@ audit evidence.
   never silently truncated or replaced with prose or source paths.
 - A changed Workroom, baseline, artifact, reviewer, tool set, or active
   approval/receipt blocks supersession.
+- A historical artifact is ignored only after exact provider proof that its blob
+  identity is impossible and only when it has no remaining authority or output.
+- A bound route with writer-only or split reader/writer grants is not emitted.
 - Failed and malformed rows remain immutable and auditable. A later valid row
   supersedes by append, never by mutation or fallback.
 - Rollback is the protected source revert. No migration, table, role, or
