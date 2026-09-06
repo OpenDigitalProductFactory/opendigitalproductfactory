@@ -220,6 +220,33 @@ The check the original §10 asked for was run against the live database on 2026-
 | `EP-COWORKER-LIFECYCLE` | Exists. Owns certification and oracles (finding 6), not depth binding. |
 | **`EP-WORK-POSTURE`** | **The actual owner, and not named in the original list.** Slice E, `BI-13ED1BE1`, owns making `verificationDepth` load-bearing — see §1.2. |
 
-**`BI-4BD81F3B` does not exist in the live backlog.** It returns `not_found`. It is cited only from a code comment in `build-process-matrix.ts`. §4.2 makes it the hard ordering precondition for Phase 4, so **Phase 4 is currently gated on a backlog item that was never filed.** Filing it — or replacing the reference with whatever really tracks non-vacuous browser-use results — is a precondition for Phase 4, not a formality.
+**Installation-qualified reconciliation, 2026-09-06 (BI-4CCE50E0):** the earlier
+`not_found` observation above must not be interpreted as global absence.
+`get_backlog_item` on the operator development install returns BI-4BD81F3B and BI-8E539357 as
+`triaging`, both carrying a federated-origin marker. The peer is currently
+unreachable. Reconcile at the owner; do not file duplicate replacements.
+Phase 4 still requires demonstrated completion of BI-4BD81F3B, not merely a row.
 
 **Status of the design as a whole.** The problem statements remain code-verified apart from finding 4 (§1.2). Phase 2 is delivered (`BI-30165EB4`) and its report is at [`2026-09-06-verification-depth-shadow-report.md`](../audits/2026-09-06-verification-depth-shadow-report.md). Phases 3–6 remain proposals; Phase 3 has two open preconditions named in that report.
+
+## 11. Business-outcome verification amendment — proposed, 2026-09-06
+
+Research: BI-4CCE50E0, [source review](../research/2026-09-06-astra-business-verification-review.md).
+Extend §4.2 through the [audit evidence contract](../../architecture/archetype-operating-model-audit.md#outcome-evidence-and-exception-probes):
+reachability plus an assertion is necessary; the assertion must establish the
+intended business outcome, with version-bound navigation and persisted-state
+evidence where the action writes. A click or absence of console errors alone cannot
+pass. Use a known-bad fixture as a negative control, retain first-attempt failures,
+and distinguish product fail, infrastructure-inconclusive and not-run.
+
+For numerical or policy work, independently recompute the expected values and cite
+the applicable source revision/section. Correct-looking output with a wrong source
+fails the relevant criterion. Reuse existing certification/browser/initiative
+adapters; do not create a parallel evidence store. Reviewer principal independence
+remains mandatory under its existing policy. Model-family diversity is a separate
+calibration question; a large agent count provides no substitute for evidence.
+
+BI-4BD81F3B owns trustworthy result production; BI-8E539357 owns later gate binding.
+Their owner must incorporate this amendment before activation. Existing feature-map,
+shadow-calibration and approval prerequisites remain in force; this documentation
+pass does not enable a gate or widen autonomy.

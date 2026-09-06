@@ -107,6 +107,27 @@ scans the whole catalog in minutes and regressions are caught automatically, wit
 
 ## 6. Open questions
 
+### Research amendment — business facts and consequences (2026-09-06)
+
+BI-4CCE50E0: [Astra review §5–7](../research/2026-09-06-astra-business-verification-review.md).
+Generated archetype defaults are starter assumptions, not observations about a
+company. B's corpus must preserve source, owner confirmation, effective time and
+uncertainty through the existing WWWD/knowledge mechanisms. C's scene must project
+real commitments, capacity and exceptions; label simulated/unobserved state and
+keep spatial and accessible-list actions equivalent. D's outcome must be traceable
+to authoritative work/finance evidence rather than an animation or generated total.
+
+Rehearse a normal day, bad day and periodic cycle with actual worker roles and public
+entry paths using the [operating-model audit](../../architecture/archetype-operating-model-audit.md).
+Restaurant is a proposed first pilot; discover dine-in/takeout/counter-service modes
+and outside-system ownership before claiming support. Keep a thin per-archetype
+semantic layer over canonical resources, identity and operations. A generic
+six-stage diagram and a gallery snapshot do not prove operational completeness.
+
+Existing B/C identifiers BI-44EF78DE and BI-DE577C43 were not found on the operator development install.
+Resolve at their owner before changing implementation scope; do not recreate them.
+This amendment preserves the program's incremental sequence and adds no renderer.
+
 1. Flavor authoring: pure-derived default vs. a one-time LLM-generated-then-reviewed flavor file
    per archetype? (Leaning: derived default that is always valid, with an optional curated flavor
    that raises fidelity — so coverage is 94/94 from day one and flavor is incremental.)

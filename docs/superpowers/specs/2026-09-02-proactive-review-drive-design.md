@@ -84,13 +84,17 @@ A room at full proactivity **drives its own review to done**. Concretely:
    spec-approval (mints `OBJECTIVE_BASELINE`) → plan-review as ordered stages, so the
    baseline exists before the completion gate reads it — dissolving wall 3.
 
-4. **Merge-through-code-gates satisfies delivery + acceptance for direct-merge work.** A PR
-   that passed CI **and** the merge queue has already been independently gated. The
-   completion gate reads that merge (the squash commit reachable from `origin/main`, the
-   green required checks) as satisfying `DELIVERY_EVIDENCE` and `ACCEPTANCE` for a
-   direct-merge room — the resolution BI-9FF39058 already named. The design/spec-approval
-   judgment still routes to a non-author reviewer (step 1); the *code* delivery is not
-   re-litigated by hand.
+4. **Merge-through-code-gates establishes code delivery; acceptance follows the
+   objective evidence.** Proposed clarification, BI-4CCE50E0 (2026-09-06): the
+   reachable squash commit and green required checks establish delivery. A check
+   satisfies acceptance only for the objective and artifact version it actually
+   evaluated. Runtime, UI, business arithmetic and policy objectives retain their
+   corresponding evidence requirements. A CI-green reservation form whose booking
+   never reaches the host must not close as accepted. Docs-only objectives may be
+   covered by the relevant document checks and review. Reuse the initiative
+   objective/receipt mapping; no second approval system. The non-author review in
+   step 1 remains required. This clarification requires owner review before changing
+   the completion gate; it is not an instruction to bypass or invalidate receipts.
 
 5. **FAIL is first-class.** A reviewer's fail records findings and holds the item; it never
    silently passes and never needs a separate human approval to be recorded. Full
@@ -148,6 +152,16 @@ the room dispatches the reviewer on its own.
   full proactivity the *agent-reviewer* branch does not pause — it dispatches. We keep the
   human branch (`attention`) for agent-authored work, matching the HITL pattern where the
   author cannot self-approve.
+
+## Evidence depth amendment — proposed, BI-4CCE50E0
+
+The reviewer names each objective, artifact/run version, assertion, observation and
+supporting source. Policy-dependent findings cite the applicable revision and exact
+section; numerical findings use independent recomputation. Missing or conflicting
+evidence remains unresolved. A wrong citation does not become correct because the
+verdict matches. Reuse existing reviewer packets and receipt fields, with bounded
+repair/review attempts and retained failures. Reviewer count and model confidence
+are not acceptance evidence. See [research §4](../research/2026-09-06-astra-business-verification-review.md#4-testing-and-review-increments).
 
 ## Alternatives rejected
 

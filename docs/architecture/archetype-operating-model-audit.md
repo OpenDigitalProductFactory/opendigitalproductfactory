@@ -168,6 +168,41 @@ Five rules, each earned by a run that went wrong without it:
 5. **Try the destructive controls.** Delete, cancel, remove, archive. Check for confirmation,
    undo, and target size at the width the work is really done at.
 
+### Outcome evidence and exception probes
+
+Research amendment: BI-4CCE50E0, 2026-09-06; extends BI-7199065E. Rationale and
+sources: [Astra applicability review](../superpowers/research/2026-09-06-astra-business-verification-review.md).
+This is an audit evidence requirement, not a new runtime receipt schema or a change
+to the coverage/operability formulas.
+
+For each operating-day step, retain:
+
+- scenario/version and the ordinary, bad-day or periodic-cycle variant;
+- installation/build identity, time, actual actor/role, starting fixture and source versions;
+- expected business outcome and invariant, specified before seeing the generated result;
+- actual navigation/action, assertion evaluated, observed result and authorized persisted-state readback;
+- trace/screenshot/log references as appropriate, including exceptions and first-attempt failures;
+- the applicable company rule's source/revision/section when a judgment depends on policy;
+- completed/partial/impossible outcome, real-world fallback, and the existing BI for any gap.
+
+Record infrastructure-inconclusive and not-run separately; neither establishes a
+product verdict. If the required run cannot be completed, qualify the score's
+coverage rather than silently dropping steps from its denominator. An attractive
+screen or successful click without the expected state transition is not completion.
+
+In a governed test environment, add a bounded adverse-path sample: double submit,
+refresh after a timeout, stale/conflicting edits, capacity exhaustion, cancellation,
+role denial, missing/conflicting policy and a private fact viewed from the public
+side. Test deliberate incorrect outputs against the same assertions so the checks
+demonstrate that they can fail. Keep deterministic business assertions separate
+from subjective visual review. Repair later, then replay the original failure;
+retain both run identities and do not erase the first failure with a retry.
+
+Use isolated fictitious fixtures and test sinks for external messages/payments.
+Destructive probes below apply to disposable test records under the environment's
+authority, never to real customer records merely because this rubric names them.
+The caller's authorized scope always governs the run.
+
 ### The five probes that belong in every run
 
 Independent of archetype, because each has now failed at least once:

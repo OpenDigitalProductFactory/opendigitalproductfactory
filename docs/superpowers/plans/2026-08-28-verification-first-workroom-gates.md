@@ -16,7 +16,10 @@ title: Implementation plan — verification-first workroom gates
 Both queries ran against live state on 2026-09-06. Full results in the design's §10.
 
 1. **Epic-overlap check — done.** The owner is **`EP-WORK-POSTURE`**, which the original list did not name. `BI-13ED1BE1` (Slice E) already owns making `verificationDepth` load-bearing and shipped on 2026-08-23 at the *policy-envelope* enforcement point — five days before this plan was written. Of the four names guessed here: `EP-QUALITY-RIGHTSIZING` does not exist; `EP-1C37C089` is **not** "gate binding" but the TAK consequential-tool-use gate; `EP-WORK-CONVERGENCE` and `EP-COWORKER-LIFECYCLE` exist but own neither. Phase 2 was therefore filed as a sibling slice under `EP-WORK-POSTURE` (`BI-30165EB4`), not as new work.
-2. **`BI-4BD81F3B` — does not exist.** It returns `not_found` in the live backlog; it is cited only from a code comment. **Phase 4 is gated on an item that was never filed.** Filing it, or identifying what actually tracks non-vacuous browser-use results, is now a Phase 4 precondition.
+2. **`BI-4BD81F3B` — owner reconciliation required.** The earlier read returned
+   `not_found`; the 2026-09-06 the operator development install read for BI-4CCE50E0 returns the
+   federated row as `triaging`. See design §10. Do not duplicate the item or confuse
+   its existence with trustworthy UX-result completion. Phase 4 remains gated.
 
 **Phase 2 is delivered.** Code landed in PR #4880 (`48a7492bd`, 2026-09-02) — before either query ran, so it too was built without live coverage. Its report and the step 2.4 decision are at [`2026-09-06-verification-depth-shadow-report.md`](../audits/2026-09-06-verification-depth-shadow-report.md).
 
@@ -131,6 +134,16 @@ to deliver while Phases 3–6 remain separate backlog work.
 | 4.3 | Re-read the 2026-06-07 operator decision against the new behaviour and confirm the CLI-serving-build path still ships on CLI evidence. | Written confirmation, or the decision is re-put to the operator before landing. |
 
 Step 4.3 is not ceremony. The design claims this respects the operator's decision; that claim needs checking against the code path rather than against the design's own summary of it.
+
+**Research delta for Phase 4 (BI-4CCE50E0):** implement the result expectations in
+design §11 through existing adapters. Add a passing persisted-outcome fixture, a
+click-only/vacuous fixture, a deliberately wrong result and an interrupted run.
+For a write journey, demonstrate public submission -> authorized worker action ->
+reload/readback; include a retry or conflicting edit. Record exact build/scenario
+identity and original failures. The owner of BI-4BD81F3B supplies these fixtures;
+BI-8E539357 consumes them only after its current prerequisites and reviews pass.
+Numerical/policy fixtures independently check arithmetic and cited source revision.
+No new engine or runtime work is delivered by this plan amendment.
 
 ## 6. Phase 5 — Judge independence
 

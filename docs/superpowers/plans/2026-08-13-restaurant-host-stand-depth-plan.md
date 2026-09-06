@@ -132,6 +132,19 @@ Kernel interaction `DI-47863797A6AD` recommends `extend-canonical-contracts` wit
 
 ## Verification matrix
 
+**Research amendment, BI-4CCE50E0 (2026-09-06):** add the host-to-seat portion of
+the [restaurant operating-day fixture](../research/2026-09-06-astra-business-verification-review.md#5-human-world-representation-the-restaurant-pilot).
+Race two public reservations for the last allocatable table; refresh after a
+successful write with a lost response; retry a stale host seating command; cancel
+and verify capacity releases once. Public/host/timeline projections must agree after
+reload. Capture actual host-role and signed-out public evidence, not administrator
+access alone, using the [audit contract](../../architecture/archetype-operating-model-audit.md#outcome-evidence-and-exception-probes).
+
+Keep this plan's atomic host-to-seat scope. Kitchen, stock, POS settlement and
+periodic-close expansion belong to later researched slices under the simulator and
+Living Business program. BI-178AAB4F and BI-661BBC66 returned `not_found` on the operator development install during this research; reconcile their owning installation before scheduling
+implementation. This is additional acceptance design, not a new delivery claim.
+
 | Concern | Source-local proof | Canonical-runtime proof |
 |---|---|---|
 | Named walk-in | action validation, auth, persistence, nullable contact tests | create named walk-in; verify waiting queue and reload |

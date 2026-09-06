@@ -62,6 +62,23 @@ This set covers all 21 current category files while still avoiding a 95-archetyp
 
 ## Per-Archetype Walkthrough
 
+**2026-09-06 research increment (BI-4CCE50E0):** select Restaurant plus Pet Rescue
+as the first complementary rehearsal pair for the
+[Astra applicability review](../research/2026-09-06-astra-business-verification-review.md).
+This pair proves only its exercised scope; the representative matrix below remains
+the broader coverage plan. Use the [operating-model audit](../../architecture/archetype-operating-model-audit.md)
+for normal/bad/periodic days and its outcome-evidence contract for each step. Preserve
+coverage and operability as separate measures; cosmetic completion cannot substitute
+for a day that workers can actually perform.
+
+Before scoring, specify expected state independently of the output. For the public
+CTA, prove the correct operational record and role handoff, then reload and inspect
+the result. Include a duplicate submission, failed/late response, unavailable
+resource, private fact and a missing policy source. Use disposable fixtures in the
+governed nonproduction environment; keep external sends/payments in test sinks.
+Record first-pass failures and all inconclusive/unrun steps with denominators.
+These are planned checks; this documentation pass records no product test results.
+
 Use the same sequence for each archetype.
 
 ### 1. Setup Selection

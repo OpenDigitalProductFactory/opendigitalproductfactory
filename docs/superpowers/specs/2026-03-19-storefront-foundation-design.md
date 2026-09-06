@@ -8,6 +8,22 @@
 
 ## 1. Overview
 
+**2026-09-06 evolution note — proposed, BI-4CCE50E0:** this is the historical
+foundation. Extend its existing public projection and archetype composition; do not
+rebuild the original data model. Current [research §6](../research/2026-09-06-astra-business-verification-review.md#6-storefront-composition)
+requires a supported path for each business intent, not one generic CTA for every
+visitor. Restaurant menu/reservation/private-dining, rescue adopt/foster/volunteer/
+donate, trades service requests and rental availability have different completion
+conditions. Each public promise must match current approved facts and reach the
+responsible operational role through canonical intake/booking records.
+
+Validate preview -> published surface -> staff action -> persisted outcome, including
+retry, unavailable capacity and private-field exclusion. A request acknowledgment
+must not imply confirmed booking, fulfillment or payment. Reuse theme-aware UI and
+mobile/keyboard behavior. Existing local delivery anchors BI-B19306CA and BI-46437AEF
+own the rescue intake/routing example; research does not authorize expanding those
+items into every archetype. Shared evolution must preserve their distinct semantics.
+
 Add a public-facing storefront to the ODPF platform, enabling the organisation running the platform to sell products and services to potential and existing customers. The storefront is the primary customer entry point — replacing the disconnected `/customer-login` flow with a tenant-aware, publicly accessible surface.
 
 The design is archetype-driven: a pre-wired library of ~35 business templates across 10 market categories (healthcare, trades, professional services, retail, education, pet services, food, fitness, nonprofit, beauty) seeds the storefront with appropriate content and CTA types out of the box. The conversion action (book, buy, inquire, donate) is determined by the archetype and can be overridden per item.

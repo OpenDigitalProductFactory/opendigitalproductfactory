@@ -67,3 +67,24 @@ No DB, no server actions, no UI, no non-field-service archetypes, no volume/load
 
 ## 9. Test-only archetype toggle
 The multi-archetype toggle (in the viz) is **test-instance-only** — a real customer install is exactly one archetype. Gated so production single-archetype installs never see it. Lands in P4 alongside the observability wiring.
+
+## 10. P4 research amendment — business-day fidelity (2026-09-06)
+
+BI-4CCE50E0 contributes [research and restaurant scenarios](../research/2026-09-06-astra-business-verification-review.md#5-human-world-representation-the-restaurant-pilot)
+to existing BI-041735BC. The latter is a federated-origin record on the operator development install;
+its owner must reconcile scope and approval before implementation.
+
+Add normal-day, disrupted-day and periodic-close fixtures. Begin with Restaurant
+host/public booking and Pet Rescue public/staff intake, then use measured gaps to
+select later archetypes. Execute real DPF authorization, domain logic and persistence;
+isolate external message/payment sinks. Pure simulation, service integration and
+browser evidence retain distinct fidelity labels. Use the existing
+[audit evidence contract](../../architecture/archetype-operating-model-audit.md#outcome-evidence-and-exception-probes),
+including independently specified expected values and a known-bad negative control.
+
+Report first-pass completion separately from eventual completion and partial credit;
+record scenario versions, skipped/inconclusive counts, regression failures and cost.
+Do not claim catalog-wide reliability from a few sentinels. Bound each run's time,
+retry and concurrency budget and page large record sets. Expand shared scenario and
+oracle adapters before adding bespoke harnesses; preserve each vertical's constraints.
+No production test toggle, simulation execution or gate activation occurs in this pass.
