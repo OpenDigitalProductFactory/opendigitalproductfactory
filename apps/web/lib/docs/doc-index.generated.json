@@ -2079,6 +2079,22 @@
         "what-success-means"
       ]
     },
+    "docs/architecture/portal-ux-evaluation-framework.md": {
+      "publicHref": "/architecture/portal-ux-evaluation-framework/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-page-and-flow-evaluation-framework",
+        "1-evaluate-a-job-not-a-screenshot",
+        "2-rubric-and-decision-rules",
+        "3-measurement-protocol",
+        "4-workroom-centered-disclosure",
+        "archetype-sentinels-without-ia-forks",
+        "5-standing-ux-design-and-fit-gate",
+        "6-architecture-decision-and-research"
+      ]
+    },
     "docs/architecture/principle-decide-mcda-identity.md": {
       "publicHref": "/architecture/principle-decide-mcda-identity/",
       "portalHref": null,
@@ -10707,6 +10723,20 @@
       "publishedPortal": false,
       "anchors": [
         "populated-performance-live-acceptance"
+      ]
+    },
+    "docs/testing/portal-ux-scorecard-template.md": {
+      "publicHref": "/testing/portal-ux-scorecard-template/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-page-flow-scorecard-template",
+        "identity-and-purpose",
+        "measures",
+        "rubric",
+        "task-and-state-evidence",
+        "disposition-and-refactoring"
       ]
     },
     "docs/testing/pr-health.md": {
