@@ -427,9 +427,12 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   const { mapDemandRows } = await import("@/lib/demand/demand-data");
   const demandView = mapDemandRows([item])[0]!;
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
+  const { loadInheritedInitiativeScope } = await import("@/lib/backlog/initiative-readiness/parent-scope-inheritance");
   const hasSpec = specPlanRefs.some((entry) => entry.kind === "spec");
   const hasPlan = specPlanRefs.some((entry) => entry.kind === "plan");
+  const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
   const readiness = projectBacklogItemReadinessSummary({
+    inheritedScope,
     item: {
       id: item.id,
       itemId: item.itemId,
