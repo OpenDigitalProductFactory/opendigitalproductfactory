@@ -8,6 +8,24 @@ status: draft
 **Workroom:** `WC-162C6AAD`  
 **Design:** [Squash-safe delivery observation](../specs/2026-09-06-squash-safe-delivery-observation-design.md)
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-9FF39058`
+- Receipt: blocked-by: the immutable plan must be committed before the governed coverage recorder can bind it
+- Rationale: The observation schema, exact selector, freshness semantics, and
+  reaper consumer form one safety invariant. Shipping any phase independently
+  would either lose squash-merge delivery or allow stale or mismatched provider
+  evidence to close the wrong Workroom.
+- Dependencies: none
+
+| Key | Requirement refs | Contract refs | Flow refs | Verification refs |
+| --- | --- | --- | --- | --- |
+| provider-observation | OBJ-9FF-1 | contract:provider-pr-observation-v1 | flow:github-reader-to-inventory | AC-9FF-1 |
+| exact-merge-selection | OBJ-9FF-2 | contract:exact-pr-head-selection | flow:provider-observation-selection | AC-9FF-2 |
+| freshness-reconciliation | OBJ-9FF-2, OBJ-9FF-3 | contract:fresh-open-monotonic-merge | flow:inventory-to-liveness | AC-9FF-3, AC-9FF-4 |
+| reaper-integration | OBJ-9FF-4 | contract:workroom-liveness-reaper | flow:liveness-to-reaper | AC-9FF-5 |
+
 ## Scope and coverage
 
 This is one atomic delivery slice from the delivery-closeout program. It changes
