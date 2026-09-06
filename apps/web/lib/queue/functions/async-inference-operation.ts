@@ -87,7 +87,7 @@ export const asyncInferenceOperationReconciliation = inngest.createFunction(
     if (!workerEnabled()) {
       return { skipped: true, reason: "async-operation-worker-disabled" };
     }
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, ASYNC_INFERENCE_OPERATION_RECOVERY_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     const wakes = await step.run("reconcile-due-async-operation-wakes", () =>
       reconcilePrismaAsyncOperationWakes({ limit: 50 }),
@@ -114,7 +114,7 @@ export const asyncInferenceOperationOutbox = inngest.createFunction(
     triggers: [{ cron: ASYNC_INFERENCE_OPERATION_OUTBOX_CRON }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, ASYNC_INFERENCE_OPERATION_OUTBOX_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("publish-async-operation-transition-outbox", () =>
       publishPrismaAsyncOperationTransitions({ limit: 50 }),

@@ -16,7 +16,7 @@ export const a2aCollaborationHealthScan = inngest.createFunction(
     triggers: [cron("25 6 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/a2a-collaboration-health-scan");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("analyze-notify-and-dispatch-aiops", async () => {

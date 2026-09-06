@@ -8,15 +8,30 @@
 import { prisma } from "@dpf/db";
 
 /**
- * Runtime gate for scheduled functions: returns false when an operator has
- * disabled the job. Defaults to enabled when no row exists, so a job that has
- * never been touched runs normally. Wire this into a cron's entry gate to make
- * the per-job kill switch load-bearing.
+ * Runtime gate for scheduled functions — THE single implementation of the
+ * per-job kill switch (BI-7E49FA15). Returns false only when an operator has
+ * set ScheduledJob.enabled=false for this jobId.
+ *
+ * Posture, stated deliberately:
+ *   - No row  → enabled. A job that has never been touched runs normally.
+ *   - Read fails → enabled. The switch fails OPEN. A kill switch that failed
+ *     closed would take the whole schedule down on a database blip, which is a
+ *     far larger blast radius than one extra tick of a job the operator meant
+ *     to pause. Before this helper was made canonical, three of five hand-rolled
+ *     copies already swallowed the error and ran; this makes that uniform.
+ *
+ * Reached from gateAtEntry (every catalogued cron) and directly from runners
+ * that are also driven by a run-now event, which does not pass through the
+ * entry gate.
  */
 export async function isJobEnabled(jobId: string): Promise<boolean> {
-  const row = await prisma.scheduledJob.findUnique({
-    where: { jobId },
-    select: { enabled: true },
-  });
-  return row?.enabled ?? true;
+  try {
+    const row = await prisma.scheduledJob.findUnique({
+      where: { jobId },
+      select: { enabled: true },
+    });
+    return row?.enabled ?? true;
+  } catch {
+    return true;
+  }
 }

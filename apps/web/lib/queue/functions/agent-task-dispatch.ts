@@ -15,7 +15,7 @@ export const agentTaskDispatch = inngest.createFunction(
     triggers: [cron("*/5 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "agent/task-dispatch");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     // Once an hour (on the top-of-hour :00 tick of this */5 poll), converge every

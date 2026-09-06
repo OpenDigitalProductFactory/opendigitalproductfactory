@@ -59,7 +59,7 @@ export const dataControlOperationRecoveryScheduled = inngest.createFunction(
     triggers: [cron(DATA_CONTROL_OPERATION_RECOVERY_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "govern/data-control-operation-recovery-scheduled");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("recover-data-control-operations", () =>
       runDataControlOperationRecovery({
@@ -78,7 +78,7 @@ export const dataControlOperationRecoveryRequested = inngest.createFunction(
     triggers: [{ event: DATA_CONTROL_OPERATION_RECOVERY_EVENT }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "govern/data-control-operation-recovery-requested");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("recover-data-control-operations-requested", () =>
       runDataControlOperationRecovery({

@@ -548,7 +548,7 @@ export const workroomDriveScheduled = inngest.createFunction(
     triggers: [cron(WORKROOM_DRIVE_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, WORKROOM_DRIVE_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("workroom-drive", () => runWorkroomDriveJob());
   },
@@ -562,7 +562,7 @@ export const workroomDriveRunNow = inngest.createFunction(
     triggers: [{ event: WORKROOM_DRIVE_REQUESTED_EVENT }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, WORKROOM_DRIVE_RUN_NOW_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("workroom-drive", () => runWorkroomDriveJob());
   },

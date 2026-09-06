@@ -64,7 +64,7 @@ export const evalBackground = inngest.createFunction(
     triggers: [{ event: "ai/eval.run" }],
   },
   async ({ event, step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ai/eval-background");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const { endpointId, modelId, userId, force } = event.data;
@@ -129,7 +129,7 @@ export const probeBackground = inngest.createFunction(
     triggers: [{ event: "ai/probe.run" }],
   },
   async ({ event, step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ai/probe-background");
     if (!gate.proceed) return { skipped: true, reason: gate.reason, tested: 0 };
 
     const { endpointId, modelId, probesOnly, userId } = event.data;

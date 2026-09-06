@@ -32,7 +32,7 @@ export const dataRetentionSweepScheduled = inngest.createFunction(
     triggers: [cron(DATA_RETENTION_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, DATA_RETENTION_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("data-retention-sweep", async () => {

@@ -79,7 +79,7 @@ export const indexIntegritySweep = inngest.createFunction(
     triggers: [cron("30 5 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/index-integrity-sweep");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("check-live-index-integrity", () => runIndexIntegritySweep());
   },

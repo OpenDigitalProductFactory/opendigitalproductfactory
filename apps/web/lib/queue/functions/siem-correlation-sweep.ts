@@ -371,7 +371,7 @@ async function groupOpenDetectionsIntoCases(
 export const siemCorrelationSweep = inngest.createFunction(
   { id: "ops/siem-correlation-sweep", retries: 2, triggers: [cron("3,18,33,48 * * * *")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/siem-correlation-sweep");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     // 1. Flow the platform's own audit telemetry into SecurityEvents first, so

@@ -17,7 +17,7 @@ export const mcpCallEfficiencyScan = inngest.createFunction(
     triggers: [cron("15 6 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/mcp-call-efficiency-scan");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("analyze-notify-and-dispatch-aiops", async () => {

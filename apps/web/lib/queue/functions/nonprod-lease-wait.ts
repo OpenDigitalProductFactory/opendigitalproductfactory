@@ -58,7 +58,7 @@ export const nonprodLeaseWaitReconciliation = inngest.createFunction(
     triggers: [cron(RECONCILE_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "nonprod/lease-wait-reconciliation");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("reconcile-durable-nonprod-waits", () => reconcileNonprodLeaseWaits({}));
   },
