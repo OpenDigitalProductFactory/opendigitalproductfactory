@@ -69,6 +69,11 @@ Steps:
 **Observable:** the standing rooms on this install report owners without anyone appointing them,
 and any that cannot are named.
 
+**Delivered 2026-09-06.** Measured against the twelve live stalled rooms: the shape rung
+resolves 12/12 drivers, each distinct from that room's own approver. The ladder is joined to
+the Phase C stall item, which now names who should be appointed rather than only reporting
+that nobody is — a diagnosis becomes a one-step instruction.
+
 ## Phase C — the bottleneck signal
 
 Deliverable: a stalled room reaches a human.

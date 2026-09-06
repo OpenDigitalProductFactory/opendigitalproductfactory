@@ -132,3 +132,36 @@ describe("projectRoomStall", () => {
     expect(projectRoomStall(row({ drive: { action: "pause" }, consecutivePauses: 9 }))).not.toBeNull();
   });
 });
+
+// ─── The ladder seam (BI-24E7D59F) ───────────────────────────────────────────
+//
+// Reporting "nobody owns this" is a diagnosis. Naming who the work shape says
+// should drive it is an instruction the operator can act on in one step. All
+// twelve standing rooms on this install resolve a driver from their shape, so
+// this is the difference between twelve alerts and twelve appointments.
+
+describe("projectRoomStall with a resolved ladder owner", () => {
+  it("names the principal the ladder resolved, and how it was resolved", () => {
+    const item = projectRoomStall(
+      row({ ladderOwner: { principalRef: "agent:security-engineer", source: "shape" } }),
+    );
+    expect(item?.context).toContain("agent:security-engineer");
+    expect(item?.context.toLowerCase()).toContain("shape");
+  });
+
+  it("still refuses to assign the item to a merely-derived owner", () => {
+    // A derived owner is a SUGGESTION. Routing the item to them would make the
+    // room look owned to the very surface reporting that it is not, and
+    // conformance still requires an explicit appointment to execute.
+    const item = projectRoomStall(
+      row({ ladderOwner: { principalRef: "agent:security-engineer", source: "shape" } }),
+    );
+    expect(item?.audience.assigneePrincipalId).toBeUndefined();
+    expect(item?.audience.operator).toBe(true);
+  });
+
+  it("says plainly that nobody can be derived when the ladder returns null", () => {
+    const item = projectRoomStall(row({ ladderOwner: null }));
+    expect(item?.context).toContain("No owner can be derived");
+  });
+});
