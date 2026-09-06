@@ -126,6 +126,7 @@ function makeRequest(overrides?: Partial<AdapterRequest>): AdapterRequest {
     modelId: "gpt-4o",
     plan: makePlan(),
     provider: { baseUrl: "cli://local", headers: {} },
+    fetchImpl: globalThis.fetch,
     messages: [{ role: "user", content: "hello" }],
     systemPrompt: "",
     ...overrides,

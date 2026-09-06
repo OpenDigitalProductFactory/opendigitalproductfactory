@@ -43,6 +43,7 @@ import {
   type ConsensusDecision,
 } from "./consensus";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { BOOTSTRAPPED_TASK_RUN_PREFIX } from "./bootstrapped-task-run";
 
 /* -------------------------------------------------------------------------- */
 /* Public shapes                                                              */
@@ -367,7 +368,7 @@ export async function orchestrateDeliberation(
   } else {
     const created = await prisma.taskRun.create({
       data: {
-        taskRunId: `deliberation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        taskRunId: `${BOOTSTRAPPED_TASK_RUN_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         userId: input.userId,
         threadId: input.threadId ?? null,
         buildId: input.buildId ?? null,
@@ -715,9 +716,8 @@ export async function orchestrateDeliberation(
     await applyConsensusOutcome(buildId, consensusDecision, branchVotes, prisma);
   }
 
-  // BI-132FC1B9: settle bootstrapped TaskRuns so a failed/timeout caller cannot
-  // leave them in working forever and trip the self-upgrade quiescence drain.
-  if (taskRunBootstrapped && taskRunId) {
+  // BI-132FC1B9 settle; BI-D208E70C only when THIS call dispatched — see bootstrapped-task-run.ts.
+  if (taskRunBootstrapped && taskRunId && input.dispatcher) {
     await settleBootstrapTaskRun(taskRunId, "completed");
   }
 

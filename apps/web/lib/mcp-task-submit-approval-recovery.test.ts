@@ -390,10 +390,10 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
         },
       },
     });
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-APPROVED" },
+    expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({ // guarded working transition (BI-D208E70C)
+      where: expect.objectContaining({ taskRunId: "TR-MCP-APPROVED" }),
       data: { status: "working", lastHeartbeatAt: expect.any(Date) },
-    });
+    }));
     expect(db.update).toHaveBeenCalledWith({
       where: { taskRunId: "TR-MCP-APPROVED" },
       data: {

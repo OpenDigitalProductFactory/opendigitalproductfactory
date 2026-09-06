@@ -65,7 +65,7 @@ export const embeddingAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await request.fetchImpl(url, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify(body),
