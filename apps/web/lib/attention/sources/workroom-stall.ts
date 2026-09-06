@@ -22,6 +22,15 @@ type Db = typeof prisma;
  *  is reported the same working day. */
 export const STALL_TICK_THRESHOLD = 4;
 
+/** Drive actions that mean the room is NOT advancing.
+ *
+ *  `escalate` belongs here and its absence was a live defect (BI-2A5F1E77):
+ *  escalate writes no pendingAttention, so watching only `pause` handed a room
+ *  from a state this source covered into a state nothing read — it stopped being
+ *  reported at the exact moment it started needing a human. An escalation with no
+ *  channel is a stall with extra steps. */
+const STUCK_ACTIONS: ReadonlySet<string> = new Set(["pause", "escalate"]);
+
 /** How many rooms one load will project. Bounded like every other source. */
 export const ROOM_STALL_SCAN_LIMIT = 100;
 
@@ -78,7 +87,7 @@ function readOverseerPrincipalRef(drive: Record<string, unknown>): string | unde
 export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
   const drive = asRecord(row.drive);
   if (!drive) return null;
-  if (drive.action !== "pause") return null;
+  if (!STUCK_ACTIONS.has(drive.action as string)) return null;
   if (row.consecutivePauses < STALL_TICK_THRESHOLD) return null;
 
   const codes = readDeviationCodes(drive);
@@ -197,11 +206,12 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
         (
           SELECT MIN(n.rn) - 1
           FROM drive_activity n
-          WHERE n."workCapsuleId" = d."workCapsuleId" AND n.action IS DISTINCT FROM 'pause'
+          WHERE n."workCapsuleId" = d."workCapsuleId"
+            AND (n.action IS NULL OR n.action NOT IN ('pause', 'escalate'))
         ),
         d.rn
       )
-      AND d.action = 'pause'
+      AND d.action IN ('pause', 'escalate')
       GROUP BY d."workCapsuleId"
     )
     SELECT

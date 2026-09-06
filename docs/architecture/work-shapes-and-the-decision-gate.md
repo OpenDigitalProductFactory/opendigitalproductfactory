@@ -471,6 +471,15 @@ anybody.
 The `workroom-stall` attention source closes that. It is a read over state the drive
 already writes — no new table, no new writer, no new tick:
 
+**A stall is "not advancing", not "paused".** `escalate` writes no
+`pendingAttention`, so a source matching only `pause` hands a room from a state it
+covers into a state nothing reads — the room stops being reported at the moment it
+starts needing a human. That happened live within one tick of the first appointment
+landing (`BI-2A5F1E77`): `WC-A69BCABB` cleared `missing_explicit_coordinator`, moved
+to `escalate` on two deviations the missing owner had masked, and vanished from the
+surface built to report it. The watched set is `{pause, escalate}` and the streak
+counts a run of non-advancing actions, not a run of pauses.
+
 - **Threshold, not first pause.** Four consecutive refusals (the drive cron is every
   15 minutes, so one hour). A single paused tick is ordinary; an hour of them is a
   stall. A source that fires on healthy rooms is one operators learn to ignore.

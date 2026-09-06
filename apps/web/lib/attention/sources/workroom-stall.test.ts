@@ -165,3 +165,52 @@ describe("projectRoomStall with a resolved ladder owner", () => {
     expect(item?.context).toContain("No owner can be derived");
   });
 });
+
+// ─── Escalation is a stall too (BI-2A5F1E77) ─────────────────────────────────
+//
+// Found live, immediately after the first appointment worked. WC-A69BCABB left
+// `pause` and entered `escalate` — and escalate writes no pendingAttention, so a
+// source watching only `pause` handed the room from a state it covered into a
+// state nothing reads. The room stopped being reported at the exact moment it
+// started needing a human.
+//
+// An escalation with no channel is a stall with extra steps.
+
+describe("projectRoomStall over escalating rooms", () => {
+  const escalating = (over: Record<string, unknown> = {}) => ({
+    kind: "workroom-drive",
+    action: "escalate",
+    reason: "conformance_escalate",
+    conformance: {
+      deviations: [{ code: "coordinator_authority_binding_ineligible", summary: "s" }],
+      processOverseerPrincipalRef: "PRN-SEC-1",
+      interventionReason: "The AI Process Overseer's TAK authority binding is unknown.",
+    },
+    ...over,
+  });
+
+  it("raises attention for a room stuck escalating", () => {
+    const item = projectRoomStall(row({ drive: escalating() }));
+    expect(item).not.toBeNull();
+    expect(item?.context).toContain("coordinator_authority_binding_ineligible");
+  });
+
+  it("routes an escalating room to its overseer, who now exists", () => {
+    // Unlike the unowned case, an escalating room HAS an owner — the escalation
+    // is theirs to answer.
+    const item = projectRoomStall(row({ drive: escalating() }));
+    expect(item?.audience.assigneePrincipalId).toBe("PRN-SEC-1");
+  });
+
+  it("still stays silent for a room that is advancing", () => {
+    expect(
+      projectRoomStall(
+        row({ drive: { kind: "workroom-drive", action: "dispatch" }, consecutivePauses: 9 }),
+      ),
+    ).toBeNull();
+  });
+
+  it("counts an escalation streak the same way it counts a pause streak", () => {
+    expect(projectRoomStall(row({ drive: escalating(), consecutivePauses: 1 }))).toBeNull();
+  });
+});
