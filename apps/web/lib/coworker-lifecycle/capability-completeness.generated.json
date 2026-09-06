@@ -9499,7 +9499,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 106,
+          "reachableTools": 108,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -9509,11 +9509,12 @@
             "policy_read",
             "initiative_compliance_review",
             "spec_plan_read",
-            "web_search"
+            "web_search",
+            "statutory_reference_propose"
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 106 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 108 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -10333,9 +10334,10 @@
           "level": 3,
           "directSkills": 6,
           "wildcardSkills": 10,
-          "reachableTools": 120,
+          "reachableTools": 122,
           "heldGrants": [
             "policy_write",
+            "statutory_reference_propose",
             "data_governance_validate",
             "file_read",
             "backlog_read",
@@ -10346,7 +10348,7 @@
           ],
           "services": 1,
           "unbackedSkillIds": [],
-          "detail": "6 skill(s), 120 tool(s), all service backings resolve",
+          "detail": "6 skill(s), 122 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
