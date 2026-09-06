@@ -117,6 +117,24 @@ with its writer in Phase 3.
 6. Tests: staffing map, contract validation (the no-proposal path first), and
    that a failed panel leaves the record exactly as Phase 1 left it.
 
+**Status:** the pattern seed, both role prompts, the staffing map, the verdict
+contract, the conductor and the panel-roster line on the card are implemented on
+`feat/governance-triage-panel`, with 37 tests over the three new pure modules.
+
+**The trigger ships with it.** Hooking the kernel gate directly was rejected —
+a panel is provider-bound and asynchronous, and the gate is a hot path that must
+not wait on one. The caller is the Phase 4 sweep below, so Phases 3 and 4 land
+together: a panel nothing triggers is dead substrate that reads as capability.
+
+**Staffing signal quality — measured, not assumed.** The live ledger carries
+five domain classes across every unresolved decision (plan-readiness,
+kernel-consult, architecture-tradeoff, risk-assessment, professional-practice),
+which cannot separate a payroll question from a marketing one. Staffing
+therefore reads the profession gate first, then subject matter in the question
+text, then the domain class where it is unambiguous — and reports which signal
+it used. Subject-matter matching is a labelled heuristic; when nothing matches,
+the panel runs kernel-only and the card says so.
+
 ---
 
 ## Phase 4 — The standing process (BI-C62127B9)
@@ -129,6 +147,30 @@ with its writer in Phase 3.
    ready; digest and nav counts.
 4. Tests: cap enforcement and the skip log, the ageing rule, and that the sweep
    and the review page cannot drift apart on which decisions are open.
+
+**Status:** implemented on `feat/governance-triage-panel` together with Phase 3.
+
+- `decision-perspective/owner-ruling-queue.ts` is the ONE definition of "waiting
+  on a human", and the sweep composes on it rather than restating it. Three
+  copies of that predicate drifted once already (BI-6EC1EE25). This branch
+  originally added its own consolidating module; `owner-ruling-queue.ts` landed
+  on `main` first with the same purpose plus an organization-profile ownership
+  boundary (BI-EB5E9BE3), so it is the canonical home and the duplicate was
+  dropped rather than reconciled.
+- `concierge-sweep.ts` is bounded and reports what it dropped — a cap that
+  truncates silently reads as "everything was covered" the moment anyone looks.
+  It never resolves anything: it writes proposals that sit at `proposed` until a
+  human rules.
+- `triage-panel-binding.ts` convenes the run through the existing orchestrator
+  and parses the adjudicator's verdict narrowly: either a JSON object comes out
+  or `null` does, and a verdict nobody can parse is refused rather than repaired.
+- The standing governance room is upserted on a stable key and each pass is
+  appended as activity — convened once, never closed.
+- The attention inbox now leads with the suggestion and asks for a review rather
+  than judgment once a draft exists.
+
+Deferred deliberately: the nav count and the weekly-digest line. Both are
+cosmetic next to the trigger, and neither is worth widening this change.
 
 ---
 

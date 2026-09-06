@@ -26,6 +26,8 @@
 // reconciled (scheduling-surface review, 2026-06-21). Keep the parity test real.
 
 import { CODE_GRAPH_JOB_ID } from "@/lib/build/code-graph/constants";
+import { ASSET_INTELLIGENCE_JOBS } from "./asset-intelligence-jobs";
+import { DECISION_GOVERNANCE_JOBS } from "./decision-governance-jobs";
 import {
   EMBEDDING_COVERAGE_JOB_ID,
   EMBEDDING_COVERAGE_JOB_NAME,
@@ -34,22 +36,6 @@ import {
   EMBEDDING_COVERAGE_CRON,
   EMBEDDING_COVERAGE_CADENCE,
 } from "@/lib/wiki/embedding-coverage-constants";
-import {
-  CATALOG_SWEEP_JOB_ID,
-  CATALOG_SWEEP_JOB_NAME,
-  CATALOG_SWEEP_SCHEDULED_INNGEST_ID,
-  CATALOG_SWEEP_REQUESTED_EVENT,
-  CATALOG_SWEEP_CRON,
-  CATALOG_SWEEP_CADENCE,
-} from "@/lib/asset-intelligence/catalog-sweep-constants";
-import {
-  IDENTITY_INFERENCE_JOB_ID,
-  IDENTITY_INFERENCE_JOB_NAME,
-  IDENTITY_INFERENCE_SCHEDULED_INNGEST_ID,
-  IDENTITY_INFERENCE_REQUESTED_EVENT,
-  IDENTITY_INFERENCE_CRON,
-  IDENTITY_INFERENCE_CADENCE,
-} from "@/lib/asset-intelligence/identity-inference-constants";
 /** core = platform-integrity cron, operator read-only. editable = cadence
  *  may be tuned by an operator after install. */
 import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
@@ -63,6 +49,7 @@ export type { JobCategory, ScheduledJobCatalogEntry };
 
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
+  ...DECISION_GOVERNANCE_JOBS,
   ...FLOW_JOB_CATALOG_ENTRIES,
   {
     jobId: "index-integrity-sweep",
@@ -689,32 +676,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
-  {
-    jobId: CATALOG_SWEEP_JOB_ID,
-    honorsEnabledGate: true,
-    inngestId: CATALOG_SWEEP_SCHEDULED_INNGEST_ID,
-    name: CATALOG_SWEEP_JOB_NAME,
-    purpose:
-      "EP-ASSET-INTELLIGENCE (spec §4.2/§4.4): iterates the CatalogIdentity spine and runs the open enrichment feeds — SBOM→identity bridge, CPE 2.3 crosswalk, and endoflife.date support-lifecycle milestones. If it stops, normalized identity + EOL/EOS posture goes stale.",
-    cron: CATALOG_SWEEP_CRON,
-    cadence: CATALOG_SWEEP_CADENCE,
-    category: "editable",
-    tracksRunData: true,
-    runNowEvent: CATALOG_SWEEP_REQUESTED_EVENT,
-  },
-  {
-    jobId: IDENTITY_INFERENCE_JOB_ID,
-    honorsEnabledGate: true,
-    inngestId: IDENTITY_INFERENCE_SCHEDULED_INNGEST_ID,
-    name: IDENTITY_INFERENCE_JOB_NAME,
-    purpose:
-      "EP-ASSET-INTELLIGENCE (spec §4.2/§8): resolves the ambiguous tail of inventory items that deterministic fingerprint rules could not identify, using a cheap model (batched + per-run inference budget cap). Logs each AI resolution, promotes repeated ones to shadow fingerprint rules, and auto-applies only at high confidence. If it stops, unidentified estate items never gain a canonical identity or support-lifecycle posture.",
-    cron: IDENTITY_INFERENCE_CRON,
-    cadence: IDENTITY_INFERENCE_CADENCE,
-    category: "editable",
-    tracksRunData: true,
-    runNowEvent: IDENTITY_INFERENCE_REQUESTED_EVENT,
-  },
+  ...ASSET_INTELLIGENCE_JOBS,
   {
     jobId: "coworker-certification",
     inngestId: "ops/coworker-certification-nightly",
