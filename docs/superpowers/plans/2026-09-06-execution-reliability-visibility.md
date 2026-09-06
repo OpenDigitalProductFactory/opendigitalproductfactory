@@ -233,3 +233,24 @@ These are source-local results, not deployed runtime verification. The seven
 reviewer scenarios, canonical release, portal navigation and screenshots remain
 required. No new version migration or historical definition archive is claimed:
 the current registry provides one version per key and rejects unavailable versions.
+
+## Implementation evidence: process inspection
+
+The existing shared shape renderer now supports selected-step inspection, keyboard
+focus, search/state filters, a list alternative, and URL-preserved context. Intended
+definitions and observed room receipts are separate. Projection tests reject inferred
+completion from terminal case state, cancellation, or an unverified recommendation;
+a continuing process is not labeled as waiting. Stage colors use the shared registry.
+
+Thirty-five affected tests and web typecheck pass. This is source evidence only.
+The six required question headings and accessible controls exceed the old component's
+three-word source-copy baseline. The scoped baseline amendment implements that explicit
+user requirement; it does not relax any other file or prose axis. The progressive
+inspector is chosen over repeated full cards and a separate detail route. Consultation
+DI-B8832D1C621B recorded the comparison but lacked contextual embedding retrieval;
+its score is incomplete, not a kernel approval. The implementation judgment and this
+limitation are recorded in WC-4A72DC95 and the UX-fit manifest.
+
+Remaining: authoritative receipt-to-step correlation, recovery scenario execution,
+enterprise navigation, nested contribution closure, archetype-specific coverage,
+served viewport/accessibility checks and screenshots. None is certified by DOM tests.

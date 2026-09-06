@@ -56,6 +56,11 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  workroomStage: {
+    passed: "success", holding: "warning", denied: "danger",
+    "awaiting-confirmation": "warning", "not-reached": "neutral",
+    unknown: "neutral", observed: "neutral", cancelled: "neutral",
+  },
   // Durable provider operations. start_indeterminate is deliberately warning:
   // the provider POST may have crossed, so the platform reconciles rather
   // than presenting it as pending or repeating the side effect.
