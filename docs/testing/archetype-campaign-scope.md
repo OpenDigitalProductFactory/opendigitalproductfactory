@@ -4,6 +4,9 @@ Status: proposed acceptance scope, 2026-09-06. Audience: external contributors a
 development operators. This document does not activate a campaign or grant reset,
 peer-write, business-policy or reviewer authority. All cases below are **not run**.
 
+Scope revision: 2. Adds new-server admission and separate client/peer authentication
+checks. The catalog inventory retains its independent discovery revision.
+
 ## Portable contract and local ownership
 
 Use this path, a source commit, and the stable `ACR-*` case IDs below when reviewing
@@ -45,6 +48,74 @@ These are source observations, not results on a restored installation.
 | Audience | [External planning boundary](../architecture/external-planning-reference-boundary.md) already separates private planning from product claims. Indexing a reset document alone does not establish where it renders. | Identify and inspect the exact reported surface before changing routes or claiming a UI fix. |
 
 ## External campaign protocol
+
+### First exercise: admit a new member against the organization's master work list
+
+Before testing business features, exercise connection and initial synchronization.
+The organization's durable hub supplies the agreed master work inventory; the
+new member must prove it has the required work before selecting an epic. This is
+a proposed admission criterion over existing services, not a shipped installer gate.
+
+1. **Pin the starting inventory at the hub.** Record the authorized selection,
+   every required item/epic's origin, revision and scope, and a snapshot watermark.
+   Include required work originating on other members. A hub's visible combined
+   list can contain mirrors that its ordinary origin-only export omits. Detect
+   that difference explicitly; a successful pull of hub-origin rows cannot prove
+   that the whole master list arrived. Missing member-origin rows require a
+   governed owner/recovery path, not a second writable copy or relaxed no-echo rule.
+2. **Declare new member versus reinstall.** A genuinely new server gets its own
+   installation identity and scoped organization join package through the existing
+   join process (`-OrganizationJoinPackage` / `--organization-join-package`). A
+   reinstall of the same logical member preserves its protected `DPF_STATE_DIR`,
+   including its own PKI and federation identity/peer ledger, and separately
+   restores work. Never clone the hub's signing key or reuse another active
+   member's identity to make synchronization appear to work.
+3. **Prove network reachability before debugging credentials.** Check the advertised
+   authority/callback URLs, name resolution, intended host binding, approved ports,
+   firewall and TLS trust from the relevant machines. A local health response is
+   insufficient. Preserve the intended exposure through upgrade. Do not globally
+   expose services or disable TLS/origin checks as a troubleshooting shortcut.
+4. **Establish server-to-server trust.** The existing organization-membership path
+   verifies the issued certificate chain, pinned organization root, signed member
+   statement, organization, audience and freshness; mutual proof establishes the
+   trusted link with `organization-trust` provenance. A valid join package supplies
+   enrollment authority, not blanket business or backlog-write permission. With
+   missing/expired/mismatched membership, retain the typed failure and use the
+   existing authorized enrollment/confirmation path. LAN discovery alone is no trust.
+5. **Authenticate the external agent separately.** Connect to the target member's
+   `/api/mcp/v1` using its advertised OAuth metadata. Browser clients use
+   authorization code with PKCE S256 and the permitted consent/refresh flow;
+   genuinely headless runners use an operator-provisioned `client_credentials`
+   client. Record issuer/resource, client identity and effective grants, never
+   secrets. Verify the actual client's support and end-to-end flow; metadata
+   availability alone is not a login or refresh result. PAT support is a migration
+   policy: inspect the served policy before using compatibility bootstrap, and do
+   not make copying a hub token or repeatedly minting temporary tokens the default.
+6. **Complete initial sync and reconciliation.** Allow the existing federation job
+   to enroll/reconcile and pull work, or use an available governed sync action.
+   Retain the actual outcome and completion watermark; five minutes elapsed is not
+   success. Compare all pages and the recovery field matrix against the pinned hub
+   selection, then reconcile intervening changes to a second watermark. Verify
+   origin ownership, epic relationships, archetype scope and required evidence.
+   A connected link, empty success or row count alone cannot admit the campaign.
+7. **Open one synchronized scenario.** Resolve the owning network's work item and
+   claim it through the authorized owner/workroom path. Mirrored work remains
+   read-only locally. Start one fictitious normal-day public-to-worker scenario;
+   retain actions and persisted outcomes, then add its bad-day and periodic cases.
+   Record results locally and verify their permitted durable path back to the hub
+   before considering a reinstall. This planning document does not issue business
+   messages, activate a background campaign or authorize a destructive run.
+
+Authentication reference: [MCP client self-authentication design](../superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md).
+Connection reference: [organization federation design](../superpowers/specs/2026-09-02-zero-configuration-organization-federation-design.md).
+At source `998d1c4cbaa0d5abc16e15efe8c51798534a4e43`, the relevant implementation
+includes `apps/web/lib/mcp/transport-auth.ts`, `apps/web/lib/auth/oauth-policy.ts`
+and `apps/web/lib/federation/organization-membership.ts`. They distinguish OAuth
+from PAT compatibility and membership proof from client credentials. Dated absence
+claims in older design histories are not current runtime findings. The adopting
+run must verify its served version and actual effective policy.
+
+### Business improvement loop
 
 Use existing workrooms, environment leases, scenario adapters and evidence stores.
 The external agent controls the campaign; the instance owns authorized business
@@ -140,6 +211,9 @@ by the assertions. Unavailable infrastructure cannot become a product pass.
 | ACR-013 | External procedure stays with operator/agent; authorized admin sees status; worker sees business work. | Inspect actual route/index/search/role reach before changing visibility; indexing alone proves no rendered defect. | Audience boundary |
 | ACR-014 | Another installation can understand scope and review a PR without resolving originating local IDs. | An unavailable local BI does not imply missing implementation; local mapping cannot rewrite source requirements or import foreign work. | Artifact portability |
 | ACR-015 | Feedback prioritizes the next slice with distinct observed and fixture evidence. | No-user leaves remain discoverable/unassessed; pilot success does not claim all-archetype acceptance. | Coverage/feedback |
+| ACR-016 | External client discovers the target OAuth issuer/resource, authenticates through its supported browser or headless flow, and obtains only effective authorized tools. | Wrong audience, expired/revoked token, insufficient grants and refresh/reconnect failure stay explicit; no peer token reuse or silent privilege increase. Verify PAT migration policy without changing it. | MCP authentication |
+| ACR-017 | New member proves organization membership and mutual trust; reinstall of the same logical member preserves its own durable identity and valid peer links. | Expired/wrong-root/wrong-organization proof, unreachable callback, duplicate active identity or upgrade exposure regression blocks admission. A fresh server cannot clone the hub identity. | Enrollment/connections |
+| ACR-018 | New member reconciles the agreed master work selection across all required origins to a recorded watermark before opening a scenario. | Hub-visible member-origin mirrors omitted by ordinary export, missing page/scope/evidence or concurrent edits produce an explicit unresolved set; no empty or partial sync is called complete. | Initial sync/admission |
 
 Start with a business whose users can give feedback; restaurant and pet rescue
 provide contrasting rehearsal examples, followed by trades and rental where
