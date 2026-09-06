@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "Kernel-consult ledger (DecisionInteraction rows now record against the fallback profile)",
+    "Decision-perspective profile readers that resolve currentVersionId for dpf-organizational-principles"
+  ],
+  "migration": {
+    "name": "20260905020000_backfill_fallback_decision_profile_version",
+    "backfill": "Inserts the single DecisionPerspectiveProfileVersion row dpf-organizational-principles-v1 (versionNumber 1, materialFingerprint seed:dpf-organizational-principles:v1) where the fallback profile exists without it, and sets the profile's currentVersionId to it where null. Idempotent; no-op where the version already exists or the profile is absent. Nothing is deleted or rewritten."
+  },
+  "tests": [
+    "apps/web/lib/onboarding/ensure-org-decision-perspective-profile.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-perspective-profile-version",
+      "prismaModel": "DecisionPerspectiveProfileVersion",
+      "lifecycleDisposition": "Seed-provisioned governance version; retained for the life of the profile it versions and never age-purged, because sealed decision records cite it.",
+      "fields": [
+        {
+          "fieldId": "data:decision-perspective-profile-version#versionId",
+          "resolution": "inherited",
+          "reason": "Stable seed identity mirroring DPF_ORGANIZATIONAL_PRINCIPLES_PROFILE.currentVersion; no new field, one new row.",
+          "provenance": "BI-218EC195; apps/web/lib/decision-perspective/default-profile.ts",
+          "flags": []
+        },
+        {
+          "fieldId": "data:decision-perspective-profile-version#materialFingerprint",
+          "resolution": "inherited",
+          "reason": "Seed fingerprint string; carries no personal or sensitive data.",
+          "provenance": "BI-218EC195",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

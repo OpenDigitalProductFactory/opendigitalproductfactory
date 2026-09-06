@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   taskRunUpdate: vi.fn(),
+  taskRunUpdateMany: vi.fn(),
   taskRunFindUnique: vi.fn(),
   deliberationRunFindUnique: vi.fn(),
   deliberationRunUpdate: vi.fn(),
@@ -35,7 +36,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({
   prisma: {
     $transaction: mocks.transaction,
-    taskRun: { update: mocks.taskRunUpdate, findUnique: mocks.taskRunFindUnique },
+    taskRun: {
+      update: mocks.taskRunUpdate,
+      updateMany: mocks.taskRunUpdateMany,
+      findUnique: mocks.taskRunFindUnique,
+    },
     deliberationRun: {
       findUnique: mocks.deliberationRunFindUnique,
       update: mocks.deliberationRunUpdate,
@@ -78,7 +83,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.transaction.mockImplementation(async (callback: (client: unknown) => unknown) =>
     callback({
-      taskRun: { update: mocks.taskRunUpdate, findUnique: mocks.taskRunFindUnique },
+      taskRun: {
+      update: mocks.taskRunUpdate,
+      updateMany: mocks.taskRunUpdateMany,
+      findUnique: mocks.taskRunFindUnique,
+    },
       deliberationRun: {
         findUnique: mocks.deliberationRunFindUnique,
         update: mocks.deliberationRunUpdate,
@@ -275,6 +284,52 @@ describe("runDeliberation", () => {
       (c) => c[0].data.status === "completed",
     );
     expect(completedUpdate).toBeDefined();
+  });
+
+  it("completes an orchestrator-bootstrapped TaskRun even when routeContext is /build (BI-D208E70C)", async () => {
+    runWithBranches([
+      { id: "n1", workerRole: "reviewer", status: "queued" },
+      { id: "n2", workerRole: "summarizer", status: "queued" },
+    ]);
+    mocks.taskRunFindUnique.mockResolvedValue({ routeContext: "/build" });
+
+    await runDeliberation({
+      userId: "u1",
+      deliberationRunId: "delib-1",
+      taskRunId: "deliberation-1788372027063-9vjla0",
+      threadId: null,
+    });
+
+    const completedUpdate = mocks.taskRunUpdate.mock.calls.find(
+      (c) => c[0].data.status === "completed",
+    );
+    expect(completedUpdate).toBeDefined();
+    // The start-of-run transition is the guarded one, never a bare update to working.
+    expect(mocks.taskRunUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "working" }) }),
+    );
+    expect(
+      mocks.taskRunUpdate.mock.calls.find((c) => c[0].data.status === "working"),
+    ).toBeUndefined();
+  });
+
+  it("does not complete a caller-owned TaskRun whose routeContext is not deliberation", async () => {
+    runWithBranches([
+      { id: "n1", workerRole: "reviewer", status: "queued" },
+      { id: "n2", workerRole: "summarizer", status: "queued" },
+    ]);
+    mocks.taskRunFindUnique.mockResolvedValue({ routeContext: "/build" });
+
+    await runDeliberation({
+      userId: "u1",
+      deliberationRunId: "delib-1",
+      taskRunId: "TR-CALLER-OWNED",
+      threadId: null,
+    });
+
+    expect(
+      mocks.taskRunUpdate.mock.calls.find((c) => c[0].data.status === "completed"),
+    ).toBeUndefined();
   });
 
   it("returns early when DeliberationRun doesn't exist — no crash", async () => {

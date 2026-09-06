@@ -37,6 +37,10 @@ import {
   isWorktreeSessionLive,
   heartbeatTtlMs,
 } from "./lib/worktree-session-heartbeat.mjs";
+import {
+  loadActiveWorkroomPaths,
+  pathHasActiveClaim,
+} from "./lib/worktree-liveness.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GRACE = 14;
@@ -233,7 +237,7 @@ function pathHasLease(leasePayload, wtPath) {
   return leasePayload.includes(wtPath) || leasePayload.includes(norm);
 }
 
-function gatherFacts(root, entry, prIndex, leasePayload, ttlMs) {
+function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims) {
   const wtPath = entry.path;
   const branch = entry.detached ? null : entry.branch;
   const isRoot = path.resolve(wtPath) === path.resolve(root);
@@ -250,6 +254,12 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs) {
     // Liveness + abandoned-merge signals — never checked on the root clone.
     hasLiveSession: branch && !isRoot ? isWorktreeSessionLive(wtPath, { ttlMs }) : false,
     midMerge: branch && !isRoot ? isMidMerge(wtPath) : false,
+    // Platform-owned liveness. The heartbeat above only exists for Claude Code;
+    // the Workroom claim is written by every surface, so it answers for all of
+    // them — and when it cannot be read we refuse rather than guess.
+    hasActiveClaim: branch && !isRoot ? pathHasActiveClaim(claims.activePaths, wtPath) : false,
+    claimSourceUnavailable: branch && !isRoot ? !claims.available : false,
+    claimSourceReason: claims.reason,
   };
 }
 
@@ -298,13 +308,21 @@ function main(argv = process.argv.slice(2)) {
   const entries = listWorktrees(root);
   const prIndex = loadPrBranchIndex();
   const leasePayload = loadLeasePaths();
+  // Ask the platform who owns what, once, for the whole scan.
+  const claims = loadActiveWorkroomPaths();
+  if (!claims.available) {
+    console.error(
+      `[worktree-janitor] Workroom claims UNREADABLE (${claims.reason}) — every worktree will be ` +
+        "kept. A reaper that cannot ask who is working must not decide that nobody is.",
+    );
+  }
   const ttlMs = heartbeatTtlMs(process.env);
   const policy = args.tierAOnly ? "tier-a-only" : "all";
   const decisions = [];
   const removals = [];
 
   for (const entry of entries) {
-    const facts = gatherFacts(root, entry, prIndex, leasePayload, ttlMs);
+    const facts = gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims);
     const { verdict, reason, tier } = classifyWorktree(facts, { graceDays: args.graceDays });
     const row = {
       path: facts.path,

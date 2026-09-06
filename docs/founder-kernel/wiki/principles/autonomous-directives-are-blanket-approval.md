@@ -122,8 +122,15 @@ missing half.
 - **Out-of-band scope expansion**: if the work uncovers a problem that
   needs a separate spec/plan, surface it as a decision question, not as
   a "by the way I'm also fixing this." Spawn it as a separate task.
-- **External actions outside the install**: pushing to a remote
-  registry, opening a public issue, posting to a social channel, etc.
+- **External actions outside existing authorization**: pushing to a remote
+  registry, opening a public issue, posting to a social channel, etc. Reuse
+  explicit authorization already given for the same action and scope.
+
+## Direction, authority, and recovery are different questions
+
+A valid directive remains authorization across phase boundaries within its actual scope. A missing receipt or infrastructure failure does not revoke it. Apply [[principles/consult-scopes-before-asking]] to directional questions instead of asking the operator to ratify decisions WWMD already resolves.
+
+The descent and recurrence bounds prevent unbounded repair work; reaching them does not require a ceremonial request to continue. Report the concrete dependency and what remains unverified, continue independent authorized work, and present a human question only when new scope, authority, or material judgment is actually needed. Do not repeat identical failing attempts without new evidence or a changed recovery approach. Never use this clarification to bypass permissions or claim an unrun check passed.
 
 ## What the agent SHOULD do mid-autonomous-run
 

@@ -2,9 +2,9 @@
 title: Human-in-the-Loop at Phase Boundaries
 pageKind: principle
 status: published
-abstract: Approve transitions at phase boundaries, not individual tool calls.
+abstract: Use phase boundaries to identify missing judgment or authority; do not require fresh approval solely because a phase changes.
 principleTier: commandment
-principleDirection: Approve transitions at phase boundaries, not individual tool calls.
+principleDirection: Use phase boundaries to identify missing judgment or authority; do not require fresh approval solely because a phase changes.
 principleDimensionVector: {"governance_compliance": 1.0, "human_cognitive_load": -0.6, "speed_to_value": 0.5, "legibility_of_consequence": 0.7, "customer_consent_state": 0.65}
 principleAppliesTo:
   - in_platform_coworker
@@ -22,33 +22,34 @@ sources:
 
 ## Rule
 
-Human approval gates exist at **phase boundaries** — ideate → plan, plan → build, review → ship — not at individual tool calls within a phase. Within a phase, the agent operates autonomously using its scoped tools.
+A phase boundary is an opportunity to evaluate whether judgment or authority is missing, not an automatic requirement for human approval. Reuse authorization within its scope. Ask again only when a material consequence, commitment, scope, or authority changes, or when the action's governing policy requires action-specific consent.
+
+Within authorized work, agents operate autonomously using their scoped tools. Verification checks still establish whether a transition is valid; completing those checks does not require a second human decision when the direction and authority are already settled.
 
 ## Why
 
-Per-call approval breaks the agent's reasoning flow and burns the operator's time on micro-decisions. Phase boundaries give the human meaningful, infrequent decision points where the agent has produced reviewable evidence (a plan, a build, a verification report) and the human can act on substance instead of rubber-stamping every step. This matches the IT4IT value-stream gate model: governance happens at the transition, autonomy happens inside the stream.
+An approval that cannot change the decision is a rubber stamp. Moving repeated confirmations from tool calls to phase boundaries only batches the waste. Human review belongs where a person has a consequential judgment or authorization to supply, with the result and consequences made clear before consent.
 
-The exception is proposal-mode tools: any action that affects production (deploying, registering products, modifying user data) presents a card for explicit approval regardless of phase, because the blast radius is too high for autonomous execution.
+Founder correction, 2026-09-05, BI-DC0F14E0: this replaces the earlier blanket requirement for approval at ideate-to-plan, plan-to-build, and review-to-ship transitions. It does not remove access controls, protected merge checks, required independent findings, or action-specific consent.
 
-## Applies To
+## How to apply
 
-Every population governed by DPF — in-platform coworkers, external coding agents working on the codebase, and the humans operating the platform. The contract is symmetric: agents respect the gate, humans honor the autonomy inside it. Does NOT apply to first-time bootstrap flows where the human has not yet defined phase boundaries (those run under different setup-mode rules) or to read-only operations (queries, inspections) which never gate.
+At a transition, use the existing decision, authorization, and relevant verification. Continue if they cover the proposed action. If they do not, resolve the missing facts or checks through the existing process, and ask a human only for the judgment or authority that remains missing. Do not add a separate approval form to establish that no approval is needed.
 
-## How To Apply
+A production-affecting action follows its actual permission and consent contract. Its phase label neither grants permission nor invalidates permission already given. Where a tool requires a proposal or specific approval, use it; WWMD judgment does not substitute for that authorization.
 
-Implementers gate phase transitions deterministically — a build cannot move from `review` to `ship` until the design-review-required and tests-pass checks have passed and the human has approved the summary. Inside a phase, do not insert per-call confirmation prompts; trust the scoped tool grants and let the agent run. For production-affecting actions inside a phase, route through proposal-mode tools so the human sees a card before the side effect executes. Phase exit produces durable evidence (a plan document, a verification report, a contribution ledger) so the approval is grounded in artifacts the human can audit later.
+## Decision dimensions
 
-## Decision Dimensions
-
-- `governance_compliance: 1.0` — phase-boundary gates ARE the governance substrate; this principle is what makes that substrate operationally meaningful.
-- `human_cognitive_load: -0.6` — strongly favors the option that reduces interruption load on the operator. Per-call approval has the opposite sign on this axis; this principle exists precisely to bend the system away from that pattern.
-- `speed_to_value: +0.5` — autonomous operation within a phase materially shortens the cycle. The principle does not maximize raw speed (governance and cognitive-load axes still win at the boundary), but it removes the throughput tax of per-call review.
+The vector retains compliance with applicable governance (1.0), consent state (0.65), legible consequences (0.7), reduced cognitive load (-0.6), and speed to value (0.5). Compliance and consent describe whether required protections and actual authorization are satisfied, not the quantity or recency of approval clicks. Reusing valid authorization therefore preserves those benefits while reducing interruption cost; skipping required consent lowers compliance and consent-state features. This interpretation supports the revised direction without reversing any cost axis or changing the numeric weights merely to force a preferred result.
 
 ## Examples
 
-- **Positive:** A coworker building a feature receives plan approval at the phase boundary, then runs 40 tool calls inside the build phase (edits, tests, lints, commits) without any prompts; at the ship boundary, the human reviews the summary and verification evidence and approves.
-- **Counterexample:** A workflow that asks the user "should I run the tests?" or "want me to continue?" between every action inside a phase. This burns the operator's attention on micro-decisions and signals the agent doesn't trust its scoped tool grants — the wrong place to put a gate.
+- The operator authorizes implementing and delivering a named repair. The agent performs the scoped work and verification, then proceeds through the authorized delivery path without asking whether to continue at each stage.
+- The repair reveals an unapproved destructive migration. Present its concrete consequence and obtain the required consent before execution.
+- A workflow requests the same approval after each evidence upload, although nothing material changed. Consolidate that repetition instead of counting it as additional governance.
 
-## Sources
+## Related principles
 
-(Rendered from the `sources:` frontmatter by `WikiSourceCitations` — do not duplicate citation prose here.)
+- [[principles/consult-scopes-before-asking]] — settle direction in the owning doctrine.
+- [[governance-approves-evidence-not-provenance]] — evaluate meaningful evidence once within its scope.
+- [[show-the-consequence-before-the-confirm]] — make necessary consent legible.

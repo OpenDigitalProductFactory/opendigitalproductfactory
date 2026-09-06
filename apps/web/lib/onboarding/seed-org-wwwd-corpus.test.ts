@@ -144,8 +144,9 @@ describe("seedOrgWwwdCorpus", () => {
     });
 
     // Version v1
-    expect(fake.versions).toHaveLength(1);
-    expect(fake.versions[0]).toMatchObject({ versionId: result.versionId, versionNumber: 1 });
+    // Fallback profile v1 + org v1 (BI-218EC195: the fallback carries its own version).
+    expect(fake.versions).toHaveLength(2);
+    expect(fake.versions[1]).toMatchObject({ versionId: result.versionId, versionNumber: 1 });
 
     // Thirteen materials across all four decision classes (BI-70ADC71F + the
     // workstream-B excellence page in plan-readiness).
@@ -219,7 +220,7 @@ describe("seedOrgWwwdCorpus", () => {
 
     // Fallback + org profile, each upserted once (no duplicates on re-run).
     expect(fake.profiles).toHaveLength(2);
-    expect(fake.versions).toHaveLength(1);
+    expect(fake.versions).toHaveLength(2);
     expect(fake.materials).toHaveLength(13);
     expect(fake.wikiPages).toHaveLength(10);
     // Body unchanged on the 2nd run → no extra revision, no re-embed
