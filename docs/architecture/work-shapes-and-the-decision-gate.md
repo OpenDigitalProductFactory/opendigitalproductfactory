@@ -446,6 +446,36 @@ Readback, not tool success text, determines whether a shape is active. The recov
 amendment assigns repair and round-trip verification to `BI-06AE6833`; do not create
 a duplicate room or edit the database to make a diagram look configured.
 
+## A stalled room reaches a human
+
+A room's drive records why it refused, on every tick, in
+`workspaceState.workroomDrive` and in a `WorkroomActivity` row. Writing that
+faithfully is not the same as anyone learning it. Until `BI-03E94B5B` nothing read
+either surface, so refusal was free: on 2026-09-06 all twelve standing rooms on this
+install were found refusing — 331 consecutive wakes on `WC-A69BCABB`, 207-209 on the
+other eleven, every one on `missing_explicit_coordinator`, and none of it had reached
+anybody.
+
+The `workroom-stall` attention source closes that. It is a read over state the drive
+already writes — no new table, no new writer, no new tick:
+
+- **Threshold, not first pause.** Four consecutive refusals (the drive cron is every
+  15 minutes, so one hour). A single paused tick is ordinary; an hour of them is a
+  stall. A source that fires on healthy rooms is one operators learn to ignore.
+- **The streak is the current one.** It is counted back from the newest drive
+  activity and stops at the most recent non-pause, so a room that recovered and
+  stalled again reports the new streak, not a lifetime total.
+- **An unowned room is never assigned to a principal.** The missing principal is the
+  finding; it routes to the operator, who can appoint one. An owned-but-stalled room
+  routes to its Process Overseer as well.
+- **The item names the room, the reason and the streak length.** Not "a room is
+  stuck".
+
+Raw SQL against this trail must use the physical table name `"WorkCapsuleActivity"`
+(`@@map`), exactly as `Workroom` maps to `"WorkCapsule"`. The Prisma model name
+compiles and type-checks and fails only against a real database — unit tests over the
+projector cannot catch it.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
