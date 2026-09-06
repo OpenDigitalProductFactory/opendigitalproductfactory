@@ -4,6 +4,18 @@ export type ReadinessTarget = (typeof READINESS_TARGETS)[number];
 export const READINESS_PROFILES = ["doc-only", "fix", "feature", "cross-domain", "archetype"] as const;
 export type ReadinessProfile = (typeof READINESS_PROFILES)[number];
 
+/**
+ * Delivery shape — the fifth Workroom shape axis (design 2026-09-02 §3.0), the
+ * key of the v3 requirement tables. `null`/absent means a pre-taxonomy item:
+ * the v2 profile tables apply unchanged (kernel ruling 5).
+ */
+export const READINESS_SHAPES = ["break-fix", "small", "medium", "large", "xlarge"] as const;
+export type ReadinessShape = (typeof READINESS_SHAPES)[number];
+
+/** Risk axis (design §3.2). Raises the shape; never lowers it. */
+export const READINESS_SENSITIVITIES = ["low", "elevated", "high"] as const;
+export type ReadinessSensitivity = (typeof READINESS_SENSITIVITIES)[number];
+
 export type ReadinessVerdict = "allowed" | "input-required" | "denied";
 
 /**
@@ -47,6 +59,8 @@ export const READINESS_CODES = [
   "ARCHETYPE_COMPLETENESS_FAILED",
   "READINESS_PROJECTION_FAILED",
   "STALE_EVIDENCE",
+  "POST_IMPLEMENTATION_REVIEW_REQUIRED",
+  "DECOMPOSITION_REQUIRED",
 ] as const;
 
 export type ReadinessCode = (typeof READINESS_CODES)[number];
@@ -85,6 +99,9 @@ export type InitiativeReadinessFacts = {
   subject: InitiativeSubject;
   transitionObject: InitiativeTransitionObject;
   profile: ReadinessProfile;
+  /** Declared or derived delivery shape; absent for pre-taxonomy items. */
+  shape?: ReadinessShape | null;
+  sensitivity?: ReadinessSensitivity | null;
   evaluatedAt: string;
   classification: ReadinessEvidenceState;
   canonicalDesign: ReadinessEvidenceState;
@@ -107,6 +124,8 @@ export type InitiativeReadinessFacts = {
   objectiveReconciliation: ReadinessEvidenceState;
   archetypeProvisioning: ArchetypeProvisioningFacts;
   archetypeCompleteness: ReadinessEvidenceState;
+  /** break-fix only: the post-implementation review receipt (design §4, ruling 1). */
+  postImplementationReview?: ReadinessEvidenceState;
   blockingFindingsOpen?: boolean;
   projectionError?: boolean;
   evidenceRefs?: Partial<Record<ReadinessCode, string[]>>;

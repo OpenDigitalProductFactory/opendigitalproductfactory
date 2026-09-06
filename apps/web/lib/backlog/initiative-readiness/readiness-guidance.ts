@@ -5,6 +5,7 @@ import type {
   ReadinessEvidenceState,
   ReadinessProfile,
   ReadinessRequirementResult,
+  ReadinessShape,
 } from "./types";
 
 /**
@@ -180,6 +181,32 @@ const GENERIC_REMEDIES: Partial<Record<ReadinessCode, string>> = {
     "Readiness projection could not read this item's evidence. Report it; do not retry blindly.",
   STALE_EVIDENCE:
     "Recorded evidence is bound to a superseded artifact. Re-record it against the current immutable head.",
+  POST_IMPLEMENTATION_REVIEW_REQUIRED:
+    "A break-fix owes a post-implementation review within 48 hours of merge by someone other than the declarer: confirm the symptom is gone on the live install and record the PIR receipt.",
+  DECOMPOSITION_REQUIRED:
+    "An xlarge item never enters implementation. Decompose it into two or more shaped children (propose_decomposition, record_plan_backlog_coverage) and claim those.",
+};
+
+/**
+ * v3: what a requirement means for a SHAPE, where that differs from the
+ * profile definition. Small and medium do not earn a spec, so their doors are
+ * the item body and the live install, not the reviewer lane.
+ */
+const SHAPE_REMEDIES: Partial<Record<ReadinessShape, Partial<Record<ReadinessCode, string>>>> = {
+  small: {
+    RESEARCH_REQUIRED:
+      "For a small item, research is the reproduction: the defect or gap confirmed on a named ref and a failing-to-passing proof. Record it with record_initiative_evidence(gate: \"research\").",
+    ACCEPTANCE_EVIDENCE_REQUIRED:
+      "A small item is accepted by a runtime check on the live install or by the failing-to-passing test. Record it with record_execution_evidence and cite it as acceptance.",
+  },
+  medium: {
+    RESEARCH_REQUIRED:
+      "For a medium item, research is the design note in the item body: the problem, the options considered, and the one chosen. Record it with record_initiative_evidence(gate: \"research\").",
+    OBJECTIVE_BASELINE_REQUIRED:
+      "A medium item's baseline is its acceptance criteria in the item body: add an \"Acceptance\" section with one criterion per bullet (or bullets starting AC-<id>) via update_backlog_item. No spec approval is needed.",
+    ACCEPTANCE_EVIDENCE_REQUIRED:
+      "A medium item owes an independent acceptance receipt: an eligible reviewer (a coworker qualifies) verifies the acceptance criteria on the live install.",
+  },
 };
 
 function definitionSentence(definition: ReadinessRequirementDefinition): string {
@@ -189,6 +216,8 @@ function definitionSentence(definition: ReadinessRequirementDefinition): string 
 export type RequirementGuidanceInput = {
   code: ReadinessCode;
   profile: ReadinessProfile;
+  /** v3: the delivery shape, when the item carries one. */
+  shape?: ReadinessShape | null;
   state: ReadinessEvidenceState | "blocked";
   /** Non-receipt activity IDs on this item that could be an attempt at this requirement. */
   unreadEvidenceRefs: readonly string[];
@@ -237,8 +266,11 @@ export function requirementNextAction(input: RequirementGuidanceInput): string |
     parts.push(input.reasons.map(endWithStop).join(" "));
   }
 
+  const shapeRemedy = input.shape ? SHAPE_REMEDIES[input.shape]?.[input.code] : undefined;
   const definition = requirementDefinition(input.code, input.profile);
-  if (definition) {
+  if (shapeRemedy) {
+    parts.push(shapeRemedy);
+  } else if (definition) {
     parts.push(definitionSentence(definition));
   } else if (GENERIC_REMEDIES[input.code]) {
     parts.push(GENERIC_REMEDIES[input.code]!);

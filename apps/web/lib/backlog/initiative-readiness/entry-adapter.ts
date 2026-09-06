@@ -2,6 +2,7 @@ import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evid
 
 import { evaluateInitiativeReadiness } from "./evaluate";
 import { deriveAuthoritativeReadinessProfile } from "./profiles";
+import { itemBodyBaselineState } from "./item-body-baseline";
 import type { InheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
@@ -13,7 +14,10 @@ import type {
   ReadinessEvidenceState,
   ReadinessTarget,
 } from "./types";
-import { READINESS_CODES, READINESS_EVIDENCE_LANES, READINESS_PROFILES } from "./types";
+import {
+  READINESS_CODES, READINESS_EVIDENCE_LANES, READINESS_PROFILES, READINESS_SHAPES,
+  type ReadinessSensitivity, type ReadinessShape,
+} from "./types";
 
 export type InitiativeReadinessActivity = {
   id: string;
@@ -34,7 +38,19 @@ export type InitiativeReadinessItem = {
   archetypeCategories?: readonly string[];
   archetypeIds?: readonly string[];
   activeBuildKind?: string | null;
+  /** v3: the Workroom's declared/derived delivery shape as `delivery-<shape>@<version>`, when bound. */
+  workShape?: string | null;
+  /** v3: deliverable sensitivity (design 3.2); distinct from BacklogItem.sensitivity, the data classification. */
+  deliverySensitivity?: ReadinessSensitivity | null;
+  /** v3: the item body is the baseline for small/medium shapes. */
+  body?: string | null;
 };
+
+/** `delivery-small@1.0.0` → `small`; anything else → null (an unshaped item). */
+export function readinessShapeFromWorkShape(ref: string | null | undefined): ReadinessShape | null {
+  const key = typeof ref === "string" ? ref.split("@")[0]?.replace(/^delivery-/, "") : null;
+  return key && (READINESS_SHAPES as readonly string[]).includes(key) ? key as ReadinessShape : null;
+}
 
 type Baseline = {
   baselineId: string;
@@ -47,6 +63,7 @@ const GATE_NAMES = new Set([
   "classification", "research", "design-spec", "spec-approval", "architecture-review",
   "data-review", "ux-fit-review", "security-review", "compliance-review", "domain-review",
   "plan-review", "dependency-disposition", "archetype-provisioning", "archetype-completeness",
+  "post-implementation-review",
 ]);
 
 function normalizeGate(value: string | null): string | null {
@@ -443,7 +460,11 @@ export function projectBacklogItemReadiness(args: {
   });
   const governed = profile !== null;
   const evidence = receipts.states;
-  const baselineState: ReadinessEvidenceState = baseline.current ? "pass" : "missing";
+  const shape = readinessShapeFromWorkShape(args.item.workShape);
+  // v3: small and medium mint their baseline from the item body, not a spec.
+  const baselineState: ReadinessEvidenceState = baseline.current
+    ? "pass"
+    : shape === "small" || shape === "medium" ? itemBodyBaselineState(args.item.body) : "missing";
   const coverage = args.planCoverage ?? projectedCoverage.state;
   const dependency = state(evidence, "dependency-disposition");
   const archetypeProvisioning = state(evidence, "archetype-provisioning");
@@ -456,6 +477,8 @@ export function projectBacklogItemReadiness(args: {
     subject: { kind: "backlog-item", id: args.item.itemId },
     transitionObject: args.transitionObject,
     profile: profile ?? "doc-only",
+    shape,
+    sensitivity: args.item.deliverySensitivity ?? null,
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
     canonicalDesign: pass(baselineState),
@@ -490,6 +513,7 @@ export function projectBacklogItemReadiness(args: {
       skillsAndTools: archetypeProvisioning,
     },
     archetypeCompleteness: state(evidence, "archetype-completeness"),
+    postImplementationReview: state(evidence, "post-implementation-review"),
     projectionError: baseline.malformed || receipts.malformed || args.completion?.projectionError,
     evidenceRefs: args.completion?.evidenceRefs,
     unreadEvidenceRefs: unreadEvidenceByCode(args.activities),
