@@ -221,3 +221,21 @@ describe("initiative readiness reviewer tools", () => {
     }));
   });
 });
+
+describe("the writer schema states its contract before the writer refuses it (BI-9E522F11)", () => {
+  // Measured 2026-09-06 on the reference install: four spec-approval attempts
+  // in one hour ended malformed-receipt ("A passing spec approval cannot
+  // introduce findings"), one CLASSIFICATION_REQUIRED (profile copied from the
+  // spec header), one finding-resolution-invalid. Every rule was enforced on
+  // the server and stated nowhere the reviewer could read before calling.
+  it("tells the reviewer that a pass carries no findings, what profile to name, and what a resolution may cite", () => {
+    const tool = initiativeReadinessPack.definitions.find((definition) => definition.name === "record_initiative_design_review");
+    const properties = (tool?.inputSchema as { properties: Record<string, { description?: string }> }).properties;
+    expect(properties.decision?.description).toMatch(/NO findings/);
+    expect(properties.findings?.description).toMatch(/ONLY on a failing receipt/);
+    expect(properties.findings?.description).toMatch(/malformed-receipt/);
+    expect(properties.profile?.description).toMatch(/authoritative classification/);
+    expect(properties.profile?.description).toMatch(/CLASSIFICATION_REQUIRED/);
+    expect(properties.resolvedFindingRefs?.description).toMatch(/finding-resolution-invalid/);
+  });
+});
