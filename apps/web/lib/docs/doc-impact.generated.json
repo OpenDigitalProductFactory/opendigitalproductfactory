@@ -1766,6 +1766,9 @@
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
     ],
+    "scripts/hooks/session-reaper.sh": [
+      "docs/architecture/branch-and-worktree-runbook.md"
+    ],
     "scripts/host-resource-runner.mjs": [
       "docs/architecture/dpf-patterns.md",
       "docs/operations/local-ci-sandbox-slots.md",
@@ -2379,6 +2382,7 @@
       "apps/web/lib/self-upgrade/local-changes-ledger.ts",
       "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs",
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
+      "scripts/hooks/session-reaper.sh",
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
