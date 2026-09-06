@@ -1,10 +1,10 @@
 {
   "_comment": "Plane-4 standing tool-surface baseline (scripts/check-tool-surface.mjs). Growth is ALLOWED but never silent: raise a value and record `reason` + `recordedAt` saying what capability it buys. Dispatch-time caps are governed elsewhere and are not the subject of this baseline.",
-  "selectionCliff": 15,
+  "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 408,
-      "reason": "issue_organization_join_file (BI-AC7BCC58, EP-ZERO-CONFIG-FEDERATION §5.3): the authority side of the pair. Until now only a host script behind an edge node could mint the one-time join file, so an agent could never pair two installations end to end. This tool is the session-free twin of the Connections page's 'Create join file': the authority portal unlocks its provisioner key and mints the tokens itself (verified against a live step-ca), returning the file text the agent carries to import_organization_join_file on the member. Together the two tools close the pairing loop with nothing typed.",
+      "value": 409,
+      "reason": "appoint_room_coordinator (BI-F63200A8). Conformance refuses to execute a Workroom without exactly one explicit Process Overseer, and no tool could set that role: persistWorkroomParticipantAssignment had zero callers and invite_room_participant admits a participant without ever making them coordinator. A live room woke 291 times and refused every one for want of an owner. This earns a permanent place because ownership is a standing property of every room on every install, not a one-off repair \u2014 and because the tool is deliberately callable without an acting coworker, so a stalled room can be given an owner by whoever notices it.",
       "recordedAt": "2026-09-05"
     },
     "registry.packFiles": {

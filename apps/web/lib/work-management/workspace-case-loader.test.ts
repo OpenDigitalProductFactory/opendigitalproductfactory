@@ -9,6 +9,8 @@ import {
 } from "./workspace-case-loader";
 
 type WorkItemFixture = Awaited<ReturnType<WorkspaceCasePrismaClient["workItem"]["findMany"]>>[number];
+type CoworkerEngagementFixture =
+  Awaited<ReturnType<NonNullable<WorkspaceCasePrismaClient["coworkerEngagement"]>["findMany"]>>[number];
 
 const baseItem = {
   id: "row-1",
@@ -52,6 +54,30 @@ function prismaFor(items: WorkItemFixture[], detail: WorkItemFixture | null = it
   };
 }
 
+const baseEngagement: CoworkerEngagementFixture = {
+  id: "eng-row-1",
+  engagementId: "CE-1",
+  offerId: "OFFER-1",
+  serviceId: "SVC-1",
+  providerAgentId: "agent-launch",
+  requestedByUserId: "user-1",
+  requestedByAgentId: null,
+  requestedOutcome: "Prepare the municipal launch readiness packet.",
+  priority: "high",
+  status: "needs-approval",
+  approvalContext: { required: true, reasons: ["paid-provider:funding-context-missing"] },
+  auditRefs: { source: "town-informed-exercise" },
+  metadata: { exercise: "municipal-launch-readiness" },
+  workCapsuleId: null,
+  toolExecutionId: null,
+  createdAt: new Date("2026-09-06T01:00:00.000Z"),
+  updatedAt: new Date("2026-09-06T01:05:00.000Z"),
+  completedAt: null,
+  provider: { displayName: "Launch Readiness Coworker", name: "launch-readiness" },
+  offer: { offerId: "OFFER-1", name: "Launch readiness" },
+  service: { serviceId: "SVC-1", name: "Municipal portal readiness" },
+};
+
 describe("workspace Work Case loader", () => {
   it("projects queued work as attention-first Work Cases", async () => {
     const dashboard = await loadWorkspaceWorkCaseLens({
@@ -93,6 +119,80 @@ describe("workspace Work Case loader", () => {
 
     expect(key).toBe("manual-task%3AWI%3A42");
     expect(decodeWorkCaseKey(key)).toEqual({ sourceType: "manual-task", sourceId: "WI:42" });
+  });
+
+  it("merges coworker service engagements into the attention-first Work Case lens", async () => {
+    const prismaClient: WorkspaceCasePrismaClient = {
+      ...prismaFor([{ ...baseItem, status: "in-progress", urgency: "routine" }]),
+      coworkerEngagement: {
+        findMany: async () => [baseEngagement],
+        findFirst: async () => baseEngagement,
+      },
+    };
+
+    const dashboard = await loadWorkspaceWorkCaseLens({
+      prismaClient,
+      userId: "user-1",
+      now: new Date("2026-09-06T01:10:00.000Z"),
+    });
+
+    expect(dashboard.cases.map((item) => item.caseId)).toEqual([
+      "coworker-engagement:CE-1",
+      "booking:BK-1",
+    ]);
+    expect(dashboard.cases[0]).toMatchObject({
+      title: "Prepare the municipal launch readiness packet.",
+      sourceLabel: "Coworker engagement",
+      state: "awaiting-decision",
+      href: "/workspace/cases/coworker-engagement%3ACE-1",
+      assignmentLabel: "Requested by you",
+      attentionRequired: true,
+    });
+  });
+
+  it("loads coworker engagement details without a WorkItem comment target", async () => {
+    const prismaClient: WorkspaceCasePrismaClient = {
+      ...prismaFor([], null),
+      coworkerEngagement: {
+        findMany: async () => [baseEngagement],
+        findFirst: async () => baseEngagement,
+      },
+    };
+
+    const detail = await loadWorkspaceWorkCaseDetail({
+      prismaClient,
+      caseKey: encodeWorkCaseKey({ sourceType: "coworker-engagement", sourceId: "CE-1" }),
+      userId: "user-1",
+      now: new Date("2026-09-06T01:10:00.000Z"),
+    });
+
+    expect(detail?.summary).toMatchObject({
+      caseId: "coworker-engagement:CE-1",
+      sourceLabel: "Coworker engagement",
+      state: "awaiting-decision",
+      attentionRequired: true,
+    });
+    expect(detail?.workItemId).toBeNull();
+    expect(detail?.sourceRefs).toContainEqual({
+      kind: "coworker-engagement",
+      id: "CE-1",
+      status: "needs-approval",
+    });
+    expect(detail?.room).toMatchObject({
+      roomKey: "coworker-engagement%3ACE-1",
+      title: "Prepare the municipal launch readiness packet.",
+      purpose: "Prepare the municipal launch readiness packet.",
+      state: "awaiting-decision",
+      work: {
+        nextAction: "Resolve pending decision",
+        attentionRequired: true,
+      },
+    });
+    expect(detail?.room?.participants).toContainEqual(expect.objectContaining({
+      displayName: "Launch Readiness Coworker",
+      kind: "agent",
+      roles: ["contributor"],
+    }));
   });
 
   // BI-2310EEE1 — the list and the room must derive one state. A queued WorkItem
