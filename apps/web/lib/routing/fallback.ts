@@ -262,6 +262,7 @@ export async function callWithFallbackChain(
   let overloadRetried = false;
   let transientRetried = false;
   let authRefreshRetried = false;
+  let selectedAdapterCannotEnforceRequiredTerminalWriter = false;
   const agentId = outcomeAttribution?.agentId?.trim() || mcpSession?.agentId?.trim() || null;
   const traceId = outcomeAttribution?.traceId?.trim() || decision.traceId?.trim() || null;
   const agentMessageId = outcomeAttribution?.agentMessageId?.trim() || null;
@@ -389,8 +390,10 @@ export async function callWithFallbackChain(
         decision.preferenceResolution?.fallbackUsed === true;
       const unavailablePreference =
         decision.preferenceResolution?.unavailable[0] ?? null;
+      const capabilityFallback = i > 0
+        && selectedAdapterCannotEnforceRequiredTerminalWriter;
       const downgradeReason = i > 0
-        ? "provider-unavailable"
+        ? capabilityFallback ? "not-eligible" : "provider-unavailable"
         : preferenceMiss
           ? "not-eligible"
           : null;
@@ -416,7 +419,9 @@ export async function callWithFallbackChain(
         downgraded,
         downgradeReason,
         downgradeMessage: downgraded
-          ? preferenceMiss
+          ? capabilityFallback
+            ? `The selected AI adapter cannot enforce this task's required governed writer. Using ${provider.name} instead.`
+            : preferenceMiss
             ? unavailablePreference
               ? `Preferred ${unavailablePreference.kind} "${unavailablePreference.value}" is unavailable. Using ${provider.name} instead. Check AI Workforce settings to fix.`
               : `A configured AI routing preference is unavailable. Using ${provider.name} instead. Check AI Workforce settings to fix.`
@@ -435,6 +440,11 @@ export async function callWithFallbackChain(
       }
       const errMsg = e instanceof Error ? e.message : String(e);
       attempts.push({ endpointId: entry.providerId, error: errMsg });
+      if (e instanceof InferenceError && e.code === "required_terminal_writer_not_enforceable") {
+        if (i === 0) selectedAdapterCannotEnforceRequiredTerminalWriter = true;
+        console.info(`[callWithFallbackChain] ${entry.providerId} adapter cannot enforce the required terminal writer; trying the next candidate.`);
+        continue;
+      }
       console.warn(`[callWithFallbackChain] ${entry.providerId} failed: ${errMsg}`);
 
       if (e instanceof InferenceError) {

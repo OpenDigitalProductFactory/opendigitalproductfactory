@@ -208,17 +208,18 @@ export async function executeRemoteTaskAttempt(input: {
     // at the completion boundary (#4925, #4930) so a review cannot pass without
     // the governed writer having been attempted. Ported verbatim into the async
     // flow, which previously relied on result.failure alone.
-    const terminalWriterWasAttempted = terminalToolPolicy
-      ? (result.executedTools ?? []).some((tool) => tool.name === terminalToolPolicy.writerToolName)
-        || result.proposal?.name === terminalToolPolicy.writerToolName
-      : false;
+    const terminalWriterExecutions = terminalToolPolicy
+      ? (result.executedTools ?? []).filter((tool) => tool.name === terminalToolPolicy.writerToolName)
+      : [];
     const terminalWriterApprovalEnvelopeId = terminalToolPolicy
-      ? (result.executedTools ?? [])
-          .filter((tool) => tool.name === terminalToolPolicy.writerToolName)
+      ? terminalWriterExecutions
           .map((tool) => approvalRequiredEnvelopeId(tool.result))
           .find((envelopeId): envelopeId is string => envelopeId !== null) ?? null
       : null;
-    const terminalWriterMissing = terminalToolPolicy !== null && !terminalWriterWasAttempted;
+    const terminalWriterSucceeded = terminalWriterExecutions.some((tool) => tool.result.success);
+    const terminalWriterMissing = terminalToolPolicy !== null
+      && !terminalWriterSucceeded
+      && terminalWriterApprovalEnvelopeId === null;
     // BI-8B8731EE: a resource wait is NOT a writer-contract failure, and this
     // branch would otherwise swallow it. `terminalWriterMissing` is true for any
     // governed route that executed no tools, which is exactly what a capacity
@@ -232,13 +233,19 @@ export async function executeRemoteTaskAttempt(input: {
         && !Array.isArray(currentRun.progressPayload)
         ? currentRun.progressPayload as Record<string, unknown>
         : {};
+      const approvalProgress = { ...priorProgress };
+      delete approvalProgress.terminalWriterWait;
+      delete approvalProgress.terminalWriterDispatchFailure;
+      delete approvalProgress.terminalWriterEscalation;
+      delete approvalProgress.terminalWriterContextFailure;
+      delete approvalProgress.resourceWait;
       await prisma.taskRun.update({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "input-required",
           completedAt: null,
           progressPayload: {
-            ...priorProgress,
+            ...approvalProgress,
             summary: result.content,
             riskClass: parsed.riskClass,
             executedToolCount: result.executedTools?.length ?? 0,
@@ -263,6 +270,77 @@ export async function executeRemoteTaskAttempt(input: {
       };
     }
     if (
+      result.failure?.kind === "required-terminal-writer-not-enforceable"
+      && terminalWriterMissing
+      && terminalToolPolicy
+    ) {
+      const terminalWriterAttempt = input.terminalWriterAttempt ?? 1;
+      const observedAt = new Date().toISOString();
+      const escalation = terminalWriterRetryIsExhausted(terminalWriterAttempt)
+        ? createTerminalWriterEscalation({
+            writerToolName: terminalToolPolicy.writerToolName,
+            attempt: terminalWriterAttempt,
+            observedAt,
+          })
+        : null;
+      const priorProgress = currentRun?.progressPayload
+        && typeof currentRun.progressPayload === "object"
+        && !Array.isArray(currentRun.progressPayload)
+        ? currentRun.progressPayload as Record<string, unknown>
+        : {};
+      await prisma.taskRun.update({
+        where: { taskRunId: run.taskRunId },
+        data: {
+          status: "input-required",
+          completedAt: null,
+          progressPayload: {
+            ...priorProgress,
+            summary: result.failure.message,
+            riskClass: parsed.riskClass,
+            executedToolCount: result.executedTools?.length ?? 0,
+            terminalWriterWait: {
+              schemaVersion: 1,
+              kind: "missing-terminal-writer",
+              writerToolName: terminalToolPolicy.writerToolName,
+              resumeMode: "same-taskrun",
+              attempt: terminalWriterAttempt,
+              observedAt,
+              dispatchContract: "required-tool-call",
+            },
+            terminalWriterDispatchFailure: {
+              schemaVersion: 1,
+              code: "required-terminal-writer-not-enforceable",
+              writerToolName: terminalToolPolicy.writerToolName,
+              observedAt,
+            },
+            ...(escalation ? { terminalWriterEscalation: escalation } : {}),
+          },
+        },
+      });
+      return {
+        kind: "result",
+        result: {
+          taskRunId: run.taskRunId,
+          status: "input-required",
+          idempotentReplay: input.idempotentReplay,
+          ...resumedFlag,
+          requiresApproval: false,
+          resumable: escalation === null,
+          waitReason: escalation
+            ? terminalWriterEscalationWaitReason(escalation)
+            : "required-terminal-writer-not-enforceable",
+          content: remoteTaskContent(
+            escalation ? terminalWriterEscalationMessage(escalation) : result.failure.message,
+          ),
+          structuredContent: escalation
+            ? terminalWriterEscalationStructuredContent(escalation)
+            : { error: "required-terminal-writer-not-enforceable" },
+          executedToolCount: result.executedTools?.length ?? 0,
+          isError: true,
+        },
+      };
+    }
+    if (
       !resourceWaitOwnsThisTurn
       && (result.failure?.kind === "terminal-writer-missing" || terminalWriterMissing)
       && terminalToolPolicy
@@ -270,6 +348,8 @@ export async function executeRemoteTaskAttempt(input: {
       const terminalWriterAttempt = input.terminalWriterAttempt ?? 1;
       const terminalWriterFailureMessage = result.failure?.kind === "terminal-writer-missing"
         ? result.failure.message
+        : terminalWriterExecutions.length > 0
+          ? `The required governed writer ${terminalToolPolicy.writerToolName} was called but did not produce a receipt or approval envelope. The same TaskRun remains resumable.`
         : `The required governed writer ${terminalToolPolicy.writerToolName} was not recorded before the review attempt ended. The same TaskRun remains resumable. No receipt was created.`;
       const escalation = terminalWriterRetryIsExhausted(terminalWriterAttempt)
         ? createTerminalWriterEscalation({
@@ -315,7 +395,7 @@ export async function executeRemoteTaskAttempt(input: {
             ? terminalWriterEscalationWaitReason(escalation)
             : "missing-terminal-writer",
           content: remoteTaskContent(
-            escalation ? terminalWriterEscalationMessage(escalation) : result.content,
+            escalation ? terminalWriterEscalationMessage(escalation) : terminalWriterFailureMessage,
           ),
           ...(escalation
             ? { structuredContent: terminalWriterEscalationStructuredContent(escalation) }

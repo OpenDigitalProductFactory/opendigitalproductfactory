@@ -571,26 +571,25 @@ describe("runAgenticLoop", () => {
     threadId: "thread-1",
   };
 
-  // BI-8B8731EE. On a governed reviewer route the loop used to rewrite EVERY
-  // routeAndCall throw as `terminal-writer-missing`, discarding the
-  // classification it had just computed. A local-CI capacity reservation —
-  // which clears itself in ~195s — was therefore reported as the writer failing
-  // its contract, and `preInferenceResourceWait` downstream could never see the
-  // `capacity` kind it keys on.
+  // Preserve typed pre-inference causes even after this TaskRun banked reader work.
   it.each([
-    ["Local provider dispatch deferred: local-ci-queued-capacity-reservation", "capacity"],
-    ["Provider is overloaded, status: 529", "busy"],
-  ])("keeps a resource deferral classified (%s) instead of blaming the writer", async (message, expectedKind) => {
+    ["Local provider dispatch deferred: local-ci-queued-capacity-reservation", "capacity", false],
+    ["Provider is overloaded, status: 529", "busy", false],
+    ["required-terminal-writer-not-enforceable: claude-code-cli cannot require record_initiative_evidence", "required-terminal-writer-not-enforceable", true],
+  ])("keeps a pre-inference refusal classified (%s) instead of blaming the writer", async (message, expectedKind, banksReader) => {
     const mockRoute = vi.mocked(routeAndCall);
     const deferral = new Error(message);
     deferral.name = expectedKind === "capacity" ? "LocalProviderCapacityDeferredError" : "Error";
-    mockRoute.mockRejectedValue(deferral);
+    if (banksReader) {
+      mockRoute.mockResolvedValueOnce(mockResult({ content: "Read.", toolCalls: [{ id: "r1", name: "search_project_files", arguments: { query: "bound source" } }] })).mockRejectedValueOnce(deferral);
+      vi.mocked(executeTool).mockResolvedValueOnce({ success: true, message: "Bound source" });
+    } else mockRoute.mockRejectedValue(deferral);
 
     const result = await runAgenticLoop({
       ...baseParams,
       terminalToolPolicy: {
         writerToolName: "record_initiative_evidence",
-        readerToolNames: ["read_source_at_version"],
+        readerToolNames: ["search_project_files"],
         minimumSuccessfulReaderCalls: 1,
         maximumReaderCalls: 3,
       },
@@ -599,6 +598,7 @@ describe("runAgenticLoop", () => {
     expect(result.failure?.kind).toBe(expectedKind);
     expect(result.failure?.kind).not.toBe("terminal-writer-missing");
     expect(result.content).not.toContain("could not be dispatched");
+    expect(result.executedTools).toHaveLength(banksReader ? 1 : 0);
   });
 
   it("still blames the writer when the route fails for a reason it cannot classify", async () => {

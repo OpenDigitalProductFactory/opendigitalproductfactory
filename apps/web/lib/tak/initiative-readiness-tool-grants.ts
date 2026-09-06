@@ -6,6 +6,7 @@ import type {
   ReadinessRequirementResult,
 } from "@/lib/backlog/initiative-readiness";
 import type { ToolDefinition } from "@/lib/mcp-tools";
+import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 
 export type InitiativeReadinessLane = {
   capability: NonNullable<ToolDefinition["requiredCapability"]>;
@@ -64,6 +65,13 @@ export type InitiativeReviewBindingPacket = {
   gate: InitiativeRecoveryGate;
   expectedCurrentBaselineId: string | null;
   eligibleEvidenceActivityIds?: string[];
+  workroomRef?: {
+    kind: "workroom-head";
+    workroomId: string;
+    repositoryFullName: string;
+    branchName: string;
+    headSha: string;
+  };
   artifactRef: {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
@@ -452,14 +460,16 @@ function requestCoworkerPacket(args: {
   const mappingInstruction = args.gate === "objective-mapping"
     ? ` Map every current OBJ-* and AC-* statement to post-baseline evidence using only these eligible activity IDs: ${args.eligibleEvidenceActivityIds?.join(", ")}. Submit the proposal with record_initiative_evidence(operation='objective-mapping').`
     : "";
+  const objective = `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at Workroom head ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
+    args.artifact
+      ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_READER_TOOL},`
+      : ""
+  } record a governed receipt only when the gate passes.${mappingInstruction}`;
+  const questionPacketSummary = `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`;
   const base = {
     targetAgent: args.targetAgentId,
-    objective: `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at Workroom head ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
-      args.artifact
-        ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_READER_TOOL},`
-        : ""
-    } record a governed receipt only when the gate passes.${mappingInstruction}`,
-    questionPacketSummary: `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`,
+    objective,
+    questionPacketSummary,
     requestKey: `initiative-readiness:${args.decision.subject.id}:${args.gate}:${args.dispatch.headSha}`,
     tier: 2 as const,
     enteredVia: "handoff" as const,
@@ -467,24 +477,49 @@ function requestCoworkerPacket(args: {
   // The two fields travel together or not at all: the adapter refuses one
   // without the other, so a partial packet is an unexecutable packet.
   if (!args.artifact) return base;
+  const binding = {
+    writerToolName: args.toolName,
+    itemId: args.decision.subject.id,
+    gate: args.gate,
+    expectedCurrentBaselineId: args.expectedCurrentBaselineId,
+    ...(args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
+      ? {
+        eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
+        workroomRef: {
+          kind: "workroom-head" as const,
+          workroomId: args.dispatch.workroomId,
+          repositoryFullName: args.dispatch.repositoryFullName,
+          branchName: args.dispatch.branchName,
+          headSha: args.dispatch.headSha,
+        },
+      }
+      : {}),
+    artifactRef: {
+      kind: "repo-blob-at-commit" as const,
+      repositoryFullName: args.dispatch.repositoryFullName,
+      commitSha: reviewSha,
+      path: args.artifact.path,
+      providerBlobId: args.artifact.providerBlobId,
+    },
+  };
+  const requestKey = args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
+    ? createObjectiveMappingRequestKey({
+      targetAgent: args.targetAgentId,
+      objective,
+      questionPacketSummary,
+      requiredToolNames: [args.toolName, IMMUTABLE_READER_TOOL],
+      binding: {
+        ...binding,
+        gate: "objective-mapping",
+        eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
+        workroomRef: binding.workroomRef!,
+      },
+    })
+    : base.requestKey;
   return {
     ...base,
+    requestKey,
     requiredToolNames: [args.toolName, IMMUTABLE_READER_TOOL],
-    initiativeReviewBinding: {
-      writerToolName: args.toolName,
-      itemId: args.decision.subject.id,
-      gate: args.gate,
-      expectedCurrentBaselineId: args.expectedCurrentBaselineId,
-      ...(args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
-        ? { eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds }
-        : {}),
-      artifactRef: {
-        kind: "repo-blob-at-commit" as const,
-        repositoryFullName: args.dispatch.repositoryFullName,
-        commitSha: reviewSha,
-        path: args.artifact.path,
-        providerBlobId: args.artifact.providerBlobId,
-      },
-    },
+    initiativeReviewBinding: binding,
   };
 }

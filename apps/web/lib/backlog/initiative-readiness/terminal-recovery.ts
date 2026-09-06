@@ -2,6 +2,10 @@ import { prisma } from "@dpf/db";
 
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
+  authorizeObjectiveMappingRequestKeyEvolution,
+  type ObjectiveMappingRequestHistory,
+} from "@/lib/mcp-task-objective-mapping-request-key";
+import {
   resolveInitiativeReviewerRecovery,
   type InitiativeReviewerRecovery,
 } from "@/lib/tak/initiative-readiness-tool-grants";
@@ -33,6 +37,10 @@ export type TerminalRecoveryEscalationReason =
   | "baseline-ambiguous"
   | "eligible-evidence-not-found"
   | "eligible-evidence-unbounded"
+  | "objective-mapping-history-unavailable"
+  | "objective-mapping-identity-conflict"
+  | "objective-mapping-prior-authority-active"
+  | "objective-mapping-authoritative-output-exists"
   | "canonical-artifact-unavailable";
 
 type TerminalEscalation = {
@@ -66,6 +74,10 @@ export type TerminalRecoveryPorts = {
     itemId: string;
     baselineId: string;
   }): Promise<ActionResult<{ activityIds: string[] }>>;
+  loadObjectiveMappingHistory(args: {
+    itemId: string;
+    headSha: string;
+  }): Promise<ActionResult<{ history: ObjectiveMappingRequestHistory[] }>>;
   discoverArtifact(args: {
     repositoryFullName: string;
     baseSha: string;
@@ -209,10 +221,143 @@ async function defaultLoadEligibleEvidenceActivityIds(args: {
   });
 }
 
+const MAX_OBJECTIVE_MAPPING_HISTORY_ROWS = 50;
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function parseHistoricalObjectiveMappingBinding(value: unknown): ObjectiveMappingRequestHistory["binding"] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const binding = value as Record<string, unknown>;
+  const artifactValue = binding.artifactRef;
+  if (!artifactValue || typeof artifactValue !== "object" || Array.isArray(artifactValue)) return null;
+  const artifact = artifactValue as Record<string, unknown>;
+  const writerToolName = nonEmptyString(binding.writerToolName);
+  const itemId = nonEmptyString(binding.itemId);
+  const expectedCurrentBaselineId = binding.expectedCurrentBaselineId;
+  const repositoryFullName = nonEmptyString(artifact.repositoryFullName);
+  const commitSha = nonEmptyString(artifact.commitSha);
+  const path = nonEmptyString(artifact.path);
+  const providerBlobId = nonEmptyString(artifact.providerBlobId);
+  if (!writerToolName || !itemId || binding.gate !== "objective-mapping"
+    || (expectedCurrentBaselineId !== undefined && expectedCurrentBaselineId !== null
+      && typeof expectedCurrentBaselineId !== "string")
+    || artifact.kind !== "repo-blob-at-commit" || !repositoryFullName || !commitSha || !path || !providerBlobId) {
+    return null;
+  }
+  const evidence = binding.eligibleEvidenceActivityIds;
+  const eligibleEvidenceActivityIds = evidence === undefined
+    ? undefined
+    : Array.isArray(evidence) && evidence.length > 0
+      && evidence.every((entry) => typeof entry === "string" && entry.trim())
+      ? [...new Set(evidence.map((entry) => String(entry).trim()))].sort()
+      : null;
+  if (evidence !== undefined && !eligibleEvidenceActivityIds) return null;
+  const refValue = binding.workroomRef;
+  const ref = refValue && typeof refValue === "object" && !Array.isArray(refValue)
+    ? refValue as Record<string, unknown>
+    : null;
+  const workroomId = nonEmptyString(ref?.workroomId);
+  const workroomRepository = nonEmptyString(ref?.repositoryFullName);
+  const branchName = nonEmptyString(ref?.branchName);
+  const headSha = nonEmptyString(ref?.headSha);
+  if (refValue !== undefined && (ref?.kind !== "workroom-head" || !workroomId || !workroomRepository || !branchName || !headSha)) {
+    return null;
+  }
+  return {
+    writerToolName,
+    itemId,
+    gate: "objective-mapping",
+    ...(expectedCurrentBaselineId !== undefined
+      ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
+      : {}),
+    ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
+    ...(ref && workroomId && workroomRepository && branchName && headSha
+      ? {
+        workroomRef: {
+          kind: "workroom-head",
+          workroomId,
+          repositoryFullName: workroomRepository,
+          branchName,
+          headSha,
+        },
+      }
+      : {}),
+    artifactRef: {
+      kind: "repo-blob-at-commit",
+      repositoryFullName,
+      commitSha,
+      path,
+      providerBlobId,
+    },
+  };
+}
+
+async function defaultLoadObjectiveMappingHistory(args: {
+  itemId: string;
+  headSha: string;
+}): Promise<ActionResult<{ history: ObjectiveMappingRequestHistory[] }>> {
+  const keyPrefix = `initiative-readiness:${args.itemId}:objective-mapping:${args.headSha}`;
+  const rows = await prisma.taskRun.findMany({
+    where: {
+      a2aMetadata: { path: ["idempotencyKey"], string_starts_with: keyPrefix },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: MAX_OBJECTIVE_MAPPING_HISTORY_ROWS + 1,
+    select: {
+      taskRunId: true,
+      status: true,
+      objective: true,
+      a2aMetadata: true,
+      actionEnvelopes: { select: { status: true } },
+    },
+  });
+  if (rows.length > MAX_OBJECTIVE_MAPPING_HISTORY_ROWS) return err("objective-mapping-history-unbounded");
+  const matching: Array<{
+    row: (typeof rows)[number];
+    idempotencyKey: string;
+    binding: ObjectiveMappingRequestHistory["binding"];
+  }> = [];
+  for (const row of rows) {
+    const metadata = row.a2aMetadata && typeof row.a2aMetadata === "object" && !Array.isArray(row.a2aMetadata)
+      ? row.a2aMetadata as Record<string, unknown>
+      : null;
+    const idempotencyKey = nonEmptyString(metadata?.idempotencyKey);
+    if (!idempotencyKey?.startsWith(keyPrefix)) continue;
+    const binding = parseHistoricalObjectiveMappingBinding(metadata?.initiativeReviewBinding);
+    if (!binding) return err("objective-mapping-history-invalid");
+    matching.push({ row, idempotencyKey, binding });
+  }
+  const taskRunIds = matching.map((entry) => entry.row.taskRunId);
+  const executions = taskRunIds.length === 0 ? [] : await prisma.toolExecution.findMany({
+    where: {
+      taskRunId: { in: taskRunIds },
+      toolName: "record_initiative_evidence",
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { taskRunId: true, success: true, receipt: { select: { id: true } } },
+  });
+  return ok({
+    history: matching.map((entry) => ({
+      taskRunId: entry.row.taskRunId,
+      status: entry.row.status,
+      objective: entry.row.objective,
+      idempotencyKey: entry.idempotencyKey,
+      binding: entry.binding!,
+      actionEnvelopeStatuses: entry.row.actionEnvelopes.map((envelope) => envelope.status),
+      writerExecutions: executions
+        .filter((execution) => execution.taskRunId === entry.row.taskRunId)
+        .map((execution) => ({ success: execution.success, hasReceipt: execution.receipt !== null })),
+    })),
+  });
+}
+
 const DEFAULT_PORTS: TerminalRecoveryPorts = {
   loadLiveRooms: defaultLoadLiveRooms,
   loadBaselinePayloads: defaultLoadBaselinePayloads,
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
+  loadObjectiveMappingHistory: defaultLoadObjectiveMappingHistory,
   discoverArtifact: discoverCanonicalDesignArtifact,
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
 };
@@ -293,7 +438,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
     return escalation("canonical-artifact-unavailable", "The current baseline has no provider-verified canonical source binding.");
   }
 
-  return ports.resolveRecovery({
+  const recovery = await ports.resolveRecovery({
     decision: args.decision,
     currentAgentId: args.currentAgentId,
     db: prisma as never,
@@ -309,4 +454,61 @@ export async function resolveTerminalInitiativeRecovery(args: {
       ? { eligibleEvidenceActivityIds: eligibleEvidence.data.activityIds }
       : {}),
   });
+  if (!needsObjectiveMapping) return recovery;
+
+  const packet = recovery.reviewerRoutes.find((route) => route.gate === "objective-mapping")?.requestCoworker;
+  const binding = packet?.initiativeReviewBinding;
+  const requiredToolNames = packet?.requiredToolNames;
+  if (!packet || !binding || !requiredToolNames) {
+    return escalation(
+      "objective-mapping-history-unavailable",
+      "The readiness resolver did not produce a complete objective-mapping packet. Refresh readiness; do not invent a request identity.",
+    );
+  }
+  const historyResult = await ports.loadObjectiveMappingHistory({
+    itemId: args.decision.subject.id,
+    headSha: room.headSha,
+  });
+  if (!historyResult.ok) {
+    return escalation(
+      "objective-mapping-history-unavailable",
+      "Historical objective-mapping authority could not be bounded and validated. Reconcile the TaskRun history before dispatch.",
+    );
+  }
+  if (binding.gate !== "objective-mapping" || !binding.eligibleEvidenceActivityIds || !binding.workroomRef) {
+    return escalation(
+      "objective-mapping-history-unavailable",
+      "The server-issued objective-mapping packet lacks its versioned evidence or Workroom identity.",
+    );
+  }
+  const authorization = authorizeObjectiveMappingRequestKeyEvolution({
+    packet: {
+      targetAgent: packet.targetAgent,
+      objective: packet.objective,
+      questionPacketSummary: packet.questionPacketSummary,
+      requestKey: packet.requestKey,
+      requiredToolNames,
+      binding: {
+        ...binding,
+        gate: "objective-mapping",
+        eligibleEvidenceActivityIds: binding.eligibleEvidenceActivityIds,
+        workroomRef: binding.workroomRef,
+      },
+    },
+    history: historyResult.data.history,
+  });
+  if (!authorization.authorized) {
+    const reason = authorization.reason === "immutable-identity-conflict"
+      ? "objective-mapping-identity-conflict"
+      : authorization.reason === "prior-authority-active"
+        ? "objective-mapping-prior-authority-active"
+        : authorization.reason === "authoritative-output-exists"
+          ? "objective-mapping-authoritative-output-exists"
+          : "objective-mapping-history-unavailable";
+    return escalation(
+      reason,
+      `Objective-mapping history refused a successor request (${authorization.reason}${authorization.taskRunId ? ` on ${authorization.taskRunId}` : ""}). Resolve that exact authority state; do not churn the key.`,
+    );
+  }
+  return recovery;
 }
