@@ -49,6 +49,7 @@ import {
 } from "./gate-sensitivity.mjs";
 import { findCanonicalSeedContentPaths } from "./seed-fit-gate.mjs";
 import { PR_TRAILER_NAMES } from "./pr-trailer-contract.mjs";
+import { classifyConvergenceSurfaces } from "../check-convergence-impact.mjs";
 import {
   MODULE_SIZE_HARD_CAP,
   MODULE_SIZE_SOFT_CEILING,
@@ -220,6 +221,22 @@ function trailerConstraints(files, addedLinesByFile) {
       level: "required",
       because: `persistent data surface(s) changed: ${dataSurfaces.join(", ")}`,
       alternative: "a data-impact manifest (or registered exception) covering migration/backfill/rollback disposition",
+    });
+  }
+
+  // BI-B19BE117: an install-reachable surface (compose, env contract, installer,
+  // hooks, config, image-copied-by-name script, seed content) must state how an
+  // EXISTING install converges. Advertised here so every surface writes the
+  // trailer before generation rather than learning about it from a red check.
+  let convergence = [];
+  try { convergence = classifyConvergenceSurfaces(paths); } catch { /* registry unreadable: the CI gate still runs */ }
+  if (convergence.length > 0) {
+    trailers.push({
+      gate: "Convergence-Impact",
+      trailer: `${PR_TRAILER_NAMES.convergenceImpact}:`,
+      level: "required",
+      because: `install-reachable surface(s) changed: ${convergence.map((s) => `${s.kind} (${s.files.slice(0, 3).join(", ")})`).join("; ")}`,
+      alternative: "<mode> — <mechanism or reason, 20+ chars>; modes: auto-converges | self-upgrade-step | operator-action | fresh-install-only | not-reachable",
     });
   }
 

@@ -21,6 +21,7 @@ const EXPECTED_LEGACY_JOBS = [
   "compose-env-contract-guard",
   "compose-resource-budgets-guard",
   "context-economy-guard",
+  "convergence-impact-gate",
   "data-impact-gate",
   "db-commandment-coverage",
   "decision-baseline",

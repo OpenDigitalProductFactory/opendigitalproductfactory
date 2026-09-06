@@ -63,6 +63,7 @@ export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
   "design-grounding-gate",
   "docs-impact-gate",
   "data-impact-gate",
+  "convergence-impact-gate",
   "spec-plan-doc-gate",
 ]);
 
