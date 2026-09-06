@@ -329,6 +329,20 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
   },
+  {
+    sourceKey: "coworker-engagement",
+    definitionVersion: 1,
+    displayLabel: "Coworker engagement",
+    owningArea: "ai-workforce",
+    domainCategory: "coworker-service",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    titleProjection: "Use the requested outcome for the coworker service engagement.",
+    summaryProjection: "Use the coworker service, provider, approval context, and engagement status.",
+    supportedTransitions: STANDARD_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
+  },
   // ─── Employment lifecycle (EP-862820FD, BI-28EFA338) ────────────────────────
   //
   // The employment lifecycle is registry entries, not a workflow engine.
