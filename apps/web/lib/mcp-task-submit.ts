@@ -280,7 +280,7 @@ async function reserveTerminalWriterReplay(input: {
     } else if (
       writerAttempt.success !== false
       || !existingWait
-      || !["stalled", "failed"].includes(input.existing.status)
+      || !["input-required", "stalled", "failed"].includes(input.existing.status)
     ) return null;
   }
 
