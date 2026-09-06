@@ -71,6 +71,15 @@ authority matrix, documentation, protected delivery, and live replay are one
 narrow policy correction. None is independently safe or useful without the
 others, so all work remains mapped to BI-921B7DC2.
 
+Traceability for the single delivery unit is explicit:
+
+- Requirement: `OBJ-BTRA-1`.
+- Contracts: `initiativeReviewBinding`, `coworker-authority-v1`, and
+  `hitlPolicy:always`.
+- Flow: `FLOW-BTRA-1` — validate the server-issued binding, resolve the bounded
+  technical writer authority, persist the receipt, and verify the live result.
+- Verification: `AC-BTRA-1`, `AC-BTRA-2`, `AC-BTRA-3`, and `AC-BTRA-4`.
+
 | Deliverable | BI | Requirements | Contracts | Verification |
 |---|---|---|---|---|
 | Bounded readiness-receipt authority | BI-921B7DC2 | OBJ-BTRA-1; AC-BTRA-1–4 | `initiativeReviewBinding`; `coworker-authority-v1`; `hitlPolicy: always` | focused authority tests; merged-code CI; semantic review; canonical live replay |
