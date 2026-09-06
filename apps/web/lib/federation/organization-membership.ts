@@ -72,12 +72,21 @@ export interface MembershipDb extends FederationIdentityDb {
   remoteAction?: {
     findFirst(args: unknown): Promise<{ parameters: unknown } | null>;
   };
+  organization?: {
+    findFirst(args: unknown): Promise<{ name: string } | null>;
+  };
   $transaction<T>(fn: (tx: Parameters<typeof createFederationLinkRow>[0]) => Promise<T>): Promise<T>;
 }
 
 async function localOrganizationRef(db: MembershipDb, env?: Record<string, string | undefined>): Promise<string | null> {
   const resolution = await loadEstateNameResolution(
-    { readConfig: async (key: string) => (await db.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ?? null },
+    {
+      readConfig: async (key: string) => (await db.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ?? null,
+      // The setup-time organization name is the lowest tier (BI-CA54ACC8): an
+      // authority that was named at install but never on the installation page
+      // still has an organization to compare.
+      readOrganizationName: async () => (await db.organization?.findFirst({ select: { name: true } }))?.name ?? null,
+    },
     env ? { env } : {},
   );
   return normalizeOrganizationRef(resolution.estateName);
@@ -300,7 +309,19 @@ export async function enrolWithOrganizationAuthority(
 ): Promise<{ enrolled: true; linkId: string; authorityUrl: string } | { enrolled: false; reason: string }> {
   const callback = generateLinkToken();
   const post = input.post ?? postToPeer;
-  let last: PeerPostResult | null = null;
+  // The failure the operator sees is the most informative one across the
+  // derived URLs, not the last one tried (BI-39C06F70): an authority's answer
+  // beats a fallback URL's socket error, and a definitive refusal ends the loop
+  // because no other URL can change that verdict.
+  let last: (PeerPostResult & { authorityUrl: string }) | null = null;
+  const remember = (res: PeerPostResult, authorityUrl: string) => {
+    const informative = (r: PeerPostResult | null) => (r ? (r.status > 0 ? (r.body ? 2 : 1) : 0) : -1);
+    if (informative(res) >= informative(last)) last = { ...res, authorityUrl };
+  };
+  const refusalReason = (res: PeerPostResult): string | null => {
+    const details = (res.body as { details?: { reason?: unknown } } | undefined)?.details;
+    return res.status === 403 && typeof details?.reason === "string" ? details.reason : null;
+  };
   for (const authorityUrl of input.authorityUrls) {
     const built = await buildMembershipProof(db, {
       material: input.material,
@@ -314,10 +335,17 @@ export async function enrolWithOrganizationAuthority(
     });
     if ("error" in built) return { enrolled: false, reason: built.error };
     const res = await post({ peerAuthorityUrl: authorityUrl, linkToken: "dpflink_organization-proof", path: ORGANIZATION_ENROLL_PATH, cloudEvent: built, sameOrgLan: true });
-    last = res;
-    if (!res.ok) continue;
+    if (!res.ok) {
+      remember(res, authorityUrl);
+      const reason = refusalReason(res);
+      if (reason) {
+        console.warn(`[federation] the organization authority at ${authorityUrl} refused this installation's membership proof: ${reason}`);
+        return { enrolled: false, reason: `authority refused: ${reason} (${authorityUrl})` };
+      }
+      continue;
+    }
     const body = res.body as { linkId?: string; linkToken?: string; proof?: unknown } | undefined;
-    if (typeof body?.linkToken !== "string" || !body.linkToken.startsWith("dpflink_")) { last = { ok: false, status: res.status, error: "malformed-response" }; continue; }
+    if (typeof body?.linkToken !== "string" || !body.linkToken.startsWith("dpflink_")) { remember({ ok: false, status: res.status, body: res.body, error: "malformed-response" }, authorityUrl); continue; }
     // Verify the authority's own proof when it sent one.
     let peerStatement: MembershipStatement | null = null;
     let peerChain: ChainVerification | null = null;
@@ -357,7 +385,9 @@ export async function enrolWithOrganizationAuthority(
     });
     return { enrolled: true, linkId, authorityUrl };
   }
-  return { enrolled: false, reason: last ? `peer responded ${last.status}${last.error ? `: ${last.error}` : ""}` : "no-authority-url" };
+  // `last` is only assigned inside `remember`, which the narrowing above cannot see.
+  const failure = last as (PeerPostResult & { authorityUrl: string }) | null;
+  return { enrolled: false, reason: failure ? `peer responded ${failure.status}${failure.error ? `: ${failure.error}` : ""} (${failure.authorityUrl})` : "no-authority-url" };
 }
 
 /**

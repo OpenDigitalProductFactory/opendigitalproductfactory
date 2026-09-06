@@ -237,6 +237,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           installationBadge={await loadInstallationBadge({
             readConfig: async (key) =>
               (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
+            // The badge falls back to the organization named at setup (BI-CA54ACC8).
+            readOrganizationName: async () => organization?.name ?? null,
           })}
         />
         <div className="flex flex-1 flex-col lg:flex-row">

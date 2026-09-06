@@ -308,3 +308,9 @@ a living document and is now behind the decision.
 - **Fix the gate, not just the sentence.** Rewriting one headline leaves the
   incentive that produced it. The readability cap stays; what changes is that
   satisfying it with fragments stops being the cheapest path.
+
+## Addendum 2026-09-06: the organization named at setup is the lowest tier (BI-CA54ACC8)
+
+Found on the live pair while proving EP-ZERO-CONFIG-FEDERATION: production showed its Organization name in the banner yet refused every membership proof with `no-local-organization`, because the membership statement compares the estate name and nothing had ever moved an existing install forward onto it (the installer never writes `estateName`, no migration seeded it, and the operator had not opened the installation page).
+
+The precedence gains one more speaking tier below `portal-declaration`: `organization-name`, the Organization row the setup wizard created. `resolveEstateNamePrecedence` takes `organizationName`, reports `organizationNameValue`, and `EstateIdentityStore.readOrganizationName` (optional) supplies it; `prismaEstateIdentityStore` is the one builder Prisma-backed callers use. The installation page keeps the Operator name field empty while this tier is in force and says which organization applies meanwhile (kernel decision DI-0B1E2E643EB3), so a typed name remains a real declaration. `unset` still exists: an install with no Organization row and no declaration is unnamed, and says so.
