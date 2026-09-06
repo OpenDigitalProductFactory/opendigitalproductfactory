@@ -62,7 +62,7 @@ export const businessJourneyWatchdogScheduled = inngest.createFunction(
     triggers: [cron(BUSINESS_JOURNEY_WATCHDOG_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("business-journey-watchdog", () => runBusinessJourneyWatchdogJob());
   },
@@ -76,7 +76,7 @@ export const businessJourneyWatchdogRunNow = inngest.createFunction(
     triggers: [{ event: BUSINESS_JOURNEY_WATCHDOG_REQUESTED_EVENT }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, BUSINESS_JOURNEY_WATCHDOG_RUN_NOW_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("business-journey-watchdog", () => runBusinessJourneyWatchdogJob());
   },

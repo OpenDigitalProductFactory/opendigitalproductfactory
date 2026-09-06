@@ -16,7 +16,7 @@ Proposed decision: `atomic` for BI-96885B6B.
 
 | Deliverable | Backlog | Requirements | Contract | Flow | Verification |
 | --- | --- | --- | --- | --- | --- |
-| bounded review-incomplete resume | BI-96885B6B | OBJ-BRB-1, OBJ-BRB-2, OBJ-BRB-3 | existing `resumePreBuildPhase` contract | stranded ideate build → history classification → skip or canonical retry | AC-BRB-1 through AC-BRB-7 |
+| bounded review-incomplete resume | BI-96885B6B | OBJ-BRB-1, OBJ-BRB-2, OBJ-BRB-3 | existing `resumePreBuildPhase` contract | stranded ideate build → history classification → skip or canonical retry | AC-BRB-1, AC-BRB-2, AC-BRB-3, AC-BRB-4, AC-BRB-5, AC-BRB-6, AC-BRB-7 |
 
 The live plan-coverage writer and independent baseline are intentionally pending while the provider transport they require is not yet served. No receipt or PASS is inferred at this source-only checkpoint. Do not open a PR until the canonical server can validate this immutable plan or an explicit bootstrap disposition records the missing writer as inconclusive.
 

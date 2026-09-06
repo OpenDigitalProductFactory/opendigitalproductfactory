@@ -97,7 +97,7 @@ export const allBackupsDailyScheduled = inngest.createFunction(
     triggers: [cron(ALL_BACKUPS_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/all-backups-daily-scheduled");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const planned = await runScheduledCoreAndCapabilityBackups({ step, runPostgres: async () => {
@@ -157,7 +157,7 @@ export const postgresDailyBackupScheduled = inngest.createFunction(
     triggers: [cron(POSTGRES_BACKUP_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/postgres-daily-backup-scheduled");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("run-postgres-backup-scheduled", async () => {

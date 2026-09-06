@@ -130,6 +130,7 @@ scripts/nonprod-environment-admission.test.mjs
 scripts/pr-readiness.test.mjs
 scripts/pregate.test.mjs
 scripts/probes/marketing-media/gemini-tts-response.test.mjs
+scripts/promote-host-bind-address.test.mjs
 scripts/promote-install-state-rollback.test.mjs
 scripts/promoter-build-context.test.mjs
 scripts/promoter-contract.test.mjs

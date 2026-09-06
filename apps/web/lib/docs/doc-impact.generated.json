@@ -560,6 +560,9 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -1149,6 +1152,9 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/work-management/coworker-engagement-case-projection.ts": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -1584,6 +1590,9 @@
     "scripts/check-compose-env-contract.mjs": [
       "docs/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir.md"
     ],
+    "scripts/check-convergence-impact.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/check-data-impact.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
@@ -1914,9 +1923,6 @@
       "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/sbom/check-singleton-safety.mjs": [
-      "docs/architecture/dependency-reduction-routine.md"
-    ],
-    "scripts/sbom/image-size-icns-loop.test.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/sbom/internalization-candidates.mjs": [
@@ -2353,6 +2359,7 @@
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/backlog/deferral-contract.ts",
+      "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts",
       "apps/web/lib/govern/data/field-classification.ts",
       "packages/db/src/table-classification.ts",
       "scripts/check-no-unattributable-deferral.mjs"
@@ -2474,7 +2481,6 @@
       "scripts/sbom/check-new-dependencies.mjs",
       "scripts/sbom/check-sbom-drift.mjs",
       "scripts/sbom/check-singleton-safety.mjs",
-      "scripts/sbom/image-size-icns-loop.test.mjs",
       "scripts/sbom/internalization-candidates.mjs",
       "scripts/sbom/runtime-surface.mjs",
       "scripts/sbom/scan-dependencies.mjs"
@@ -2495,6 +2501,7 @@
       "packages/db/src/table-classification.ts",
       "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs",
       "pnpm-lock.yaml",
+      "scripts/check-convergence-impact.mjs",
       "scripts/check-data-impact.mjs",
       "scripts/check-design-grounding-decision.mjs",
       "scripts/check-doc-links.mjs",
@@ -3153,6 +3160,7 @@
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
       "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
       "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
+      "apps/web/lib/work-management/coworker-engagement-case-projection.ts",
       "apps/web/lib/work-management/room-channel-continuity.ts",
       "apps/web/lib/work-management/room-channel-ingress.ts",
       "apps/web/lib/work-management/room-participation.ts",

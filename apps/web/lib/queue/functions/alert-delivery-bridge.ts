@@ -192,7 +192,7 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
 export const alertDeliveryBridge = inngest.createFunction(
   { id: "ops/alert-delivery-bridge", retries: 2, triggers: [cron("*/5 * * * *")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/alert-delivery-bridge");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return await step.run("deliver-alerts", async () => runAlertDeliveryScan());

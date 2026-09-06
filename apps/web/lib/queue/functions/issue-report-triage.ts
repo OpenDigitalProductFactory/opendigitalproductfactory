@@ -12,7 +12,7 @@ import { gateAtEntry } from "../quiescence-gates";
 export const issueReportTriage = inngest.createFunction(
   { id: "quality/issue-report-triage", retries: 2, triggers: [cron("3,18,33,48 * * * *")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "quality/issue-report-triage");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const result = await step.run("triage-open-reports", async () => {

@@ -78,6 +78,19 @@ A standing room declares its activity shape by passing `workShape` to `create_wo
 `standing-operations-shapes.ts`. Like the collaboration shape, it persists as a `scopeClaims`
 entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
 
+The same registry carries the five **delivery shapes** (`delivery-shapes.ts`, BI-B90F7CBB,
+design `2026-09-02-work-shape-taxonomy-and-proportional-gates-design.md` §3.0):
+`delivery-break-fix@1.0.0`, `delivery-small@1.0.0`, `delivery-medium@1.0.0`,
+`delivery-large@1.0.0`, `delivery-xlarge@1.0.0`. They are the fifth shape axis — how big a unit
+of delivery work is and what it owes before it is done — expressed as activity shapes so a
+delivery room binds one exactly the way a standing room binds a watch. Each is `claim`-triggered,
+declares its stages with evidence, its success, failure and budget stops, and its collaboration
+shape; every merge, deploy, acceptance and authority-changing advance is a `governed-decision`,
+and the author never holds the receipt writer. `small | medium | large | xlarge` are
+`BacklogEffortSize`; `break-fix` is the expedite lane on a small fix (post-hoc review, WIP 1).
+
+A delivery room gets its shape at the claim (`claim_backlog_item_for_work`, BI-02470C7E, design §3.3): declared by the caller as `workShape`, or derived from the item's `effortSize` and work type when every classification rule in design §3.4 agrees (`derive-delivery-shape.ts`, recorded with `source: derived` and the signals used). An implementation claim with no derivable shape is refused with `work_shape_required` and the five-shape pick list; an unattended caller gets `attentionRequired` on the refusal; `delivery-xlarge` is refused for implementation because it only ever decomposes. The shape persists as the room's `workShape` scope claim, read back by `readWorkShapeClaim` / `resolveWorkShapeClaim` like any activity shape.
+
 **This claim is what makes a room wake.** The standing-Workroom drive
 (`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) selects non-terminal,
 unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
@@ -139,6 +152,34 @@ vocabulary. `room-coordinator.ts` selects or derives a coordinator for the read 
 budgets, stop conditions, and coordinator eligibility with observed state. A derived coordinator
 remains useful for legacy visibility, but it is marked compatibility-only and does not make a
 shaped room execution-qualified. The enforced contract is:
+
+#### Appointing one ⟦runtime: 2026-09-03, `BI-F63200A8`⟧
+
+Requiring an explicit coordinator is only half a contract; something has to be able to name one.
+Until this landed nothing could. `persistWorkroomParticipantAssignment` could always write the
+roster row and had **zero callers**; `invite_room_participant` admits a participant but never sets
+the `coordinator` role, and requires an acting coworker, so it could not have unstuck a room even
+from inside. The consequence was observable rather than theoretical: a standing room on the
+reference install woke every fifteen minutes and refused **100 consecutive times** with
+`missing_explicit_coordinator`, and nothing surfaced it.
+
+`appoint_room_coordinator` is that caller — `capsuleId` plus `principalRef`, deliberately callable
+**without** an acting coworker so a stalled room can be given an owner by whoever notices it. It
+carries `consequence: "authority"`, because who answers for a room is an authority fact.
+
+Its refusals carry the contract:
+
+- an unknown or inactive principal is refused, because persisting one leaves the room *looking*
+  owned while it still refuses to execute — indistinguishable from having no owner at all;
+- a second coordinator is refused unless a hand-over is explicit, because conformance treats
+  `multiple_coordinators` as blocking, so silently adding one leaves the room **more** stuck than
+  before the appointment;
+- re-appointing the current owner is idempotent, not a second coordinator.
+
+Appointment is layer 1 of the ownership ladder ratified in `DI-306B742EFD74`; deriving an owner
+from the work shape, the archetype's portfolio specialist, or the value-stream orchestrator is
+follow-on work, and an unresolvable room is reported unowned rather than assigned to a
+plausible-looking coworker.
 
 1. **Convene:** require exactly one explicit current coordinator and validate the collaboration
    shape, WorkShapeDefinition/version, persisted roster, posture, authority, trigger, measures,
@@ -254,8 +295,9 @@ The shape registry spans three modules, merged into `ALL_SHAPES` at runtime:
 | `work-shapes.ts` | the contract — types, validation, cycle projection — and the anchor compliance shape |
 | `standing-operations-shapes.ts` | the standing operations a BUSINESS runs |
 | `coworker-standing-shapes.ts` | the standing work the platform's own coworkers run |
+| `delivery-shapes.ts` | the five delivery shapes: size and what each owes before it is done (BI-B90F7CBB) |
 
-A static reader must consult all three. The capability measure read only the first
+A static reader must consult all four. The capability measure read only the first
 for a period and reported seven fully-bounded agents as having no declared work
 shape at all — an unbounded coworker is what that reads as, so the under-report was
 the more dangerous direction. `SHAPE_SOURCE_FILES` in
@@ -417,6 +459,162 @@ adoption handler drops `workShape`, and the store does not update scope on reuse
 Readback, not tool success text, determines whether a shape is active. The recovery
 amendment assigns repair and round-trip verification to `BI-06AE6833`; do not create
 a duplicate room or edit the database to make a diagram look configured.
+
+## A stalled room reaches a human
+
+A room's drive records why it refused, on every tick, in
+`workspaceState.workroomDrive` and in a `WorkroomActivity` row. Writing that
+faithfully is not the same as anyone learning it. Until `BI-03E94B5B` nothing read
+either surface, so refusal was free: on 2026-09-06 all twelve standing rooms on this
+install were found refusing — 331 consecutive wakes on `WC-A69BCABB`, 207-209 on the
+other eleven, every one on `missing_explicit_coordinator`, and none of it had reached
+anybody.
+
+The `workroom-stall` attention source closes that. It is a read over state the drive
+already writes — no new table, no new writer, no new tick:
+
+**A stall is "not advancing", not "paused".** `escalate` writes no
+`pendingAttention`, so a source matching only `pause` hands a room from a state it
+covers into a state nothing reads — the room stops being reported at the moment it
+starts needing a human. That happened live within one tick of the first appointment
+landing (`BI-2A5F1E77`): `WC-A69BCABB` cleared `missing_explicit_coordinator`, moved
+to `escalate` on two deviations the missing owner had masked, and vanished from the
+surface built to report it. The watched set is `{pause, escalate}` and the streak
+counts a run of non-advancing actions, not a run of pauses.
+
+- **Threshold, not first pause.** Four consecutive refusals (the drive cron is every
+  15 minutes, so one hour). A single paused tick is ordinary; an hour of them is a
+  stall. A source that fires on healthy rooms is one operators learn to ignore.
+- **The streak is the current one.** It is counted back from the newest drive
+  activity and stops at the most recent non-pause, so a room that recovered and
+  stalled again reports the new streak, not a lifetime total.
+- **An unowned room is never assigned to a principal.** The missing principal is the
+  finding; it routes to the operator, who can appoint one. An owned-but-stalled room
+  routes to its Process Overseer as well.
+- **The item names the room, the reason and the streak length.** Not "a room is
+  stuck".
+
+Raw SQL against this trail must use the physical table name `"WorkCapsuleActivity"`
+(`@@map`), exactly as `Workroom` maps to `"WorkCapsule"`. The Prisma model name
+compiles and type-checks and fails only against a real database — unit tests over the
+projector cannot catch it.
+
+## Who answers for a room
+
+`deriveRoomCoordinator` promotes the single accountable PARTICIPANT, which works for
+a room somebody staffed. Rooms created by derivation are staffed by nobody: all
+twelve standing rooms on this install carried `participantCount: 0`, so there was
+nothing to promote and every one refused.
+
+The ownership ladder resolves an owner instead of requiring one to be appointed:
+
+1. **explicit** — a persisted coordinator assignment. Wins outright.
+2. **shape** — the principal who DRIVES the work shape.
+3. **archetype** — the default owner for rooms of this kind, when declared.
+4. otherwise **null**, and the room is reported as unowned.
+
+Two rules carry the weight:
+
+- **The driver is not the approver.** Stages advancing by `governed-decision` are the
+  approval stages; their principal is excluded before candidates are counted.
+  Deriving them would trip `coordinator_approver_overlap` — swapping one refusal for
+  another while looking like progress.
+- **Ambiguity resolves null, never a best guess.** Executing stages naming more than
+  one principal is a shape that has not said who drives. A wrong derived owner is
+  worse than none: the room then looks owned and still refuses, which is
+  indistinguishable from the defect the ladder exists to remove.
+
+A derived owner is a **suggestion**. Conformance still admits only an EXPLICIT
+overseer for autonomous execution, so the ladder names who should be appointed and
+the stall attention item carries that name; it never routes the item to them and
+never satisfies the gate on its own.
+
+Measured against this install's twelve stalled rooms, the shape rung resolves all
+twelve — security-engineer, platform-engineer, change-reviewer, portfolio-advisor,
+build-specialist, customer-advisor and finance-controller — each distinct from its
+own room's approver.
+
+## Nesting has to be written, not just declared
+
+`standing-rooms.ts` declares a tree: every sub-room carries a `parentKey`. On
+2026-09-06 that tree existed only in the declaration —
+
+    SELECT relation, count(*) FROM "WorkCapsuleRelation";   -- (0 rows)
+
+Zero relations of any kind, while eighteen standing rooms sat in the database with
+idempotency keys matching the derivation's own format. `deriveStandingRooms` had no
+consumer anywhere, so whatever materialized those rooms never wrote the containment,
+and the five parent rooms floated unlinked from their children.
+
+Nesting is not decoration. Delegation downward and escalation upward are both walks
+over these rows, so nothing built on the hierarchy can be true before they exist —
+an escalation projection written against an empty relation table would pass every
+test and observe nothing.
+
+The drive tick now reconciles the declared tree before driving:
+
+- **Containment is a property of the room KEY, not the archetype.** Room keys are
+  globally unique, so `STANDING_ROOM_PARENT_BY_KEY` — derived from the same three
+  arrays the archetype derivation reads, not a second declaration — lets a
+  reconciler materialize the tree without resolving an install's archetype.
+- **Version-agnostic.** `standing-room:<key>:v1` and `:v2` are the same room;
+  containment follows the room's purpose, not its revision.
+- **Nothing ungrounded is written.** A child whose parent was never materialized is
+  skipped rather than pointed at a missing row, and a room whose key is absent from
+  the declaration never acquires a parent by guesswork.
+- **Idempotent and non-fatal.** One insert with `skipDuplicates`; a settled estate
+  writes nothing and reports `nestedRelations: 0`. A failure to write a parent link
+  never blocks a room that could otherwise be driven.
+
+`nestedRelations` on the drive result is how an operator tells "nesting is done"
+from "nesting was never written" — the distinction that hid this defect.
+
+## Who may coordinate: authority, and a gate with no key
+
+Conformance refuses an AI Process Overseer unless its authority binding and its
+TAK-JSI qualification are both eligible. It reads `coordinatorEligibility` and
+defaults to `unknown` when absent — and until `BI-E0728215` **nothing populated
+that field**. It was undefined on every tick of every room, so every AI overseer
+was refused permanently: not for want of configuration, but because the check had
+no producer. Measured at the time: 124 AI coworkers, 0 with coordination
+authority, 0 dispatches ever.
+
+Two governed decisions, both scored rather than assumed:
+
+**Authority comes from an explicit binding** (`DI-F8C8042FBB5D`, margin 9.318,
+high confidence). Reusing an agent's route binding, or letting the work shape's
+own declaration stand as authority, both scored ~2.3-2.9 — `Least privilege, deny
+by default` contributed *negatively* to each. A route binding
+(`platform-engineer on /platform`) is page access; it is not authority to drive a
+room to verdict.
+
+The shape *proposes* and the binding *grants*. Coordination bindings are derived
+from the standing shapes and materialized as explicit `AuthorityBinding` rows
+(`scopeType: workroom`, `resourceType: work-shape`), exactly as
+`bootstrapAuthorityBindings` derives route bindings from `ROUTE_AGENT_MAP_ENTRIES`.
+The distinction the kernel drew is not where the proposal comes from but what the
+grant *is*: a row an operator can see, suspend and revoke. Re-seeding never
+re-grants a binding a human suspended.
+
+The driver comes from the ownership ladder's shape rung, which already excludes
+the governed-decision stage — so seeding can never introduce
+`coordinator_approver_overlap`.
+
+**An absent scheme is not a failed one** (`DI-FF4A015CF917`, margin 5.420, high
+confidence). There is no TAK-JSI qualification substrate in the schema: no
+qualification model exists, so no coworker on any install could ever be
+qualified. A precondition nothing can satisfy is not a safeguard; it is a
+permanent denial wearing a safeguard's clothes, and it offers no graduated
+control at all.
+
+So `jsi` resolves `not-applicable` when the platform has no scheme — recorded on
+the room, not blocking — while a scheme that exists and is unmet blocks exactly
+as before. Deleting the check outright scored 0.713 and was rejected. Scheme
+presence is detected from the live Prisma client rather than a constant, so the
+control becomes real the day a qualification model lands, with no code change and
+nobody needing to remember.
+
+`unknown` still blocks. Only `eligible` and `not-applicable` satisfy the gate.
 
 ## Related references
 

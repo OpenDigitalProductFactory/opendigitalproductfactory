@@ -7,6 +7,7 @@
 
 import { toCloudEvent } from "@dpf/db/projection-serialization";
 import type { DemandActivity } from "@dpf/db/federated-demand-contract";
+import type { OperationalPostureActivity } from "@dpf/db/federated-operational-posture-contract";
 
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
@@ -190,6 +191,33 @@ export async function sendDemandToPeer(
     linkToken: target.linkToken,
     path: "/api/v1/federation/demand",
     cloudEvent,
+    sameOrgLan: target.sameOrgLan ?? false,
+    ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
+  });
+}
+
+/** Deliver one minimized, read-only operational-posture record to a trusted
+ *  same-organization peer's inbox (BI-648F01A0 Slice 2). No legacy route alias:
+ *  a peer that predates the posture type answers 422 and the outbox retries
+ *  until it upgrades. */
+export async function sendOperationalPostureToPeer(
+  target: PeerLinkTarget,
+  activity: OperationalPostureActivity,
+  record: unknown,
+  options: { eventId?: string; now?: Date } = {},
+): Promise<PeerPostResult> {
+  return postToPeer({
+    peerAuthorityUrl: target.peerAuthorityUrl,
+    linkToken: target.linkToken,
+    path: "/api/v1/federation/inbox",
+    cloudEvent: toCloudEvent({
+      id: options.eventId ?? `${target.linkId}:${activity}:${Date.now()}`,
+      source: "/dpf",
+      type: activity,
+      time: (options.now ?? new Date()).toISOString(),
+      linkId: target.linkId,
+      data: record,
+    }),
     sameOrgLan: target.sameOrgLan ?? false,
     ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
   });

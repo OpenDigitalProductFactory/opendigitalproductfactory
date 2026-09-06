@@ -1,12 +1,16 @@
+---
+status: active
+---
+
 # Portal UX Simplification Spine
 
 | Field | Value |
 | ----- | ----- |
 | Status | Active working plan + circulation packet |
-| Date | 2026-05-26 |
-| Branch | `feat/portal-ux-simplification` |
-| Primary anchors | [`2026-04-17-portal-navigation-consolidation-design.md`](../specs/2026-04-17-portal-navigation-consolidation-design.md), [`2026-05-20-portal-ux-audit.md`](../audits/2026-05-20-portal-ux-audit.md), [`2026-05-24-vertical-workspace-home-design.md`](../specs/2026-05-24-vertical-workspace-home-design.md), [`2026-05-16-ux-auditor-coworker-design.md`](../specs/2026-05-16-ux-auditor-coworker-design.md), [`2026-05-26-pipedrive-crm-marketing-ux-fit-review.md`](../audits/2026-05-26-pipedrive-crm-marketing-ux-fit-review.md) |
-| Live backlog anchors | `EP-2b79c5c6-8a63-4184-9076-5257bb271cdd` (manual UX audit intake), `EP-WWMD-MCP`, `EP-BUILD-STUDIO-UX`, `EP-AI-OPSMAP`, `EP-REDUCTION-GEAR-ARCH` |
+| Date | 2026-05-26; refreshed 2026-09-06 |
+| Branch | Historical: `feat/portal-ux-simplification`; closeout packet: `doc/ux-thread-outcomes-closure` |
+| Primary anchors | [`2026-04-17-portal-navigation-consolidation-design.md`](../specs/2026-04-17-portal-navigation-consolidation-design.md), [`2026-05-20-portal-ux-audit.md`](../audits/2026-05-20-portal-ux-audit.md), [`2026-05-24-vertical-workspace-home-design.md`](../specs/2026-05-24-vertical-workspace-home-design.md), [`2026-05-16-ux-auditor-coworker-design.md`](../specs/2026-05-16-ux-auditor-coworker-design.md), [`2026-05-26-pipedrive-crm-marketing-ux-fit-review.md`](../audits/2026-05-26-pipedrive-crm-marketing-ux-fit-review.md), [`2026-09-06-portal-ux-simplification-thread-audit.md`](../audits/2026-09-06-portal-ux-simplification-thread-audit.md), [`2026-09-06-portal-ux-simplification-execution-plan.md`](2026-09-06-portal-ux-simplification-execution-plan.md) |
+| Live backlog anchors | `EP-4FF5273F`, `BI-436A9466` (closeout packet), `BI-5A1A3C13` (delegate substrate), `BI-971D6F22` (Workspace first viewport), `BI-36A2CF08` (Workspace coworker trust), `BI-1F0B4184` (Business terminology), `BI-CEB3FDF8` (empty states), `BI-FFCE0D22` (Platform AI source truth), `BI-D8E00326` (CRM marketing follow-on), `EP-WWMD-MCP`, `EP-BUILD-STUDIO-UX`, `EP-AI-OPSMAP`, `EP-REDUCTION-GEAR-ARCH` |
 | Execution mode | Outside Build Studio until the Build Studio UX/runtime is reliable enough to own this work |
 
 ## Review Packet For Circulation
@@ -53,6 +57,10 @@ Recommendation: accept / change / defer / reject
 
 ## Status Notes
 
+- 2026-09-06 closeout: the current circulatable audit is now [`2026-09-06-portal-ux-simplification-thread-audit.md`](../audits/2026-09-06-portal-ux-simplification-thread-audit.md), and the executable queue is now [`2026-09-06-portal-ux-simplification-execution-plan.md`](2026-09-06-portal-ux-simplification-execution-plan.md).
+- 2026-09-06 source inventory: `origin/main` contains 367 page routes and 652 page/API route files. The route-budget baseline covers 205 measured routes. This confirms the simplification problem is now one of recall, routing, and first-use legibility rather than merely a few broken links.
+- 2026-09-06 delivery split: PR #5091 merged the `delegate` interaction-shape substrate into source at `874fc01f1e47b0e0e675868a5f338564bfb8416c`, but live served verification still needs self-upgrade/readiness evidence before the outcome is called delivered into the platform.
+- 2026-09-06 backlog split: the open human-facing work now has explicit follow-up items: `BI-971D6F22`, `BI-36A2CF08`, `BI-1F0B4184`, `BI-CEB3FDF8`, and `BI-FFCE0D22`.
 - The manual audit intake epic was live-verified through DB fallback on 2026-05-26 because MCP transport was unavailable in this session. The epic exists as `open` with zero items. That makes it a valid intake anchor, but accepted findings still need backlog materialization.
 - Slice 1 has already landed branch work for the Six-C Context route, readiness affordance, and KPI route regression coverage. The plan below keeps the full Slice 1 scope because 404 recovery still needs to be tightened.
 - Treat the 2026-05-20 audit as the baseline evidence, and the `feat/portal-ux-simplification` branch as current in-flight remediation. Do not rewrite baseline findings as if they are current after a slice has fixed them; add status notes instead.

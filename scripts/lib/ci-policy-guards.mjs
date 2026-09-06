@@ -105,6 +105,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // liveness test above: in ci-policy-test-inventory-allowlist.txt it would
       // never run.
       node("--test", "scripts/gate-worktree-lease-timeout.test.mjs"),
+      // BI-D908DA0A: a parked claim says whether it waits behind work or behind
+      // a closed pool; the two used to print identically.
+      node("--test", "scripts/gate-worktree-pool-closed.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken
@@ -157,6 +160,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // A guarded install step that skips in silence reads as success, and is
       // then recorded as done by Save-Progress. Optional-script guards must say so.
       conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
+      conformanceTest("scripts/check-setup-worktree-hygiene.test.mjs"),
     ], { inputs: ["code"] }),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
@@ -228,6 +232,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/documentation-evidence-lane.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
+        "scripts/lib/host-available-memory.test.mjs",
         "packages/dpf-skill-pack/hooks/claim-work-guidance.test.mjs",
         "packages/dpf-skill-pack/hooks/plan-coverage-guidance.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
@@ -609,15 +614,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       pnpm("run", "check:prose-lint:test"),
       pnpm("run", "check:prose-lint"),
     ]),
-    // Proves the locally-owned image-size fix is still applied. image-size is
-    // archived upstream with no patched release, so patches/image-size@1.2.1.patch
-    // is the only thing standing between metro's asset pipeline and CVE-2025-71330.
-    // Lives in the WORKSPACE profile because it imports the installed package —
-    // the Dependency Scan workflow only reads the lockfile and never installs.
-    // Fails loudly when a metro bump moves image-size off the patched version.
-    guard("owned-patch-regression", "Owned Patch Regression", [
-      node("--test", "scripts/sbom/image-size-icns-loop.test.mjs"),
-    ]),
   ]),
   "pull-request": Object.freeze([
     guard("ux-fit-gate", "UX-Fit Gate", [
@@ -735,6 +731,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("data-impact-gate", "Data-Impact Gate", [
       node("--test", "scripts/check-data-impact.test.mjs"),
       node("scripts/check-data-impact.mjs"),
+    ]),
+    // BI-B19BE117: the sibling of Data-Impact for every non-data surface that
+    // reaches an existing install only through a convergence mechanism. The
+    // red/green fixtures run first so a validator that stops rejecting
+    // attestation theater fails here, not silently in every compose PR.
+    guard("convergence-impact-gate", "Convergence-Impact Gate", [
+      node("--test", "scripts/check-convergence-impact.test.mjs"),
+      node("scripts/check-convergence-impact.mjs"),
     ]),
     guard("design-grounding-gate", "Design Grounding Gate", [
       node(

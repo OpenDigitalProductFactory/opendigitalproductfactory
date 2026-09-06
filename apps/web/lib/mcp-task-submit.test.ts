@@ -501,10 +501,10 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(writer.inputSchema.properties).not.toHaveProperty("itemId");
     expect(writer.inputSchema.properties).not.toHaveProperty("gate");
     expect(writer.inputSchema.properties).not.toHaveProperty("artifactRef");
-    expect(writer.inputSchema.properties).not.toHaveProperty("findings");
-    expect(writer.inputSchema.properties).not.toHaveProperty("resolvedFindingRefs");
-    expect(writer.inputSchema.properties).not.toHaveProperty("reason");
-    expect(writer.inputSchema.required).toEqual(["decision"]);
+    expect(writer.inputSchema.properties).toHaveProperty("findings");
+    expect(writer.inputSchema.properties).toHaveProperty("resolvedFindingRefs");
+    expect(writer.inputSchema.properties).toHaveProperty("reason");
+    expect(writer.inputSchema.required).toEqual(["decision", "reason", "findings", "resolvedFindingRefs"]);
     const providerWriter = execution.toolsForProvider.find((tool) => tool.function?.name === "record_initiative_evidence")!;
     expect(providerWriter.function?.parameters?.properties).toEqual(writer.inputSchema.properties);
     expect(providerWriter.function?.parameters?.required).toEqual(writer.inputSchema.required);
@@ -550,6 +550,111 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(outcome).toMatchObject({
       kind: "invalid_params",
       message: expect.stringContaining("item must match the backlog authority scope"),
+    });
+    expect(autonomous.resolveAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects a bound review that omits every immutable reader", async () => {
+    const outcome = await submit("PAT-BINDING-NO-READER", {
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/build/work/WC-7FF8A505",
+      objective: "Record the immutable design review.",
+      prompt: "Record the governed assessment.",
+      idempotencyKey: "review-binding-without-reader",
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-F0715C9C",
+        "tool:record_initiative_design_review",
+      ],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_design_review",
+        itemId: "BI-F0715C9C",
+        gate: "spec-approval",
+        expectedCurrentBaselineId: null,
+        artifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+          path: "docs/superpowers/specs/design.md",
+          providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+        },
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("requires read_source_at_version"),
+    });
+    expect(autonomous.resolveAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects a bound review whose only immutable reader cannot complete evidence traversal", async () => {
+    const outcome = await submit("PAT-BINDING-SEARCH-ONLY", {
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/build/work/WC-7FF8A505",
+      objective: "Record the immutable design review.",
+      prompt: "Search the source and record the governed assessment.",
+      idempotencyKey: "review-binding-with-search-only",
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-F0715C9C",
+        "tool:search_source_at_version",
+        "tool:record_initiative_design_review",
+      ],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_design_review",
+        itemId: "BI-F0715C9C",
+        gate: "spec-approval",
+        expectedCurrentBaselineId: null,
+        artifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+          path: "docs/superpowers/specs/design.md",
+          providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+        },
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("requires read_source_at_version"),
+    });
+    expect(autonomous.resolveAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects unrelated tools beside the bound writer and immutable reader", async () => {
+    const outcome = await submit("PAT-BINDING-EXTRA-TOOL", {
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/build/work/WC-7FF8A505",
+      objective: "Record the immutable design review.",
+      prompt: "Read the source and record the governed assessment.",
+      idempotencyKey: "review-binding-with-extra-tool",
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-F0715C9C",
+        "tool:read_source_at_version",
+        "tool:record_initiative_design_review",
+        "tool:update_backlog_item",
+      ],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_design_review",
+        itemId: "BI-F0715C9C",
+        gate: "spec-approval",
+        expectedCurrentBaselineId: null,
+        artifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+          path: "docs/superpowers/specs/design.md",
+          providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+        },
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("only the bound writer and immutable readers"),
     });
     expect(autonomous.resolveAgent).not.toHaveBeenCalled();
   });

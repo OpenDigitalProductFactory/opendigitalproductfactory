@@ -1,4 +1,5 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
+import { INITIATIVE_DISPOSITION_GUIDANCE, validateInitiativeDisposition, findingEvidenceMatchesRead, type InitiativeFindingEvidence } from "@/lib/backlog/initiative-readiness/disposition-contract";
 import { prisma } from "@dpf/db";
 import {
   RESEARCH_DEFINITIONS,
@@ -34,23 +35,56 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
     properties: {
       itemId: { type: "string", description: "Governed BacklogItem ID (BI-*)." },
       gate: { type: "string", enum: [...lane.gates] },
-      decision: { type: "string", enum: ["pass", "fail", "not-applicable"] },
+      decision: {
+        type: "string",
+        enum: ["pass", "fail", "not-applicable"],
+        description:
+          INITIATIVE_DISPOSITION_GUIDANCE,
+      },
       artifactRef: artifactRefSchema,
-      reason: { type: "string" },
+      reason: {
+        type: "string",
+        description: "Why the gate passed or failed, citing the artifact. Non-blocking observations go here on a pass.",
+      },
       findings: {
         type: "array",
+        description:
+          "Blocking defects, and ONLY on a failing receipt: a passing receipt with findings is refused as malformed-receipt. Pass an empty array on pass. Each finding gets a server-minted id; the caller never supplies one.",
         items: {
           type: "object",
           properties: {
             issue: { type: "string" },
             severity: { type: "string", enum: ["critical", "important"] },
+            evidence: {
+              type: "object",
+              description: "Required for bound review findings. Cite a successful immutable reader execution and an exact quote at these blob lines. Explain in issue why it proves the defect; withdraw or correct claims contradicted by the artifact.",
+              properties: {
+                blobId: { type: "string" },
+                startLine: { type: "integer", minimum: 1 }, endLine: { type: "integer", minimum: 1 }, quote: { type: "string" },
+              },
+              required: ["blobId", "startLine", "endLine", "quote"],
+            },
           },
           required: ["issue", "severity"],
         },
       },
-      resolvedFindingRefs: { type: "array", items: { type: "string" } },
-      profile: { type: "string", enum: ["doc-only", "fix", "feature", "cross-domain", "archetype"] },
-      artifactRole: { type: "string", enum: ["design-spec", "problem-statement", "documentation-scope"] },
+      resolvedFindingRefs: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Only currently OPEN finding ids may be resolved; otherwise use []. An unknown id is refused as finding-resolution-invalid.",
+      },
+      profile: {
+        type: "string",
+        enum: ["doc-only", "fix", "feature", "cross-domain", "archetype"],
+        description:
+          "Required on a passing spec-approval. The item's own authoritative classification (the profile the readiness decision reports for the item, derived from its work type), NOT the reach of the design: a spec whose policy spans domains still names the item's profile. A mismatch is refused as CLASSIFICATION_REQUIRED.",
+      },
+      artifactRole: {
+        type: "string",
+        enum: ["design-spec", "problem-statement", "documentation-scope"],
+        description: "Required on a passing spec-approval: what the reviewed artifact is.",
+      },
       expectedCurrentBaselineId: { type: ["string", "null"] },
       supersessionDispositions: {
         type: "array",
@@ -159,15 +193,15 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
-function parseFindings(value: unknown): Array<{ issue: string; severity: "critical" | "important" }> | null {
+function parseFindings(value: unknown): Array<{ issue: string; severity: "critical" | "important"; evidence?: InitiativeFindingEvidence }> | null {
   if (!Array.isArray(value)) return null;
-  const findings: Array<{ issue: string; severity: "critical" | "important" }> = [];
+  const findings: Array<{ issue: string; severity: "critical" | "important"; evidence?: InitiativeFindingEvidence }> = [];
   for (const entry of value) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
     const finding = entry as Record<string, unknown>;
     if (typeof finding.issue !== "string" || !finding.issue.trim()
       || (finding.severity !== "critical" && finding.severity !== "important")) return null;
-    findings.push({ issue: finding.issue, severity: finding.severity });
+    findings.push({ issue: finding.issue, severity: finding.severity, ...(finding.evidence ? { evidence: finding.evidence as InitiativeFindingEvidence } : {}) });
   }
   return findings;
 }
@@ -271,24 +305,21 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         ...(Object.prototype.hasOwnProperty.call(binding, "expectedCurrentBaselineId")
           ? { expectedCurrentBaselineId: binding.expectedCurrentBaselineId }
           : {}),
-        ...(actionKey === "record_initiative_evidence" && binding.gate === "research"
-          ? {
-              findings: [],
-              resolvedFindingRefs: [],
-              reason: `Independent reviewer ${context?.agentId ?? "unknown"} recorded ${String(params.decision ?? "unknown")} for the immutable research artifact bound to TaskRun ${context?.taskRunId ?? "unknown"}.`,
-            }
-          : {}),
       };
     }
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
       const mappings = parseObjectiveMappings(params.objectiveMappings);
-      if (typeof params.baselineId !== "string" || !params.baselineId.trim() || !mappings) {
+      const baselineId = binding?.gate === "objective-mapping"
+        ? binding.expectedCurrentBaselineId
+        : params.baselineId;
+      if (typeof baselineId !== "string" || !baselineId.trim() || !mappings) {
         return { success: false, error: "malformed-receipt", message: "Objective mapping requires a current baselineId and non-empty objective/evidence mappings." };
       }
       const result = await recordInitiativeObjectiveMappingProposal({
+        taskRunId: context?.taskRunId ?? null,
         itemId: String(params.itemId ?? ""),
-        baselineId: params.baselineId,
+        baselineId,
         mappings,
         eligibleEvidenceActivityIds: binding?.eligibleEvidenceActivityIds ?? [],
         reason: String(params.reason ?? ""),
@@ -320,6 +351,27 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     if (!findings || !resolvedFindingRefs) {
       return { success: false, error: "malformed-receipt", message: "findings and resolvedFindingRefs must match the governed receipt schema." };
     }
+    const dispositionError = validateInitiativeDisposition(decision, findings, resolvedFindingRefs);
+    if (dispositionError) return { success: false, error: "malformed-receipt", message: dispositionError };
+    if (binding && findings.length > 0 && binding.artifactRef.kind === "repo-blob-at-commit") {
+      const reads = await prisma.toolExecution.findMany({
+        where: { taskRunId: context?.taskRunId, toolName: "read_source_at_version", success: true },
+        select: { id: true, result: true },
+      });
+      for (const finding of findings) {
+        const evidence = finding.evidence;
+        const artifact = binding.artifactRef;
+        const matchedRead = evidence && reads.some((row) => {
+          const page = (row.result as { data?: Record<string, unknown> } | null)?.data;
+          return page && page.version === artifact.commitSha && page.path === artifact.path
+            && page.repositoryFullName === artifact.repositoryFullName
+            && findingEvidenceMatchesRead(evidence, page, artifact.providerBlobId);
+        });
+        if (!matchedRead) {
+          return { success: false, error: "malformed-receipt", message: "A finding must cite an exact quote and lines from a successful read of this bound blob. Correct unsupported or contradicted findings using the immutable evidence; do not manufacture a pass." };
+        }
+      }
+    }
     const selectedProfile = params.profile;
     if (gate === "classification" && decision === "pass"
       && !(selectedProfile === "doc-only" || selectedProfile === "fix" || selectedProfile === "feature" || selectedProfile === "cross-domain" || selectedProfile === "archetype")) {
@@ -331,9 +383,6 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       if (!(profile === "doc-only" || profile === "fix" || profile === "feature" || profile === "cross-domain" || profile === "archetype")
         || !(artifactRole === "design-spec" || artifactRole === "problem-statement" || artifactRole === "documentation-scope")) {
         return { success: false, error: "malformed-receipt", message: "Passing spec approval requires profile and artifactRole." };
-      }
-      if (findings.length > 0) {
-        return { success: false, error: "malformed-receipt", message: "A passing spec approval cannot introduce findings." };
       }
       const approval = await recordInitiativeSpecApproval({
         itemId: String(params.itemId ?? ""),

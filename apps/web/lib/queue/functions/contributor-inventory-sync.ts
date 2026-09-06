@@ -56,7 +56,7 @@ const NOTIFICATION_CRON_SUBJECT = "contributor-inventory-sync";
 export type SyncSourceKey = "git-worktree" | "git-branch" | "github-pr";
 
 export type SyncSourceResult =
-  | { ok: true; rows: SnapshotRowPayload[] }
+  | { ok: true; rows: SnapshotRowPayload[]; unchanged?: boolean }
   | { ok: false; error: string; state?: "not-configured" | "error" };
 
 export type SnapshotRowPayload = {
@@ -108,6 +108,8 @@ export type PerSourceSummary = {
   count: number;
   error: string | null;
   state?: "ok" | "not-configured" | "error";
+  /** The provider authenticated that its previously stored representation is current. */
+  unchanged?: boolean;
 };
 
 /**
@@ -508,7 +510,13 @@ async function syncStaleCronNotification(
 
 function summarize(res: SyncSourceResult): PerSourceSummary {
   if (res.ok) {
-    return { ok: true, count: res.rows.length, error: null, state: "ok" };
+    return {
+      ok: true,
+      count: res.rows.length,
+      error: null,
+      state: "ok",
+      ...(res.unchanged ? { unchanged: true } : {}),
+    };
   }
   return {
     ok: false,
@@ -580,7 +588,7 @@ async function createDefaultReaders(): Promise<SyncSourceReaders> {
       if (!result.ok) {
         return { ok: false, error: result.error, state: result.state };
       }
-      return { ok: true, rows: result.rows };
+      return { ok: true, rows: result.rows, unchanged: result.unchanged };
     },
   };
 }
@@ -604,7 +612,7 @@ export const contributorInventorySyncCron = inngest.createFunction(
     triggers: [cron("*/10 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/contributor-inventory-sync-cron");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return await step.run("run-sync-cron", () =>
@@ -621,7 +629,7 @@ export const contributorInventorySyncOnDemand = inngest.createFunction(
     triggers: [{ event: "ops/contributor-inventory-sync.run" }],
   },
   async ({ event, step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/contributor-inventory-sync-on-demand");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const triggeredBy =

@@ -1,6 +1,13 @@
 import { prisma } from "@dpf/db";
+import type { Prisma } from "@dpf/db";
 
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import {
+  authorizeObjectiveMappingRequestKeyEvolution,
+  validateObjectiveMappingRequestKey,
+  objectiveMappingHistoricalProviderProofDigest,
+  type ObjectiveMappingRequestHistory,
+} from "@/lib/mcp-task-objective-mapping-request-key";
 import {
   resolveInitiativeReviewerRecovery,
   type InitiativeReviewerRecovery,
@@ -14,6 +21,7 @@ import {
   selectEligibleObjectiveEvidenceActivityIds,
 } from "./objective-reconciliation";
 import type { InitiativeReadinessDecision } from "./types";
+import { readRepositoryProviderBlob } from "./repository-artifact";
 
 export type TerminalRecoveryRoom = {
   capsuleId: string;
@@ -33,6 +41,10 @@ export type TerminalRecoveryEscalationReason =
   | "baseline-ambiguous"
   | "eligible-evidence-not-found"
   | "eligible-evidence-unbounded"
+  | "objective-mapping-history-unavailable"
+  | "objective-mapping-identity-conflict"
+  | "objective-mapping-prior-authority-active"
+  | "objective-mapping-authoritative-output-exists"
   | "canonical-artifact-unavailable";
 
 type TerminalEscalation = {
@@ -47,7 +59,7 @@ export type TerminalInitiativeRecovery = Omit<InitiativeReviewerRecovery, "escal
   escalations: Array<InitiativeReviewerRecovery["escalations"][number] | TerminalEscalation>;
 };
 
-type BaselinePayload = {
+export type BaselinePayload = {
   baselineId: string;
   supersedesBaselineId: string | null;
   artifactRef?: {
@@ -66,6 +78,16 @@ export type TerminalRecoveryPorts = {
     itemId: string;
     baselineId: string;
   }): Promise<ActionResult<{ activityIds: string[] }>>;
+  loadObjectiveMappingHistory(args: {
+    itemId: string;
+    headSha: string;
+  }): Promise<ActionResult<{ history: ObjectiveMappingRequestHistory[] }>>;
+  verifyHistoricalArtifact(args: {
+    repositoryFullName: string;
+    commitSha: string;
+    path: string;
+    expectedBlobId: string;
+  }): Promise<Awaited<ReturnType<typeof readRepositoryProviderBlob>>>;
   discoverArtifact(args: {
     repositoryFullName: string;
     baseSha: string;
@@ -88,7 +110,7 @@ function escalation(reason: TerminalRecoveryEscalationReason, nextAction: string
   };
 }
 
-function parseBaselinePayloads(payloads: unknown[]): BaselinePayload[] | null {
+export function parseBaselinePayloads(payloads: unknown[]): BaselinePayload[] | null {
   const rows: BaselinePayload[] = [];
   for (const payload of payloads) {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
@@ -119,7 +141,7 @@ function parseBaselinePayloads(payloads: unknown[]): BaselinePayload[] | null {
   return rows;
 }
 
-function currentBaseline(rows: BaselinePayload[]): BaselinePayload | null {
+export function currentBaseline(rows: BaselinePayload[]): BaselinePayload | null {
   const superseded = new Set(rows.map((row) => row.supersedesBaselineId).filter((id): id is string => Boolean(id)));
   const heads = rows.filter((row) => !superseded.has(row.baselineId));
   if (heads.length !== 1) return null;
@@ -209,13 +231,297 @@ async function defaultLoadEligibleEvidenceActivityIds(args: {
   });
 }
 
+export const MAX_OBJECTIVE_MAPPING_HISTORY_ROWS = 50;
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function parseHistoricalObjectiveMappingBinding(value: unknown): ObjectiveMappingRequestHistory["binding"] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const binding = value as Record<string, unknown>;
+  const artifactValue = binding.artifactRef;
+  if (!artifactValue || typeof artifactValue !== "object" || Array.isArray(artifactValue)) return null;
+  const artifact = artifactValue as Record<string, unknown>;
+  const writerToolName = nonEmptyString(binding.writerToolName);
+  const itemId = nonEmptyString(binding.itemId);
+  const expectedCurrentBaselineId = binding.expectedCurrentBaselineId;
+  const repositoryFullName = nonEmptyString(artifact.repositoryFullName);
+  const commitSha = nonEmptyString(artifact.commitSha);
+  const path = nonEmptyString(artifact.path);
+  const providerBlobId = nonEmptyString(artifact.providerBlobId);
+  if (!writerToolName || !itemId || binding.gate !== "objective-mapping"
+    || (expectedCurrentBaselineId !== undefined && expectedCurrentBaselineId !== null
+      && typeof expectedCurrentBaselineId !== "string")
+    || artifact.kind !== "repo-blob-at-commit" || !repositoryFullName || !commitSha || !path || !providerBlobId) {
+    return null;
+  }
+  const evidence = binding.eligibleEvidenceActivityIds;
+  const eligibleEvidenceActivityIds = evidence === undefined
+    ? undefined
+    : Array.isArray(evidence) && evidence.length > 0
+      && evidence.every((entry) => typeof entry === "string" && entry.trim())
+      ? [...new Set(evidence.map((entry) => String(entry).trim()))].sort()
+      : null;
+  if (evidence !== undefined && !eligibleEvidenceActivityIds) return null;
+  const refValue = binding.workroomRef;
+  const ref = refValue && typeof refValue === "object" && !Array.isArray(refValue)
+    ? refValue as Record<string, unknown>
+    : null;
+  const workroomId = nonEmptyString(ref?.workroomId);
+  const workroomRepository = nonEmptyString(ref?.repositoryFullName);
+  const branchName = nonEmptyString(ref?.branchName);
+  const headSha = nonEmptyString(ref?.headSha);
+  if (refValue !== undefined && (ref?.kind !== "workroom-head" || !workroomId || !workroomRepository || !branchName || !headSha)) {
+    return null;
+  }
+  return {
+    writerToolName,
+    itemId,
+    gate: "objective-mapping",
+    ...(expectedCurrentBaselineId !== undefined
+      ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
+      : {}),
+    ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
+    ...(ref && workroomId && workroomRepository && branchName && headSha
+      ? {
+        workroomRef: {
+          kind: "workroom-head",
+          workroomId,
+          repositoryFullName: workroomRepository,
+          branchName,
+          headSha,
+        },
+      }
+      : {}),
+    artifactRef: {
+      kind: "repo-blob-at-commit",
+      repositoryFullName,
+      commitSha,
+      path,
+      providerBlobId,
+    },
+  };
+}
+
+type ObjectiveMappingHistoryDb = Pick<Prisma.TransactionClient, "taskRun" | "toolExecution">;
+
+function parseHistoricalToolNames(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) return null;
+  const names = [...new Set(value
+    .filter((scope) => scope.startsWith("tool:"))
+    .map((scope) => scope.slice("tool:".length).trim())
+    .filter(Boolean))].sort();
+  return names.length > 0 ? names : null;
+}
+
+export async function loadObjectiveMappingHistoryFromDb(db: ObjectiveMappingHistoryDb, args: {
+  itemId: string;
+  headSha: string;
+}): Promise<ActionResult<{ history: ObjectiveMappingRequestHistory[] }>> {
+  const keyPrefix = `initiative-readiness:${args.itemId}:objective-mapping:${args.headSha}`;
+  const rows = await db.taskRun.findMany({
+    where: {
+      a2aMetadata: { path: ["idempotencyKey"], string_starts_with: keyPrefix },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: MAX_OBJECTIVE_MAPPING_HISTORY_ROWS + 1,
+    select: {
+      taskRunId: true,
+      status: true,
+      title: true,
+      objective: true,
+      authorityScope: true,
+      a2aMetadata: true,
+      actionEnvelopes: { select: { status: true } },
+    },
+  });
+  if (rows.length > MAX_OBJECTIVE_MAPPING_HISTORY_ROWS) return err("objective-mapping-history-unbounded");
+  const matching: Array<{
+    row: (typeof rows)[number];
+    idempotencyKey: string;
+    binding: ObjectiveMappingRequestHistory["binding"];
+    targetAgent: string;
+    questionPacketSummary: string;
+    requiredToolNames: string[];
+  }> = [];
+  for (const row of rows) {
+    const metadata = row.a2aMetadata && typeof row.a2aMetadata === "object" && !Array.isArray(row.a2aMetadata)
+      ? row.a2aMetadata as Record<string, unknown>
+      : null;
+    const idempotencyKey = nonEmptyString(metadata?.idempotencyKey);
+    if (!idempotencyKey?.startsWith(keyPrefix)) continue;
+    const targetAgent = nonEmptyString(metadata?.requestedAgentId);
+    const questionPacketSummary = nonEmptyString(row.title);
+    const requiredToolNames = parseHistoricalToolNames(row.authorityScope);
+    const binding = parseHistoricalObjectiveMappingBinding(metadata?.initiativeReviewBinding);
+    if (!binding || !targetAgent || !questionPacketSummary || !requiredToolNames) {
+      return err("objective-mapping-history-invalid");
+    }
+    matching.push({ row, idempotencyKey, binding, targetAgent, questionPacketSummary, requiredToolNames });
+  }
+  const taskRunIds = matching.map((entry) => entry.row.taskRunId);
+  const executions = taskRunIds.length === 0 ? [] : await db.toolExecution.findMany({
+    where: {
+      taskRunId: { in: taskRunIds },
+      toolName: "record_initiative_evidence",
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { taskRunId: true, success: true, receipt: { select: { id: true } } },
+  });
+  return ok({
+    history: matching.map((entry) => ({
+      taskRunId: entry.row.taskRunId,
+      status: entry.row.status,
+      targetAgent: entry.targetAgent,
+      objective: entry.row.objective,
+      questionPacketSummary: entry.questionPacketSummary,
+      idempotencyKey: entry.idempotencyKey,
+      requiredToolNames: entry.requiredToolNames,
+      binding: entry.binding!,
+      actionEnvelopeStatuses: entry.row.actionEnvelopes.map((envelope) => envelope.status),
+      writerExecutions: executions
+        .filter((execution) => execution.taskRunId === entry.row.taskRunId)
+        .map((execution) => ({ success: execution.success, hasReceipt: execution.receipt !== null })),
+    })),
+  });
+}
+
+async function defaultLoadObjectiveMappingHistory(args: {
+  itemId: string;
+  headSha: string;
+}): Promise<ActionResult<{ history: ObjectiveMappingRequestHistory[] }>> {
+  return loadObjectiveMappingHistoryFromDb(prisma, args);
+}
+
 const DEFAULT_PORTS: TerminalRecoveryPorts = {
   loadLiveRooms: defaultLoadLiveRooms,
   loadBaselinePayloads: defaultLoadBaselinePayloads,
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
+  loadObjectiveMappingHistory: defaultLoadObjectiveMappingHistory,
+  verifyHistoricalArtifact: (args) => readRepositoryProviderBlob(args),
   discoverArtifact: discoverCanonicalDesignArtifact,
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
 };
+
+function baselineAncestors(
+  rows: readonly BaselinePayload[],
+  head: BaselinePayload,
+): Map<string, BaselinePayload> {
+  const byId = new Map(rows.map((row) => [row.baselineId, row]));
+  const ancestors = new Map<string, BaselinePayload>();
+  const visited = new Set<string>([head.baselineId]);
+  let cursor = head.supersedesBaselineId;
+  while (cursor) {
+    if (visited.has(cursor)) break;
+    visited.add(cursor);
+    const row = byId.get(cursor);
+    if (!row) break;
+    ancestors.set(cursor, row);
+    cursor = row.supersedesBaselineId;
+  }
+  return ancestors;
+}
+
+function sameRepositoryPath(
+  left: NonNullable<BaselinePayload["artifactRef"]>,
+  right: ObjectiveMappingRequestHistory["binding"]["artifactRef"],
+): boolean {
+  return left.repositoryFullName.toLocaleLowerCase("en-US") === right.repositoryFullName.toLocaleLowerCase("en-US")
+    && left.path === right.path;
+}
+
+export function exactArtifactRefMatches(
+  left: NonNullable<BaselinePayload["artifactRef"]>,
+  right: ObjectiveMappingRequestHistory["binding"]["artifactRef"],
+): boolean {
+  return left.kind === right.kind
+    && left.repositoryFullName.toLocaleLowerCase("en-US") === right.repositoryFullName.toLocaleLowerCase("en-US")
+    && left.commitSha.toLocaleLowerCase("en-US") === right.commitSha.toLocaleLowerCase("en-US")
+    && left.path === right.path
+    && left.providerBlobId.toLocaleLowerCase("en-US") === right.providerBlobId.toLocaleLowerCase("en-US");
+}
+
+export function exactStringSetMatches(left: readonly string[], right: readonly string[]): boolean {
+  const normalizedLeft = [...new Set(left.map((entry) => entry.trim()))].sort();
+  const normalizedRight = [...new Set(right.map((entry) => entry.trim()))].sort();
+  return normalizedLeft.length === normalizedRight.length
+    && normalizedLeft.every((entry, index) => entry === normalizedRight[index]);
+}
+
+export async function classifyHistoricalObjectiveMappingArtifacts(args: {
+  history: readonly ObjectiveMappingRequestHistory[];
+  baselineRows: readonly BaselinePayload[];
+  currentBaseline: BaselinePayload;
+  currentArtifact: {
+    repositoryFullName: string;
+    path: string;
+  };
+  room: TerminalRecoveryRoom & {
+    repositoryFullName: string;
+    headSha: string;
+  };
+  verify: TerminalRecoveryPorts["verifyHistoricalArtifact"];
+}): Promise<ActionResult<{
+  history: ObjectiveMappingRequestHistory[];
+  providerProvenImpossibleTaskRunProofs: ReadonlyMap<string, string>;
+}>> {
+  const ancestors = baselineAncestors(args.baselineRows, args.currentBaseline);
+  const verificationByLocator = new Map<string, Awaited<ReturnType<typeof readRepositoryProviderBlob>>>();
+  const classified: ObjectiveMappingRequestHistory[] = [];
+  const providerProvenImpossibleTaskRunProofs = new Map<string, string>();
+
+  for (const historical of args.history) {
+    const baselineId = historical.binding.expectedCurrentBaselineId;
+    const ancestor = typeof baselineId === "string" ? ancestors.get(baselineId) : undefined;
+    const historicalArtifact = historical.binding.artifactRef;
+    const ancestorArtifact = ancestor?.artifactRef;
+    const isLegacyInvalid = historical.binding.workroomRef === undefined
+      || historical.binding.eligibleEvidenceActivityIds === undefined;
+    const eligible = isLegacyInvalid
+      && ancestorArtifact !== undefined
+      && sameRepositoryPath(ancestorArtifact, historicalArtifact)
+      && ancestorArtifact.providerBlobId === historicalArtifact.providerBlobId
+      && historicalArtifact.repositoryFullName.toLocaleLowerCase("en-US")
+        === args.currentArtifact.repositoryFullName.toLocaleLowerCase("en-US")
+      && historicalArtifact.path === args.currentArtifact.path
+      && historicalArtifact.commitSha.toLocaleLowerCase("en-US") === args.room.headSha.toLocaleLowerCase("en-US");
+
+    if (!eligible) {
+      classified.push(historical);
+      continue;
+    }
+
+    const locatorKey = [
+      historicalArtifact.repositoryFullName.toLocaleLowerCase("en-US"),
+      historicalArtifact.commitSha.toLocaleLowerCase("en-US"),
+      historicalArtifact.path,
+      historicalArtifact.providerBlobId.toLocaleLowerCase("en-US"),
+    ].join("\u0000");
+    let verification = verificationByLocator.get(locatorKey);
+    if (!verification) {
+      verification = await args.verify({
+        repositoryFullName: historicalArtifact.repositoryFullName,
+        commitSha: historicalArtifact.commitSha,
+        path: historicalArtifact.path,
+        expectedBlobId: historicalArtifact.providerBlobId,
+      });
+      verificationByLocator.set(locatorKey, verification);
+    }
+    if (!verification.ok && verification.code === "IMMUTABLE_SOURCE_UNAVAILABLE") {
+      return err("historical-artifact-provider-unavailable");
+    }
+    if (!verification.ok && verification.code === "IMMUTABLE_BLOB_MISMATCH") {
+      providerProvenImpossibleTaskRunProofs.set(
+        historical.taskRunId,
+        objectiveMappingHistoricalProviderProofDigest(historical),
+      );
+    }
+    classified.push(historical);
+  }
+
+  return ok({ history: classified, providerProvenImpossibleTaskRunProofs });
+}
 
 /** Build an exact, executable reviewer handoff after — and only after — denial. */
 export async function resolveTerminalInitiativeRecovery(args: {
@@ -293,7 +599,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
     return escalation("canonical-artifact-unavailable", "The current baseline has no provider-verified canonical source binding.");
   }
 
-  return ports.resolveRecovery({
+  const recovery = await ports.resolveRecovery({
     decision: args.decision,
     currentAgentId: args.currentAgentId,
     db: prisma as never,
@@ -309,4 +615,83 @@ export async function resolveTerminalInitiativeRecovery(args: {
       ? { eligibleEvidenceActivityIds: eligibleEvidence.data.activityIds }
       : {}),
   });
+  if (!needsObjectiveMapping) return recovery;
+
+  const packet = recovery.reviewerRoutes.find((route) => route.gate === "objective-mapping")?.requestCoworker;
+  const binding = packet?.initiativeReviewBinding;
+  const requiredToolNames = packet?.requiredToolNames;
+  if (!packet || !binding || !requiredToolNames) {
+    return escalation(
+      "objective-mapping-history-unavailable",
+      "The readiness resolver did not produce a complete objective-mapping packet. Refresh readiness; do not invent a request identity.",
+    );
+  }
+  const historyResult = await ports.loadObjectiveMappingHistory({
+    itemId: args.decision.subject.id,
+    headSha: room.headSha,
+  });
+  if (!historyResult.ok) {
+    return escalation(
+      "objective-mapping-history-unavailable",
+      "Historical objective-mapping authority could not be bounded and validated. Reconcile the TaskRun history before dispatch.",
+    );
+  }
+  if (binding.gate !== "objective-mapping" || !binding.eligibleEvidenceActivityIds || !binding.workroomRef) {
+    return escalation(
+      "objective-mapping-history-unavailable",
+      "The server-issued objective-mapping packet lacks its versioned evidence or Workroom identity.",
+    );
+  }
+  const classifiedHistory = await classifyHistoricalObjectiveMappingArtifacts({
+    history: historyResult.data.history,
+    baselineRows: baselineRows!,
+    currentBaseline: baseline,
+    currentArtifact: {
+      repositoryFullName: binding.artifactRef.repositoryFullName,
+      path: binding.artifactRef.path,
+    },
+    room: {
+      ...room,
+      repositoryFullName: room.repositoryFullName,
+      headSha: room.headSha,
+    },
+    verify: ports.verifyHistoricalArtifact,
+  });
+  if (!classifiedHistory.ok) {
+    return escalation(
+      "objective-mapping-history-unavailable",
+      "Historical objective-mapping artifact provenance could not be verified. Retry after the repository provider is healthy; do not infer or churn the request identity.",
+    );
+  }
+  const authorization = authorizeObjectiveMappingRequestKeyEvolution({
+    packet: {
+      targetAgent: packet.targetAgent,
+      objective: packet.objective,
+      questionPacketSummary: packet.questionPacketSummary,
+      requestKey: packet.requestKey,
+      requiredToolNames,
+      binding: {
+        ...binding,
+        gate: "objective-mapping",
+        eligibleEvidenceActivityIds: binding.eligibleEvidenceActivityIds,
+        workroomRef: binding.workroomRef,
+      },
+    },
+    history: classifiedHistory.data.history,
+    providerProvenImpossibleTaskRunProofs: classifiedHistory.data.providerProvenImpossibleTaskRunProofs,
+  });
+  if (!authorization.authorized) {
+    const reason = authorization.reason === "immutable-identity-conflict"
+      ? "objective-mapping-identity-conflict"
+      : authorization.reason === "prior-authority-active"
+        ? "objective-mapping-prior-authority-active"
+        : authorization.reason === "authoritative-output-exists"
+          ? "objective-mapping-authoritative-output-exists"
+          : "objective-mapping-history-unavailable";
+    return escalation(
+      reason,
+      `Objective-mapping history refused a successor request (${authorization.reason}${authorization.taskRunId ? ` on ${authorization.taskRunId}` : ""}). Resolve that exact authority state; do not churn the key.`,
+    );
+  }
+  return recovery;
 }

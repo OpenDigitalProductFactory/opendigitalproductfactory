@@ -12,6 +12,7 @@ import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 import { isTurnStalled } from "@/lib/agent/turn-watchdog";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
+import { ThreadSensitivityNotice } from "./ThreadSensitivityNotice";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
@@ -50,7 +51,7 @@ import {
   type AgentRenderableMessage,
 } from "./agent-message-state";
 import { useVoiceSynth } from "./hooks/useVoiceSynth";
-import { deriveComposerState, type ThreadLoadState } from "./composer-state";
+import { deriveComposerState, isClearDisabled, type ThreadLoadState } from "./composer-state";
 import { resolvePanelRouteContextLabel } from "@/lib/agent/panel-route-context";
 
 type Props = {
@@ -105,15 +106,6 @@ function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
     }
     return true;
   });
-}
-
-function isClearDisabled(
-  messages: AgentRenderableMessage[],
-  busy: boolean,
-  isClearing: boolean,
-  threadId?: string | null,
-) {
-  return !threadId || messages.length === 0 || busy || isClearing;
 }
 
 // BI-2750EB6F: how long a busy turn may go with NO sign of server life (no SSE
@@ -937,6 +929,14 @@ export function AgentCoworkerPanel({
         isDocked={isDocked}
         routeContextLabel={resolvePanelRouteContextLabel(effectiveRoute)}
         presentationIdentity={agentIdentity}
+      />
+
+      {/* BI-706530B2: name the local-model pin instead of letting the owner
+          experience it as an unexplained loss of capability. */}
+      <ThreadSensitivityNotice
+        threadId={threadId}
+        messageCount={messages.length}
+        onStartFresh={handleOpenClearConfirm}
       />
 
       {/* Voice activity indicator — shown when voice synthesis is active */}

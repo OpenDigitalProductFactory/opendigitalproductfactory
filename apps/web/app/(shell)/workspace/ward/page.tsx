@@ -19,8 +19,8 @@ import {
   type WardCareContext,
 } from "@/lib/ward/care-context";
 import { CapacityReview } from "@/components/ward/CapacityReview";
-import { loadWardBoard, type WardStoreClient } from "@/lib/ward/ward-store";
-import { summarizeKennelCapacity, type WardUnit } from "@/lib/ward/ward-occupancy";
+import { loadWardWorkspace, type WardStoreClient } from "@/lib/ward/ward-store";
+import { summarizeKennelCapacity, type WardBoard, type WardUnit } from "@/lib/ward/ward-occupancy";
 
 type Props = { searchParams: Promise<{ view?: string }> };
 
@@ -48,12 +48,13 @@ export default async function WardPage({ searchParams }: Props) {
   const config = await prisma.storefrontConfig.findFirst({
     select: { organizationId: true },
   });
-  const board = config
-    ? await loadWardBoard({
+  const workspace = config
+    ? await loadWardWorkspace({
         organizationId: config.organizationId,
         db: prisma as unknown as WardStoreClient,
       })
-    : null;
+    : { board: null, animals: [] };
+  const { board } = workspace;
   const capacity = summarizeKennelCapacity(board);
   // Loaded after the board because the review only exists once we know whether
   // the shelter has run out of room.
@@ -109,7 +110,14 @@ export default async function WardPage({ searchParams }: Props) {
             </p>
           </Surface>
           <Surface padding="lg">
-            <WardOperations animals={[]} resources={[]} />
+            <WardOperations
+              animals={workspace.animals.map((animal) => ({
+                ...animal,
+                allocationId: null,
+                resourceId: null,
+              }))}
+              resources={[]}
+            />
           </Surface>
         </>
       ) : (
@@ -145,9 +153,10 @@ export default async function WardPage({ searchParams }: Props) {
   );
 }
 
-function wardOperationData(
-  board: NonNullable<Awaited<ReturnType<typeof loadWardBoard>>>,
-): { animals: WardOperationAnimal[]; resources: WardOperationResource[] } {
+function wardOperationData(board: WardBoard): {
+  animals: WardOperationAnimal[];
+  resources: WardOperationResource[];
+} {
   const resources: WardOperationResource[] = board.zones.flatMap((zone) =>
     zone.units.map((unit) => ({
       id: unit.kennelId,
@@ -208,7 +217,7 @@ function WardMap({
   board,
   care,
 }: {
-  board: NonNullable<Awaited<ReturnType<typeof loadWardBoard>>>;
+  board: WardBoard;
   care: WardCareContext;
 }) {
   return (
@@ -313,9 +322,7 @@ function UnitCell({
   );
 }
 
-function wardListRows(
-  board: NonNullable<Awaited<ReturnType<typeof loadWardBoard>>>,
-): WardListRow[] {
+function wardListRows(board: WardBoard): WardListRow[] {
   return board.zones.flatMap((zone) =>
     zone.units.map((unit) => ({
       kennelId: unit.kennelId,

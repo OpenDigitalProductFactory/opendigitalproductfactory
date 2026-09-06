@@ -216,6 +216,21 @@ describe("runContributorInventorySync", () => {
     expect(result.perSourceResult["github-pr"].state).toBe("not-configured");
   });
 
+  it("records a provider not-modified response so consumers can renew prior observations", async () => {
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders({
+        githubPr: async () => ({ ok: true, rows: [], unchanged: true }),
+      }),
+    });
+
+    expect(result.perSourceResult["github-pr"]).toMatchObject({
+      ok: true,
+      count: 0,
+      unchanged: true,
+    });
+  });
+
   it("stuck-run reaper: when reapStuckRuns=true, marks pre-existing running rows older than the threshold as failed before the new run", async () => {
     mocks.syncRunUpdateMany.mockResolvedValue({ count: 2 });
 

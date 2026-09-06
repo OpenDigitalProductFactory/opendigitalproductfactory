@@ -308,6 +308,14 @@ lines, then `wsl --shutdown` and restart Docker Desktop. This is the
 **Build fails with an out-of-memory / killed error (Customizable mode).**
 The Docker VM is under-provisioned — see [Docker memory](#docker-memory).
 
+**Builds fail later with `host-capacity-lost:host-memory-low`.**
+The opposite problem: the Docker VM is over-provisioned and starving the host.
+Preflight warns when the VM exceeds half of host RAM. On Windows this is usually
+benign — WSL2 sizes dynamically and `autoMemoryReclaim` returns freed pages — but
+an explicit `memory=` in `%USERPROFILE%\.wslconfig` pins it. Remove or lower it,
+then `wsl --shutdown`. (On macOS the VM is fixed-size and never returns memory to
+the host, so over-allocation there ratchets until builds fail.)
+
 **`/api/health` returns 500.**
 The database migrations may not have completed. Tail the portal-init
 container: `docker compose logs portal-init`.

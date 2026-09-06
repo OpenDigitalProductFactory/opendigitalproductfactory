@@ -39,6 +39,8 @@ On 2026-06-05 the live install ran an image **stamped `e7ef3331` (June 5) but co
 - Before swap, re-assert stamp == bytes == target; on any mismatch, **fail loud** — do not deploy a mislabeled image.
 - Route every live-install advance through `/ops/self-upgrade` (or the governed runner/promoter). Never hand-advance the root clone HEAD or rebuild the portal as an "update."
 - When diagnosing a "stale portal," check the **bytes** (files present, migration tip, route behavior), not the version label.
+- **A release tag is a label too.** Confirming that a git tag contains a merge commit says nothing about the image carrying that tag. On 2026-08-27 an agent verified `#4741` was an ancestor of git tag `v2026.08.27`, upgraded to the image tagged `v2026.08.27`, and reported five fixes live; the running container still held `allowedTools: []` — the pre-merge file. Nothing was bind-mounted; the image genuinely predated its own tag. Check a file the change actually touched: `docker exec <container> grep … /app/…`, or `docker run --rm --entrypoint sh <image> -lc '…'` before deploying. Note that some images ship source rather than a built `.next`, so grep the source path, not the bundle.
+- **"Up to date" is a label as well.** The same session found `:latest` frozen at the previous release because a failed publish job never promoted it. The install's own status page truthfully reported "You're running the latest version. Nothing to install" while a newer release existed — a red publish on one side, a green check on the other, and nothing connecting them. Compare digests (`docker manifest inspect`) rather than trusting the update surface.
 
 ## Decision Dimensions
 

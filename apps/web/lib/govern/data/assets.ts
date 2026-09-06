@@ -25,6 +25,7 @@ import {
   type SubjectLocator,
 } from "./taxonomy";
 import { AI_PROVIDER_GOVERNANCE_ASSETS } from "./ai-provider-governance-assets";
+import { STATUTORY_REFERENCE_ASSETS } from "./statutory-reference-assets";
 import { PROCESSING_GOVERNANCE_ASSETS } from "./processing-governance-assets";
 import { BUSINESS_PRODUCT_PORTFOLIO_ASSETS } from "./business-product-portfolio-assets";
 import { HOSPITALITY_CAPACITY_ASSETS } from "./hospitality-capacity-assets";
@@ -654,6 +655,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     fields: [],
   },
   ...AI_PROVIDER_GOVERNANCE_ASSETS,
+  ...STATUTORY_REFERENCE_ASSETS,
   {
     // Per-customer incumbent coverage verdict (BI-548060D5). Operational — the
     // instantiated verdict for a customer's incumbent app, defaulted from the

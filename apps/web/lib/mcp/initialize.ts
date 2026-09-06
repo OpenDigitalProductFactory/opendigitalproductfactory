@@ -66,6 +66,9 @@ async function composeInstallationIdentity(): Promise<
     const store = {
       readConfig: async (key: string) =>
         (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
+      // Lowest estate-name tier: the organization named at setup (BI-CA54ACC8).
+      readOrganizationName: async () =>
+        (await prisma.organization.findFirst({ select: { name: true } }))?.name ?? null,
     };
 
     const [environment, estate, shortDeviceId] = await Promise.all([

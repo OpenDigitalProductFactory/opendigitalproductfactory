@@ -26,7 +26,7 @@ export const skillCurator = inngest.createFunction(
     triggers: [cron("0 7 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "skills/curator");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("run-skill-curator", async () => {

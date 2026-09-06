@@ -83,6 +83,10 @@ import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
 import { siemCorrelationSweep } from "./siem-correlation-sweep";
 import { patchAssessmentSweep } from "./patch-assessment-sweep";
 import {
+  decisionConciergeSweepScheduled,
+  decisionConciergeSweepRequested,
+} from "./decision-concierge-sweep";
+import {
   catalogEnrichmentSweepScheduled,
   catalogEnrichmentSweepRequested,
 } from "./catalog-enrichment-sweep";
@@ -140,6 +144,7 @@ import {
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
+  decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
   prometheusPoll,
   fullDiscoverySweep,
   modelDiscoveryRefresh,
@@ -213,6 +218,7 @@ export const scheduledFunctions = [
 ];
 
 export const eventFunctions = [
+  decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
   localModelInstall,
   rateRecovery,
   mcpCatalogSync,

@@ -64,7 +64,7 @@ export const coworkerCertificationNightly = inngest.createFunction(
     triggers: [cron("40 4 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/coworker-certification-nightly");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     // Full roster, then requeue only capacity-inconclusive coworkers (below).
     let agentIds: string[] | undefined = undefined;
@@ -93,7 +93,7 @@ export const coworkerCertificationRunNow = inngest.createFunction(
     triggers: [{ event: "ops/coworker-certification.requested" }],
   },
   async ({ step, event }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/coworker-certification-run-now");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     const requested = (event?.data as { agentIds?: unknown } | undefined)?.agentIds;
     let agentIds: string[] | undefined = Array.isArray(requested)

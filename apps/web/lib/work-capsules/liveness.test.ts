@@ -182,7 +182,7 @@ describe("classifyWorkCapsuleLiveness", () => {
     expect(v).toMatchObject({ liveness: "recovery-required", isLive: false, isReapable: false });
   });
 
-  it("treats an open PR as live even after the authoring lease lapsed", () => {
+  it("does not treat a stored PR identity as observed open state", () => {
     const v = classifyWorkCapsuleLiveness(
       row({
         executorKind: "codex-desktop",
@@ -191,9 +191,42 @@ describe("classifyWorkCapsuleLiveness", () => {
       }),
       NOW,
     );
+    expect(v.liveness).toBe("lease-expired");
+    expect(v.isReapable).toBe(true);
+  });
+
+  it("treats only a fresh explicit open observation as live", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-04T00:00:00.000Z"),
+        pullRequestNumber: 4055,
+        pullRequestObservation: {
+          state: "open",
+          observedAt: new Date("2026-08-05T14:50:00.000Z"),
+        },
+      }),
+      NOW,
+    );
     expect(v.liveness).toBe("live");
     expect(v.isReapable).toBe(false);
     expect(v.reason).toContain("#4055");
+  });
+
+  it("does not keep a room live from a stale open observation", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-04T00:00:00.000Z"),
+        pullRequestNumber: 4055,
+        pullRequestObservation: {
+          state: "open",
+          observedAt: new Date("2026-08-05T14:00:00.000Z"),
+        },
+      }),
+      NOW,
+    );
+    expect(v.liveness).toBe("lease-expired");
   });
 
   it("marks a capsule dead when its linked build is terminal (zombie BS capsule)", () => {

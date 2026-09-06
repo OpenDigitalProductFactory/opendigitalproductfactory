@@ -148,6 +148,11 @@ COPY scripts/salvage-sweep.mjs ./scripts/
 COPY scripts/gate-context.mjs ./scripts/
 COPY scripts/check-design-grounding-decision.mjs ./scripts/
 COPY scripts/check-data-impact.mjs ./scripts/
+# gate-context advertises the Convergence-Impact trailer (BI-B19BE117); the
+# classifier and its surface registry ride along so the packaged generator
+# names the same surfaces CI will gate.
+COPY scripts/check-convergence-impact.mjs ./scripts/
+COPY scripts/convergence-surfaces.json ./scripts/
 COPY scripts/lib/gate-context.mjs ./scripts/lib/
 COPY scripts/lib/ci-evidence-plan.mjs ./scripts/lib/
 COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/

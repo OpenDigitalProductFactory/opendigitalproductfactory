@@ -1590,6 +1590,7 @@
         "maturity-labels-closed-set",
         "finance-matrix-snapshot",
         "payroll-absorption-stance-reversal-2026-08-22",
+        "statutory-rate-acquisition-propose-ratify-resolve-2026-09-01",
         "payroll-tax-persistence-and-period-components-2026-08-26",
         "mileage-jurisdiction-resolution-2026-08-26",
         "finance-doc-reconciliation-rules",
@@ -2445,6 +2446,7 @@
         "shape-is-four-orthogonal-choices-not-one-taxonomy",
         "the-activity-shape-is-a-second-separate-claim-runtime-2026-09-02-bi-a967717a",
         "the-coordinator-is-the-workroom-process-overseer",
+        "appointing-one-runtime-2026-09-03-bi-f63200a8",
         "the-gate-which-scope-decides",
         "what-the-gate-does-to-the-turn",
         "where-the-declared-shapes-live-runtime-2026-09-02",
@@ -2453,6 +2455,10 @@
         "setting-the-posture-and-the-default-for-rooms",
         "known-gaps",
         "encoding-and-visualization",
+        "a-stalled-room-reaches-a-human",
+        "who-answers-for-a-room",
+        "nesting-has-to-be-written-not-just-declared",
+        "who-may-coordinate-authority-and-a-gate-with-no-key",
         "related-references"
       ]
     },

@@ -12,7 +12,7 @@ export const mcpCatalogSync = inngest.createFunction(
     // Gate at entry only — once the sync is running it's killable:false
     // (mid-upsert state would be lost). Refuses NEW syncs during drain;
     // an in-flight sync runs to completion. See spec §6.3.
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/mcp-catalog-sync");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     await step.run("run-sync", async () => {

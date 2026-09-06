@@ -256,6 +256,8 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
           data: {
             lease: { leaseId: "NPEL-QUEUE-TEST" },
             admission: { status: "queued", queuePosition: 2, waitAgeMs: 20 },
+            // BI-D908DA0A: a closed pool parks the claim on the same wire shape.
+            poolPolicy: { effectiveCapacity: 0, rollbackReason: "host-stage-headroom-low" },
           },
         }
         : tool === "claim_nonprod_environment_lease"
@@ -311,7 +313,7 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
     );
     const grantedMs = Date.parse(claims[1].args.expiresAt) - claims[1].receivedAt;
     assert.ok(grantedMs >= 2_800, `expected a fresh ~3s TTL, got ${grantedMs}ms`);
-    assert.match(result.output, /queued at position 2/);
+    assert.match(result.output, /pool is CLOSED \(host-stage-headroom-low\).*position 2/);
   } finally {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
