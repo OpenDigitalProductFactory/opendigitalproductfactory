@@ -28,7 +28,14 @@ merge-queue safety net. `DPF_FEDERATION_EXCHANGE_ENABLED` is referenced in a tes
 cleanup only — no live code path reads it today, so posture is gated the same way
 demand is: the cron plus a trusted same-organization link.
 
-## Phase B — Slice 3: paired-estate surface
+## Phase B — Slice 3: paired-estate surface (BI-27B578C7 follow-on)
+
+| Step | Module | What it does |
+|---|---|---|
+| B1 | `apps/web/lib/federation/operational-posture-read-model.ts` | Pure mapper + cached loader: the local capture beside every peer-canonical `operational-posture` mirror. Age is measured from the peer's capture, not the delivery; freshness bands are one heartbeat + slack (fresh), then stale, then silent at three missed heartbeats, at which point the peer's own health band is overtaken by `offline`. |
+| B2 | `apps/web/components/ops/PairedEstatePosturePanel.tsx`, `/ops/installation` | One card per installation, each stating its basis line ("Captured on this installation" / "Reported by <peer> · captured 4m ago") and freshness chip; shared `Surface` + `StatusBadge`, `--dpf-*` tokens only. |
+| B3 | `apps/web/lib/federation/operational-posture-peer-targets.ts` + cron step `reflect-peer-runtime-targets` | Each reported peer becomes an `external-preview` runtime target (`RT-PEER-<link>`), status from freshness, version from the report, host URL from the link's own peer authority — so the coordination map shows both installs without granting a peer the root-portal acceptance role. |
+
 
 - Read model: local posture (captured live) + every peer-canonical
   `operational-posture` mirror, each stamped with **basis** (local capture vs

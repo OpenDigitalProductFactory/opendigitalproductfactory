@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "cards-on-installation-page",
+  "decisionInteractionId": "DI-4548A2BBF2BC",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/installation/page.tsx",
+      "apps/web/components/ops/PairedEstatePosturePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "cards-on-installation-page",
+      "dedicated-paired-estate-route"
+    ],
+    "note": "BI-648F01A0 Slice 3 (spec docs/superpowers/specs/2026-09-01-cross-install-operational-control-plane-design.md, plan docs/superpowers/plans/2026-09-06-cross-install-operational-posture-flow-plan.md Phase B). The paired estate's operational posture is rendered as one summary card per installation appended to Operations → Installation, composed from the shared Surface + StatusBadge primitives with no new route and no new controls; every card states its basis (captured here vs. reported by the peer) and age, and a silent peer renders as offline. The kernel scored the appended-cards shape highest (composite 9.22, margin 3.64, confidence high) against a dedicated /ops/paired-estate route with a DataTable, filters and drill-down."
+  }
+}
