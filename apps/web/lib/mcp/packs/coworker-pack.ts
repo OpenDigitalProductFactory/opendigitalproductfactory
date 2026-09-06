@@ -31,8 +31,12 @@ const initiativeReviewProperties = {
       expectedCurrentBaselineId: { type: ["string", "null"] },
       eligibleEvidenceActivityIds: {
         type: "array",
-        items: { type: "string" },
+        items: { type: "string", minLength: 1 },
+        minItems: 1,
         maxItems: 500,
+        uniqueItems: true,
+        description:
+          "Exact eligible post-baseline evidence activity IDs from an objective-mapping recovery packet. Required by the server when gate is objective-mapping.",
       },
       workroomRef: {
         type: "object",
