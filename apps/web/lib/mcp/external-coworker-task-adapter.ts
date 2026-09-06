@@ -6,6 +6,7 @@ import {
   validateInitiativeReviewAuthorityScope,
   type InitiativeReviewBinding,
 } from "@/lib/mcp-task-submit";
+import { validateObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 
 export type ExternalCoworkerTaskInput = {
   collaborationKind: "handoff" | "summon";
@@ -64,10 +65,10 @@ function initiativeReviewPacket(input: ExternalCoworkerTaskInput): InitiativeRev
     names.length < 2
     || names.length > 4
     || !names.includes(binding.writerToolName)
-    || !names.some((name) => allowedReaders.has(name))
+    || !names.includes("read_source_at_version")
     || names.some((name) => name !== binding.writerToolName && !allowedReaders.has(name))
   ) {
-    return "requiredToolNames must contain only the bound writer and one or both immutable source readers";
+    return "requiredToolNames must contain the bound writer and read_source_at_version; search_source_at_version is the only optional extra tool";
   }
 
   const authorityScope = [
@@ -114,6 +115,32 @@ export async function dispatchExternalCoworkerTask(input: ExternalCoworkerTaskIn
       message: reviewPacket,
       data: { action: "Use the exact server-issued readiness packet without adding tools or changing immutable identity." },
     };
+  }
+  if (reviewPacket?.binding.gate === "objective-mapping") {
+    const binding = reviewPacket.binding;
+    const currentPacketValid = binding.workroomRef && binding.eligibleEvidenceActivityIds
+      ? validateObjectiveMappingRequestKey({
+        targetAgent: input.targetAgent,
+        objective: input.objective,
+        questionPacketSummary: input.title?.trim() ?? "",
+        requiredToolNames: input.requiredToolNames as string[],
+        binding: {
+          ...binding,
+          gate: "objective-mapping",
+          eligibleEvidenceActivityIds: binding.eligibleEvidenceActivityIds,
+          workroomRef: binding.workroomRef,
+        },
+        requestKey,
+      })
+      : /^initiative-readiness:BI-[A-Za-z0-9-]+:objective-mapping:[a-f0-9]{40}$/u.test(requestKey);
+    if (!currentPacketValid) {
+      return {
+        success: false,
+        error: "invalid_objective_mapping_request_key",
+        message: "Objective-mapping requires the exact versioned requestKey and Workroom binding from the server-issued readiness packet.",
+        data: { action: "Refresh readiness and submit the exact packet without changing its key, summary, binding, or evidence set." },
+      };
+    }
   }
 
   let outcome: Awaited<ReturnType<typeof submitRemoteCoworkerTask>>;

@@ -63,6 +63,20 @@ This is not multi-master backlog replication. Each source backlog item remains
 single-writer authoritative. Either installation can pause or revoke its link,
 and expanding the projection requires approval on both sides.
 
+### What survives a reinstall
+
+An installation's federation identity and its list of peers live in the
+`federation/` folder of the state directory (`~/.dpf` by default), beside the
+organization certificates. A reinstall that keeps that directory keeps the
+identity its peers trust and every connection it had; nothing needs to be
+re-connected or re-approved on either side. Exchange is always on: a trusted
+connection is the only switch, and there is no flag to set.
+
+If an installation is rebuilt without its state directory, its peers see the
+new identity arrive over the same address and retire the old connection on
+their own ("superseded by" the new one) once a new connection is made. The
+Connections page never carries two live rows for one installation.
+
 ### Backlog sync between your own installations
 
 Approved `same-organization` connections also keep each other's **backlog** in
@@ -83,12 +97,26 @@ is already on production before the development box is torn down.
   mirrored, when the last copy landed, and whether any item shares an id with
   work created locally (those are left alone until the local one is renamed or
   retired).
-- If a connection shows "Waiting for first copy" for more than ten minutes, the
-  other installation is running a platform version that predates backlog sync.
-  Upgrade it from its own **Operate → Self-upgrade**.
+- Each connection carries one sentence — "In step …", "Behind by …" or
+  "Broken because …" — and the same sentence is what an AI coworker reads in
+  its briefing. A "Broken because" sentence names the cause and what the
+  platform does next; there is nothing for a person to type or click.
 
 Demand sharing (above) is separate: a copy of a backlog item is not "demand"
 to follow or adopt, and adopted demand is still owned by whoever adopted it.
+
+### Joining is the only step
+
+Once an installation has imported the organization's join file, it holds a
+certificate the organization's own authority issued it. From then on it proves
+membership to the organization's authority installation by itself — signing
+its request with that certificate and checking the authority's certificate in
+return — and the connection is created trusted on both sides with no
+invitation, no approval click and no code to compare. Nothing is typed: the
+authority's address comes from the join file, and so does this installation's
+own name. If the authority installation is still on a version that predates
+this, the connection is retried every few minutes and made the moment it
+upgrades.
 
 ## Customer and reseller operation
 

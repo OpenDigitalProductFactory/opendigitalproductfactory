@@ -11,6 +11,8 @@ type StartDeliberationInput = {
   userId: string;
   patternSlug: string;
   taskRunId?: string;
+  /** Coworker on whose behalf the deliberation runs (BI-B3AB7FC9). */
+  agentId?: string | null;
   artifactType:
     | "spec"
     | "plan"
@@ -191,6 +193,7 @@ export async function startDeliberation(input: StartDeliberationInput) {
   const orchestration = await orchestrateDeliberation({
     userId: input.userId,
     taskRunId: input.taskRunId,
+    agentId: input.agentId ?? null,
     threadId: input.threadId ?? null,
     buildId: input.buildId ?? null,
     patternSlug: resolved.patternSlug,

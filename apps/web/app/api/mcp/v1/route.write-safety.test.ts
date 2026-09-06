@@ -65,6 +65,46 @@ beforeEach(() => {
 });
 
 describe("POST — mutating tool safety", () => {
+  it("rejects tasks/cancel from a read token before any TaskRun mutation", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_read",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+      scope: "read",
+    });
+
+    const res = await POST(new Request("http://localhost:3000/api/mcp/v1", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer dpfmcp_READ",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 701,
+        method: "tasks/cancel",
+        params: { taskId: "TR-MCP-DURABLE" },
+      }),
+    }));
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toMatchObject({
+      error: {
+        code: -32600,
+        message: expect.stringContaining("write-scoped MCP token"),
+        data: {
+          error: "insufficient_token_scope",
+          method: "tasks/cancel",
+          requiredScope: "write",
+          tokenScope: "read",
+        },
+      },
+    });
+    expect(prisma.taskRun.update).not.toHaveBeenCalled();
+  });
+
   it("allows write-scoped tokens to call create_workroom", async () => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_write",

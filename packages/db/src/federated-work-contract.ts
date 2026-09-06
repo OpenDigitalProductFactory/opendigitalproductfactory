@@ -39,10 +39,28 @@ export interface FederatedWorkEpicV1 {
   completedAt: string | null;
 }
 
+/** The active-deferral projection an origin publishes with a `deferred` item
+ *  (BI-9DA5F179). A deferral with no reason, trigger or review date is not a
+ *  park — it is an item that has vanished — so a mirror never writes `deferred`
+ *  bare. The origin's owner principal is install-local and does not travel; the
+ *  receiving side holds the mirror's deferral through the link's federated-peer
+ *  Principal, because only the origin may change it. */
+export interface FederatedWorkDeferralV1 {
+  reason: string;
+  trigger: string;
+  reviewAt: string;
+  deferredAt: string | null;
+}
+
 export interface FederatedWorkItemV1 {
   itemId: string;
   title: string;
   status: string;
+  /** Present when `status` is `deferred` AND the origin holds an attributable
+   *  deferral; null otherwise (including an origin that parked the item with
+   *  nothing attached — the receiver reports that, it does not hide it). Absent
+   *  on pages from a peer older than this field. */
+  deferral?: FederatedWorkDeferralV1 | null;
   type: string;
   body: string | null;
   priority: number | null;
@@ -88,8 +106,21 @@ export function federatedWorkOriginMarker(originInstallationId: string, recordId
   return `[origin:${ORIGIN_MARKER_KIND}:${originInstallationId}:${recordId}]`;
 }
 
-/** SQL-usable prefix for `NOT { body: { contains } }` exclusions. */
+/** The marker's opening text; used to parse a marker line, never as a SQL predicate. */
 export const FEDERATED_WORK_ORIGIN_MARKER_PREFIX = ORIGIN_MARKER_PREFIX;
+
+/**
+ * SQL prefilter for `NOT { body: { contains } }` exclusions (BI-C97CE534).
+ * A real marker always names an installation id, which the platform mints as
+ * `inst_<hex>`; prose that merely writes `[origin:federatedWork:<inst>:<id>]`
+ * to describe the mechanism does not match this longer prefix, so an owned
+ * row is not hidden from the wire for mentioning it. The predicate is only a
+ * prefilter: every reader re-checks with `hasFederatedWorkOriginMarker`, which
+ * is exact (the marker is a standalone line). A body that quotes a literal
+ * `inst_`-prefixed marker in prose is still excluded here; that is the price
+ * of a substring predicate and is documented, not hidden.
+ */
+export const FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX = `${ORIGIN_MARKER_PREFIX}inst_`;
 
 export function hasFederatedWorkOriginMarker(text: string | null | undefined): boolean {
   return (text ?? "").split(/\r?\n/).some((line) => ORIGIN_MARKER_LINE.test(line.trim()));
@@ -180,8 +211,11 @@ export function validateFederatedWorkItemV1(value: unknown, path = "item"): stri
   // Closed-vocabulary facets stay short. `proposedOutcome` and `resolution` are
   // prose an operator or coworker typed — the first live pull from production
   // was refused on an item whose proposedOutcome ran past an 80-character cap.
+  // Free-form at the wire: what a column can hold, the page can carry. Only
+  // shape and ids are enforced here; the receiver writes through Prisma, which
+  // owns the column types. (The first live pull was refused on a hand-typed cap.)
   for (const key of ["workType", "triageOutcome", "effortSize", "source", "scopeKind"] as const) {
-    if (!isNullableString(value[key], 200)) violations.push(`${path}.${key}:invalid`);
+    if (!isNullableString(value[key])) violations.push(`${path}.${key}:invalid`);
   }
   if (!isNullableString(value.proposedOutcome)) violations.push(`${path}.proposedOutcome:invalid`);
   if (!isNullableString(value.resolution)) violations.push(`${path}.resolution:invalid`);
@@ -199,6 +233,20 @@ export function validateFederatedWorkItemV1(value: unknown, path = "item"): stri
   if (!isIso(value.createdAt)) violations.push(`${path}.createdAt:invalid`);
   if (!isIso(value.updatedAt)) violations.push(`${path}.updatedAt:invalid`);
   if (!isNullableIso(value.completedAt)) violations.push(`${path}.completedAt:invalid`);
+  violations.push(...validateFederatedWorkDeferralV1(value.deferral, `${path}.deferral`));
+  return violations;
+}
+
+/** Absent or null is well-formed (an older peer, or an item that is not parked).
+ *  Present means every field the deferral contract requires must be there. */
+export function validateFederatedWorkDeferralV1(value: unknown, path = "deferral"): string[] {
+  if (value === null || value === undefined) return [];
+  if (!isRecord(value)) return [`${path}:not-an-object`];
+  const violations: string[] = [];
+  if (!isNonEmptyString(value.reason, 2_000)) violations.push(`${path}.reason:invalid`);
+  if (!isNonEmptyString(value.trigger, 2_000)) violations.push(`${path}.trigger:invalid`);
+  if (!isIso(value.reviewAt)) violations.push(`${path}.reviewAt:invalid`);
+  if (!isNullableIso(value.deferredAt)) violations.push(`${path}.deferredAt:invalid`);
   return violations;
 }
 

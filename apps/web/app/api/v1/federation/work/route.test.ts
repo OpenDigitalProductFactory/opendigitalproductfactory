@@ -23,17 +23,15 @@ function request(query = ""): NextRequest {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  process.env.DPF_FEDERATION_EXCHANGE_ENABLED = "1";
   mockResolveIdentity.mockResolvedValue({ installationId: `inst_${"e".repeat(32)}`, projectionSecret: "s" });
   mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "same-org-peer" });
   mockBuildPage.mockResolvedValue({ specVersion: "dpf.work-sync/1", items: [], epics: [], cursor: null, complete: true });
 });
 
 describe("GET /api/v1/federation/work", () => {
-  it("is off when federation exchange is off", async () => {
-    process.env.DPF_FEDERATION_EXCHANGE_ENABLED = "0";
-    expect((await GET(request())).status).toBe(404);
-    expect(mockBuildPage).not.toHaveBeenCalled();
+  it("needs no flag: a trusted link is the only switch (EP-ZERO-CONFIG-FEDERATION)", async () => {
+    delete process.env.DPF_FEDERATION_EXCHANGE_ENABLED;
+    expect((await GET(request())).status).toBe(200);
   });
 
   it("requires a trusted link", async () => {

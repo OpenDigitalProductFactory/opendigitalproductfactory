@@ -77,15 +77,36 @@ export function resolveSourceRoot(): string {
 
 export type GitReader = (root: string, args: string) => Promise<string | null>;
 
-/** Default git reader. Injected in tests (RunDeps idiom) so the unit suite
- *  never shells out — a real `git` call in a unit test is a 10s timeout, not a
- *  test. */
+/**
+ * Default git reader. Injected in tests (RunDeps idiom) so the unit suite never
+ * shells out — a real `git` call in a unit test is a 10s timeout, not a test.
+ *
+ * Carries the scoped `-c safe.directory=<root>` exception, for the same reason
+ * every other git call in the platform does: the portal container runs as a
+ * different uid than the checkout it mounts, so an unprefixed git dies with
+ * "fatal: detected dubious ownership in repository at '/sandbox-workspace'".
+ *
+ * SHIPPED DEFECT (this fix). #4951 made this reader prefer the default branch,
+ * importing resolveDefaultBranchRef — which DOES carry the flag. So the ref
+ * resolved fine, and then `ls-tree` / `show` went through THIS reader, which did
+ * not, failed, and fell back to the working tree on every production call. The
+ * live tool went on answering from whatever branch the sandbox was parked on
+ * (observed: pr-4917-head) while reporting medium trust — correct about the
+ * tree it read, and not the tree anyone asked about.
+ */
+export function buildCommittedSchemaGitCommand(root: string, args: string): string {
+  return `git -c safe.directory=${JSON.stringify(root)} ${args}`;
+}
+
 const defaultReadGit: GitReader = async (root, args) => {
   try {
     const { promisify } = await import("node:util");
     const { exec: nodeExec } = await import("node:child_process");
     const exec = promisify(nodeExec);
-    const { stdout } = await exec(`git ${args}`, { cwd: root, timeout: 10_000 });
+    const { stdout } = await exec(buildCommittedSchemaGitCommand(root, args), {
+      cwd: root,
+      timeout: 10_000,
+    });
     const trimmed = stdout.trim();
     return trimmed.length > 0 ? trimmed : null;
   } catch {
@@ -305,6 +326,17 @@ export async function loadCommittedSchema(
 
   // Fall back to the working tree, and let the existing scoring say so — an
   // off-default or unidentifiable tree is capped and named, never authoritative.
+  //
+  // Say WHY. The scoring already makes an off-default read visible, but "which
+  // branch" is not "why not the merge target": a silent fallback is how #4951
+  // looked deployed-and-working while every call was degrading. The code-graph
+  // reader logs its fallback reason; this one did not, and that asymmetry cost a
+  // full deploy cycle to notice.
+  console.warn(
+    `[committed-schema] Could not read the schema from ${
+      defaultRef ? `the default branch (${defaultRef.ref})` : "any default-branch ref"
+    }; falling back to the working tree at ${root}.`,
+  );
   let names: string[];
   try {
     names = (await readdir(schemaDir)).filter((n) => n.endsWith(".prisma")).sort();

@@ -79,8 +79,27 @@ A standing room declares its activity shape by passing `workShape` to `create_wo
 entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
 
 **This claim is what makes a room wake.** The standing-Workroom drive
-(`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) loads non-terminal rooms
-and drops every one whose `scopeClaims` carry no work-shape claim. A room without it is inert
+(`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) selects non-terminal,
+unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
+`STANDING_ROOM_SCAN_LIMIT`.
+
+That same standing drive performs a bounded, best-effort notification reconciliation for
+Workroom-owned facts such as approval, review, lease expiry, and terminal state. Durable async
+inference transitions do not wait for that cadence: the event-only Task Hub consumer re-reads the
+canonical `(operationId, sequence)` transition, resolves its server-owned Workroom binding, writes
+a deterministic activity to the existing Workroom ledger, and then wakes the list stream. The
+event payload is never accepted as status, Workroom, recipient, or notification authority, and no
+parallel task ledger or scheduler is introduced.
+
+The filter is part of the query rather than a pass over the results, and the distinction is
+load-bearing ⟦runtime: corrected 2026-09-02⟧. The first implementation capped
+the row read at 200 and filtered for the claim afterwards in JavaScript, so the cap bounded
+*every* room instead of the candidates. On an install with 276 non-terminal rooms and one
+shaped room, the drive reported `scanned: 0` on every tick for seven hours: registered,
+connected, executing in 47ms, and reading the wrong set of rows. Nothing errored, which is
+why it took a direct row count to see. The ordering matters for the same reason — without it,
+which rooms fall inside the cap is whatever the query planner returned, so a room could be
+scanned on one tick and invisible on the next without changing at all. A room without it is inert
 by construction, however assertive its posture. A malformed reference is refused at
 normalization rather than stored, because a claim that can never resolve would leave the room
 looking declared and behaving inert — the exact failure this contract exists to end.
@@ -114,10 +133,12 @@ standing rooms. The accountable participant owns the outcome; the coordinator ow
 the room's declared shape. Executors do the work, reviewers or evaluators assess it, and approvers
 authorize consequential transitions. Those responsibilities are not synonyms.
 
-The current runtime establishes the vocabulary but not the complete control loop.
-`room-coordinator.ts` selects or derives a coordinator for the read model, and
-`bindWorkroomShape` can report missing participant roles. A derived coordinator is useful for
-legacy visibility, but it is not enough to make a room execution-qualified. The target contract is:
+The runtime now carries this role as an executable conformance projection, not only as roster
+vocabulary. `room-coordinator.ts` selects or derives a coordinator for the read model;
+`workroom-shape-conformance.ts` compares declared shape, stage, evidence, role separation,
+budgets, stop conditions, and coordinator eligibility with observed state. A derived coordinator
+remains useful for legacy visibility, but it is marked compatibility-only and does not make a
+shaped room execution-qualified. The enforced contract is:
 
 1. **Convene:** require exactly one explicit current coordinator and validate the collaboration
    shape, WorkShapeDefinition/version, persisted roster, posture, authority, trigger, measures,
@@ -138,9 +159,17 @@ coordinator and accountable owner. The coordinator may be a person or an AI cowo
 coordinator requires job-specific qualification for process oversight plus explicit TAK authority;
 it cannot also serve as the independent evaluator or approver where the shape requires separation.
 
-The Workroom surface should make this control legible: coordinator identity, explicit versus
-derived assignment, conformance status, current and expected next stage, unresolved deviations,
-last check, and intervention reason. Presence remains separate from membership.
+The same projection guards cycle opening, cycle completion, and carry-over persistence before any
+mutation. Standing-room runs persist the full projection and its stable reconciliation key so the
+next drive and the operator read the same evidence. Missing or unresolvable evidence pauses a
+shaped room; the runtime does not infer conformance from the absence of an error. AI coordinators
+must have eligible JSI qualification and TAK authority inputs, and an unknown input fails closed.
+
+The Workroom surface makes this control legible in **Details → Process Overseer**: coordinator
+identity, explicit versus derived assignment, conformance status, current and expected next stage,
+unresolved deviations, last check, intervention reason, and reconciliation key. Presence remains
+separate from membership. Unshaped legacy rooms are reported as not applicable rather than being
+silently upgraded to executable oversight.
 
 Definition and occurrence identity are not a fifth shape axis. The Work Case source
 registry owns a stable, versioned room-definition projection. The Work Case owns the room
@@ -370,7 +399,37 @@ clamp. The load-bearing rule mirrors the two-level rule above: a derivation may 
 action boundary and may never widen it, so shape can restrict autonomy but never grant it.
 Design: [Work Posture](../superpowers/specs/2026-08-22-workroom-work-posture-design.md).
 
-## Related
+## Encoding and visualization
+
+The activity definition is typed TypeScript in `WorkShapeDefinition`; the room
+stores a `key@version` reference in `scopeClaims`. The collaboration shape has its
+own `workroomShape` entry. Occurrence state and receipts live in the existing
+Workroom/cycle/task records. These are DPF contracts, not BPMN XML or SysML text.
+
+| View | Purpose | Current implementation boundary |
+| --- | --- | --- |
+| Workroom Overview/Details | Explain current progress, evidence and what holds the work | `shape-projection.ts` builds the five-stage DPF graph rendered by `WorkroomShape`; it is not a BPMN editor or a full rendering of every activity definition |
+| BPMN | Process tasks, gateways, waits, recovery paths and ownership lanes | `process-extract.ts` and `reconcile-process.ts` project selected state machines; WorkShape recovery extraction needs explicit coverage |
+| SysML v2 | Requirements, interfaces, allocation to components and verification evidence | Existing EA notation and Parity Engine; use stable source keys rather than a separately maintained model |
+
+The [SysML reference](../Reference/sysml-v2.md) owns notation selection; ArchiMate
+remains the enterprise view and C4 the lightweight software explanation. Current
+views derive from registered definitions, transition rules and canonical receipts.
+Target-state sketches must be labeled as such until implemented and verified.
+
+The [reviewer recovery amendment](../superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md#81-reviewer-recovery-and-receipt-settlement)
+defines the planned extension of `pull-request-flow-watch@1.0.0`, its version
+compatibility requirements and the operator display. A declared shape never proves
+that automatic replacement or gate advancement is running.
+
+**Existing-room binding gap, observed 2026-09-05:** `adopt_worktree` accepted a
+shape update for `WC-4D4BB6EC` but returned unchanged empty `scopeClaims`. The
+adoption handler drops `workShape`, and the store does not update scope on reuse.
+Readback, not tool success text, determines whether a shape is active. The recovery
+amendment assigns repair and round-trip verification to `BI-06AE6833`; do not create
+a duplicate room or edit the database to make a diagram look configured.
+
+## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
 - [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI and the composition rule

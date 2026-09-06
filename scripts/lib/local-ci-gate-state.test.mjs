@@ -9,6 +9,7 @@ import {
   isRecoverableInterruptedGateState,
   projectReusedPassMetadata,
   readLocalCiGateState,
+  supersedeLosingSlotRecords,
   writeLocalCiGateState,
 } from "./local-ci-gate-state.mjs";
 
@@ -162,4 +163,63 @@ test("queued admission diagnostics survive a later terminal state write", () => 
 
   const state = readLocalCiGateState(stateFile);
   assert.deepEqual(state.admission, admission);
+});
+
+// BI-5529B5AC: when one slot PASSES a branch+SHA, a sibling slot's non-passing
+// record for the SAME branch+SHA is a loser that would otherwise linger as a
+// live-looking claim (the shadow that refused a real PASS on 2026-09-02). It is
+// rewritten as `superseded`, naming the winner; records for other SHAs, other
+// branches, real passes, and pending evidence are left alone.
+test("a losing sibling record for the same branch+SHA is rewritten as superseded", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-gate-supersede-"));
+  const winner = join(dir, "dpf-local-ci-gate-slot-1.json");
+  const loser = join(dir, "dpf-local-ci-gate.json");
+  const base = { leaseId: "L", evidenceId: "", expiresAt: "2026-09-03T02:00:00.000Z", resilience: null, leaseEvents: [] };
+  writeLocalCiGateState(loser, { ...base, branch: "feat/x", sha: "abc", gatePassed: false, status: "queued" });
+  writeLocalCiGateState(winner, { ...base, branch: "feat/x", sha: "abc", gatePassed: true, status: "passed", evidenceId: "E1" });
+
+  const result = supersedeLosingSlotRecords({
+    winnerStateFile: winner,
+    winnerSlotKey: "slot-1",
+    siblingStateFiles: [loser],
+    branch: "feat/x",
+    sha: "abc",
+    now: () => "2026-09-03T01:00:00.000Z",
+  });
+
+  assert.deepEqual(result.superseded, [loser]);
+  const rewritten = readLocalCiGateState(loser);
+  assert.equal(rewritten.status, "superseded");
+  assert.equal(rewritten.gatePassed, false);
+  assert.equal(rewritten.supersededStatus, "queued");
+  assert.deepEqual(rewritten.supersededBy, { slotKey: "slot-1", stateFile: winner, at: "2026-09-03T01:00:00.000Z" });
+  assert.equal(rewritten.sha, "abc");
+});
+
+test("supersession leaves other SHAs, other branches, passes, and pending evidence untouched", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-gate-supersede-skip-"));
+  const winner = join(dir, "dpf-local-ci-gate-slot-1.json");
+  const base = { leaseId: "L", evidenceId: "", expiresAt: "2026-09-03T02:00:00.000Z", resilience: null, leaseEvents: [] };
+  const otherSha = join(dir, "a.json");
+  const otherBranch = join(dir, "b.json");
+  const realPass = join(dir, "c.json");
+  const pending = join(dir, "d.json");
+  const missing = join(dir, "e.json");
+  writeLocalCiGateState(otherSha, { ...base, branch: "feat/x", sha: "old", gatePassed: false, status: "failed" });
+  writeLocalCiGateState(otherBranch, { ...base, branch: "feat/y", sha: "abc", gatePassed: false, status: "failed" });
+  writeLocalCiGateState(realPass, { ...base, branch: "feat/x", sha: "abc", gatePassed: true, status: "passed", evidenceId: "E0" });
+  writeLocalCiGateState(pending, { ...base, branch: "feat/x", sha: "abc", gatePassed: true, status: "passed", evidencePending: true, evidencePendingReason: "quiescing" });
+
+  const result = supersedeLosingSlotRecords({
+    winnerStateFile: winner,
+    winnerSlotKey: "slot-1",
+    siblingStateFiles: [otherSha, otherBranch, realPass, pending, missing],
+    branch: "feat/x",
+    sha: "abc",
+  });
+
+  assert.deepEqual(result.superseded, []);
+  for (const file of [otherSha, otherBranch, realPass, pending]) {
+    assert.notEqual(readLocalCiGateState(file).status, "superseded", file);
+  }
 });

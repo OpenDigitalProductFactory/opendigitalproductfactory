@@ -30,4 +30,18 @@ describe("RecentInvoicesTable (report-kit migration)", () => {
     expect(html).toContain("£1,200.00");
     expect(html).toContain("£50.50");
   });
+
+  it("can present internal invoice rows as Pet Rescue contributions", () => {
+    const rescueHtml = renderToStaticMarkup(
+      <RecentInvoicesTable
+        rows={ROWS}
+        currencySymbol="$"
+        accountHeader="Supporter or funder"
+        emptyLabel="No contributions yet."
+      />,
+    );
+
+    expect(rescueHtml).toContain("Supporter or funder");
+    expect(rescueHtml).not.toContain(">Account<");
+  });
 });

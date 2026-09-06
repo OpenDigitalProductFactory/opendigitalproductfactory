@@ -36,13 +36,12 @@ export const mcpTaskRunDispatchReconciliation = inngest.createFunction(
     triggers: [cron("*/2 * * * *")],
   },
   async ({ step }) => {
-    if (!externalMcpTaskAsyncEnabled()) {
-      return { skipped: true, reason: "flag-off" };
-    }
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return gate;
     return step.run("reconcile-submitted-external-tasks", () =>
-      reconcilePersistedRemoteTaskDispatches(),
+      reconcilePersistedRemoteTaskDispatches({
+        includeOrdinary: externalMcpTaskAsyncEnabled(),
+      }),
     );
   },
 );

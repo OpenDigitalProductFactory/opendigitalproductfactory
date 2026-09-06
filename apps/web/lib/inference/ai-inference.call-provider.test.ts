@@ -2,22 +2,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockPrisma,
+  mockGetDecryptedCredential,
   mockGetProviderBearerToken,
   mockAdapterExecute,
   mockStartTimer,
   mockAiInferenceTokensInc,
   mockAiInferenceErrorsInc,
+  mockProviderFetch,
 } = vi.hoisted(() => ({
   mockPrisma: {
     modelProvider: {
       findUnique: vi.fn(),
     },
   },
+  mockGetDecryptedCredential: vi.fn(),
   mockGetProviderBearerToken: vi.fn(),
   mockAdapterExecute: vi.fn(),
   mockStartTimer: vi.fn(),
   mockAiInferenceTokensInc: vi.fn(),
   mockAiInferenceErrorsInc: vi.fn(),
+  mockProviderFetch: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -25,7 +29,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 vi.mock("@/lib/ai-provider-internals", () => ({
-  getDecryptedCredential: vi.fn(),
+  getDecryptedCredential: mockGetDecryptedCredential,
   getProviderExtraHeaders: vi.fn(() => ({})),
   getProviderBearerToken: mockGetProviderBearerToken,
   isAnthropicProvider: vi.fn(() => false),
@@ -51,6 +55,10 @@ vi.mock("../routing/embedding-adapter", () => ({}));
 vi.mock("../routing/transcription-adapter", () => ({}));
 vi.mock("../routing/async-adapter", () => ({}));
 
+vi.mock("./provider-inference-transport", () => ({
+  providerInferenceFetch: mockProviderFetch,
+}));
+
 import { callProvider } from "./ai-inference";
 import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-telemetry-writer";
 
@@ -65,6 +73,29 @@ describe("callProvider", () => {
       inferenceMs: 12,
       raw: {},
     });
+  });
+
+  it("omits async-operation metadata for a synchronous adapter result", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai",
+      authMethod: "api_key",
+      authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValueOnce({ secretRef: "test-key" });
+
+    const result = await callProvider(
+      "openai",
+      "model-under-test",
+      [{ role: "user", content: "Answer synchronously" }],
+      "You are helpful.",
+    );
+
+    expect(result).not.toHaveProperty("asyncOperation");
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
+      fetchImpl: mockProviderFetch,
+    }));
   });
 
   it("routes Codex OAuth execution through the ChatGPT backend", async () => {
@@ -120,6 +151,51 @@ describe("callProvider", () => {
         }),
       }),
     );
+  });
+
+  it("projects typed async-operation start metadata from the adapter", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "gemini",
+      authMethod: "api_key",
+      authHeader: "x-goog-api-key",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValueOnce({ secretRef: "test-key" });
+    mockAdapterExecute.mockResolvedValueOnce({
+      text: "",
+      toolCalls: [],
+      usage: { inputTokens: 0, outputTokens: 0 },
+      inferenceMs: 12,
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: "operations/provider-op-1",
+      },
+    });
+
+    const result = await callProvider(
+      "gemini",
+      "model-under-test",
+      [{ role: "user", content: "Research this" }],
+      "You research.",
+      undefined,
+      {
+        providerId: "gemini",
+        modelId: "model-under-test",
+        recipeId: null,
+        contractFamily: "background.research",
+        executionAdapter: "async",
+        maxTokens: 0,
+        providerSettings: {},
+        toolPolicy: {},
+        responsePolicy: {},
+      },
+    );
+
+    expect(result.asyncOperation).toEqual({
+      status: "accepted",
+      providerOperationId: "operations/provider-op-1",
+    });
   });
 
   it("forwards attribution.agentMessageId into AdapterRunTelemetry on the success path", async () => {
@@ -191,90 +267,94 @@ describe("callProvider", () => {
         toolPolicy: { toolChoice: "required" },
         responsePolicy: {},
       },
-    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    )).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringMatching(/cannot enforce required tool choice/i),
+    });
     expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
 
-  it("permits one explicitly bound terminal writer through a CLI adapter", async () => {
+  it.each([
+    ["anthropic-sub", "claude-sonnet-4-6", "claude-cli", "record_initiative_evidence"],
+    ["codex", "gpt-5.4", "codex-cli", "record_initiative_design_review"],
+  ])("refuses %s/%s before inference when its CLI adapter cannot force the bound writer", async (
+    providerId,
+    modelId,
+    executionAdapter,
+    writerToolName,
+  ) => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
-      providerId: "anthropic-sub",
+      providerId,
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
-      baseUrl: null,
+      baseUrl: providerId === "codex" ? "https://api.openai.com/v1" : null,
       endpoint: null,
     });
 
-    await callProvider(
-      "anthropic-sub",
-      "claude-sonnet-4-6",
+    const rejection = callProvider(
+      providerId,
+      modelId,
       [{ role: "user", content: "Record it." }],
-      "Use the writer.",
-      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      "Use the sole governed writer.",
+      [{ type: "function", function: { name: writerToolName, parameters: {} } }],
       {
-        providerId: "anthropic-sub",
-        modelId: "claude-sonnet-4-6",
+        providerId,
+        modelId,
         recipeId: null,
         contractFamily: "sync.review",
-        executionAdapter: "claude-cli",
+        executionAdapter,
         maxTokens: 1024,
         providerSettings: {},
         toolPolicy: { toolChoice: "required" },
-        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+        responsePolicy: { terminalWriterToolName: writerToolName },
       },
       undefined,
       { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
     );
 
-    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
-      tools: [expect.objectContaining({
-        function: expect.objectContaining({ name: "record_initiative_evidence" }),
-      })],
-      plan: expect.objectContaining({
-        toolPolicy: expect.objectContaining({ toolChoice: "required" }),
-        responsePolicy: expect.objectContaining({ terminalWriterToolName: "record_initiative_evidence" }),
-      }),
-    }));
+    await expect(rejection).rejects.toMatchObject({
+      code: "required_terminal_writer_not_enforceable",
+      providerId,
+      message: expect.stringContaining("required-terminal-writer-not-enforceable"),
+    });
+    expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
 
-  it("permits the live Codex CLI route for one governed bound terminal writer", async () => {
+  it("keeps a sole required writer available to a provider-native HTTP adapter", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
-      providerId: "codex",
-      authMethod: "oauth2_authorization_code",
+      providerId: "openai",
+      authMethod: "api_key",
       authHeader: "Authorization",
       baseUrl: "https://api.openai.com/v1",
       endpoint: null,
     });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "key" });
 
     await callProvider(
-      "codex",
+      "openai",
       "gpt-5.4",
-      [{ role: "user", content: "Record the objective mapping." }],
+      [{ role: "user", content: "Record it." }],
       "Use the sole governed writer.",
       [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
       {
-        providerId: "codex",
+        providerId: "openai",
         modelId: "gpt-5.4",
         recipeId: null,
         contractFamily: "sync.review",
-        executionAdapter: "codex-cli",
+        executionAdapter: "chat",
         maxTokens: 1024,
         providerSettings: {},
         toolPolicy: { toolChoice: "required" },
         responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
       },
-      undefined,
-      { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
     );
 
     expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
-      providerId: "codex",
-      tools: [expect.objectContaining({
-        function: expect.objectContaining({ name: "record_initiative_evidence" }),
-      })],
+      providerId: "openai",
       plan: expect.objectContaining({
-        executionAdapter: "codex-cli",
-        toolPolicy: expect.objectContaining({ toolChoice: "required" }),
-        responsePolicy: expect.objectContaining({ terminalWriterToolName: "record_initiative_evidence" }),
+        executionAdapter: "chat",
+        toolPolicy: { toolChoice: "required" },
       }),
     }));
   });

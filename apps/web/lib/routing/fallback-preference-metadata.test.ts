@@ -90,6 +90,33 @@ beforeEach(() => {
 });
 
 describe("callWithFallbackChain configured preference metadata", () => {
+  it("preserves a typed async start handle without exposing raw provider data", async () => {
+    mockCallProvider.mockResolvedValueOnce({
+      content: "",
+      inputTokens: 0,
+      outputTokens: 0,
+      inferenceMs: 25,
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: "interaction-provider-op-1",
+      },
+      raw: { providerOnly: "must-not-cross-fallback-boundary" },
+    });
+
+    const result = await callWithFallbackChain(
+      { ...decision, preferenceResolution: undefined },
+      [{ role: "user", content: "research" }],
+      "system",
+    );
+
+    expect(result.asyncOperation).toEqual({
+      status: "accepted",
+      providerOperationId: "interaction-provider-op-1",
+    });
+    expect(result).not.toHaveProperty("raw");
+    expect(result.downgradeReason).toBeNull();
+  });
+
   it("reports an unavailable preference from structured routing metadata", async () => {
     await expect(
       callWithFallbackChain(
@@ -99,6 +126,7 @@ describe("callWithFallbackChain configured preference metadata", () => {
       ),
     ).resolves.toMatchObject({
       downgraded: true,
+      downgradeReason: "not-eligible",
       downgradeMessage: expect.stringContaining(
         'Preferred provider "preferred-provider" is unavailable',
       ),

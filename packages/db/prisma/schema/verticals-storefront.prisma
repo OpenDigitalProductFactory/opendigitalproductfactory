@@ -54,6 +54,7 @@ model StorefrontConfig {
   rentableUnits                  RentableUnit[]
   rentalAgreements               RentalAgreement[]
   adoptableAnimals               AdoptableAnimal[]
+  animalProfiles                 AnimalProfile[]
   archetypeCompositions          StorefrontArchetypeComposition[]
   hospitalityResources           HospitalityResource[]
   hospitalityCapacityPools       HospitalityCapacityPool[]
@@ -554,6 +555,7 @@ model AdoptableAnimal {
   animalRef           String    @unique
   storefrontId        String
   organizationId      String
+  animalProfileId     String?   @unique
   name                String
   species             String? // dog|cat|rabbit|other
   breed               String?
@@ -570,10 +572,227 @@ model AdoptableAnimal {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  storefront   StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
-  organization Organization     @relation(fields: [organizationId], references: [id])
+  storefront    StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  organization  Organization     @relation(fields: [organizationId], references: [id])
+  animalProfile AnimalProfile?   @relation(fields: [animalProfileId], references: [id], onDelete: SetNull)
 
   @@index([storefrontId, status, sortOrder])
+}
+
+enum AnimalLifecycleStatus {
+  in_care          @map("in-care")
+  placement_ready  @map("placement-ready")
+  placed           @map("placed")
+  outcome_recorded @map("outcome-recorded")
+  inactive
+}
+
+enum AnimalCustodyStage {
+  intake
+  legal_hold          @map("legal-hold")
+  quarantine
+  health_assessment   @map("health-assessment")
+  procedures
+  behavior_assessment @map("behavior-assessment")
+  care
+  placement_ready     @map("placement-ready")
+  outcome_recorded    @map("outcome-recorded")
+}
+
+enum AnimalIntakeType {
+  stray
+  owner_relinquished @map("owner-relinquished")
+  seizure_confiscate @map("seizure-confiscate")
+  transfer_in        @map("transfer-in")
+  born_in_care       @map("born-in-care")
+  return
+  other
+}
+
+enum AnimalOutcomeType {
+  adoption
+  return_to_owner @map("return-to-owner")
+  return_to_field @map("return-to-field")
+  transfer_out    @map("transfer-out")
+  died_in_care    @map("died-in-care")
+  euthanasia
+  lost_in_care    @map("lost-in-care")
+  other
+}
+
+enum AnimalAdoptionApplicationStatus {
+  submitted
+  screening
+  meet_and_greet @map("meet-and-greet")
+  home_check     @map("home-check")
+  approved
+  waitlisted
+  declined
+  withdrawn
+  placed
+  closed
+}
+
+enum AnimalPlacementStatus {
+  reserved
+  active
+  returned
+  cancelled
+}
+
+enum AnimalCustodyEventKind {
+  stage_transition    @map("stage-transition")
+  legal_hold_released @map("legal-hold-released")
+  correction
+}
+
+/// Durable operational identity for an animal. A public AdoptableAnimal row is
+/// an optional projection of this record, never the source of custody truth.
+model AnimalProfile {
+  id                String                @id @default(cuid())
+  animalRef         String
+  organizationId    String
+  storefrontId      String?
+  externalSourceKey String?
+  name              String
+  species           String?
+  breed             String?
+  sex               String?
+  birthDate         DateTime?
+  approximateAge    String?
+  microchipNumber   String?
+  lifecycleStatus   AnimalLifecycleStatus @default(in_care)
+  source            String                @default("operator")
+  sourceRef         String?
+  version           Int                   @default(1)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  organization    Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront      StorefrontConfig?           @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
+  publicListing   AdoptableAnimal?
+  custodyEpisodes AnimalCustodyEpisode[]
+  custodyEvents   AnimalCustodyEvent[]
+  applications    AnimalAdoptionApplication[]
+  placements      AnimalPlacement[]
+
+  @@unique([organizationId, animalRef])
+  @@unique([organizationId, externalSourceKey])
+  @@unique([id, organizationId])
+  @@index([organizationId, lifecycleStatus, updatedAt])
+  @@index([storefrontId])
+}
+
+/// One admission-to-outcome interval. Re-entry creates a new numbered episode
+/// instead of rewriting the animal's prior history.
+model AnimalCustodyEpisode {
+  id              String             @id @default(cuid())
+  episodeRef      String             @unique
+  organizationId  String
+  animalProfileId String
+  episodeNumber   Int
+  intakeType      AnimalIntakeType
+  intakeSource    String?
+  intakeLocation  String?
+  openedAt        DateTime
+  currentStage    AnimalCustodyStage @default(intake)
+  legalHoldActive Boolean            @default(false)
+  legalHoldReason String?
+  closedAt        DateTime?
+  outcomeType     AnimalOutcomeType?
+  outcomeReason   String?
+  version         Int                @default(1)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  animal       AnimalProfile        @relation(fields: [animalProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  events       AnimalCustodyEvent[]
+
+  @@unique([animalProfileId, episodeNumber])
+  @@unique([id, organizationId])
+  @@index([animalProfileId, organizationId])
+  @@index([organizationId, currentStage, openedAt])
+}
+
+/// Append-only custody timeline; sequence is monotonic inside an episode.
+model AnimalCustodyEvent {
+  id                String                 @id @default(cuid())
+  eventRef          String                 @unique
+  organizationId    String
+  animalProfileId   String
+  custodyEpisodeId  String
+  sequence          Int
+  fromStage         AnimalCustodyStage?
+  toStage           AnimalCustodyStage
+  kind              AnimalCustodyEventKind @default(stage_transition)
+  reason            String?
+  actorPrincipalRef String
+  occurredAt        DateTime               @default(now())
+  createdAt         DateTime               @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  animal       AnimalProfile        @relation(fields: [animalProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  episode      AnimalCustodyEpisode @relation(fields: [custodyEpisodeId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([custodyEpisodeId, sequence])
+  @@index([custodyEpisodeId, organizationId])
+  @@index([organizationId, animalProfileId, occurredAt])
+}
+
+model AnimalAdoptionApplication {
+  id                   String                          @id @default(cuid())
+  applicationRef       String                          @unique
+  organizationId       String
+  animalProfileId      String
+  inquiryRef           String?
+  applicantContactRef  String?
+  applicantName        String?
+  status               AnimalAdoptionApplicationStatus @default(submitted)
+  reviewerPrincipalRef String?
+  decisionReason       String?
+  submittedAt          DateTime                        @default(now())
+  decidedAt            DateTime?
+  version              Int                             @default(1)
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  animal       AnimalProfile    @relation(fields: [animalProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  placement    AnimalPlacement?
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status, submittedAt])
+  @@index([organizationId, animalProfileId, status])
+}
+
+model AnimalPlacement {
+  id                String                @id @default(cuid())
+  placementRef      String                @unique
+  organizationId    String
+  animalProfileId   String
+  applicationId     String                @unique
+  adopterContactRef String?
+  status            AnimalPlacementStatus @default(reserved)
+  placedAt          DateTime?
+  returnedAt        DateTime?
+  returnReason      String?
+  adoptionFeeAmount Decimal?
+  currency          String                @default("USD")
+  paymentRef        String?
+  allocationRef     String?
+  version           Int                   @default(1)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  animal       AnimalProfile             @relation(fields: [animalProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  application  AnimalAdoptionApplication @relation(fields: [applicationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([id, organizationId])
+  @@unique([applicationId, organizationId])
+  @@index([organizationId, status, placedAt])
+  @@index([organizationId, animalProfileId, createdAt])
 }
 
 model StorefrontInquiry {
@@ -606,15 +825,18 @@ model StorefrontDonation {
   amount            Decimal
   currency          String           @default("USD")
   campaignId        String?
+  fundId            String?
   message           String?
   isAnonymous       Boolean          @default(false)
   status            String           @default("pending")
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
   storefront        StorefrontConfig @relation(fields: [storefrontId], references: [id])
+  fund              FinancialFund?   @relation(fields: [fundId], references: [id], onDelete: SetNull)
 
   @@index([storefrontId, status])
   @@index([donorEmail])
+  @@index([fundId])
 }
 
 // ─── Finance: Accounts Payable ─────────────────────────────────────

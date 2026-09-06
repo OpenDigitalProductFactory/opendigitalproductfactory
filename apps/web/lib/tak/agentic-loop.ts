@@ -945,7 +945,6 @@ function truncateMessageContent(content: string, maxChars: number, label: string
   return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
 }
 
-
 function compactAgenticMessages(
   messages: ChatMessage[],
   maxContextTokens?: number | null,
@@ -1110,6 +1109,7 @@ export type RunAgenticLoopParams = {
    * call records the same token id in ToolExecution audit rows.
    */
   apiTokenId?: string | null;
+  tokenScope?: "read" | "write" | "admin";
   /**
    * Governed Hermes learning Slice 1: active coworker skill for this run.
    * When set, every governed tool call records the same skillId in
@@ -1139,7 +1139,6 @@ export type RunAgenticLoopParams = {
   enableExecutionPlan?: boolean;
   /** Bounded evidence-reader surface with a reserved governed writer step. */
   terminalToolPolicy?: TerminalToolPolicy;
-
 };
 
 export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<AgenticResult> {
@@ -1669,9 +1668,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // BI-8B8731EE. A THROW from routeAndCall means the model never ran, so
         // this is not the reviewer declining its writer contract.
         //
-        // `failure` above already classifies why. When that classification is a
-        // RESOURCE wait — the host is busy, or governed local CI holds the
-        // inference capacity — say so, because the platform already knows what
+        // `failure` above already classifies why. Preserve an adapter capability
+        // refusal on every required-writer call; preserve RESOURCE waits only
+        // before any tool work, because the platform already knows what
         // to do with it: `preInferenceResourceWait` projects a `provider-capacity`
         // wait that resumes on the same TaskRun. Rewriting it to
         // `terminal-writer-missing` made that handling unreachable for every
@@ -1680,12 +1679,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         //
         // Measured cost of the substitution: five dispatches spent auditing
         // grants, autonomy tiers and tool surfaces that were correct throughout.
-        // Only PRE-INFERENCE, mirroring `preInferenceResourceWait`'s own
-        // contract. Once a reader has run, the turn is no longer "nothing
-        // happened yet": the resumable writer wait below is the better state,
-        // because the read work is banked and only the receipt is outstanding.
-        // Diverting that to a resource wait would fail the run instead.
-        if ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0) {
+        // Capacity/busy is preserved only before tool work, mirroring
+        // `preInferenceResourceWait`. Once a reader runs, its work is banked and
+        // the resumable writer wait is better than a resource wait. An adapter
+        // refusal is still pre-inference for the current writer call, though,
+        // so preserve it regardless of completed reader work.
+        if (failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
           return completeResult(failure.message, null, { failure });
         }
         const message = routeOptions.toolChoice === "required"
@@ -2520,6 +2519,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             threadId,
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
+            tokenScope: params.tokenScope,
             skillId: tracker.activeSkillId ?? undefined,
             // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
             // to the tool surface (actions/agent-coworker.ts). Flag the turn so
@@ -2570,7 +2570,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
 
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
       if (toolResult.success && params.terminalToolPolicy?.readerToolNames.includes(tc.name)) {
-        terminalToolSurfaceOverride = null;
+        terminalToolSurfaceOverride = null; terminalToolNudges = 0;
       }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });

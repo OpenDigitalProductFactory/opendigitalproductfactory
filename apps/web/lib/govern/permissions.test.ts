@@ -44,6 +44,13 @@ describe("can()", () => {
     expect(can(hr500, "manage_backlog")).toBe(true);
   });
 
+  it("keeps animal-welfare operations separate from finance authority", () => {
+    expect(can(hr500, "view_animal_welfare")).toBe(true);
+    expect(can(hr500, "operate_animal_welfare")).toBe(true);
+    expect(can(hr500, "view_finance")).toBe(false);
+    expect(can(hr600, "view_animal_welfare")).toBe(false);
+  });
+
   it("HR-300 cannot manage_backlog", () => {
     expect(can(hr300, "manage_backlog")).toBe(false);
   });

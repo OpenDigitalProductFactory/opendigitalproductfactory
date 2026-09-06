@@ -234,7 +234,15 @@ export async function adoptWorktreeCapsule(args: {
     // state, not privileged data, so re-adopting the same branch advances it.
     const headSynced = Boolean(args.input.headSha) && args.input.headSha !== existing.headSha;
     const baseSynced = Boolean(args.input.baseSha) && args.input.baseSha !== existing.baseSha;
-    if (lateBind || headSynced || baseSynced || repoBound) {
+    // BI-69BBC446: the worktree path used to move only on lateBind, so
+    // re-adopting an ALREADY-bound room accepted worktreePath, reported success,
+    // and kept the old path — while headSha next to it synced fine. A worktree
+    // gets reaped and rebuilt under a new directory far more often than a room
+    // changes branches, and the stale path then fails the claim readback. It is
+    // the caller's own local state, exactly like the branch head, so it advances
+    // on the same footing rather than only at first binding.
+    const worktreeMoved = Boolean(args.input.worktreePath) && args.input.worktreePath !== existing.worktreePath;
+    if (lateBind || headSynced || baseSynced || repoBound || worktreeMoved) {
       const bound = await inTransaction(args.db, async (tx) => {
         const updated = await tx.workroom.update({
           where: { capsuleId: existing.capsuleId },
@@ -244,9 +252,9 @@ export async function adoptWorktreeCapsule(args: {
                 backlogItemId: args.input.backlogItemId,
                 ...(args.input.epicId && existing.epicId == null ? { epicId: args.input.epicId } : {}),
                 ...(args.input.executorRef && existing.executorRef == null ? { executorRef: args.input.executorRef } : {}),
-                ...(args.input.worktreePath && existing.worktreePath !== args.input.worktreePath ? { worktreePath: args.input.worktreePath } : {}),
               }
               : {}),
+            ...(worktreeMoved ? { worktreePath: args.input.worktreePath } : {}),
             ...(repoBound ? { repositoryFullName: args.input.repositoryFullName } : {}),
             ...(headSynced ? { headSha: args.input.headSha } : {}),
             ...(baseSynced ? { baseSha: args.input.baseSha } : {}),
@@ -262,6 +270,7 @@ export async function adoptWorktreeCapsule(args: {
           payload: {
             ...(lateBind ? { backlogItemId: args.input.backlogItemId, lateBind: true } : {}),
             ...(repoBound ? { repositoryFullName: args.input.repositoryFullName, repositoryLateBind: true } : {}),
+            ...(worktreeMoved ? { worktreePath: args.input.worktreePath, previousWorktreePath: existing.worktreePath ?? null } : {}),
             ...(headSynced ? { headSha: args.input.headSha, previousHeadSha: existing.headSha ?? null } : {}),
             ...(baseSynced ? { baseSha: args.input.baseSha, previousBaseSha: existing.baseSha ?? null } : {}),
           },

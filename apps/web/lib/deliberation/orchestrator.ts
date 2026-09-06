@@ -43,6 +43,7 @@ import {
   type ConsensusDecision,
 } from "./consensus";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { BOOTSTRAPPED_TASK_RUN_PREFIX } from "./bootstrapped-task-run";
 
 /* -------------------------------------------------------------------------- */
 /* Public shapes                                                              */
@@ -83,6 +84,8 @@ export interface OrchestrateDeliberationInput {
   threadId?: string | null;
   buildId?: string | null;
   routeContext?: string | null;
+  /** Coworker on whose behalf this runs — stamped on a bootstrapped TaskRun (BI-B3AB7FC9). */
+  agentId?: string | null;
 
   patternSlug: string;
   artifactType: DeliberationArtifactType;
@@ -365,10 +368,12 @@ export async function orchestrateDeliberation(
   } else {
     const created = await prisma.taskRun.create({
       data: {
-        taskRunId: `deliberation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        taskRunId: `${BOOTSTRAPPED_TASK_RUN_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         userId: input.userId,
         threadId: input.threadId ?? null,
         buildId: input.buildId ?? null,
+        initiatingAgentId: input.agentId ?? null,
+        currentAgentId: input.agentId ?? null,
         routeContext: input.routeContext ?? "deliberation",
         title: `Deliberation: ${input.patternSlug}`,
         objective: `Run ${pattern.name} over artifactType=${input.artifactType}`,
@@ -711,9 +716,8 @@ export async function orchestrateDeliberation(
     await applyConsensusOutcome(buildId, consensusDecision, branchVotes, prisma);
   }
 
-  // BI-132FC1B9: settle bootstrapped TaskRuns so a failed/timeout caller cannot
-  // leave them in working forever and trip the self-upgrade quiescence drain.
-  if (taskRunBootstrapped && taskRunId) {
+  // BI-132FC1B9 settle; BI-D208E70C only when THIS call dispatched — see bootstrapped-task-run.ts.
+  if (taskRunBootstrapped && taskRunId && input.dispatcher) {
     await settleBootstrapTaskRun(taskRunId, "completed");
   }
 

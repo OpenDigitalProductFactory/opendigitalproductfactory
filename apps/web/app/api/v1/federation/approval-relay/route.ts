@@ -7,7 +7,7 @@
 // Auth is intentionally token-valid-but-not-yet-trusted: this relay is HOW a
 // pending link becomes trusted, so it cannot require a trusted link. We validate
 // the peer-presented link token against the link we issued and accept any
-// non-revoked link. Flag-gated by DPF_FEDERATION_EXCHANGE_ENABLED.
+// non-revoked link. Always on: the trusted link is the only switch.
 
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -15,12 +15,8 @@ import { prisma } from "@dpf/db";
 
 import { recordFederationPeerApproval } from "@/lib/federation/enrollment";
 import { classifyFederationToken, hashToken } from "@/lib/federation/tokens";
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  if (!envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
-    return NextResponse.json({ ok: false, error: "federation_exchange_disabled" }, { status: 404 });
-  }
   const authHeader = request.headers.get("authorization");
   const match = authHeader ? /^Bearer\s+(.+)$/.exec(authHeader.trim()) : null;
   const presented = match?.[1]?.trim();

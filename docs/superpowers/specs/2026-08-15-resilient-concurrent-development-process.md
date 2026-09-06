@@ -11,6 +11,13 @@ status: binding
 - Decision: `DI-83C76A3C1B58` — durable flow control selected with high confidence and no commandment conflict
 - Extends `AGENTS.md` doctrine: four peer surfaces, one process; governance approves evidence, not provenance.
 
+> **2026-09-03 local-capacity decision.** The operator selected two paired local
+> installations as the primary capacity investment. The extension in
+> [`2026-09-03-local-first-agentic-delivery-throughput-design.md`](2026-09-03-local-first-agentic-delivery-throughput-design.md)
+> keeps this specification's server-owned admission and resource lanes, adds
+> capability/pressure-aware cross-install placement, and retains cloud CI as the
+> protected safety net and contingency lane—not the default scaling strategy.
+
 ## 1. Problem and measured baseline
 
 DPF needs high fan-out, but fan-out is useful only while work keeps moving. The current host ran continuously and produced four pull requests in seven hours: about 0.57 PR/hour. During the same investigation, nonproduction lease traffic contained 498 claims, 426 renewals, and 373 list calls. Of those 1,297 calls, 1,222 (about 94%) were estimated waiting overhead rather than useful state transitions.

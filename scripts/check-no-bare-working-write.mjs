@@ -49,6 +49,10 @@ const ALLOWLIST = new Set([
   // exists to enforce; this file just inlines it because it also needs to
   // set other dispatcher-only fields in the same atomic write.
   "apps/web/lib/actions/agent-thread-dispatcher-runtime.ts",
+  // Creates a server-authorized Workroom TaskRun in the "working" state at
+  // birth and sets lastHeartbeatAt in that same atomic create before the
+  // provider operation can be admitted or dispatched.
+  "apps/web/lib/inference/async-operation-workroom-runtime.ts",
 
   // Writes Workroom.status, not TaskRun.status — a durable maintenance room has
   // no heartbeat and no stall watchdog, so markTaskRunWorking does not apply

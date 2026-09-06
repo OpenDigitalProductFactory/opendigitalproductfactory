@@ -131,6 +131,8 @@ export interface InstanceStanceStore {
    * off rather than assuming a declared peer is real.
    */
   listFederationLinks?(): Promise<readonly PairingLink[]>;
+  /** The one federation health sentence, or null when it cannot be read. */
+  readWorkSyncHealthLine?(): Promise<string | null>;
 }
 
 /**
@@ -167,6 +169,10 @@ export function prismaInstanceStanceStore(
       );
       if (stamps.length === 0) return null;
       return stamps.reduce((a, b) => (a.getTime() >= b.getTime() ? a : b));
+    },
+    readWorkSyncHealthLine: async () => {
+      const { getFederationHealth } = await import("@/lib/federation/work-sync-read-model");
+      return (await getFederationHealth()).line;
     },
     listFederationLinks: async () => {
       const rows = await prisma.federationLink.findMany({
@@ -261,12 +267,19 @@ export async function loadInstanceStance(
     declaredRef: snapshot.pairedProductionInstallationRef,
     links,
   });
+  let workSyncHealthLine: string | undefined;
+  try {
+    workSyncHealthLine = (await store.readWorkSyncHealthLine?.()) ?? undefined;
+  } catch {
+    workSyncHealthLine = undefined;
+  }
 
   return resolveInstanceStance(
     { ...snapshot, pairedProductionInstallationRef: pairing.ref ?? undefined },
     {
       sourceCapable: hostProfile.sourceCapable,
       pairingIsEstablished: pairingSupportsWorkSync(pairing),
+      ...(workSyncHealthLine ? { workSyncHealthLine } : {}),
     },
     {
       holdsIrreplaceableWork: holdsIrreplaceableWork({

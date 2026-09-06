@@ -26,6 +26,7 @@ describe("archetype outcome facts", () => {
     });
 
     expect(facts).toEqual({
+      kennelCapacity: null,
       donationRows: null,
       animalStatusRows: null,
       animalsPlaced: null,

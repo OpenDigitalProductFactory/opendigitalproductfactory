@@ -51,9 +51,9 @@ import {
   engineKeyForProvider,
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
+import { providerInferenceFetch } from "./provider-inference-transport";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
 /** Anthropic-style content blocks for structured tool-calling messages */
 export type ContentBlock =
   | { type: "text"; text: string }
@@ -110,12 +110,12 @@ export type ChatMessage = {
   /** For role=tool messages: which tool call this result responds to */
   toolCallId?: string;
 };
-
 export type InferenceResult = {
   content: string;
   inputTokens: number;
   outputTokens: number;
   inferenceMs: number;
+  asyncOperation?: import("../routing/adapter-types").AsyncOperationStartResult;
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   /** Responses API: chain subsequent calls with this ID for conversation state. */
   responseId?: string;
@@ -138,7 +138,7 @@ export type InferenceResult = {
 export class InferenceError extends Error {
   constructor(
     message: string,
-    public readonly code: "network" | "auth" | "rate_limit" | "overloaded" | "model_not_found" | "provider_error" | "transient" | "billing" | "request_too_large",
+    public readonly code: "network" | "auth" | "rate_limit" | "overloaded" | "model_not_found" | "provider_error" | "transient" | "billing" | "request_too_large" | "required_terminal_writer_not_enforceable",
     public readonly providerId: string,
     public readonly statusCode?: number,
     public readonly headers?: Record<string, string>,
@@ -466,6 +466,46 @@ export async function callProvider(
     buildId?: string | null;
   },
 ): Promise<InferenceResult> {
+  // Resolve adapter enforceability before capacity or budget accounting. A
+  // plan/adapter capability miss is not a provider request and must not consume
+  // budget, wait on host capacity, or mutate provider health through fallback.
+  const effectivePlan: RoutedExecutionPlan = plan ?? {
+    providerId,
+    modelId,
+    recipeId: null,
+    contractFamily: "unknown",
+    executionAdapter: resolveDefaultExecutionAdapter(providerId),
+    maxTokens: 4096,
+    providerSettings: {},
+    toolPolicy: (tools?.length ?? 0) > 0 ? { toolChoice: "auto" } : {},
+    responsePolicy: {},
+  };
+  const executionAdapterRaw = effectivePlan.executionAdapter;
+  let selector: ExecutionAdapterSelector | null;
+  try {
+    selector = parseExecutionAdapterSelector(executionAdapterRaw);
+  } catch (e) {
+    if (typeof executionAdapterRaw !== "string") throw e;
+    selector = null;
+  }
+  const isCliAdapter = selector !== null
+    && (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
+  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter) {
+    const soleToolFunction = tools?.length === 1 ? tools[0]?.["function"] : undefined;
+    const soleToolName = soleToolFunction && typeof soleToolFunction === "object" && !Array.isArray(soleToolFunction)
+      ? (soleToolFunction as Record<string, unknown>)["name"]
+      : undefined;
+    const requiredTerminalWriter = typeof soleToolName === "string"
+      && effectivePlan.responsePolicy.terminalWriterToolName === soleToolName;
+    throw new InferenceError(
+      requiredTerminalWriter
+        ? `required-terminal-writer-not-enforceable: execution adapter ${selector?.kind ?? String(executionAdapterRaw)} cannot enforce required tool choice with a server-verifiable mechanism.`
+        : `Execution adapter ${selector?.kind ?? String(executionAdapterRaw)} cannot enforce required tool choice.`,
+      requiredTerminalWriter ? "required_terminal_writer_not_enforceable" : "provider_error",
+      providerId,
+    );
+  }
+
   // Host capacity is a dispatch constraint, not a routing hint. Enforce it at
   // the shared adapter boundary so direct, agentic, evaluation and fallback
   // callers cannot start a local model while governed local CI owns the host.
@@ -527,63 +567,8 @@ export async function callProvider(
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
 
-  // 2. Build minimal plan if none provided (backward compat)
-  const effectivePlan: RoutedExecutionPlan = plan ?? {
-    providerId,
-    modelId,
-    recipeId: null,
-    contractFamily: "unknown",
-    executionAdapter: resolveDefaultExecutionAdapter(providerId),
-    maxTokens: 4096,
-    providerSettings: {},
-    toolPolicy: (tools?.length ?? 0) > 0 ? { toolChoice: "auto" } : {},
-    responsePolicy: {},
-  };
-
-  // Phase A6: route the executionAdapter through the structured selector +
-  // capability-aware resolver. Legacy string values for CLI/chat kinds round-trip
-  // through parseExecutionAdapterSelector; legacy strings outside the structured
-  // taxonomy (responses, embedding, image_gen, async, transcription) fall through
-  // to the registry directly so existing routes are unchanged.
-  const executionAdapterRaw = effectivePlan.executionAdapter;
-  let selector: ExecutionAdapterSelector | null;
-  try {
-    selector = parseExecutionAdapterSelector(executionAdapterRaw);
-  } catch (e) {
-    if (typeof executionAdapterRaw !== "string") {
-      // Object input that failed validation — propagate.
-      throw e;
-    }
-    selector = null;
-  }
-
   // CLI adapters (anthropic-sub, codex) resolve their own auth and spawn CLI
   // binaries — they do not need HTTP base URL or auth headers.
-  const isCliAdapter =
-    selector !== null &&
-    (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
-  const soleToolFunction = tools?.length === 1 ? tools[0]?.["function"] : undefined;
-  const soleToolName = soleToolFunction && typeof soleToolFunction === "object" && !Array.isArray(soleToolFunction)
-    ? (soleToolFunction as Record<string, unknown>)["name"]
-    : undefined;
-  const callerGuardsSoleTerminalWriter = Boolean(
-    mcpSession
-    && typeof soleToolName === "string"
-    && effectivePlan.responsePolicy.terminalWriterToolName === soleToolName,
-  );
-  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter && !callerGuardsSoleTerminalWriter) {
-    throw new InferenceError(
-      `Execution adapter ${selector?.kind ?? String(executionAdapterRaw)} cannot enforce required tool choice.`,
-      "provider_error",
-      providerId,
-    );
-  }
-  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter) {
-    console.info(
-      `[ai-inference] Delegating exact terminal-writer completion enforcement to the caller policy for ${String(soleToolName)}.`,
-    );
-  }
-
   // EP-COST Phase 4: consult CliPoolStatus before dispatching a CLI-backed call.
   // If the pool is known-exhausted (resetAt is in the future), throw rate_limit
   // so routed-inference.ts falls back to the next provider in the priority list
@@ -642,6 +627,7 @@ export async function callProvider(
       modelId,
       plan: effectivePlan,
       provider: { baseUrl, headers },
+      fetchImpl: providerInferenceFetch,
       messages,
       systemPrompt,
       tools,
@@ -738,6 +724,7 @@ export async function callProvider(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     inferenceMs: result.inferenceMs,
+    ...(result.asyncOperation !== undefined && { asyncOperation: result.asyncOperation }),
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
     truncated: result.truncated ?? false,
@@ -777,7 +764,6 @@ export async function logTokenUsage(input: {
       );
     }
   }
-
   // Record cost metric for Prometheus
   if (costUsd > 0) {
     aiInferenceCostUsd.inc({ provider: input.providerId }, costUsd);

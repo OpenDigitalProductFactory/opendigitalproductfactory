@@ -32,6 +32,8 @@ import {
   workroomDriveTaskId,
   type DrivePlan,
 } from "@/lib/work-management/drive-resolution";
+import type { WorkroomCoordinatorEligibility } from "@/lib/work-management/workroom-shape-conformance";
+import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
 
 export type WorkroomDriveRoom = {
   id: string;
@@ -49,6 +51,8 @@ export type WorkroomDriveRoom = {
   reviewDue: boolean;
   substrateReachable: boolean;
   substrateEmpty: boolean;
+  /** Current verifier-readable JSI and TAK eligibility for an AI coordinator. */
+  coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
 };
 
 export type WorkroomDriveEffects = {
@@ -90,42 +94,13 @@ export type WorkroomDriveResult = {
 
 const TERMINAL = new Set(["abandoned", "archived", "complete"]);
 
+/** Max rooms one drive tick will consider. Bounds CANDIDATES, not all rooms. */
+export const STANDING_ROOM_SCAN_LIMIT = 200;
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function readStoredDrive(workspaceState: unknown): {
-  currentStageKey: string | null;
-  receipts: { stageKey: string; kind: string }[];
-  budgetUsage: { kind: string; used: number }[];
-  stopConditionHits: string[];
-  reviewDue: boolean;
-} {
-  const drive = asRecord(asRecord(workspaceState)?.workroomDrive);
-  const receipts = Array.isArray(drive?.receipts)
-    ? drive.receipts.filter((entry): entry is { stageKey: string; kind: string } => {
-      const row = asRecord(entry);
-      return Boolean(row && typeof row.stageKey === "string" && typeof row.kind === "string");
-    })
-    : [];
-  const budgetUsage = Array.isArray(drive?.budgetUsage)
-    ? drive.budgetUsage.filter((entry): entry is { kind: string; used: number } => {
-      const row = asRecord(entry);
-      return Boolean(row && typeof row.kind === "string" && typeof row.used === "number");
-    })
-    : [];
-  const stopConditionHits = Array.isArray(drive?.stopConditionHits)
-    ? drive.stopConditionHits.filter((entry): entry is string => typeof entry === "string")
-    : [];
-  return {
-    currentStageKey: typeof drive?.stageKey === "string" ? drive.stageKey : null,
-    receipts,
-    budgetUsage,
-    stopConditionHits,
-    reviewDue: drive?.reviewDue === true,
-  };
 }
 
 function postureLevelOf(scopeClaims: unknown): ProactivityLevel | null {
@@ -161,6 +136,7 @@ export async function applyDrivePlan(input: {
         reason: plan.reason,
       }
       : null,
+    conformance: plan.conformance,
     ledger: plan.ledger,
   };
 
@@ -255,6 +231,7 @@ export async function runWorkroomDriveJob(
   deps?: {
     listRooms?: () => Promise<WorkroomDriveRoom[]>;
     effects?: WorkroomDriveEffects;
+    reconcileNotifications?: () => Promise<void>;
   },
 ): Promise<WorkroomDriveResult> {
   const rooms = deps?.listRooms ? await deps.listRooms() : await loadStandingRooms();
@@ -267,7 +244,7 @@ export async function runWorkroomDriveJob(
 
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
-    const stored = readStoredDrive(room.workspaceState);
+    const stored = readStoredWorkroomDriveState(room.workspaceState);
     const plan = resolveDrivePlan({
       roomId: room.capsuleId,
       definition: shape ? readWorkShapeDefinitionContract(shape) : null,
@@ -284,6 +261,7 @@ export async function runWorkroomDriveJob(
       reviewDue: room.reviewDue || stored.reviewDue,
       substrateReachable: room.substrateReachable,
       substrateEmpty: room.substrateEmpty,
+      coordinatorEligibility: room.coordinatorEligibility,
       now,
     });
     plans.push({
@@ -299,6 +277,18 @@ export async function runWorkroomDriveJob(
     else skipped += 1;
   }
 
+  try {
+    if (deps?.reconcileNotifications) {
+      await deps.reconcileNotifications();
+    } else if (!deps) {
+      const { reconcileDeliveryTaskNotificationsLive } = await import("@/lib/work-capsules/delivery-task-notifications-live");
+      await reconcileDeliveryTaskNotificationsLive(now);
+    }
+  } catch {
+    // Notification projection is advisory. Delivery state was already persisted
+    // and must not be rolled back when the inbox or realtime bus is unavailable.
+  }
+
   return {
     runId: `workroom-drive:${now.toISOString()}`,
     scanned: rooms.length,
@@ -310,10 +300,46 @@ export async function runWorkroomDriveJob(
   };
 }
 
+/**
+ * Ids of the rooms the drive could possibly act on: non-terminal, not archived,
+ * and actually carrying a work-shape claim.
+ *
+ * The claim lives inside the `scopeClaims` JSON, which Prisma cannot filter on
+ * for an array of objects — so this is raw SQL rather than a `findMany` where
+ * clause. That matters more than it looks: the previous implementation capped
+ * `findMany` at 200 rows and only then filtered for the claim in JavaScript, so
+ * the cap applied to ALL rooms rather than to candidates. On the reference
+ * install that meant 276 non-terminal rooms, exactly one of them shaped, and a
+ * drive that reported `scanned: 0` forever because the one shaped room fell
+ * outside an unordered 200-row window. Filtering in SQL means the cap now
+ * bounds work the drive can actually do, and `ORDER BY` makes which rooms it
+ * takes deterministic instead of whatever the planner returned.
+ */
+export async function loadStandingRoomIds(db: {
+  $queryRaw: (q: TemplateStringsArray, ...v: unknown[]) => Promise<Array<{ id: string }>>;
+}): Promise<string[]> {
+  const rows = await db.$queryRaw`
+    SELECT "id"
+    FROM "WorkCapsule"
+    WHERE "archivedAt" IS NULL
+      AND "status" NOT IN ('abandoned', 'archived', 'complete')
+      AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements("scopeClaims") AS claim
+        WHERE claim ? 'workShape'
+      )
+    ORDER BY "updatedAt" ASC, "id" ASC
+    LIMIT ${STANDING_ROOM_SCAN_LIMIT}
+  `;
+  return rows.map((row) => row.id);
+}
+
 async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
   const { prisma } = await import("@dpf/db");
+  const ids = await loadStandingRoomIds(prisma as never);
+  if (ids.length === 0) return [];
   const rows = await prisma.workroom.findMany({
     where: {
+      id: { in: ids },
       archivedAt: null,
       status: { notIn: [...TERMINAL] },
     },
@@ -342,7 +368,6 @@ async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
         },
       },
     },
-    take: 200,
   });
 
   return rows.flatMap((row) => {
@@ -377,7 +402,7 @@ async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
           authoritySummary: "",
         };
       }),
-      ...readStoredDrive(row.workspaceState),
+      ...readStoredWorkroomDriveState(row.workspaceState),
       substrateReachable: true,
       substrateEmpty: false,
     }];
@@ -397,7 +422,7 @@ function liveEffects(): WorkroomDriveEffects {
         where: { id: input.roomId },
         data: { workspaceState: { ...existing, workroomDrive: input.snapshot } as object },
       });
-      await prisma.workroomActivity.create({
+      const activity = await prisma.workroomActivity.create({
         data: {
           workCapsuleId: input.roomId,
           kind: input.activityKind,
@@ -405,6 +430,8 @@ function liveEffects(): WorkroomDriveEffects {
           payload: input.payload as object,
         },
       });
+      const { publishRecordedWorkCapsuleActivity } = await import("@/lib/work-capsules/activity-events");
+      publishRecordedWorkCapsuleActivity(input.roomId, activity.id);
     },
     async acquireLease(input) {
       if (input.currentExpiresAt && input.currentExpiresAt.getTime() > input.now.getTime()) {

@@ -212,6 +212,55 @@ describe("non-food-hospitality (standard)", () => {
   });
 });
 
+describe("pet-rescue finance surface", () => {
+  const surface = resolveFinanceSurface("nonprofit-community", "pet-rescue");
+
+  it("leads with mission funding and stewardship instead of revenue", () => {
+    expect(surface.mode).toBe("owner-first");
+    expect(surface.subtype).toBe("pet-rescue");
+    expect(surface.headline).toBe("Funding & stewardship");
+    const copy = [
+      surface.headline,
+      surface.subhead,
+      ...surface.moneyJobs.flatMap((job) => [job.label, job.question]),
+    ].join(" ");
+    expect(copy).toMatch(/donation|grant/i);
+    expect(copy).toMatch(/care|animal/i);
+    expect(copy).not.toMatch(/customer|revenue|sales funnel/i);
+  });
+
+  it("offers contribution entry points and rescue-specific navigation labels", () => {
+    expect(surface.invoiceEntryPoints.map((entry) => entry.id)).toEqual([
+      "donation",
+      "grant",
+      "sponsorship",
+      "blank",
+    ]);
+    expect(surface.primaryActionLabel).toBe("Record contribution");
+    expect(surface.entryPointSectionLabel).toBe("Record funding");
+    expect(surface.navigationLabels).toMatchObject({
+      revenue: "Funding",
+      spend: "Care spending",
+      close: "Stewardship",
+    });
+    expect(surface.metricCopy).toEqual({
+      outstandingSingular: "commitment",
+      outstandingPlural: "commitments",
+      receivedSingular: "contribution",
+      receivedPlural: "contributions",
+      emptyOverdue: "no commitments recorded yet",
+      recentAccountHeader: "Supporter or funder",
+      recentEmpty: "No contributions yet.",
+    });
+    expect(surface.setupDescription).toMatch(/donations|grants/i);
+    expect(surface.setupDescription).not.toMatch(/invoicing/i);
+  });
+
+  it("does not make every nonprofit inherit pet-rescue claims", () => {
+    expect(resolveFinanceSurface("nonprofit-community", "charity").mode).toBe("standard");
+  });
+});
+
 describe("isOwnerFirstFinanceCategory", () => {
   it("is true only for food-hospitality", () => {
     expect(isOwnerFirstFinanceCategory(FOOD)).toBe(true);
@@ -248,6 +297,14 @@ describe("resolveFinanceInvoiceCopy", () => {
     expect(copy.customerLabel).toBe("Customer");
     expect(copy.signatureHint.toLowerCase()).toContain("engagement letter");
   });
+
+  it("uses contribution and supporter language for pet rescue", () => {
+    const copy = resolveFinanceInvoiceCopy("nonprofit-community", "pet-rescue");
+    expect(copy.customerLabel).toBe("Supporter or funder");
+    expect(copy.newInvoiceSubhead).toContain("contribution");
+    expect(copy.contexts.donation?.title).toBe("Record a donation");
+    expect(copy.signatureHint.toLowerCase()).not.toContain("engagement letter");
+  });
 });
 
 describe("isFinanceInvoiceContext", () => {
@@ -263,6 +320,9 @@ describe("isFinanceInvoiceContext", () => {
     "custom-order",
     "counter-sale",
     "delivery",
+    "donation",
+    "grant",
+    "sponsorship",
   ])("accepts %s", (ctx) => {
     expect(isFinanceInvoiceContext(ctx)).toBe(true);
   });

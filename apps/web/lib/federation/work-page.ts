@@ -9,9 +9,10 @@
 
 import {
   FEDERATED_WORK_LOCAL_ONLY_SENSITIVITIES,
-  FEDERATED_WORK_ORIGIN_MARKER_PREFIX,
+  FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX,
   FEDERATED_WORK_SPEC_VERSION,
   hasFederatedWorkOriginMarker,
+  type FederatedWorkDeferralV1,
   type FederatedWorkEpicV1,
   type FederatedWorkItemV1,
   type FederatedWorkPageV1,
@@ -39,6 +40,10 @@ export interface WorkPageItemRow {
   createdAt: Date;
   updatedAt: Date;
   completedAt: Date | null;
+  deferReason: string | null;
+  deferTrigger: string | null;
+  deferReviewAt: Date | null;
+  deferredAt: Date | null;
   epic: { epicId: string } | null;
 }
 
@@ -83,6 +88,21 @@ function toItem(row: WorkPageItemRow): FederatedWorkItemV1 {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
+    deferral: toDeferral(row),
+  };
+}
+
+/** Publish the deferral only when it is attributable (BI-9DA5F179). A parked
+ *  row missing any of reason / trigger / review date ships `null` so the peer
+ *  reports the gap instead of mirroring a bare `deferred`. */
+function toDeferral(row: WorkPageItemRow): FederatedWorkDeferralV1 | null {
+  if (row.status !== "deferred") return null;
+  if (!row.deferReason || !row.deferTrigger || !row.deferReviewAt) return null;
+  return {
+    reason: row.deferReason,
+    trigger: row.deferTrigger,
+    reviewAt: row.deferReviewAt.toISOString(),
+    deferredAt: row.deferredAt?.toISOString() ?? null,
   };
 }
 
@@ -100,10 +120,20 @@ function toEpic(row: WorkPageEpicRow): FederatedWorkEpicV1 {
   };
 }
 
-/** Where-clause shared by every reader that must skip mirrored rows. */
+/**
+ * Where-clause shared by every reader that must skip mirrored rows. The prose
+ * columns are nullable, and `NOT (col LIKE …)` is NULL — not true — for a NULL
+ * column, so a bare NOT-contains silently dropped every row that had no prose
+ * (29 production epics and 8 development epics never crossed). A row with no
+ * prose cannot carry a marker and is owned.
+ */
 export const OWNED_BACKLOG_WHERE = {
   sensitivity: { notIn: [...FEDERATED_WORK_LOCAL_ONLY_SENSITIVITIES] },
-  NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_PREFIX } },
+  OR: [{ body: null }, { NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }],
+} as const;
+
+export const OWNED_EPIC_WHERE = {
+  OR: [{ description: null }, { NOT: { description: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }],
 } as const;
 
 export async function buildFederatedWorkPage(
@@ -123,6 +153,7 @@ export async function buildFederatedWorkPage(
       resolution: true, sensitivity: true, source: true, occurrenceCount: true,
       scopeKind: true, archetypeCategories: true, archetypeIds: true, lifecycleTags: true,
       createdAt: true, updatedAt: true, completedAt: true,
+      deferReason: true, deferTrigger: true, deferReviewAt: true, deferredAt: true,
       epic: { select: { epicId: true } },
     },
   });
@@ -139,7 +170,7 @@ export async function buildFederatedWorkPage(
   const epics = input.cursor
     ? []
     : (await db.epic.findMany({
-        where: { NOT: { description: { contains: FEDERATED_WORK_ORIGIN_MARKER_PREFIX } } },
+        where: OWNED_EPIC_WHERE,
         orderBy: { epicId: "asc" },
         select: {
           epicId: true, title: true, description: true, status: true, priority: true,

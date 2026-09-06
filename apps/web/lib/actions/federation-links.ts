@@ -136,7 +136,7 @@ export async function approveFederationLinkAction(linkId: string): Promise<LinkL
     const linkState = await approveFederationLinkLocal(linkId, gate.principalId);
     // Relay our approval to the peer so they flip their approvedAtPeer. Best-effort:
     // a relay failure must never fail our local approval (the peer can be re-notified).
-    if (envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
+    {
       const full = await prisma.federationLink.findUnique({
         where: { linkId },
         select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true, role: true },

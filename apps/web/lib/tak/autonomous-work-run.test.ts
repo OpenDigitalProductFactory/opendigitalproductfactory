@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => {
   const create = vi.fn();
+  const createMessage = vi.fn();
   const findFirst = vi.fn();
-  const prisma = { taskRun: { create, findFirst } };
+  const prisma = { taskRun: { create, findFirst }, taskMessage: { create: createMessage } };
   return {
     prisma: { ...prisma, $transaction: vi.fn(async (callback) => callback(prisma)) },
   };
@@ -289,6 +290,42 @@ describe("createAutonomousWorkRun", () => {
       taskRunId: "TR-MCP-A1B2C3D4E5F6",
       initiatingAgentId: "AGT-WS-REVIEW",
     });
+  });
+
+  it("commits a deferred external submission and its first message atomically", async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.mocked(prisma.taskRun.create).mockResolvedValue({
+      id: "tr_internal_deferred", taskRunId: "TR-MCP-DEFERRED", contextId: "thread-deferred",
+    } as never);
+    const { createAutonomousWorkRun } = await import("./autonomous-work-run");
+
+    await createAutonomousWorkRun({
+      trigger: "external-mcp",
+      taskRunId: "TR-MCP-DEFERRED",
+      userId: "user-1",
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/research",
+      title: "Deferred inference",
+      objective: "Produce one durable answer.",
+      prompt: "Produce one durable answer.",
+      threadId: "thread-deferred",
+      deferredSubmission: {
+        content: "Produce one durable answer.",
+        metadata: { source: "mcp.tasks/submit" },
+      },
+    });
+
+    expect(prisma.taskRun.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "submitted" }),
+    }));
+    expect(prisma.taskMessage.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        taskRunId: "tr_internal_deferred",
+        contextId: "thread-deferred",
+        role: "user",
+        parts: [{ type: "message", text: "Produce one durable answer." }],
+      }),
+    }));
   });
 
   it("creates capacity-continuity TaskRuns with capacity metadata and no tool execution", async () => {
@@ -716,12 +753,14 @@ describe("createAutonomousWorkRun", () => {
       threadId: "thread-1",
       taskRunId: "TR-MCP-ABCDEF12",
       apiTokenId: "tok_remote",
+      tokenScope: "write",
     });
 
     expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
       expect.objectContaining({
         taskRunId: "TR-MCP-ABCDEF12",
         apiTokenId: "tok_remote",
+        tokenScope: "write",
       }),
     );
   });

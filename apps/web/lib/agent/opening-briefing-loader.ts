@@ -7,6 +7,7 @@ import { prisma } from "@dpf/db";
 import { resolveAgentForRoute } from "@/lib/agent-routing";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { loadAttentionItems, filterAttentionForAudience } from "@/lib/attention/aggregate";
+import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
 import { composeOpeningBriefing, type OpeningBriefingPayload } from "./opening-briefing";
 
 /**
@@ -43,12 +44,17 @@ export async function loadOpeningBriefingPayload(
   });
   // V1 operator-view, matching /workspace/inbox; worker scoping is BI-AS-4.
   const visible = filterAttentionForAudience(items, { operator: true });
+  const projection = buildOwnerAttentionProjection(visible, {
+    fallbackLevel: "balanced",
+    nowMs: Date.now(),
+    audience: "operator",
+  });
 
   const briefing = composeOpeningBriefing({
     routeContext,
     // Platform default: the composer treats null as balanced.
     proactivityLevel: null,
-    items: visible,
+    items: projection.needsYouNow.map((entry) => entry.item),
   });
   return briefing ? { content: briefing.content, agentId: agent.agentId ?? null } : null;
 }

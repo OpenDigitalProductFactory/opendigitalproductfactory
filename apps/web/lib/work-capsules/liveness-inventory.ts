@@ -33,6 +33,7 @@ const INVENTORY_SELECT = {
   lastSyncedAt: true,
   updatedAt: true,
   featureBuildId: true,
+  taskRun: { select: { status: true, updatedAt: true } },
 } as const;
 
 type InventoryDb = {
@@ -108,7 +109,7 @@ export async function loadCapsuleLivenessInventory(
         signaledAt: lease.heartbeatAt ?? lease.admittedAt ?? lease.queuedAt ?? lease.updatedAt ?? null,
       } : null,
     }, now);
-    const { featureBuildId: _omit, ...rest } = row;
+    const { featureBuildId: _omit, taskRun: _taskRun, ...rest } = row;
     return {
       ...rest,
       liveness: verdict.liveness,

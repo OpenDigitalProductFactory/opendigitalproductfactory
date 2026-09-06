@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
   recordExternalEvidence: vi.fn(),
@@ -62,6 +63,17 @@ describe("change-review MCP pack", () => {
       if (!row) throw new Error("missing TaskRun");
       Object.assign(row, data);
       return row;
+    });
+    // markTaskRunWorking is a guarded updateMany (BI-D208E70C): move the row
+    // only from a working-entry state, and report how many rows moved.
+    mocks.prisma.taskRun.updateMany.mockImplementation(async ({ where, data }) => {
+      const allowed: string[] = where.status?.in ?? [];
+      const row = taskRows.find(
+        (candidate) => candidate.taskRunId === where.taskRunId && allowed.includes(String(candidate.status)),
+      );
+      if (!row) return { count: 0 };
+      Object.assign(row, data);
+      return { count: 1 };
     });
   });
 

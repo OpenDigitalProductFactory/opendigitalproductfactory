@@ -1,11 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { err, ok } from "@/lib/shared/action-result";
+import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+
 import { readinessRequirement } from "./readiness-guidance";
 import type { InitiativeReadinessDecision } from "./types";
 import { resolveTerminalInitiativeRecovery } from "./terminal-recovery";
 
 const baseSha = "1".repeat(40);
 const headSha = "2".repeat(40);
+const baselineCommitSha = "5".repeat(40);
+const eligibleEvidenceActivityIds = [
+  "cmtnr924q-post-baseline",
+  "cmtnr926e-post-baseline",
+  "cmtnr927v-post-baseline",
+  "cmtnr9295-post-baseline",
+];
 const decision: InitiativeReadinessDecision = {
   decisionId: "IRD-TERMINAL",
   policyVersion: "initiative-readiness.v2",
@@ -38,11 +49,68 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
   return {
     loadLiveRooms: vi.fn().mockResolvedValue(rooms),
     loadBaselinePayloads: vi.fn().mockResolvedValue(baselines),
+    loadEligibleEvidenceActivityIds: vi.fn().mockResolvedValue(ok({
+      activityIds: eligibleEvidenceActivityIds,
+    })),
+    loadObjectiveMappingHistory: vi.fn().mockResolvedValue(ok({ history: [] })),
     discoverArtifact: vi.fn().mockResolvedValue({
       resolved: true,
       artifact: { path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
     }),
-    resolveRecovery: vi.fn().mockResolvedValue({ reviewerRoutes: [{ gate: "objective-mapping" }], escalations: [], unroutable: [] }),
+    resolveRecovery: vi.fn().mockImplementation(async (
+      input: Parameters<typeof resolveInitiativeReviewerRecovery>[0],
+    ) => {
+      const dispatch = input.dispatchContext;
+      const artifact = input.canonicalArtifact;
+      if (!dispatch || !artifact?.resolved || !input.eligibleEvidenceActivityIds) {
+        throw new Error("test expected a complete objective-mapping recovery input");
+      }
+      const objective = `For BI-TERMINAL in ${dispatch.workroomId} on ${dispatch.repositoryFullName}#${dispatch.branchName} at Workroom head ${dispatch.headSha}, address objective-mapping using record_initiative_evidence.`;
+      const questionPacketSummary = `objective-mapping for BI-TERMINAL at ${dispatch.headSha.slice(0, 12)}`;
+      const binding = {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping" as const,
+        expectedCurrentBaselineId: input.expectedCurrentBaselineId,
+        eligibleEvidenceActivityIds: [...input.eligibleEvidenceActivityIds],
+        workroomRef: {
+          kind: "workroom-head" as const,
+          workroomId: dispatch.workroomId,
+          repositoryFullName: dispatch.repositoryFullName,
+          branchName: dispatch.branchName,
+          headSha: dispatch.headSha,
+        },
+        artifactRef: {
+          kind: "repo-blob-at-commit" as const,
+          repositoryFullName: dispatch.repositoryFullName,
+          commitSha: artifact.commitSha ?? dispatch.headSha,
+          path: artifact.path,
+          providerBlobId: artifact.providerBlobId,
+        },
+      };
+      const requiredToolNames = ["record_initiative_evidence", "read_source_at_version"];
+      return {
+        reviewerRoutes: [{
+          gate: "objective-mapping",
+          requestCoworker: {
+            targetAgent: "AGT-WS-PORTFOLIO",
+            objective,
+            questionPacketSummary,
+            requestKey: createObjectiveMappingRequestKey({
+              targetAgent: "AGT-WS-PORTFOLIO",
+              objective,
+              questionPacketSummary,
+              requiredToolNames,
+              binding,
+            }),
+            requiredToolNames,
+            initiativeReviewBinding: binding,
+          },
+        }],
+        escalations: [],
+        unroutable: [],
+      };
+    }),
   };
 }
 
@@ -72,8 +140,116 @@ describe("terminal initiative recovery", () => {
       },
       canonicalArtifact: { resolved: true, path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
       expectedCurrentBaselineId: "baseline-current",
+      eligibleEvidenceActivityIds,
     }));
-    expect(result.reviewerRoutes).toEqual([{ gate: "objective-mapping" }]);
+    expect(ports.loadObjectiveMappingHistory).toHaveBeenCalledWith({
+      itemId: decision.subject.id,
+      headSha,
+    });
+    expect(result.reviewerRoutes).toMatchObject([{ gate: "objective-mapping" }]);
+  });
+
+  it("fails closed while historical objective-mapping approval authority is active", async () => {
+    const ports = deps();
+    const routePacket = {
+      targetAgent: "AGT-WS-PORTFOLIO",
+      objective: `For BI-TERMINAL in WC-TERMINAL on ${room.repositoryFullName}#${room.headBranch} at Workroom head ${headSha}, address objective-mapping using record_initiative_evidence.`,
+      questionPacketSummary: `objective-mapping for BI-TERMINAL at ${headSha.slice(0, 12)}`,
+      requestKey: "placeholder",
+      requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping" as const,
+        expectedCurrentBaselineId: "baseline-current",
+        eligibleEvidenceActivityIds,
+        workroomRef: {
+          kind: "workroom-head" as const,
+          workroomId: room.capsuleId,
+          repositoryFullName: room.repositoryFullName,
+          branchName: room.headBranch,
+          headSha,
+        },
+        artifactRef: {
+          kind: "repo-blob-at-commit" as const,
+          repositoryFullName: room.repositoryFullName,
+          commitSha: headSha,
+          path: "docs/superpowers/specs/design.md",
+          providerBlobId: "3".repeat(40),
+        },
+      },
+    };
+    routePacket.requestKey = createObjectiveMappingRequestKey({
+      targetAgent: routePacket.targetAgent,
+      objective: routePacket.objective,
+      questionPacketSummary: routePacket.questionPacketSummary,
+      requiredToolNames: routePacket.requiredToolNames,
+      binding: routePacket.initiativeReviewBinding,
+    });
+    ports.resolveRecovery.mockResolvedValue({
+      reviewerRoutes: [{ gate: "objective-mapping", requestCoworker: routePacket }],
+      escalations: [],
+      unroutable: [],
+    });
+    ports.loadObjectiveMappingHistory.mockResolvedValue(ok({ history: [{
+      taskRunId: "TR-MCP-PRIOR",
+      status: "input-required",
+      objective: routePacket.objective,
+      idempotencyKey: `initiative-readiness:BI-TERMINAL:objective-mapping:${headSha}`,
+      binding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping",
+        expectedCurrentBaselineId: "baseline-current",
+        artifactRef: routePacket.initiativeReviewBinding.artifactRef,
+      },
+      actionEnvelopeStatuses: ["approved"],
+      writerExecutions: [{ success: false, hasReceipt: false }],
+    }] }));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{
+      reason: "objective-mapping-prior-authority-active",
+      nextAction: expect.stringContaining("TR-MCP-PRIOR"),
+    }]);
+  });
+
+  it("fails closed when the current baseline has no eligible post-baseline passing evidence", async () => {
+    const ports = deps();
+    ports.loadEligibleEvidenceActivityIds.mockResolvedValue(ok({ activityIds: [] }));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason: "eligible-evidence-not-found" }]);
+    expect(ports.resolveRecovery).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the post-baseline evidence inventory cannot be bounded", async () => {
+    const ports = deps();
+    ports.loadEligibleEvidenceActivityIds.mockResolvedValue(err("evidence-limit-exceeded"));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason: "eligible-evidence-unbounded" }]);
+    expect(ports.resolveRecovery).not.toHaveBeenCalled();
   });
 
   it("uses the provider-verified artifact already pinned by the current baseline", async () => {
@@ -83,6 +259,7 @@ describe("terminal initiative recovery", () => {
       artifactRef: {
         kind: "repo-blob-at-commit",
         repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
         path: "docs/superpowers/specs/pinned-design.md",
         providerBlobId: "4".repeat(40),
       },
@@ -93,6 +270,7 @@ describe("terminal initiative recovery", () => {
     expect(ports.resolveRecovery).toHaveBeenCalledWith(expect.objectContaining({
       canonicalArtifact: {
         resolved: true,
+        commitSha: baselineCommitSha,
         path: "docs/superpowers/specs/pinned-design.md",
         providerBlobId: "4".repeat(40),
       },

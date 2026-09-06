@@ -3,8 +3,11 @@ import { createHash } from "node:crypto";
 import { prisma } from "@dpf/db";
 
 import {
+  cancelGithubResponseBody,
+  createGithubReadTransport,
   resolveGithubToken,
   resolveRepoIdentity,
+  type GithubReadTransport,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import type { InitiativeArtifactRef } from "./receipt-schema";
@@ -76,6 +79,7 @@ type GithubJsonFailure = {
   kind: "transport" | "http" | "unreadable";
   attempts: number;
   status?: number;
+  transportCode?: string;
 };
 
 type GithubJsonResult =
@@ -84,6 +88,22 @@ type GithubJsonResult =
 
 const RETRYABLE_PROVIDER_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_PROVIDER_ATTEMPTS = 2;
+
+// Preserve useful transport evidence without returning messages, URLs, headers,
+// or arbitrary provider-defined codes that may contain credentials.
+const SAFE_TRANSPORT_CODES = new Set([
+  "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET", "ENOTFOUND", "EAI_AGAIN", "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT",
+]);
+
+function safeTransportCode(cause: unknown): string | undefined {
+  for (let depth = 0; depth < 4 && cause && typeof cause === "object"; depth += 1) {
+    const error = cause as { code?: unknown; cause?: unknown };
+    if (typeof error.code === "string" && SAFE_TRANSPORT_CODES.has(error.code)) return error.code;
+    cause = error.cause;
+  }
+  return undefined;
+}
 
 function providerAttemptLabel(attempts: number): string {
   return `${attempts} ${attempts === 1 ? "attempt" : "attempts"}`;
@@ -95,7 +115,7 @@ function providerFailureMessage(
 ): string {
   const attempts = providerAttemptLabel(failure.attempts);
   if (failure.kind === "transport") {
-    return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (transport failure).`;
+    return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (transport failure${failure.transportCode ? `: ${failure.transportCode}` : ""}).`;
   }
   if (failure.kind === "http") {
     return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (HTTP ${failure.status}).`;
@@ -119,11 +139,12 @@ async function fetchGithubJson(args: {
         },
         cache: "no-store",
       });
-    } catch {
+    } catch (cause) {
       if (attempt < MAX_PROVIDER_ATTEMPTS) continue;
-      return { ok: false, kind: "transport", attempts: attempt };
+      return { ok: false, kind: "transport", attempts: attempt, transportCode: safeTransportCode(cause) };
     }
     if (!response.ok) {
+      await cancelGithubResponseBody(response);
       if (attempt < MAX_PROVIDER_ATTEMPTS && RETRYABLE_PROVIDER_STATUSES.has(response.status)) continue;
       return { ok: false, kind: "http", attempts: attempt, status: response.status };
     }
@@ -200,6 +221,7 @@ export async function readRepositoryProviderBlob(args: {
   expectedBlobId: string;
   db?: Pick<RepositoryArtifactDb, "credentialEntry" | "platformDevConfig" | "scheduledJob">;
   fetchImpl?: typeof fetch;
+  transportFactory?: () => GithubReadTransport;
 }): Promise<RepositoryProviderBlobResult> {
   const db = args.db ?? prisma;
   let repo: Awaited<ReturnType<typeof resolveRepoIdentity>>;
@@ -212,15 +234,31 @@ export async function readRepositoryProviderBlob(args: {
   if (`${repo.owner}/${repo.name}`.toLocaleLowerCase("en-US") !== args.repositoryFullName.toLocaleLowerCase("en-US")) {
     return { ok: false, code: "CANONICAL_REPOSITORY_REQUIRED", error: "Requested repository is not this installation's canonical repository." };
   }
-  return fetchRepositoryProviderBlob({
-    owner: repo.owner,
-    repo: repo.name,
-    token,
-    commitSha: args.commitSha,
-    path: args.path,
-    expectedBlobId: args.expectedBlobId,
-    fetchImpl: args.fetchImpl ?? fetch,
-  });
+  let transport: GithubReadTransport | null = null;
+  if (!args.fetchImpl) {
+    try {
+      transport = (args.transportFactory ?? createGithubReadTransport)();
+    } catch {
+      return {
+        ok: false,
+        code: "IMMUTABLE_SOURCE_UNAVAILABLE",
+        error: "Repository provider transport is unavailable.",
+      };
+    }
+  }
+  try {
+    return await fetchRepositoryProviderBlob({
+      owner: repo.owner,
+      repo: repo.name,
+      token,
+      commitSha: args.commitSha,
+      path: args.path,
+      expectedBlobId: args.expectedBlobId,
+      fetchImpl: args.fetchImpl ?? transport!.fetch,
+    });
+  } finally {
+    await transport?.close().catch(() => {});
+  }
 }
 
 function dcoEmail(payload: unknown): string | null {
@@ -251,6 +289,7 @@ export async function resolveRepositoryArtifact(args: {
   subject: InitiativeSubject;
   db?: RepositoryArtifactDb;
   fetchImpl?: typeof fetch;
+  transportFactory?: () => GithubReadTransport;
 }): Promise<ResolveRepositoryArtifactResult> {
   const db = args.db ?? (prisma as unknown as RepositoryArtifactDb);
   let expectedRepo: Awaited<ReturnType<typeof resolveRepoIdentity>>;
@@ -332,58 +371,72 @@ export async function resolveRepositoryArtifact(args: {
   } catch {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider credentials are unavailable." };
   }
-  const commitResult = await fetchGithubJson({
-    url: `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(args.locator.commitSha)}`,
-    token,
-    fetchImpl: args.fetchImpl ?? fetch,
-  });
-  if (!commitResult.ok) {
-    return {
-      ok: false,
-      code: commitResult.kind === "unreadable" ? "ARTIFACT_AUTHOR_REQUIRED" : "CANONICAL_DESIGN_REQUIRED",
-      error: providerFailureMessage(commitResult, {
-        unavailable: "immutable commit provenance",
-        unreadable: "commit provenance",
-      }),
-    };
+  let transport: GithubReadTransport | null = null;
+  if (!args.fetchImpl) {
+    try {
+      transport = (args.transportFactory ?? createGithubReadTransport)();
+    } catch {
+      return {
+        ok: false,
+        code: "CANONICAL_DESIGN_REQUIRED",
+        error: "Repository provider transport is unavailable.",
+      };
+    }
   }
-  const commitPayload = commitResult.data;
-  const email = dcoEmail(commitPayload);
-  if (!email) {
-    return {
-      ok: false,
-      code: "ARTIFACT_AUTHOR_REQUIRED",
-      error: `Commit ${args.locator.commitSha} carries no single "Signed-off-by: Name <email>" trailer. Sign the commit off (git commit -s), push the rewritten sha, re-sync the workroom head with adopt_worktree, then retry.`,
-    };
-  }
-  const capsule = capsules[0]!;
+  const fetchImpl = args.fetchImpl ?? transport!.fetch;
+  try {
+    const commitResult = await fetchGithubJson({
+      url: `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(args.locator.commitSha)}`,
+      token,
+      fetchImpl,
+    });
+    if (!commitResult.ok) {
+      return {
+        ok: false,
+        code: commitResult.kind === "unreadable" ? "ARTIFACT_AUTHOR_REQUIRED" : "CANONICAL_DESIGN_REQUIRED",
+        error: providerFailureMessage(commitResult, {
+          unavailable: "immutable commit provenance",
+          unreadable: "commit provenance",
+        }),
+      };
+    }
+    const commitPayload = commitResult.data;
+    const email = dcoEmail(commitPayload);
+    if (!email) {
+      return {
+        ok: false,
+        code: "ARTIFACT_AUTHOR_REQUIRED",
+        error: `Commit ${args.locator.commitSha} carries no single "Signed-off-by: Name <email>" trailer. Sign the commit off (git commit -s), push the rewritten sha, re-sync the workroom head with adopt_worktree, then retry.`,
+      };
+    }
+    const capsule = capsules[0]!;
   // The accountable author is the capsule owner. The DCO sign-off is the
   // corroborating evidence: where the install has registered that email to a
   // principal, it must be the SAME principal — a mismatch is a real conflict and
   // fails loudly. Where no alias is registered, the absence is not evidence of
   // wrongdoing and does not veto the capsule's own accountability record.
-  const authorPrincipalId = capsule.createdByPrincipalId;
-  if (!authorPrincipalId) {
-    return {
-      ok: false,
-      code: "ARTIFACT_AUTHOR_REQUIRED",
-      error: `Workroom ${capsule.capsuleId} has no accountable principal, so the artifact author cannot be recorded. Re-adopt the branch from an authenticated session (adopt_worktree) and retry.`,
-    };
-  }
-  const principals = await db.principalAlias.findMany({
+    const authorPrincipalId = capsule.createdByPrincipalId;
+    if (!authorPrincipalId) {
+      return {
+        ok: false,
+        code: "ARTIFACT_AUTHOR_REQUIRED",
+        error: `Workroom ${capsule.capsuleId} has no accountable principal, so the artifact author cannot be recorded. Re-adopt the branch from an authenticated session (adopt_worktree) and retry.`,
+      };
+    }
+    const principals = await db.principalAlias.findMany({
     where: { aliasType: "email", aliasValue: email, issuer: "" },
     select: { principalId: true },
     take: 2,
   });
-  if (principals.length > 1) {
+    if (principals.length > 1) {
     return {
       ok: false,
       code: "ARTIFACT_AUTHOR_REQUIRED",
       error: `DCO sign-off identity ${email} is registered to more than one principal, so authorship is ambiguous. Merge the duplicate principals or remove the stale email alias, then retry.`,
     };
   }
-  const signOffPrincipalId = principals.length === 1 ? principals[0]?.principalId ?? null : null;
-  if (signOffPrincipalId && signOffPrincipalId !== authorPrincipalId) {
+    const signOffPrincipalId = principals.length === 1 ? principals[0]?.principalId ?? null : null;
+    if (signOffPrincipalId && signOffPrincipalId !== authorPrincipalId) {
     return {
       ok: false,
       code: "ARTIFACT_AUTHOR_REQUIRED",
@@ -393,29 +446,29 @@ export async function resolveRepositoryArtifact(args: {
   // Agent participation is optional context. An external Claude/Codex/Grok
   // session records its activity under a human principal and has no agent id at
   // all; requiring one asked which surface produced the artifact.
-  const participatingAgentIds = new Set(
+    const participatingAgentIds = new Set(
     capsule.activities.map((activity) => activity.recordedByAgentId).filter((id): id is string => Boolean(id)),
   );
-  const soleAgentId = participatingAgentIds.size === 1 ? [...participatingAgentIds][0]! : null;
-  const agentAliases = soleAgentId
+    const soleAgentId = participatingAgentIds.size === 1 ? [...participatingAgentIds][0]! : null;
+    const agentAliases = soleAgentId
     ? await db.principalAlias.findMany({
       where: { principalId: authorPrincipalId, aliasType: "agent", aliasValue: soleAgentId, issuer: "" },
       select: { aliasValue: true },
       take: 2,
     })
     : [];
-  const authorAgentId = soleAgentId && agentAliases.length === 1 ? soleAgentId : null;
+    const authorAgentId = soleAgentId && agentAliases.length === 1 ? soleAgentId : null;
 
-  const providerBlob = await fetchRepositoryProviderBlob({
+    const providerBlob = await fetchRepositoryProviderBlob({
     owner: expectedRepo.owner,
     repo: expectedRepo.name,
     token,
     commitSha: args.locator.commitSha,
     path: args.locator.path,
     expectedBlobId: args.locator.providerBlobId,
-    fetchImpl: args.fetchImpl ?? fetch,
+    fetchImpl,
   });
-  if (!providerBlob.ok) {
+    if (!providerBlob.ok) {
     return {
       ok: false,
       code: providerBlob.code === "IMMUTABLE_BLOB_MISMATCH"
@@ -424,14 +477,17 @@ export async function resolveRepositoryArtifact(args: {
       error: providerBlob.error,
     };
   }
-  return {
-    ok: true,
-    artifact: {
-      digest: `sha256:${createHash("sha256").update(providerBlob.data).digest("hex")}`,
-      bytes: providerBlob.data,
-      authorPrincipalId,
-      authorAgentId,
-      authorEmail: email,
-    },
-  };
+    return {
+      ok: true,
+      artifact: {
+        digest: `sha256:${createHash("sha256").update(providerBlob.data).digest("hex")}`,
+        bytes: providerBlob.data,
+        authorPrincipalId,
+        authorAgentId,
+        authorEmail: email,
+      },
+    };
+  } finally {
+    await transport?.close().catch(() => {});
+  }
 }

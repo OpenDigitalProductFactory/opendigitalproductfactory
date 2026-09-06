@@ -477,3 +477,53 @@ test("a candidateSha/HEAD mismatch on an unfinished record is STALE in the headl
   });
   assert.equal(lines[0], "local-CI gate: STALE");
 });
+
+// BI-5529B5AC: once another slot PASSES the same branch+SHA, the losing
+// record is rewritten as `superseded`. That is not a verdict on the diff — it
+// is bookkeeping — so it must read as INCONCLUSIVE and name the winner, never
+// as FAIL.
+test("a superseded slot record is INCONCLUSIVE and names the winning slot", () => {
+  const result = classifySlotRecord({
+    state: {
+      branch: "feat/x",
+      sha: HEAD,
+      gatePassed: false,
+      status: "superseded",
+      supersededStatus: "queued",
+      supersededBy: { slotKey: "slot-1", at: "2026-09-03T01:00:00.000Z" },
+    },
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+  assert.equal(result.verdict, "INCONCLUSIVE");
+  assert.match(result.reason, /superseded/);
+  assert.match(result.reason, /slot-1/);
+});
+
+test("reconciliation still prefers the PASS over a superseded sibling", () => {
+  const passed = {
+    slotKey: "slot-1",
+    ...classifySlotRecord({
+      state: { branch: "feat/x", sha: HEAD, gatePassed: true, status: "passed", expiresAt: "2026-08-04T13:00:00.000Z" },
+      metadata: { candidateSha: HEAD },
+      headSha: HEAD,
+      headBranch: "feat/x",
+      now: NOW,
+    }),
+  };
+  const superseded = {
+    slotKey: "slot-0",
+    ...classifySlotRecord({
+      state: { branch: "feat/x", sha: HEAD, gatePassed: false, status: "superseded", supersededBy: { slotKey: "slot-1" } },
+      metadata: null,
+      headSha: HEAD,
+      headBranch: "feat/x",
+      now: NOW,
+    }),
+  };
+  const result = reconcileSlots([superseded, passed]);
+  assert.equal(result.verdict, "PASS");
+  assert.equal(result.slot, "slot-1");
+});

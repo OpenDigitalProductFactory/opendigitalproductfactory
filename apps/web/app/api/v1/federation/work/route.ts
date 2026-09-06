@@ -19,8 +19,8 @@ import {
 import { apiErrorResponse } from "@/lib/api/error";
 import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
 import { resolveFederationIdentity, type FederationIdentityDb } from "@/lib/federation/demand-identity";
+import { recordReachedAtHost, type ReachedAtDb } from "@/lib/federation/reached-at";
 import { buildFederatedWorkPage, type WorkPageDb } from "@/lib/federation/work-page";
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const ERROR_STATUS: Record<string, number> = {
   missing_authorization: 401,
@@ -37,9 +37,6 @@ function parseLimit(raw: string | null): number {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  if (!envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
-    return apiErrorResponse("FEDERATION_EXCHANGE_DISABLED", "Federation exchange is disabled on this installation.", 404);
-  }
   const authz = await resolveFederationLinkAuth(request.headers.get("authorization"));
   if (!authz.ok) {
     return apiErrorResponse(authz.error.toUpperCase(), authz.message, ERROR_STATUS[authz.error] ?? 401);
@@ -49,6 +46,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (authz.role !== "same-org-peer") {
     return apiErrorResponse("LINK_NOT_SAME_ORGANIZATION", "Work sync is available only to a same-organization peer.", 403);
   }
+  // A trusted same-organization peer just reached us at this Host: that is one
+  // of our own addresses, learned without anyone typing it (reached-at.ts).
+  void recordReachedAtHost(prisma as unknown as ReachedAtDb, request.headers.get("x-forwarded-host") ?? request.headers.get("host"));
 
   const url = new URL(request.url);
   const cursor = url.searchParams.get("cursor");
