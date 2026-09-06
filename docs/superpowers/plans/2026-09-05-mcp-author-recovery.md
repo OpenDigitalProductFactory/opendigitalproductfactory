@@ -47,6 +47,8 @@ Refactor duplicate ARTIFACT_AUTHOR_REQUIRED advice into one existing recovery pr
 
 Make coverage remediation profile-aware. If the selected parent cannot create the required baseline through the suggested route, return a precise parent-binding requirement and the supported correction instead of promising nonexistent reviewerRoutes. Preserve baseline enforcement and provenance; do not silently reclassify documentation or widen author grants. Resolve the actual supported parent-binding rule against existing governance before implementation; revise the design if a policy change is required.
 
+AC-MCP-RECOVERY-7 implementation is isolated in `planning/plan-coverage-recovery.ts`. The coverage writer reads the authoritative parent and mapped-child work types, delegates profile selection to the existing readiness policy, and returns either `scope-baseline-review-required` for feature-class work or `implementation-parent-binding-required` for documentation/fix work. The latter includes mapped implementation child candidates when present. The writer still requires an immutable canonical plan and current baseline before persisting any receipt; no baseline exemption or automatic reclassification is introduced.
+
 ## 3. Carry the contract through all readers
 
 Project prerequisite blockers separately from reviewer execution. Reuse reviewerRoutes and TaskRun lifecycle; cite real pending dispatch ids, expose terminal outcomes and distinguish unknown availability from confirmed reviewer absence. Apply the same projection to readiness, get_workroom and Workroom listing. Keep new fields additive and test legacy consumers. Do not create a status ledger or a duplicate listing tool.

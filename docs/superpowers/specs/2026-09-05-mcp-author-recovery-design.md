@@ -73,6 +73,8 @@ Additional acceptance AC-MCP-RECOVERY 7: recovery must be valid for the actual r
 
 Resolve the documentation-authoring versus implementation-parent binding in the existing planning contract. A profile-aware refusal must supply a valid supported next action or an explicit parent-binding correction with the required evidence; it must not promise reviewer routes that its recommended call cannot return. Reuse existing profile policy. Test the coverage refusal followed by its actual prescribed readiness call for doc-only, fix and feature profiles, including a documentation parent mapping feature children. Preserve immutable scope binding, feature/refactor approval and author/reviewer separation. No automatic reclassification, new umbrella or baseline exemption is authorized by this acceptance criterion. Keep the live blocking condition separate from the defect's tracking id.
 
+Implementation clarification: `record_plan_backlog_coverage` remains a governed implementation receipt writer, so it never mints or bypasses a scope baseline for documentation or fix artifacts. A feature-class item without a baseline continues through independent spec approval. A documentation/fix item instead receives a typed `implementation-parent-binding-required` correction; when its deliverables name eligible implementation children, the response names those candidates. This keeps authoring evidence on the documentation item while binding implementation coverage to the item that owns the baseline.
+
 
 ## Implementation and verification boundary
 
