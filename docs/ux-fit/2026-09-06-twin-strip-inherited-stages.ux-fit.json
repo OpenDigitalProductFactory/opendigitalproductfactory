@@ -3,9 +3,7 @@
   "decidedOption": "inherited-backbone-stages-behind-collapsed-disclosure",
   "scope": {
     "files": [
-      "apps/web/components/twin/ValueStreamStrip.tsx",
-      "apps/web/lib/twin/stage-flow.ts",
-      "packages/storefront-templates/src/twin-value-stream.ts"
+      "apps/web/components/twin/ValueStreamStrip.tsx"
     ]
   },
   "evidence": {
