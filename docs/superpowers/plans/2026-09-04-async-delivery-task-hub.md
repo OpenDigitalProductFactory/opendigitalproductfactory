@@ -9,7 +9,7 @@ status: active
 **Workroom:** `WC-59101F34`
 
 **Design:** [`2026-09-04-async-delivery-task-hub-design.md`](../specs/2026-09-04-async-delivery-task-hub-design.md)
-**Dependency:** `BI-801313EB` durable async lifecycle; consume its authorized read API and published transition event without editing its persistence, lifecycle, or workers. Register only the narrow Task Hub projection consumer.
+**Dependency:** `BI-801313EB` durable async lifecycle; consume its authorized read API and published transition event. Register the narrow Task Hub projection consumer and the Workroom-to-TaskRun admission adapter required by the closed one-shot contract, without changing the async-operation schema or provider lifecycle.
 
 ## Outcome and delivery boundary
 
@@ -127,6 +127,19 @@ Red first:
 
 The implementation uses the existing Notification table and realtime attention bus. It must not create a delivery ledger.
 
+## Phase 4b — close the Workroom producer binding gap (TDD)
+
+Extend only the routed durable admission boundary for `background.mcp-durable-inference-one-shot`:
+
+1. reproduce the live failure where an authorized Workroom request creates an operation that the worker refuses with `DURABLE_INFERENCE_TASKRUN_BINDING_MISSING`;
+2. authorize the Workroom first, then create/replay a deterministic server-owned TaskRun and link it to that Workroom;
+3. defer the operation wake, persist the exact operation id into TaskRun progress by compare-and-swap, and enqueue only afterward;
+4. prove an identical request reuses the same TaskRun and operation;
+5. prove missing human attribution, forged or unauthorized Workrooms, request/metadata drift, conflicting Workroom TaskRun linkage, and operation-id drift fail before provider dispatch; and
+6. keep non-TaskRun contract families on the existing direct Workroom path.
+
+No new schema, queue, notification ledger, or provider retry path is introduced. The existing async-operation lease/fence and transition consumers remain authoritative.
+
 ## Phase 5 — validation, review, and delivery
 
 1. Run focused projector/store/stream/component/notification tests and `apps/web` typecheck.
@@ -134,14 +147,14 @@ The implementation uses the existing Notification table and realtime attention b
 3. Produce `docs/ux-fit/2026-09-04-async-delivery-task-hub.ux-fit.json` with measured desktop/mobile, light/dark, keyboard/focus, overflow, loading/reconnect/partial/error, and route-budget evidence.
 4. Run exact-tree semantic review and local CI when admitted. If either lane is occupied, unavailable, or underperforming, record it as **INCONCLUSIVE** with focused/typecheck/guard compensation; infer no PASS and keep protected CI mandatory.
 5. DCO-sign the implementation commit, push normally, open one protected PR, and arm normal protected auto-merge only after readiness.
-6. Require every protected PR and merge-group check and stop at the protected merge result. This task does not publish a release, deploy, or upgrade an install.
-7. Preserve the live-install acceptance script for a separately authorized delivery task: exact served SHA/CAN-TEST and authenticated `/build/work` acceptance covering bounded initial page, event-first row update, reconnect reconciliation, semantic deep links, responsive/a11y states, and one deduplicated notification for a controlled durable transition.
+6. Require every protected PR and merge-group check, publish exactly one canonical release for the protected merge, and use exactly one governed live-upgrade action after publisher and quiescence prechecks.
+7. After exact served-SHA/CAN-TEST proof, run one Workroom-bound closed-contract admission. Record the server-owned Workroom/TaskRun/operation binding, terminal transition, exactly one Workroom activity and one notification, then replay that same terminal consumer once and prove both counts remain one.
 
 ## Atomic traceability
 
 | Deliverable key | Requirements | Flows | Contracts | Verification |
 | --- | --- | --- | --- | --- |
-| `delivery-task-hub` | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-003, OBJ-DTH-004, OBJ-DTH-005, OBJ-DTH-006, OBJ-DTH-007; AC-DTH-001, AC-DTH-002, AC-DTH-003, AC-DTH-004, AC-DTH-005, AC-DTH-006, AC-DTH-007 | `workroom-list→bounded-snapshot→event-upsert→reconnect-snapshot`; `inference/async-operation.transitioned→canonical-transition-read→bounded-server-owned-Workroom-wake→deduplicated-semantic-notification`; `inspect/resume/review/handoff→canonical-owner-surface` | Workroom identity, TaskRun status, authorized async-operation read model, canonical async transition and binding, existing Workroom activity ledger/bus, Notification/attention bus, `view_platform` | pure projection/store/stream/notification/transition-consumer tests; component/a11y tests; typecheck/guards; UX-fit; protected CI |
+| `delivery-task-hub` | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-003, OBJ-DTH-004, OBJ-DTH-005, OBJ-DTH-006, OBJ-DTH-007; AC-DTH-001, AC-DTH-002, AC-DTH-003, AC-DTH-004, AC-DTH-005, AC-DTH-006, AC-DTH-007 | `authorized-Workroom-request→server-owned-TaskRun→deferred-operation-admission→durable-TaskRun-projection→provider-wake`; `workroom-list→bounded-snapshot→event-upsert→reconnect-snapshot`; `inference/async-operation.transitioned→canonical-transition-read→bounded-server-owned-Workroom-wake→deduplicated-semantic-notification`; `inspect/resume/review/handoff→canonical-owner-surface` | Workroom identity, canonical TaskRun binding, authorized async-operation read model, canonical async transition and binding, existing Workroom activity ledger/bus, Notification/attention bus, `view_platform` | admission ordering/idempotency/authorization tests; pure projection/store/stream/notification/transition-consumer tests; component/a11y tests; typecheck/guards; UX-fit; protected CI; live 1-activity/1-notification replay proof |
 
 ## Refactoring allocation
 

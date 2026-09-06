@@ -83,11 +83,13 @@ export async function discoverCanonicalDesignArtifact(args: {
   transportFactory?: () => GithubReadTransport;
 }): Promise<CanonicalArtifactDiscoveryResult> {
   const db = args.db ?? (prisma as unknown as CanonicalArtifactDb);
-  if (!/^[a-f0-9]{40}$/i.test(args.baseSha) || !/^[a-f0-9]{40}$/i.test(args.headSha)) {
+  const invalidFields = (["baseSha", "headSha"] as const)
+    .filter((field) => !/^[a-f0-9]{40}$/i.test(args[field]));
+  if (invalidFields.length > 0) {
     return {
       resolved: false,
       code: "provider-unavailable",
-      nextAction: "The workroom does not record an immutable base and head. Re-sync the branch with adopt_worktree(headBranch, headSha), then retry.",
+      nextAction: `The workroom has missing or invalid ${invalidFields.join(" and ")}. Re-sync the branch with adopt_worktree(headBranch, baseSha, headSha), supplying full immutable commit SHAs for both fields and preserving any valid recorded identity, then retry.`,
     };
   }
 

@@ -8959,6 +8959,14 @@
     "longSentences": 0,
     "textMass": 9
   },
+  "apps/web/components/ward/CapacityReview.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
   "apps/web/components/ward/WardOperations.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

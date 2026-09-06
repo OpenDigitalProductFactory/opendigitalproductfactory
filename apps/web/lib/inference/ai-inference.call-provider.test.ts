@@ -8,6 +8,7 @@ const {
   mockStartTimer,
   mockAiInferenceTokensInc,
   mockAiInferenceErrorsInc,
+  mockProviderFetch,
 } = vi.hoisted(() => ({
   mockPrisma: {
     modelProvider: {
@@ -20,6 +21,7 @@ const {
   mockStartTimer: vi.fn(),
   mockAiInferenceTokensInc: vi.fn(),
   mockAiInferenceErrorsInc: vi.fn(),
+  mockProviderFetch: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -52,6 +54,10 @@ vi.mock("../routing/image-gen-adapter", () => ({}));
 vi.mock("../routing/embedding-adapter", () => ({}));
 vi.mock("../routing/transcription-adapter", () => ({}));
 vi.mock("../routing/async-adapter", () => ({}));
+
+vi.mock("./provider-inference-transport", () => ({
+  providerInferenceFetch: mockProviderFetch,
+}));
 
 import { callProvider } from "./ai-inference";
 import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-telemetry-writer";
@@ -87,6 +93,9 @@ describe("callProvider", () => {
     );
 
     expect(result).not.toHaveProperty("asyncOperation");
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
+      fetchImpl: mockProviderFetch,
+    }));
   });
 
   it("routes Codex OAuth execution through the ChatGPT backend", async () => {
@@ -258,90 +267,94 @@ describe("callProvider", () => {
         toolPolicy: { toolChoice: "required" },
         responsePolicy: {},
       },
-    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    )).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringMatching(/cannot enforce required tool choice/i),
+    });
     expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
 
-  it("permits one explicitly bound terminal writer through a CLI adapter", async () => {
+  it.each([
+    ["anthropic-sub", "claude-sonnet-4-6", "claude-cli", "record_initiative_evidence"],
+    ["codex", "gpt-5.4", "codex-cli", "record_initiative_design_review"],
+  ])("refuses %s/%s before inference when its CLI adapter cannot force the bound writer", async (
+    providerId,
+    modelId,
+    executionAdapter,
+    writerToolName,
+  ) => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
-      providerId: "anthropic-sub",
+      providerId,
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
-      baseUrl: null,
+      baseUrl: providerId === "codex" ? "https://api.openai.com/v1" : null,
       endpoint: null,
     });
 
-    await callProvider(
-      "anthropic-sub",
-      "claude-sonnet-4-6",
+    const rejection = callProvider(
+      providerId,
+      modelId,
       [{ role: "user", content: "Record it." }],
-      "Use the writer.",
-      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      "Use the sole governed writer.",
+      [{ type: "function", function: { name: writerToolName, parameters: {} } }],
       {
-        providerId: "anthropic-sub",
-        modelId: "claude-sonnet-4-6",
+        providerId,
+        modelId,
         recipeId: null,
         contractFamily: "sync.review",
-        executionAdapter: "claude-cli",
+        executionAdapter,
         maxTokens: 1024,
         providerSettings: {},
         toolPolicy: { toolChoice: "required" },
-        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+        responsePolicy: { terminalWriterToolName: writerToolName },
       },
       undefined,
       { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
     );
 
-    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
-      tools: [expect.objectContaining({
-        function: expect.objectContaining({ name: "record_initiative_evidence" }),
-      })],
-      plan: expect.objectContaining({
-        toolPolicy: expect.objectContaining({ toolChoice: "required" }),
-        responsePolicy: expect.objectContaining({ terminalWriterToolName: "record_initiative_evidence" }),
-      }),
-    }));
+    await expect(rejection).rejects.toMatchObject({
+      code: "required_terminal_writer_not_enforceable",
+      providerId,
+      message: expect.stringContaining("required-terminal-writer-not-enforceable"),
+    });
+    expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
 
-  it("permits the live Codex CLI route for one governed bound terminal writer", async () => {
+  it("keeps a sole required writer available to a provider-native HTTP adapter", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
-      providerId: "codex",
-      authMethod: "oauth2_authorization_code",
+      providerId: "openai",
+      authMethod: "api_key",
       authHeader: "Authorization",
       baseUrl: "https://api.openai.com/v1",
       endpoint: null,
     });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "key" });
 
     await callProvider(
-      "codex",
+      "openai",
       "gpt-5.4",
-      [{ role: "user", content: "Record the objective mapping." }],
+      [{ role: "user", content: "Record it." }],
       "Use the sole governed writer.",
       [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
       {
-        providerId: "codex",
+        providerId: "openai",
         modelId: "gpt-5.4",
         recipeId: null,
         contractFamily: "sync.review",
-        executionAdapter: "codex-cli",
+        executionAdapter: "chat",
         maxTokens: 1024,
         providerSettings: {},
         toolPolicy: { toolChoice: "required" },
         responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
       },
-      undefined,
-      { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
     );
 
     expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
-      providerId: "codex",
-      tools: [expect.objectContaining({
-        function: expect.objectContaining({ name: "record_initiative_evidence" }),
-      })],
+      providerId: "openai",
       plan: expect.objectContaining({
-        executionAdapter: "codex-cli",
-        toolPolicy: expect.objectContaining({ toolChoice: "required" }),
-        responsePolicy: expect.objectContaining({ terminalWriterToolName: "record_initiative_evidence" }),
+        executionAdapter: "chat",
+        toolPolicy: { toolChoice: "required" },
       }),
     }));
   });

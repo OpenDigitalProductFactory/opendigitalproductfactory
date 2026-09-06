@@ -39,6 +39,13 @@ export interface AdapterRequest {
   modelId: string;
   plan: RoutedExecutionPlan;
   provider: ResolvedProvider;
+  /**
+   * Server-owned provider transport. HTTP adapters must use this instead of
+   * process-global fetch so long-lived inference never re-enters the libuv
+   * getaddrinfo queue. CLI adapters accept the common request shape but do not
+   * use this field.
+   */
+  fetchImpl: typeof fetch;
   messages: ChatMessage[];
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;

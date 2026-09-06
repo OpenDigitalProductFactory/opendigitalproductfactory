@@ -1,6 +1,13 @@
 import { Inngest } from "inngest";
 
-export const inngest = new Inngest({ id: "dpf-platform" });
+import { createOffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
+
+const inngestTransport = createOffThreadpoolFetchTransport();
+
+export const inngest = new Inngest({
+  id: "dpf-platform",
+  fetch: inngestTransport.fetch,
+});
 
 // Event payload types for type-safe event sending
 

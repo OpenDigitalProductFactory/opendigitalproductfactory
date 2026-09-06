@@ -17,6 +17,7 @@ const EXPECTED_LEGACY_JOBS = [
   "build-studio-surface-guard",
   "bundle-boundary-guard",
   "capability-consumer-guard",
+  "compose-bind-posture-guard",
   "compose-env-contract-guard",
   "compose-resource-budgets-guard",
   "context-economy-guard",

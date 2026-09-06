@@ -20,7 +20,6 @@ import {
   type PartnerBusinessRow,
 } from "@/components/platform/federation-links/PartnerBusinessPanel";
 import { OrganizationJoinPanel } from "@/components/platform/federation-links/OrganizationJoinPanel";
-import { getOrganizationJoinNodeSummariesAction } from "@/lib/actions/organization-join";
 import {
   deriveNearbyDiscoveryHealth,
   deriveEdgeNodeReadiness,
@@ -45,7 +44,7 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
-  const [links, edgeNodes, partnerAccounts, nearbyPairingSessions, organizationJoinNodes, introducedCandidates] = await Promise.all([
+  const [links, edgeNodes, partnerAccounts, nearbyPairingSessions, introducedCandidates] = await Promise.all([
     prisma.federationLink.findMany({
       include: { principal: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
@@ -79,7 +78,6 @@ export default async function FederationLinksPage() {
       orderBy: { requestedAt: "desc" },
       take: 20,
     }),
-    getOrganizationJoinNodeSummariesAction(),
     prisma.federationIntroductionCandidate.findMany({
       where: {
         expiresAt: { gt: new Date() }, withdrawnAt: null, dismissedAt: null,
@@ -218,7 +216,7 @@ export default async function FederationLinksPage() {
           both sides approve; either side can pause or revoke the connection.
         </p>
       </div>
-      <OrganizationJoinPanel nodes={organizationJoinNodes.ok ? organizationJoinNodes.nodes : []} candidates={joinCandidates} />
+      <OrganizationJoinPanel candidates={joinCandidates} />
       <FederationLinksAdminClient
         rows={rows}
         nearbyCandidates={connectionCandidates}

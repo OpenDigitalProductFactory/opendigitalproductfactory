@@ -472,10 +472,6 @@ export async function submitRemoteCoworkerTask(input: {
     const replay = replayOrConflict(existing, parsed);
     if (
       requestMatches
-      && recoverTerminalWriterEscalation(existing.progressPayload)
-    ) return replay;
-    if (
-      requestMatches
       && (existing.status === "input-required" || (existing.status === "completed" && terminalToolPolicy))
     ) {
       const resumed = await resumeApprovedRemoteTask({
@@ -510,6 +506,12 @@ export async function submitRemoteCoworkerTask(input: {
       });
       if (recovered) return recovered;
     }
+    // The retry budget limits inference, not exact approved execution or
+    // renewal requiring fresh owner approval through the existing authority path.
+    if (
+      requestMatches
+      && recoverTerminalWriterEscalation(existing.progressPayload)
+    ) return replay;
     const terminalWriterReservation = terminalToolPolicy
       ? await reserveTerminalWriterReplay({
           existing,
@@ -694,6 +696,7 @@ export async function submitRemoteCoworkerTask(input: {
         idempotencyKey: parsed.idempotencyKey,
         requestDigest,
         requestDigestVersion: REMOTE_TASK_REQUEST_DIGEST_VERSION,
+        requestObjective: parsed.objective,
         collaborationKind: parsed.collaborationKind ?? null,
         riskClass: parsed.riskClass,
         apiTokenId: token.tokenId,

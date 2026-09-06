@@ -438,7 +438,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // The AbortSignal is created inside the thunk so, for serialized local
       // calls, the timeout clock starts when the call actually dispatches — not
       // while it waits its turn in the local-inference lock.
-      const doFetch = () => fetch(chatUrl, {
+      const doFetch = () => request.fetchImpl(chatUrl, {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify(body),

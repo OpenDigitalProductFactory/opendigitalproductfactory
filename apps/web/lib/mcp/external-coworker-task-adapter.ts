@@ -64,10 +64,10 @@ function initiativeReviewPacket(input: ExternalCoworkerTaskInput): InitiativeRev
     names.length < 2
     || names.length > 4
     || !names.includes(binding.writerToolName)
-    || !names.some((name) => allowedReaders.has(name))
+    || !names.includes("read_source_at_version")
     || names.some((name) => name !== binding.writerToolName && !allowedReaders.has(name))
   ) {
-    return "requiredToolNames must contain only the bound writer and one or both immutable source readers";
+    return "requiredToolNames must contain the bound writer and read_source_at_version; search_source_at_version is the only optional extra tool";
   }
 
   const authorityScope = [

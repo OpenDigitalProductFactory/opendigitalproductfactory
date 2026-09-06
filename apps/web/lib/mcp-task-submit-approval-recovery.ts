@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import type { UserContext } from "@/lib/permissions";
 import { markTaskRunWorking } from "@/lib/observability/heartbeat";
@@ -129,21 +129,28 @@ export async function resumeApprovedRemoteTask(input: {
   const status = currentRun?.status === "input-required"
     ? "input-required"
     : result.success ? "completed" : "failed";
+  const progressPayload: Record<string, Prisma.InputJsonValue | null> = {
+    ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+      && !Array.isArray(input.existing.progressPayload)
+      ? input.existing.progressPayload as Prisma.InputJsonObject
+      : {}),
+    summary: result.message,
+    riskClass: input.parsed.riskClass,
+    executedToolCount: 1,
+    resumedFromApproval: true,
+    requiresApproval: status === "input-required",
+  };
+  if (status === "completed") {
+    delete progressPayload.terminalWriterWait;
+    delete progressPayload.terminalWriterEscalation;
+    delete progressPayload.terminalWriterContextFailure;
+  }
   await prisma.taskRun.update({
     where: { taskRunId: input.existing.taskRunId },
     data: {
       status,
       ...(status === "input-required" ? {} : { completedAt: new Date() }),
-      progressPayload: {
-        ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
-          && !Array.isArray(input.existing.progressPayload)
-          ? input.existing.progressPayload as Record<string, unknown>
-          : {}),
-        summary: result.message,
-        riskClass: input.parsed.riskClass,
-        executedToolCount: 1,
-        resumedFromApproval: true,
-      },
+      progressPayload,
     },
   });
 

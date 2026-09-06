@@ -33,6 +33,9 @@
  * @property {boolean} dirty         porcelain non-empty
  * @property {number} ageDays        days since last commit (0 if unknown)
  * @property {boolean} [hasLiveSession]  a fresh session heartbeat is present
+ * @property {boolean} [hasActiveClaim]  an active Workroom claims this worktree
+ * @property {boolean} [claimSourceUnavailable]  the claim record could not be read
+ * @property {string}  [claimSourceReason]  why it could not be read
  * @property {boolean} [midMerge]        a merge is in progress (MERGE_HEAD present)
  */
 
@@ -77,6 +80,33 @@ export function classifyWorktree(facts, opts = {}) {
     return {
       verdict: "KEEP",
       reason: `branch=${facts.branch} live session heartbeat — refuse to reap an in-use worktree`,
+      tier: null,
+    };
+  }
+
+  // The PLATFORM's answer to "is anyone working here", which outranks the
+  // client-written heartbeat above because it is the same record every surface
+  // writes to. The heartbeat is a Claude Code plugin hook: Codex, Grok and Build
+  // Studio write nothing, so on 2026-09-02 the gate above read "no heartbeat" as
+  // "no live session" and reaped 24 claimed worktrees, one of them a
+  // codex-desktop room touched minutes earlier (BI-99395B29 follow-up).
+  if (facts.hasActiveClaim) {
+    return {
+      verdict: "KEEP",
+      reason: `branch=${facts.branch} claimed by an active Workroom — refuse to reap owned work`,
+      tier: null,
+    };
+  }
+
+  // FAIL SAFE. When the claim record could not be read at all, "nobody is
+  // working here" is a guess, not a finding — and it is the guess that cost 24
+  // worktrees. Refuse to reap rather than assume the platform is idle.
+  if (facts.claimSourceUnavailable) {
+    return {
+      verdict: "KEEP",
+      reason:
+        `branch=${facts.branch} Workroom claims unreadable (${facts.claimSourceReason ?? "unknown"}) — ` +
+        "refusing to reap on absent evidence",
       tier: null,
     };
   }
