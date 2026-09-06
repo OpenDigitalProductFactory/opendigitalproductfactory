@@ -38,6 +38,18 @@ const initiativeReviewProperties = {
         description:
           "Exact eligible post-baseline evidence activity IDs from an objective-mapping recovery packet. Required by the server when gate is objective-mapping.",
       },
+      workroomRef: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["workroom-head"] },
+          workroomId: { type: "string" },
+          repositoryFullName: { type: "string" },
+          branchName: { type: "string" },
+          headSha: { type: "string" },
+        },
+        required: ["kind", "workroomId", "repositoryFullName", "branchName", "headSha"],
+        additionalProperties: false,
+      },
       artifactRef: {
         type: "object",
         properties: {

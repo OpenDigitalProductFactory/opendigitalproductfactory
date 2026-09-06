@@ -6,6 +6,13 @@ export type InitiativeReviewBinding = {
   gate: string;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: string[];
+  workroomRef?: {
+    kind: "workroom-head";
+    workroomId: string;
+    repositoryFullName: string;
+    branchName: string;
+    headSha: string;
+  };
   artifactRef: {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
@@ -26,7 +33,7 @@ function boundedUniqueStrings(value: unknown): string[] | null {
   const values = value.map(optionalString);
   if (values.some((entry) => !entry)) return null;
   const normalized = values as string[];
-  return new Set(normalized).size === normalized.length ? normalized : null;
+  return new Set(normalized).size === normalized.length ? [...normalized].sort() : null;
 }
 
 function scopedToolNames(authorityScope: readonly string[] | undefined): string[] {
@@ -75,6 +82,14 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
   const eligibleEvidenceActivityIds = rawEligibleEvidenceActivityIds === undefined
     ? undefined
     : boundedUniqueStrings(rawEligibleEvidenceActivityIds);
+  const rawWorkroomRef = binding["workroomRef"];
+  const workroomRef = rawWorkroomRef && typeof rawWorkroomRef === "object" && !Array.isArray(rawWorkroomRef)
+    ? rawWorkroomRef as Record<string, unknown>
+    : null;
+  const workroomId = optionalString(workroomRef?.["workroomId"]);
+  const workroomRepositoryFullName = optionalString(workroomRef?.["repositoryFullName"]);
+  const branchName = optionalString(workroomRef?.["branchName"]);
+  const headSha = optionalString(workroomRef?.["headSha"]);
   if (
     !writerToolName?.startsWith("record_initiative_")
     || !itemId?.startsWith("BI-")
@@ -88,6 +103,14 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
     || (rawEligibleEvidenceActivityIds !== undefined && !eligibleEvidenceActivityIds)
+    || (rawWorkroomRef !== undefined && (
+      workroomRef?.["kind"] !== "workroom-head"
+      || !workroomId
+      || !workroomRepositoryFullName
+      || !branchName
+      || !headSha
+    ))
+    || (workroomRef && workroomRepositoryFullName !== repositoryFullName)
     || (gate === "objective-mapping" && !eligibleEvidenceActivityIds)
   ) return null;
   return {
@@ -98,6 +121,17 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
+    ...(workroomRef && workroomId && workroomRepositoryFullName && branchName && headSha
+      ? {
+        workroomRef: {
+          kind: "workroom-head" as const,
+          workroomId,
+          repositoryFullName: workroomRepositoryFullName,
+          branchName,
+          headSha,
+        },
+      }
+      : {}),
     artifactRef: {
       kind: "repo-blob-at-commit",
       repositoryFullName,
