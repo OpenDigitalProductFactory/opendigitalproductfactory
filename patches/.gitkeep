@@ -1,0 +1,2 @@
+# pnpm patch files live here (pnpm-workspace.yaml patchedDependencies).
+# The Dockerfile COPYs this directory before install, so it must exist even when empty.
