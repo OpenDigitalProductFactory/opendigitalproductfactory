@@ -1,6 +1,10 @@
+---
+status: active
+---
+
 # Execution reliability and process visibility
 
-Status: proposed; exact-artifact review and live coverage pending.
+Status: implementation in progress; broader execution/portal coverage remains pending.
 Workroom: WC-4A72DC95. Parent delivery item: BI-06AE6833.
 Decision: DI-515AD614CCF6, harden existing DPF/Inngest execution.
 Canonical design: [throughput design sections 8.1–8.7](../specs/2026-09-03-local-first-agentic-delivery-throughput-design.md).
@@ -24,7 +28,9 @@ rooms, task ledgers, schedulers, or an organizational authority hierarchy in UI 
 Proposed decomposed graph below; this is not a coverage receipt. Record the
 immutable plan with record_plan_backlog_coverage after the independent spec
 approval establishes the scope baseline. Preserve its returned receipt ID here.
-Source implementation waits for that contract and exact-artifact plan review.
+The supported implementation claim is allowed (IRD-CB79336589A7, 2026-09-06),
+using the current shared approved baseline and coverage. This proposed broader
+mapping does not replace that coverage or certify the whole initiative.
 
 | Key | Existing item | Depends on | Objectives | Acceptance |
 | --- | --- | --- | --- | --- |
@@ -39,10 +45,11 @@ editing its implementation. No forced co-claim or duplicate initiative is implie
 
 The admission deliverable is independently owned by WC-27D00458 on
 `fix/semantic-review-provider-admission`. Its
-[focused plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/6b9f44a491048dd5ffca9a2ac3faf9ce11e31652/docs/superpowers/plans/2026-09-06-semantic-review-provider-admission.md)
+[focused plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/ac85b97f95a0480ca72e29b37695a4b0d2bbc217/docs/superpowers/plans/2026-09-06-semantic-review-provider-admission.md)
 provides the implementation/verification contract (blob
-`6aea5e981af361ee0d918016b117b062c78c36f1`, coverage receipt
-`cmtqbi3et0eog01ncylwzwyx0`); this task must not edit
+`3fe9c155d0ca45b455d9cfe38593e0fed69c2895`, coverage receipt
+`cmtqfaemg02bc01p3br91qj6e`, review receipt
+`initiative-3098e534-708c-41c3-be54-2c3b46bab065`); this task must not edit
 `routed-semantic-review.ts` or duplicate that runtime change. This row maps the
 existing work into the combined decomposition, not a second assignment.
 
@@ -207,3 +214,22 @@ Baseline source checks: 62 existing tests passed in the governed worktree across
 not the separate adoption parser. This baseline therefore does not disprove the
 reported adoption defect. Add behavior coverage through both creation and adoption,
 with persisted/read-back mixed claims, rather than only widening a structural test.
+
+## Implementation evidence: shape persistence
+
+Source regression tests reproduced dropped MCP adoption input, omitted creation
+claims, ignored re-adoption/resume scope, claim/release erasure, legacy-object
+loss, stale overwrites, and false success after duplicate creation/adoption with
+different scope. Each regression failed before its corresponding repair.
+
+The shared scope ingress and patch module now preserves omitted fields, mixed
+claims and unchanged binding timestamps. Persistence validates the exact registered
+definition version. Scope updates compare the original JSON and row timestamp,
+and refuse a conflicting executor session. A conflicting duplicate does not
+acknowledge the requested binding as stored. Delivery claim binding reuses this
+patch contract instead of its own destructive JSON filter.
+
+These are source-local results, not deployed runtime verification. The seven
+reviewer scenarios, canonical release, portal navigation and screenshots remain
+required. No new version migration or historical definition archive is claimed:
+the current registry provides one version per key and rejects unavailable versions.

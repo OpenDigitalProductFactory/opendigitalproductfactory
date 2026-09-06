@@ -1,3 +1,4 @@
+import { normalizePersistedScope, parseScopeInput } from "./scope-input";
 import { prisma } from "@dpf/db";
 import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
@@ -25,11 +26,9 @@ import {
   isWorkCapsulePortfolioRole,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
-  normalizeWorkCapsuleScopeInput,
   WORK_CAPSULE_WORKROOM_SHAPES,
   type ScopeClaim,
   type WorkCapsuleEvidenceKind,
-  type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
 import { adoptWorktree } from "./adopt-worktree-handler";
@@ -89,24 +88,6 @@ function numberParam(params: Record<string, unknown>, key: string): number | nul
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
-  // Every key the tool schema advertises under scopeProperties must appear here.
-  // This function picks fields explicitly, so a field added to the schema and to
-  // the normalizer but not to this list is accepted by the caller, dropped here,
-  // and answered `success: true` — the same defect `backlogItemId` had on
-  // adopt_worktree. scope-input-parity.test.ts is what keeps the two in step.
-  return {
-    workroomShape: params.workroomShape,
-    workShape: params.workShape,
-    decisionScope: params.decisionScope,
-    portfolioRole: params.portfolioRole,
-    servedPersona: params.servedPersona,
-    activityKind: params.activityKind,
-    outcomeAnchor: params.outcomeAnchor,
-    servesPortfolioRoles: params.servesPortfolioRoles,
-    dependsOnPortfolioRoles: params.dependsOnPortfolioRoles,
-  };
-}
 
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
@@ -487,7 +468,7 @@ export async function createWorkCapsuleTool(
     ? executorKind
     : null;
   try {
-    normalizeWorkCapsuleScopeInput(parseScopeInput(params));
+    normalizePersistedScope(parseScopeInput(params));
   } catch (error) {
     return invalidScopeResult(error);
   }
