@@ -511,6 +511,41 @@ twelve — security-engineer, platform-engineer, change-reviewer, portfolio-advi
 build-specialist, customer-advisor and finance-controller — each distinct from its
 own room's approver.
 
+## Nesting has to be written, not just declared
+
+`standing-rooms.ts` declares a tree: every sub-room carries a `parentKey`. On
+2026-09-06 that tree existed only in the declaration —
+
+    SELECT relation, count(*) FROM "WorkCapsuleRelation";   -- (0 rows)
+
+Zero relations of any kind, while eighteen standing rooms sat in the database with
+idempotency keys matching the derivation's own format. `deriveStandingRooms` had no
+consumer anywhere, so whatever materialized those rooms never wrote the containment,
+and the five parent rooms floated unlinked from their children.
+
+Nesting is not decoration. Delegation downward and escalation upward are both walks
+over these rows, so nothing built on the hierarchy can be true before they exist —
+an escalation projection written against an empty relation table would pass every
+test and observe nothing.
+
+The drive tick now reconciles the declared tree before driving:
+
+- **Containment is a property of the room KEY, not the archetype.** Room keys are
+  globally unique, so `STANDING_ROOM_PARENT_BY_KEY` — derived from the same three
+  arrays the archetype derivation reads, not a second declaration — lets a
+  reconciler materialize the tree without resolving an install's archetype.
+- **Version-agnostic.** `standing-room:<key>:v1` and `:v2` are the same room;
+  containment follows the room's purpose, not its revision.
+- **Nothing ungrounded is written.** A child whose parent was never materialized is
+  skipped rather than pointed at a missing row, and a room whose key is absent from
+  the declaration never acquires a parent by guesswork.
+- **Idempotent and non-fatal.** One insert with `skipDuplicates`; a settled estate
+  writes nothing and reports `nestedRelations: 0`. A failure to write a parent link
+  never blocks a room that could otherwise be driven.
+
+`nestedRelations` on the drive result is how an operator tells "nesting is done"
+from "nesting was never written" — the distinction that hid this defect.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
