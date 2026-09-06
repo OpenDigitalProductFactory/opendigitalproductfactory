@@ -442,3 +442,49 @@ describe("parent scope inheritance", () => {
     expect(projection.decision.unmet.map((entry) => entry.code)).toContain("OBJECTIVE_BASELINE_REQUIRED");
   });
 });
+
+describe("plan-review binds the plan artifact, not the design (BI-B5C8FEFC)", () => {
+  const planReviewAgainstPlan = { ...receipt("r-plan-review-plan", "plan-review"), payload: { ...receipt("r-plan-review-plan", "plan-review").payload, artifactDigest: "sha256:plan" } };
+  const withoutPlanReview = () => readyActivities().filter((entry) => entry.gateKey !== "plan-review");
+
+  it("accepts a plan-review receipt recorded against the coverage record's plan digest", () => {
+    const projection = projectBacklogItemReadiness({
+      item,
+      activities: [...withoutPlanReview(), planReviewAgainstPlan],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.decision.verdict).toBe("allowed");
+  });
+
+  it("still marks a plan-review receipt stale when it matches neither the plan nor the design", () => {
+    const foreign = { ...planReviewAgainstPlan, payload: { ...planReviewAgainstPlan.payload, artifactDigest: "sha256:elsewhere" } };
+    const projection = projectBacklogItemReadiness({
+      item,
+      activities: [...withoutPlanReview(), foreign],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.decision.unmet.find((entry) => entry.code === "PLAN_REVIEW_REQUIRED")?.state).toBe("stale");
+  });
+
+  it("keeps the design digest for every other gate", () => {
+    const specAgainstPlan = { ...receipt("r-approval-plan", "spec-approval"), payload: { ...receipt("r-approval-plan", "spec-approval").payload, artifactDigest: "sha256:plan" } };
+    const projection = projectBacklogItemReadiness({
+      item,
+      activities: [...readyActivities().filter((entry) => entry.gateKey !== "spec-approval"), specAgainstPlan],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")?.state).toBe("stale");
+  });
+});
