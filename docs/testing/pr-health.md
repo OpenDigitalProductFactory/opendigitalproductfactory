@@ -60,7 +60,8 @@ constraints that apply to the current worktree diff (committed + staged +
 unstaged + untracked, vs the `origin/main` merge base):
 
 - required attestation trailers for this diff shape (Process-Spine, Design
-  Grounding, UX-Fit, Seed-Fit body line, Data-Impact manifest);
+  Grounding, UX-Fit, Seed-Fit body line, Data-Impact manifest,
+  Convergence-Impact decision);
 - module-size caps for touched baselined files and budgets for new modules;
 - shrink-only prose/style ratchet values frozen for touched files;
 - derived artifacts to regenerate in the same change;
