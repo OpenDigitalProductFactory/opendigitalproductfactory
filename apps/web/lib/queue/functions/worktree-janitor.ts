@@ -205,6 +205,16 @@ async function defaultRunScan(mode: "dry-run" | "live"): Promise<ScanOutcome> {
  * returned rather than only the reapable ones: the bound is about how much is
  * accumulating, not about how much happens to be safe to delete right now.
  */
+/**
+ * Did this scan keep anything only because it could not read the Workroom claim
+ * record? If so its liveness picture is incomplete and no bound may act on it.
+ */
+export function scanKeptForUnknownLiveness(scan: WorktreeJanitorScan): boolean {
+  return (scan.decisions ?? []).some(
+    (d) => d.verdict === "KEEP" && /absent evidence|unreadable/i.test(d.reason ?? ""),
+  );
+}
+
 export function countRetained(scan: WorktreeJanitorScan): number {
   // An EMPTY decisions array is "not populated", not "zero worktrees" — a scan
   // may report only a summary. Reading empty as zero would put the install
@@ -304,6 +314,21 @@ export async function runWorktreeJanitor(options: RunOptions = {}): Promise<RunR
   const max = resolveMaxWorktrees(env);
 
   if (retained <= max) {
+    return summarize(observed.scan, "dry-run");
+  }
+
+  // A bound must never drive deletion on evidence the scan could not gather.
+  // The observation reports how many worktrees it had to KEEP because the
+  // Workroom claim record was unreadable; if it kept anything for that reason,
+  // liveness is unknown for this run and going live would reap on a guess. This
+  // is the half that turned a dormant classifier flaw into automatic damage
+  // when the bound shipped in #4987 — the bound is only safe once liveness is
+  // platform-owned AND actually readable.
+  if (scanKeptForUnknownLiveness(observed.scan)) {
+    console.error(
+      "[worktree-janitor] over bound, but Workroom claims were unreadable this run — " +
+        "staying in observe mode. A bound must not reap on absent evidence.",
+    );
     return summarize(observed.scan, "dry-run");
   }
 

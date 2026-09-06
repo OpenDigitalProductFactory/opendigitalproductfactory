@@ -58,13 +58,14 @@ jobs:
         env:
           APP_ID: ${{ secrets.SECURITY_SWEEP_APP_ID }}
         if: env.APP_ID != ''
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.SECURITY_SWEEP_APP_ID }}
           private-key: ${{ secrets.SECURITY_SWEEP_APP_PRIVATE_KEY }}
-          permission-dependabot-alerts: read
-          permission-secret-scanning-alerts: read
-          permission-security-events: read
+          # No permission-* inputs: the token carries exactly what the installation
+          # grants (Dependabot, Secret scanning, Code scanning alerts: read). Naming
+          # them here failed with 422 "permissions not granted" on the first live run
+          # because the API key for Dependabot alerts is vulnerability_alerts.
 
       - name: Audit stale overrides
         # On scheduled/manual runs require the API (a silent skip would hide that

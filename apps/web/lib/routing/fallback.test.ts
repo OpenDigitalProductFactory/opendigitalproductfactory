@@ -275,34 +275,23 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       );
     });
 
-    it("uses provider-specific execution plans for fallback endpoints", async () => {
+    it("routes a required writer past a non-enforcing adapter without declaring an outage", async () => {
       mockCallProvider
-        .mockRejectedValueOnce(new Error("primary unavailable"))
-        .mockResolvedValueOnce({
-          content: "fallback ok",
-          inputTokens: 10,
-          outputTokens: 5,
-          inferenceMs: 100,
-        });
+        .mockRejectedValueOnce(new InferenceError("required-terminal-writer-not-enforceable: codex-cli cannot require record_initiative_evidence", "required_terminal_writer_not_enforceable", "codex"))
+        .mockResolvedValueOnce({ content: "fallback ok", inputTokens: 10, outputTokens: 5, inferenceMs: 100 });
 
-      const tools = [
-        {
-          type: "function",
-          function: {
-            name: "read_project_file",
-            description: "Read a project file",
-            parameters: { type: "object", properties: {} },
-          },
-        },
-      ];
+      const tools = [{ type: "function", function: {
+        name: "record_initiative_evidence", description: "Persist the governed receipt",
+        parameters: { type: "object", properties: {} },
+      } }];
       const decision: RouteDecision = {
-        ...makeDecision("openai", "gpt-4.1"),
-        selectedEndpoint: "openai-ep",
-        selectedModelId: "gpt-4.1",
-        fallbackChain: ["codex-ep"],
+        ...makeDecision("codex", "gpt-5.4"),
+        selectedEndpoint: "codex-ep",
+        selectedModelId: "gpt-5.4",
+        fallbackChain: ["openai-ep"],
         candidates: [
-          makeCandidate("openai-ep", "openai", "gpt-4.1"),
           makeCandidate("codex-ep", "codex", "gpt-5.4"),
+          makeCandidate("openai-ep", "openai", "gpt-4.1"),
         ],
       };
 
@@ -311,22 +300,31 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         [{ role: "user", content: "hi" }],
         "system",
         tools,
+        {
+          providerId: "codex", modelId: "gpt-5.4", recipeId: null,
+          contractFamily: "initiative-review", executionAdapter: "codex-cli",
+          maxTokens: 4096, providerSettings: {}, toolPolicy: { toolChoice: "required" },
+          responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+        },
       );
       await vi.runAllTimersAsync();
-      await expect(pending).resolves.toMatchObject({
-        providerId: "codex",
-        modelId: "gpt-5.4",
-        content: "fallback ok",
-        downgraded: true,
+      const result = await pending;
+      expect(result).toMatchObject({
+        providerId: "openai", modelId: "gpt-4.1", content: "fallback ok",
+        downgraded: true, downgradeReason: "not-eligible",
       });
+      expect(result.downgradeMessage).toMatch(/cannot enforce.*required governed writer/i);
 
-      const fallbackPlan = mockCallProvider.mock.calls[1]?.[5];
-      expect(fallbackPlan).toMatchObject({
-        providerId: "codex",
-        modelId: "gpt-5.4",
-        executionAdapter: "codex-cli",
-        toolPolicy: { toolChoice: "auto" },
+      expect(mockCallProvider.mock.calls[1]?.[5]).toMatchObject({
+        providerId: "openai", modelId: "gpt-4.1", executionAdapter: "chat",
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
       });
+      expect(mockRecordRequest).toHaveBeenCalledTimes(1);
+      expect(mockRecordRequest).toHaveBeenCalledWith("openai", "gpt-4.1", 15);
+      expect(mockRecordRouteOutcome).toHaveBeenCalledTimes(1);
+      expect(mockMarkEndpointUnavailable).not.toHaveBeenCalled();
+      expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
     });
   });
 

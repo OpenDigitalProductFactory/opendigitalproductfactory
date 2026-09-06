@@ -20,6 +20,7 @@ import {
 } from "./mcp-task-durable-inference-contract";
 import { ensureDurableInferenceTaskRecipes } from "./mcp-task-durable-inference-runtime";
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
+import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
 
 export { REMOTE_TASK_EXECUTION_EVENT };
 
@@ -272,12 +273,18 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     status: "submitted",
     a2aMetadata: { path: ["trigger"], equals: "external-mcp" },
   };
+  const resourceWaitSubmitted: Prisma.TaskRunWhereInput = {
+    status: "submitted",
+    a2aMetadata: { path: ["trigger"], equals: "external-mcp" },
+    progressPayload: { path: ["resourceWait", "kind"], equals: "provider-capacity" },
+  };
   const rows = await prisma.taskRun.findMany({
     where: {
       updatedAt: { lt: cutoff },
       OR: [
         durableSubmitted,
         durableAdmitting,
+        resourceWaitSubmitted,
         ...(input?.includeOrdinary === false ? [] : [ordinarySubmitted]),
       ],
     },
@@ -311,7 +318,10 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     const isOrdinaryCandidate = input?.includeOrdinary !== false
       && row.status === "submitted"
       && metadata?.["trigger"] === "external-mcp";
-    if (!isDurableCandidate && !isOrdinaryCandidate) {
+    const isResourceWaitCandidate = row.status === "submitted"
+      && metadata?.["trigger"] === "external-mcp"
+      && parseResourceWaitProjection(progress) !== null;
+    if (!isDurableCandidate && !isOrdinaryCandidate && !isResourceWaitCandidate) {
       raced += 1;
       continue;
     }

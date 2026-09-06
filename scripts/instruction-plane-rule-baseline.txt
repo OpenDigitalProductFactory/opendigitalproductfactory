@@ -7,12 +7,13 @@ docs/founder-kernel/wiki/principles/build-gate-mandatory.md
 docs/founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md	Claim a workroom before you work — every surface, including the external CLIs.
 docs/founder-kernel/wiki/principles/classify-ambiguous-requests-before-acting.md	Classify ambiguous requests before acting.
 docs/founder-kernel/wiki/principles/commons-are-curated-not-just-appended.md	Commons are curated, not just appended.
+docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md	WWMD resolves platform direction.
 docs/founder-kernel/wiki/principles/consult-specs-first.md	Ground new work in existing platform work.
 docs/founder-kernel/wiki/principles/db-fallback-explicit.md	DB fallback must be explicit.
 docs/founder-kernel/wiki/principles/dco-sign-off-required.md	An enforcement refusal stops work unless a checked-in override records operator 
 docs/founder-kernel/wiki/principles/decisions-belong-to-their-scope.md	WWMD vs WWWD — which decision surface governs.
 docs/founder-kernel/wiki/principles/design-research-required.md	Every new feature spec must include a "Research & Benchmarking" section before f
-docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md	Governance approves evidence, not provenance — the keystone.
+docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md	Governance must earn its cost.
 docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md	The canonical runtime is the only source of runtime truth.
 docs/founder-kernel/wiki/principles/keep-root-clone-as-merge-worktree.md	Keep the root clone as the merge/release worktree
 docs/founder-kernel/wiki/principles/learnings-belong-in-the-shared-commons.md	Learnings belong in the shared commons.
