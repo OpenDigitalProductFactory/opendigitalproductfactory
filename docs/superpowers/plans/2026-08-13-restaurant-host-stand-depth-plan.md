@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Restaurant Host Stand Depth — Design and Implementation Plan
 
 **Backlog:** BI-178AAB4F

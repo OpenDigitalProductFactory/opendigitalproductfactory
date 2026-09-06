@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # The Living Business Excellence Program — grounded, primed, rehearsable twins (design)
 
 **Status:** registered (parent program spec)

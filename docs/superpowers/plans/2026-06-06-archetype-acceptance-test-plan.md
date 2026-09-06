@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Archetype Acceptance Test Plan
 
 > **For agentic workers:** REQUIRED: Use `superpowers:executing-plans` when running this plan end-to-end. This plan is a product-behavior walkthrough, not a build-system verification plan. Use the already-available sandbox/main build selected by the operator; do not turn failed access into a self-upgrade or deployment investigation unless the task is explicitly rescoped.

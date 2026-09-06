@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Business Activity Simulator — design spec
 
 **Status:** P1 shipped (PR #2720, BI-FDAD8788) · **P2 shipped** (BI-78B83F58) · P3/P4 open (BI-E51D594F / BI-041735BC) · updated 2026-07-09

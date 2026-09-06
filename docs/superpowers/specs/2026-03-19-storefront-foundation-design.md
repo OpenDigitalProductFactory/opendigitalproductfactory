@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Storefront Foundation — Design Spec
 
 **Date:** 2026-03-19

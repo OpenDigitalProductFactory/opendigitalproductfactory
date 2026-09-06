@@ -134,7 +134,13 @@ intake under the existing simulator epic, not another implementation program.
 
 **Owner-side handoff required:** BI-4BD81F3B, BI-8E539357 and BI-041735BC carry origin the paired source installation. Initialization declared the peer read-only and currently unreachable. Preserve them; the owner should append the relevant §4/§5 requirements and source links. Their mirrored presence disproves a global absence claim but does not prove the peer's current state.
 
-**Source references not resolved locally:** BI-178AAB4F, BI-661BBC66, BI-44EF78DE and BI-DE577C43 returned `not_found` on the operator development install. Their source plans remain useful architecture references; do not recreate those IDs, report them complete, or assume they are absent everywhere. Resolve at the owning installation before implementation. No automatic cross-install mutation is authorized by this research.
+**Source references not resolved locally:** the host-stand/capacity and excellence
+corpus/grounding delivery references in the linked source plans returned `not_found`
+on the operator development install. The exact IDs and responses are retained in
+live research item BI-4CCE50E0; these are historical source references, not newly
+validated coordination anchors. Do not recreate them, report them complete, or
+assume they are absent everywhere. Resolve at the owning installation before
+implementation. No automatic cross-install mutation is authorized by this research.
 
 ## 9. Review and limits
 
