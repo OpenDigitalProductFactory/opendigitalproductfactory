@@ -174,9 +174,316 @@ PR creation is a midpoint. A durable controller owns the tail until one of `veri
 2. Bind checks and semantic review to the immutable head SHA/gate key. A new head supersedes pending older attempts while preserving their receipts as history.
 3. Normalize actionable findings by provider/id/head. Every current blocking finding must be fixed, answered with evidence, deliberately rejected under policy, or rendered stale.
 4. Request the smallest repair that satisfies the finding. Prevent adjacent scope growth unless it becomes a separate BI.
-5. If progress stalls, offer audited Workroom handoff/takeover. The new executor receives decisions, open issues, evidence digest, next action, branch/head, and current findings. Ownership transfers; two writers do not race.
+5. If progress stalls, perform audited Workroom handoff/takeover within the recorded authorization and lease policy. The new executor receives decisions, open issues, evidence digest, next action, branch/head, and current findings. Ownership transfers; two writers do not race. Ask for a decision only when scope or authority must change, not because the original client disappeared.
 6. Auto-merge only when repository policy explicitly permits it and required protected checks, reviews, DCO, evidence, and risk/approval rules pass. Model confidence is never a merge authority.
 7. Merge/deploy events reconcile Workroom and BI state, then close out the room under the delivered/paused/abandoned rules.
+
+### 8.1 Reviewer recovery and receipt settlement
+
+The same controller owns recovery before PR creation and during the review tail.
+Reuse Workroom, TaskRun, AsyncInferenceOp, the initiative reviewer binding, and the
+existing receipt writers. Do not add another task ledger, scheduler, or gate table.
+The following is target behavior; a shape declaration alone does not implement it.
+
+1. Persist the review identity before dispatch: subject, gate, repository, artifact
+   path, commit SHA/blob or revision, digest, policy version, expected baseline,
+   reviewer principal, and applicable authorization references. Keep the identity
+   stable across provider attempts; keep each attempt's provider/model separate.
+2. Read existing receipts before inference. A receipt for different bytes remains
+   history and cannot advance the current gate. Fence late writers after a head,
+   baseline, or executor change; reconcile races through the existing writers.
+3. Select an eligible provider under section 11. An unavailable local model is a
+   routing/capacity result, not a semantic finding or a new human decision.
+4. Distinguish attempt ended, writer rejected, receipt persisted, gate satisfied,
+   and superseded work in the result projection. TaskRun completion alone proves
+   none of the latter outcomes. A rejected writer stops that attempt and supplies
+   its typed recovery reason; it must not be presented as review approval.
+5. Preserve the current three-attempt missing-writer inference limit. On exhaustion,
+   the durable controller selects a different eligible provider/reviewer for the
+   same packet. Persist attempted routes, successor identity, remaining aggregate
+   budget, and next wake condition so switching providers cannot reset the budget
+   indefinitely. With no eligible route or budget, stop with an owner and remedy.
+6. Exact approved execution is separate from inference retries. Reuse the existing
+   approved-call recovery path while its scope, identity, validity, and authority
+   still apply. Neither reuse nor provider substitution waives reviewer independence.
+7. After receipt commit, reevaluate readiness and advance only satisfied transitions.
+   Keep spec approval, baseline, and retention pin atomic in the existing writer.
+   A crash between commit and notification must resume from that receipt without
+   repeating the assessment. Durable event reconciliation repairs missed wakeups.
+8. Repair a failed coverage requirement through its own dependency path. A doc-only
+   implementation projection with no unmet gates cannot be the prescribed route
+   for obtaining a missing scope baseline. Return the executable baseline-review
+   prerequisite without changing the work's classification just to trigger a gate.
+
+### 8.2 Work-shape evolution and encoded boundaries
+
+Extend the existing `pull-request-flow-watch` activity family under `BI-06AE6833`.
+Version 1.0.0 only reads and classifies PR health; it does not recover review writers,
+repair checks, or complete delivery. Specify the recovery-capable successor as
+`pull-request-flow-watch@2.0.0`, with `change-consequential` collaboration, before
+implementing and registering it. Do not bind a room to an unavailable version.
+
+| Stage | Accountable role | Evidence and next transition |
+| --- | --- | --- |
+| Bind current work | Delivery coordinator | Verified subject/repository/head/baseline and authorization; missing identity returns one artifact-owner action |
+| Reconcile | Delivery coordinator | Current receipts, checks, persisted events and liveness; satisfied work skips inference |
+| Review | Independent reviewer | Screened request and bounded provider attempts; persists a receipt or a typed attempt outcome |
+| Recover or repair | Delivery coordinator, then eligible replacement | Same review packet for infrastructure recovery; a code repair creates a new head and supersedes old review |
+| Advance | Existing gate owner | Readiness result from current receipts; protected merge/deploy authority remains authoritative |
+| Verify and close | Acceptance reviewer / delivery coordinator | Verified-delivered, deliberately-deferred, or blocked-with-owner outcome |
+
+Reuse the closed trigger classes: `claim`, `cadence`, `escalation`, `authority-change`,
+and `evidence-decay`. Provider completion/head changes enter the existing durable
+event path; do not invent a new trigger enum just to name each provider event.
+Waiting releases model execution. Bound each reconciliation page, provider-attempt
+chain, retry deadline, and Workroom WIP before activation; inherit section 12's
+installation ceiling. Success closes the cycle; unreadable evidence, revoked
+authority, unavailable replacement, and exhausted budget each have an owned exit.
+
+**Version and carrier compatibility:** the current registry resolves one version
+per key and a room carries one activity-shape reference. Retain v1 resolution until
+every v1 claim is deliberately migrated, or provide an explicit governed migration;
+never silently reinterpret old claims. Delivery size/risk remains orthogonal to
+recovery. Do not replace a `delivery-large` claim with a watch and lose its gates,
+or append competing shape entries. The delivery-shape family composes the same
+recovery contract at review stages. The implementation must reconcile this with
+the [proportional-gates design](2026-09-02-work-shape-taxonomy-and-proportional-gates-design.md).
+
+**Verified binding prerequisite (2026-09-05):** attempting to shape existing
+`WC-4D4BB6EC` through `adopt_worktree` returned success but an empty `scopeClaims`
+readback. `adopt-worktree-handler.ts` omits `workShape`; `adoptWorktreeCapsule`
+neither persists shape claims on create nor updates scope on re-adoption. Its
+successful return is not shape activation. Extend the existing adoption contract,
+preserve omitted fields and unrelated claims, audit old/new versions, reject
+unresolvable references, and verify stored readback. Scope claim/release operations
+must also preserve both shape entries. No direct database patch or duplicate room
+is a substitute. This prerequisite belongs to `BI-06AE6833`'s external-room coverage.
+
+### 8.3 Visual model and SysML architecture note
+
+Encoding is the existing typed TypeScript `WorkShapeDefinition` registry plus
+versioned references in Workroom `scopeClaims`; occurrences and evidence remain
+in the existing room-cycle, TaskRun, and receipt records. This is not BPMN XML or
+SysML text execution. See the [shape architecture](../../architecture/work-shapes-and-the-decision-gate.md)
+and [SysML reference](../../Reference/sysml-v2.md).
+
+- **Operator view:** extend the existing Overview/Details shape projection. Show
+  current stage, next action, accountable owner and last progress in a stable row.
+  Distinguish “Review recorded; checking readiness” from “Changes required” and
+  “Waiting for an eligible reviewer.” Keep receipt IDs, retry history, model choice,
+  immutable identities and prior versions in Details. Use tokens, status icons,
+  keyboard navigation, visible focus, responsive layout and 44px action targets.
+- **BPMN process view:** derive tasks, gateways, retry paths, waits and ownership
+  lanes from the registered stages and implemented transition rules. The current
+  `process-extract.ts` / `reconcile-process.ts` projects selected state machines;
+  recovery-stage/WorkShape extraction is follow-up work, not existing coverage.
+- **SysML v2 view:** requirements are exact-revision evidence, bounded recovery,
+  eligible external routing, writer fencing and receipt-based advancement. Allocate
+  them to the router, TaskRun recovery, receipt writers and Workroom controller;
+  link each requirement to the verification cases in section 15.1. APIs/tools,
+  provider calls, durable events and receipt transactions are the interface boundary.
+- **Data authority and parity:** Postgres/source registries remain authoritative;
+  EA, BPMN/SysML and the UI are derived views. Extend the existing Parity Engine
+  with stable source keys and versioned extractors. Report missing or conflicting
+  projections through `EaConformanceIssue`. Mark this diagram as target-state until
+  runtime evidence exists; do not hand-maintain a parallel `.sysml` authority.
+
+This Mermaid sketch communicates the target flow; it is not a BPMN-conformant
+model or proof of implementation:
+
+```mermaid
+flowchart LR
+    bind[Bind current revision] --> reconcile[Reconcile evidence]
+    reconcile --> gate{Gate satisfied?}
+    gate -->|Yes| advance[Advance and verify]
+    gate -->|No| route[Select eligible reviewer]
+    route --> review[Review and record receipt]
+    review -->|Receipt recorded| reconcile
+    review -->|Infrastructure failure| recover[Bounded retry or replacement]
+    recover -->|Eligible route and budget| route
+    recover -->|No eligible route or budget| owned[Blocked with owner and next action]
+    review -->|Changes required| repair[Repair and bind new revision]
+    repair --> bind
+    advance --> close[Verified closeout]
+```
+
+Standards: [OMG BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2) for process
+notation and [OMG SysML 2.0](https://www.omg.org/spec/SysML/2.0) for systems
+traceability, checked 2026-09-05. Reuse the existing DPF notation/EA stack and its
+benchmarking; this amendment adopts no external modeling tool or workflow engine.
+
+### 8.4 Execution-engine decision and evidence boundary
+
+**Decision:** harden the existing DPF engine on Inngest for this slice.
+`DI-515AD614CCF6` selected this option on 2026-09-06: composite 12.333,
+margin 2.158, high confidence, strong structured coverage, no commandment
+conflict, and `autonomyEligible=true`. Temporal scored 10.175; Camunda 8
+scored 8.844. The inputs are engineering estimates for this bounded change,
+not vendor performance measurements. Research and Use Standards (+0.882),
+Ship Real Functionality (+0.819), and Single Source of Truth (+0.689) support
+the selected option. The canonical ledger owns the scores and contribution audit.
+
+This extends the existing Inngest migration plan and sections 8.1–8.3; it does
+not implement a second scheduler. Reconsider if the restart, duplicate-delivery,
+or durable-wait acceptance cases cannot be met on the pinned deployment without
+building a competing execution engine. A successful consultation is not runtime
+verification. The decision can be revisited without changing Workroom identity.
+
+#### Research & Benchmarking
+
+Reviewed 2026-09-06 against vendor documentation; installed DPF source inspected
+at `729c017e7d6`. These are required mechanisms, not a claim that every DPF path
+already uses them correctly.
+
+| Concern | Harden DPF / existing Inngest | Temporal behind DPF adapter | Camunda 8 behind DPF adapter |
+| --- | --- | --- | --- |
+| Restart recovery | Existing journaled steps plus persisted TaskRun/AsyncInferenceOp reconciliation; repair gaps between them | Event-history replay and activity retries; move orchestration into deterministic workflows | Persisted process instances and reactivated jobs; translate recovery flow to executable BPMN |
+| Durable timers | Existing scheduled reconciliation and persisted next-wake timestamps; no client timer owns work | Persisted workflow timers survive worker/service outage [T1] | BPMN timer events; DPF still owns deadline/authority policy |
+| Concurrency and duplicate delivery | Atomic DB claims/fences at effect boundaries; do not rely on separate function concurrency limits | Task queues and workflow identity; activities can execute more than once [T2] | Job timeout can cause concurrent redelivery; workers must be idempotent [C1] |
+| External effects | Stable request identity; attach/read existing effect; ambiguous start becomes reconciliation, never blind retry | Same DPF effect adapter still required [T2] | Same DPF effect adapter still required [C1] |
+| Human approvals | Existing action envelopes and independent receipt writers; wait releases inference | Signals/updates wake workflow; DPF authorizes and records approval | BPMN user tasks; DPF approval authority must remain authoritative |
+| Bounded retries | Preserve three missing-writer attempts; persist aggregate successor budget and deadline | Explicit activity retry/timeouts plus aggregate workflow budget | Job retries/backoff and incidents plus aggregate process budget |
+| Cancellation | Persist intent; fence late results; reconcile provider cancellation acknowledgement | Workflow/activity cancellation must propagate into DPF effect adapters | Cancel instance/jobs; in-flight external effects still require reconciliation |
+| Version migration | Resolve exact key/version; preserve v1; deliberate migration only | Worker versioning and replay compatibility add deployment obligations [T3] | Deployed process versions and explicit instance mappings; unsupported migrations reject [C2] |
+| Observability | Join authoritative events/receipts through existing portal, EA and ShapeGraph | Temporal history is useful evidence; still needs DPF projection and freshness | Operate/process view useful; still needs DPF EA, authority and evidence joins |
+| Deployment burden | Existing services; harden established install/release contract | Additional service and worker lifecycle, persistence, backup and routing | Additional orchestration stack, deployment operations and commercial production entitlement [C3] |
+| Licensing | Retain current pinned dependencies; no new engine entitlement | Server MIT license; hosted service terms are separate [T4] | Current production license required; do not assume old Zeebe community terms [C3] |
+| Migration cost | Lowest estimated change reach: repair existing writers/readers | Drain or explicitly transfer Inngest recovery instances; maintain correlation during migration | Translate/version process definitions, integrate workers and approvals, drain old instances |
+
+[T1]: https://docs.temporal.io/workflow-execution/timers-delays
+[T2]: https://docs.temporal.io/activity-definition
+[T3]: https://docs.temporal.io/production-deployment/worker-deployments/worker-versioning
+[T4]: https://github.com/temporalio/temporal/blob/main/LICENSE
+[C1]: https://docs.camunda.io/docs/components/concepts/job-workers/
+[C2]: https://docs.camunda.io/docs/components/concepts/process-instance-migration/
+[C3]: https://docs.camunda.io/docs/reference/licenses/
+
+Inngest's [execution model](https://www.inngest.com/docs/learn/how-functions-are-executed)
+supports step memoization and retries. DPF adopts that existing mechanism;
+neither its documentation nor an engine swap guarantees idempotent external effects.
+No new engine is installed for visualization.
+
+If an external-engine successor is later selected, DPF remains the execution
+authority for admission, grants, independent review, approvals and closeout.
+The engine owns scheduling/history only. Correlate installation + Workroom +
+cycle + shape version + immutable review digest to workflow/process instance;
+correlate TaskRun and AsyncInferenceOp to individual attempts. Replace the
+selected Inngest recovery function and its retry/timer logic, never run both as
+writers. Drain existing runs or transfer a sealed checkpoint under an atomic
+ownership fence. Reconcile engine success against DPF receipts before advancing;
+receipt committed but engine acknowledgement lost resumes from the receipt.
+Unknown external effect outcome blocks for reconciliation rather than resubmission.
+
+### 8.5 Trace baseline and connected model
+
+The real room `WC-4D4BB6EC` was read through MCP on 2026-09-06. It is an
+external-adoption room for `BI-DC0F14E0`, branch `doc/wwmd-decision-value`,
+head `67f368470b1321fbd20596728c9b3f68b92af39c`. Its recorded review first waited
+on local-CI capacity, later recorded independent semantic review, and its
+activities cite protected PR #5081 merge at `bb94b132` and subsequent release
+verification. Those are recorded evidence claims; this slice has not replayed
+that delivery. The room itself remains `ready`, with empty `scopeClaims`, null
+TaskRun/build/PR links and an expired lease. Thus verified merge evidence and
+current coordination state disagree. Do not infer automatic recovery or closeout.
+
+Source findings at the inspected main:
+
+- `adopt-worktree-handler.ts` omits `workShape`; adoption create omits shape
+  claims; reuse ignores scope. Ordinary `createWorkCapsule` already writes claims.
+- `claimCapsuleScope`/`releaseCapsuleScope` serialize only parsed ownership
+  claims, discarding collaboration/activity/posture entries.
+- `workroom-drive.ts` selects shaped rooms and filters unresolved versions out.
+  Its live lease checks expiry before an unconditional write; scheduled and
+  run-now functions have separate concurrency configurations.
+- `mcp-task-terminal-writer-escalation.ts` defines three attempts and a typed
+  request to select another reviewer/provider. That message is not successor
+  dispatch evidence. AsyncInferenceOp already supplies immutable request identity,
+  checkpoints, start fences and cancellation state; extend that contract.
+- `build-pr-delivery-reconcile.ts` requires FeatureBuild and PR linkage; it
+  cannot settle this external room as currently recorded.
+- EA `reconcile-process.ts` registers envelope and backlog state machines only.
+  `process-extract.ts` uses states as nodes; it does not establish executable
+  BPMN conformance. MCP's EA mirror reported 21 Workroom-related elements and a
+  last reconcile at 2026-09-05T03:02:23.117Z; absence after that cutoff is unknown.
+
+Keep definition, occurrence and evidence identities separate. Enterprise links
+reuse EA elements, value-stream teams, capabilities/services and outcome anchors.
+Coordination reuses WorkroomRelation and participant assignments. Execution uses
+the resolved version, cycle, TaskRun, provider operation and gate receipts.
+Evidence links retain source IDs, revision/digest, observed time and source status.
+Projection records carry their extractor version and source revision; missing
+joins and stale facts appear explicitly and feed existing EaConformanceIssue.
+
+### 8.6 Enterprise-to-evidence interaction and archetype semantics
+
+Extend the EA canvas, `WorkroomShape`, process graph and shared UI primitives.
+Enterprise shows outcomes, value streams, capabilities, services and observed
+health. Selecting an operation opens coordination: stable grouped Workrooms,
+owners, dependencies, queues and bottlenecks. Selecting a room opens execution;
+selecting a step opens evidence with the following six answers: where are we,
+why are we here, what is permitted next, who owns it, which evidence supports
+it, and which related work is affected. Missing answers say unknown and identify
+the missing source; intended stages cannot masquerade as observed execution.
+
+Use owner swimlanes, stable keys/layout, restrained status icons and theme tokens.
+Search/filter state and selection live in navigation context with breadcrumbs;
+back navigation restores the previous selection. Provide a keyboard-operable
+list using the same projection, visible focus, readable text, reduced motion and
+responsive layout. No decorative progress animation or estimated percentages.
+Show source freshness and loading/partial/failure states. Simulation is an
+explicitly labeled separate mode and cannot write runtime or acceptance evidence.
+
+Conway's law is addressed by the existing
+[coordinated Workrooms design](2026-09-03-coordinated-workrooms-design.md): expose
+the actual ownership/delegation structure, not an invented organizational chart.
+Reuse `contains` for structural nesting, `spawned-from` for provenance and
+`depends-on`/`blocks` for scheduling constraints. Containment never grants authority,
+implies sequential execution, or marks a parent complete when a child finishes.
+Each child retains its outcome, owner, evidence and independent approval duties.
+Show parent/child breadcrumb, blocked dependencies and escalation destination;
+detect cycles and paginate large trees without silently omitting children.
+
+Use the platform/archetype/instance split from that design. Platform owns execution
+invariants; archetypes own applicable standing rooms, specialist roster, evidence
+and policy requirements; instances bind actual people, thresholds and authority.
+Source-delivery reviewer recovery is a platform operation even on the current
+Pet Rescue development install. Do not reclassify that organization to software
+development or make rescue, veterinary, farm/ranch and manufacturing operations
+inherit PR gates. Inspect their existing profiles and requirements before asserting
+coverage; label unsupported archetype mappings rather than claiming universal fit.
+
+BPMN represents prescribed tasks, explicit gateways, waits, messages and ownership
+lanes. [CMMN 1.1](https://www.omg.org/spec/CMMN/1.1/) informs adaptive case work:
+discretionary activities and milestones remain outcome-constrained, not a forced
+sequence of agent thoughts. DMN semantics apply to explicit decision tables, with
+rule/version/input/result evidence; WWMD scoring is not automatically a DMN model.
+SysML requirements, allocations, interfaces and verification links reuse EA stable
+source keys. Supported extraction must be documented per construct. Arbitrary
+BPMN XML execution, compensation/event subprocesses, CMMN execution, DMN execution
+and SysML textual round-trip remain unsupported until separately implemented and
+verified. A graph using familiar symbols establishes none of those claims.
+
+### 8.7 Reviewer slice objectives and acceptance contract
+
+**OBJ-EXEC-01:** Persist and read back exact activity/collaboration shapes without losing scope or ownership.
+
+**OBJ-EXEC-02:** Complete independent reviewer recovery through durable server-owned execution with bounded effects.
+
+**OBJ-EXEC-03:** Navigate enterprise, nested coordination, actual execution and evidence with truthful state.
+
+**OBJ-EXEC-04:** Preserve archetype requirements, versioned definitions and architecture/execution traceability.
+
+| Acceptance | Objective | Verifiable outcome |
+| --- | --- | --- |
+| AC-EXEC-01 | OBJ-EXEC-01 | Creation, update, unchanged replay, claim/release and explicit version migration preserve exact shapes and unrelated claims; concurrent ownership and late writers are fenced. |
+| AC-EXEC-02 | OBJ-EXEC-02 | Normal reviewer completion records the exact-revision receipt before readiness advances; TaskRun completion alone never approves a gate. |
+| AC-EXEC-03 | OBJ-EXEC-02 | Provider failure selects an eligible bounded retry/successor without a client; revoked authority or ambiguous external effect produces owned reconciliation. |
+| AC-EXEC-04 | OBJ-EXEC-02 | Restart during execution and duplicate delivery reuse durable identity and completed receipts without duplicate side effects. |
+| AC-EXEC-05 | OBJ-EXEC-02 | Approval wait consumes no inference; authorized resumption advances once; exhausted recovery stops with owner and next action. |
+| AC-EXEC-06 | OBJ-EXEC-03 | Running nonproduction portal demonstrates enterprise-to-evidence navigation and all six selected-step answers for normal, failed, waiting, exhausted and stale states. |
+| AC-EXEC-07 | OBJ-EXEC-03 | Keyboard/list, search/filter/back navigation, responsive themes and reduced motion pass; simulation and unknown/stale projections are explicit. |
+| AC-EXEC-08 | OBJ-EXEC-04 | Nested rooms preserve independent owners/outcomes/authority; applicable archetype requirements and unsupported BPMN/CMMN/DMN/SysML mappings are explicit. |
+| AC-EXEC-09 | OBJ-EXEC-04 | Versioned extractors link source, execution and evidence identities and report drift through existing conformance mechanisms. |
 
 ## 9. Delivery outcome scorecard
 
@@ -232,6 +539,22 @@ TaskRun or provider session still carries an active identifier.
 Cloud execution remains mandatory where protected repository policy requires it and available as fallback when local evidence is inconclusive or capacity is unavailable. Vendor runners are evaluated only after the local scorecard shows protected-cloud time is the limiting stage.
 
 ## 11. Model and prompt execution profiles
+
+### Provider eligibility is independent of local execution placement
+
+Local-machine investment in section 10 does not make local inference mandatory.
+For authorized nonconfidential DPF development, choose any eligible connected
+provider from payload classification, retention/repository authorization, grants,
+capability, context capacity and budget. Preserve the existing separation of
+`modelTier` and residency and the source-code/authorship-metadata screening rules.
+Do not impose a blanket confidential floor on every development review; mixed
+payloads containing secrets or regulated records retain their stronger controls.
+
+Apply host-capacity admission at the actual provider boundary on every initial and
+fallback call. An active local-CI reservation excludes local model dispatch, not
+eligible remote review. Reuse `assertProviderDispatchCapacity` and the existing
+fallback chain rather than adding another admission predicate. The explicit
+local-only policy remains a hard boundary; provider failure never weakens it.
 
 Split instructions into two layers.
 
@@ -353,6 +676,33 @@ This design is complete when:
 - existing epics/BIs carry the delta and every uncovered deliverable has one live BI;
 - architecture review confirms the design is actionable, and later implementation plans map their deliverable graphs to these live BIs before code begins.
 - the T3 source delta's binding-saga, liveness, PR-identity, continuation, event-pressure, and attributable-cost amendments are included in the relevant existing BI acceptance contracts.
+
+### 15.1 Recovery amendment verification and ownership
+
+| Verification case | Expected result | Existing delivery owner |
+| --- | --- | --- |
+| Local CI occupied; external provider eligible | External review completes; local dispatch stays fenced; mixed regulated/secret payload remains constrained | `BI-06AE6833`, inference maintainer; profile evaluation in `BI-A472354E` |
+| Three omitted writers; duplicate retry event; original client gone | One durable successor attempt, unchanged packet, bounded total budget, independent principal, no repeated routine authorization | `BI-801313EB` + `BI-06AE6833` |
+| Writer rejects, or process dies after receipt commit | Rejection is not gate satisfaction; committed receipt is reused; baseline/pin atomicity retained | `BI-801313EB`, initiative-readiness maintainer |
+| Head/baseline changes while review is pending | Old receipt remains historical; late attempt cannot advance new work | `BI-06AE6833` |
+| Doc-only coverage fails without a baseline | Specific executable prerequisite returned, not a successful empty recovery route | `BI-DC0F14E0`, planning/governance maintainer |
+| Existing external room receives a shape; scope is later claimed/released | Stored resolved version matches request, unrelated fields survive, old-version claims remain readable | `BI-06AE6833` |
+| Auto-merge enabled with failed checks; author replaced | Failed check produces repair action; stale writer fenced; protected merge still required | `BI-06AE6833` |
+| Diagram versus current receipts and registry version | Same owner/state/action, stale projection labeled, missing extractor reported | `BI-9DC43E17`, EA maintainer |
+
+Reserve 20% of implementation capacity for deletion/consolidation: remove the
+blanket semantic-review admission path, centralize attempt-result/recovery
+projection, and share the shape-field parser/merge/readback contract. Measure
+removed duplicate predicates and repeated review calls; do not count new framework
+code as refactoring. Ship admission, settlement/recovery, and external-room/UI
+coverage as separate rollbackable slices under the owners above.
+
+The separate wiki freshness defect remains with `BI-ED117C82`: compare content or
+version rather than vector presence, hydrate doctrine from canonical rows, and
+test changed published content with an existing vector. It is not evidence that
+review recovery or release `bb94b132` failed. That release's TaskRun settlement and
+fallback-profile fixes must be reused; end-to-end recovery still needs the cases
+above. This amendment is design evidence, not their passing result.
 
 ## 16. Architecture review (advisory)
 
