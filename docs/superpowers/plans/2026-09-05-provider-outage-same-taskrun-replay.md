@@ -4,9 +4,10 @@ status: draft
 
 # Provider-outage same-TaskRun replay plan
 
-**Backlog item:** `BI-A50F6B7B`  
-**Tracking parent:** `BI-F6AD1E18`  
-**Workroom:** `WC-08FF9F3D`  
+**Backlog item:** `BI-A50F6B7B`
+**Tracking parent:** `BI-F6AD1E18`
+**Delivery Workroom:** `WC-99420804`
+**Parent evidence Workroom:** `WC-08FF9F3D`
 **Design:** `docs/superpowers/specs/2026-09-05-provider-outage-same-taskrun-replay-design.md`
 
 **For agentic workers:** execute this plan one independently reviewable backlog
@@ -76,7 +77,10 @@ release, deployment, or live replay may be claimed from that source evidence.
 - Dependencies: `BI-41EB722B` (protected-merged before implementation integration)
 - Rationale: classifier and recovery selection are inseparable halves of the
   same already-persisted TaskRun wait contract; neither is useful alone.
-- Receipt: pending canonical baseline and `record_plan_backlog_coverage`
+- Receipt: blocked-by: the source provider cannot resolve this new child branch
+  until its first normal push; the canonical research, baseline, and
+  `record_plan_backlog_coverage` calls will run against the pushed immutable
+  head before PR readiness is claimed.
 
 ## Source-only TDD evidence
 

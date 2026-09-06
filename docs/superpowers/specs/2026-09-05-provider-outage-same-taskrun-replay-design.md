@@ -4,9 +4,10 @@ status: draft
 
 # Provider-outage same-TaskRun replay
 
-**Backlog item:** `BI-A50F6B7B`  
-**Tracking parent:** `BI-F6AD1E18`  
-**Design Workroom:** `WC-08FF9F3D`
+**Backlog item:** `BI-A50F6B7B`
+**Tracking parent:** `BI-F6AD1E18`
+**Delivery Workroom:** `WC-99420804`
+**Parent evidence Workroom:** `WC-08FF9F3D`
 
 This is the first independently shippable child of the xlarge temporal-failover
 parent. It uses the durable TaskRun wait and background reconciliation already
