@@ -4,9 +4,9 @@ status: active
 
 # Required Terminal-Writer Enforcement Implementation Plan
 
-**Backlog item:** `BI-8B8731EE`  
-**Workroom:** `WC-E30BEE1A`  
-**Branch:** `fix/required-terminal-writer-enforcement`  
+**Backlog item:** `BI-8B8731EE`
+**Workroom:** `WC-E30BEE1A`
+**Branch:** `fix/required-terminal-writer-enforcement`
 **Design:** `docs/superpowers/specs/2026-09-02-capacity-deferral-is-not-a-writer-failure-design.md`
 
 ## Outcome
