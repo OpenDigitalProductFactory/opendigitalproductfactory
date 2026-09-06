@@ -1,5 +1,7 @@
 # Backlog & planning runbook
 
+Plan-review recovery binds the immutable plan recorded in valid coverage for the current scope baseline and Workroom repository. Design approval continues to bind the canonical design. If the plan commit, blob, or safe `docs/superpowers/plans/*.md` path is missing, stale, or belongs to another repository, record complete current plan coverage and retry readiness; a design cannot substitute for a plan. The plan-specific request key prevents replay of a historical review routed to the design. Historical receipts remain available for audit.
+
 **Status:** procedure reference. The *rules* — backlog lives in Postgres, plan before build, check epic overlap — live in [`AGENTS.md`](../../AGENTS.md) §6 and stay always-on. This file holds the tooling detail, hygiene cadence and enforced-gate list. Relocated by BI-0020D511 Phase 1; no rule was dropped.
 
 - **Backlog lives in PostgreSQL** (`Epic`, `BacklogItem`). Always query live state before planning or changing backlog work. → [kernel principle](../professions/portfolio-management/wiki/backlog-lives-in-postgresql.md)

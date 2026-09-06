@@ -3,6 +3,7 @@ import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evid
 import { evaluateInitiativeReadiness } from "./evaluate";
 import { deriveAuthoritativeReadinessProfile } from "./profiles";
 import type { InheritedInitiativeScope } from "./parent-scope-inheritance";
+import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
 import type {
   InitiativeReadinessDecision,
@@ -332,14 +333,16 @@ function unreadEvidenceByCode(
   return byCode;
 }
 
+type InitiativePlanArtifact = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
+
 function projectPlanCoverage(
   activities: readonly InitiativeReadinessActivity[],
   baseline: Baseline | null,
-): { state: ReadinessEvidenceState; planDigest: string | null } {
+): { state: ReadinessEvidenceState; planDigest: string | null; planArtifact: InitiativePlanArtifact | null } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "plan_backlog_coverage")
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id))[0];
-  if (!latest) return { state: "missing", planDigest: null };
+  if (!latest) return { state: "missing", planDigest: null, planArtifact: null };
   const payload = object(latest.payload);
   const artifact = object(payload?.planArtifactRef);
   if (!payload
@@ -353,9 +356,20 @@ function projectPlanCoverage(
     || !baseline
     || payload.scopeBaselineId !== baseline.baselineId
     || payload.scopeBaselineArtifactDigest !== baseline.artifactDigest) {
-    return { state: "malformed", planDigest: null };
+    return { state: "malformed", planDigest: null, planArtifact: null };
   }
-  return { state: "pass", planDigest: String(payload.planArtifactDigest) };
+  // Reuse this baseline-validated selection for dispatch too. Historical
+  // coverage can still project its digest without inventing missing locators.
+  const planArtifact: InitiativePlanArtifact | null =
+    typeof artifact.repositoryFullName === "string" && /^[^/\s]+\/[^/\s]+$/.test(artifact.repositoryFullName)
+      && typeof artifact.commitSha === "string" && /^[a-f0-9]{40}$/i.test(artifact.commitSha)
+      && typeof artifact.providerBlobId === "string" && /^[a-f0-9]{40}$/i.test(artifact.providerBlobId)
+      && typeof artifact.path === "string" && /^docs\/superpowers\/plans\/[A-Za-z0-9][A-Za-z0-9._/-]*\.md$/.test(artifact.path)
+      && !artifact.path.split("/").some((part) => part === "." || part === "..")
+      ? { kind: "repo-blob-at-commit", repositoryFullName: artifact.repositoryFullName,
+        commitSha: artifact.commitSha, path: artifact.path, providerBlobId: artifact.providerBlobId }
+      : null;
+  return { state: "pass", planDigest: String(payload.planArtifactDigest), planArtifact };
 }
 
 export function projectBacklogItemReadiness(args: {
@@ -398,6 +412,7 @@ export function projectBacklogItemReadiness(args: {
 }): {
   governed: boolean;
   baselineId: string | null;
+  planArtifact: InitiativePlanArtifact | null;
   /** Parent item whose scope this projection borrowed, or null when the item stands alone. */
   inheritedFrom: string | null;
   artifactHints: { hasSpec: boolean; hasPlan: boolean };
@@ -483,6 +498,7 @@ export function projectBacklogItemReadiness(args: {
   return {
     governed,
     baselineId: baseline.current?.baselineId ?? null,
+    planArtifact: projectedCoverage.planArtifact,
     inheritedFrom: inherited?.parentItemId ?? null,
     artifactHints: args.artifactHints ?? { hasSpec: false, hasPlan: false },
     decision: evaluateInitiativeReadiness(facts, args.target),
