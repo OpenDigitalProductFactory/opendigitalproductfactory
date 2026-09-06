@@ -10,6 +10,7 @@ import {
   classifySlotRecord,
   exitCodeForVerdict,
   formatStatusReport,
+  poolClosedReasonFromState,
   reconcileSlots,
 } from "./pregate-status.mjs";
 
@@ -158,6 +159,53 @@ test("a run that gave up while queued reads INCONCLUSIVE, not PASS (BI-8392DA16)
   assert.equal(r.verdict, "INCONCLUSIVE");
   assert.match(r.reason, /blocked_quiescence/);
   assert.match(r.reason, /infrastructure, not a product verdict/i);
+});
+
+test("a claim parked behind a CLOSED pool names the host pressure, not a queue (BI-D908DA0A)", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "queued",
+      evidenceRecordId: "",
+      admission: {
+        queuePosition: 1,
+        poolPolicy: { effectiveCapacity: 0, rollbackReason: "host-stage-headroom-low" },
+      },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /pool was CLOSED \(host-stage-headroom-low\)/);
+  assert.match(r.reason, /not a queue and not a failure of the diff/);
+});
+
+test("an older parked record carries the closure on its queued lease event", () => {
+  assert.equal(
+    poolClosedReasonFromState({
+      leaseEvents: [{ type: "queued", queuePosition: 2, poolClosedReason: "host-memory-low" }],
+    }),
+    "host-memory-low",
+  );
+  assert.equal(poolClosedReasonFromState({ admission: { poolPolicy: { effectiveCapacity: 1 } } }), null);
+  assert.equal(poolClosedReasonFromState(null), null);
+});
+
+test("a claim queued behind a live slot still reads as a plain queue", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "queued",
+      evidenceRecordId: "",
+      admission: { queuePosition: 2, poolPolicy: { effectiveCapacity: 1, rollbackReason: "host-build-capacity-one" } },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.doesNotMatch(r.reason, /CLOSED/);
 });
 
 test("PENDING when the gate passed but evidence publication is unfinished", () => {
