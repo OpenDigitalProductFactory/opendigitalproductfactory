@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockHandleIncomingDisposition, mockResolveIdentity } = vi.hoisted(() => ({
+const { mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockHandleIncomingDisposition, mockHandleIncomingPosture, mockResolveIdentity } = vi.hoisted(() => ({
   mockResolveAuth: vi.fn(),
   mockHandleIncomingDemand: vi.fn(),
   mockHandleIncomingDemandResponse: vi.fn(),
   mockHandleIncomingDisposition: vi.fn(),
+  mockHandleIncomingPosture: vi.fn(),
   mockResolveIdentity: vi.fn(),
 }));
 
@@ -14,6 +15,7 @@ vi.mock("@/lib/federation/demand-exchange", () => ({ handleIncomingDemand: mockH
 vi.mock("@/lib/federation/demand-response", () => ({ handleIncomingDemandResponse: mockHandleIncomingDemandResponse }));
 vi.mock("@/lib/federation/demand-identity", () => ({ resolveFederationIdentity: mockResolveIdentity }));
 vi.mock("@/lib/federation/demand-disposition", () => ({ handleIncomingDemandDisposition: mockHandleIncomingDisposition }));
+vi.mock("@/lib/federation/operational-posture-exchange", () => ({ handleIncomingOperationalPosture: mockHandleIncomingPosture }));
 
 import { POST } from "./route";
 
@@ -128,5 +130,39 @@ describe("POST /api/v1/federation/demand", () => {
     const response = await POST(request());
 
     expect(response.status).toBe(409);
+  });
+});
+
+describe("POST /api/v1/federation/inbox — operational posture (BI-648F01A0)", () => {
+  const posture = { specVersion: "dpf.operational-posture/1", originInstallationId: "inst_origin", originVersion: 7 };
+
+  it("routes a posture report from a same-organization peer to the posture handler", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "same-org-peer" });
+    mockHandleIncomingPosture.mockResolvedValue({ action: "created", mirrorId: "fopm_1", originVersion: 7 });
+
+    const response = await POST(request("dpf.operational-posture.reported", posture));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, action: "created", originVersion: 7 });
+    expect(mockHandleIncomingPosture).toHaveBeenCalledWith(expect.anything(), "link_1", posture);
+    expect(mockHandleIncomingDemand).not.toHaveBeenCalled();
+  });
+
+  it("refuses a posture report from a non-same-organization peer", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "managed-by" });
+
+    const response = await POST(request("dpf.operational-posture.reported", posture));
+
+    expect(response.status).toBe(403);
+    expect(mockHandleIncomingPosture).not.toHaveBeenCalled();
+  });
+
+  it("maps rejected and conflict outcomes to 422 and 409", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "same-org-peer" });
+    mockHandleIncomingPosture.mockResolvedValueOnce({ action: "rejected", violations: ["field:not-allowed:hostname"] });
+    expect((await POST(request("dpf.operational-posture.reported", posture))).status).toBe(422);
+
+    mockHandleIncomingPosture.mockResolvedValueOnce({ action: "conflict", mirrorId: "fopm_1", originVersion: 9, reason: "origin-version-not-advancing" });
+    expect((await POST(request("dpf.operational-posture.reported", posture))).status).toBe(409);
   });
 });

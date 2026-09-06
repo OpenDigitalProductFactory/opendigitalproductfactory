@@ -15,6 +15,13 @@ export const demandReconciliationScheduled = inngest.createFunction(
     const gate = await gateAtEntry(step, "federation/demand-reconciliation");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    // This install's operational posture goes to every trusted same-organization
+    // peer on the same cadence (BI-648F01A0 Slice 2.2). Queued first so the demand
+    // step's outbox drain delivers it in this cycle; its own drain is a no-op then.
+    const posture = await step.run("project-operational-posture", async () => {
+      const { runOperationalPostureReconciliation } = await import("@/lib/federation/operational-posture-reconciliation");
+      return runOperationalPostureReconciliation();
+    });
     const demand = await step.run("reconcile-federated-demand", async () => {
       const { runDemandReconciliation } = await import("@/lib/federation/demand-reconciliation");
       return runDemandReconciliation();
@@ -38,6 +45,6 @@ export const demandReconciliationScheduled = inngest.createFunction(
       const { reconcileOrganizationMembership } = await import("@/lib/federation/organization-membership");
       return reconcileOrganizationMembership();
     });
-    return { demand, work, links, membership };
+    return { posture, demand, work, links, membership };
   },
 );
