@@ -112,6 +112,7 @@ const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
             trustGateKeys: ["quarantine-and-placement-safety"],
             handoffTo: "welfare-daily-care",
             metricBindings: ["quarantine-occupancy", "placement-moves"],
+            coversBackboneStages: ["deliver"],
           },
         ],
       },
@@ -198,6 +199,7 @@ const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
             responsibleRole: "Adoption coordinator",
             trustGateKeys: ["eligibility-and-safeguarding"],
             metricBindings: ["applications-in-screening", "screening-lead-time"],
+            coversBackboneStages: ["qualify"],
           },
           {
             key: "placement-meet-home-check",
@@ -234,6 +236,7 @@ const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
             responsibleRole: "Post-adoption coordinator",
             trustGateKeys: [],
             metricBindings: ["follow-ups-due", "placement-stability"],
+            coversBackboneStages: ["retain"],
           },
           {
             key: "placement-return-reentry",

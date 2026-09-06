@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "decidedOption": "inherited-backbone-stages-behind-collapsed-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/ValueStreamStrip.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/admin/twin-kit": {
+        "defaultVisibleWords": 82,
+        "leadBandWords": 0,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  },
+  "notes": {
+    "routeMeasurement": "Component-scope measurement of the value-stream strip on /admin/twin-kit with pet-rescue's real composed stage flow (ValueStreamStrip.budget.test.tsx, lib/ux-budget measureUxBudget + axe-core in jsdom). Every stage inline: 99 words on arrival. Inherited backbone stages deferred behind the disclosure: 82 words, 1 disclosure region, 0 axe violations. The first CI sweep of this branch measured the whole route at 508 words with the inline strip against a frozen 479; the deferred strip removes the five inherited tiles and their untracked markers from what is visible on arrival. The CI route sweep remains the authoritative route-level figure and blocks if this measurement is wrong.",
+    "responsiveFit": "The strip keeps its horizontal overflow container; the disclosure is a native details element below it with a caption-sized summary, so nothing changes at narrow widths beyond one extra line.",
+    "themeAndAccess": "Inherited stages keep the same tiles, labels, load-bearing accent and untracked marker inside the disclosure; the summary uses the accent token; axe reports zero violations with color contrast excluded in jsdom."
+  }
+}

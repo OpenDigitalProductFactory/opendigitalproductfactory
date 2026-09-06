@@ -48,6 +48,7 @@ export function buildStageFlow(
       order: s.order,
       loadBearing: s.loadBearing,
       observable: s.queueKeys.length > 0 || s.zoneKeys.length > 0,
+      inherited: s.inherited,
       count: d?.count ?? 0,
       ...(d?.longestWaitMs && d.longestWaitMs > 0 ? { longestWait: fmtWait(d.longestWaitMs) } : {}),
     };

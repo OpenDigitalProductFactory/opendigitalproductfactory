@@ -65,6 +65,7 @@ const PROCESS_PROFILE_KEYS = new Set([
   "resourceKinds",
   "valueStreams",
   "supportingCapabilities",
+  "omittedBackboneStages",
 ]);
 const PROCESS_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_PROCESS_SLUG_LENGTH = 63;
@@ -239,7 +240,7 @@ function readValueStreams(raw: unknown): ArchetypeProcessProfile["valueStreams"]
       if (
         !isRecord(stage) ||
         Object.keys(stage).some(
-          (key) => !["key", "label", "input", "output", "responsibleRole", "trustGateKeys", "handoffTo", "capabilityBindings", "metricBindings"].includes(key),
+          (key) => !["key", "label", "input", "output", "responsibleRole", "trustGateKeys", "handoffTo", "capabilityBindings", "metricBindings", "coversBackboneStages"].includes(key),
         ) ||
         !isProcessSlug(stage.key) ||
         stageKeys.has(stage.key) ||
@@ -254,7 +255,11 @@ function readValueStreams(raw: unknown): ArchetypeProcessProfile["valueStreams"]
         (stage.capabilityBindings !== undefined &&
           (!Array.isArray(stage.capabilityBindings) || stage.capabilityBindings.some((module) => !MODULES.has(module as ArchetypeModule)))) ||
         (stage.metricBindings !== undefined &&
-          (!Array.isArray(stage.metricBindings) || stage.metricBindings.some((metric) => !isProcessSlug(metric))))
+          (!Array.isArray(stage.metricBindings) || stage.metricBindings.some((metric) => !isProcessSlug(metric)))) ||
+        (stage.coversBackboneStages !== undefined &&
+          (!Array.isArray(stage.coversBackboneStages) ||
+            stage.coversBackboneStages.some((key) => !isProcessSlug(key)) ||
+            !hasUniqueValues(stage.coversBackboneStages as string[])))
       ) {
         return null;
       }
@@ -272,6 +277,9 @@ function readValueStreams(raw: unknown): ArchetypeProcessProfile["valueStreams"]
         ...(stage.handoffTo !== undefined ? { handoffTo: stage.handoffTo } : {}),
         ...(stage.capabilityBindings !== undefined ? { capabilityBindings: stage.capabilityBindings as ArchetypeModule[] } : {}),
         ...(stage.metricBindings !== undefined ? { metricBindings: stage.metricBindings as string[] } : {}),
+        ...(stage.coversBackboneStages !== undefined
+          ? { coversBackboneStages: stage.coversBackboneStages as string[] }
+          : {}),
       });
     }
 
@@ -305,6 +313,7 @@ function readProcessProfile(raw: unknown): ArchetypeProcessProfile | null {
       resourceKinds: [],
       valueStreams: [],
       supportingCapabilities: [],
+      omittedBackboneStages: [],
     };
   }
 
@@ -333,6 +342,25 @@ function readProcessProfile(raw: unknown): ArchetypeProcessProfile | null {
     !Array.isArray(supportingCapabilities) ||
     supportingCapabilities.some((capability) => !isProcessSlug(capability)) ||
     !hasUniqueValues(supportingCapabilities as string[])
+  ) {
+    return null;
+  }
+
+  // A declared omission must name a backbone stage and say why it does not run.
+  // A reasonless omission is the silent loss this field exists to prevent.
+  const omittedBackboneStages = raw.omittedBackboneStages ?? [];
+  if (
+    !Array.isArray(omittedBackboneStages) ||
+    omittedBackboneStages.some(
+      (omission) =>
+        !isRecord(omission) ||
+        Object.keys(omission).some((key) => !["stageKey", "reason"].includes(key)) ||
+        !isProcessSlug(omission.stageKey) ||
+        !isProcessText(omission.reason),
+    ) ||
+    !hasUniqueValues(
+      (omittedBackboneStages as { stageKey: string }[]).map((omission) => omission.stageKey),
+    )
   ) {
     return null;
   }
@@ -372,6 +400,7 @@ function readProcessProfile(raw: unknown): ArchetypeProcessProfile | null {
     resourceKinds,
     valueStreams,
     supportingCapabilities: supportingCapabilities as string[],
+    omittedBackboneStages: omittedBackboneStages as { stageKey: string; reason: string }[],
   };
 }
 

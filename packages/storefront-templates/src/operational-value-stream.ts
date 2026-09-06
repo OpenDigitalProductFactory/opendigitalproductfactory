@@ -98,6 +98,12 @@ export interface OperationalValueStream {
   it4itStageBinding: It4ItStage[];
   streams: OperationalValueStreamLane[];
   supportingCapabilities: string[];
+  /**
+   * Backbone stages this archetype declares it does not run, with the reason.
+   * Empty for an archetype that runs the whole backbone. Reportable so a dropped
+   * stage is visible rather than silently absent.
+   */
+  declaredBackboneOmissions: { stageKey: string; reason: string }[];
 }
 
 // ── Stage backbone ───────────────────────────────────────────────────────────
@@ -331,7 +337,7 @@ function humanizeSlug(value: string): string {
 
 function deriveLeafValueStreams(
   archetype: ArchetypeDefinition,
-): { streams: OperationalValueStreamLane[]; stages: OperationalValueStreamStage[]; loadBearingStageKeys: string[]; trustGates: string[]; supportingCapabilities: string[] } | null {
+): { streams: OperationalValueStreamLane[]; stages: OperationalValueStreamStage[]; loadBearingStageKeys: string[]; trustGates: string[]; supportingCapabilities: string[]; coveredBackboneStageKeys: Set<string> } | null {
   const profiles = archetype.activationProfile?.processProfile?.valueStreams;
   if (!profiles || profiles.length === 0) return null;
 
@@ -362,12 +368,18 @@ function deriveLeafValueStreams(
     responsibleRole: profile.responsibleRole,
     stages: profile.stages.map((stage) => stageByKey.get(stage.key)!),
   }));
+  const coveredBackboneStageKeys = new Set(
+    profiles.flatMap((stream) =>
+      stream.stages.flatMap((stage) => stage.coversBackboneStages ?? []),
+    ),
+  );
   return {
     streams,
     stages,
     loadBearingStageKeys,
     trustGates: Array.from(new Set(stages.flatMap((stage) => stage.trustGateKeys))),
     supportingCapabilities: (archetype.activationProfile?.processProfile?.supportingCapabilities ?? []).map(humanizeSlug),
+    coveredBackboneStageKeys,
   };
 }
 
@@ -431,30 +443,38 @@ export function deriveOperationalValueStream(archetype: ArchetypeDefinition): Op
   const it4itStageBinding = resolveIt4itBinding(archetype);
 
   const leaf = deriveLeafValueStreams(archetype);
-  if (leaf) {
-    return {
-      archetypeId: archetype.archetypeId,
-      archetypeName: archetype.name,
-      category: archetype.category,
-      stages: leaf.stages,
-      streams: leaf.streams,
-      loadBearingStageKeys: leaf.loadBearingStageKeys,
-      capacityUnit,
-      demandSignature,
-      trustGates: leaf.trustGates,
-      supportingCapabilities: leaf.supportingCapabilities,
-      it4itStageBinding,
-    };
-  }
+  const declaredBackboneOmissions =
+    archetype.activationProfile?.processProfile?.omittedBackboneStages?.map((omission) => ({
+      stageKey: omission.stageKey,
+      reason: omission.reason,
+    })) ?? [];
+  const omittedStageKeys = new Set(declaredBackboneOmissions.map((o) => o.stageKey));
 
   const activeModules = archetype.activationProfile?.modules;
 
-  const specs: StageSpec[] = [
+  const allSpecs: StageSpec[] = [
     ...PRIMARY_STAGE_SPECS,
     ...(isRental ? [RETURN_INSPECT_SPEC] : []),
     ...(isCustody ? [RECEIVE_STORE_SPEC] : []),
     ...CROSS_CUT_SPECS,
   ].sort((x, y) => x.order - y.order);
+
+  // A leaf profile composes with the backbone rather than replacing it: a stage
+  // a leaf stage declares it covers is dropped from the backbone, a stage the
+  // archetype declares it does not run is dropped with its reason on record, and
+  // everything else is retained. Without a leaf profile this is the whole set.
+  const specs = allSpecs.filter(
+    (spec) =>
+      !omittedStageKeys.has(spec.key) &&
+      !(leaf?.coveredBackboneStageKeys.has(spec.key) ?? false),
+  );
+
+  // Leaf lanes number their stages from 100 up (stream index * 100). Retained
+  // backbone stages sit after them, keeping the backbone's own relative order,
+  // so the composed stage list stays monotonically ordered.
+  const backboneOrderOffset = leaf
+    ? Math.ceil((Math.max(0, ...leaf.stages.map((stage) => stage.order)) + 1) / 100) * 100
+    : 0;
 
   const stages: OperationalValueStreamStage[] = specs.map((spec) => {
     const mapped = STAGE_CAPABILITY_MAP[spec.key];
@@ -466,7 +486,7 @@ export function deriveOperationalValueStream(archetype: ArchetypeDefinition): Op
     return {
       key: spec.key,
       label: spec.label,
-      order: spec.order,
+      order: spec.order + backboneOrderOffset,
       loadBearing: loadBearingStageKeys.includes(spec.key),
       capabilityBindings,
       metricBindings,
@@ -479,27 +499,60 @@ export function deriveOperationalValueStream(archetype: ArchetypeDefinition): Op
     };
   });
 
+  const backboneLane: OperationalValueStreamLane = {
+    key: "operational-value-stream",
+    label: `${archetype.name} operational value stream`,
+    purpose: `Create and deliver value for ${archetype.name}`,
+    input: "Interest or demand",
+    output: "Delivered value and an accountable relationship",
+    responsibleRole: "Business operator",
+    stages,
+  };
+
+  if (leaf) {
+    const composedTrustGates = Array.from(new Set([...leaf.trustGates, ...trustGates]));
+    // The trust-compliance cross-cut is where the archetype's whole compliance
+    // surface is read, so a recovered one carries the leaf gates too — not just
+    // the generic ones it would have derived on its own.
+    for (const stage of stages) {
+      if (stage.key === "trust-compliance") stage.trustGateKeys = composedTrustGates;
+    }
+
+    // Leaf lanes first — they carry the archetype's own vocabulary — then the
+    // backbone stages none of them covers, so nothing is silently lost.
+    return {
+      archetypeId: archetype.archetypeId,
+      archetypeName: archetype.name,
+      category: archetype.category,
+      stages: [...leaf.stages, ...stages],
+      streams: stages.length > 0 ? [...leaf.streams, backboneLane] : leaf.streams,
+      // A retained backbone stage keeps the backbone's own load-bearing verdict,
+      // so the reported set and the per-stage flag cannot disagree.
+      loadBearingStageKeys: [
+        ...leaf.loadBearingStageKeys,
+        ...stages.filter((stage) => stage.loadBearing).map((stage) => stage.key),
+      ],
+      capacityUnit,
+      demandSignature,
+      trustGates: composedTrustGates,
+      supportingCapabilities: leaf.supportingCapabilities,
+      it4itStageBinding,
+      declaredBackboneOmissions,
+    };
+  }
+
   return {
     archetypeId: archetype.archetypeId,
     archetypeName: archetype.name,
     category: archetype.category,
     stages,
-    streams: [
-      {
-        key: "operational-value-stream",
-        label: `${archetype.name} operational value stream`,
-        purpose: `Create and deliver value for ${archetype.name}`,
-        input: "Interest or demand",
-        output: "Delivered value and an accountable relationship",
-        responsibleRole: "Business operator",
-        stages,
-      },
-    ],
+    streams: [backboneLane],
     loadBearingStageKeys,
     capacityUnit,
     demandSignature,
     trustGates,
     it4itStageBinding,
     supportingCapabilities: [],
+    declaredBackboneOmissions,
   };
 }

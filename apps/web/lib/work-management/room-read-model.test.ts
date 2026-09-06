@@ -104,7 +104,7 @@ describe("Work Room read model", () => {
       identity: {
         definition: {
           definitionId: "workroom-definition:booking",
-          version: 1,
+          version: 2,
           sourceKey: "booking",
           label: "Storefront booking",
           mode: "finite",
