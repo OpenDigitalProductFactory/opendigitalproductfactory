@@ -1,6 +1,6 @@
 ---
 title: Shared Change Reviewer Control
-status: accepted
+status: binding
 date: 2026-07-27
 owner: platform
 reviewed_by: codex-desktop
