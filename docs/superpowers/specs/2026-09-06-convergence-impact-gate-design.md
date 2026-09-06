@@ -12,7 +12,7 @@ decision_interaction: DI-9DF1A83ECACD
 - **Backlog item:** `BI-B19BE117`
 - **Status:** Design — implemented in this branch.
 
-**OBJ-ID:** OBJ-CONVERGENCE-GATE-1
+**OBJ-CONVERGENCE-GATE-1:** Every PR that changes an install-reachable surface records, in a machine-readable trailer, how an install that already exists converges to the state the PR describes.
 
 > Every PR is reviewed for whether the change is correct. Nothing asks how an
 > install created three versions ago arrives at the same state.
@@ -84,14 +84,15 @@ The trailer is the durable record. `gate-context.mjs` advertises it before gener
 
 ## 5. Acceptance criteria
 
-| AC | Statement | Verified by |
+| Criterion | Objective | Statement |
 | --- | --- | --- |
-| AC-1 | A compose change with no trailer fails the gate | `check-convergence-impact.test.mjs` "gate FAILS a compose change" |
-| AC-2 | A trailer with a mode and no reason fails | "attestation is theater" |
-| AC-3 | Each of the three motivating defects classifies | "three motivating defects" |
-| AC-4 | App source, tests, fixtures and docs never classify | "never classify" |
-| AC-5 | The trailer is advertised in gate context and accepted by pr-readiness | `pr-readiness.test.mjs` trailer contract test |
-| AC-6 | The guard runs in the pull-request profile and its test is listed | `ci-policy-guards.mjs` entry; test inventory check |
+| AC-1 | OBJ-CONVERGENCE-GATE-1 | A compose change with no trailer fails the gate (test "gate FAILS a compose change") |
+| AC-2 | OBJ-CONVERGENCE-GATE-1 | A trailer with a mode and no reason fails (test "attestation is theater") |
+| AC-3 | OBJ-CONVERGENCE-GATE-1 | Each of the three motivating defects classifies (test "three motivating defects") |
+| AC-4 | OBJ-CONVERGENCE-GATE-1 | App source, tests, fixtures and docs never classify (test "never classify") |
+| AC-5 | OBJ-CONVERGENCE-GATE-1 | The trailer is advertised in gate context and accepted by pr-readiness (trailer contract test) |
+| AC-6 | OBJ-CONVERGENCE-GATE-1 | The guard runs in the pull-request profile and its test is listed (ci-policy-guards entry, test inventory) |
+| AC-7 | OBJ-CONVERGENCE-GATE-1 | A trailer quoted inside a fenced code block is not an attestation (test "fenced code block") |
 
 ## 6. Non-goals
 
