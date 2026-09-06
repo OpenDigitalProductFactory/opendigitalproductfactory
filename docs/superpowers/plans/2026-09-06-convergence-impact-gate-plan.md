@@ -12,6 +12,23 @@ design: docs/superpowers/specs/2026-09-06-convergence-impact-gate-design.md
 - **Design:** [`2026-09-06-convergence-impact-gate-design.md`](../specs/2026-09-06-convergence-impact-gate-design.md)
 - **Status:** delivered in PR #5133 (f0f8fcd), spec corrections in #5140 and #5142
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-B19BE117`
+- Receipt: `cmtq7ir8408zk01lclpl9xy6t`
+- Rationale: The guard, its surface registry, the trailer-contract entry, the
+  gate-context advertisement, the pull-request profile wiring, the Dockerfile
+  COPY and the docs row are one unit. A guard without the profile entry never
+  runs, a trailer name without the guard is dead vocabulary, and the Dockerfile
+  COPY exists only because gate-context imports the classifier. Any subset
+  ships an inert gate, which is the failure the work exists to prevent.
+- Dependencies: none
+
+| Key | Requirement refs | Contract refs | Flow refs | Verification refs |
+| --- | --- | --- | --- | --- |
+| convergence-impact-gate | OBJ-CONVERGENCE-GATE-1 | scripts/lib/pr-trailer-contract.mjs, scripts/convergence-surfaces.json, convergence-impact-gate | runs check-convergence-impact.mjs over BASE_SHA...HEAD; advertises the trailer before generation | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 |
+
 ## Decision: atomic
 
 One deliverable. The guard, its registry, the trailer contract entry, the gate-context advertisement, the profile wiring and the docs row are not independently shippable: a guard without the profile entry never runs, a trailer name without the guard is dead vocabulary, and the Dockerfile COPY exists only because gate-context imports the classifier. Shipping any subset would be the inert-guard failure the plan exists to avoid.
