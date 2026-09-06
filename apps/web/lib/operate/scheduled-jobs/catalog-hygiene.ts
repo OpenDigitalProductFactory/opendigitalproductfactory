@@ -54,6 +54,19 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
     runNowEvent: null,
   },
   {
+    jobId: "edge-node-janitor",
+    inngestId: "ops/edge-node-janitor",
+    honorsEnabledGate: true,
+    name: "Edge-node janitor",
+    purpose:
+      "Retires an installer-managed Edge Node enrollment that a live one has superseded (silent a week beside a live node), so an Enrollment conflict heals itself.",
+    cron: "33 * * * *",
+    cadence: "Hourly",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "runtime-artifact-janitor",
     inngestId: "ops/runtime-artifact-janitor",
     ungatedReason:
