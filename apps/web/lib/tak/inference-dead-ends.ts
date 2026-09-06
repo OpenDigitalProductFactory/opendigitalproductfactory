@@ -409,7 +409,13 @@ function isAllEndpointNetworkOutage(message: string): boolean {
     return false;
   }
   if (!Array.isArray(attempts) || attempts.length === 0) return false;
-  return attempts.every((attempt) => {
+  const dispatchedAttempts = attempts.filter((attempt) => {
+    if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return true;
+    const error = (attempt as Record<string, unknown>)["error"];
+    return typeof error !== "string" || !/required-terminal-writer-not-enforceable/i.test(error);
+  });
+  if (dispatchedAttempts.length === 0) return false;
+  return dispatchedAttempts.every((attempt) => {
     if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
     const error = (attempt as Record<string, unknown>)["error"];
     if (typeof error !== "string" || error.trim().length === 0) return false;

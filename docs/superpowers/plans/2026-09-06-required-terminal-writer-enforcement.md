@@ -73,6 +73,10 @@ remains frozen and is not a test target.
 - `apps/web/lib/mcp-task-execution.test.ts`
 - `apps/web/lib/mcp-task-replay-projection.ts`
 - `apps/web/lib/mcp-task-replay-projection.test.ts`
+- `apps/web/lib/mcp-task-review-contract.ts`
+- `apps/web/lib/mcp-task-submit.test.ts`
+- `apps/web/lib/mcp/external-coworker-task-adapter.ts`
+- `apps/web/lib/mcp/external-coworker-task-adapter.test.ts`
 - `apps/web/lib/tak/terminal-tool-policy.ts`
 - `apps/web/lib/tak/terminal-tool-policy.test.ts`
 

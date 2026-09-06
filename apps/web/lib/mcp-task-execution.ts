@@ -389,7 +389,7 @@ export async function executeRemoteTaskAttempt(input: {
             ? terminalWriterEscalationWaitReason(escalation)
             : "missing-terminal-writer",
           content: remoteTaskContent(
-            escalation ? terminalWriterEscalationMessage(escalation) : result.content,
+            escalation ? terminalWriterEscalationMessage(escalation) : terminalWriterFailureMessage,
           ),
           ...(escalation
             ? { structuredContent: terminalWriterEscalationStructuredContent(escalation) }

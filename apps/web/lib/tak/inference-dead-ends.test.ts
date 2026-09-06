@@ -224,6 +224,19 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
     expect(outcome.message).toBe(providersBusyHandoff());
   });
 
+  it("ignores a non-dispatched CLI capability miss when every enforcing adapter has a network outage", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      `All endpoints failed for initiative-review. Attempts: ${JSON.stringify([
+        { endpointId: "claude-cli", error: "required-terminal-writer-not-enforceable: claude-cli cannot require the writer" },
+        { endpointId: "enforcing-http", error: "Network error calling enforcing-http: fetch failed" },
+      ])}`,
+      1,
+    );
+
+    expect(outcome.kind).toBe("busy");
+    expect(outcome.message).toBe(providersBusyHandoff());
+  });
+
   it.each([
     [
       "mixed structural and network failures",

@@ -306,6 +306,16 @@ export function resolveTerminalToolCall(
   toolName: string,
 ): TerminalToolCallDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (toolName === policy.writerToolName && progress.writerAttempted) {
+    return {
+      kind: "refuse",
+      result: {
+        success: false,
+        error: "terminal_writer_already_attempted",
+        message: "The sole governed writer has already been attempted in this turn. No second writer call is allowed.",
+      },
+    };
+  }
   if (policy.terminalPhase === "writer-only" && policy.readerToolNames.includes(toolName)) {
     return {
       kind: "refuse",

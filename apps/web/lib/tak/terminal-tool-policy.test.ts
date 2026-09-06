@@ -261,6 +261,13 @@ describe("terminal tool policy", () => {
     });
   });
 
+  it("refuses a second writer from the same provider tool-call batch", () => {
+    expect(resolveTerminalToolCall(policy, [read(), writer(false)], policy.writerToolName)).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_writer_already_attempted" },
+    });
+  });
+
   it("nudges once and then returns an explicit resumable wait when text arrives before the writer", () => {
     expect(resolveTerminalTextExit(policy, [read()], 0)).toMatchObject({
       kind: "nudge",
@@ -446,6 +453,22 @@ describe("agent loop terminal writer integration", () => {
     const thirdTools = (vi.mocked(routeAndCall).mock.calls[2]![3] as { tools: typeof providerTools }).tools;
     expect(secondTools.map((tool) => tool.function.name)).toEqual(policy.readerToolNames);
     expect(thirdTools.map((tool) => tool.function.name)).toContain(policy.writerToolName);
+  });
+
+  it("executes only the first writer when a provider emits duplicates in one batch", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [
+        { id: "writer-1", name: policy.writerToolName, arguments: { decision: "pass" } },
+        { id: "writer-2", name: policy.writerToolName, arguments: { decision: "fail" } },
+      ]) as never)
+      .mockResolvedValueOnce(response("The sole governed writer attempt was rejected.") as never);
+
+    const result = await runAgenticLoop({ ...params, terminalToolPolicy: enterTerminalWriterPhase(policy) });
+
+    expect(vi.mocked(governedExecuteTool).mock.calls.filter(([call]) => call.toolName === policy.writerToolName))
+      .toHaveLength(1);
+    expect(result.executedTools.filter((tool) => tool.name === policy.writerToolName)).toHaveLength(1);
+    expect(result.failure).toMatchObject({ kind: "terminal-writer-missing" });
   });
 
   it("returns a missing-writer failure after successful reads and two prose exits", async () => {

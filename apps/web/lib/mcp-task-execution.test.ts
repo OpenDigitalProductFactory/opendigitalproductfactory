@@ -392,8 +392,17 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
 
     expect(outcome).toMatchObject({
       kind: "result",
-      result: { status: "input-required", resumable: true, waitReason: "missing-terminal-writer" },
+      result: {
+        status: "input-required",
+        resumable: true,
+        waitReason: "missing-terminal-writer",
+        content: [{
+          type: "text",
+          text: expect.stringContaining("was not recorded before the review attempt ended"),
+        }],
+      },
     });
+    expect(JSON.stringify(outcome)).not.toContain("In my assessment the design is sound.");
   });
 
   it("does not divert a capacity failure that arrived AFTER real tool work", async () => {
