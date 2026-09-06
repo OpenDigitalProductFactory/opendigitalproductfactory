@@ -71,11 +71,22 @@ authority.
 
 | Acceptance ID | Objective IDs | Required outcome |
 | --- | --- | --- |
-| `AC-OMPS-001` | `OBJ-OMPS-ADVERTISE` | `request_coworker` and `summon_coworker` both expose `eligibleEvidenceActivityIds` as a unique string array capped at 500. |
-| `AC-OMPS-002` | `OBJ-OMPS-PRESERVE` | A threadless request and summon forward an exact objective-mapping packet, including the ordered eligible evidence IDs, to the shared adapter. |
-| `AC-OMPS-003` | `OBJ-OMPS-FAIL-CLOSED` | The existing parser rejects objective-mapping bindings with missing, empty, duplicate, oversized, or non-string evidence IDs. |
-| `AC-OMPS-004` | `OBJ-OMPS-FAIL-CLOSED` | Existing research/spec-approval packets without evidence IDs continue to parse and dispatch. |
-| `AC-OMPS-005` | `OBJ-OMPS-PROVIDER` | Provider-schema sanitization can remove unsupported declaration keywords without weakening the canonical server parser or persisted binding. |
+| AC-OMPS-001 | OBJ-OMPS-ADVERTISE | `request_coworker` and `summon_coworker` both expose `eligibleEvidenceActivityIds` as a unique string array capped at 500. |
+| AC-OMPS-002 | OBJ-OMPS-PRESERVE | A threadless request and summon forward an exact objective-mapping packet, including the ordered eligible evidence IDs, to the shared adapter. |
+| AC-OMPS-003 | OBJ-OMPS-FAIL-CLOSED | The existing parser rejects objective-mapping bindings with missing, empty, duplicate, oversized, or non-string evidence IDs. |
+| AC-OMPS-004 | OBJ-OMPS-FAIL-CLOSED | Existing research/spec-approval packets without evidence IDs continue to parse and dispatch. |
+| AC-OMPS-005 | OBJ-OMPS-PROVIDER | Provider-schema sanitization can remove unsupported declaration keywords without weakening the canonical server parser or persisted binding. |
+
+## Ordered fix sequence
+
+1. Freeze the missing public field and dropped-packet behavior as first-failing
+   request and summon tests.
+2. Extend the one shared public binding schema and reuse the existing adapter
+   pass-through without adding a second parser.
+3. Re-run the focused public-pack, canonical parser, and provider-normalization
+   regressions, then publish through DCO and protected CI.
+4. Deploy the protected result before requesting any replacement
+   objective-mapping identity for a historically incomplete packet.
 
 ## Boundaries and rollback
 
