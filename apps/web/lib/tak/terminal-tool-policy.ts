@@ -1,3 +1,5 @@
+import { INITIATIVE_CORRECTABLE_ERRORS, INITIATIVE_DISPOSITION_GUIDANCE, INITIATIVE_WRITER_CORRECTION_LIMIT } from "../backlog/initiative-readiness/disposition-contract";
+
 export type TerminalToolPolicy = {
   writerToolName: string;
   readerToolNames: readonly string[];
@@ -45,7 +47,7 @@ type ImmutableReaderArtifactRef = {
 export type TerminalToolRecord = {
   name: string;
   args?: Record<string, unknown>;
-  result: { success: boolean; error?: string; data?: Record<string, unknown> };
+  result: { success: boolean; error?: string; message?: string; data?: Record<string, unknown> };
 };
 
 const INITIATIVE_REVIEW_READER_NAMES = [
@@ -326,7 +328,7 @@ export function resolveTerminalToolCall(
   toolName: string,
 ): TerminalToolCallDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
-  if (toolName === policy.writerToolName && progress.writerAttempted) {
+  if (toolName === policy.writerToolName && progress.writerAttempted && !canCorrectTerminalWriter(policy, records)) {
     return {
       kind: "refuse",
       result: {
@@ -417,6 +419,29 @@ function writerReachedTerminalBoundary(
   ));
 }
 
+function canCorrectTerminalWriter(policy: TerminalToolPolicy, records: readonly TerminalToolRecord[]): boolean {
+  const attempts = records.filter((record) => record.name === policy.writerToolName);
+  const last = attempts.at(-1);
+  return attempts.length > 0 && attempts.length <= INITIATIVE_WRITER_CORRECTION_LIMIT
+    && !writerReachedTerminalBoundary(policy, records)
+    && last?.result.success === false
+    && INITIATIVE_CORRECTABLE_ERRORS.has(last.result.error ?? "");
+}
+
+function correctionReminder(policy: TerminalToolPolicy, records: readonly TerminalToolRecord[]): string {
+  const last = records.filter((record) => record.name === policy.writerToolName).at(-1)!;
+  return `The canonical writer rejected the assessment: ${last.result.error}: ${last.result.message ?? "Receipt validation failed."} `
+    + `Use the already-read immutable evidence to independently correct the proposal and call ${policy.writerToolName}. `
+    + INITIATIVE_DISPOSITION_GUIDANCE;
+}
+
+export function terminalWriterFailureMessage(policy: TerminalToolPolicy, records: readonly TerminalToolRecord[]): string {
+  const last = records.filter((record) => record.name === policy.writerToolName).at(-1);
+  return last
+    ? `${policy.writerToolName} did not persist a valid receipt. Last result: ${last.result.error ?? "unverified-writer-result"}: ${last.result.message ?? "No verifiable receipt returned."} Automatic correction for this attempt has stopped. Resolve this error before resuming the same TaskRun; do not advance its gate.`
+    : `The provider did not invoke required writer ${policy.writerToolName}. Resume the same TaskRun with a provider that supports the required tool call; no receipt was created.`;
+}
+
 export function selectTerminalToolSurface(
   providerTools: readonly Record<string, unknown>[],
   allowedToolNames: readonly string[],
@@ -434,7 +459,8 @@ export function applyTerminalToolSurface(
   providerTools: readonly Record<string, unknown>[],
 ): Array<Record<string, unknown>> {
   const progress = summarizeTerminalToolProgress(policy, records);
-  if (progress.writerAttempted) return [];
+  if (progress.writerAttempted) return canCorrectTerminalWriter(policy, records)
+    ? selectTerminalToolSurface(providerTools, [policy.writerToolName]) : [];
   if (policy.terminalPhase === "writer-only") {
     return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
   }
@@ -450,7 +476,8 @@ export function buildTerminalToolReminder(
 ): string {
   const progress = summarizeTerminalToolProgress(policy, records);
   if (progress.writerAttempted) {
-    return `The sole ${policy.writerToolName} attempt did not produce a receipt or approval envelope. Stop without another tool call.`;
+    if (canCorrectTerminalWriter(policy, records)) return correctionReminder(policy, records);
+    return terminalWriterFailureMessage(policy, records);
   }
   if (policy.terminalPhase === "writer-only") {
     return `Immutable evidence is already persisted. Call ${policy.writerToolName} now; do not read again or respond with prose first.`;
@@ -470,11 +497,14 @@ export function resolveTerminalTextExit(
   const progress = summarizeTerminalToolProgress(policy, records);
   if (writerReachedTerminalBoundary(policy, records)) return { kind: "complete" };
   if (progress.writerAttempted) {
+    if (canCorrectTerminalWriter(policy, records) && nudgesUsed < INITIATIVE_WRITER_CORRECTION_LIMIT) return {
+      kind: "nudge", allowedToolNames: [policy.writerToolName], message: correctionReminder(policy, records),
+    };
     return {
       kind: "input-required",
       reason: "missing-terminal-writer",
       writerToolName: policy.writerToolName,
-      message: `The sole ${policy.writerToolName} attempt did not produce a receipt or approval envelope. The same TaskRun remains resumable.`,
+      message: terminalWriterFailureMessage(policy, records),
     };
   }
   if (progress.readerBudgetExhausted && !progress.evidenceAvailable) {
