@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 
 import { resolveRepositoryArtifact, type InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness";
+import { deriveAuthoritativeReadinessProfile } from "@/lib/backlog/initiative-readiness/profiles";
 
 export {
   projectPlanBacklogDependencies,
@@ -43,7 +44,17 @@ export type PlanBacklogCoverageReceipt = {
   deliverables: PlanBacklogDeliverable[] | PlanBacklogDeliverableV2[];
 };
 
-export type MappedBacklogItem = { itemId: string; status: string };
+export type MappedBacklogItem = { itemId: string; status: string; workType?: string | null };
+
+type CoverageBacklogItem = {
+  id: string;
+  itemId: string;
+  effortSize: string | null;
+  type?: string | null;
+  source?: string | null;
+  workType?: string | null;
+  scopeKind?: string | null;
+};
 
 export type PlanBacklogCoverageValidation =
   | {
@@ -345,11 +356,11 @@ export type PlanBacklogCoverageDb = {
   backlogItem: {
     findUnique: (args: {
       where: { itemId: string };
-      select: { id: true; itemId: true; effortSize: true };
-    }) => Promise<{ id: string; itemId: string; effortSize: string | null } | null>;
+      select: { id: true; itemId: true; effortSize: true; type?: true; source?: true; workType?: true; scopeKind?: true };
+    }) => Promise<CoverageBacklogItem | null>;
     findMany: (args: {
       where: { itemId: { in: string[] } };
-      select: { itemId: true; status: true };
+      select: { itemId: true; status: true; workType?: true };
     }) => Promise<MappedBacklogItem[]>;
   };
   backlogItemActivity: {
@@ -622,7 +633,7 @@ export async function recordPlanBacklogCoverage(args: {
   const db = args.db ?? (prisma as unknown as PlanBacklogCoverageDb);
   const parent = await db.backlogItem.findUnique({
     where: { itemId: args.itemId },
-    select: { id: true, itemId: true, effortSize: true },
+    select: { id: true, itemId: true, effortSize: true, type: true, source: true, workType: true, scopeKind: true },
   });
   if (!parent) {
     return {
@@ -661,7 +672,7 @@ export async function recordPlanBacklogCoverage(args: {
     }
     const currentParent = await tx.backlogItem.findUnique({
       where: { itemId: args.itemId },
-      select: { id: true, itemId: true, effortSize: true },
+      select: { id: true, itemId: true, effortSize: true, type: true, source: true, workType: true, scopeKind: true },
     });
     if (!currentParent || currentParent.id !== parent.id) {
       return { ok: false as const, code: "backlog-item-not-found" as const, error: `BacklogItem ${args.itemId} was not found.` };
@@ -691,7 +702,7 @@ export async function recordPlanBacklogCoverage(args: {
     const mappedBacklogItems = requestedIds.length
       ? await tx.backlogItem.findMany({
           where: { itemId: { in: requestedIds } },
-          select: { itemId: true, status: true },
+          select: { itemId: true, status: true, workType: true },
         })
       : [];
     const baseline = projectCurrentScopeBaselineTraceability(await tx.backlogItemActivity.findMany({
@@ -700,6 +711,38 @@ export async function recordPlanBacklogCoverage(args: {
       select: { payload: true },
     }));
     if (!baseline) {
+      const currentProfile = deriveAuthoritativeReadinessProfile(currentParent) ?? "feature";
+      const implementationChildren = mappedBacklogItems
+        .filter((item) => {
+          const childProfile = deriveAuthoritativeReadinessProfile({ workType: item.workType });
+          return childProfile != null && childProfile !== "doc-only";
+        })
+        .map((item) => item.itemId);
+      const recovery = currentProfile === "feature" || currentProfile === "cross-domain" || currentProfile === "archetype"
+        ? {
+            kind: "scope-baseline-review-required",
+            itemId: currentParent.itemId,
+            nextTool: "claim_backlog_item_for_work",
+            workIntent: "implementation",
+          }
+        : implementationChildren.length > 0
+          ? {
+              kind: "implementation-parent-binding-required",
+              documentationItemId: currentParent.itemId,
+              candidateImplementationItemIds: implementationChildren,
+              nextTool: "record_plan_backlog_coverage",
+            }
+          : {
+              kind: "implementation-parent-binding-required",
+              documentationItemId: currentParent.itemId,
+              candidateImplementationItemIds: [],
+              nextTool: "claim_backlog_item_for_work",
+            };
+      const recoveryText = recovery.kind === "scope-baseline-review-required"
+        ? "Call `claim_backlog_item_for_work` for this existing Workroom with workIntent=`implementation`, then execute the returned `recovery.reviewerRoutes` spec-approval `request_coworker` packet verbatim. That packet binds `record_initiative_design_review` to the immutable canonical design and an independent reviewer."
+        : implementationChildren.length > 0
+          ? `This documentation/fix item cannot own implementation coverage. Record coverage against the governed implementation child with a current scope baseline instead; candidate item(s): ${implementationChildren.join(", ")}.`
+          : "This documentation/fix item cannot mint implementation coverage without a baseline. Bind the work to its governed implementation parent or child first; do not request a reviewer route for this item.";
       // The remediation text names the CONDITION, never a blocker id. It used
       // to instruct callers to "cite BI-B9403248 for the blocked receipt";
       // that BI closed on 2026-08-21 (PR #4422) while the block stayed live,
@@ -711,9 +754,9 @@ export async function recordPlanBacklogCoverage(args: {
         ok: false as const,
         code: "traceability-incomplete" as const,
         error: `BacklogItem ${currentParent.itemId} has no initiative scope baseline, so plan coverage cannot be bound to a governed scope. `
-          + "A baseline is written only when the initiative's spec-approval gate passes. From an external client, call `claim_backlog_item_for_work` for the existing Workroom identity with workIntent=`implementation`, then execute the returned `recovery.reviewerRoutes` spec-approval `request_coworker` packet verbatim. "
-          + "That server-issued packet binds `record_initiative_design_review` to the canonical design under `docs/superpowers/specs/`, an exact immutable repository version, and an eligible reviewer independent of the artifact's author; the author cannot record it. "
+          + recoveryText + " "
           + "Until this item carries a baseline, record the plan's coverage table in the plan itself and state the blocking CONDITION — \"no initiative scope baseline exists for <item>\" — rather than citing a backlog id, which goes stale when that id closes.",
+        recovery,
       };
     }
     const receipt: PlanBacklogCoverageReceipt = {

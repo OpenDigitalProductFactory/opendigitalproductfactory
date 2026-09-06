@@ -671,6 +671,110 @@ describe("recordPlanBacklogCoverage", () => {
     expect(activityCreate).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["feature", "scope-baseline-review-required"],
+    ["bug", "implementation-parent-binding-required"],
+    ["doc", "implementation-parent-binding-required"],
+  ])("returns an executable profile-aware recovery for %s work", async (workType, recoveryKind) => {
+    const { db } = fakeDb();
+    db.backlogItemActivity.findMany = vi.fn(async () => []);
+    db.backlogItem.findUnique = vi.fn(async () => ({
+      id: "parent-row",
+      itemId: "BI-PARENT",
+      effortSize: "large",
+      workType,
+    }));
+
+    const result = await recordPlanBacklogCoverage({
+      itemId: "BI-PARENT",
+      planPath: "docs/superpowers/plans/example.md",
+      planArtifactRef,
+      decision: "atomic",
+      rationale: "The compatibility boundary is intentionally delivered as one change.",
+      deliverables: [{ key: "one", title: "One", independentlyShippable: false, dependsOn: [], ...traceability }],
+      userId: "user-1",
+      db,
+      resolveArtifact: resolvePlan,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "traceability-incomplete",
+      recovery: { kind: recoveryKind },
+    });
+    if (workType === "feature") expect((result as { error: string }).error).toContain("spec-approval `request_coworker`");
+    else expect((result as { error: string }).error).not.toContain("reviewer route verbatim");
+  });
+
+  it("points a documentation parent at its mapped feature child instead of a nonexistent reviewer route", async () => {
+    const { db } = fakeDb();
+    db.backlogItemActivity.findMany = vi.fn(async () => []);
+    db.backlogItem.findUnique = vi.fn(async () => ({
+      id: "parent-row",
+      itemId: "BI-DOC-PARENT",
+      effortSize: "large",
+      workType: "doc",
+    }));
+    db.backlogItem.findMany = vi.fn(async () => [{ itemId: "BI-FEATURE-CHILD", status: "open", workType: "feature" }]);
+
+    const result = await recordPlanBacklogCoverage({
+      itemId: "BI-DOC-PARENT",
+      planPath: "docs/superpowers/plans/example.md",
+      planArtifactRef,
+      decision: "decomposed",
+      deliverables: [{
+        key: "child",
+        title: "Feature child",
+        independentlyShippable: true,
+        backlogItemId: "BI-FEATURE-CHILD",
+        dependsOn: [],
+        ...traceability,
+      }],
+      userId: "user-1",
+      db,
+      resolveArtifact: resolvePlan,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "traceability-incomplete",
+      recovery: {
+        kind: "implementation-parent-binding-required",
+        documentationItemId: "BI-DOC-PARENT",
+        candidateImplementationItemIds: ["BI-FEATURE-CHILD"],
+      },
+    });
+    expect((result as { error: string }).error).toContain("BI-FEATURE-CHILD");
+  });
+
+  it("does not misrepresent a fix design document as a canonical plan receipt", async () => {
+    const { db } = fakeDb();
+    db.backlogItem.findUnique = vi.fn(async () => ({
+      id: "parent-row",
+      itemId: "BI-PARENT",
+      effortSize: "large",
+      workType: "bug",
+    }));
+    const fixRef = {
+      ...planArtifactRef,
+      path: "docs/superpowers/specs/fix-design.md",
+    };
+
+    const result = await recordPlanBacklogCoverage({
+      itemId: "BI-PARENT",
+      planPath: fixRef.path,
+      planArtifactRef: fixRef,
+      decision: "atomic",
+      rationale: "The ordered repair is one indivisible compatibility boundary.",
+      deliverables: [{ key: "repair", title: "Repair", independentlyShippable: false, dependsOn: [], ...traceability }],
+      userId: "user-1",
+      db,
+      resolveArtifact: resolvePlan,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "plan-artifact-invalid" });
+  });
+
   it("does not write a receipt when a mapped BI does not exist", async () => {
     const { db, activityCreate } = fakeDb();
     const result = await recordPlanBacklogCoverage({
