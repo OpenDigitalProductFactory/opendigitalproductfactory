@@ -245,6 +245,27 @@ export function deriveStandingRooms(
   return rooms;
 }
 
+/**
+ * Every declared standing room, across every archetype, keyed by its room key.
+ *
+ * Room keys are globally unique, so containment is a property of the KEY and not
+ * of the archetype that happens to include it. A reconciler materializing the
+ * `contains` relations therefore does not need to resolve an install's archetype
+ * to know which room nests under which — it needs only the keys it finds.
+ *
+ * Derived from the same three arrays the archetype derivation reads; there is no
+ * second declaration of the tree.
+ */
+export const STANDING_ROOM_PARENT_BY_KEY: Readonly<Record<string, string | null>> =
+  Object.freeze(
+    Object.fromEntries(
+      [...TOP_ROOMS, ...UNIVERSAL_SUB_ROOMS, ...SOFTWARE_DELIVERY_SUB_ROOMS].map((room) => [
+        room.key,
+        room.parentKey,
+      ]),
+    ),
+  );
+
 /** The declared work-shape keys a given archetype will actually drive. */
 export function standingRoomShapeKeys(archetype: ArchetypeDefinition): string[] {
   return deriveStandingRooms(archetype)

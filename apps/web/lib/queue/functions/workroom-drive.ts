@@ -9,6 +9,8 @@
 
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { planContainmentRelations } from "@/lib/work-management/standing-room-nesting";
+
 import { gateAtEntry } from "../quiescence-gates";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import {
@@ -89,6 +91,11 @@ export type WorkroomDriveResult = {
   attention: number;
   stopped: number;
   skipped: number;
+  /** `contains` relations materialized this tick from the declared standing-room
+   *  tree. Non-zero only while the estate is catching up; a settled estate reports
+   *  0 forever, which is how an operator tells "nesting is done" from "nesting was
+   *  never written" (BI-AEAA90A9). */
+  nestedRelations: number;
   plans: Array<{ roomId: string; action: string; reason: string; taskId: string | null }>;
 };
 
@@ -232,8 +239,21 @@ export async function runWorkroomDriveJob(
     listRooms?: () => Promise<WorkroomDriveRoom[]>;
     effects?: WorkroomDriveEffects;
     reconcileNotifications?: () => Promise<void>;
+    reconcileNesting?: () => Promise<number>;
   },
 ): Promise<WorkroomDriveResult> {
+  // Materialize the declared nesting before driving. The tree is declared in
+  // standing-rooms.ts and, until BI-AEAA90A9, was written nowhere: this install
+  // held eighteen standing rooms and ZERO relations, so the five parents floated
+  // unlinked from their children and every hierarchy walk ran over an empty set.
+  // Idempotent and cheap (one insert with skipDuplicates), so it costs a settled
+  // estate nothing per tick.
+  // A caller supplying its own room list owns nesting too, so the live
+  // reconciler runs only alongside the live loader.
+  const reconcile =
+    deps?.reconcileNesting ?? (deps?.listRooms ? async () => 0 : reconcileStandingRoomNesting);
+  const nested = await reconcile();
+
   const rooms = deps?.listRooms ? await deps.listRooms() : await loadStandingRooms();
   const effects = deps?.effects ?? liveEffects();
   const plans: WorkroomDriveResult["plans"] = [];
@@ -292,6 +312,7 @@ export async function runWorkroomDriveJob(
   return {
     runId: `workroom-drive:${now.toISOString()}`,
     scanned: rooms.length,
+    nestedRelations: nested,
     dispatched,
     attention,
     stopped,
@@ -331,6 +352,43 @@ export async function loadStandingRoomIds(db: {
     LIMIT ${STANDING_ROOM_SCAN_LIMIT}
   `;
   return rows.map((row) => row.id);
+}
+
+/**
+ * Write the declared standing-room tree, returning how many relations were newly
+ * created. Idempotent: the (from, to, relation) unique constraint plus
+ * skipDuplicates means a settled estate writes nothing and reports 0.
+ *
+ * Failure is non-fatal. Nesting is what the hierarchy is built on, but a room
+ * that can still be driven must not be blocked because its parent link could not
+ * be written this minute.
+ */
+export async function reconcileStandingRoomNesting(): Promise<number> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const rooms = await prisma.workroom.findMany({
+      where: { archivedAt: null, idempotencyKey: { startsWith: "standing-room:" } },
+      select: { id: true, capsuleId: true, idempotencyKey: true },
+    });
+    const byCapsuleId = new Map(rooms.map((room) => [room.capsuleId, room.id]));
+    const plans = planContainmentRelations(
+      rooms.map((room) => ({ capsuleId: room.capsuleId, idempotencyKey: room.idempotencyKey })),
+    );
+    if (plans.length === 0) return 0;
+    const created = await prisma.workroomRelation.createMany({
+      data: plans.flatMap((plan) => {
+        const fromWorkroomId = byCapsuleId.get(plan.fromCapsuleId);
+        const toWorkroomId = byCapsuleId.get(plan.toCapsuleId);
+        return fromWorkroomId && toWorkroomId
+          ? [{ fromWorkroomId, toWorkroomId, relation: "contains" as const }]
+          : [];
+      }),
+      skipDuplicates: true,
+    });
+    return created.count;
+  } catch {
+    return 0;
+  }
 }
 
 async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {

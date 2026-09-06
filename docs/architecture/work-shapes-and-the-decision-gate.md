@@ -476,6 +476,76 @@ Raw SQL against this trail must use the physical table name `"WorkCapsuleActivit
 compiles and type-checks and fails only against a real database — unit tests over the
 projector cannot catch it.
 
+## Who answers for a room
+
+`deriveRoomCoordinator` promotes the single accountable PARTICIPANT, which works for
+a room somebody staffed. Rooms created by derivation are staffed by nobody: all
+twelve standing rooms on this install carried `participantCount: 0`, so there was
+nothing to promote and every one refused.
+
+The ownership ladder resolves an owner instead of requiring one to be appointed:
+
+1. **explicit** — a persisted coordinator assignment. Wins outright.
+2. **shape** — the principal who DRIVES the work shape.
+3. **archetype** — the default owner for rooms of this kind, when declared.
+4. otherwise **null**, and the room is reported as unowned.
+
+Two rules carry the weight:
+
+- **The driver is not the approver.** Stages advancing by `governed-decision` are the
+  approval stages; their principal is excluded before candidates are counted.
+  Deriving them would trip `coordinator_approver_overlap` — swapping one refusal for
+  another while looking like progress.
+- **Ambiguity resolves null, never a best guess.** Executing stages naming more than
+  one principal is a shape that has not said who drives. A wrong derived owner is
+  worse than none: the room then looks owned and still refuses, which is
+  indistinguishable from the defect the ladder exists to remove.
+
+A derived owner is a **suggestion**. Conformance still admits only an EXPLICIT
+overseer for autonomous execution, so the ladder names who should be appointed and
+the stall attention item carries that name; it never routes the item to them and
+never satisfies the gate on its own.
+
+Measured against this install's twelve stalled rooms, the shape rung resolves all
+twelve — security-engineer, platform-engineer, change-reviewer, portfolio-advisor,
+build-specialist, customer-advisor and finance-controller — each distinct from its
+own room's approver.
+
+## Nesting has to be written, not just declared
+
+`standing-rooms.ts` declares a tree: every sub-room carries a `parentKey`. On
+2026-09-06 that tree existed only in the declaration —
+
+    SELECT relation, count(*) FROM "WorkCapsuleRelation";   -- (0 rows)
+
+Zero relations of any kind, while eighteen standing rooms sat in the database with
+idempotency keys matching the derivation's own format. `deriveStandingRooms` had no
+consumer anywhere, so whatever materialized those rooms never wrote the containment,
+and the five parent rooms floated unlinked from their children.
+
+Nesting is not decoration. Delegation downward and escalation upward are both walks
+over these rows, so nothing built on the hierarchy can be true before they exist —
+an escalation projection written against an empty relation table would pass every
+test and observe nothing.
+
+The drive tick now reconciles the declared tree before driving:
+
+- **Containment is a property of the room KEY, not the archetype.** Room keys are
+  globally unique, so `STANDING_ROOM_PARENT_BY_KEY` — derived from the same three
+  arrays the archetype derivation reads, not a second declaration — lets a
+  reconciler materialize the tree without resolving an install's archetype.
+- **Version-agnostic.** `standing-room:<key>:v1` and `:v2` are the same room;
+  containment follows the room's purpose, not its revision.
+- **Nothing ungrounded is written.** A child whose parent was never materialized is
+  skipped rather than pointed at a missing row, and a room whose key is absent from
+  the declaration never acquires a parent by guesswork.
+- **Idempotent and non-fatal.** One insert with `skipDuplicates`; a settled estate
+  writes nothing and reports `nestedRelations: 0`. A failure to write a parent link
+  never blocks a room that could otherwise be driven.
+
+`nestedRelations` on the drive result is how an operator tells "nesting is done"
+from "nesting was never written" — the distinction that hid this defect.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
