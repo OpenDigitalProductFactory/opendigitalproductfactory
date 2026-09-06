@@ -69,21 +69,6 @@ Every stage whose advance merges, deploys or changes authority is a `governed-de
 
 ### 3.1 Shapes
 
-**Recovery composition amendment (2026-09-05):** delivery size/risk and recovery
-behavior are independent. The single Workroom activity-shape reference must not
-be overwritten with a PR watch to obtain retries at the cost of losing delivery
-gates. Compose the shared recovery stages inside each applicable delivery shape;
-keep its evidence obligations, budget and collaboration requirements. The
-[throughput design sections 8.1–8.3](2026-09-03-local-first-agentic-delivery-throughput-design.md#81-reviewer-recovery-and-receipt-settlement)
-own the recovery contract, version migration, BPMN/SysML projection, and runtime
-binding prerequisites. Those sections distinguish existing v1 observation from
-the proposed v2 recovery behavior; no undeployed key is a valid runtime binding.
-
-Coverage failures must return their specific prerequisite even when a doc-only
-implementation projection otherwise passes. Do not up-classify documentation to
-manufacture a reviewer route. Diagram nodes and UI status derive from receipts
-and the current version, never from TaskRun completion or the existence of a claim.
-
 | Shape | What it is | Appetite | Carrier | Examples |
 |---|---|---|---|---|
 | `break-fix` | Operational repair of a live defect or incident on the installed runtime. Reversion-shaped: restores intended behaviour, adds no capability. | hours | one PR; Workroom optional | the pregate hook that never ran; a leaked lease; a crashed reaper |
