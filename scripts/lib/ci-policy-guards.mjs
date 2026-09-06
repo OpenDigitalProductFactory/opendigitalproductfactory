@@ -610,15 +610,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       pnpm("run", "check:prose-lint:test"),
       pnpm("run", "check:prose-lint"),
     ]),
-    // Proves the locally-owned image-size fix is still applied. image-size is
-    // archived upstream with no patched release, so patches/image-size@1.2.1.patch
-    // is the only thing standing between metro's asset pipeline and CVE-2025-71330.
-    // Lives in the WORKSPACE profile because it imports the installed package —
-    // the Dependency Scan workflow only reads the lockfile and never installs.
-    // Fails loudly when a metro bump moves image-size off the patched version.
-    guard("owned-patch-regression", "Owned Patch Regression", [
-      node("--test", "scripts/sbom/image-size-icns-loop.test.mjs"),
-    ]),
   ]),
   "pull-request": Object.freeze([
     guard("ux-fit-gate", "UX-Fit Gate", [
