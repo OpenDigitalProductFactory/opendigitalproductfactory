@@ -225,15 +225,3 @@ packageExtensions:
     peerDependencies:
       vitest: '*'
 
-# image-size 1.2.1: GHSA-w3rx-r6r6-pgpr / CVE-2025-71330 (Dependabot #151, high) —
-# the ICNS entry-walk loop never advances on a zero-length entry and hangs the
-# event loop. There is NO patched release and no fix coming: image-size is
-# archived upstream on both GitHub (2026-06-03) and its Codeberg revival, and
-# metro — our only consumer — closed its own Dependabot issue as "not planned"
-# (react/metro#1607). We therefore own the fix. The patch guards the loop,
-# mirroring the guard upstream itself applied to findBox() in utils.js.
-# Regression test: scripts/sbom/image-size-icns-loop.test.mjs (runs in the
-# Dependency Scan workflow). Pinned to the exact version on purpose — when metro
-# moves image-size off 1.2.1 this fails loudly and forces a re-review.
-patchedDependencies:
-  image-size@1.2.1: patches/image-size@1.2.1.patch
