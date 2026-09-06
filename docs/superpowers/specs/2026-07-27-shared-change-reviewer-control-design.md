@@ -253,6 +253,166 @@ slice; the Work Capsule/Build timeline is the canonical surface.
   activity with operation type `semantic-change-review.outcome`; no review table
   or dashboard is introduced.
 
+## Amendment: evidenced failure analysis and recovery readiness
+
+Status: proposed on 2026-09-06; implementation and independent approval pending.
+This section supersedes the earlier documentation auto-pass and shadow rollout
+for failure-analysis readiness. It extends the same review/evidence contract.
+
+### Objectives and acceptance
+
+**OBJ-FAILURE-001:** Prevent avoidable failures by analysing business consequences
+during design and refreshing the analysis against the delivered change.
+
+**OBJ-FAILURE-002:** Require independently challenged, current verification and
+accountable disposition before PR publication or promotion on every surface.
+
+**OBJ-FAILURE-003:** Recover review execution without false passes, false code
+findings, duplicate execution, or technical approval requests to business owners.
+
+**OBJ-FAILURE-004:** Learn from escaped failures through existing outcome evidence.
+
+| Acceptance criterion | Objective links | Observable result |
+| --- | --- | --- |
+| AC-FAILURE-001 | OBJ-FAILURE-001 | Every change, including docs/config/process/tests, identifies workflows, affected people, invariants, authority/data boundaries, and a versioned design analysis; a final-diff refresh identifies eliminated opportunities and remaining failures. |
+| AC-FAILURE-002 | OBJ-FAILURE-001, OBJ-FAILURE-002 | Each credible failure names trigger/assumption, business/user effect, severity/exposure, prevention or elimination, containment, detection, recovery/compensation, evidence and accountable remaining-risk disposition. |
+| AC-FAILURE-003 | OBJ-FAILURE-002 | Empty checkboxes, blanket zero-risk assurances, plausible narratives without verified material evidence, unknown dispositions and stale receipts cannot satisfy server delivery or authoritative PR/merge readiness. |
+| AC-FAILURE-004 | OBJ-FAILURE-002 | Evidence resolves in the current Workroom and repository against the final immutable change and current policy; expected and observed results are recorded, and unrun checks remain unverified. |
+| AC-FAILURE-005 | OBJ-FAILURE-001, OBJ-FAILURE-002 | An independent existing reviewer challenges omissions and justified low-impact applicability; grants, principal independence, explicit approval policy and accountable risk acceptance remain enforced. |
+| AC-FAILURE-006 | OBJ-FAILURE-003 | Missing evidence, changed diff, stale receipt, reviewer outage, denial, retry/replay and lost response have regression coverage; infrastructure remains inconclusive and has bounded same-identity recovery. |
+| AC-FAILURE-007 | OBJ-FAILURE-003 | A valid internal review recovery packet reaches its independent coworker without owner technical approval; mismatched binding, insufficient grants, explicit always-approval and genuine business-risk decisions preserve their boundary. |
+| AC-FAILURE-008 | OBJ-FAILURE-004 | Existing outcome evidence records escaped failure counts and links incident/scenario follow-up; unavailable observations remain unknown rather than zero. |
+
+### Design grounding and ownership
+
+Reviewed source: `apps/web/lib/change-review/semantic-change-review.ts`,
+`semantic-change-review-operation.ts`, `semantic-review-enforcement.ts`,
+`semantic-review-single-flight.ts`, and the `change-review-pack.ts` MCP adapter;
+`apps/web/lib/work-management/policy-envelope.ts` and the Workroom transition
+in `apps/web/lib/work-capsules/work-capsule-store.ts`; the existing initiative
+review binding described in the backlog-and-planning runbook; and
+`scripts/lib/semantic-review-gate.mjs` plus `scripts/semantic-review-policy.json`.
+The companion process specification remains
+[Resilient Concurrent Development Process](2026-08-15-resilient-concurrent-development-process.md).
+
+The per-work-kind evidence initiative owns which regression, typecheck, docs,
+behavior-preservation and UX evidence a kind of work owes. This amendment owns
+failure-scenario completeness, mitigation-to-evidence relationships, final-change
+freshness, and independent challenge. Both extend the existing evidence decision;
+neither creates a second evidence engine. Peer-owned coordination records remain
+read-only; confirm the interface with their accountable owner through the existing
+coordination plane. Install-local identifiers belong only in that plane.
+
+### Evidence contract
+
+Store the analysis in the existing immutable review receipt/evidence payload,
+with its versioned design reference and final-change binding. No new table,
+reviewer role, mutable approval store or client-owned guarantee is introduced.
+Use one pure validation contract from the shared review operation, server
+delivery/promotion evaluator and authoritative PR check. Adapters resolve trusted
+evidence and identity; prose or caller-supplied success flags do not establish them.
+
+The payload records affected workflows/people, invariants and boundaries; design
+artifact reference; final diff identity; eliminated opportunities with rationale;
+remaining scenarios; and justified applicability for failure families. Each
+scenario has a stable local key, trigger, effect, severity/exposure, prevention,
+containment, detection, recovery, verification references and accountable risk
+disposition. A mitigation reference resolves to existing verification evidence
+with expected/observed behavior and execution status for this change. Accepted
+material risk additionally resolves to an existing authority decision covering
+that risk; naming an owner is not acceptance. Repair-required risks block.
+
+Consider input/permission errors, identity/tenant/peer mix-ups, slow/unavailable
+dependencies, credential expiry, retries/duplicates, races/stale responses,
+partial writes, restart/cancellation, paging/capacity, version skew, migration,
+backfill and rollback. Consider common-cause combinations. Applicability is an
+explained judgment, not a requirement to add speculative code for every family.
+A spelling correction may carry one evidenced scope disposition. A workflow or
+gate change needs scenarios and negative-path verification. Neither receives a
+pass merely because fields are nonempty. Independent semantic review assesses
+adequacy and searches for omitted scenarios against the actual artifact.
+
+### Enforcement and recovery
+
+Require analysis before independent review can mint a publication receipt.
+Bind analysis and resolved evidence digest into the existing review identity and
+single-flight key, alongside base/head/diff, policy and reviewer versions.
+Changing analysis, verification, policy or diff invalidates reuse. A design-stage
+receipt cannot authorize final-code publication. Resolve repository head and
+evidence ownership server-side; do not trust an external client's supplied hash.
+
+Wire this same decision into Workroom review/promotion transitions, the assembled
+Build Studio promotion path and authoritative PR/merge checks. A local sidecar
+or PR-template section is explanatory convenience, never the authority. Required
+failure evidence is enforced even where semantic-review rollout remains shadow;
+legacy receipts require refresh rather than being grandfathered into readiness.
+Deploy the producer and consumers together, bump contract/policy versions, and
+exercise existing-install convergence before declaring the gate active.
+
+Missing/stale material evidence means repair the evidence. Transport/capacity or
+unreadable reviewer input means inconclusive; retain the same TaskRun/key and
+reconcile durable state after a lost response before dispatching again. Reuse
+terminal evidence only after complete freshness validation. Keep recovery within
+existing bounded attempts; exhaustion routes to the technical delivery authority
+with identity, attempts, evidence and next action, not generic owner sign-off.
+Denial is not an outage and is never retried around its grants or identity boundary.
+
+Use the existing server-issued initiativeReviewBinding recovery packet unchanged
+for routine internal design/plan reviews. Do not ask the business owner to choose
+reviewers or validate technical details. Explicit always-approval, real authority
+changes and material business-risk acceptance retain their existing decision path.
+
+### Failure analysis of this gate
+
+| Trigger and effect | Eliminated/prevented opportunity | Containment, detection and recovery | Evidence and accountable disposition |
+| --- | --- | --- | --- |
+| Missing/stale analysis permits a defect that interrupts animal care, donations or volunteer coordination. | One shared predicate eliminates divergent adapter rules; exact identity prevents reuse across changes. | Deny readiness with missing/stale evidence detail; refresh analysis and independently re-review. | Negative omission, stale policy/head/evidence and alternate-surface tests; delivery authority owns unresolved gaps. |
+| Reviewer dependency outage blocks a necessary repair; fabricated pass exposes users to unreviewed behavior. | Durable single-flight avoids duplicate requests; completed evidence is checked before reuse. | Inconclusive execution, bounded retry and durable readback after lost response; technical coordinator handles exhaustion. | Outage, restart, retry and lost-response tests; no semantic verdict is claimed until review completes. |
+| Wrong tenant, peer, principal or forged risk acceptance releases an unauthorized change. | Existing scope/grant intersection and independent receipt writer remain authoritative. | Deny exact mismatch, retain audit reason, route a concrete authority decision only where needed. | Binding/grant/independence and accepted-risk provenance tests; governance authority owns disposition. |
+| Valid internal recovery is misrouted to a nontechnical owner, delaying service repairs. | Reuse validated review binding rather than infer permission from prose or generic HITL tier. | Existing TaskRun envelope states internal recovery or actual approval boundary. | Valid-packet bypass and explicit always-approval/mismatch regressions; technical coordinator owns recovery. |
+| Duplicate/lost persistence response or policy upgrade produces misleading readiness. | Idempotent execution and immutable evidence references eliminate blind replay. | Reconcile durable receipt and candidate identity, reject old schema/policy, retry boundedly. | Replay, partial-write, version-skew and response-loss tests; no rollback claim for external effects. |
+
+Rollback of software does not retract published code, undo external effects or
+restore destructive migrations. Emergency exceptions use existing accountable
+promotion authority and explicit scope/expiry; they must not masquerade as passed
+failure evidence. Unknown failure modes remain possible after a valid review.
+
+### Research & Benchmarking
+
+- [Google SRE NALSD](https://sre.google/workbook/non-abstract-design/): adopt
+  iterative design around concrete business constraints and failure domains;
+  reject copying Google's resource scale into every small DPF change.
+- [SLSA verification summaries](https://slsa.dev/spec/v1.2/verification_summary):
+  adopt artifact, verifier and policy binding; do not claim SLSA certification or
+  create another attestation database from this analogy.
+- [OPA decision logs](https://www.openpolicyagent.org/docs/management-decision-logs):
+  adopt traceable decisions with input and policy revision; reuse DPF evidence
+  storage rather than add OPA or an independent audit transport.
+
+### Verification, UX and operating limits
+
+Verification maps AC-FAILURE-001/002/003 to contract negative tests and independent
+review; AC-FAILURE-004 to trusted evidence resolution/freshness tests;
+AC-FAILURE-005/007 to real grant and bound-review routing tests;
+AC-FAILURE-006 to single-flight fault tests; AC-FAILURE-008 to outcome persistence
+and missing-observation tests. Exercise Workroom and PR readiness with missing,
+current and then stale evidence on the governed nonproduction verification path.
+Record exact commands and observed results after implementation; this table is
+a test plan, not evidence of a pass.
+
+Reuse the Workroom timeline: default copy names what is missing and the recovery
+action; technical detail expands to scenario/evidence/owner links. No navigation
+or dashboard is added. Verify quiet internal routing and concrete authority
+escalation against the running app. Reserve approximately 20 percent of this
+delivery for consolidating shared validation and adapter decisions.
+
+Bound payload and resolved-evidence counts, fail visibly on truncation, and avoid
+scanning all Workroom history per transition. Scale with a bounded receipt lookup
+per candidate and a linear scenario pass; portfolio-wide aggregation remains in
+the existing outcome pipeline. Resource/concurrency work owns higher throughput.
+An incident links escaped failure evidence and a scenario follow-up through the
+same outcome record; no fixed checklist proves exhaustive foresight.
+
 ## Non-goals
 
 - Replacing GitHub review.
