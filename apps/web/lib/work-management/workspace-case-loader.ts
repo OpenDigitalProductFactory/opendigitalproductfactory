@@ -37,6 +37,12 @@ import {
   readWorkspaceRoomPolicy,
   type WorkspaceRoomPolicyParticipant,
 } from "./workspace-room-access";
+import {
+  CLOSED_COWORKER_ENGAGEMENT_STATUSES,
+  loadCoworkerEngagementDetail,
+  toCoworkerEngagementListItem,
+  type CoworkerEngagementCasePrismaClient,
+} from "./coworker-engagement-case-projection";
 
 export { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 
@@ -143,7 +149,7 @@ export type WorkspaceCasePrismaClient = {
   workroomActivity: {
     findMany(args: unknown): Promise<WorkspaceWorkroomActivityRecord[]>;
   };
-};
+} & CoworkerEngagementCasePrismaClient;
 
 export type WorkspaceRoomAuthContext = {
   principalId: string | null;
@@ -225,8 +231,8 @@ export type WorkspaceWorkCaseDetailView = {
   sourceRefs: WorkCaseSourceRef[];
   // BI-B416B12A: the underlying WorkItem id/title, so the detail surface can post
   // a comment (WorkItemMessage.workItemId) with @mention notification.
-  workItemId: string;
-  workItemTitle: string;
+  workItemId: string | null;
+  workItemTitle: string | null;
   // Transitional compatibility seam. The loader always returns the room
   // projection; the optional marker lets the existing detail component remain
   // unchanged until BI-32E26F62 replaces its composition on the same route.
@@ -365,19 +371,37 @@ export async function loadWorkspaceWorkCaseLens({
   }
 
   const cases = items
-    .map((item) => toListItem(item, userId, now, item.id ? capsulesByItem.get(item.id) ?? [] : []))
-    .sort(sortCases);
+    .map((item) => toListItem(item, userId, now, item.id ? capsulesByItem.get(item.id) ?? [] : []));
+  const coworkerEngagements = prismaClient.coworkerEngagement
+    ? await prismaClient.coworkerEngagement.findMany({
+        where: {
+          requestedByUserId: userId,
+          status: { notIn: CLOSED_COWORKER_ENGAGEMENT_STATUSES },
+        },
+        include: {
+          provider: { select: { displayName: true, name: true } },
+          offer: { select: { offerId: true, name: true } },
+          service: { select: { serviceId: true, name: true } },
+        },
+        orderBy: [{ createdAt: "asc" }],
+        take: limit,
+      })
+    : [];
+  const sortedCases = [
+    ...cases,
+    ...coworkerEngagements.map((engagement) => toCoworkerEngagementListItem(engagement, userId)),
+  ].sort(sortCases).slice(0, limit);
 
   return {
     generatedAt: now.toISOString(),
     stats: {
-      total: cases.length,
-      needsAttention: cases.filter((item) => item.attentionRequired).length,
-      active: cases.filter((item) => item.state === "active" || item.state === "verifying").length,
-      unassigned: cases.filter((item) => item.assignmentLabel === "Unassigned").length,
-      dueSoon: cases.filter((item) => dueSoon(item.dueAt, now)).length,
+      total: sortedCases.length,
+      needsAttention: sortedCases.filter((item) => item.attentionRequired).length,
+      active: sortedCases.filter((item) => item.state === "active" || item.state === "verifying").length,
+      unassigned: sortedCases.filter((item) => item.assignmentLabel === "Unassigned").length,
+      dueSoon: sortedCases.filter((item) => dueSoon(item.dueAt, now)).length,
     },
-    cases,
+    cases: sortedCases,
   };
 }
 
@@ -542,6 +566,16 @@ export async function loadWorkspaceWorkCaseDetail({
 }): Promise<WorkspaceWorkCaseDetailView | null> {
   const decoded = decodeWorkCaseKey(caseKey);
   if (!decoded) return null;
+  if (decoded.sourceType === "coworker-engagement") {
+    return loadCoworkerEngagementDetail({
+      prismaClient,
+      sourceId: decoded.sourceId,
+      userId,
+      authContext,
+      caseKey,
+      now,
+    });
+  }
 
   const item = await prismaClient.workItem.findFirst({
     where: {

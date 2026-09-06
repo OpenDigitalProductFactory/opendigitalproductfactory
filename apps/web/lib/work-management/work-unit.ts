@@ -10,7 +10,11 @@
  * Design: docs/superpowers/specs/2026-08-12-work-model-convergence-addendum-common-work-formula-design.md
  */
 
-export type WorkUnitCarrierKind = "work-capsule" | "work-item" | "task-run";
+export type WorkUnitCarrierKind =
+  | "work-capsule"
+  | "work-item"
+  | "task-run"
+  | "coworker-engagement";
 
 /** The case a unit projects into, addressed by (sourceType, sourceId). */
 export interface WorkUnitCaseRef {
@@ -55,6 +59,7 @@ export const WORK_UNIT_CARRIER_REGISTRY = [
   { carrier: "work-capsule", adapter: "toWorkUnitFromCapsule", addressableSourceType: "work-capsule" },
   { carrier: "work-item", adapter: "toWorkUnitFromWorkItem", addressableSourceType: "work-item" },
   { carrier: "task-run", adapter: "toWorkUnitFromTaskRun", addressableSourceType: "task-run" },
+  { carrier: "coworker-engagement", adapter: "toWorkUnitFromCoworkerEngagement", addressableSourceType: "coworker-engagement" },
 ] as const satisfies ReadonlyArray<{
   carrier: WorkUnitCarrierKind;
   adapter: string;
@@ -151,6 +156,31 @@ export function toWorkUnitFromWorkItem(input: WorkItemWorkUnitInput): WorkUnit {
       : { sourceType: "work-item", sourceId: input.id },
     workItemId: input.id,
     backlogItemId: input.sourceType === "backlog-item" ? input.sourceId : null,
+    stage: input.status,
+  });
+}
+
+export interface CoworkerEngagementWorkUnitInput {
+  engagementId: string;
+  requestedOutcome: string;
+  status: string;
+  requestedByUserId?: string | null;
+  requestedByAgentId?: string | null;
+  providerAgentId?: string | null;
+  workCapsuleId?: string | null;
+}
+
+/** Adapter: a requested coworker service engagement -> WorkUnit. */
+export function toWorkUnitFromCoworkerEngagement(input: CoworkerEngagementWorkUnitInput): WorkUnit {
+  return unit({
+    carrier: "coworker-engagement",
+    carrierId: input.engagementId,
+    title: input.requestedOutcome,
+    status: input.status,
+    caseRef: { sourceType: "coworker-engagement", sourceId: input.engagementId },
+    workItemId: null,
+    accountableRef: input.requestedByUserId ?? input.requestedByAgentId ?? null,
+    contributorRefs: [input.providerAgentId, input.workCapsuleId],
     stage: input.status,
   });
 }
