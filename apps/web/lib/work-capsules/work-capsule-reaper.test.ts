@@ -14,6 +14,7 @@ const { prismaMock } = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 
 import {
+  annotateProviderDeliverySignals,
   annotateDeliveredSignals,
   reconcileTerminalCapsuleBacklogs,
   reapStaleWorkCapsules,
@@ -121,6 +122,7 @@ function capsule(overrides: Record<string, unknown> = {}) {
     updatedAt: NOW,
     pullRequestUrl: null,
     pullRequestNumber: null,
+    repositoryFullName: null,
     headBranch: null,
     headSha: null,
     worktreePath: null,
@@ -141,7 +143,12 @@ describe("selectReapCandidates", () => {
       capsule({ capsuleId: "WC-ZOMBIE", featureBuildId: "fb-abandoned" }),
       capsule({ capsuleId: "WC-BUILDING", featureBuildId: "fb-building" }),
       capsule({ capsuleId: "WC-FROZEN14", updatedAt: new Date("2026-08-02T14:00:00.000Z") }),
-      capsule({ capsuleId: "WC-PR", pullRequestNumber: 4055, leaseExpiresAt: new Date("2026-08-01T00:00:00.000Z") }),
+      capsule({
+        capsuleId: "WC-PR",
+        pullRequestNumber: 4055,
+        leaseExpiresAt: new Date("2026-08-01T00:00:00.000Z"),
+        pullRequestObservation: { state: "open", observedAt: new Date("2026-08-05T14:55:00.000Z") },
+      }),
       capsule({ capsuleId: "WC-DONE", status: "complete", updatedAt: new Date("2026-06-01T00:00:00.000Z") }),
       capsule({ capsuleId: "WC-NEW", updatedAt: new Date("2026-08-05T14:45:00.000Z") }),
     ];
@@ -219,6 +226,84 @@ describe("annotateDeliveredSignals (procedural, local git — no LLM, no GitHub 
   });
 });
 
+describe("annotateProviderDeliverySignals (BI-9FF39058)", () => {
+  const merged = {
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    number: 5090,
+    url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5090",
+    title: "Squash-safe delivery",
+    headBranch: "fix/squash",
+    headSha: "a".repeat(40),
+    state: "merged",
+    isDraft: false,
+    mergeStateStatus: "CLEAN",
+    mergeCommitSha: "b".repeat(40),
+    mergedAt: "2026-08-05T14:50:00.000Z",
+    providerUpdatedAt: "2026-08-05T14:50:00.000Z",
+    observedAt: "2026-08-05T14:51:00.000Z",
+    providerApiVersion: "github-rest/2022-11-28",
+    observationFingerprint: "fixture-is-replaced-by-helper",
+  };
+
+  it("marks a source-free squash merge delivered only for the exact authored head", async () => {
+    const { createPullRequestObservation } = await import(
+      "../contributor-change-lanes/pull-request-observation"
+    );
+    const payload = createPullRequestObservation(merged as never);
+    const rows = [
+      capsule({
+        capsuleId: "WC-MATCH",
+        repositoryFullName: merged.repositoryFullName,
+        pullRequestNumber: 5090,
+        headSha: merged.headSha,
+      }),
+      capsule({
+        capsuleId: "WC-LATER-HEAD",
+        repositoryFullName: merged.repositoryFullName,
+        pullRequestNumber: 5090,
+        headSha: "c".repeat(40),
+      }),
+    ] as any[];
+
+    await annotateProviderDeliverySignals(rows, [payload], NOW);
+
+    expect(rows[0].deliveredSignal).toEqual({ merged: true });
+    expect(rows[1].deliveredSignal).toBeUndefined();
+  });
+
+  it("projects a fresh matching open observation, but not a stale one", async () => {
+    const { createPullRequestObservation } = await import(
+      "../contributor-change-lanes/pull-request-observation"
+    );
+    const open = createPullRequestObservation({
+      ...merged,
+      state: "open",
+      mergeCommitSha: null,
+      mergedAt: null,
+    } as never);
+    const fresh = capsule({
+      repositoryFullName: merged.repositoryFullName,
+      pullRequestNumber: 5090,
+      headSha: merged.headSha,
+    }) as any;
+    const stale = capsule({
+      repositoryFullName: merged.repositoryFullName,
+      pullRequestNumber: 5090,
+      headSha: merged.headSha,
+    }) as any;
+
+    await annotateProviderDeliverySignals([fresh], [open], NOW);
+    await annotateProviderDeliverySignals(
+      [stale],
+      [open],
+      new Date("2026-08-05T16:00:00.000Z"),
+    );
+
+    expect(fresh.pullRequestObservation?.state).toBe("open");
+    expect(stale.pullRequestObservation).toBeUndefined();
+  });
+});
+
 function makeDb() {
   const db = {
     workroom: {
@@ -230,6 +315,7 @@ function makeDb() {
     },
     workroomActivity: { create: vi.fn() },
     featureBuild: { findMany: vi.fn() },
+    contributorInventorySyncRun: { findFirst: vi.fn().mockResolvedValue(null) },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
   };
   return db;
@@ -322,6 +408,97 @@ describe("reapStaleWorkCapsules", () => {
 
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0]!.liveness).toBe("build-terminal");
+  });
+
+  it("loads the latest successful provider inventory to close a source-free squash merge", async () => {
+    const { createPullRequestObservation } = await import(
+      "../contributor-change-lanes/pull-request-observation"
+    );
+    const merged = createPullRequestObservation({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      number: 5090,
+      url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5090",
+      title: "Squash-safe delivery",
+      headBranch: "fix/squash",
+      headSha: "a".repeat(40),
+      state: "merged",
+      isDraft: false,
+      mergeStateStatus: "CLEAN",
+      mergeCommitSha: "b".repeat(40),
+      mergedAt: "2026-08-05T14:50:00.000Z",
+      providerUpdatedAt: "2026-08-05T14:50:00.000Z",
+      observedAt: "2026-08-05T14:51:00.000Z",
+    });
+    db.workroom.findMany.mockResolvedValueOnce([
+      capsule({
+        capsuleId: "WC-SQUASHED",
+        repositoryFullName: merged.repositoryFullName,
+        pullRequestNumber: merged.number,
+        headSha: merged.headSha,
+        leaseExpiresAt: new Date("2026-08-01T00:00:00.000Z"),
+      }),
+    ]);
+    db.contributorInventorySyncRun.findFirst.mockResolvedValueOnce({
+      snapshots: [{ payload: merged }],
+    });
+    db.featureBuild.findMany.mockResolvedValueOnce([]);
+
+    const result = await reapStaleWorkCapsules({ db: db as never, now: NOW });
+
+    expect(db.contributorInventorySyncRun.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { perSourceResult: { path: ["github-pr", "ok"], equals: true } },
+        orderBy: { startedAt: "desc" },
+      }),
+    );
+    expect(result.candidates).toEqual([
+      expect.objectContaining({ capsuleId: "WC-SQUASHED", disposition: "delivered" }),
+    ]);
+  });
+
+  it("renews prior open observations when GitHub confirms the inventory is unchanged", async () => {
+    const { createPullRequestObservation } = await import(
+      "../contributor-change-lanes/pull-request-observation"
+    );
+    const priorOpen = createPullRequestObservation({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      number: 5091,
+      url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5091",
+      title: "Still in review",
+      headBranch: "fix/reviewing",
+      headSha: "c".repeat(40),
+      state: "open",
+      isDraft: false,
+      mergeStateStatus: "CLEAN",
+      mergeCommitSha: null,
+      mergedAt: null,
+      providerUpdatedAt: "2026-08-05T14:00:00.000Z",
+      observedAt: "2026-08-05T14:00:00.000Z",
+    });
+    db.workroom.findMany.mockResolvedValueOnce([
+      capsule({
+        capsuleId: "WC-STILL-OPEN",
+        repositoryFullName: priorOpen.repositoryFullName,
+        pullRequestNumber: priorOpen.number,
+        pullRequestUrl: priorOpen.url,
+        headSha: priorOpen.headSha,
+        leaseExpiresAt: new Date("2026-08-01T00:00:00.000Z"),
+      }),
+    ]);
+    db.contributorInventorySyncRun.findFirst
+      .mockResolvedValueOnce({
+        startedAt: new Date("2026-08-05T14:59:00.000Z"),
+        completedAt: new Date("2026-08-05T14:59:30.000Z"),
+        perSourceResult: { "github-pr": { ok: true, unchanged: true } },
+        snapshots: [],
+      })
+      .mockResolvedValueOnce({ snapshots: [{ payload: priorOpen }] });
+    db.featureBuild.findMany.mockResolvedValueOnce([]);
+
+    const result = await reapStaleWorkCapsules({ db: db as never, now: NOW });
+
+    expect(result.candidates).toHaveLength(0);
+    expect(db.contributorInventorySyncRun.findFirst).toHaveBeenCalledTimes(2);
   });
 });
 

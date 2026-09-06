@@ -96,6 +96,10 @@ const REAPABLE_LIVENESS = new Set<WorkCapsuleLiveness>([
  *  DELIVERED (merged) room bypasses the grace: it need not resume. */
 export const WORK_CAPSULE_PAUSE_GRACE_MS = 24 * 60 * 60 * 1000;
 
+/** Provider "open" is a renewable liveness fact, not a permanent property. */
+export const WORK_CAPSULE_OPEN_PR_FRESHNESS_MS = 20 * 60 * 1000;
+const PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 export type CapsuleLivenessInput = {
   status: string;
   executorKind: string | null;
@@ -104,6 +108,11 @@ export type CapsuleLivenessInput = {
   updatedAt: Date;
   pullRequestUrl: string | null;
   pullRequestNumber?: number | null;
+  /** Verified provider state for this exact repository/PR/authored-head tuple. */
+  pullRequestObservation?: {
+    state: "open" | "merged" | "closed";
+    observedAt: Date;
+  } | null;
   /**
    * Snapshot of the linked Build Studio FeatureBuild, when this capsule is a
    * build-studio capsule and the caller has loaded it. `phase` drives the
@@ -115,10 +124,9 @@ export type CapsuleLivenessInput = {
   taskRun?: { status: string | null; updatedAt: Date | null } | null;
   durableWait?: { state: "queued" | "active"; signaledAt: Date | null } | null;
   /**
-   * Whether this capsule's work is DELIVERED, computed by the caller from LOCAL
-   * git reachability (branch head reachable from the trunk = merged) — never the
-   * GitHub PR API and never an LLM. When `merged` is true the room is closed out
-   * as delivered regardless of lease state. Absent/null when not computed.
+   * Whether this capsule's work is DELIVERED, computed by the caller from a
+   * verified provider observation or positive local git reachability — never an
+   * LLM. When `merged` is true the room is closed out regardless of lease state.
    */
   deliveredSignal?: { merged: boolean } | null;
 };
@@ -145,8 +153,16 @@ export type CapsuleLivenessVerdict = {
   trueLivenessAt: Date | null;
 };
 
-function hasOpenPr(input: CapsuleLivenessInput): boolean {
-  return Boolean(input.pullRequestUrl) || (input.pullRequestNumber ?? 0) > 0;
+function hasOpenPr(input: CapsuleLivenessInput, now: Date): boolean {
+  if (
+    !input.pullRequestObservation ||
+    input.pullRequestObservation.state !== "open" ||
+    (!input.pullRequestUrl && (input.pullRequestNumber ?? 0) <= 0)
+  ) {
+    return false;
+  }
+  const age = now.getTime() - input.pullRequestObservation.observedAt.getTime();
+  return age >= -PROVIDER_CLOCK_SKEW_MS && age <= WORK_CAPSULE_OPEN_PR_FRESHNESS_MS;
 }
 
 function humanAge(ms: number): string {
@@ -201,10 +217,8 @@ export function classifyWorkCapsuleLiveness(
     return verdict("terminal", `Capsule already ${input.status}.`, null);
   }
 
-  // DELIVERED wins over every liveness signal: if the branch head is reachable
-  // from the trunk (merged — computed locally, no GitHub API, no LLM) the work
-  // is done and the session need not resume, so close out as delivered rather
-  // than waiting on a lease or mislabelling it abandoned.
+  // DELIVERED wins over every liveness signal. The caller may prove it from an
+  // exact authenticated provider merge or positive local trunk reachability.
   if (input.deliveredSignal?.merged) {
     return verdict(
       "delivered",
@@ -215,9 +229,13 @@ export function classifyWorkCapsuleLiveness(
 
   // An open PR is the live artifact even if the authoring session's lease has
   // since lapsed — the work is in review / the merge queue, not abandoned.
-  if (hasOpenPr(input)) {
+  if (hasOpenPr(input, now)) {
     const label = input.pullRequestNumber ? `PR #${input.pullRequestNumber}` : "an open PR";
-    return verdict("live", `Parked in review as ${label}.`, input.lastSyncedAt ?? null);
+    return verdict(
+      "live",
+      `Parked in review as ${label} (verified provider observation).`,
+      input.pullRequestObservation?.observedAt ?? null,
+    );
   }
 
   const taskRun = input.taskRun ?? null;

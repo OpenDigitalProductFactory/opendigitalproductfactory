@@ -22,8 +22,10 @@
 // Worktree removal is a separate, explicitly-gated step (dpf-worktree-hygiene).
 
 import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
+import { selectLatestExactPullRequestObservation } from "../contributor-change-lanes/pull-request-observation";
 import {
   classifyWorkCapsuleLiveness,
+  WORK_CAPSULE_OPEN_PR_FRESHNESS_MS,
   type CapsuleLivenessInput,
   type WorkCapsuleDisposition,
   type WorkCapsuleLiveness,
@@ -121,7 +123,7 @@ export type ReapCandidate = {
 /** The linked-build snapshot the reaper joins onto build-studio capsules. */
 export type ReaperBuildSnapshot = { phase: string | null; lastActivityAt: Date | null };
 
-type ReaperCapsuleRow = CapsuleLivenessInput & {
+export type ReaperCapsuleRow = CapsuleLivenessInput & {
   capsuleId: string;
   title: string;
   source: string;
@@ -129,6 +131,7 @@ type ReaperCapsuleRow = CapsuleLivenessInput & {
   headSha: string | null;
   worktreePath: string | null;
   featureBuildId: string | null;
+  repositoryFullName: string | null;
 };
 
 /**
@@ -184,6 +187,9 @@ type ReaperDb = CapsuleDb & {
   backlogItemActivity?: {
     count(args: unknown): Promise<number>;
     create(args: unknown): Promise<any>;
+  };
+  contributorInventorySyncRun?: {
+    findFirst(args: unknown): Promise<any>;
   };
 };
 
@@ -300,7 +306,12 @@ export async function annotateDeliveredSignals(
   const hasTrunk = deps.hasTrunk ?? trunkRefExists;
   const reachable = deps.reachable ?? isReachableFromTrunk;
 
-  const withSha = rows.filter((r) => Boolean(r.headSha));
+  const withSha = rows.filter(
+    (row) =>
+      Boolean(row.headSha) &&
+      !row.deliveredSignal?.merged &&
+      !row.pullRequestObservation,
+  );
   if (withSha.length === 0) return;
   if (!(await hasTrunk(repoRoot))) return; // repo-less runtime → skip; null everywhere.
 
@@ -311,6 +322,107 @@ export async function annotateDeliveredSignals(
     } catch {
       // Best-effort: a single git failure never aborts the sweep.
     }
+  }
+}
+
+/**
+ * Project verified provider observations onto Workroom rows. A merge is a
+ * durable monotonic fact. An open PR is only a bounded liveness observation;
+ * stale/closed/unknown payloads grant no liveness and no reaper authority.
+ */
+export async function annotateProviderDeliverySignals(
+  rows: ReaperCapsuleRow[],
+  payloads: readonly unknown[],
+  now: Date = new Date(),
+  confirmedAt: Date | null = null,
+): Promise<void> {
+  for (const row of rows) {
+    if (!row.repositoryFullName || !row.pullRequestNumber || !row.headSha) continue;
+    const observation = selectLatestExactPullRequestObservation(payloads, {
+      repositoryFullName: row.repositoryFullName,
+      pullRequestNumber: row.pullRequestNumber,
+      headSha: row.headSha,
+    });
+    if (!observation) continue;
+    if (observation.state === "merged") {
+      row.deliveredSignal = { merged: true };
+      continue;
+    }
+    const observedAt = confirmedAt ?? new Date(observation.observedAt);
+    const age = now.getTime() - observedAt.getTime();
+    if (observation.state === "open" && age >= 0 && age <= WORK_CAPSULE_OPEN_PR_FRESHNESS_MS) {
+      row.pullRequestObservation = { state: "open", observedAt };
+    }
+  }
+}
+
+type ProviderObservationBatch = {
+  payloads: unknown[];
+  confirmedAt: Date | null;
+};
+
+function githubInventoryWasUnchanged(perSourceResult: unknown): boolean {
+  if (!perSourceResult || typeof perSourceResult !== "object") return false;
+  const github = (perSourceResult as Record<string, unknown>)["github-pr"];
+  return Boolean(
+    github &&
+      typeof github === "object" &&
+      (github as Record<string, unknown>).unchanged === true,
+  );
+}
+
+async function loadLatestSuccessfulProviderPayloads(
+  db: ReaperDb,
+): Promise<ProviderObservationBatch> {
+  if (!db.contributorInventorySyncRun) return { payloads: [], confirmedAt: null };
+  try {
+    const row = await db.contributorInventorySyncRun.findFirst({
+      where: { perSourceResult: { path: ["github-pr", "ok"], equals: true } },
+      orderBy: { startedAt: "desc" },
+      select: {
+        startedAt: true,
+        completedAt: true,
+        perSourceResult: true,
+        snapshots: {
+          where: { source: "github-pr" },
+          select: { payload: true },
+        },
+      },
+    });
+    if (!row) return { payloads: [], confirmedAt: null };
+    if (Array.isArray(row.snapshots) && row.snapshots.length > 0) {
+      return {
+        payloads: row.snapshots.map((snapshot: { payload?: unknown }) => snapshot.payload),
+        confirmedAt: null,
+      };
+    }
+    if (!githubInventoryWasUnchanged(row.perSourceResult)) {
+      return { payloads: [], confirmedAt: null };
+    }
+    const prior = await db.contributorInventorySyncRun.findFirst({
+      where: {
+        AND: [
+          { perSourceResult: { path: ["github-pr", "ok"], equals: true } },
+          { snapshots: { some: { source: "github-pr" } } },
+        ],
+      },
+      orderBy: { startedAt: "desc" },
+      select: {
+        snapshots: {
+          where: { source: "github-pr" },
+          select: { payload: true },
+        },
+      },
+    });
+    return {
+      payloads: Array.isArray(prior?.snapshots)
+        ? prior.snapshots.map((snapshot: { payload?: unknown }) => snapshot.payload)
+        : [],
+      confirmedAt: row.completedAt ?? row.startedAt,
+    };
+  } catch {
+    // Provider unavailability is unknown, never evidence that a PR is closed.
+    return { payloads: [], confirmedAt: null };
   }
 }
 
@@ -346,6 +458,7 @@ export async function reapStaleWorkCapsules(args: {
       updatedAt: true,
       pullRequestUrl: true,
       pullRequestNumber: true,
+      repositoryFullName: true,
       headBranch: true,
       headSha: true,
       worktreePath: true,
@@ -354,11 +467,19 @@ export async function reapStaleWorkCapsules(args: {
     take: 500,
   });
 
-  // DELIVERED detection — PROCEDURAL, LOCAL, no LLM, no GitHub API: a room whose
-  // branch head is reachable from the trunk has merged and is closed out as
-  // delivered (not abandoned). Reads git objects only (never a worktree), so it
-  // is junction-safe; degrades gracefully to null (→ lease/grace logic) wherever
-  // the local repo or the trunk ref is unavailable.
+  // Provider facts are the source-free/squash-safe path. Only verified exact
+  // repository/PR/authored-head observations can affect lifecycle; a previous
+  // successful inventory remains available while later provider syncs fail.
+  const providerObservations = await loadLatestSuccessfulProviderPayloads(args.db);
+  await annotateProviderDeliverySignals(
+    capsules,
+    providerObservations.payloads,
+    now,
+    providerObservations.confirmedAt,
+  );
+
+  // Positive local ancestry remains a fallback for source checkouts. It never
+  // overwrites an exact provider merge with a negative/indeterminate result.
   await annotateDeliveredSignals(capsules);
 
   // Batch-load the linked FeatureBuild snapshot for the build-studio capsules
