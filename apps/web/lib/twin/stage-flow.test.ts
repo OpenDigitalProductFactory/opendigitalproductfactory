@@ -24,7 +24,9 @@ describe("buildStageFlow", () => {
   it("finds pet-rescue's day is almost entirely unobservable — the reason the strip read all zeros", () => {
     const flow = buildStageFlow(bindingFor("pet-rescue"), {});
 
-    expect(flow).toHaveLength(16);
+    // 16 leaf stages composed with the 5 universal backbone stages (BI-4B11F98E):
+    // a leaf profile extends the backbone instead of replacing it.
+    expect(flow).toHaveLength(21);
     const observable = flow.filter((s) => s.observable).map((s) => s.stageKey);
     expect(observable).toEqual(["intake-capacity-decision"]);
   });
