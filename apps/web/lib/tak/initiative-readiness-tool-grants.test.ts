@@ -76,6 +76,59 @@ function inactiveGrantRow(grantKey: string, agentId: string, displayName: string
 }
 
 describe("initiative readiness recovery routing", () => {
+  it("binds plan review to the coverage plan while other reviews keep the design", async () => {
+    const planArtifact = {
+      resolved: true as const,
+      path: "docs/superpowers/plans/admission.md",
+      providerBlobId: "a".repeat(40),
+      commitSha: "b".repeat(40),
+    };
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: { ...decision, unmet: [
+        readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" }),
+        readinessRequirement({ code: "SPEC_APPROVAL_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+      ] },
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(boundGrantRows("initiative_design_review", "AGT-REVIEW", "Reviewer")) } },
+      dispatchContext, canonicalArtifact, planArtifact,
+    });
+    const plan = recovery.reviewerRoutes.find((route) => route.gate === "plan-review")!.requestCoworker;
+    expect(plan.initiativeReviewBinding?.artifactRef).toMatchObject({
+      path: planArtifact.path, providerBlobId: planArtifact.providerBlobId, commitSha: planArtifact.commitSha,
+    });
+    expect(plan.objective).toContain(planArtifact.path);
+    expect(plan.requestKey).toMatch(/:plan:[a-f0-9]{64}$/);
+    expect(recovery.reviewerRoutes.find((route) => route.gate === "spec-approval")?.requestCoworker.initiativeReviewBinding?.artifactRef.path).toBe(canonicalArtifact.path);
+  });
+
+  it("never substitutes the design when the plan artifact is unavailable", async () => {
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: { ...decision, unmet: [readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" })] },
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(boundGrantRows("initiative_design_review", "AGT-REVIEW", "Reviewer")) } },
+      dispatchContext, canonicalArtifact,
+    });
+    expect(recovery.reviewerRoutes).toEqual([]);
+    expect(recovery.escalations[0]?.nextAction).toContain("plan coverage");
+  });
+
+  it("reuses an exact plan request but separates changed paths and baselines", async () => {
+    const packet = async (path: string, baseline: string) => {
+      const recovery = await resolveInitiativeReviewerRecovery({
+        decision: { ...decision, unmet: [readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" })] },
+        currentAgentId: "AGT-AUTHOR",
+        db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(boundGrantRows("initiative_design_review", "AGT-REVIEW", "Reviewer")) } },
+        dispatchContext, canonicalArtifact, expectedCurrentBaselineId: baseline,
+        planArtifact: { resolved: true, path, commitSha: "b".repeat(40), providerBlobId: "a".repeat(40) },
+      });
+      return recovery.reviewerRoutes[0]!.requestCoworker.requestKey;
+    };
+    const original = await packet("docs/superpowers/plans/one.md", "BASE-1");
+    expect(await packet("docs/superpowers/plans/one.md", "BASE-1")).toBe(original);
+    expect(await packet("docs/superpowers/plans/two.md", "BASE-1")).not.toBe(original);
+    expect(await packet("docs/superpowers/plans/one.md", "BASE-2")).not.toBe(original);
+  });
+
   it("requires the bound writer and file_read on the same production agent", async () => {
     const researchOnlyDecision: InitiativeReadinessDecision = {
       ...decision,

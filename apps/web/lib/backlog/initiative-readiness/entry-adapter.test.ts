@@ -149,6 +149,22 @@ function terminalFixture(payloadOverride: Record<string, unknown> = {}) {
   };
 }
 
+describe("plan recovery locator", () => {
+  it.each(["current", "stale", "incomplete", "unsafe-path"])("exposes only a valid current-baseline locator: %s", (scenario) => {
+    const activities = readyActivities();
+    const coverage = activities.find((entry) => entry.kind === "plan_backlog_coverage")!;
+    const artifact = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
+      commitSha: "a".repeat(40), providerBlobId: "b".repeat(40),
+      path: scenario === "unsafe-path" ? "docs/superpowers/plans/../specs/a.md" : "docs/superpowers/plans/plan.md" };
+    coverage.payload = { ...coverage.payload, planPath: artifact.path, planArtifactRef: {
+      ...artifact, ...(scenario === "incomplete" ? { providerBlobId: "" } : {}),
+    }, ...(scenario === "stale" ? { scopeBaselineId: "old-baseline" } : {}) } as typeof coverage.payload;
+    const result = projectBacklogItemReadiness({ item, activities, target: "implementation", transitionObject,
+      authorization: "pass", capsuleIdentity: "pass", evaluatedAt: "2026-09-06T21:00:00.000Z" });
+    expect(result.planArtifact).toEqual(scenario === "current" ? artifact : null);
+  });
+});
+
 describe("projectBacklogItemReadiness", () => {
   it("preserves the enforced allowed completion decision for a done item", () => {
     const fixture = terminalFixture();

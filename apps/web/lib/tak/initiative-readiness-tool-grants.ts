@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@/lib/shared/canonical-json";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 import type {
   InitiativeGateKey,
@@ -194,6 +196,8 @@ export async function resolveInitiativeReviewerRecovery(input: {
   db: ReviewerRouteDb;
   dispatchContext: InitiativeRecoveryDispatchContext | null;
   canonicalArtifact?: InitiativeRecoveryCanonicalArtifact | null;
+  /** Exact plan selected by the baseline-validated coverage projection. */
+  planArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
 }): Promise<InitiativeReviewerRecovery> {
@@ -289,7 +293,9 @@ export async function resolveInitiativeReviewerRecovery(input: {
       // rejects — the very defect this lane routing exists to end. Plan coverage
       // is not a review of immutable bytes, so it carries no artifact identity
       // and is not blocked by one being unresolvable (BI-9FE775F9).
-      const artifact = input.canonicalArtifact ?? null;
+      const artifact = entry.gate === "plan-review"
+        ? input.planArtifact ?? { resolved: false as const, nextAction: "Record valid plan coverage against the current baseline, then retry plan review. The design cannot substitute for the implementation plan." }
+        : input.canonicalArtifact ?? null;
       if (bindable && (!artifact || !artifact.resolved)) {
         // A route without a binding is not a lesser route — it is an unusable
         // one: `request_coworker` rejects `requiredToolNames` unless the binding
@@ -540,7 +546,11 @@ function requestCoworkerPacket(args: {
         workroomRef: binding.workroomRef!,
       },
     })
-    : base.requestKey;
+    : args.gate === "plan-review"
+      ? `${base.requestKey}:plan:${createHash("sha256").update(canonicalJson({
+        binding, targetAgent: args.targetAgentId, objective,
+      })).digest("hex")}`
+      : base.requestKey;
   return {
     ...base,
     requestKey,

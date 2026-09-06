@@ -112,6 +112,7 @@ type PendingRecovery = {
   baselineId: string | null;
   dispatchContext: InitiativeRecoveryDispatchContext | null;
   baseSha: string | null;
+  planArtifact: ReturnType<typeof projectBacklogItemReadiness>["planArtifact"];
 };
 
 /**
@@ -144,6 +145,11 @@ async function resolveRecoveryOutsideTransaction(args: {
     db: args.db,
     dispatchContext: pending.dispatchContext,
     canonicalArtifact,
+    planArtifact: pending.planArtifact && pending.dispatchContext
+      && pending.planArtifact.repositoryFullName.toLowerCase() === pending.dispatchContext.repositoryFullName.toLowerCase()
+      ? { resolved: true, path: pending.planArtifact.path,
+        commitSha: pending.planArtifact.commitSha, providerBlobId: pending.planArtifact.providerBlobId }
+      : { resolved: false, nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review." },
     expectedCurrentBaselineId: pending.baselineId,
   });
 }
@@ -435,6 +441,7 @@ export async function claimGovernedBacklogWorkspace(args: {
         pendingRecovery = {
           decision: evaluated,
           baselineId: projection.baselineId,
+          planArtifact: projection.planArtifact,
           dispatchContext: recoveryWorkroom?.headSha ? {
             workroomId: recoveryWorkroom.capsuleId,
             repositoryFullName: recoveryWorkroom.repositoryFullName,
