@@ -31,6 +31,7 @@ vi.mock("./mcp/external-approval-location-lookup", () => ({
 }));
 
 import { executeRemoteTaskAttempt, remoteTaskConversation } from "./mcp-task-execution";
+import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 
 const writerToolName = "record_initiative_evidence";
 const parsed = {
@@ -127,6 +128,17 @@ describe("remote task terminal-writer postcondition", () => {
   });
 
   it("parks an approval-required terminal writer even when the tool did not project TaskRun state", async () => {
+    db.findTaskRun.mockResolvedValue({
+      status: "input-required",
+      progressPayload: {
+        auditMarker: "preserve-me",
+        terminalWriterWait: { kind: "missing-terminal-writer", observedAt: "2026-09-06T02:00:00.000Z" },
+        terminalWriterDispatchFailure: { code: "required-terminal-writer-not-enforceable", observedAt: "2026-09-06T02:00:00.000Z" },
+        terminalWriterEscalation: { kind: "manual-recovery-required" },
+        terminalWriterContextFailure: { code: "terminal_writer_context_unavailable" },
+        resourceWait: { kind: "provider-capacity" },
+      },
+    });
     autonomous.execute.mockResolvedValue({
       content: "The objective mapping is ready for exact approval.",
       executedTools: [{
@@ -177,6 +189,28 @@ describe("remote task terminal-writer postcondition", () => {
     expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "completed" }),
     }));
+    const progressPayload = db.updateTaskRun.mock.calls.at(-1)?.[0]?.data?.progressPayload;
+    expect(progressPayload).toMatchObject({
+      auditMarker: "preserve-me",
+      requiresApproval: true,
+      approvalEnvelopeId: "ENV-OBJECTIVE-MAPPING",
+    });
+    expect(progressPayload).not.toHaveProperty("terminalWriterWait");
+    expect(progressPayload).not.toHaveProperty("terminalWriterDispatchFailure");
+    expect(progressPayload).not.toHaveProperty("terminalWriterEscalation");
+    expect(progressPayload).not.toHaveProperty("terminalWriterContextFailure");
+    expect(progressPayload).not.toHaveProperty("resourceWait");
+    expect(projectRemoteTaskReplay({
+      existing: {
+        taskRunId: "TR-MCP-APPROVAL-PROJECTION",
+        status: "input-required",
+        progressPayload,
+        a2aMetadata: {},
+      },
+      requestMatches: true,
+    })).toMatchObject({
+      result: { requiresApproval: true },
+    });
   });
 
   it("does not complete when the governed writer ran but produced neither receipt nor approval", async () => {

@@ -233,13 +233,19 @@ export async function executeRemoteTaskAttempt(input: {
         && !Array.isArray(currentRun.progressPayload)
         ? currentRun.progressPayload as Record<string, unknown>
         : {};
+      const approvalProgress = { ...priorProgress };
+      delete approvalProgress.terminalWriterWait;
+      delete approvalProgress.terminalWriterDispatchFailure;
+      delete approvalProgress.terminalWriterEscalation;
+      delete approvalProgress.terminalWriterContextFailure;
+      delete approvalProgress.resourceWait;
       await prisma.taskRun.update({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "input-required",
           completedAt: null,
           progressPayload: {
-            ...priorProgress,
+            ...approvalProgress,
             summary: result.content,
             riskClass: parsed.riskClass,
             executedToolCount: result.executedTools?.length ?? 0,
