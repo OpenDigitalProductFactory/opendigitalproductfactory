@@ -527,6 +527,23 @@ describe("agent loop terminal writer integration", () => {
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(3);
   });
 
+  it("routes the terminal-writer retry away from a provider that returned prose", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("The evidence is sufficient for a judgment.") as never)
+      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "anthropic-sub" } as never)
+      .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
+
+    await runAgenticLoop(params);
+
+    const retryOptions = vi.mocked(routeAndCall).mock.calls[2]![3] as {
+      deniedProviders?: string[];
+      preferredProviderId?: string;
+    };
+    expect(retryOptions.deniedProviders).toEqual(["local"]);
+    expect(retryOptions.preferredProviderId).toBeUndefined();
+  });
+
   it("returns a missing-writer failure when the review budget expires after a successful read", async () => {
     const now = vi.spyOn(Date, "now")
       .mockReturnValueOnce(0)

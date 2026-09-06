@@ -8,6 +8,26 @@ export type TerminalToolPolicy = {
   persistedEvidenceAvailable?: boolean;
 };
 
+type TerminalProviderRoute = {
+  deniedProviders?: string[];
+  preferredProviderId?: string;
+};
+
+/** Route a bounded required-writer retry away from the provider that returned prose. */
+export function rotateTerminalWriterProvider(
+  options: TerminalProviderRoute,
+  providerId: string,
+): void {
+  const noncompliantProvider = providerId.trim();
+  if (!noncompliantProvider || noncompliantProvider === "unknown") return;
+  options.deniedProviders = [
+    ...new Set([...(options.deniedProviders ?? []), noncompliantProvider]),
+  ];
+  if (options.preferredProviderId === noncompliantProvider) {
+    delete options.preferredProviderId;
+  }
+}
+
 export type ImmutableReaderArguments = {
   repositoryFullName: string;
   path: string;

@@ -231,6 +231,10 @@ After reservation, the server invokes the already-governed `read_source_at_versi
 
 This is orchestration recovery, not an alternate evidence model. It changes no request identity, approval semantics, writer arguments, provider routing, tool grants, or receipt rules. WWMD decision `DI-6A51BE456F49` selected this repair over a replacement review identity because it preserves the immutable audit chain and makes the platform's existing resumability promise true.
 
+### Provider noncompliance rotation
+
+A required-writer provider that returns prose has demonstrated noncompliance for that bounded turn. The same TaskRun keeps its immutable binding, evidence, grants, and approval boundary, while the next in-turn writer nudge denies only that provider and lets the canonical router select another eligible endpoint. The platform never pins a replacement provider and never converts prose into a decision. If no alternative is eligible, the existing typed fail-closed refusal remains authoritative.
+
 ### Named-reference research
 
 - Source reference: `fix/initiative-review-terminal-writer-resume` at `c6c1380e828a65ca9552806d057c66833fb6c403`.

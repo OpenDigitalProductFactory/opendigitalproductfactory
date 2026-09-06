@@ -63,6 +63,12 @@ remains frozen and is not a test target.
 
 - `apps/web/lib/inference/ai-inference.ts`
 - `apps/web/lib/inference/ai-inference.call-provider.test.ts`
+
+## Provider noncompliance closeout
+
+1. Reproduce a successful immutable read followed by a required-writer prose response.
+2. Carry the noncompliant provider into the next in-turn route as a deny-only constraint, clearing a matching preference without selecting or pinning its replacement.
+3. Prove the same TaskRun reaches an alternate provider's actual writer call, while the no-alternative case remains a typed refusal and no receipt is inferred.
 - `apps/web/lib/routing/fallback.ts`
 - `apps/web/lib/routing/fallback.test.ts`
 - `apps/web/lib/tak/inference-dead-ends.ts`
