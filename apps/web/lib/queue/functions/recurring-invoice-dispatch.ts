@@ -17,7 +17,7 @@ import { gateAtEntry } from "../quiescence-gates";
 export const recurringInvoiceDispatch = inngest.createFunction(
   { id: "finance/recurring-invoice-dispatch", retries: 1, triggers: [cron("30 6 * * *")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "finance/recurring-invoice-dispatch");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return await step.run("generate-due-invoices", async () => {

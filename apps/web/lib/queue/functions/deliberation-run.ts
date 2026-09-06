@@ -419,7 +419,7 @@ export const deliberationRun = inngest.createFunction(
     // so there's no natural mid-flow boundary to suspend; refactoring it to
     // expose per-branch step.run boundaries for gateBetweenSteps is tracked
     // as a follow-up under BI-QUIESCE-004b).
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "deliberation/run");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const data = event.data as unknown as RunDeliberationInput;

@@ -10,6 +10,7 @@
 
 import { type Prisma } from "@dpf/db";
 
+import { isJobEnabled } from "@/lib/operate/scheduled-jobs/core";
 import { runRetentionSweep, type RetentionSweepReport } from "./execute";
 import type { RetentionPrismaClient } from "./policies";
 import { resolveOrgIndustryKey } from "./industry-floors";
@@ -65,14 +66,9 @@ export async function executeScheduledRetentionSweep(opts: {
   const retentionPrisma = prisma as unknown as RetentionPrismaClient;
 
   // Operator kill switch. A destructive purge MUST be disableable without code.
-  const job = await prisma.scheduledJob
-    .findUnique({
-      where: { jobId: DATA_RETENTION_JOB_ID },
-      select: { enabled: true, metadata: true },
-    })
-    .catch(() => null);
-
-  if (job && job.enabled === false) {
+  // Shared implementation (BI-7E49FA15); kept here as well as in gateAtEntry
+  // because the run-now event path reaches this runner without the entry gate.
+  if (!(await isJobEnabled(DATA_RETENTION_JOB_ID))) {
     return {
       dryRun,
       industryKey: null,
@@ -98,6 +94,12 @@ export async function executeScheduledRetentionSweep(opts: {
   });
 
   if (!dryRun) {
+    const job = await prisma.scheduledJob
+      .findUnique({
+        where: { jobId: DATA_RETENTION_JOB_ID },
+        select: { metadata: true },
+      })
+      .catch(() => null);
     const prior = (job?.metadata ?? {}) as { recentRuns?: unknown[] };
     const recentRuns = Array.isArray(prior.recentRuns) ? prior.recentRuns : [];
     const nextRecent = [summarizeForMetadata(report), ...recentRuns].slice(

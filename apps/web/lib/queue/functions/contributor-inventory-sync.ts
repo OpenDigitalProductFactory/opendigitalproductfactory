@@ -612,7 +612,7 @@ export const contributorInventorySyncCron = inngest.createFunction(
     triggers: [cron("*/10 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/contributor-inventory-sync-cron");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return await step.run("run-sync-cron", () =>
@@ -629,7 +629,7 @@ export const contributorInventorySyncOnDemand = inngest.createFunction(
     triggers: [{ event: "ops/contributor-inventory-sync.run" }],
   },
   async ({ event, step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/contributor-inventory-sync-on-demand");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const triggeredBy =

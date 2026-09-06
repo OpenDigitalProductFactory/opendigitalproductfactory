@@ -69,7 +69,7 @@ export const semanticMemoryReconcileScheduled = inngest.createFunction(
     triggers: [cron(SEMANTIC_MEMORY_RECONCILE_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, SEMANTIC_MEMORY_RECONCILE_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("semantic-memory-reconcile", async () => runSemanticMemoryReconcile());
   },

@@ -19,7 +19,7 @@ export const queueMetricsAggregator = inngest.createFunction(
     triggers: [cron("7 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "queue/metrics-aggregator");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("aggregate-current-day", async () => {

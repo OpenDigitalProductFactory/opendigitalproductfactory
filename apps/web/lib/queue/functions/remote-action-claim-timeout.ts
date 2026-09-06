@@ -40,7 +40,7 @@ export const remoteActionClaimTimeout = inngest.createFunction(
     if (!envFlagEnabled(process.env, "DPF_REMOTE_ACTION_DISPATCH_ENABLED")) {
       return { skipped: true, reason: "flag-disabled" };
     }
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/remote-action-claim-timeout");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return await step.run("timeout-stale-remote-action-claims", async () => runRemoteActionClaimTimeout());
   },

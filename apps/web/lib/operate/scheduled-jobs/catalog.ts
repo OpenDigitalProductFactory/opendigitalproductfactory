@@ -55,6 +55,7 @@ import {
 import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
 import { FLOW_JOB_CATALOG_ENTRIES } from "./catalog-flow";
 import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
+import { HYGIENE_JOB_CATALOG_ENTRIES } from "./catalog-hygiene";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
@@ -66,6 +67,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "index-integrity-sweep",
     inngestId: "ops/index-integrity-sweep",
+    honorsEnabledGate: true,
     name: "Live database index integrity sweep",
     purpose:
       "Checks the persistent install database for btree-to-heap disagreement and blocking collation drift, then raises one deduplicated platform issue before ghost records reach users.",
@@ -78,6 +80,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "build-pr-delivery-reconcile",
     inngestId: "build/pr-delivery-reconcile",
+    honorsEnabledGate: true,
     name: "Build Studio PR delivery reconcile",
     purpose:
       "Recovers Build Studio pull requests through exact-head readiness, stale-branch updates, and the protected merge queue without bypassing governed release.",
@@ -90,6 +93,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "data-control-operation-recovery",
     inngestId: "govern/data-control-operation-recovery-scheduled",
+    honorsEnabledGate: true,
     name: "Data control operation recovery",
     purpose:
       "Resumes durable data-control operations after worker crashes and escalates partial outcomes.",
@@ -115,6 +119,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "self-upgrade",
     inngestId: "ops/self-upgrade-scheduled",
+    ungatedReason:
+      "Quiescence caller: self-upgrade drives the drain itself, so gating it on ScheduledJob.enabled would deadlock the upgrade path and strand an install with no route to a fix.",
     name: "Self-upgrade reconcile",
     purpose:
       "Autonomous deployment of merged main PRs to this install. Core to keeping the platform current.",
@@ -132,6 +138,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "postgres-daily-backup",
     inngestId: "ops/postgres-daily-backup-scheduled",
+    honorsEnabledGate: true,
     name: "Postgres daily backup",
     purpose:
       "Durable Postgres backup. Disaster-recovery floor — never disable on a real install.",
@@ -144,6 +151,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "all-backups-daily",
     inngestId: "ops/all-backups-daily-scheduled",
+    ungatedReason:
+      "Quiescence caller: the daily backup fan-out is the disaster-recovery floor the upgrade path depends on; gating it would deadlock self-upgrade.",
     name: "All backups (fan-out)",
     purpose: "Fans out daily backups across Postgres / Neo4j / Qdrant sub-runners.",
     cron: "daily",
@@ -155,6 +164,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "model-discovery-refresh",
     inngestId: "inference/model-discovery-refresh",
+    honorsEnabledGate: true,
     name: "Model discovery refresh",
     purpose:
       "Refreshes the provider model catalog routing depends on. Stale data degrades model selection.",
@@ -167,6 +177,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "routing-reachability-preflight",
     inngestId: "inference/routing-reachability-preflight",
+    honorsEnabledGate: true,
     name: "Coworker routing reachability preflight",
     purpose: "Dry-runs routing per production coworker (incl. the payload-screening escalation ceiling); raises one owner-visible issue on zero eligible models so dead-ends are announced, not discovered mid-conversation.",
     cron: "37 */6 * * *",
@@ -178,6 +189,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "contributor-inventory-sync",
     inngestId: "ops/contributor-inventory-sync-cron",
+    honorsEnabledGate: true,
     name: "Contributor inventory sync",
     purpose:
       "Reconciles contributor/PR inventory against GitHub. Governance + attribution integrity.",
@@ -190,6 +202,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "federated-demand-reconciliation",
     inngestId: "federation/demand-reconciliation",
+    honorsEnabledGate: true,
     name: "Federated demand reconciliation",
     purpose:
       "Projects approved same-organization platform demand, retries durable peer delivery, withdraws records that leave the approved scope, and pulls every same-organization peer's backlog into local read-only mirrors (work sync).",
@@ -202,6 +215,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "agent-task-dispatch",
     inngestId: "agent/task-dispatch",
+    honorsEnabledGate: true,
     name: "Agent task dispatch",
     purpose: "Pumps queued agent tasks into execution. Agent work stalls if it stops.",
     cron: "*/5 * * * *",
@@ -210,89 +224,11 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
-  {
-    jobId: "taskrun-watchdog",
-    inngestId: "ops/taskrun-watchdog",
-    name: "Task-run watchdog",
-    purpose: "Detects and resolves stuck task runs. Liveness guard for the task system.",
-    cron: "* * * * *",
-    cadence: "Every minute",
-    category: "core",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
-    jobId: "token-expiry-monitor",
-    inngestId: "ops/token-expiry-monitor",
-    name: "Token expiry monitor",
-    purpose: "Warns before provider/integration credentials expire. Auth continuity.",
-    cron: "0 9 * * *",
-    cadence: "Daily at 09:00",
-    category: "core",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
-    jobId: "runtime-target-janitor",
-    inngestId: "ops/runtime-target-janitor",
-    name: "Runtime-target janitor",
-    purpose: "Sweeps stale runtime targets + expires leases. Resource hygiene.",
-    cron: "0 * * * *",
-    cadence: "Hourly",
-    category: "core",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
-    jobId: "runtime-artifact-janitor",
-    inngestId: "ops/runtime-artifact-janitor",
-    name: "Runtime-artifact janitor",
-    purpose:
-      "Reaps orphaned CI build images + stray compose projects (and their named volumes). Default OFF; ENABLED alone = observe-only (logs would-reap); ENABLED + DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=1 = live reap. CLI guards keep root dpf, running, and live-worktree stacks safe.",
-    cron: "20 5 * * *",
-    cadence: "Daily at 05:20",
-    category: "core",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
-    jobId: "worktree-janitor",
-    inngestId: "ops/worktree-janitor",
-    name: "Worktree janitor fleet backstop (Tier-A)",
-    purpose:
-      "OPTIONAL fleet sweeper for leftover worktrees. Primary reaping is session-lifecycle (worktree-session-hygiene on SessionEnd). This portal Inngest job dry-runs when DPF_WORKTREE_JANITOR_ENABLED=1; live Tier-A only with DPF_WORKTREE_JANITOR_AUTO_REAP=1. Not a per-client CLI cron.",
-    cron: "40 5 * * *",
-    cadence: "Daily at 05:40",
-    category: "core",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
-    jobId: "sandbox-build-gc",
-    inngestId: "ops/sandbox-build-gc",
-    name: "Build Studio sandbox build GC",
-    purpose:
-      "Backstop: removes leftover /workspace/.builds/<FB-*> for terminal or missing FeatureBuilds; optional aged build/* branch delete when DPF_SANDBOX_BUILD_GC_DELETE_BRANCHES=1. Primary cleanup is transactional on promote/abandon/complete. Enable with DPF_SANDBOX_BUILD_GC_ENABLED=1.",
-    cron: "50 5 * * *",
-    cadence: "Daily at 05:50",
-    category: "core",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
-    jobId: "infra-prune",
-    inngestId: "ops/infra-prune",
-    name: "Infrastructure prune",
-    purpose: "Weekly reclamation of stale infra. Destructive — kept core-locked.",
-    cron: "0 3 * * 0",
-    cadence: "Weekly, Sun 03:00",
-    category: "core",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
+  ...HYGIENE_JOB_CATALOG_ENTRIES,
   {
     jobId: "alert-delivery-bridge",
     inngestId: "ops/alert-delivery-bridge",
+    honorsEnabledGate: true,
     name: "Alert delivery bridge",
     purpose:
       "Delivers firing Prometheus/Loki alerts into the quality-issue inbox (the platform runs no Alertmanager). If it stops, firing alerts evaluate but never reach an operator — silent blindness. Core-locked for that reason.",
@@ -309,6 +245,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "quality-issue-drift-sweep",
     inngestId: "governance/quality-issue-drift-sweep-scheduled",
+    honorsEnabledGate: true,
     name: "Quality-issue drift sweep",
     purpose:
       "Runtime half of quality-issue governance. Self-heals the recovery/orphan backstop (closes stale entity/relationship issues whose row is active again or gone) and detects DRIFT — any issue-type open count over its declared steady-state budget — so a newly-accumulating detector is surfaced automatically instead of found by inspection. Reports drift with owners for the auto-processing router to fund and route; does not file work itself.",
@@ -334,6 +271,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "regulatory-monitor-scan",
     inngestId: "govern/regulatory-monitor-scan-scheduled",
+    honorsEnabledGate: true,
     name: "Regulatory monitor scan",
     purpose:
       "Re-scans active regulations for changes so the compliance surface reflects a current posture instead of aging into a false green. Before this, a scan ran only when an operator pressed \"Run Scan Now\" and never refreshed. Editable so an operator can retune the cadence or run one off-cadence. BI-DA37A602.",
@@ -372,6 +310,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "semantic-memory-reconcile",
     inngestId: "govern/semantic-memory-reconcile-scheduled",
+    honorsEnabledGate: true,
     name: "Semantic memory orphan reconciliation",
     purpose:
       "BI-DG-001 (EP-DATA-GOVERNANCE): removes agent-memory vectors whose source coworker turn has been purged, so a deleted conversation cannot linger in semantic recall. If it stops, orphaned vectors accumulate and a source deletion is never fully propagated to the derived copy. Editable so an operator can pause or run-now the sweep.",
@@ -384,6 +323,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "discovery-prometheus-poll",
     inngestId: "ops/prometheus-poll",
+    honorsEnabledGate: true,
     name: "Discovery: Prometheus poll",
     purpose: "Polls Prometheus for new monitoring targets. Cadence is tunable to taste.",
     cron: "5 * * * *",
@@ -395,6 +335,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "discovery-full-sweep",
     inngestId: "ops/full-discovery-sweep",
+    honorsEnabledGate: true,
     name: "Discovery: full sweep",
     purpose: "Full infrastructure discovery sweep. Cadence is tunable.",
     cron: "10 * * * *",
@@ -406,6 +347,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "issue-report-triage",
     inngestId: "quality/issue-report-triage",
+    honorsEnabledGate: true,
     name: "Quality: issue-report triage",
     purpose: "Triages inbound issue reports into the backlog. Cadence is tunable.",
     cron: "3,18,33,48 * * * *",
@@ -417,6 +359,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "backlog-triage-drain",
     inngestId: "ops/backlog-triage-drain",
+    honorsEnabledGate: true,
     name: "Backlog triage drain",
     purpose: "Drains the backlog triage queue. Cadence is tunable.",
     cron: "23 * * * *",
@@ -428,6 +371,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "canonical-improvement-digest",
     inngestId: "ops/canonical-improvement-digest",
+    honorsEnabledGate: true,
     name: "Canonical improvement digest",
     purpose:
       "Batches [reference-doc] ImprovementProposal rows into one doc chore BI for human-approved canonical-source PRs (process-spine §6.5).",
@@ -440,6 +384,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "coworker-regression-detect",
     inngestId: "quality/coworker-regression-detect",
+    honorsEnabledGate: true,
     name: "Coworker regression detect",
     purpose: "Scans for coworker quality regressions. Cadence is tunable.",
     cron: "6,21,36,51 * * * *",
@@ -451,6 +396,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "governed-backlog-tee-up",
     inngestId: "build/governed-backlog-tee-up-scheduled",
+    honorsEnabledGate: true,
     name: "Governed backlog tee-up",
     purpose: "Tees up governed backlog items for the day. Cadence is tunable.",
     cron: "0 14 * * *",
@@ -462,6 +408,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "capacity-drain",
     inngestId: "build/capacity-drain-scheduled",
+    honorsEnabledGate: true,
     name: "Capacity drain (use-it-or-lose-it)",
     purpose:
       "Near the weekly LLM-allocation reset, with a healthy pool and free build slots, dispatch top demand-ranked ready work so allocation is not wasted. Opt-in (capacityDrainEnabled).",
@@ -474,6 +421,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "assurance-remediation-tee-up",
     inngestId: "assurance/remediation-tee-up-scheduled",
+    honorsEnabledGate: true,
     name: "Assurance remediation tee-up",
     purpose:
       "Off-hours, budget-capped auto-promotion of genuine high/critical assurance findings into Build Studio remediation builds. If it stops, auto-filed vulnerability BIs sit unworked.",
@@ -486,6 +434,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "assurance-merge-gate",
     inngestId: "assurance/merge-gate-scheduled",
+    honorsEnabledGate: true,
     name: "Assurance merge gate",
     purpose:
       "Off-hours WWMD-gated merge decision for assurance remediation PRs (patch-only-auto): escalates non-auto PRs to a human. Auto-merge actuation is dark (DPF_ASSURANCE_AUTOMERGE_ENABLED, default off). If it stops, remediation PRs await manual merge.",
@@ -498,6 +447,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "material-freshness-decay",
     inngestId: "decision/material-freshness-decay",
+    ungatedReason:
+      "Module does not call gateAtEntry yet — not wired to the kill switch (BI-7E49FA15).",
     name: "Material freshness decay",
     purpose: "Decays stale decision materials. Cadence is tunable.",
     cron: "20 3 * * *",
@@ -509,6 +460,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "research-schedule-scan",
     inngestId: "research/schedule-scan",
+    ungatedReason:
+      "Module does not call gateAtEntry yet — not wired to the kill switch (BI-7E49FA15).",
     name: "Research schedule scan",
     purpose: "Proposes scheduled research for the week. Cadence is tunable.",
     cron: "0 9 * * 1",
@@ -520,6 +473,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "wiki-lint",
     inngestId: "wiki/lint-daily",
+    honorsEnabledGate: true,
     name: "Wiki lint",
     purpose: "Daily wiki integrity lint. Cadence is tunable.",
     cron: "30 3 * * *",
@@ -531,6 +485,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "skill-metrics-aggregator",
     inngestId: "skills/metrics-aggregator",
+    honorsEnabledGate: true,
     name: "Skill metrics aggregator",
     purpose: "Aggregates skill-usage metrics. Cadence is tunable.",
     cron: "0 5 * * *",
@@ -542,6 +497,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "mcp-call-efficiency-scan",
     inngestId: "ops/mcp-call-efficiency-scan",
+    honorsEnabledGate: true,
     name: "MCP call efficiency scan",
     purpose:
       "BI-A08EBAEC: analyzes ToolExecution thrash, retry storms, and high-volume/failure tools; notifies, files critical BIs, and dispatches a one-shot AI Ops (platform-engineer) review so token waste is cut via skills, tool merges, or webhooks.",
@@ -554,6 +510,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "a2a-collaboration-health-scan",
     inngestId: "ops/a2a-collaboration-health-scan",
+    honorsEnabledGate: true,
     name: "A2A collaboration health scan",
     purpose:
       "BI-3003EE63: analyzes coworker↔coworker edges (delegation, handoff, task lineage) for failed/blocked paths, stuck active delegations, and orphan lineage; notifies, files critical BIs (BI-A2A-EFF-*), and dispatches a one-shot AI Ops review (MCP-efficiency twin).",
@@ -566,6 +523,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "queue-metrics-aggregator",
     inngestId: "queue/metrics-aggregator",
+    honorsEnabledGate: true,
     name: "Queue metrics aggregator",
     purpose:
       "Rolls up the QueueTelemetryEvent stream into per-queue QueueMetricSnapshot rows (wait/process/cycle time, throughput, first-pass yield). Without it, queue flow metrics never materialise for tiles or the coworker surface.",
@@ -578,6 +536,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "business-metrics-aggregator",
     inngestId: "business/metrics-aggregator",
+    honorsEnabledGate: true,
     name: "Business metrics aggregator",
     purpose:
       "Builds tenant-scoped owner/manager performance snapshots from canonical operational evidence for archetypes the metrics engine covers (hospitality today). On an install with no covered storefront it refreshes nothing by design. The Performance view stays fast and preserves its last valid snapshot when a refresh fails.",
@@ -590,6 +549,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "skill-curator",
     inngestId: "skills/curator",
+    honorsEnabledGate: true,
     name: "Skill curator",
     purpose: "Curates / proposes skill improvements. Cadence is tunable.",
     cron: "0 7 * * *",
@@ -601,6 +561,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "work-pattern-profile-review",
     inngestId: "quality/work-pattern-profile-review",
+    honorsEnabledGate: true,
     name: "Work pattern profile review",
     purpose:
       "Reviews coworker work-pattern telemetry and proposes capability needs. If it stops, repeated agent friction stays anecdotal instead of becoming governed improvement evidence.",
@@ -613,6 +574,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "log-signature-scanner",
     inngestId: "ops/log-signature-scanner",
+    honorsEnabledGate: true,
     name: "Log signature scanner",
     purpose:
       "Scans container logs (Loki) for novel error signatures and files one issue per new signature. If it stops, novel log anomalies surface to no one. Cadence and noise threshold are tunable.",
@@ -625,6 +587,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "edge-incident-correlation",
     inngestId: "ops/edge-incident-correlation",
+    honorsEnabledGate: true,
     name: "Edge incident correlation",
     purpose:
       "EP-MSP-FEDERATION A2+A3 — correlates a burst of edge alerts to the preceding change into one change-before-spike incident, then routes it to the right customer as a quality issue + ServiceTicket. Dark-launched behind DPF_EDGE_INCIDENT_CORRELATION_ENABLED. Cadence and lookback are tunable.",
@@ -637,6 +600,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "remote-action-claim-timeout",
     inngestId: "ops/remote-action-claim-timeout",
+    honorsEnabledGate: true,
     name: "Remote action claim timeout",
     purpose:
       "EP-REMOTE-ACTION P2 — times out RemoteActions a node claimed but never reported a result for (claim-then-die), so the read-only dispatch queue can't wedge. Dark-launched behind DPF_REMOTE_ACTION_DISPATCH_ENABLED. Cadence and timeout window are tunable.",
@@ -649,6 +613,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "release-health-check",
     inngestId: "ops/release-health-check",
+    honorsEnabledGate: true,
     name: "Release health check",
     purpose:
       "Polls the latest release's verify-gate outcome and keeps the operator notification + health card in sync. If it stops, a red release can go unnoticed. Cadence is tunable.",
@@ -661,6 +626,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "marketing-scheduler-dispatch",
     inngestId: "marketing/scheduler-dispatch",
+    honorsEnabledGate: true,
     name: "Marketing scheduler",
     purpose:
       "Fires due scheduled outbound marketing actions (draft/publish/KPI pull) that an operator or autopilot policy queued. If it stops, scheduled marketing actions never run. Outbound sends still pass the kernel veto. Editable so an operator can disable it.",
@@ -673,6 +639,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "postmark-callback-sweep",
     inngestId: "integrations/postmark-callback-sweep",
+    ungatedReason:
+      "Module does not call gateAtEntry yet — not wired to the kill switch (BI-7E49FA15).",
     name: "Postmark callback recovery",
     purpose:
       "Drains durable inbound-email responder receipts and terminal callback audit outbox rows missed by the low-latency event path. If it stops, callback acknowledgments remain safe but responder and audit recovery are delayed.",
@@ -685,6 +653,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "recurring-invoice-dispatch",
     inngestId: "finance/recurring-invoice-dispatch",
+    honorsEnabledGate: true,
     name: "Recurring invoice generator",
     purpose:
       "Generates invoices for active recurring schedules whose next date is due (idempotent; honours auto-send). If it stops, recurring invoices are not generated. Editable so an operator can disable it.",
@@ -697,6 +666,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "siem-correlation-sweep",
     inngestId: "ops/siem-correlation-sweep",
+    honorsEnabledGate: true,
     name: "SIEM correlation sweep",
     purpose:
       "EP-SOVEREIGN-SOC P1: projects the platform's own audit telemetry into SecurityEvents, then scans the recent window against enabled DetectionRules + the active threat-intel index and emits Detections. If it stops, no new security detections are produced.",
@@ -709,6 +679,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "patch-assessment-sweep",
     inngestId: "ops/patch-assessment-sweep",
+    honorsEnabledGate: true,
     name: "Estate patch assessment",
     purpose:
       "EP-PATCH-MANAGEMENT P0: projects discovered installed software into patch findings (OSV vulnerabilities + CISA KEV prioritization) on the Assurance Ledger, and resolves findings that became clean. If it stops, estate patch posture goes stale.",
@@ -747,6 +718,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "coworker-certification",
     inngestId: "ops/coworker-certification-nightly",
+    honorsEnabledGate: true,
     name: "Coworker certification",
     purpose:
       "EP-COWORKER-LIFECYCLE Phase 2 (BI-DE9CC88B): exercises every roster coworker's golden journeys through the real execution path (read-only tool surface) and records per-coworker pass/fail AssuranceRuns the workforce roster shows. If it stops, coworker certification goes stale and broken coworkers surface late again.",
@@ -759,6 +731,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: EMBEDDING_COVERAGE_JOB_ID,
     inngestId: EMBEDDING_COVERAGE_INNGEST_ID,
+    honorsEnabledGate: true,
     name: EMBEDDING_COVERAGE_JOB_NAME,
     purpose:
       "BI-ED117C82: re-embeds published wiki/stance pages that are missing a vector, so the decision engine can still retrieve the organisation's own doctrine. A page without a vector degrades stance relevance to lexical and the gate then escalates instead of deciding \u2014 which the operator experiences as coworkers re-asking settled questions. Retries every 2h because the local model is often busy at boot; reports coverage into the corpus-health Workroom so a run is visible. If it stops, silent corpus gaps accumulate with no symptom pointing at them.",
@@ -771,6 +744,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "memory-consolidation-nightly",
     inngestId: "coworker/memory-consolidation-nightly",
+    honorsEnabledGate: true,
     name: "Coworker memory consolidation",
     purpose:
       "EP-8C706944 Phase 2 + EP-COMPETENCE-FLYWHEEL (BI-907C4327, BI-4B0A1C1F): the sleep-time 'autoDream' pass distills completed work into coworker working notes, advances thread checkpoints, batch-collapses near-duplicate notes/facts to one canonical each, then expires entries unused past the retention window (supersession, never a hard delete). If it stops, coworker memory acquisition stalls and the memory stores accumulate near-duplicates and stale facts.",
@@ -789,6 +763,20 @@ const CATALOG_BY_JOB_ID = new Map<string, ScheduledJobCatalogEntry>(
 
 export function getCatalogEntry(jobId: string): ScheduledJobCatalogEntry | undefined {
   return CATALOG_BY_JOB_ID.get(jobId);
+}
+
+const CATALOG_BY_INNGEST_ID = new Map<string, ScheduledJobCatalogEntry>(
+  SCHEDULED_JOB_CATALOG.map((e) => [e.inngestId, e]),
+);
+
+/** Resolve a catalog entry from the Inngest function id — the identity a cron
+ *  knows about itself. This is how gateAtEntry finds the jobId whose
+ *  ScheduledJob.enabled it must honour (BI-7E49FA15). Event-driven run-now
+ *  functions have no entry and resolve to undefined. */
+export function getCatalogEntryByInngestId(
+  inngestId: string,
+): ScheduledJobCatalogEntry | undefined {
+  return CATALOG_BY_INNGEST_ID.get(inngestId);
 }
 
 /** A job is locked (operator read-only) when its catalog classification is
