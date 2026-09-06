@@ -131,6 +131,32 @@ export async function trunkRefExists(repoRoot: string, trunkRef = "origin/main")
  * fetched locally, or git error) so the caller withholds the delivered verdict
  * rather than guessing. Reads objects only — never touches a worktree.
  */
+/**
+ * True when the trunk carries the squash/merge commit of pull request
+ * `prNumber` — the subject GitHub writes is "<title> (#N)". This is the
+ * delivery signal for work that landed WITHOUT a Workroom recording its head
+ * (BI-AFE8BB73, design §4 "delivery evidence is the trunk, not a manifest"):
+ * the item's linked PR, resolved procedurally from the local clone, no API.
+ * `null` when git cannot answer (no clone, no trunk), never a false "merged".
+ */
+export async function trunkHasMergedPullRequest(
+  repoRoot: string,
+  prNumber: number | null | undefined,
+  trunkRef = "origin/main",
+): Promise<boolean | null> {
+  if (!prNumber || !Number.isInteger(prNumber) || prNumber <= 0) return null;
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", repoRoot, "log", trunkRef, "--fixed-strings", `--grep=(#${prNumber})`, "-1", "--format=%H"],
+      { timeout: 5000, windowsHide: true },
+    );
+    return stdout.trim().length > 0;
+  } catch {
+    return null;
+  }
+}
+
 export async function isReachableFromTrunk(
   repoRoot: string,
   headSha: string | null | undefined,
