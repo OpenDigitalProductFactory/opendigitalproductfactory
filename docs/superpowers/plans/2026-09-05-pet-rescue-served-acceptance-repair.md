@@ -4,7 +4,7 @@ status: active
 
 # Pet Rescue exact-served acceptance repair
 
-Backlog item: `BI-24FDCB9D`  
+**Backlog item:** `BI-24FDCB9D`
 Workroom: `WC-87F57668`  
 Design: `docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md` §§5.1, 7.1, 7.4, 7.5  
 Blocked closeout: `BI-7A38F667` / `WC-16B8E810`
@@ -69,12 +69,12 @@ pass on the exact worktree.
 
 ## Backlog coverage
 
-Decision: `atomic`  
-Deliverable: `pet-rescue-served-acceptance-repair` → `BI-24FDCB9D`  
-Requirements: `AC-RESCUE-CAPACITY-02`, `AC-RESCUE-HOME-02`  
-Dependencies: `BI-D2A51B36`, `BI-7A38F667`  
-Coverage receipt: pending the immutable plan commit and
-`record_plan_backlog_coverage`.
+- Decision: atomic
+- Parent: `BI-24FDCB9D`
+- Receipt: blocked-by: no initiative scope baseline exists for BI-24FDCB9D because both exact server-issued reviewer routes returned without their required writer tool call or receipt
+- Rationale: the Ward roster and mobile navigation contradictions jointly block the same exact-served Pet Rescue acceptance, so neither half is independently shippable.
+- Deliverable: `pet-rescue-served-acceptance-repair` → `BI-24FDCB9D`; requirements `AC-RESCUE-CAPACITY-02`, `AC-RESCUE-HOME-02`
+- Dependencies: `pet-rescue-served-acceptance-repair` → `BI-24FDCB9D` (`BI-D2A51B36`, `BI-7A38F667`)
 
 ## Risk and rollback
 
