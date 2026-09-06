@@ -1,0 +1,1291 @@
+{
+  "scopeRevision": 1,
+  "catalogRevision": "d291fb5e536593fe9fb31e6fc1e3cd7fc3a43d62",
+  "purpose": "Dated discovery inventory for ACR-001; not executable scenarios or runtime acceptance. Reconcile against the current catalog at adoption.",
+  "archetypes": [
+    {
+      "archetypeId": "veterinary-clinic",
+      "name": "Veterinary Clinic",
+      "category": "healthcare-wellness",
+      "sourcePath": "packages/storefront-templates/src/archetypes/healthcare-wellness.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "dental-practice",
+      "name": "Dental Practice",
+      "category": "healthcare-wellness",
+      "sourcePath": "packages/storefront-templates/src/archetypes/healthcare-wellness.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "medical-practice",
+      "name": "Medical Practice",
+      "category": "healthcare-wellness",
+      "sourcePath": "packages/storefront-templates/src/archetypes/healthcare-wellness.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "physiotherapy",
+      "name": "Physiotherapy",
+      "category": "healthcare-wellness",
+      "sourcePath": "packages/storefront-templates/src/archetypes/healthcare-wellness.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "counselling",
+      "name": "Counselling / Therapy",
+      "category": "healthcare-wellness",
+      "sourcePath": "packages/storefront-templates/src/archetypes/healthcare-wellness.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "optician",
+      "name": "Optician",
+      "category": "healthcare-wellness",
+      "sourcePath": "packages/storefront-templates/src/archetypes/healthcare-wellness.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "home-health-care",
+      "name": "Home Health & In-Home Care",
+      "category": "healthcare-wellness",
+      "sourcePath": "packages/storefront-templates/src/archetypes/healthcare-wellness.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "mobile-phlebotomy",
+      "name": "Mobile Phlebotomy & Lab Draw",
+      "category": "healthcare-wellness",
+      "sourcePath": "packages/storefront-templates/src/archetypes/healthcare-wellness.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "dme-delivery",
+      "name": "Medical Equipment Delivery & Setup",
+      "category": "healthcare-wellness",
+      "sourcePath": "packages/storefront-templates/src/archetypes/healthcare-wellness.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "hair-salon",
+      "name": "Hair Salon",
+      "category": "beauty-personal-care",
+      "sourcePath": "packages/storefront-templates/src/archetypes/beauty-personal-care.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "barber-shop",
+      "name": "Barber Shop",
+      "category": "beauty-personal-care",
+      "sourcePath": "packages/storefront-templates/src/archetypes/beauty-personal-care.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "nail-salon",
+      "name": "Nail Salon",
+      "category": "beauty-personal-care",
+      "sourcePath": "packages/storefront-templates/src/archetypes/beauty-personal-care.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "beauty-spa",
+      "name": "Beauty Spa",
+      "category": "beauty-personal-care",
+      "sourcePath": "packages/storefront-templates/src/archetypes/beauty-personal-care.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "personal-trainer",
+      "name": "Personal Trainer",
+      "category": "beauty-personal-care",
+      "sourcePath": "packages/storefront-templates/src/archetypes/beauty-personal-care.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "mobile-beauty",
+      "name": "Mobile Beauty & Glam",
+      "category": "beauty-personal-care",
+      "sourcePath": "packages/storefront-templates/src/archetypes/beauty-personal-care.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "facilities-maintenance",
+      "name": "Facilities Maintenance",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "plumber",
+      "name": "Plumber",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "electrician",
+      "name": "Electrician",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "cleaning-service",
+      "name": "Cleaning Service",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "landscaping",
+      "name": "Landscaping & Grounds",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "hvac-contractor",
+      "name": "HVAC Contractor",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "pest-control",
+      "name": "Pest Control",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "appliance-repair",
+      "name": "Appliance Repair",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "pool-spa-service",
+      "name": "Pool & Spa Service",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "pressure-washing",
+      "name": "Pressure Washing & Exterior Cleaning",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "roofing-gutters",
+      "name": "Roofing & Gutters",
+      "category": "trades-maintenance",
+      "sourcePath": "packages/storefront-templates/src/archetypes/trades-maintenance.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "it-managed-services",
+      "name": "IT Managed Services",
+      "category": "professional-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/professional-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "legal-services",
+      "name": "Legal Services",
+      "category": "professional-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/professional-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "accounting",
+      "name": "Accounting & Bookkeeping",
+      "category": "professional-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/professional-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "marketing-agency",
+      "name": "Marketing Agency",
+      "category": "professional-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/professional-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "consulting",
+      "name": "Consulting",
+      "category": "professional-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/professional-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "field-inspection",
+      "name": "Property & Field Inspection",
+      "category": "professional-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/professional-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "land-surveying",
+      "name": "Land Surveying",
+      "category": "professional-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/professional-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "process-serving-notary",
+      "name": "Process Serving & Mobile Notary",
+      "category": "professional-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/professional-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "software-platform",
+      "name": "Software Platform",
+      "category": "software-platform",
+      "sourcePath": "packages/storefront-templates/src/archetypes/software-platform.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "corporate-training",
+      "name": "Corporate Training",
+      "category": "education-training",
+      "sourcePath": "packages/storefront-templates/src/archetypes/education-training.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "tutoring",
+      "name": "Tutoring",
+      "category": "education-training",
+      "sourcePath": "packages/storefront-templates/src/archetypes/education-training.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "music-school",
+      "name": "Music School",
+      "category": "education-training",
+      "sourcePath": "packages/storefront-templates/src/archetypes/education-training.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "driving-school",
+      "name": "Driving School",
+      "category": "education-training",
+      "sourcePath": "packages/storefront-templates/src/archetypes/education-training.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "pet-grooming",
+      "name": "Pet Grooming",
+      "category": "pet-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/pet-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "dog-walking",
+      "name": "Dog Walking",
+      "category": "pet-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/pet-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "pet-boarding",
+      "name": "Pet Boarding",
+      "category": "pet-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/pet-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "mobile-pet-grooming",
+      "name": "Mobile Pet Grooming",
+      "category": "pet-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/pet-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "mobile-vet",
+      "name": "Mobile Veterinary Service",
+      "category": "pet-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/pet-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "restaurant",
+      "name": "Restaurant",
+      "category": "food-hospitality",
+      "sourcePath": "packages/storefront-templates/src/archetypes/food-hospitality.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "catering",
+      "name": "Catering",
+      "category": "food-hospitality",
+      "sourcePath": "packages/storefront-templates/src/archetypes/food-hospitality.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "bakery",
+      "name": "Bakery",
+      "category": "food-hospitality",
+      "sourcePath": "packages/storefront-templates/src/archetypes/food-hospitality.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "retail-goods",
+      "name": "Retail Shop",
+      "category": "retail-goods",
+      "sourcePath": "packages/storefront-templates/src/archetypes/retail-goods.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "artisan-goods",
+      "name": "Artisan Goods",
+      "category": "retail-goods",
+      "sourcePath": "packages/storefront-templates/src/archetypes/retail-goods.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "florist",
+      "name": "Florist",
+      "category": "retail-goods",
+      "sourcePath": "packages/storefront-templates/src/archetypes/retail-goods.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "wholesale-distribution",
+      "name": "Wholesale & Distribution",
+      "category": "retail-goods",
+      "sourcePath": "packages/storefront-templates/src/archetypes/retail-goods.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "furniture-delivery-install",
+      "name": "Furniture & Appliance Delivery & Install",
+      "category": "retail-goods",
+      "sourcePath": "packages/storefront-templates/src/archetypes/retail-goods.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "gym",
+      "name": "Gym",
+      "category": "fitness-recreation",
+      "sourcePath": "packages/storefront-templates/src/archetypes/fitness-recreation.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "yoga-studio",
+      "name": "Yoga Studio",
+      "category": "fitness-recreation",
+      "sourcePath": "packages/storefront-templates/src/archetypes/fitness-recreation.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "dance-studio",
+      "name": "Dance Studio",
+      "category": "fitness-recreation",
+      "sourcePath": "packages/storefront-templates/src/archetypes/fitness-recreation.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "pet-rescue",
+      "name": "Pet Rescue",
+      "category": "nonprofit-community",
+      "sourcePath": "packages/storefront-templates/src/archetypes/nonprofit-community.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "animal-shelter",
+      "name": "Animal Shelter",
+      "category": "nonprofit-community",
+      "sourcePath": "packages/storefront-templates/src/archetypes/nonprofit-community.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "community-shelter",
+      "name": "Community Shelter",
+      "category": "nonprofit-community",
+      "sourcePath": "packages/storefront-templates/src/archetypes/nonprofit-community.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "charity",
+      "name": "Charity",
+      "category": "nonprofit-community",
+      "sourcePath": "packages/storefront-templates/src/archetypes/nonprofit-community.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "sports-club",
+      "name": "Sports Club",
+      "category": "nonprofit-community",
+      "sourcePath": "packages/storefront-templates/src/archetypes/nonprofit-community.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "cooperative",
+      "name": "Cooperative (Member-Owned)",
+      "category": "nonprofit-community",
+      "sourcePath": "packages/storefront-templates/src/archetypes/nonprofit-community.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "agricultural-cooperative",
+      "name": "Agricultural Cooperative (Shared Machinery)",
+      "category": "nonprofit-community",
+      "sourcePath": "packages/storefront-templates/src/archetypes/nonprofit-community.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "meal-delivery-program",
+      "name": "Meal Delivery Program",
+      "category": "nonprofit-community",
+      "sourcePath": "packages/storefront-templates/src/archetypes/nonprofit-community.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "homeowners-association",
+      "name": "Homeowners Association",
+      "category": "hoa-property-management",
+      "sourcePath": "packages/storefront-templates/src/archetypes/hoa-property-management.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "condo-association",
+      "name": "Condominium Association",
+      "category": "hoa-property-management",
+      "sourcePath": "packages/storefront-templates/src/archetypes/hoa-property-management.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "property-management-company",
+      "name": "Property Management Company",
+      "category": "hoa-property-management",
+      "sourcePath": "packages/storefront-templates/src/archetypes/hoa-property-management.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "community-bank",
+      "name": "Community Bank",
+      "category": "banking-financial-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/banking-financial-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "credit-union",
+      "name": "Credit Union",
+      "category": "banking-financial-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/banking-financial-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "mortgage-lending",
+      "name": "Mortgage Lender & Broker",
+      "category": "banking-financial-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/banking-financial-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "small-town-municipality",
+      "name": "Small Town / Municipality",
+      "category": "public-sector",
+      "sourcePath": "packages/storefront-templates/src/archetypes/public-sector.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "municipal-utility",
+      "name": "Municipal Utility (Water / Sewer / Electric / Gas)",
+      "category": "public-sector",
+      "sourcePath": "packages/storefront-templates/src/archetypes/public-sector.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "law-enforcement-agency",
+      "name": "Law Enforcement Agency (Police / Sheriff)",
+      "category": "public-sector",
+      "sourcePath": "packages/storefront-templates/src/archetypes/public-sector.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "equipment-rental",
+      "name": "Equipment & Tool Rental",
+      "category": "asset-rental",
+      "sourcePath": "packages/storefront-templates/src/archetypes/asset-rental.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "self-storage",
+      "name": "Self-Storage Facility",
+      "category": "asset-rental",
+      "sourcePath": "packages/storefront-templates/src/archetypes/asset-rental.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "production-equipment-rental",
+      "name": "Film & Production Equipment Rental",
+      "category": "asset-rental",
+      "sourcePath": "packages/storefront-templates/src/archetypes/asset-rental.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "new-home-builder",
+      "name": "New Home Builder",
+      "category": "real-estate-construction",
+      "sourcePath": "packages/storefront-templates/src/archetypes/real-estate-construction.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "custom-home-builder",
+      "name": "Custom Home Builder",
+      "category": "real-estate-construction",
+      "sourcePath": "packages/storefront-templates/src/archetypes/real-estate-construction.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "auto-glass",
+      "name": "Windshield & Auto Glass Replacement",
+      "category": "automotive-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/automotive-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "mobile-mechanic",
+      "name": "Mobile Mechanic",
+      "category": "automotive-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/automotive-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "mobile-detailing",
+      "name": "Mobile Auto Detailing",
+      "category": "automotive-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/automotive-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "mobile-tire",
+      "name": "Mobile Tire Service",
+      "category": "automotive-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/automotive-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "roadside-assistance",
+      "name": "Roadside Assistance & Towing",
+      "category": "automotive-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/automotive-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "locksmith",
+      "name": "Locksmith (Auto & Residential)",
+      "category": "automotive-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/automotive-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "moving-company",
+      "name": "Moving Company",
+      "category": "moving-and-logistics",
+      "sourcePath": "packages/storefront-templates/src/archetypes/moving-and-logistics.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "junk-removal",
+      "name": "Junk Removal & Hauling",
+      "category": "moving-and-logistics",
+      "sourcePath": "packages/storefront-templates/src/archetypes/moving-and-logistics.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "courier-delivery",
+      "name": "Courier & Delivery Service",
+      "category": "moving-and-logistics",
+      "sourcePath": "packages/storefront-templates/src/archetypes/moving-and-logistics.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "last-mile-freight",
+      "name": "Last-Mile Freight & Delivery",
+      "category": "moving-and-logistics",
+      "sourcePath": "packages/storefront-templates/src/archetypes/moving-and-logistics.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "freight-brokerage",
+      "name": "Freight Brokerage & Forwarding",
+      "category": "moving-and-logistics",
+      "sourcePath": "packages/storefront-templates/src/archetypes/moving-and-logistics.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "guard-patrol",
+      "name": "Security Guard & Patrol Services",
+      "category": "security-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/security-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "alarm-cctv-install",
+      "name": "Alarm & CCTV Installation",
+      "category": "security-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/security-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "film-video-production",
+      "name": "Film & Video Production Company",
+      "category": "media-production",
+      "sourcePath": "packages/storefront-templates/src/archetypes/media-production.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "post-production-studio",
+      "name": "Post-Production & VFX Studio",
+      "category": "media-production",
+      "sourcePath": "packages/storefront-templates/src/archetypes/media-production.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "event-production-staging",
+      "name": "Event Production, AV & Staging",
+      "category": "media-production",
+      "sourcePath": "packages/storefront-templates/src/archetypes/media-production.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "event-venue",
+      "name": "Event Venue & Box Office",
+      "category": "live-events-venues",
+      "sourcePath": "packages/storefront-templates/src/archetypes/live-events-venues.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "tour-promoter",
+      "name": "Concert Promoter & Tour Operator",
+      "category": "live-events-venues",
+      "sourcePath": "packages/storefront-templates/src/archetypes/live-events-venues.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "talent-booking-agency",
+      "name": "Talent & Booking Agency",
+      "category": "live-events-venues",
+      "sourcePath": "packages/storefront-templates/src/archetypes/live-events-venues.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "third-party-logistics",
+      "name": "3PL Contract Warehousing",
+      "category": "warehousing-fulfilment",
+      "sourcePath": "packages/storefront-templates/src/archetypes/warehousing-fulfilment.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "ecommerce-fulfilment",
+      "name": "E-Commerce Fulfilment Centre",
+      "category": "warehousing-fulfilment",
+      "sourcePath": "packages/storefront-templates/src/archetypes/warehousing-fulfilment.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "cold-chain-storage",
+      "name": "Cold & Temperature-Controlled Storage",
+      "category": "warehousing-fulfilment",
+      "sourcePath": "packages/storefront-templates/src/archetypes/warehousing-fulfilment.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "cross-dock-transload",
+      "name": "Cross-Dock & Transload",
+      "category": "warehousing-fulfilment",
+      "sourcePath": "packages/storefront-templates/src/archetypes/warehousing-fulfilment.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "dry-cleaning-plant-network",
+      "name": "Dry Cleaning Plant & Store Network",
+      "category": "fabric-care-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/fabric-care-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "wash-and-fold-laundry",
+      "name": "Wash & Fold Laundry",
+      "category": "fabric-care-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/fabric-care-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "alterations-tailoring",
+      "name": "Alterations & Tailoring",
+      "category": "fabric-care-services",
+      "sourcePath": "packages/storefront-templates/src/archetypes/fabric-care-services.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "mixed-farm-ranch",
+      "name": "Mixed Farm & Ranch",
+      "category": "agriculture-ranching",
+      "sourcePath": "packages/storefront-templates/src/archetypes/agriculture-ranching.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "crop-hay-farm",
+      "name": "Crop & Hay Farm",
+      "category": "agriculture-ranching",
+      "sourcePath": "packages/storefront-templates/src/archetypes/agriculture-ranching.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "cattle-ranch",
+      "name": "Cattle Ranch",
+      "category": "agriculture-ranching",
+      "sourcePath": "packages/storefront-templates/src/archetypes/agriculture-ranching.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    },
+    {
+      "archetypeId": "industrial-equipment-oem",
+      "name": "Industrial Equipment OEM",
+      "category": "manufacturing",
+      "sourcePath": "packages/storefront-templates/src/archetypes/manufacturing.ts",
+      "discoveryStatus": "unassessed",
+      "requiredVariants": [
+        "normal-day",
+        "bad-day",
+        "periodic-cycle"
+      ]
+    }
+  ]
+}

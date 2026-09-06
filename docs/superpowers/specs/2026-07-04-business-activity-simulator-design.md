@@ -74,8 +74,8 @@ The multi-archetype toggle (in the viz) is **test-instance-only** — a real cus
 
 ## 10. P4 research amendment — business-day fidelity (2026-09-06)
 
-BI-4CCE50E0 contributes [research and restaurant scenarios](../research/2026-09-06-astra-business-verification-review.md#5-human-world-representation-the-restaurant-pilot)
-to existing BI-041735BC. The latter is a federated-origin record on the operator development install;
+The linked research contributes [research and restaurant scenarios](../research/2026-09-06-astra-business-verification-review.md#5-human-world-representation-the-restaurant-pilot)
+to the existing simulator persistence/authentication work. The latter is a federated-origin record on the operator development install;
 its owner must reconcile scope and approval before implementation.
 
 Add normal-day, disrupted-day and periodic-close fixtures. Begin with Restaurant

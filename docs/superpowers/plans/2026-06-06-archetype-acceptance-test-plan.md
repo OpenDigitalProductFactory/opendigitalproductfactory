@@ -66,7 +66,7 @@ This set covers all 21 current category files while still avoiding a 95-archetyp
 
 ## Per-Archetype Walkthrough
 
-**2026-09-06 research increment (BI-4CCE50E0):** select Restaurant plus Pet Rescue
+**2026-09-06 research increment:** select Restaurant plus Pet Rescue
 as the first complementary rehearsal pair for the
 [Astra applicability review](../research/2026-09-06-astra-business-verification-review.md).
 This pair proves only its exercised scope; the representative matrix below remains

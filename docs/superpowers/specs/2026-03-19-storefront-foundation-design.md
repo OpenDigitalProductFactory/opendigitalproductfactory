@@ -12,7 +12,7 @@ status: draft
 
 ## 1. Overview
 
-**2026-09-06 evolution note — proposed, BI-4CCE50E0:** this is the historical
+**2026-09-06 evolution note — proposed:** this is the historical
 foundation. Extend its existing public projection and archetype composition; do not
 rebuild the original data model. Current [research §6](../research/2026-09-06-astra-business-verification-review.md#6-storefront-composition)
 requires a supported path for each business intent, not one generic CTA for every
@@ -24,12 +24,11 @@ responsible operational role through canonical intake/booking records.
 Validate preview -> published surface -> staff action -> persisted outcome, including
 retry, unavailable capacity and private-field exclusion. A request acknowledgment
 must not imply confirmed booking, fulfillment or payment. Reuse theme-aware UI and
-mobile/keyboard behavior. Existing local delivery anchors BI-B19306CA and BI-46437AEF
-own the rescue intake/routing example; research does not authorize expanding those
-items into every archetype. Shared evolution must preserve their distinct semantics.
+mobile/keyboard behavior. Existing rescue intake and routing work retains its
+bounded scope. Shared evolution must preserve each archetype's distinct semantics.
 
-Design follow-up BI-55D37FDE under EP-4FF5273F owns the cross-archetype intent
-contract and delivery mapping. It remains documentation intake in triaging;
+The storefront intent design follow-up must define the cross-archetype intent
+contract and map delivery ownership within the adopting network;
 implementation approval and plan coverage are separate prerequisites.
 
 Add a public-facing storefront to the ODPF platform, enabling the organisation running the platform to sell products and services to potential and existing customers. The storefront is the primary customer entry point — replacing the disconnected `/customer-login` flow with a tenant-aware, publicly accessible surface.

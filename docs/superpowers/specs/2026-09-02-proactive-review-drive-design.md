@@ -85,7 +85,7 @@ A room at full proactivity **drives its own review to done**. Concretely:
    baseline exists before the completion gate reads it — dissolving wall 3.
 
 4. **Merge-through-code-gates establishes code delivery; acceptance follows the
-   objective evidence.** Proposed clarification, BI-4CCE50E0 (2026-09-06): the
+   objective evidence.** Proposed clarification, the linked research (2026-09-06): the
    reachable squash commit and green required checks establish delivery. A check
    satisfies acceptance only for the objective and artifact version it actually
    evaluated. Runtime, UI, business arithmetic and policy objectives retain their
@@ -153,7 +153,7 @@ the room dispatches the reviewer on its own.
   human branch (`attention`) for agent-authored work, matching the HITL pattern where the
   author cannot self-approve.
 
-## Evidence depth amendment — proposed, BI-4CCE50E0
+## Evidence depth amendment — proposed
 
 The reviewer names each objective, artifact/run version, assertion, observation and
 supporting source. Policy-dependent findings cite the applicable revision and exact
@@ -163,10 +163,10 @@ verdict matches. Reuse existing reviewer packets and receipt fields, with bounde
 repair/review attempts and retained failures. Reviewer count and model confidence
 are not acceptance evidence. See [research §4](../research/2026-09-06-astra-business-verification-review.md#4-testing-and-review-increments).
 
-Design follow-up BI-0B8657BD under this epic owns the objective-level acceptance,
+The objective-review design follow-up owns the objective-level acceptance,
 citation and reconciliation clarification. It remains documentation intake in
 triaging. Existing verification and reviewer-policy owners retain implementation
-and decision authority; peer-owned amendments are tracked in BI-4CCE50E0.
+and decision authority; peer-owned amendments remain in the originating network's private work register.
 
 ## Alternatives rejected
 

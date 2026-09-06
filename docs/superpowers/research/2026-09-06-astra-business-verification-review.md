@@ -1,7 +1,6 @@
 # Astra examples: business operations and verification
 
-**Date:** 2026-09-06. **Research/documentation:** BI-4CCE50E0, EP-BUSINESS-ACTIVITY-SIM.
-**Workroom:** WC-AD92E604. **Source baseline:** `6c47df3288996ad698f1910218281afe4aa58cda`.
+**Date:** 2026-09-06. **Source baseline:** `6c47df3288996ad698f1910218281afe4aa58cda`.
 **Status:** proposed design amendments for incremental delivery; no implementation or runtime acceptance claimed.
 
 ## Recommendation
@@ -51,15 +50,15 @@ The source checkout and live database answer different questions. The consumer i
 
 | Existing home | Finding and amendment |
 |---|---|
-| [Operating-model audit](../../architecture/archetype-operating-model-audit.md), BI-7199065E | Step 6 and a separate operability score are already in source, although the live BI remains open. Extend the evidence and exception probes; do not reintroduce the run stage as new work or close its BI from source presence alone. |
-| [Verification-first design](../specs/2026-08-28-verification-first-workroom-gates-design.md) and [plan](../plans/2026-08-28-verification-first-workroom-gates.md) | Non-vacuous verification is already planned. Qualify stale absence claims: this installation returns BI-4BD81F3B and BI-8E539357 as triaging, with federated origin. Existence is not completion. Preserve shadow calibration and Phase 4 prerequisites. |
-| [Proactive review](../specs/2026-09-02-proactive-review-drive-design.md), EP-4614F35E | The code-merge acceptance shortcut needs objective-level limits. Preserve independent reviewer authority and bounded dispatch; bind judgments to source evidence. |
-| [Business Activity Simulator](../specs/2026-07-04-business-activity-simulator-design.md), BI-041735BC | Real domain functions and financial oracles already exist. P4 owns persistence/auth fidelity. Add business-day and fault scenarios through that seam. |
+| [Operating-model audit](../../architecture/archetype-operating-model-audit.md) | Step 6 and a separate operability score are already in source, although the live BI remains open. Extend the evidence and exception probes; do not reintroduce the run stage as new work or close its BI from source presence alone. |
+| [Verification-first design](../specs/2026-08-28-verification-first-workroom-gates-design.md) and [plan](../plans/2026-08-28-verification-first-workroom-gates.md) | Non-vacuous verification is already planned. Qualify stale absence claims: this installation returns the non-vacuous verification work and the deep-verification integration work as triaging, with federated origin. Existence is not completion. Preserve shadow calibration and Phase 4 prerequisites. |
+| [Proactive review](../specs/2026-09-02-proactive-review-drive-design.md) | The code-merge acceptance shortcut needs objective-level limits. Preserve independent reviewer authority and bounded dispatch; bind judgments to source evidence. |
+| [Business Activity Simulator](../specs/2026-07-04-business-activity-simulator-design.md), the simulator persistence/authentication work | Real domain functions and financial oracles already exist. P4 owns persistence/auth fidelity. Add business-day and fault scenarios through that seam. |
 | [Restaurant host stand](../plans/2026-08-13-restaurant-host-stand-depth-plan.md) | Richer than the archetype's reservation-led default. Preserve its atomic host-to-seat scope; use it as the first operating-day slice rather than expand it into kitchen, stock and payroll implementation. |
 | [Living Business Excellence](../specs/2026-07-15-living-business-excellence-program-design.md) | Grounding, exemplars and outcome loops are already the program. Generated defaults need owner-confirmed operational evidence and replayable consequences. |
-| [Storefront foundation](../specs/2026-03-19-storefront-foundation-design.md), BI-B19306CA / BI-46437AEF | Reuse public projection and intake. A default CTA cannot represent every reason to contact a business or every downstream owner. |
+| [Storefront foundation](../specs/2026-03-19-storefront-foundation-design.md) | Reuse public projection and intake. A default CTA cannot represent every reason to contact a business or every downstream owner. |
 
-Schema inspection found `Organization`, `StorefrontConfig`, `StorefrontArchetype`, `StorefrontBooking`, `OperationalSceneLayout`, `Resource`, hospitality resource/allocation/service-turn records, `Policy` and `PolicyRequirement`. They are candidates to compose, not evidence that every use case works. Resource generalization is already a settled direction in BI-2C80E6EA / DI-F289DBB51DCB, with clinical-specific preservation conditions. This review proposes no new table, enum, engine or agent role.
+Schema inspection found `Organization`, `StorefrontConfig`, `StorefrontArchetype`, `StorefrontBooking`, `OperationalSceneLayout`, `Resource`, hospitality resource/allocation/service-turn records, `Policy` and `PolicyRequirement`. They are candidates to compose, not evidence that every use case works. Resource generalization has an existing local decision with clinical-specific preservation conditions; resolve its authoritative design and owner before implementation. This review proposes no new table, enum, engine or agent role.
 
 ## 4. Testing and review increments
 
@@ -115,59 +114,41 @@ Reserve roughly 20% of each later slice's estimate for inspecting and consolidat
 
 The documentation follows the same rule: the audit owns reusable scenario evidence; plans link to it and keep only their domain delta. Historical dated runs stay intact. No seed or installed runtime edits are part of this pass.
 
-## 8. Incremental execution and live ownership
+## 8. Incremental execution and portable ownership
 
-| Order | Existing delivery anchor | Amendment / completion evidence |
+Implementation references use source paths and the stable acceptance case IDs in
+[the campaign test scope](../../testing/archetype-campaign-scope.md). Each adopting
+organization maps them to its own backlog, epics and priorities. Private work IDs,
+workroom receipts and peer ownership remain in that network's local register;
+they are not portable dependencies for contributors reviewing this source.
+
+| Sequence | Existing delivery seam | Completion evidence |
 |---|---|---|
-| Now | BI-4CCE50E0 | Research memo and source amendments, locally owned backlog additions, owner-side handoff for remote records. Documentation checks only. |
-| First verification slice | BI-4BD81F3B, then BI-8E539357; EP-COWORKER-LIFECYCLE / EP-WORK-POSTURE | Assertion-bearing UX fixtures, negative control, version-bound trace and persisted outcome; preserve reachability and calibration dependencies. |
-| First business rehearsal | BI-041735BC; EP-BUSINESS-ACTIVITY-SIM | Restaurant normal/bad/periodic scenarios using real DPF paths, with external sinks isolated. Baseline operability and failure inventory before feature expansion. |
-| Public/staff handoff | BI-B19306CA and BI-46437AEF; EP-5102F494 | Typed intent, correct recipient, retry-safe persistence, private/public split. Use a fictitious fixture; do not replay real personal details into test systems. |
-| Representation depth | Restaurant host plan; Living Business Excellence program | Reconcile delivery owners, discover operating modes and source-of-truth gaps, then select the next bounded feature from measured failures. |
+| Verification | Non-vacuous UX results and deep-verification adapters | Independent assertions, negative control, exact-version trace and persisted outcome; retain calibration prerequisites. |
+| Business rehearsal | Simulator persistence/auth fidelity and shared fixture adapters | Normal/bad/periodic scenarios through actual public and worker paths, with isolated external sinks. |
+| Public/staff handoff | Storefront projection, typed intake and role routing | Correct recipient, retry-safe state and private/public separation. |
+| Representation | Restaurant host plan and Living Business Excellence | Confirm operating modes and source authority, then select bounded features from observed failures. |
+| Recovery | External campaign, federation and capture/restore seams | Complete field and ownership parity, durable evidence and receipt-bound resumption. |
 
-**Local ownership:** BI-7199065E, BI-B19306CA and BI-46437AEF were readable without federated-origin markers; this pass records research amendments without changing their delivery status. Their prior bodies and evidence remain intact.
+Research identified acceptance amendments across fixtures, restaurant reliability,
+capacity, operational UI, public privacy, finance handoff, worker access, policy
+clocks, evaluation integrity and operating-model audits. Bounded design follow-ups
+cover restaurant operating modes, cross-archetype storefront intents and objective
+review. These topics retain existing delivery owners; the organization-local
+mapping is not copied into this source artifact.
 
-The three item amendments were written and read back through MCP. EP-5102F494's
-scope rationale now names operating-day evidence and these existing delivery owners;
-its rescue scope and status remain unchanged. BI-4CCE50E0 is the new documentation
-intake under the existing simulator epic, not another implementation program.
+Enumerate the current archetype catalog for complete baseline coverage. The local
+inventory at the reviewed catalog revision contained 107 unique leaves in 25
+categories; this is a dated discovery denominator, not 107 tested businesses.
+New leaves need baseline mapping. Keep no-user leaves unassessed and use actual
+user feedback to prioritize increments. Shared failures retain one delivery owner.
 
-**Owner-side handoff required:** BI-4BD81F3B, BI-8E539357 and BI-041735BC carry origin the paired source installation. Initialization declared the peer read-only and currently unreachable. Preserve them; the owner should append the relevant §4/§5 requirements and source links. Their mirrored presence disproves a global absence claim but does not prove the peer's current state.
-
-**Source references not resolved locally:** the host-stand/capacity and excellence
-corpus/grounding delivery references in the linked source plans returned `not_found`
-on the operator development install. The exact IDs and responses are retained in
-live research item BI-4CCE50E0; these are historical source references, not newly
-validated coordination anchors. Do not recreate them, report them complete, or
-assume they are absent everywhere. Resolve at the owning installation before
-implementation. No automatic cross-install mutation is authorized by this research.
+Missing local lookups do not prove that historical source work never existed.
+Resolve its owning installation and immutable plan before scheduling; do not
+recreate foreign items or alter peer-owned mirrors. Source presence alone does
+not establish current runtime state or completion.
 
 ## 9. Review and limits
-
-### Backlog expansion requested after the research pass
-
-The live coverage register remains in BI-4CCE50E0. Ten existing items now carry
-specific acceptance amendments: fixture convergence BI-79449954, restaurant test
-reliability BI-32572536, capacity BI-D2A51B36, operational cockpit BI-7A38F667,
-public privacy BI-56BB6038, finance handoff BI-D649585A, worker access BI-2777B86B,
-policy clocks BI-2ABA6C2E, evaluation integrity BI-1B7BB954 and audit BI-7199065E.
-Their delivery statuses and original evidence remain intact. The earlier public
-intake/routing amendments in BI-B19306CA and BI-46437AEF still apply.
-
-Three bounded documentation follow-ups cover the remaining design work:
-
-| Intake | Design work | Existing epic |
-|---|---|---|
-| BI-8F213EFB | Restaurant operating modes, confirmed facts and delivery-owner reconciliation | EP-BUSINESS-ACTIVITY-SIM |
-| BI-55D37FDE | Cross-archetype storefront intent composition and public-to-worker contract | EP-4FF5273F |
-| BI-0B8657BD | Objective-level review, policy citations and independent reconciliation | EP-4614F35E |
-
-All three are triaging documentation intake. Their proposed design homes are
-linked above; completing/reviewing those contracts and mapping implementation
-owners remain their deliverables. No new implementation plan or build activation
-is claimed. Existing shared fixtures retain their prior plan-coverage gate.
-Peer-owned verification, reliability, reviewer-policy and simulator amendments
-remain an explicit owner-reconciliation queue in BI-4CCE50E0.
 
 ### Assessment limits
 

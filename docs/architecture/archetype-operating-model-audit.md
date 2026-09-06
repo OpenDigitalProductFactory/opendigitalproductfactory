@@ -170,7 +170,7 @@ Five rules, each earned by a run that went wrong without it:
 
 ### Outcome evidence and exception probes
 
-Research amendment: BI-4CCE50E0, 2026-09-06; extends BI-7199065E. Rationale and
+Research amendment, 2026-09-06. Rationale and
 sources: [Astra applicability review](../superpowers/research/2026-09-06-astra-business-verification-review.md).
 This is an audit evidence requirement, not a new runtime receipt schema or a change
 to the coverage/operability formulas.

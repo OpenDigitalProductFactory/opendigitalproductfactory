@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 697,
+  "pageCount": 698,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9375,6 +9375,21 @@
         "9-cross-cutting-test-matrix",
         "10-post-audit-actions",
         "appendix-a-full-open-epic-list-2026-06-10-snapshot"
+      ]
+    },
+    "docs/testing/archetype-campaign-scope.md": {
+      "publicHref": "/testing/archetype-campaign-scope/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-campaigns-portable-test-scope-and-recovery-gap-analysis",
+        "portable-contract-and-local-ownership",
+        "existing-implementation-and-gaps",
+        "external-campaign-protocol",
+        "recovery-field-matrix-and-readiness",
+        "stable-acceptance-cases",
+        "analysis-disposition-and-implementation-handoff"
       ]
     },
     "docs/testing/archetype-exercise-harness.md": {
