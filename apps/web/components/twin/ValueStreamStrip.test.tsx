@@ -86,4 +86,23 @@ describe("ValueStreamStrip", () => {
     const { container } = render(<ValueStreamStrip stages={[]} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("keeps inherited backbone stages behind a disclosure so composing the model adds no words on arrival", () => {
+    render(
+      <ValueStreamStrip
+        stages={[
+          stage({ stageKey: "welfare-daily-care", label: "Deliver daily care", order: 210 }),
+          stage({ stageKey: "attract", label: "Attract", order: 1010, inherited: true }),
+          stage({ stageKey: "capture", label: "Capture", order: 1020, inherited: true }),
+        ]}
+      />,
+    );
+    const details = document.querySelector("details[data-dpf-disclosure]");
+    expect(details).not.toBeNull();
+    expect(details?.hasAttribute("open")).toBe(false);
+    expect(screen.getByText("2 inherited backbone stages")).toBeTruthy();
+    expect(screen.getByLabelText("Value stream").textContent).toContain("Deliver daily care");
+    expect(screen.getByLabelText("Value stream").textContent).not.toContain("Attract");
+    expect(screen.getByLabelText("Inherited backbone stages").textContent).toContain("Attract");
+  });
 });

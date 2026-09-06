@@ -40,6 +40,22 @@ describe("buildStageFlow", () => {
     expect(stage).toMatchObject({ observable: true, count: 3, longestWait: "2h" });
   });
 
+  it("marks the composed backbone stages as inherited and the leaf's own as not (BI-4B11F98E)", () => {
+    const petRescue = buildStageFlow(bindingFor("pet-rescue"), {});
+    expect(petRescue.filter((s) => s.inherited).map((s) => s.stageKey)).toEqual([
+      "attract",
+      "capture",
+      "settle",
+      "trust-compliance",
+      "operate-improve",
+    ]);
+    expect(petRescue.filter((s) => !s.inherited)).toHaveLength(16);
+
+    // No leaf profile: the backbone IS the stream, nothing is inherited.
+    const restaurant = buildStageFlow(bindingFor("restaurant"), {});
+    expect(restaurant.every((s) => !s.inherited)).toBe(true);
+  });
+
   it("does not report an archetype as fully unobservable when it is not", () => {
     const flow = buildStageFlow(bindingFor("restaurant"), {});
     expect(flow.filter((s) => s.observable).length).toBeGreaterThan(0);
