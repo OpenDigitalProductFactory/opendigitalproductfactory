@@ -397,6 +397,26 @@ export type InferenceDeadEndOutcome = {
   message: string;
 };
 
+function isAllEndpointNetworkOutage(message: string): boolean {
+  if (!/All endpoints failed/i.test(message)) return false;
+  const attemptsMarker = message.match(/Attempts:\s*/i);
+  if (attemptsMarker?.index === undefined) return false;
+  const serializedAttempts = message.slice(attemptsMarker.index + attemptsMarker[0].length).trim();
+  let attempts: unknown;
+  try {
+    attempts = JSON.parse(serializedAttempts);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(attempts) || attempts.length === 0) return false;
+  return attempts.every((attempt) => {
+    if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
+    const error = (attempt as Record<string, unknown>)["error"];
+    if (typeof error !== "string" || error.trim().length === 0) return false;
+    return /network error|fetch failed|\bECONN(?:REFUSED|RESET|ABORTED)\b|\bENOTFOUND\b|\bEAI_AGAIN\b|\bETIMEDOUT\b|\bUND_ERR_(?:CONNECT_TIMEOUT|SOCKET)\b|socket hang up|getaddrinfo|connect(?:ion)? (?:refused|reset|timed out)|connect timeout/i.test(error);
+  });
+}
+
 export function describeToolRouteFailureOutcome(
   errorMessage: string,
   toolCount: number,
@@ -418,6 +438,7 @@ export function describeToolRouteFailureOutcome(
   if (/No credential|auth(?:entication|orization)? (?:failed|error)|unauthorized/i.test(msg)) return { kind: "credentials", message };
   if (/No eligible endpoints|toolUse required|tool-capable/i.test(msg)) return { kind: "policy-or-capability", message };
   if (/rate.?limit|overload|\bbusy\b|status(?:Code)?[\"']?:\s*(?:429|529)/i.test(msg)) return { kind: "busy", message };
+  if (isAllEndpointNetworkOutage(msg)) return { kind: "busy", message };
   return { kind: "unknown", message };
 }
 
