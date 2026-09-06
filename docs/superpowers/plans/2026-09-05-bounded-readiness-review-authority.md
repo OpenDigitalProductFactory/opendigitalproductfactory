@@ -66,6 +66,12 @@ remain unchanged.
 
 ## Backlog coverage
 
+- Decision: atomic
+- Parent: `BI-921B7DC2`
+- Receipt: `cmtp4ccq00b7401lknbpxzo3y`
+- Rationale: The regression, authority correction, negative matrix, protected delivery, and live proof are unsafe or misleading when shipped separately.
+- Dependencies: none
+
 Decision: **atomic**. The regression, resolver change, preserved negative
 authority matrix, documentation, protected delivery, and live replay are one
 narrow policy correction. None is independently safe or useful without the
