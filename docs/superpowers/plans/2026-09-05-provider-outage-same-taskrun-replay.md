@@ -77,10 +77,11 @@ release, deployment, or live replay may be claimed from that source evidence.
 - Dependencies: `BI-41EB722B` (protected-merged before implementation integration)
 - Rationale: classifier and recovery selection are inseparable halves of the
   same already-persisted TaskRun wait contract; neither is useful alone.
-- Receipt: blocked-by: the source provider cannot resolve this new child branch
-  until its first normal push; the canonical research, baseline, and
-  `record_plan_backlog_coverage` calls will run against the pushed immutable
-  head before PR readiness is claimed.
+- Receipt: blocked-by: canonical research TaskRun is missing its required terminal writer;
+  `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-121390DA7F90` is resumable at
+  `missing-terminal-writer` attempt 1 after executing zero tools and creating
+  no envelope or receipt. Preserve that identity; do not infer a baseline or
+  plan coverage from the failed writer contract.
 
 ## Source-only TDD evidence
 
