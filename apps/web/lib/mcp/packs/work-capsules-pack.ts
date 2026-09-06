@@ -10,6 +10,7 @@
 
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
+import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
 import type { ToolPack } from "../tool-pack";
 
 const ENUMS = workCapsuleToolEnums();
@@ -160,6 +161,12 @@ const definitions: ToolDefinition[] = [
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
+        workShape: {
+          type: "string",
+          enum: [...DELIVERY_SHAPE_REFS],
+          description:
+            "The DELIVERY shape of this work as key@version: how big it is and what it owes before it is done. Declared here, or derived from the item's effortSize and work type when the classification rules agree; an implementation claim with no derivable shape is refused with work_shape_required and a pick list — put that list to the owner and re-claim, never guess. xlarge never enters implementation.",
+        },
         workIntent: { type: "string", enum: ["design", "review", "plan", "implementation"], description: "Lifecycle intent. Required for governed callers; omission is the legacy implementation-safe default." },
         force: { type: "boolean", description: "Deliberately co-claim despite another live Workroom." },
         overrideReason: { type: "string", description: "Required audit reason when force overrides live ownership." },
