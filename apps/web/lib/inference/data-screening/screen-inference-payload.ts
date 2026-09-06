@@ -80,6 +80,21 @@ export type ScreenInferencePayloadInput = {
   >;
 };
 
+/**
+ * The payload index at which the exchange under way starts: the last user-role
+ * message. Everything below it is history the owner may not remember writing.
+ *
+ * -1 when the payload carries no user message at all (a system-initiated
+ * screen), which reads as "no message is current" and keeps every match in
+ * history — the conservative side, since it never claims the owner caused it.
+ */
+function currentTurnStartIndex(messages: readonly { role: string }[]): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") return index;
+  }
+  return -1;
+}
+
 export function screenInferencePayload(
   input: ScreenInferencePayloadInput,
 ): InferenceDataScreenResult {
@@ -223,6 +238,12 @@ export function screenInferencePayload(
       // here because it is not itself a business-data confidentiality level.
       measuredSensitivity: routedPayloadSensitivity,
       declaredSensitivity: declaredPayloadSensitivity,
+      // Where the exchange under way begins, so a local-only verdict can be
+      // attributed to history rather than to the message the owner just sent
+      // (BI-706530B2). An index, never content. The provenance paths already
+      // carry indices; without this anchor there is nothing to compare them
+      // against, and "something earlier pinned this thread" is underivable.
+      currentTurnStartIndex: currentTurnStartIndex(input.messages),
       sensitivityFloorApplied: sensitivity !== routedPayloadSensitivity,
       rawPayloadStored: false,
     },
