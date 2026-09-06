@@ -1,4 +1,5 @@
 import { requirementEvidenceLane, requirementNextAction } from "./readiness-guidance";
+import { shapeRequirements, type ShapeRequirement } from "./shape-requirements";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
@@ -8,15 +9,9 @@ import type {
   ReadinessTarget,
 } from "./types";
 
-export const INITIATIVE_READINESS_POLICY_VERSION = "initiative-readiness.v2";
+export const INITIATIVE_READINESS_POLICY_VERSION = "initiative-readiness.v3";
 
-type Requirement = {
-  code: ReadinessCode;
-  state: ReadinessEvidenceState;
-  accountableRole: string;
-  failCode?: ReadinessCode;
-  allowNotApplicable?: boolean;
-};
+type Requirement = ShapeRequirement;
 
 function requirement(
   code: ReadinessCode,
@@ -119,11 +114,20 @@ function completionRequirements(facts: InitiativeReadinessFacts): Requirement[] 
   return requirements;
 }
 
-function requirementsFor(facts: InitiativeReadinessFacts, target: ReadinessTarget): Requirement[] {
+function profileRequirementsFor(facts: InitiativeReadinessFacts, target: ReadinessTarget): Requirement[] {
   if (target === "design") return designRequirements(facts);
   if (target === "plan") return planRequirements(facts);
   if (target === "implementation") return implementationRequirements(facts);
   return completionRequirements(facts);
+}
+
+/**
+ * v3: a shaped item is gated by (shape, sensitivity, target); an unshaped one
+ * by the v2 profile tables exactly as before (kernel ruling 5).
+ */
+function requirementsFor(facts: InitiativeReadinessFacts, target: ReadinessTarget): Requirement[] {
+  if (facts.shape) return shapeRequirements(facts, target, profileRequirementsFor);
+  return profileRequirementsFor(facts, target);
 }
 
 /**
@@ -152,6 +156,7 @@ function result(
     nextAction: requirementNextAction({
       code,
       profile: facts.profile,
+      shape: facts.shape ?? null,
       state,
       unreadEvidenceRefs,
       reasons: facts.requirementReasons?.[code],

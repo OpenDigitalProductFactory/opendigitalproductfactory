@@ -12,6 +12,8 @@ import { isReachableFromTrunk, trunkRefExists } from "@/lib/work-capsules/git-sc
 
 import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
+import { type BoundWorkShapeDb, readBoundWorkShapeRef } from "./bound-work-shape";
+import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
 import {
   reconcileInitiativeObjectives,
   type ObjectiveReconciliationActivity,
@@ -31,6 +33,8 @@ type BacklogTerminalItem = {
   workType: string | null;
   type: string | null;
   source: string | null;
+  title?: string | null;
+  body?: string | null;
   scopeKind: string | null;
   archetypeCategories: string[];
   archetypeIds: string[];
@@ -215,7 +219,7 @@ export async function completeBacklogItemTransition(args: {
       if (!found) throw new Error(`Backlog item ${args.itemId} not found.`);
       await tx.$queryRawUnsafe('SELECT "id" FROM "BacklogItem" WHERE "id" = $1 FOR UPDATE', found.id);
       lockedItem = await tx.backlogItem.findUnique({ where: { id: found.id }, select: {
-        id: true, itemId: true, status: true, workType: true, type: true, source: true,
+        id: true, itemId: true, status: true, workType: true, type: true, source: true, title: true, body: true,
         scopeKind: true, archetypeCategories: true, archetypeIds: true, organizationId: true,
         epicId: true, claimedAt: true, createdAt: true, digitalProductId: true,
           activeBuild: { select: { kind: true, verificationOut: true, uxVerificationStatus: true } },
@@ -270,8 +274,14 @@ export async function completeBacklogItemTransition(args: {
         tx as unknown as InheritanceDb,
         { childItemId: lockedItem.itemId, childRowId: lockedItem.id },
       );
+      const boundWorkShape = await readBoundWorkShapeRef(tx as unknown as BoundWorkShapeDb, lockedItem.itemId);
       const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
-        item: { ...lockedItem, activeBuildKind: lockedItem.activeBuild?.kind ?? null },
+        item: {
+          ...lockedItem,
+          activeBuildKind: lockedItem.activeBuild?.kind ?? null,
+          workShape: boundWorkShape,
+          deliverySensitivity: deriveDeliverableSensitivity({ text: `${lockedItem.title ?? ""}\n${lockedItem.body ?? ""}`, workType: lockedItem.workType }),
+        },
         activities: activities as InitiativeReadinessActivity[],
         inheritedScope,
         target: "completion",
