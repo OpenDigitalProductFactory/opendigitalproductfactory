@@ -16,7 +16,10 @@ import {
   type SweepLimits,
   type SweepSummary,
 } from "./concierge-sweep";
-import { panelCandidateWhere } from "./open-decisions";
+import {
+  UNRESOLVED_OUTCOMES,
+  excludedFromOwnerRulingQueue,
+} from "@/lib/decision-perspective/owner-ruling-queue";
 import { conductTriage, type TriageSubject } from "./triage-conductor";
 import { runGovernanceTriagePanel } from "./triage-panel-binding";
 import type { ProposalClient } from "./resolution-proposal-store";
@@ -26,6 +29,34 @@ export const GOVERNANCE_ROOM_KEY = "decision-concierge-standing-room";
 
 /** How many candidates the sweep will even look at in one pass. */
 const CANDIDATE_SCAN_LIMIT = 50;
+
+/**
+ * The subset of the open queue the sweep will spend a panel on.
+ *
+ * "Still waiting on a human" has exactly one definition, and it is
+ * `owner-ruling-queue.ts` (BI-EB5E9BE3) — this composes on its exports rather
+ * than restating them, because three copies of that predicate drifted once
+ * already and the failure is silent: the queue says four, the sweep works six,
+ * the inbox shows two, and nothing reconciles them.
+ *
+ * The two clauses added here are the sweep's own scoping, not a second
+ * definition of open: panels cost inference, so only material risk earns one,
+ * and a decision already carrying a live draft is not re-drafted.
+ *
+ * Unlike the owner inbox this is not narrowed to an organization profile — the
+ * sweep drafts for every profile on the install, and the ruling surface applies
+ * the ownership boundary when it shows the result.
+ */
+function panelCandidateWhere(): Prisma.DecisionInteractionWhereInput {
+  return {
+    outcomeType: { in: [...UNRESOLVED_OUTCOMES] },
+    humanOutcome: { equals: Prisma.DbNull },
+    question: { not: "" },
+    NOT: excludedFromOwnerRulingQueue(),
+    riskTier: { in: ["medium", "high", "critical"] },
+    resolutionProposals: { none: { status: "proposed", lifecycle: "active" } },
+  };
+}
 
 async function loadCandidates(): Promise<TriageSubject[]> {
   const rows = await prisma.decisionInteraction.findMany({
@@ -56,7 +87,7 @@ async function loadCandidates(): Promise<TriageSubject[]> {
     outcomeType: row.outcomeType,
     // The predicate already excludes answered rows; re-asserting it here would
     // be a second definition of "resolved" and is exactly the drift
-    // open-decisions.ts exists to prevent.
+    // owner-ruling-queue.ts exists to prevent.
     resolved: false,
   }));
 }

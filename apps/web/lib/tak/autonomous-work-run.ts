@@ -72,6 +72,13 @@ export type AutonomousWorkRunInput = {
   proactivity?: ProactivityPlan;
   delegatedPosture?: ResolvedDelegatedPosture;
   /**
+   * Server-owned authorization recheck executed inside the same transaction as
+   * TaskRun creation. Never expose this callback through an MCP or browser
+   * payload; it exists for authority lanes that must serialize alternate keys.
+   */
+  admissionGuard?: (tx: Prisma.TransactionClient) => Promise<void>;
+  transactionIsolationLevel?: Prisma.TransactionIsolationLevel;
+  /**
    * Closed deferred callers may commit their first user message in the same
    * transaction as the submitted TaskRun. This prevents an outbox-recoverable
    * row from existing without the immutable input needed by its worker.
@@ -127,6 +134,7 @@ export async function createAutonomousWorkRun(
   return prisma.$transaction(async (tx) => {
     const source = taskRunSourceForTrigger(input.trigger);
     await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
+    await input.admissionGuard?.(tx);
     const taskRun = await tx.taskRun.create({
       data: {
         taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
@@ -166,7 +174,7 @@ export async function createAutonomousWorkRun(
       });
     }
     return taskRun;
-  }, { isolationLevel: "Serializable" });
+  }, { isolationLevel: input.transactionIsolationLevel ?? "Serializable" });
 }
 
 export async function findCurrentAutonomousWorkRun(input: {

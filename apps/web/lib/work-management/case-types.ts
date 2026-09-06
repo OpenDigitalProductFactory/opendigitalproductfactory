@@ -78,6 +78,7 @@ export type WorkCaseSourceRefKind =
   | "source"
   | "work-item"
   | "work-capsule"
+  | "coworker-engagement"
   | "task-run"
   | "task-artifact"
   | "decision-interaction"

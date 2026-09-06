@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const remote = vi.hoisted(() => ({ submit: vi.fn() }));
@@ -8,6 +10,7 @@ vi.mock("@/lib/mcp-task-submit", async (importOriginal) => ({
 
 import { dispatchExternalCoworkerTask } from "./external-coworker-task-adapter";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { canonicalJson } from "@/lib/shared/canonical-json";
 
 const verifiedContext = {
   apiTokenId: "PAT-1",
@@ -31,6 +34,29 @@ const initiativeReviewBinding = {
     providerBlobId: "a".repeat(40),
   },
 };
+
+function callerComputableV2RequestKey(
+  packet: Parameters<typeof createObjectiveMappingRequestKey>[0],
+): string {
+  const normalized = {
+    schemaVersion: 2,
+    targetAgent: packet.targetAgent.trim(),
+    objective: packet.objective.trim(),
+    questionPacketSummary: packet.questionPacketSummary.trim(),
+    requiredToolNames: [...new Set(packet.requiredToolNames.map((name) => name.trim()))].sort(),
+    binding: {
+      writerToolName: packet.binding.writerToolName,
+      itemId: packet.binding.itemId,
+      gate: packet.binding.gate,
+      expectedCurrentBaselineId: packet.binding.expectedCurrentBaselineId ?? null,
+      eligibleEvidenceActivityIds: [...packet.binding.eligibleEvidenceActivityIds].sort(),
+      workroomRef: packet.binding.workroomRef,
+      artifactRef: packet.binding.artifactRef,
+    },
+  };
+  const digest = createHash("sha256").update(canonicalJson(normalized)).digest("hex");
+  return `initiative-readiness:${packet.binding.itemId}:objective-mapping:${packet.binding.workroomRef.headSha}:packet-v2:${digest}`;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -190,6 +216,30 @@ describe("dispatchExternalCoworkerTask", () => {
       context: verifiedContext,
     });
     expect(rejected).toMatchObject({
+      success: false,
+      error: "invalid_objective_mapping_request_key",
+    });
+    expect(remote.submit).not.toHaveBeenCalled();
+
+    const forgedPacket = {
+      targetAgent: "AGT-WS-REVIEW",
+      objective,
+      questionPacketSummary: title,
+      requiredToolNames,
+      binding: mappingBinding,
+    };
+    const rejectedSelfHash = await dispatchExternalCoworkerTask({
+      collaborationKind: "handoff",
+      targetAgent: forgedPacket.targetAgent,
+      objective: forgedPacket.objective,
+      title: forgedPacket.questionPacketSummary,
+      requestKey: callerComputableV2RequestKey(forgedPacket),
+      requiredToolNames: forgedPacket.requiredToolNames,
+      initiativeReviewBinding: forgedPacket.binding,
+      userId: "user-1",
+      context: verifiedContext,
+    });
+    expect(rejectedSelfHash).toMatchObject({
       success: false,
       error: "invalid_objective_mapping_request_key",
     });

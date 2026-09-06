@@ -1,5 +1,5 @@
 {
-  "note": "Accepted vulnerability advisories for scripts/sbom/scan-dependencies.mjs (the local Dependabot-equivalent). Each entry needs a real `reason`; `expires` (YYYY-MM-DD) forces re-review — past expiry the finding re-surfaces and the gate can fail again. This is the local mirror of Dependabot/CodeQL dismiss-with-justification. See docs/architecture/dependency-reduction-routine.md.",
+  "note": "Accepted vulnerability advisories for scripts/sbom/scan-dependencies.mjs (the local Dependabot-equivalent). Each entry needs a real `reason`; `expires` (YYYY-MM-DD) forces re-review \u2014 past expiry the finding re-surfaces and the gate can fail again. This is the local mirror of Dependabot/CodeQL dismiss-with-justification. See docs/architecture/dependency-reduction-routine.md.",
   "accepted": [
     {
       "id": "GHSA-h67p-54hq-rp68",
@@ -8,28 +8,8 @@
       ],
       "package": "js-yaml@3.14.2",
       "severity": "moderate",
-      "reason": "Trusted-input-only. js-yaml 3.14.2 is a transitive dep of gray-matter, used for build-time frontmatter parsing of our own repo-controlled .md files — never attacker-supplied YAML, so the quadratic-complexity DoS is not reachable. The fix is in js-yaml 4.x, a breaking major gray-matter does not support (consistent with the prior tolerable_risk dismissal, Dependabot #74). Re-evaluate if gray-matter adopts js-yaml 4 or a 3.x patch ships.",
+      "reason": "Trusted-input-only. js-yaml 3.14.2 is a transitive dep of gray-matter, used for build-time frontmatter parsing of our own repo-controlled .md files \u2014 never attacker-supplied YAML, so the quadratic-complexity DoS is not reachable. The fix is in js-yaml 4.x, a breaking major gray-matter does not support (consistent with the prior tolerable_risk dismissal, Dependabot #74). Re-evaluate if gray-matter adopts js-yaml 4 or a 3.x patch ships.",
       "expires": "2026-12-31"
-    },
-    {
-      "id": "GHSA-5p2g-fcmc-qvqq",
-      "aliases": [
-        "CVE-2025-71329"
-      ],
-      "package": "image-size@1.2.1",
-      "severity": "high",
-      "reason": "Vulnerable code path NOT PRESENT at our resolved version. GHSA-5p2g-fcmc-qvqq is the JXL/HEIF zero-size-box infinite loop, which lives in utils.js findBox(). Upstream already fixed findBox in 1.2.1 (\"fix potential Denial of Service via specially crafted payloads\", #436, 2025-04-02) — it advances the offset by at least 8 when box.size is 0. VERIFIED EMPIRICALLY 2026-08-15: findBox() over a zero-size box terminates cleanly; only the advisory RANGE (<= 2.0.2) sweeps 1.2.1 in, not the defect. Separately, image-size is transitive via metro@0.84.4 under apps/mobile only (never the apps/web production runtime) and parses our own repo-committed build assets, not attacker-supplied input. Re-evaluate if metro moves to a 2.x line where this parser changed.",
-      "expires": "2027-02-15"
-    },
-    {
-      "id": "GHSA-w3rx-r6r6-pgpr",
-      "aliases": [
-        "CVE-2025-71330"
-      ],
-      "package": "image-size@1.2.1",
-      "severity": "high",
-      "reason": "PATCHED LOCALLY — we own this fix. GHSA-w3rx-r6r6-pgpr is the ICNS zero-length-entry infinite loop, and unlike its JXL/HEIF sibling it IS live in 1.2.1 (reproduced 2026-08-15: the event loop hangs). image-size is ARCHIVED upstream on both GitHub (2026-06-03) and Codeberg with no patched release, and metro closed its own Dependabot issue as \"not planned\" (react/metro#1607, #1762 still open), so there is no upstream fix to wait for. We therefore patch it ourselves: patches/image-size@1.2.1.patch guards the entry-walk loop, mirroring the guard upstream already applied to findBox(). Regression test scripts/sbom/image-size-icns-loop.test.mjs runs in CI and fails if the patch stops applying. This entry stays ACCEPTED only because OSV matches on the version string (1.2.1), which a pnpm patch does not change — the defect itself is fixed. NOTE: we deliberately did NOT adopt the image-size-next fork (published 2026-08-10, 0 downloads, no provenance attestation, promoted by its own author via templated issues on react-native/next.js/metro; metro rejected those PRs).",
-      "expires": "2027-02-15"
     }
   ]
 }

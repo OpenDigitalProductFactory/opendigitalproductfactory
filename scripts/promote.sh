@@ -458,6 +458,24 @@ if [[ -n "${PROMOTE_COMPOSE_ENV_FILE:-}" ]]; then
   _env_args+=(--env-file "$PROMOTE_COMPOSE_ENV_FILE")
 fi
 
+# BI-55A30F8B: compose publishes every host port through DPF_HOST_BIND_ADDRESS
+# (default 127.0.0.1, BI-FEE77B68). The portal is recreated in step 4, but the
+# installer only writes the key into the install .env in step 7, so the first
+# promotion after that change served a LAN install on loopback only and the
+# host went dark for every peer (production, 2026-09-05). Mirror the installer
+# rule here, before any compose command runs: an env file that predates the key
+# keeps the all-interfaces exposure it already has. Process environment wins
+# over --env-file in compose interpolation, and an operator who already set the
+# variable, or an env file that carries it, is left alone.
+if [[ -z "${DPF_HOST_BIND_ADDRESS:-}" && -n "${PROMOTE_COMPOSE_ENV_FILE:-}" ]] \
+  && grep -q '[^[:space:]]' "$PROMOTE_COMPOSE_ENV_FILE" \
+  && ! grep -q '^DPF_HOST_BIND_ADDRESS=' "$PROMOTE_COMPOSE_ENV_FILE"; then
+  export DPF_HOST_BIND_ADDRESS=0.0.0.0
+  _host_bind_preserved=1
+else
+  _host_bind_preserved=0
+fi
+
 # Emit a tagged step line; always prints in both dry-run and real modes.
 # Only the step name and target SHA are printed — never source/backup/health
 # paths — so logs are safe to surface to operators.
@@ -468,6 +486,9 @@ emit_step() {
     printf 'step=%s target=%s\n' "$1" "$PROMOTE_TARGET_SHA"
   fi
 }
+if [[ $_host_bind_preserved -eq 1 ]]; then
+  emit_step host-bind-address-preserved
+fi
 
 # BET-5 (BI-A1E864A5): does this Postgres container's IMAGE provide the pgvector
 # extension? Image-agnostic — query pg_available_extensions (which reflects the

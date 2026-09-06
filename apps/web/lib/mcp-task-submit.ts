@@ -1,6 +1,5 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
-import type { Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import type { UserContext } from "@/lib/permissions";
 import {
@@ -56,12 +55,12 @@ import {
   type TerminalWriterWait,
 } from "./mcp-task-replay-projection";
 import { durableInferenceTaskMetadata, parseDurableInferenceTaskRecipeId, type DurableInferenceTaskRecipeId } from "./mcp-task-durable-inference-contract";
+import { prepareRemoteObjectiveMappingAdmission, remoteObjectiveMappingAdmissionErrorResult, revalidateRemoteObjectiveMappingReplay } from "./mcp-task-objective-mapping-admission";
 export {
   parseInitiativeReviewBinding,
   validateInitiativeReviewAuthorityScope,
 } from "./mcp-task-review-contract";
 export type { InitiativeReviewBinding } from "./mcp-task-review-contract";
-
 async function persistedTerminalReaderExecutions(
   taskRunId: string,
 ): Promise<PersistedTerminalReaderExecution[]> {
@@ -81,10 +80,8 @@ async function persistedTerminalReaderExecutions(
     },
   }) as Promise<PersistedTerminalReaderExecution[]>;
 }
-
 export const REMOTE_RISK_CLASSES = ["read", "bounded-write", "high-risk"] as const;
 export type RemoteRiskClass = (typeof REMOTE_RISK_CLASSES)[number];
-
 export type RemoteTaskSubmitParams = {
   agentId: string;
   routeContext: string;
@@ -99,7 +96,6 @@ export type RemoteTaskSubmitParams = {
   initiativeReviewBinding?: InitiativeReviewBinding;
   recipeId?: DurableInferenceTaskRecipeId;
 };
-
 export type RemoteTaskSubmitAuth = {
   tokenId: string;
   userId: string;
@@ -110,7 +106,6 @@ export type RemoteTaskSubmitAuth = {
 export type RemoteTaskSubmitOutcome =
   | { kind: "invalid_params"; message: string }
   | { kind: "result"; result: Record<string, unknown> };
-
 const DURABLE_INFERENCE_SUBMIT_KEYS = new Set([
   "agentId",
   "routeContext",
@@ -285,7 +280,7 @@ async function reserveTerminalWriterReplay(input: {
     } else if (
       writerAttempt.success !== false
       || !existingWait
-      || !["stalled", "failed"].includes(input.existing.status)
+      || !["input-required", "stalled", "failed"].includes(input.existing.status)
     ) return null;
   }
 
@@ -427,7 +422,6 @@ export async function submitRemoteCoworkerTask(input: {
       },
     };
   }
-
   const requestDigest = remoteTaskRequestDigest(parsed);
   const exactRequiredToolNames = requiredToolNames(parsed.authorityScope);
   const terminalToolPolicy = parsed.initiativeReviewBinding
@@ -464,9 +458,20 @@ export async function submitRemoteCoworkerTask(input: {
       updatedAt: true,
     },
   };
+  const objectiveMappingAdmission = await prepareRemoteObjectiveMappingAdmission({
+    taskRunId,
+    parsed,
+    requiredToolNames: exactRequiredToolNames,
+  });
+  if (!objectiveMappingAdmission.ok) {
+    return { kind: "result", result: objectiveMappingAdmission.result };
+  }
   const existing = await prisma.taskRun.findFirst(existingQuery);
-
   if (existing) {
+    const replayRefusal = await revalidateRemoteObjectiveMappingReplay(
+      objectiveMappingAdmission.data.admission,
+    );
+    if (replayRefusal) return { kind: "result", result: replayRefusal };
     const matchedRequestDigest = matchingRemoteTaskRequestDigest(existing.a2aMetadata, parsed);
     const requestMatches = matchedRequestDigest !== null;
     const replay = replayOrConflict(existing, parsed);
@@ -668,7 +673,6 @@ export async function submitRemoteCoworkerTask(input: {
     }
     return replay;
   }
-
   const contextKey = parsed.threadId ?? `mcp:${token.tokenId}:${parsed.idempotencyKey}`;
   const thread = await prisma.agentThread.upsert({
     where: { userId_contextKey: { userId: token.userId, contextKey } },
@@ -719,8 +723,11 @@ export async function submitRemoteCoworkerTask(input: {
           progressPayload: { dispatch: durableInitialDispatch },
         },
       } : {}),
+      ...(objectiveMappingAdmission.data.admission ?? {}),
     });
   } catch (error) {
+    const admissionRefusal = remoteObjectiveMappingAdmissionErrorResult(error);
+    if (admissionRefusal) return { kind: "result", result: admissionRefusal };
     if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
       const concurrent = await prisma.taskRun.findFirst(existingQuery);
       if (concurrent) return replayOrConflict(concurrent, parsed);

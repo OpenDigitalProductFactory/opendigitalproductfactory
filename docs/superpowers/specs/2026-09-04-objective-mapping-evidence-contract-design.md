@@ -74,6 +74,19 @@ Caller-invented suffixes, identity drift, or a prior current packet with active
 approval or authoritative writer/receipt state fail closed while all historical
 TaskRuns and envelopes remain auditable.
 
+**OBJ-OMEC-INVALID-HISTORY:** A historical packet whose artifact locator is
+provably impossible must not reserve the current objective-mapping identity
+forever. The server may ignore that row only after the repository provider
+returns an exact blob-identity mismatch, the historical artifact matches an
+ancestor in the validated baseline chain, and the TaskRun has no live approval,
+successful writer, or receipt. A valid stale locator, an unavailable provider,
+or any other identity drift remains fail closed.
+
+**OBJ-OMEC-REACHABILITY:** A bound initiative-review route is emitted only when
+one production reviewer holds both the writer grant and the `file_read` grant
+required by `read_source_at_version`. Grants split across agents, or a writer
+grant paired only with `spec_plan_read`, do not create an executable route.
+
 ## Architecture and data flow
 
 The terminal recovery adapter already loads the current validated baseline and
@@ -147,6 +160,35 @@ evidence set may advance only after the prior request is terminal and has no
 successful authoritative writer or receipt. Any other invariant drift or
 unbounded/ambiguous history produces a typed no-route result.
 
+### Provider-proven impossible historical locators
+
+A historical TaskRun can carry an internally coherent but provider-impossible
+artifact pair: the commit and path resolve, but the recorded blob id is not the
+blob at that path and commit. This is distinct from an ordinary stale artifact.
+Terminal recovery validates the current baseline chain first, then considers a
+historical mismatch recoverable only when all of the following hold:
+
+1. the historical item, gate, writer, repository, path, and legacy Workroom
+   identity still match the server-owned lane;
+2. its baseline and artifact locator correspond to one retained ancestor in the
+   validated baseline chain;
+3. `readRepositoryProviderBlob` returns exactly `IMMUTABLE_BLOB_MISMATCH` for
+   that historical repository/commit/path/blob pair; and
+4. no proposed or approved envelope, successful writer, or receipt exists.
+
+The provider result is server-derived evidence, never a caller flag. HTTP 404,
+transport failure, provider unavailability, invalid locators, and successful
+resolution all refuse supersession. Multiple history rows are evaluated
+independently; qualifying one malformed row never masks a second conflict.
+
+### Reviewer tool reachability
+
+Every bound initiative-review packet exposes an immutable reader and one
+governed writer. Reviewer selection therefore queries both required grants and
+groups them by agent. The same active production agent must hold the writer's
+grant and `file_read`; otherwise the route is not emitted. Non-bound plan
+coverage remains writer-only because it does not inspect repository bytes.
+
 ## Acceptance
 
 | Acceptance ID | Objective IDs | Required outcome |
@@ -161,6 +203,10 @@ unbounded/ambiguous history produces a typed no-route result.
 | AC-OMEC-008 | OBJ-OMEC-KEY | Reissuing a byte-identical packet, including the same evidence ids in a different input order, produces the same key and therefore the same TaskRun identity. |
 | AC-OMEC-009 | OBJ-OMEC-SUPERSESSION, OBJ-OMEC-FAIL-CLOSED | The external adapter rejects a caller-invented suffix, and recovery rejects changed Workroom, baseline, or artifact identity rather than minting another key. |
 | AC-OMEC-010 | OBJ-OMEC-SUPERSESSION, OBJ-OMEC-FAIL-CLOSED | A prior active proposed/approved envelope, or a successful writer/receipt on a current packet, blocks evidence-set supersession; declined/failed obsolete packet history remains auditable and may recover. |
+| AC-OMEC-011 | OBJ-OMEC-INVALID-HISTORY | The exact Pet Rescue fixture with a retained ancestor baseline, an impossible historical commit/path/blob pair, failed readers only, and no envelope/writer/receipt yields one deterministic current-baseline packet after an exact provider blob mismatch. |
+| AC-OMEC-012 | OBJ-OMEC-INVALID-HISTORY, OBJ-OMEC-FAIL-CLOSED | A provider timeout, HTTP/unreadable response, successfully resolved stale artifact, absent ancestor baseline, conflicting path/repository, active envelope, successful writer, receipt, or second conflicting history row yields no route. |
+| AC-OMEC-013 | OBJ-OMEC-REACHABILITY, OBJ-OMEC-FAIL-CLOSED | A bound review route selects only one reviewer holding both its writer grant and `file_read`; split grants and `spec_plan_read` without `file_read` are refused. |
+| AC-OMEC-014 | OBJ-OMEC-REACHABILITY | Non-bound `record_plan_backlog_coverage` routing remains writer-only and unchanged. |
 
 ## Ordered fix sequence
 
@@ -184,6 +230,12 @@ unbounded/ambiguous history produces a typed no-route result.
 8. Publish through one protected PR and canonical release, verify the served
    SHA, then use the server-issued correction packets to append real BI-SIG and
    BI-2B mappings and prove objective reconciliation without database mutation.
+9. Add the exact Pet Rescue malformed historical-locator fixture. Validate each
+   historical locator against its retained baseline and the repository provider;
+   classify only an exact blob mismatch as non-authoritative audit history.
+10. Require one reviewer to hold both the bound writer grant and `file_read`,
+    while preserving writer-only plan-coverage routing, then prove Pet Rescue
+    receives one current mapping packet without erasing its historical TaskRun.
 
 ## Failure, compatibility, and rollback
 
@@ -197,6 +249,8 @@ unbounded/ambiguous history produces a typed no-route result.
   immutable. Versioned keys apply only to newly issued objective-mapping
   packets; they do not rename or mutate a prior identity.
 - No migration, new table, new tool, role, or approval bypass is introduced.
+- Historical provider verification is bounded by the existing 50-row history
+  ceiling and deduplicated by exact artifact locator before network reads.
 - Rollback is the source commit. Malformed audit rows remain immutable and
   continue to block PASS until a governed correction exists.
 
@@ -208,3 +262,8 @@ fixtures green. Adjacent tests must cover route generation, task binding,
 writer persistence, baseline validation, and completion projection. Protected
 CI and live correction are authoritative; unavailable local infrastructure is
 reported honestly rather than treated as success.
+
+The extension must additionally reproduce the Pet Rescue invalid-locator row,
+prove that only an exact provider blob mismatch is recoverable, and exercise the
+same-agent reader/writer grant requirement. No test may authorize recovery from
+a caller-supplied classification or from a provider outage.

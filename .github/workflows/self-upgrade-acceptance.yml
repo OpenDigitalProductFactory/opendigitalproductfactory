@@ -127,6 +127,13 @@ jobs:
         run: |
           node --test scripts/promote-install-state-rollback.test.mjs \
             | tee "$DPF_N1_EVIDENCE/signed-promotion-rollback.tap"
+      - name: Promotion keeps a pre-existing install's LAN exposure through the portal swap
+        # BI-55A30F8B: the portal is recreated before the installer writes
+        # DPF_HOST_BIND_ADDRESS; the promoter must carry the pre-existing
+        # exposure itself or a LAN install goes dark mid-upgrade.
+        run: |
+          node --test scripts/promote-host-bind-address.test.mjs \
+            | tee "$DPF_N1_EVIDENCE/promotion-host-bind-address.tap"
       - name: Resolve N-1 baseline
         id: baseline
         # BI-9E5E6063: prefer a live merge-base over a potentially stale

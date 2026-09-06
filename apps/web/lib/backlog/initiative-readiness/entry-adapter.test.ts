@@ -228,6 +228,27 @@ describe("projectBacklogItemReadiness", () => {
       .toEqual(["E-TEST", "E-ACCEPT"]);
   });
 
+  it("EP-4614F35E: recognizeMergeThroughGates coerces the design/plan lanes to pass with NO receipts", () => {
+    const completionArgs = {
+      item,
+      activities: [], // no receipts at all
+      target: "completion" as const,
+      transitionObject: { kind: "backlog-item" as const, id: "BI-ENTRY", expectedVersion: "in-progress", targetState: "done" },
+      authorization: "pass" as const,
+      capsuleIdentity: "pass" as const,
+      completion: { deliveryEvidence: "pass" as const, acceptanceEvidence: "pass" as const, objectiveReconciliation: "pass" as const },
+      evaluatedAt: "2026-08-22T08:00:00.000Z",
+    };
+    // Without recognition, a receipt-less feature item cannot complete.
+    expect(projectBacklogItemReadiness(completionArgs).decision.verdict).toBe("input-required");
+    // With recognition, the design/plan lanes are satisfied and it completes.
+    const recognized = projectBacklogItemReadiness({ ...completionArgs, recognizeMergeThroughGates: true });
+    expect(recognized.decision.verdict).toBe("allowed");
+    for (const code of ["RESEARCH_REQUIRED", "CANONICAL_DESIGN_REQUIRED", "SPEC_APPROVAL_REQUIRED", "OBJECTIVE_BASELINE_REQUIRED", "PLAN_REQUIRED", "PLAN_REVIEW_REQUIRED"]) {
+      expect(recognized.decision.unmet.find((e) => e.code === code)).toBeUndefined();
+    }
+  });
+
   it("allows governed design work before a canonical design exists", () => {
     const projection = projectBacklogItemReadiness({
       item,
@@ -354,5 +375,70 @@ describe("projectBacklogItemReadiness", () => {
 
     expect(projection.decision.verdict).toBe("denied");
     expect(projection.decision.blockers.map((entry) => entry.code)).toContain("READINESS_PROJECTION_FAILED");
+  });
+});
+
+describe("parent scope inheritance", () => {
+  const child = { ...item, id: "row-child", itemId: "BI-CHILD", workType: "feature" };
+  const inheritedScope = () => ({
+    parentItemId: "BI-ENTRY",
+    coverageActivityId: "coverage-1",
+    activities: readyActivities().map((entry) => entry.kind === "plan_backlog_coverage"
+      ? { ...entry, payload: { ...(entry.payload as Record<string, unknown>), decision: "decomposed",
+          deliverables: [{ key: "slice-1", title: "Slice 1", independentlyShippable: true, backlogItemId: "BI-CHILD" }] } }
+      : entry),
+  });
+
+  it("lets a mapped child implement on the parent baseline and receipts without raising its profile", () => {
+    const projection = projectBacklogItemReadiness({
+      item: child,
+      activities: [],
+      inheritedScope: inheritedScope(),
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.decision.verdict).toBe("allowed");
+    expect(projection.decision.profile).toBe("feature");
+    expect(projection.inheritedFrom).toBe("BI-ENTRY");
+    expect(projection.baselineId).toBe("baseline-1");
+  });
+
+  it("keeps the child on its own evidence when it minted a baseline itself", () => {
+    const ownBaseline = {
+      id: "own-baseline", kind: "initiative_scope_baseline", gateKey: null, recordedAt: new Date(),
+      payload: { ...baseline, baselineId: "baseline-child", subject: { kind: "backlog-item", id: "BI-CHILD" }, artifactDigest: "sha256:child" },
+    };
+    const projection = projectBacklogItemReadiness({
+      item: child,
+      activities: [ownBaseline],
+      inheritedScope: inheritedScope(),
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.inheritedFrom).toBeNull();
+    expect(projection.baselineId).toBe("baseline-child");
+    expect(projection.decision.verdict).not.toBe("allowed");
+  });
+
+  it("does not inherit when the parent itself has no current baseline", () => {
+    const scope = inheritedScope();
+    const projection = projectBacklogItemReadiness({
+      item: child,
+      activities: [],
+      inheritedScope: { ...scope, activities: scope.activities.filter((entry) => entry.kind !== "initiative_scope_baseline") },
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.inheritedFrom).toBeNull();
+    expect(projection.decision.unmet.map((entry) => entry.code)).toContain("OBJECTIVE_BASELINE_REQUIRED");
   });
 });

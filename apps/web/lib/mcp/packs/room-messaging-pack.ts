@@ -277,6 +277,66 @@ async function inviteRoomParticipantHandler(
   };
 }
 
+async function appointRoomCoordinatorHandler(
+  params: Record<string, unknown>,
+  _userId: string,
+): Promise<ToolResult> {
+  const capsuleId = str(params, "capsuleId");
+  const principalRef = str(params, "principalRef");
+  if (!capsuleId || !principalRef) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: "capsuleId and principalRef are required.",
+    };
+  }
+  const { prisma } = await import("@dpf/db");
+  const { planCoordinatorAppointment, COORDINATOR_ROLES } = await import(
+    "@/lib/work-management/appoint-room-coordinator"
+  );
+  const { persistWorkroomParticipantAssignment } = await import(
+    "@/lib/work-management/room-participant-assignment.server"
+  );
+
+  const plan = await planCoordinatorAppointment({
+    db: prisma as never,
+    capsuleId,
+    principalRef,
+    replaceExisting: params["replaceExisting"] === true,
+  });
+  if (!plan.ok) {
+    const [code] = plan.error.split(":");
+    return { success: false, error: code ?? "appointment_refused", message: plan.error };
+  }
+  const appointed = plan.data;
+
+  const written = await persistWorkroomParticipantAssignment({
+    workroomId: appointed.workroomId,
+    principalRef: appointed.principalRef,
+    roles: COORDINATOR_ROLES,
+    assignmentSource: "explicit",
+    enteredReason: str(params, "reason") || "Appointed as the room's Process Overseer.",
+    currentWorkSummary: null,
+  });
+  if (!written) {
+    return {
+      success: false,
+      error: "assignment_failed",
+      message: "The participant row could not be written.",
+    };
+  }
+  return {
+    success: true,
+    message: `${appointed.displayName} is now the Process Overseer for ${appointed.capsuleId}.`,
+    data: {
+      capsuleId: appointed.capsuleId,
+      principalRef: appointed.principalRef,
+      displayName: appointed.displayName,
+      roles: COORDINATOR_ROLES,
+    },
+  };
+}
+
 async function getCoworkerRoomEngagementHandler(
   params: Record<string, unknown>,
   _userId: string,
@@ -325,6 +385,25 @@ const definitions: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "appoint_room_coordinator",
+    description:
+      "Appoint the Process Overseer — the owner — of a Workroom, by capsuleId (WC-*) and principalRef (PRN-*). A room may have exactly one; conformance refuses to execute a room without one, and refuses one with several. Appointing a second is refused unless replaceExisting is set, because silently adding one leaves the room MORE stuck than before. Unlike invite_room_participant this does not require an acting coworker, so an external agent or an operator can give a stalled room an owner.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        principalRef: { type: "string", description: "Principal id of the appointee (PRN-*). Must be an ACTIVE principal — a coworker or a person." },
+        replaceExisting: { type: "boolean", description: "Hand over from the current Process Overseer. Default false, which refuses rather than creating a second." },
+        reason: { type: "string", description: "Why this principal owns this room. Recorded on the participant row." },
+      },
+      required: ["capsuleId", "principalRef"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    // changes who answers for a room → consult-gated (TAK §8.4.1).
+    consequence: "authority",
+  },
+  {
     name: "invite_room_participant",
     description:
       "Call a new participant into a Work Room on demand — invite an AI coworker (agentId) or a person (userId) into the room addressed by caseKey. Only a room member with action rights (e.g. the Coordinator) may invite. The invitee is admitted outcome-scoped to THIS room (content by default; canAct=true also lets them post). Records the join and, for a coworker, marks it present.",
@@ -366,12 +445,14 @@ export const roomMessagingPack: ToolPack = {
     post_room_message: (params, userId, context) => postRoomMessageHandler(params, userId, context),
     read_room_messages: (params, userId, context) => readRoomMessagesHandler(params, userId, context),
     invite_room_participant: (params, userId, context) => inviteRoomParticipantHandler(params, userId, context),
+    appoint_room_coordinator: (params, userId) => appointRoomCoordinatorHandler(params, userId),
     get_coworker_room_engagement: (params, userId, context) => getCoworkerRoomEngagementHandler(params, userId, context),
   },
   grants: {
     post_room_message: ["work_room_write"],
     read_room_messages: ["work_room_read"],
     invite_room_participant: ["work_room_write"],
+    appoint_room_coordinator: ["work_room_write"],
     get_coworker_room_engagement: ["work_room_read"],
   },
 };

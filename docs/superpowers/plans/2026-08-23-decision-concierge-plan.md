@@ -150,9 +150,13 @@ the panel runs kernel-only and the card says so.
 
 **Status:** implemented on `feat/governance-triage-panel` together with Phase 3.
 
-- `open-decisions.ts` is now the ONE definition of "waiting on a human", used by
-  the sweep, the attention inbox, and the review workspace. Three copies of that
-  predicate drifted once already (BI-6EC1EE25); this removes the possibility.
+- `decision-perspective/owner-ruling-queue.ts` is the ONE definition of "waiting
+  on a human", and the sweep composes on it rather than restating it. Three
+  copies of that predicate drifted once already (BI-6EC1EE25). This branch
+  originally added its own consolidating module; `owner-ruling-queue.ts` landed
+  on `main` first with the same purpose plus an organization-profile ownership
+  boundary (BI-EB5E9BE3), so it is the canonical home and the duplicate was
+  dropped rather than reconciled.
 - `concierge-sweep.ts` is bounded and reports what it dropped — a cap that
   truncates silently reads as "everything was covered" the moment anyone looks.
   It never resolves anything: it writes proposals that sit at `proposed` until a

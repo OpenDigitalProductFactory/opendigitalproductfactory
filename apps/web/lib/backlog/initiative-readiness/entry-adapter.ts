@@ -2,6 +2,7 @@ import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evid
 
 import { evaluateInitiativeReadiness } from "./evaluate";
 import { deriveAuthoritativeReadinessProfile } from "./profiles";
+import type { InheritedInitiativeScope } from "./parent-scope-inheritance";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
 import type {
   InitiativeReadinessDecision,
@@ -347,7 +348,24 @@ export function projectBacklogItemReadiness(args: {
   authorization: ReadinessEvidenceState;
   capsuleIdentity: ReadinessEvidenceState;
   planCoverage?: ReadinessEvidenceState;
+  /**
+   * The parent's scope rows when a decomposed coverage record maps this item
+   * (see parent-scope-inheritance.ts). Used only when the item minted no
+   * baseline of its own; the item's own receipts still win per gate.
+   */
+  inheritedScope?: InheritedInitiativeScope | null;
   artifactHints?: { hasSpec: boolean; hasPlan: boolean };
+  /**
+   * EP-4614F35E / merge-through-gates completion: when true, the design-side and
+   * plan lanes (research, canonical design, spec-approval, objective baseline,
+   * artifact author, architecture review, plan, plan-review, plan-coverage,
+   * traceability) are recognized as satisfied because the item's PR merged
+   * through the code gates (CI + the merge queue + PR review) — the governance
+   * appropriate to direct-merge platform work. The CALLER is responsible for the
+   * predicate (merged + platform/common + no build/product/objective + a design
+   * spec); this projector only applies the coercion. Kernel-ratified DI-54AECB341524.
+   */
+  recognizeMergeThroughGates?: boolean;
   completion?: {
     deliveryEvidence: ReadinessEvidenceState;
     acceptanceEvidence: ReadinessEvidenceState;
@@ -362,50 +380,73 @@ export function projectBacklogItemReadiness(args: {
 }): {
   governed: boolean;
   baselineId: string | null;
+  /** Parent item whose scope this projection borrowed, or null when the item stands alone. */
+  inheritedFrom: string | null;
   artifactHints: { hasSpec: boolean; hasPlan: boolean };
   decision: InitiativeReadinessDecision;
 } {
-  const baseline = parseBaselines(args.activities, args.item.itemId);
-  const receipts = latestGateStates(args.activities, baseline.current?.artifactDigest ?? null, args.item.itemId);
+  const own = parseBaselines(args.activities, args.item.itemId);
+  const parent = args.inheritedScope && !own.current && !own.malformed && !own.ambiguous
+    ? parseBaselines(args.inheritedScope.activities, args.inheritedScope.parentItemId)
+    : null;
+  const inherited = parent?.current ? args.inheritedScope! : null;
+  const baseline = inherited ? parent! : own;
+  const digest = baseline.current?.artifactDigest ?? null;
+  const ownReceipts = latestGateStates(args.activities, digest, args.item.itemId);
+  const parentReceipts = inherited ? latestGateStates(inherited.activities, digest, inherited.parentItemId) : null;
+  const receipts = parentReceipts
+    ? {
+      states: new Map([...parentReceipts.states, ...[...ownReceipts.states].filter(([, state]) => state !== "missing")]),
+      malformed: ownReceipts.malformed || parentReceipts.malformed,
+    }
+    : ownReceipts;
+  // The parent's profile is the parent's risk, not the child's: a decomposed
+  // cross-domain design yields children that are sized on their own signals.
   const profile = deriveAuthoritativeReadinessProfile({
     ...args.item,
-    recordedProfiles: baseline.current ? [baseline.current.profile] : [],
+    recordedProfiles: own.current ? [own.current.profile] : [],
   });
   const governed = profile !== null;
   const evidence = receipts.states;
   const baselineState: ReadinessEvidenceState = baseline.current ? "pass" : "missing";
-  const coverage = args.planCoverage ?? projectPlanCoverage(args.activities, baseline.current);
+  const coverage = args.planCoverage
+    ?? projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current);
   const dependency = state(evidence, "dependency-disposition");
   const archetypeProvisioning = state(evidence, "archetype-provisioning");
+  // merge-through-gates recognition (EP-4614F35E): coerce the design/plan lanes to
+  // pass because the code gates already governed this direct-merge platform work.
+  // The caller owns the predicate; here it is a pure state coercion.
+  const recognizeMerge = args.recognizeMergeThroughGates === true;
+  const pass = (s: ReadinessEvidenceState): ReadinessEvidenceState => (recognizeMerge ? "pass" : s);
   const facts: InitiativeReadinessFacts = {
     subject: { kind: "backlog-item", id: args.item.itemId },
     transitionObject: args.transitionObject,
     profile: profile ?? "doc-only",
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
-    canonicalDesign: baselineState,
-    canonicalDesignAmbiguous: baseline.ambiguous,
-    research: state(evidence, "research"),
-    specApproval: state(evidence, "spec-approval"),
+    canonicalDesign: pass(baselineState),
+    canonicalDesignAmbiguous: recognizeMerge ? false : baseline.ambiguous,
+    research: pass(state(evidence, "research")),
+    specApproval: pass(state(evidence, "spec-approval")),
     specialistReviews: {
-      architecture: state(evidence, "architecture-review"),
+      architecture: pass(state(evidence, "architecture-review")),
       data: state(evidence, "data-review"),
       ux: state(evidence, "ux-fit-review"),
       security: state(evidence, "security-review"),
       compliance: state(evidence, "compliance-review"),
       domain: state(evidence, "domain-review"),
     },
-    plan: coverage,
-    planReview: state(evidence, "plan-review"),
-    planCoverage: coverage,
-    traceability: coverage,
+    plan: pass(coverage),
+    planReview: pass(state(evidence, "plan-review")),
+    planCoverage: pass(coverage),
+    traceability: pass(coverage),
     dependencies: dependency === "missing" ? "not-applicable" : dependency,
     authorization: args.authorization,
-    artifactAuthor: baselineState,
+    artifactAuthor: pass(baselineState),
     capsuleIdentity: args.capsuleIdentity,
     deliveryEvidence: args.completion?.deliveryEvidence ?? "missing",
     acceptanceEvidence: args.completion?.acceptanceEvidence ?? "missing",
-    objectiveBaseline: baselineState,
+    objectiveBaseline: pass(baselineState),
     objectiveBaselineConflict: args.completion?.objectiveBaselineConflict,
     objectiveReconciliation: args.completion?.objectiveReconciliation ?? "missing",
     archetypeProvisioning: {
@@ -423,6 +464,7 @@ export function projectBacklogItemReadiness(args: {
   return {
     governed,
     baselineId: baseline.current?.baselineId ?? null,
+    inheritedFrom: inherited?.parentItemId ?? null,
     artifactHints: args.artifactHints ?? { hasSpec: false, hasPlan: false },
     decision: evaluateInitiativeReadiness(facts, args.target),
   };
@@ -431,6 +473,7 @@ export function projectBacklogItemReadiness(args: {
 export function projectBacklogItemReadinessSummary(args: {
   item: InitiativeReadinessItem;
   activities: readonly InitiativeReadinessActivity[];
+  inheritedScope?: InheritedInitiativeScope | null;
   hasSpec: boolean;
   hasPlan: boolean;
   evaluatedAt: string;
@@ -441,6 +484,7 @@ export function projectBacklogItemReadinessSummary(args: {
     const projected = projectBacklogItemReadiness({
       item: args.item,
       activities: args.activities,
+      inheritedScope: args.inheritedScope,
       target,
       transitionObject: {
         kind: "backlog-item",
@@ -456,6 +500,7 @@ export function projectBacklogItemReadinessSummary(args: {
     return [target, projected.decision];
   })) as Record<ReadinessTarget, InitiativeReadinessDecision>;
   return {
+    inheritedFrom: args.inheritedScope?.parentItemId ?? null,
     governed: projectBacklogItemReadiness({
       item: args.item,
       activities: args.activities,

@@ -31,6 +31,9 @@ install, and that observation is the acceptance criterion.
 
 Deliverable: a room can be given an owner, and the live room advances.
 
+**Merged 2026-09-06** as `3201bf879` (PR #5099). Deploy to the live install is held by the
+release batch valve (3 of 10 accumulated), so the on-install observable is not yet claimed.
+
 Files:
 - `apps/web/lib/mcp/packs/room-messaging-pack.ts` (the appointment tool)
 - `apps/web/lib/work-management/room-participant-assignment.server.ts` (existing writer — its
@@ -66,6 +69,11 @@ Steps:
 **Observable:** the standing rooms on this install report owners without anyone appointing them,
 and any that cannot are named.
 
+**Delivered 2026-09-06.** Measured against the twelve live stalled rooms: the shape rung
+resolves 12/12 drivers, each distinct from that room's own approver. The ladder is joined to
+the Phase C stall item, which now names who should be appointed rather than only reporting
+that nobody is — a diagnosis becomes a one-step instruction.
+
 ## Phase C — the bottleneck signal
 
 Deliverable: a stalled room reaches a human.
@@ -85,7 +93,21 @@ Steps:
 
 **Observable:** the paused room appears in the owner's attention surface.
 
+**Delivered 2026-09-06** (`workroom-stall` source). Verified against the live database, not
+only in tests: the query returns all twelve standing rooms as stalled — `WC-A69BCABB` at 331
+consecutive refusals and the other eleven at 207-209, every one on
+`missing_explicit_coordinator`. The seam check earned its keep: the raw SQL used the Prisma
+model name `WorkroomActivity` rather than the physical `WorkCapsuleActivity`, which compiles,
+type-checks and passes every unit test while returning nothing at runtime.
+
 ## Phase D — relation-derived hierarchy
+
+**Blocked on data, then unblocked 2026-09-06.** The relation table held ZERO rows on this
+install: `deriveStandingRooms` had no consumer, so the declared tree was never materialized
+and the five parent rooms floated unlinked (`BI-AEAA90A9`). An escalation projection written
+first would have passed every test and observed nothing. The drive tick now reconciles
+containment before driving — 13 relations across the 18 standing rooms — so the escalation
+walk below finally has a tree to walk.
 
 Deliverable: nesting means delegation and escalation, not just containment.
 

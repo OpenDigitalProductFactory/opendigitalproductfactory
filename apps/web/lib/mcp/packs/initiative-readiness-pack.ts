@@ -34,11 +34,21 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
     properties: {
       itemId: { type: "string", description: "Governed BacklogItem ID (BI-*)." },
       gate: { type: "string", enum: [...lane.gates] },
-      decision: { type: "string", enum: ["pass", "fail", "not-applicable"] },
+      decision: {
+        type: "string",
+        enum: ["pass", "fail", "not-applicable"],
+        description:
+          "pass records the gate as satisfied at this exact artifact and carries NO findings; fail records the gate as unmet and carries at least one finding. Advisory observations that do not block belong in reason, never in findings on a pass.",
+      },
       artifactRef: artifactRefSchema,
-      reason: { type: "string" },
+      reason: {
+        type: "string",
+        description: "Why the gate passed or failed, citing the artifact. Non-blocking observations go here on a pass.",
+      },
       findings: {
         type: "array",
+        description:
+          "Blocking defects, and ONLY on a failing receipt: a passing receipt with findings is refused as malformed-receipt. Pass an empty array on pass. Each finding gets a server-minted id; the caller never supplies one.",
         items: {
           type: "object",
           properties: {
@@ -48,9 +58,23 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
           required: ["issue", "severity"],
         },
       },
-      resolvedFindingRefs: { type: "array", items: { type: "string" } },
-      profile: { type: "string", enum: ["doc-only", "fix", "feature", "cross-domain", "archetype"] },
-      artifactRole: { type: "string", enum: ["design-spec", "problem-statement", "documentation-scope"] },
+      resolvedFindingRefs: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Ids of findings currently OPEN on this item that this receipt resolves (from earlier failing receipts, IF-* ids). Pass an empty array when none; naming an id that is not open is refused as finding-resolution-invalid.",
+      },
+      profile: {
+        type: "string",
+        enum: ["doc-only", "fix", "feature", "cross-domain", "archetype"],
+        description:
+          "Required on a passing spec-approval. The item's own authoritative classification (the profile the readiness decision reports for the item, derived from its work type), NOT the reach of the design: a spec whose policy spans domains still names the item's profile. A mismatch is refused as CLASSIFICATION_REQUIRED.",
+      },
+      artifactRole: {
+        type: "string",
+        enum: ["design-spec", "problem-statement", "documentation-scope"],
+        description: "Required on a passing spec-approval: what the reviewed artifact is.",
+      },
       expectedCurrentBaselineId: { type: ["string", "null"] },
       supersessionDispositions: {
         type: "array",
@@ -283,12 +307,16 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
       const mappings = parseObjectiveMappings(params.objectiveMappings);
-      if (typeof params.baselineId !== "string" || !params.baselineId.trim() || !mappings) {
+      const baselineId = binding?.gate === "objective-mapping"
+        ? binding.expectedCurrentBaselineId
+        : params.baselineId;
+      if (typeof baselineId !== "string" || !baselineId.trim() || !mappings) {
         return { success: false, error: "malformed-receipt", message: "Objective mapping requires a current baselineId and non-empty objective/evidence mappings." };
       }
       const result = await recordInitiativeObjectiveMappingProposal({
+        taskRunId: context?.taskRunId ?? null,
         itemId: String(params.itemId ?? ""),
-        baselineId: params.baselineId,
+        baselineId,
         mappings,
         eligibleEvidenceActivityIds: binding?.eligibleEvidenceActivityIds ?? [],
         reason: String(params.reason ?? ""),

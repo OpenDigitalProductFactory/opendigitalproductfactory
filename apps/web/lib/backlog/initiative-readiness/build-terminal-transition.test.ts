@@ -18,7 +18,7 @@ function projection(verdict: "allowed" | "input-required") {
     blockers: [],
     evaluatedAt: "2026-08-22T08:00:00.000Z",
   };
-  return { governed: true, baselineId: "BASE-1", artifactHints: { hasSpec: true, hasPlan: true }, decision };
+  return { governed: true, baselineId: "BASE-1", inheritedFrom: null, artifactHints: { hasSpec: true, hasPlan: true }, decision };
 }
 
 function fakeDb() {

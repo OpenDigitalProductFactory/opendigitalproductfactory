@@ -410,6 +410,7 @@ model RouteDecisionLog {
   inferenceDataScreenReceipt Json?
 
   @@index([taskType])
+  @@index([agentMessageId, createdAt])
   @@index([actorKind, actorId, createdAt])
   @@index([agentId, createdAt])
   @@index([routeContext, createdAt])
