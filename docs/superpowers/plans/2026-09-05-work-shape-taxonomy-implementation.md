@@ -153,6 +153,23 @@ one line in `AGENTS.md` §5, and the delivery-shape half of `BI-C8C4031C`'s page
    with the acceptance above as its evidence, through the v3 policy this plan
    delivers — not through the v2 gauntlet it replaces.
 
+## Traceability
+
+Four-way trace per deliverable, verbatim tokens the coverage record cites
+(`record_plan_backlog_coverage` requires every ref to appear in this plan;
+requirement ids are the design's `OBJ-*` objectives and verification ids its
+`AC-*` acceptance rows, section 1.1 of the design).
+
+| Deliverable key | Backlog item | requirementRefs | contractRefs | flowRefs | verificationRefs |
+|---|---|---|---|---|---|
+| ledger-seals-rulings | `BI-218EC195` | OBJ-SEALED-RULINGS | spec:5.1 | plan:phase-0 | AC-LEDGER-RECORDS |
+| delivery-registry | `BI-B90F7CBB` | OBJ-SHAPE-TAXONOMY | spec:3.0 | plan:phase-1 | AC-SMALL-CLOSES-ON-MERGE |
+| claim-asks | `BI-02470C7E` | OBJ-SHAPE-TAXONOMY | spec:3.3 | plan:phase-2 | AC-CLAIM-ASKS-FOR-SHAPE |
+| readiness-v3 | `BI-B269FC72` | OBJ-PROPORTIONAL-GATES | spec:4 | plan:phase-3 | AC-LARGE-KEEPS-GATES, AC-HIGH-SENSITIVITY-RAISES, AC-PRE-TAXONOMY-UNTOUCHED |
+| delivery-from-trunk | `BI-AFE8BB73` | OBJ-DELIVERY-TRUNK | spec:4 | plan:phase-4 | AC-SMALL-CLOSES-ON-MERGE |
+| expedite-lane | `BI-F2FEC1EB` | OBJ-EXPEDITE-AUDITED | spec:4 | plan:phase-5 | AC-BREAK-FIX-PIR |
+| visibility-and-matrix | `BI-D03BE728` | OBJ-SHAPE-TAXONOMY, OBJ-PROPORTIONAL-GATES | spec:3.3 | plan:phase-6 | AC-CLAIM-ASKS-FOR-SHAPE, AC-PRE-TAXONOMY-UNTOUCHED |
+
 ## Backlog coverage
 
 - Decision: decomposed
