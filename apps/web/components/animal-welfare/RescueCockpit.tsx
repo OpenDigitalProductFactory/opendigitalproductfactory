@@ -82,14 +82,17 @@ function SourceStatus({ source, timeZone }: { source: SourceState<unknown>; time
 
 function RescueNavigation({ current }: { current: RescueArea }) {
   return (
-    <nav aria-label="Rescue operations" className="mb-6 flex gap-1 overflow-x-auto border-b border-[var(--dpf-border)]">
+    <nav
+      aria-label="Rescue operations"
+      className="mb-6 grid grid-cols-3 gap-1 border-b border-[var(--dpf-border)] sm:flex"
+    >
       {NAV.map((item) => (
         <Link
           key={item.key}
           href={item.href}
           aria-current={item.key === current ? "page" : undefined}
           className={[
-            "dpf-tap-target whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium",
+            "dpf-tap-target min-h-11 min-w-0 border-b-2 px-2 py-2 text-center text-sm font-medium leading-tight sm:flex-none sm:whitespace-nowrap sm:px-3",
             item.key === current
               ? "border-[var(--dpf-accent)] text-[var(--dpf-text)]"
               : "border-transparent text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
