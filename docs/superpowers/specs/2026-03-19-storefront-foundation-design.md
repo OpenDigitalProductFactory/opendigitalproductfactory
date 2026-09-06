@@ -28,6 +28,10 @@ mobile/keyboard behavior. Existing local delivery anchors BI-B19306CA and BI-464
 own the rescue intake/routing example; research does not authorize expanding those
 items into every archetype. Shared evolution must preserve their distinct semantics.
 
+Design follow-up BI-55D37FDE under EP-4FF5273F owns the cross-archetype intent
+contract and delivery mapping. It remains documentation intake in triaging;
+implementation approval and plan coverage are separate prerequisites.
+
 Add a public-facing storefront to the ODPF platform, enabling the organisation running the platform to sell products and services to potential and existing customers. The storefront is the primary customer entry point — replacing the disconnected `/customer-login` flow with a tenant-aware, publicly accessible surface.
 
 The design is archetype-driven: a pre-wired library of ~35 business templates across 10 market categories (healthcare, trades, professional services, retail, education, pet services, food, fitness, nonprofit, beauty) seeds the storefront with appropriate content and CTA types out of the box. The conversion action (book, buy, inquire, donate) is determined by the archetype and can be overridden per item.

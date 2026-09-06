@@ -163,6 +163,11 @@ verdict matches. Reuse existing reviewer packets and receipt fields, with bounde
 repair/review attempts and retained failures. Reviewer count and model confidence
 are not acceptance evidence. See [research §4](../research/2026-09-06-astra-business-verification-review.md#4-testing-and-review-increments).
 
+Design follow-up BI-0B8657BD under this epic owns the objective-level acceptance,
+citation and reconciliation clarification. It remains documentation intake in
+triaging. Existing verification and reviewer-policy owners retain implementation
+and decision authority; peer-owned amendments are tracked in BI-4CCE50E0.
+
 ## Alternatives rejected
 
 - **A new "auto-reviewer" service.** Rejected: duplicates the room drive and the reviewer

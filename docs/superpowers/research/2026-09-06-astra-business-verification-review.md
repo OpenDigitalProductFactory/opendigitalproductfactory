@@ -144,6 +144,33 @@ implementation. No automatic cross-install mutation is authorized by this resear
 
 ## 9. Review and limits
 
+### Backlog expansion requested after the research pass
+
+The live coverage register remains in BI-4CCE50E0. Ten existing items now carry
+specific acceptance amendments: fixture convergence BI-79449954, restaurant test
+reliability BI-32572536, capacity BI-D2A51B36, operational cockpit BI-7A38F667,
+public privacy BI-56BB6038, finance handoff BI-D649585A, worker access BI-2777B86B,
+policy clocks BI-2ABA6C2E, evaluation integrity BI-1B7BB954 and audit BI-7199065E.
+Their delivery statuses and original evidence remain intact. The earlier public
+intake/routing amendments in BI-B19306CA and BI-46437AEF still apply.
+
+Three bounded documentation follow-ups cover the remaining design work:
+
+| Intake | Design work | Existing epic |
+|---|---|---|
+| BI-8F213EFB | Restaurant operating modes, confirmed facts and delivery-owner reconciliation | EP-BUSINESS-ACTIVITY-SIM |
+| BI-55D37FDE | Cross-archetype storefront intent composition and public-to-worker contract | EP-4FF5273F |
+| BI-0B8657BD | Objective-level review, policy citations and independent reconciliation | EP-4614F35E |
+
+All three are triaging documentation intake. Their proposed design homes are
+linked above; completing/reviewing those contracts and mapping implementation
+owners remain their deliverables. No new implementation plan or build activation
+is claimed. Existing shared fixtures retain their prior plan-coverage gate.
+Peer-owned verification, reliability, reviewer-policy and simulator amendments
+remain an explicit owner-reconciliation queue in BI-4CCE50E0.
+
+### Assessment limits
+
 Architecture advisory: aligned with existing substrate, with concrete concerns addressed in the amendments: acceptance cannot be inferred from merge status; generated business defaults need provenance; public intent must connect to an operational owner; capacity/identity/policy must keep one authoritative home.
 
 Scaling: use changed-workflow runs for individual changes, scheduled category sentinels for regression and an explicit coverage denominator. Enumerate the current catalog rather than hardcode historical counts. Bound trace retention, scenario concurrency and iteration budgets; page large inventories and use deltas for observation. Initial confidence is limited to exercised scenarios and operating modes. Broader coverage stays with the simulator and archetype acceptance owners.

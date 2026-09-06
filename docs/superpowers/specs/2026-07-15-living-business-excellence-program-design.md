@@ -114,6 +114,12 @@ scans the whole catalog in minutes and regressions are caught automatically, wit
 ### Research amendment — business facts and consequences (2026-09-06)
 
 BI-4CCE50E0: [Astra review §5–7](../research/2026-09-06-astra-business-verification-review.md).
+
+Design follow-up BI-8F213EFB under EP-BUSINESS-ACTIVITY-SIM owns the restaurant
+operating-mode/fact-authority packet and reconciliation of the historical delivery
+owners. It remains documentation intake in triaging; it does not replace B/C or
+authorize restaurant kitchen, POS or inventory implementation. BI-7199065E owns
+the reusable operating-model audit and BI-79449954 the shared acceptance fixture.
 Generated archetype defaults are starter assumptions, not observations about a
 company. B's corpus must preserve source, owner confirmation, effective time and
 uncertainty through the existing WWWD/knowledge mechanisms. C's scene must project
