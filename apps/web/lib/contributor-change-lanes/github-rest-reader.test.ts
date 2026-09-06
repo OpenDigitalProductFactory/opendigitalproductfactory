@@ -129,6 +129,7 @@ describe("readGithubPullRequests", () => {
     }
     // First fetch carried no If-None-Match (initial etag from prior run is empty {})
     const firstCallHeaders = fetchImpl.mock.calls[0]?.[1].headers as Record<string, string>;
+    expect(fetchImpl.mock.calls[0]?.[0]).toContain("state=all");
     expect(firstCallHeaders["If-None-Match"]).toBeUndefined();
     expect(firstCallHeaders.Authorization).toBe("Bearer ghp_decrypted_xxxxxxxxx");
     // Etag persisted to metadata, preserving sibling keys
@@ -137,6 +138,61 @@ describe("readGithubPullRequests", () => {
         data: { metadata: { other: "preserved", githubPrEtag: '"new-etag-abc"' } },
       }),
     );
+  });
+
+  it("persists exact authored-head and squash-merge provenance", async () => {
+    mocks.credentialFindUnique.mockResolvedValueOnce({
+      secretRef: "enc:xxx",
+      status: "active",
+    });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      makeResponse([
+        makeRawPr(5090, {
+          state: "closed",
+          head: { ref: "fix/squash", sha: "a".repeat(40) },
+          merge_commit_sha: "b".repeat(40),
+          merged_at: "2026-09-06T04:00:00.000Z",
+          updated_at: "2026-09-06T04:00:01.000Z",
+        }),
+      ]),
+    );
+
+    const result = await readGithubPullRequests({
+      fetchImpl: fetchImpl as never,
+      now: () => new Date("2026-09-06T04:01:00.000Z"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({
+      sourceKey: "5090",
+      payload: {
+        repositoryFullName: "o/r",
+        number: 5090,
+        state: "merged",
+        headSha: "a".repeat(40),
+        mergeCommitSha: "b".repeat(40),
+        mergedAt: "2026-09-06T04:00:00.000Z",
+        providerUpdatedAt: "2026-09-06T04:00:01.000Z",
+        observedAt: "2026-09-06T04:01:00.000Z",
+        providerApiVersion: "github-rest/2022-11-28",
+        observationFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
+    });
+  });
+
+  it("drops an unknown provider state instead of projecting it as open", async () => {
+    mocks.credentialFindUnique.mockResolvedValueOnce({
+      secretRef: "enc:xxx",
+      status: "active",
+    });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(makeResponse([makeRawPr(5092, { state: "future-state" })]));
+
+    const result = await readGithubPullRequests({ fetchImpl: fetchImpl as never });
+
+    expect(result).toMatchObject({ ok: true, rows: [] });
   });
 
   it("sends If-None-Match from ScheduledJob.metadata.githubPrEtag on the first page", async () => {
@@ -245,15 +301,19 @@ describe("parseRepoFromUrl", () => {
   });
 });
 
-function makeRawPr(n: number) {
+function makeRawPr(n: number, overrides: Record<string, unknown> = {}) {
   return {
     number: n,
     html_url: `https://github.com/o/r/pull/${n}`,
     title: `PR ${n}`,
-    head: { ref: `feat/branch-${n}` },
+    head: { ref: `feat/branch-${n}`, sha: n.toString(16).padStart(40, "0") },
     state: "open",
     draft: false,
     mergeable_state: "CLEAN",
+    updated_at: "2026-09-06T03:00:00.000Z",
+    merged_at: null,
+    merge_commit_sha: null,
+    ...overrides,
   };
 }
 
