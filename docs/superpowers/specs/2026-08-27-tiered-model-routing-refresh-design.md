@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Tiered Model Routing Refresh
 
 **Backlog:** BI-D964397F, BI-78043BA3  

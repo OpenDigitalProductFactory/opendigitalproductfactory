@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Local-CI Builder Lifecycle Recovery Design
 
 - **Status:** ready for implementation

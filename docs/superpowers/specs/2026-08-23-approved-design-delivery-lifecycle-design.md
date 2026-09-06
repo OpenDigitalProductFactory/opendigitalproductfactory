@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: draft
 ---
 
 # Approved Design Delivery Lifecycle

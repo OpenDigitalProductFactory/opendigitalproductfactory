@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Tiered Model Routing Refresh Implementation Plan
 
 **Design:** `docs/superpowers/specs/2026-08-27-tiered-model-routing-refresh-design.md`  
