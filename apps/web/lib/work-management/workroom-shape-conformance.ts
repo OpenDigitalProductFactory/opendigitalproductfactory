@@ -85,11 +85,22 @@ export const WORKROOM_COORDINATOR_ELIGIBILITY_STATES = [
   "narrowed",
   "suspended",
   "incompatible",
+  // An absent qualification SCHEME is not a failed qualification (DI-FF4A015CF917,
+  // margin 5.420). A precondition nothing on the platform can satisfy is a
+  // permanent denial, not a safeguard; this state records that honestly and does
+  // not block, while a scheme that exists and is unmet blocks exactly as before.
+  "not-applicable",
   "unknown",
 ] as const;
 
 export type WorkroomCoordinatorEligibilityState =
   (typeof WORKROOM_COORDINATOR_ELIGIBILITY_STATES)[number];
+
+/** States that do NOT raise a deviation. `eligible` is a positive verdict;
+ *  `not-applicable` means the platform has no scheme to verdict against, so
+ *  there is nothing for this coworker to fail. Every other state — including
+ *  `unknown` — still blocks. */
+const SATISFIED_ELIGIBILITY: ReadonlySet<string> = new Set(["eligible", "not-applicable"]);
 
 export type WorkroomCoordinatorEligibility = {
   jsi: WorkroomCoordinatorEligibilityState;
@@ -250,13 +261,13 @@ export function evaluateWorkroomShapeConformance(
       jsi: "unknown" as const,
       authorityBinding: "unknown" as const,
     };
-    if (eligibility.authorityBinding !== "eligible") {
+    if (!SATISFIED_ELIGIBILITY.has(eligibility.authorityBinding)) {
       deviations.push({
         code: "coordinator_authority_binding_ineligible",
         summary: `The AI Process Overseer's TAK authority binding is ${eligibility.authorityBinding}.`,
       });
     }
-    if (eligibility.jsi !== "eligible") {
+    if (!SATISFIED_ELIGIBILITY.has(eligibility.jsi)) {
       deviations.push({
         code: "coordinator_jsi_ineligible",
         summary: `The AI Process Overseer's JSI qualification is ${eligibility.jsi}.`,

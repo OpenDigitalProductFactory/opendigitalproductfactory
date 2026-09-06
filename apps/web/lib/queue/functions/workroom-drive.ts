@@ -9,6 +9,13 @@
 
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import {
+  COORDINATION_RESOURCE_TYPE,
+  COORDINATION_SCOPE_TYPE,
+  jsiSchemePresent,
+  resolveCoordinatorEligibility,
+} from "@/lib/work-management/coordinator-eligibility";
+import { planCoordinationBindings } from "@/lib/authority/coordination-bindings";
 import { planContainmentRelations } from "@/lib/work-management/standing-room-nesting";
 
 import { gateAtEntry } from "../quiescence-gates";
@@ -254,7 +261,18 @@ export async function runWorkroomDriveJob(
     deps?.reconcileNesting ?? (deps?.listRooms ? async () => 0 : reconcileStandingRoomNesting);
   const nested = await reconcile();
 
-  const rooms = deps?.listRooms ? await deps.listRooms() : await loadStandingRooms();
+  let rooms: WorkroomDriveRoom[];
+  if (deps?.listRooms) {
+    rooms = await deps.listRooms();
+  } else {
+    await reconcileCoordinationBindings();
+    const { prisma } = await import("@dpf/db");
+    const [bindings, schemePresent] = [
+      await loadCoordinationBindings(),
+      jsiSchemePresent(prisma as unknown as Record<string, unknown>),
+    ];
+    rooms = await loadStandingRooms(bindings, schemePresent);
+  }
   const effects = deps?.effects ?? liveEffects();
   const plans: WorkroomDriveResult["plans"] = [];
   let dispatched = 0;
@@ -391,7 +409,102 @@ export async function reconcileStandingRoomNesting(): Promise<number> {
   }
 }
 
-async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
+/**
+ * Coordination bindings, keyed by the shape they grant coordination over.
+ *
+ * One query for the whole tick rather than one per room: the binding set is
+ * small (a row per shape the install staffs) and the drive reads every standing
+ * room on every pass.
+ */
+/**
+ * Materialize coordination authority for the shapes this install ships.
+ *
+ * Idempotent by derivable bindingId: an existing binding is left exactly as the
+ * operator has it — including SUSPENDED. Re-seeding must never silently
+ * re-grant authority a human deliberately withdrew, which is the one way this
+ * could become an authority-laundering path rather than a grant.
+ *
+ * Returns how many were newly created; a settled install reports 0.
+ */
+export async function reconcileCoordinationBindings(): Promise<number> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const plans = planCoordinationBindings();
+    if (plans.length === 0) return 0;
+    const existing = await prisma.authorityBinding.findMany({
+      where: { bindingId: { in: plans.map((plan) => plan.bindingId) } },
+      select: { bindingId: true },
+    });
+    const known = new Set(existing.map((row) => row.bindingId));
+    const missing = plans.filter((plan) => !known.has(plan.bindingId));
+    if (missing.length === 0) return 0;
+    let created = 0;
+    for (const plan of missing) {
+      const agent = await prisma.principal.findFirst({
+        where: { kind: "agent", principalId: plan.agentId },
+        select: { id: true, principalId: true },
+      });
+      await prisma.authorityBinding.create({
+        data: {
+          bindingId: plan.bindingId,
+          name: plan.name,
+          scopeType: plan.scopeType,
+          resourceType: plan.resourceType,
+          resourceRef: plan.resourceRef,
+          status: plan.status,
+          approvalMode: plan.approvalMode,
+          appliedAgentId: agent?.id ?? null,
+          subjects: {
+            create: plan.subjects.map((subject) => ({
+              subjectType: subject.subjectType,
+              subjectRef: subject.subjectRef,
+              relation: subject.relation,
+            })),
+          },
+        },
+      });
+      created += 1;
+    }
+    return created;
+  } catch {
+    // Never take the drive down over a seeding failure; rooms then read "absent"
+    // and refuse, which is the safe pre-existing behaviour.
+    return 0;
+  }
+}
+
+async function loadCoordinationBindings(): Promise<
+  Map<string, Array<{ status: string; scopeType: string; resourceType: string; resourceRef: string }>>
+> {
+  const byShape = new Map<
+    string,
+    Array<{ status: string; scopeType: string; resourceType: string; resourceRef: string }>
+  >();
+  try {
+    const { prisma } = await import("@dpf/db");
+    const rows = await prisma.authorityBinding.findMany({
+      where: { scopeType: COORDINATION_SCOPE_TYPE, resourceType: COORDINATION_RESOURCE_TYPE },
+      select: { status: true, scopeType: true, resourceType: true, resourceRef: true },
+    });
+    for (const row of rows) {
+      const bucket = byShape.get(row.resourceRef);
+      if (bucket) bucket.push(row);
+      else byShape.set(row.resourceRef, [row]);
+    }
+  } catch {
+    // A binding lookup that fails must not take the drive down. Rooms then read
+    // "unknown" and refuse, which is the pre-existing safe behaviour.
+  }
+  return byShape;
+}
+
+async function loadStandingRooms(
+  coordinationBindings?: Map<
+    string,
+    Array<{ status: string; scopeType: string; resourceType: string; resourceRef: string }>
+  >,
+  schemePresent = false,
+): Promise<WorkroomDriveRoom[]> {
   const { prisma } = await import("@dpf/db");
   const ids = await loadStandingRoomIds(prisma as never);
   if (ids.length === 0) return [];
@@ -429,10 +542,18 @@ async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
   });
 
   return rows.flatMap((row) => {
-    if (!resolveWorkShapeClaim(row.scopeClaims)) return [];
+    const shapeRef = resolveWorkShapeClaim(row.scopeClaims);
+    if (!shapeRef) return [];
+    // Authority is granted over the shape, not one of its revisions.
+    const shapeKey = shapeRef.key;
     return [{
       id: row.id,
       capsuleId: row.capsuleId,
+      coordinatorEligibility: resolveCoordinatorEligibility({
+        shapeKey,
+        bindings: (shapeKey ? coordinationBindings?.get(shapeKey) : undefined) ?? [],
+        schemePresent,
+      }),
       scopeClaims: row.scopeClaims,
       workspaceState: row.workspaceState,
       leaseExpiresAt: row.leaseExpiresAt,
