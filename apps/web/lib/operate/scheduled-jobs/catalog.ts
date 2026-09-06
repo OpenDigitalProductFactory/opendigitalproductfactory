@@ -26,8 +26,8 @@
 // reconciled (scheduling-surface review, 2026-06-21). Keep the parity test real.
 
 import { CODE_GRAPH_JOB_ID } from "@/lib/build/code-graph/constants";
-import { ASSET_INTELLIGENCE_JOBS } from "./catalog-asset-intelligence";
-import { DECISION_GOVERNANCE_JOBS } from "./catalog-decision-governance";
+import { ASSET_INTELLIGENCE_JOBS } from "./asset-intelligence-jobs";
+import { DECISION_GOVERNANCE_JOBS } from "./decision-governance-jobs";
 import {
   EMBEDDING_COVERAGE_JOB_ID,
   EMBEDDING_COVERAGE_JOB_NAME,
