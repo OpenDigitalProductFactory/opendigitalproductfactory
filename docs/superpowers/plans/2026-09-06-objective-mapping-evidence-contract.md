@@ -22,9 +22,7 @@ through one deterministic successor without hiding or reinterpreting history.
 
 - Decision: atomic
 - Parent: `BI-0F8E39D5`
-- Receipt: blocked-by: the provider cannot resolve this new immutable plan
-  artifact until its first DCO commit is pushed; replace this marker with the
-  live receipt before opening the protected PR
+- Receipt: `cmtphoxgd037r01qwz8sm2y25`
 - Dependencies: none
 - Rationale: packet authority, deterministic identity, transactional writer
   validation, correction projection, and supersession controls are one
