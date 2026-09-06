@@ -31,9 +31,9 @@ One deliverable. The guard, its registry, the trailer contract entry, the gate-c
 ## Traceability
 
 - **Requirements:** spec §1 (problem), §4.1 (registry), §4.2 (attestation), §4.3 (where it runs); OBJ-CONVERGENCE-GATE-1.
-- **Contracts:** `Convergence-Impact-Decision` trailer in `scripts/lib/pr-trailer-contract.mjs`; `scripts/convergence-surfaces.json` schemaVersion 1; guard id `convergence-impact-gate` in the `pull-request` profile.
-- **Flows:** PR opened → Policy Guards (PR) → `check-convergence-impact.mjs` classifies `BASE_SHA...HEAD` → trailer read from commits and `PR_BODY` → pass or fail with the mode table; `gate-context` advertises the trailer before generation.
-- **Verification:** AC-1..AC-7 in the design; `pnpm check:convergence-impact:test`; local-CI gate PASS on 943922b and 3af4c61.
+- **Contracts:** Convergence-Impact-Decision trailer in scripts/lib/pr-trailer-contract.mjs; scripts/convergence-surfaces.json schemaVersion 1; guard id convergence-impact-gate in the pull-request profile.
+- **Flows:** PR opened, Policy Guards (PR) runs check-convergence-impact.mjs over BASE_SHA...HEAD, trailer read from commits and PR_BODY, pass or fail with the mode table; gate-context advertises the trailer before generation.
+- **Verification:** AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 in the design (OBJ-CONVERGENCE-GATE-1); `pnpm check:convergence-impact:test`; local-CI gate PASS on 943922b and 3af4c61.
 
 ## Follow-ups filed
 
