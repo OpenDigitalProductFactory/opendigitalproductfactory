@@ -78,6 +78,17 @@ A standing room declares its activity shape by passing `workShape` to `create_wo
 `standing-operations-shapes.ts`. Like the collaboration shape, it persists as a `scopeClaims`
 entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
 
+The same registry carries the five **delivery shapes** (`delivery-shapes.ts`, BI-B90F7CBB,
+design `2026-09-02-work-shape-taxonomy-and-proportional-gates-design.md` §3.0):
+`delivery-break-fix@1.0.0`, `delivery-small@1.0.0`, `delivery-medium@1.0.0`,
+`delivery-large@1.0.0`, `delivery-xlarge@1.0.0`. They are the fifth shape axis — how big a unit
+of delivery work is and what it owes before it is done — expressed as activity shapes so a
+delivery room binds one exactly the way a standing room binds a watch. Each is `claim`-triggered,
+declares its stages with evidence, its success, failure and budget stops, and its collaboration
+shape; every merge, deploy, acceptance and authority-changing advance is a `governed-decision`,
+and the author never holds the receipt writer. `small | medium | large | xlarge` are
+`BacklogEffortSize`; `break-fix` is the expedite lane on a small fix (post-hoc review, WIP 1).
+
 **This claim is what makes a room wake.** The standing-Workroom drive
 (`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) selects non-terminal,
 unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
@@ -282,8 +293,9 @@ The shape registry spans three modules, merged into `ALL_SHAPES` at runtime:
 | `work-shapes.ts` | the contract — types, validation, cycle projection — and the anchor compliance shape |
 | `standing-operations-shapes.ts` | the standing operations a BUSINESS runs |
 | `coworker-standing-shapes.ts` | the standing work the platform's own coworkers run |
+| `delivery-shapes.ts` | the five delivery shapes: size and what each owes before it is done (BI-B90F7CBB) |
 
-A static reader must consult all three. The capability measure read only the first
+A static reader must consult all four. The capability measure read only the first
 for a period and reported seven fully-bounded agents as having no declared work
 shape at all — an unbounded coworker is what that reads as, so the under-report was
 the more dangerous direction. `SHAPE_SOURCE_FILES` in
