@@ -6,6 +6,7 @@ status: draft
 
 **Backlog item:** `BI-9FF39058`  
 **Workroom:** `WC-162C6AAD`  
+**Readiness profile:** `feature`  
 **Parent design:** [Delivery closeout and cost efficiency](2026-09-04-delivery-closeout-cost-efficiency-design.md)
 
 ## Problem and evidence
