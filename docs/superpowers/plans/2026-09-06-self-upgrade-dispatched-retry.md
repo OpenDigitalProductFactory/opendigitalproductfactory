@@ -10,7 +10,12 @@ This coverage locator maps its one atomic deliverable to BI-54284E21.
 
 | Deliverable | Requirements | Contract | Flow | Verification |
 | --- | --- | --- | --- | --- |
-| Shared recovery eligibility and manual retry | AC-SUA-015, AC-SUA-016 | SelfUpgradeAdmissionRepository.admit; triggerSelfUpgrade | /ops/self-upgrade | promotions.self-upgrade.test.ts; run-store.test.ts; typecheck; live fresh admission |
+| Shared recovery eligibility and manual retry | OBJ-SUA-002, OBJ-SUA-003, OBJ-SUA-004, OBJ-SUA-006, OBJ-SUA-007 | SelfUpgradeAdmissionRepository.admit; triggerSelfUpgrade | /ops/self-upgrade | AC-SUA-010, AC-SUA-011, AC-SUA-012, AC-SUA-013, AC-SUA-014, AC-SUA-015, AC-SUA-016 |
+
+Retain the baseline's existing exact-target, duplicate-worker, live-observation
+and registration recovery tests (AC-SUA-010 through AC-SUA-014). Add the manual
+dispatch-evidence regressions and preserve typed recovery (AC-SUA-015 and
+AC-SUA-016). Run action and run-store tests, typecheck and live fresh admission.
 
 No phase is independently shippable: the caller and store must use the same
 eligibility rule. Normal authority, target selection, active-run exclusion and
