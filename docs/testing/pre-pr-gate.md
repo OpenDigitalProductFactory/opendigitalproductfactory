@@ -391,6 +391,20 @@ displayed model size is ordinary RAM, conflate GPU VRAM with physical memory,
 or infer the Docker/WSL/shared-memory mechanism. It also does not terminate a
 model that was already resident before admission.
 
+**The fence measures available memory, not free memory (BI-EB6DBAF0).** The
+execution-pressure fence revokes an admitted lease when the host observation
+reports less than 4 GiB. That observation is reclaimable-inclusive: `vm_stat`
+free + inactive + speculative + purgeable on Darwin, `/proc/meminfo`
+`MemAvailable` on Linux, with `os.freemem()` kept only as a last resort so a
+wedged probe cannot wedge the gate. `os.freemem()` alone reports the free page
+pool, which excludes memory the kernel returns on demand — on a 128 GiB macOS
+host it read 17.5 GiB against 47.5 GiB genuinely available. Measuring the free
+pool made the gate fence its own work: `next build`, running under the 16 GiB
+heap the gate had just granted, drove the free pool under the floor while tens
+of GiB stayed reclaimable, and the run was killed as `host-memory-low` after
+its tests had already passed. A reading that matched only the free bucket is
+refused rather than reported as available.
+
 **Fail-fast command order (BI-7BCCDE3D).** Inside an admitted runtime-code
 gate, freshness, Prisma generation, migrations, and the cheap doc/repository
 guards run first. Web typecheck then runs before exhaustive Vitest, followed by
