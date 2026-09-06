@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Scheduled-job kill switch — design
 
 Backlog item: BI-7E49FA15 · Workroom: WC-5586F794 · Profile: fix

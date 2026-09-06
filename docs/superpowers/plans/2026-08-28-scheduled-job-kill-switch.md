@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Make the scheduled-job kill switch load-bearing (BI-7E49FA15)
 
 Status: implemented (branch fix/scheduled-job-kill-switch-v2) · Umbrella backlog item: BI-7E49FA15 · Workroom: WC-5586F794

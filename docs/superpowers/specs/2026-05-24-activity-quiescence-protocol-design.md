@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Activity Quiescence Protocol
 
 > **Observation architecture note:** this spec owns the durable quiescence lifecycle. Browser
