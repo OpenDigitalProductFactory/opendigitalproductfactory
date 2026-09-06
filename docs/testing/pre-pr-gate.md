@@ -573,6 +573,21 @@ that durable record; do not infer the refusal from process residency, cancel
 and recreate a healthy FIFO claim, or conflate Docker model residency and GPU
 VRAM with Windows physical-memory telemetry.
 
+**A queue and a closed pool are two different waits, and the gate says which.**
+When the host rollback contracts the pool to `effectiveCapacity: 0`
+(`host-stage-headroom-low`, `host-memory-low`, `host-observation-stale`, ...),
+no slot can admit anyone, yet the claim is still parked with
+`admission.status: "queued"`. The waiting line then reads
+`local-CI pool is CLOSED (<rollbackReason>)` instead of `queued at position N`,
+the queued lease event and the durable-wait record carry `poolClosedReason`,
+and `pnpm run pregate:status` names host pressure rather than "the gate did not
+run". Behind a queue you wait; behind a closed pool you free host memory (on a
+Windows host, usually the WSL page cache held by `vmmemWSL`) or wait for the
+pressure to pass. Waiting in line does nothing for a closed pool
+(BI-D908DA0A). A fenced run likewise records *which* fence fired
+(`fence reason: lease-authority-deadline`, ...) in its gate record, so a
+self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
+
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
 bounded output tail, and records real compiler exits separately from opaque
