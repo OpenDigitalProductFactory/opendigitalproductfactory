@@ -245,4 +245,17 @@ describe("enrolWithOrganizationAuthority + reconcile", () => {
     expect(deriveAuthorityPortalUrls("https://192.168.0.152:9000")).toEqual(["http://192.168.0.152:3000", "https://192.168.0.152"]);
     expect(deriveAuthorityPortalUrls("nope")).toEqual([]);
   });
+
+  it("reconcile: presents the declared estate name to the authority, not its normalised comparison form", async () => {
+    const member = installation("member");
+    const seen: string[] = [];
+    const post = vi.fn(async ({ cloudEvent }: { cloudEvent: { statement: { displayName: string; organizationRef: string } } }) => {
+      seen.push(`${cloudEvent.statement.displayName}|${cloudEvent.statement.organizationRef}`);
+      return { ok: false, status: 404 };
+    });
+    expect(await reconcileOrganizationMembership(member.db, { readText: readMember, caUrl: "https://192.168.0.152:9000", localAuthorityUrl: "http://192.168.0.200:3000", post: post as never }))
+      .toMatchObject({ outcome: "failed" });
+    // The live pair showed the same slug twice on the authority: display and ref had collapsed together.
+    expect(seen[0]).toBe("Northwind Test|northwind test");
+  });
 });
