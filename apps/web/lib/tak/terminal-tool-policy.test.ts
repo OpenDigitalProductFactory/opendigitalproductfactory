@@ -359,6 +359,46 @@ describe("terminal tool policy", () => {
       result: { error: "terminal_writer_phase_reader_refused" },
     });
   });
+
+  // Observed on BI-8E1FD1BD spec-approval, 2026-09-06. The reviewer had already
+  // read the artifact successfully. It then hit this refusal six times and told
+  // a human "BLOCKED - immutable evidence unavailable; all six evidence-reader
+  // attempts failed" - the exact inverse of what the refusal says - and answered
+  // with prose instead of its verdict, so the run ended with no receipt. The
+  // refusal is a SUCCESS condition wearing an error's clothes, so its wording is
+  // load-bearing: it must not contain anything a model can hear as "missing",
+  // and it must say what happens if the writer is not called.
+  it("phrases the writer-phase reader refusal so it cannot be read as missing evidence", () => {
+    const resumed = enterTerminalWriterPhase(policy);
+    const refusal = resolveTerminalToolCall(resumed, [], "read_source_at_version");
+    expect(refusal.kind).toBe("refuse");
+    const message = refusal.kind === "refuse" ? refusal.result.message : "";
+
+    // States the true state before the instruction.
+    expect(message).toMatch(/SUCCESS, NOT A FAILURE/);
+    expect(message).toMatch(/persisted/);
+    expect(message).toMatch(/[Nn]othing is missing/);
+    // Names the consequence of answering with prose.
+    expect(message).toMatch(new RegExp(policy.writerToolName));
+    expect(message).toMatch(/NO receipt/);
+    // Both verdicts are legitimate, so a reviewer does not read the nudge as
+    // pressure to pass.
+    expect(message).toMatch(/fail/i);
+    // The words that caused the inversion must not appear.
+    expect(message).not.toMatch(/\bunavailable\b/i);
+    expect(message).not.toMatch(/\bblocked\b/i);
+  });
+
+  it("phrases the evidence-complete nudge the same way", () => {
+    const resumed = enterTerminalWriterPhase(policy);
+    const nudge = resolveTerminalTextExit(resumed, [], 0);
+    expect(nudge.kind).toBe("nudge");
+    const message = nudge.kind === "nudge" ? nudge.message : "";
+    expect(message).toMatch(/succeeded|complete/);
+    expect(message).toMatch(/[Nn]othing is missing/);
+    expect(message).toMatch(/NO receipt/);
+    expect(message).not.toMatch(/\bunavailable\b/i);
+  });
 });
 
 describe("agent loop terminal writer integration", () => {

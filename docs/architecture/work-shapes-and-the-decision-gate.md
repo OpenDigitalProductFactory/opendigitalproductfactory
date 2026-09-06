@@ -140,6 +140,34 @@ budgets, stop conditions, and coordinator eligibility with observed state. A der
 remains useful for legacy visibility, but it is marked compatibility-only and does not make a
 shaped room execution-qualified. The enforced contract is:
 
+#### Appointing one ⟦runtime: 2026-09-03, `BI-F63200A8`⟧
+
+Requiring an explicit coordinator is only half a contract; something has to be able to name one.
+Until this landed nothing could. `persistWorkroomParticipantAssignment` could always write the
+roster row and had **zero callers**; `invite_room_participant` admits a participant but never sets
+the `coordinator` role, and requires an acting coworker, so it could not have unstuck a room even
+from inside. The consequence was observable rather than theoretical: a standing room on the
+reference install woke every fifteen minutes and refused **100 consecutive times** with
+`missing_explicit_coordinator`, and nothing surfaced it.
+
+`appoint_room_coordinator` is that caller — `capsuleId` plus `principalRef`, deliberately callable
+**without** an acting coworker so a stalled room can be given an owner by whoever notices it. It
+carries `consequence: "authority"`, because who answers for a room is an authority fact.
+
+Its refusals carry the contract:
+
+- an unknown or inactive principal is refused, because persisting one leaves the room *looking*
+  owned while it still refuses to execute — indistinguishable from having no owner at all;
+- a second coordinator is refused unless a hand-over is explicit, because conformance treats
+  `multiple_coordinators` as blocking, so silently adding one leaves the room **more** stuck than
+  before the appointment;
+- re-appointing the current owner is idempotent, not a second coordinator.
+
+Appointment is layer 1 of the ownership ladder ratified in `DI-306B742EFD74`; deriving an owner
+from the work shape, the archetype's portfolio specialist, or the value-stream orchestrator is
+follow-on work, and an unresolvable room is reported unowned rather than assigned to a
+plausible-looking coworker.
+
 1. **Convene:** require exactly one explicit current coordinator and validate the collaboration
    shape, WorkShapeDefinition/version, persisted roster, posture, authority, trigger, measures,
    review point, budgets, and stop conditions.
@@ -417,6 +445,36 @@ adoption handler drops `workShape`, and the store does not update scope on reuse
 Readback, not tool success text, determines whether a shape is active. The recovery
 amendment assigns repair and round-trip verification to `BI-06AE6833`; do not create
 a duplicate room or edit the database to make a diagram look configured.
+
+## A stalled room reaches a human
+
+A room's drive records why it refused, on every tick, in
+`workspaceState.workroomDrive` and in a `WorkroomActivity` row. Writing that
+faithfully is not the same as anyone learning it. Until `BI-03E94B5B` nothing read
+either surface, so refusal was free: on 2026-09-06 all twelve standing rooms on this
+install were found refusing — 331 consecutive wakes on `WC-A69BCABB`, 207-209 on the
+other eleven, every one on `missing_explicit_coordinator`, and none of it had reached
+anybody.
+
+The `workroom-stall` attention source closes that. It is a read over state the drive
+already writes — no new table, no new writer, no new tick:
+
+- **Threshold, not first pause.** Four consecutive refusals (the drive cron is every
+  15 minutes, so one hour). A single paused tick is ordinary; an hour of them is a
+  stall. A source that fires on healthy rooms is one operators learn to ignore.
+- **The streak is the current one.** It is counted back from the newest drive
+  activity and stops at the most recent non-pause, so a room that recovered and
+  stalled again reports the new streak, not a lifetime total.
+- **An unowned room is never assigned to a principal.** The missing principal is the
+  finding; it routes to the operator, who can appoint one. An owned-but-stalled room
+  routes to its Process Overseer as well.
+- **The item names the room, the reason and the streak length.** Not "a room is
+  stuck".
+
+Raw SQL against this trail must use the physical table name `"WorkCapsuleActivity"`
+(`@@map`), exactly as `Workroom` maps to `"WorkCapsule"`. The Prisma model name
+compiles and type-checks and fails only against a real database — unit tests over the
+projector cannot catch it.
 
 ## Related references
 

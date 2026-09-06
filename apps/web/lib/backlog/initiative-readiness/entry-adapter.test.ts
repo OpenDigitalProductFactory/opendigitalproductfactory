@@ -228,6 +228,27 @@ describe("projectBacklogItemReadiness", () => {
       .toEqual(["E-TEST", "E-ACCEPT"]);
   });
 
+  it("EP-4614F35E: recognizeMergeThroughGates coerces the design/plan lanes to pass with NO receipts", () => {
+    const completionArgs = {
+      item,
+      activities: [], // no receipts at all
+      target: "completion" as const,
+      transitionObject: { kind: "backlog-item" as const, id: "BI-ENTRY", expectedVersion: "in-progress", targetState: "done" },
+      authorization: "pass" as const,
+      capsuleIdentity: "pass" as const,
+      completion: { deliveryEvidence: "pass" as const, acceptanceEvidence: "pass" as const, objectiveReconciliation: "pass" as const },
+      evaluatedAt: "2026-08-22T08:00:00.000Z",
+    };
+    // Without recognition, a receipt-less feature item cannot complete.
+    expect(projectBacklogItemReadiness(completionArgs).decision.verdict).toBe("input-required");
+    // With recognition, the design/plan lanes are satisfied and it completes.
+    const recognized = projectBacklogItemReadiness({ ...completionArgs, recognizeMergeThroughGates: true });
+    expect(recognized.decision.verdict).toBe("allowed");
+    for (const code of ["RESEARCH_REQUIRED", "CANONICAL_DESIGN_REQUIRED", "SPEC_APPROVAL_REQUIRED", "OBJECTIVE_BASELINE_REQUIRED", "PLAN_REQUIRED", "PLAN_REVIEW_REQUIRED"]) {
+      expect(recognized.decision.unmet.find((e) => e.code === code)).toBeUndefined();
+    }
+  });
+
   it("allows governed design work before a canonical design exists", () => {
     const projection = projectBacklogItemReadiness({
       item,

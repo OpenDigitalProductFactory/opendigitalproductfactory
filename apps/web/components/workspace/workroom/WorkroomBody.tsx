@@ -259,9 +259,11 @@ function WorkroomDetailsContent({ detail, room }: Props) {
             </details>
           ) : null}
 
-          <div className="border-t border-[var(--dpf-border)] p-4">
-            <WorkItemCommentBox workItemId={detail.workItemId} caseKey={room.roomKey} />
-          </div>
+          {detail.workItemId ? (
+            <div className="border-t border-[var(--dpf-border)] p-4">
+              <WorkItemCommentBox workItemId={detail.workItemId} caseKey={room.roomKey} />
+            </div>
+          ) : null}
         </section>
 
         <aside aria-label="Work Room context" className="space-y-3">

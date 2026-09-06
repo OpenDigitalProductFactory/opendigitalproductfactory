@@ -32,7 +32,8 @@ export type AttentionSource =
   | "business-journey" // PortfolioQualityIssue issueType=journey_failure — a critical business journey failed its watchdog run (BI-E105303D)
   | "compliance-source-freshness" // governed AI-provider compliance evidence lapsing or lapsed (BI-68D44727)
   | "coworker-envelope" // CoworkerActionEnvelope status=proposed, bound to the reading user (BI-7CB2CCDE)
-  | "skill-proposal"; // ImprovementProposal category=skill, status=proposed — a skill change awaiting review (BI-2F9EE2E9)
+  | "skill-proposal" // ImprovementProposal category=skill, status=proposed — a skill change awaiting review (BI-2F9EE2E9)
+  | "workroom-stall"; // a Workroom whose drive has refused consecutive wakes — stalled, or unowned (BI-03E94B5B)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
@@ -66,7 +67,8 @@ export type ResidueReason =
   | "needs-credential" // missing credential / authority, NOT judgment (TaskRun auth-required)
   | "policy-approval" // an agent action awaits approval (AgentActionProposal)
   | "new-memory-note" // a coworker's role-local memory gained a new distilled note
-  | "no-self-heal"; // a platform service is degraded and has no automated repair path (health_alert)
+  | "no-self-heal" // a platform service is degraded and has no automated repair path (health_alert)
+  | "room-stalled"; // a Workroom's drive keeps refusing to advance — typically no accountable owner
 
 /** How much the human must do. The human_cognitive_load cost axis. */
 export type DecideEffort = "one-tap" | "review" | "judgment";
