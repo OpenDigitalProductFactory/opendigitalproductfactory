@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isEligibleRecoveryPredecessor } from "@/lib/self-upgrade/recovery-eligibility";
 import { prisma, Prisma } from "@dpf/db";
 import { safeSyncSelfUpgradeChangeRecord } from "@/lib/self-upgrade/change-record";
 import { agentEventBus } from "@/lib/agent-event-bus";
@@ -118,15 +119,7 @@ export const selfUpgradeAdmissionRepository: SelfUpgradeAdmissionRepository = {
             run: null,
           };
         }
-        if (
-          !predecessor.admissionFingerprint ||
-          !predecessor.dispatchStatus ||
-          !predecessor.targetSha ||
-          !predecessor.targetTag ||
-          predecessor.dispatchAttemptCount !== 0 ||
-          predecessor.dispatchAcknowledgedAt !== null ||
-          predecessor.dispatchEventIds.length !== 0
-        ) {
+        if (!isEligibleRecoveryPredecessor(predecessor)) {
           return { disposition: "recovery_refused" as const, reason: "recovery-predecessor-ambiguous" as const, run: null };
         }
         const targetRelationship = classifyRecoveryTargetRelationship(
