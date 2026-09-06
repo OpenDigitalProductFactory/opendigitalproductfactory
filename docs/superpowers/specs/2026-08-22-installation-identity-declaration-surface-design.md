@@ -15,6 +15,86 @@ status: binding
 
 ## 1. Decision
 
+### Development-companion continuation (proposed implementation increment, 2026-09-06)
+
+This increment connects identity declaration to existing discovery, trust and work
+sync. It is proposed scope awaiting independent initiative review; it does not
+claim that the runtime already provides the sequence. Portable references below
+are independent of any organization's backlog IDs. The adopting workroom owns
+the local mapping and approval receipts.
+
+**OBJ-COMPANION-001:** A confirmed development instance of another installation
+can reach its parent's agreed work inventory through one resumable setup journey.
+An ordinary business instance or standalone development instance is never forced
+through this development-sync setup.
+
+| Acceptance | Required behavior |
+|---|---|
+| AC-COMPANION-001 | Derive applicability server-side from confirmed effective development identity and a resolved parent relationship. Purpose alone, a host environment hint or discovery cannot activate the branch. |
+| AC-COMPANION-002 | Present current nearby candidates and existing trusted links through the existing identity surface; confirm the selected parent's installation identity. Ambiguous labels, self-selection, expired candidates and foreign relationships cannot bind silently. |
+| AC-COMPANION-003 | Resume canonical membership/pairing, preserving its authorization, certificate and organization checks. Identity save grants no credentials, approval or peer-write rights. Existing trusted links are reused. |
+| AC-COMPANION-004 | Advance from confirmed identity to selected parent, trust, synchronization and verified readiness in that order. Identity can be saved when connectivity fails, but readiness cannot be asserted. |
+| AC-COMPANION-005 | Require a complete, identity-bound sync/reconciliation result for the agreed inventory, including required member-origin work, epic scope and references. Ordinary inbound health or an origin-only subset cannot satisfy full master-list readiness. Unsupported coverage produces an explicit blocking result. |
+| AC-COMPANION-006 | Reload/retry resumes canonical state without duplicate links or imports. Parent change invalidates prior admission evidence; late old-target responses cannot complete the new identity. Reclassification does not silently revoke links or delete work. |
+| AC-COMPANION-007 | Human and MCP consumers receive the same continuation state, selected parent, reason and next permitted action. Keyboard/mobile/theme/permission and no-client background reconciliation have equivalent outcomes. |
+
+**CON-COMPANION-IDENTITY:** Reuse `installation.operating-intent.v1`, the existing
+effective environment precedence and `pairedProductionInstallationRef`. Resolve
+legacy display-name references through current verified links/candidates; ambiguous
+references remain unresolved. Never mint a parallel identity or clone a parent key.
+
+**CON-COMPANION-TRUST:** Existing federation enrollment and nearby pairing actions
+remain the only writers. A trust decision evaluates actual organization and
+certificate evidence. OAuth authenticates the external MCP client separately;
+member enrollment credentials never substitute for the client's identity.
+
+**CON-COMPANION-READINESS:** Derive continuation from persisted authoritative
+identity, link and sync evidence in a shared server projection. Bind evidence to
+the identity revision, parent installation/link and inventory watermark. A browser
+success callback cannot store readiness. No additional orchestration engine,
+global navigation or parallel workflow ledger is introduced. Reuse the activation
+orchestrator's projection seam and federation's reconciliation cadence.
+
+**FLOW-COMPANION-SETUP:** save/confirm identity -> resolve selected parent ->
+canonical trust action or reuse -> existing reconciliation -> validate required
+inventory -> ready. Each arrow checks identity revision again. Missing evidence,
+permission or network access leaves a truthful next action at that stage.
+
+UI: extend `InstallationIdentityPanel` with one primary next action and a concise
+parent/status line. Use the existing candidate and organization-join components
+or shared subcomponents, rather than copying their action/state implementations.
+Announce asynchronous progress, return focus on errors, and preserve drafts on
+retry. Do not render host teardown scripts in the instance setup journey.
+
+Compatibility: existing unpaired identities retain their current setup; existing
+pairings remain usable; old ambiguous references request resolution. New verified
+readiness is never backfilled from a historic `synced` flag. Preserve protocol
+version checks and explicitly block full-inventory acceptance if the peer cannot
+prove it. Removing this increment restores the previous identity UI without
+removing identities, links or work. No database migration is justified merely
+to store a duplicate boolean; any necessary evidence-contract extension requires
+its owning protocol review before code.
+
+Grounding: at source `061eeeee8c7`, `declareInstallationIdentity` only persists
+intent/environment and refreshes the workspace; the panel reports a saved identity.
+`startNearbyPairingAction`, organization-membership reconciliation and work-sync
+already own connection/sync behavior. `work-sync-read-model.ts` exposes inbound
+health, not full-inventory admission. The superseded 2026-08-08 umbrella is not
+implementation approval for this increment. Current parent designs are this
+document, the [identity/stance design](2026-08-22-installation-identity-and-agent-stance-design.md),
+the [organization federation design](2026-09-02-zero-configuration-organization-federation-design.md),
+and the [OAuth design](2026-08-26-mcp-client-self-authentication-design.md).
+
+Research/alternatives reuse those designs' recorded comparisons and standards:
+retain organization-issued trust and existing OAuth; reject trust-on-first-use,
+shared organization secrets and a parallel setup engine. The pending review must
+confirm that inherited research and the evidence-protocol coverage satisfy this
+increment; source presence is not a live acceptance receipt.
+
+Verification cases `VER-COMPANION-001` through `VER-COMPANION-007` correspond
+one-to-one with the acceptance rows above. The [implementation sequence](../plans/2026-09-06-instance-companion-onboarding.md)
+maps the concrete source seams and negative controls.
+
 An operator shall be able to read and correct the **whole** installation identity
 from the portal, and shall be able to see the stances that identity produces
 together with the reason for each one.
