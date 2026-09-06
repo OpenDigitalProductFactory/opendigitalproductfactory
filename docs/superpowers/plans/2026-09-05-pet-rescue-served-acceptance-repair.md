@@ -5,8 +5,10 @@ status: active
 # Pet Rescue exact-served acceptance repair
 
 **Backlog item:** `BI-24FDCB9D`
-Workroom: `WC-87F57668`  
-Design: `docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md` §§5.1, 7.1, 7.4, 7.5  
+Implementation Workroom: `WC-87F57668`
+Governance repair Workroom: `WC-A791C409`
+Design: `docs/superpowers/specs/2026-09-06-pet-rescue-served-acceptance-repair-design.md`
+Parent design: `docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md` §§5.1, 7.1, 7.4, 7.5
 Blocked closeout: `BI-7A38F667` / `WC-16B8E810`
 
 ## Objective
@@ -71,9 +73,13 @@ pass on the exact worktree.
 
 - Decision: atomic
 - Parent: `BI-24FDCB9D`
-- Receipt: blocked-by: no initiative scope baseline exists for BI-24FDCB9D because both exact server-issued reviewer routes returned without their required writer tool call or receipt
+- Receipt: blocked-by: the new child-specific immutable design must receive its genuine independent scope baseline before plan coverage can be recorded
 - Rationale: the Ward roster and mobile navigation contradictions jointly block the same exact-served Pet Rescue acceptance, so neither half is independently shippable.
-- Deliverable: `pet-rescue-served-acceptance-repair` → `BI-24FDCB9D`; requirements `AC-RESCUE-CAPACITY-02`, `AC-RESCUE-HOME-02`
+- Deliverable: `pet-rescue-served-acceptance-repair` → `BI-24FDCB9D`
+  - Requirements: `OBJ-RESCUE-SERVED-REPAIR`
+  - Contracts: `AC-RESCUE-CAPACITY-02`, `AC-RESCUE-HOME-02`
+  - Flows: `Phase 1 — RED and authority boundary`, `Phase 2 — GREEN and bounded refactor`, `Phase 3 — guards, protected CI, and live acceptance`
+  - Verification: `AC-RESCUE-SERVED-01`, `AC-RESCUE-SERVED-02`
 - Dependencies: `pet-rescue-served-acceptance-repair` → `BI-24FDCB9D` (`BI-D2A51B36`, `BI-7A38F667`)
 
 ## Risk and rollback
