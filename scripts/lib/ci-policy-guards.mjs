@@ -157,6 +157,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // A guarded install step that skips in silence reads as success, and is
       // then recorded as done by Save-Progress. Optional-script guards must say so.
       conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
+      conformanceTest("scripts/check-setup-worktree-hygiene.test.mjs"),
     ], { inputs: ["code"] }),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the

@@ -317,12 +317,25 @@ export function resolveTerminalToolCall(
     };
   }
   if (policy.terminalPhase === "writer-only" && policy.readerToolNames.includes(toolName)) {
+    // BI-69BBC446 follow-up. This refusal used to read "Immutable evidence is
+    // already persisted. Call <writer> now." A reviewer took six refusals in a
+    // row and reported to a human: "BLOCKED - immutable evidence unavailable;
+    // all six evidence-reader attempts failed" - the exact inverse of what the
+    // refusal said. It then wrote prose instead of its verdict, and the run
+    // ended with no receipt. A success condition phrased as an error is read as
+    // an error, so this states the state first, the consequence second, and
+    // never uses a word the model can hear as "missing".
     return {
       kind: "refuse",
       result: {
         success: false,
         error: "terminal_writer_phase_reader_refused",
-        message: `Immutable evidence is already persisted. Call ${policy.writerToolName} now.`,
+        message:
+          `SUCCESS, NOT A FAILURE: you already read the bound artifact in full and it is persisted for this `
+          + `turn. Nothing is missing and there is nothing left to retrieve. Re-reading is declined only `
+          + `because it would be redundant. You have everything you need to judge. `
+          + `Call ${policy.writerToolName} now with your assessment - a pass and a fail are equally valid. `
+          + `If you answer with prose instead, this run ends with NO receipt recorded and your review is lost.`,
       },
     };
   }
@@ -473,6 +486,10 @@ export function resolveTerminalTextExit(
   return {
     kind: "nudge",
     allowedToolNames: [policy.writerToolName],
-    message: `Evidence retrieval is complete. Call ${policy.writerToolName} now with your independent assessment; do not respond with prose first.`,
+    message:
+      `Evidence retrieval is complete and succeeded - nothing is missing and you have everything you need to `
+      + `judge. Call ${policy.writerToolName} now with your independent assessment; a pass and a fail are `
+      + `equally valid outcomes. Answering with prose instead of the tool call ends this run with NO receipt `
+      + `recorded.`,
   };
 }

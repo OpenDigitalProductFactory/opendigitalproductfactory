@@ -9,6 +9,7 @@ relatedCode:
   - apps/web/components/workspace/WorkCaseDetailView.tsx
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomParticipants.tsx
+  - apps/web/lib/work-management/coworker-engagement-case-projection.ts
   - apps/web/lib/work-management/room-channel-continuity.ts
   - apps/web/lib/work-management/room-channel-ingress.ts
   - apps/web/lib/work-management/room-participation.ts
@@ -23,6 +24,8 @@ relatedCode:
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
 From **Platform > Workrooms**, select a room ID to open this same canonical Workroom. Rooms tied to backlog work open that backlog case; rooms without a backlog item open their Work Capsule case, so the inventory never leads to a dead route.
+
+Coworker service engagements can also appear as Work Cases. When a requested coworker service needs approval, is accepted, or is in progress, the room opens around the engagement itself: the requested outcome is the room boundary, the provider coworker appears as a contributor, and approval context or audit references stay attached as evidence. These rooms do not show the WorkItem comment box until a WorkItem exists, because there is no task message thread to post into yet.
 
 ## What You See First
 

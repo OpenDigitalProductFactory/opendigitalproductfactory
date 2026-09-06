@@ -15,6 +15,11 @@ import { parseDecisionStakes } from "@/lib/decision/option-scoring";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
+  createRetrievalBudget,
+  resolveRetrievalBudgetMs,
+  retrievePrincipleTiers,
+} from "@/lib/decision/retrieval-budget";
+import {
   DIMENSION_KEYS,
   buildFeaturesDescription,
   validateOptionFeatures,
@@ -322,38 +327,24 @@ export async function runPrincipleDecision(
 
   const contextQuery = String(params["context"] ?? "");
 
-  // 2. Core from Qdrant — relevance-ranked.
-  let core: Array<Record<string, unknown>> = [];
-  try {
-    core = (await searchWikiPages({
-      query: contextQuery,
-      organizationId,
-      pageKind: "principle",
-      principleTier: "core",
-      principleAppliesTo: callingPopulation,
-      principleRingScope: ringScopeActive ? ringScope : undefined,
-      limit: 5,
-    })) as Array<Record<string, unknown>>;
-  } catch (err) {
-    console.warn("[principle_decide] core Qdrant lookup failed:", err);
-  }
+  // BI-D8D1371B: bound semantic retrieval so a stalling embedding provider
+  // degrades this call instead of hanging it. Reasoning: decision/retrieval-budget.ts.
+  const budgetMs = resolveRetrievalBudgetMs();
+  const retrievalBudget = createRetrievalBudget(budgetMs);
+  const withRetrievalBudget = <T,>(work: Promise<T>, whenLate: T) =>
+    retrievalBudget.run(work, whenLate);
 
-  // 3. Contextual from Qdrant — relevance-gated.
-  let contextual: Array<Record<string, unknown>> = [];
-  try {
-    contextual = (await searchWikiPages({
-      query: contextQuery,
-      organizationId,
-      pageKind: "principle",
-      principleTier: "contextual",
-      principleAppliesTo: callingPopulation,
-      principleRingScope: ringScopeActive ? ringScope : undefined,
-      limit: 5,
-      scoreThreshold: contextualThreshold,
-    })) as Array<Record<string, unknown>>;
-  } catch (err) {
-    console.warn("[principle_decide] contextual Qdrant lookup failed:", err);
-  }
+  // 2+3. Core and contextual tiers, both under the shared retrieval budget.
+  // eslint-disable-next-line prefer-const -- both are narrowed by the post-filter below.
+  let { core, contextual } = await retrievePrincipleTiers({
+    search: searchWikiPages as never,
+    budget: retrievalBudget,
+    query: contextQuery,
+    organizationId,
+    callingPopulation,
+    ringScope: ringScopeActive ? ringScope : undefined,
+    contextualThreshold,
+  });
 
   // Post-filter (cheap belt-and-suspenders). Mirrors the contract used
   // by recallPrincipleContext: empty principleRingScope passes
@@ -592,14 +583,14 @@ export async function runPrincipleDecision(
   // (empty dimensionVector), embed its direction text server-side.
   // Parallelized to amortize inference round-trips. Skipped for
   // structured-alignment rows since their embedding wouldn't be used.
-  const principleEmbeddings = await Promise.all(
+  const principleEmbeddings = await withRetrievalBudget(Promise.all(
     candidateRows.map(async (row): Promise<number[] | undefined> => {
       if (Object.keys(row.dimensionVector).length > 0) return undefined;
       if (!row.directionText) return undefined;
       const e = await generateEmbedding(row.directionText);
       return e ?? undefined;
     }),
-  );
+  ), candidateRows.map(() => undefined));
 
   type DecisionPrinciple = Parameters<typeof decide>[1][number];
   const principleList: DecisionPrinciple[] = candidateRows.map(
@@ -690,6 +681,14 @@ export async function runPrincipleDecision(
   // coverage while core/contextual retrieval was structurally impossible.
   // `make-silent-failures-observable`, applied to the kernel's own recall.
   let retrievalDegraded = false;
+  if (retrievalBudget.exceeded()) {
+    // A ruling scored without core/contextual must not read as a healthy one.
+    retrievalDegraded = true;
+    console.error(
+      `[principle_decide] retrieval budget exceeded (${budgetMs}ms) — embedding `
+        + "provider slow; scored on the tiers that returned in time.",
+    );
+  }
   if (core.length === 0 && contextual.length === 0) {
     retrievalDegraded = !(await isEmbeddingAvailable());
     if (retrievalDegraded) {
