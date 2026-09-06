@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 697,
+  "pageCount": 698,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3917,6 +3917,17 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": {
+      "publicHref": "/founder-kernel/wiki/principles/gates-proportional-to-shape/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "gates-are-proportional-to-the-shape-of-the-work",
+        "the-rule",
+        "where-it-lives"
       ]
     },
     "docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md": {

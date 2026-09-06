@@ -332,7 +332,11 @@ export async function promoteBacklogItemToBuildDraft(
   // so the prompt selector + phase gate can pick the matching lifecycle
   // policy. Default "medium" preserves today's behavior for BIs without an
   // explicit effortSize. See build-process-matrix.ts.
-  const processSize = deriveBuildProcessSize({ effortSize: item.effortSize ?? null });
+  const { readBoundWorkShapeRef } = await import("@/lib/backlog/initiative-readiness/bound-work-shape");
+  const boundWorkShape = (tx as { workroom?: { findFirst?: unknown } }).workroom?.findFirst
+    ? await readBoundWorkShapeRef(tx as unknown as Parameters<typeof readBoundWorkShapeRef>[0], item.itemId).catch(() => null)
+    : null;
+  const processSize = deriveBuildProcessSize({ effortSize: item.effortSize ?? null, workShape: boundWorkShape });
   const planBase = mergeHappyPathStateIntoPlan(null, {
     intake: {
       status: "ready",
