@@ -6,7 +6,7 @@ status: active
 
 - **Epic:** EP-129D11FD (Initiative Readiness and Governed Completion Enforcement)
 - **Backlog item:** BI-B5C8FEFC
-- **Profile:** cross-domain (policy spans backlog, Workroom, Build Studio, readiness)
+- **Profile:** feature (the item's authoritative classification, workType `feature`; the policy spans backlog, Workroom, Build Studio and readiness, but a review receipt must name the item's own profile, not the reach of the policy)
 - **Authored:** 2026-09-02
 - **Status:** active — 4 of 5 decisions ruled by the kernel (§5); decision 2 taken at its conservative default (human-only) and marked founder-revisable; execution sequence in §5.1
 - **Provenance:** BI-B3AB7FC9 (PR #4999) was a one-afternoon diagnosis-to-merge fix that could not be closed because the completion gate demanded a research receipt, a plan-coverage record, an independently approved spec baseline, acceptance evidence, and objective reconciliation. BI-28E8CB88, BI-F0715C9C and BI-3AE38A1F record the same wall from three other fixes.
@@ -184,11 +184,11 @@ Related, adjacent items this spec now binds to: BI-C8C4031C (document the shape 
 |---|---|---|
 | Design ratified | 4 of 5 decisions ruled by the kernel; 1 founder input open (who declares break-fix) | table above; BI-B5C8FEFC activity cmtkut5xx09or01pgks0ni72l |
 | Substrate exists | `workShape` registry, scope-claim persistence, claim handler, Workroom header all present | §3.0; `apps/web/lib/work-management/work-shapes.ts`; `governed-work-claim.ts:249-360` |
-| Decision ledger seals verdicts | **No** — `profile-not-provisioned` on this install | BI-218EC195 |
+| Decision ledger seals verdicts | **Yes** since 2026-09-06 — the fallback profile carries a version (PR #5083); `principle_decide` recorded DI-C0989B8514AF on this install | BI-218EC195 (shipped) |
 | Reviewer capacity for `large` gates | Fragile — reviewers exist (AGT-WS-PORTFOLIO, ea-architect) but bounded-budget reviewers have stopped before their terminal receipt write | BI-8B8731EE, BI-28E8CB88 activity cmtf85p3403dy01phlttlc1z6 |
 | Plan with backlog coverage | Not yet written | §6 is the outline; the plan is the next artifact |
 
-Verdict: **the design is final and the plan may proceed.** Implementation is sequenced in `docs/superpowers/plans/2026-09-05-work-shape-taxonomy-implementation.md` and starts with BI-218EC195 so the first delivery-shape claim binds to a sealed kernel verdict rather than an advisory one; the two rows marked No/Fragile above are that plan's first two phases, not reasons to hold the design.
+Verdict: **the design is final and the plan may proceed.** Implementation is sequenced in `docs/superpowers/plans/2026-09-05-work-shape-taxonomy-implementation.md` and started with BI-218EC195 (shipped) so the first delivery-shape claim binds to a sealed kernel verdict rather than an advisory one; the row marked Fragile above is a plan phase, not a reason to hold the design.
 
 ## 6. Implementation outline (for the plan that follows this spec)
 
