@@ -594,6 +594,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    // An engagement is requested by a person, never scheduled or thresholded.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "engagement-age", label: "Time since the engagement was requested", bindingKey: "lead-time" },
+    ],
   },
   // ─── Employment lifecycle (EP-862820FD, BI-28EFA338) ────────────────────────
   //
@@ -627,6 +638,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "worker-onboarding-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "worker-change",
@@ -642,6 +664,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "worker-change-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "worker-offboarding",
@@ -661,6 +694,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "worker-offboarding-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "worker-classification-review",
@@ -682,6 +726,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: STANDING_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "worker-classification-review-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "referral-intake",
@@ -701,6 +756,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "referral-intake-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     // A field-service job dispatched to a provider from a confirmed booking.
