@@ -31,6 +31,13 @@ const initiativeReviewBinding = {
   },
 };
 
+const eligibleEvidenceActivityIds = ["ACTIVITY-PASS-1", "ACTIVITY-PASS-2"];
+const objectiveMappingBinding = {
+  ...initiativeReviewBinding,
+  gate: "objective-mapping",
+  eligibleEvidenceActivityIds,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   external.dispatch.mockResolvedValue({
@@ -74,6 +81,27 @@ describe("coworker pack — registration", () => {
     expect(schema?.properties).toHaveProperty("requiredToolNames");
     expect(schema?.properties).toHaveProperty("initiativeReviewBinding");
   });
+
+  it.each(["request_coworker", "summon_coworker"])(
+    "%s advertises bounded objective-mapping evidence IDs in the immutable binding",
+    (toolName) => {
+      const schema = coworkerPack.definitions.find((definition) => definition.name === toolName)?.inputSchema;
+      const properties = schema?.properties as Record<string, unknown> | undefined;
+      const bindingSchema = properties?.["initiativeReviewBinding"] as {
+        properties?: Record<string, unknown>;
+      } | undefined;
+
+      expect(bindingSchema?.properties).toMatchObject({
+        eligibleEvidenceActivityIds: {
+          type: "array",
+          items: { type: "string", minLength: 1 },
+          minItems: 1,
+          maxItems: 500,
+          uniqueItems: true,
+        },
+      });
+    },
+  );
 });
 
 describe("coworker pack — handler behavior (delegation preserved)", () => {
@@ -226,6 +254,42 @@ describe("coworker pack — handler behavior (delegation preserved)", () => {
       initiativeReviewBinding,
     }));
     expect(collab.summonCoworker).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["request_coworker", "handoff"],
+    ["summon_coworker", "summon"],
+  ] as const)("%s preserves the complete objective-mapping binding", async (toolName, collaborationKind) => {
+    external.dispatch.mockResolvedValue({
+      success: true,
+      entityId: "TR-MCP-MAPPING",
+      message: "Queued governed external coworker task.",
+      data: { status: "working" },
+    });
+
+    const result = await coworkerPack.handlers[toolName](
+      {
+        targetAgent: "AGT-WS-PORTFOLIO",
+        objective: "Map every current objective to eligible passing evidence.",
+        requestKey: "initiative-readiness:BI-9DC21917:objective-mapping:abc123",
+        requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+        initiativeReviewBinding: objectiveMappingBinding,
+      },
+      "u1",
+      {
+        apiTokenId: "token-1",
+        authSource: "pat",
+        tokenScope: "write",
+        callerClient: "codex-cli/0.9",
+        userContext: { platformRole: null, isSuperuser: true },
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(external.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      collaborationKind,
+      initiativeReviewBinding: objectiveMappingBinding,
+    }));
   });
 
   it("summon_coworker delegates and returns the summon confirmation", async () => {

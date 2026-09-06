@@ -22,11 +22,14 @@ recovery still strands a persisted wait when the ordinary async rollback flag
 is off. Recovery without classification never receives the network outage as a
 wait. Both changes reuse one existing state machine and must ship together.
 
-The active `BI-41EB722B` provider-transport change is protected-merged in the
-branch ancestry. An explicit source-only boundary permits the RED/GREEN
-implementation checkpoint while the initiative research, spec approval, plan
-review, and live coverage receipts remain missing. No readiness PASS, PR,
-release, deployment, or live replay may be claimed from that source evidence.
+The `BI-41EB722B` provider-transport change is protected-merged in the branch
+ancestry. This child implementation then protected-merged through PR `#5088`
+at `c081b6f69a7a4941ade6ae8a2aa21573ec033e29`. Its original exact research
+TaskRun resumed after the terminal-writer repair and wrote receipt
+`initiative-a62dd305-8953-4723-9187-4c50035d8783`. Independent spec approval
+wrote receipt `initiative-a9d65966-7e92-45d4-8733-cb507643e832` and canonical
+baseline `baseline-65b33c6d-4c95-4f82-a8d9-ece912c4abeb`. These durable
+receipts, rather than model prose, establish the governed readiness state.
 
 ## Ordered implementation
 
@@ -66,7 +69,7 @@ release, deployment, or live replay may be claimed from that source evidence.
 
 | Deliverable | Requirements | Contracts | Flow | Verification |
 | --- | --- | --- | --- | --- |
-| OUTAGE-SAME-RUN | OBJ-OUTAGE-REPLAY-1, OBJ-OUTAGE-REPLAY-2, OBJ-OUTAGE-REPLAY-3 | AC-OUTAGE-REPLAY-1 through AC-OUTAGE-REPLAY-6 | steps 1-8 | classifier negatives; resource-wait selection; same-run worker reconstruction; restart/live recovery |
+| OUTAGE-SAME-RUN | OBJ-OUTAGE-REPLAY-1, OBJ-OUTAGE-REPLAY-2, OBJ-OUTAGE-REPLAY-3 | `resourceWait`; `resumeMode = same-taskrun`; deterministic same-TaskRun event identity | steps 1-8 | AC-OUTAGE-REPLAY-1, AC-OUTAGE-REPLAY-2, AC-OUTAGE-REPLAY-3, AC-OUTAGE-REPLAY-4, AC-OUTAGE-REPLAY-5, AC-OUTAGE-REPLAY-6 |
 
 ## Backlog coverage
 
@@ -77,11 +80,12 @@ release, deployment, or live replay may be claimed from that source evidence.
 - Dependencies: `BI-41EB722B` (protected-merged before implementation integration)
 - Rationale: classifier and recovery selection are inseparable halves of the
   same already-persisted TaskRun wait contract; neither is useful alone.
-- Receipt: blocked-by: canonical research TaskRun is missing its required terminal writer;
-  `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-121390DA7F90` is resumable at
-  `missing-terminal-writer` attempt 1 after executing zero tools and creating
-  no envelope or receipt. Preserve that identity; do not infer a baseline or
-  plan coverage from the failed writer contract.
+- Research receipt: `initiative-a62dd305-8953-4723-9187-4c50035d8783`.
+- Scope baseline: `baseline-65b33c6d-4c95-4f82-a8d9-ece912c4abeb`, approved by
+  receipt `initiative-a9d65966-7e92-45d4-8733-cb507643e832`.
+- Coverage receipt: recorded server-side against this immutable plan revision;
+  the database activity is authoritative and the plan does not self-assert a
+  receipt before the immutable revision exists.
 
 ## Source-only TDD evidence
 

@@ -134,6 +134,26 @@ describe("dispatchExternalCoworkerTask", () => {
     expect(remote.submit).not.toHaveBeenCalled();
   });
 
+  it("rejects a search-only review packet that cannot complete immutable evidence traversal", async () => {
+    const result = await dispatchExternalCoworkerTask({
+      collaborationKind: "handoff",
+      targetAgent: "AGT-WS-REVIEW",
+      objective: "Review immutable control-plane evidence.",
+      requestKey: "initiative-review:BI-9DC21917:research:search-only",
+      requiredToolNames: ["search_source_at_version", "record_initiative_evidence"],
+      initiativeReviewBinding,
+      userId: "user-1",
+      context: verifiedContext,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "invalid_initiative_review_packet",
+      message: expect.stringContaining("read_source_at_version"),
+    });
+    expect(remote.submit).not.toHaveBeenCalled();
+  });
+
   it("replaces generic tool and backlog scopes with the exact bound review scope", async () => {
     remote.submit.mockResolvedValue({
       kind: "result",

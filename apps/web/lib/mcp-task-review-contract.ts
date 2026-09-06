@@ -29,11 +29,15 @@ function boundedUniqueStrings(value: unknown): string[] | null {
   return new Set(normalized).size === normalized.length ? normalized : null;
 }
 
-export function requiredToolNames(authorityScope: readonly string[] | undefined): string[] {
+function scopedToolNames(authorityScope: readonly string[] | undefined): string[] {
   return [...new Set((authorityScope ?? []).flatMap((entry) => {
     const name = entry.startsWith("tool:") ? entry.slice("tool:".length).trim() : "";
     return name ? [name] : [];
-  }))].slice(0, 4);
+  }))];
+}
+
+export function requiredToolNames(authorityScope: readonly string[] | undefined): string[] {
+  return scopedToolNames(authorityScope).slice(0, 4);
 }
 
 export function requiresInitiativeReviewEffort(toolNames: readonly string[]): boolean {
@@ -108,9 +112,16 @@ export function validateInitiativeReviewAuthorityScope(
   binding: InitiativeReviewBinding,
   authorityScope: readonly string[] | undefined,
 ): string | null {
-  const exactTools = requiredToolNames(authorityScope);
+  const exactTools = scopedToolNames(authorityScope);
   if (!exactTools.includes(binding.writerToolName)) {
     return "initiativeReviewBinding writer must match the exact tool authority scope";
+  }
+  const immutableReaderNames = new Set(["read_source_at_version", "search_source_at_version"]);
+  if (!exactTools.includes("read_source_at_version")) {
+    return "initiativeReviewBinding requires read_source_at_version in the exact tool authority scope";
+  }
+  if (exactTools.some((name) => name !== binding.writerToolName && !immutableReaderNames.has(name))) {
+    return "initiativeReviewBinding tool authority scope may contain only the bound writer and immutable readers";
   }
   if (!authorityScope?.includes(`backlog-item:${binding.itemId}`)) {
     return "initiativeReviewBinding item must match the backlog authority scope";
