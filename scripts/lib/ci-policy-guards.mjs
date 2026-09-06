@@ -732,6 +732,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-data-impact.test.mjs"),
       node("scripts/check-data-impact.mjs"),
     ]),
+    // BI-B19BE117: the sibling of Data-Impact for every non-data surface that
+    // reaches an existing install only through a convergence mechanism. The
+    // red/green fixtures run first so a validator that stops rejecting
+    // attestation theater fails here, not silently in every compose PR.
+    guard("convergence-impact-gate", "Convergence-Impact Gate", [
+      node("--test", "scripts/check-convergence-impact.test.mjs"),
+      node("scripts/check-convergence-impact.mjs"),
+    ]),
     guard("design-grounding-gate", "Design Grounding Gate", [
       node(
         "--test",

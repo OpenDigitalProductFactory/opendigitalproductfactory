@@ -218,8 +218,8 @@ pnpm run pregate            # → node scripts/pregate.mjs
 `local-integration-ci` lease, `pregate.mjs` runs the deterministic CI policy
 guards host-natively — the same check commands CI's Policy Guards jobs run
 (module size, style drift, derived-artifact staleness, doc links, SBOM, plus
-the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit and
-Design Grounding trailer gates), with guard self-tests stripped and
+the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit,
+Design Grounding and Convergence-Impact trailer gates), with guard self-tests stripped and
 PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI.
 
 **Not every `node --test` is a self-test (BI-7B249AFE).** Some files in the
