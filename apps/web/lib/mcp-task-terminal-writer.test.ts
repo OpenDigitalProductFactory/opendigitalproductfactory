@@ -44,6 +44,10 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
   resolveAutonomousWorkTools: (...args: unknown[]) => autonomous.resolveTools(...args),
 }));
 vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: vi.fn() }));
+vi.mock("./mcp-task-review-outcome", () => ({
+  loadTaskInitiativeReviewOutcome: vi.fn().mockResolvedValue(null),
+  loadInitiativeReviewOutcome: vi.fn().mockResolvedValue({ receiptId: "receipt-1", summary: "Receipt persisted; readiness still requires plan coverage." }),
+}));
 
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
 
@@ -193,7 +197,7 @@ describe("terminal writer resumption", () => {
     autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
     autonomous.execute.mockResolvedValue({
       content: "Receipt recorded.",
-      executedTools: [{ name: "record_initiative_evidence", result: { success: true } }],
+      executedTools: [{ name: "record_initiative_evidence", result: { success: true, data: { receiptId: "receipt-1" } } }],
     });
 
     const outcome = await submit("PAT-WRITER-ROUTE-EXIT");
@@ -304,7 +308,7 @@ describe("terminal writer resumption", () => {
     autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
     autonomous.execute.mockResolvedValue({
       content: "Receipt recorded.",
-      executedTools: [{ name: "record_initiative_evidence", result: { success: true } }],
+      executedTools: [{ name: "record_initiative_evidence", result: { success: true, data: { receiptId: "receipt-1" } } }],
     });
 
     const outcome = await submit("PAT-WRITER-RESUME");
@@ -376,7 +380,7 @@ describe("terminal writer resumption", () => {
     db.findUnique.mockResolvedValue({ status: "working" });
     autonomous.execute.mockResolvedValue({
       content: "Receipt recorded.",
-      executedTools: [{ name: "record_initiative_evidence", result: { success: true } }],
+      executedTools: [{ name: "record_initiative_evidence", result: { success: true, data: { receiptId: "receipt-1" } } }],
     });
 
     const outcome = await submit("PAT-WRITER-ZERO-READER");

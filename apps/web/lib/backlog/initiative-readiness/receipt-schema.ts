@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { validateInitiativeDisposition } from "./disposition-contract";
 
 import type { InitiativeSubject } from "./types";
 import type { ReadinessProfile } from "./types";
@@ -236,9 +237,8 @@ export function validateInitiativeGateReceiptDraft(
   if (draft.findingRefs.some((finding) => draft.resolvedFindingRefs.includes(finding))) {
     return reject("finding-resolution-invalid", "A receipt cannot introduce and resolve the same finding.");
   }
-  if (draft.decision !== "fail" && draft.findingRefs.length > 0) {
-    return reject("malformed-receipt", "Only a failing receipt can introduce findings.");
-  }
+  const dispositionError = validateInitiativeDisposition(draft.decision, draft.findingRefs, draft.resolvedFindingRefs);
+  if (dispositionError) return reject("malformed-receipt", dispositionError);
   for (const resolved of draft.resolvedFindingRefs) openFindings.delete(resolved);
   if (draft.decision !== "fail" && openFindings.size > 0) {
     return reject("blocking-findings-open", "A passing or not-applicable receipt cannot leave findings open.");

@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Initiative reviewer disposition and persisted status
 
 Backlog: BI-31159978. Workroom: WC-025847D7. Profile: fix.
@@ -30,7 +33,7 @@ writer definition and bound tool schema without editing that registry.
 ## Canonical contract and ordered fix sequence
 
 1. Consolidate disposition guidance and validation into the existing readiness
-   module boundary. Pass requires empty findings and resolvedFindingRefs;
+   module boundary. Pass requires empty findings; resolutions name existing open findings only;
    positive observations belong in reason. Findings require fail and immutable
    evidence. All research and review adapters preserve the independent author's
    assessment. Server-owned artifact identity remains bound and cannot drift.
