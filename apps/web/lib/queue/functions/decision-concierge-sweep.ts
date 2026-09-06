@@ -40,7 +40,7 @@ export const decisionConciergeSweepScheduled = inngest.createFunction(
     triggers: [cron(CONCIERGE_SWEEP_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, CONCIERGE_SWEEP_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("decision-concierge-sweep", () => runPass());
   },
@@ -54,7 +54,7 @@ export const decisionConciergeSweepRequested = inngest.createFunction(
     triggers: [{ event: CONCIERGE_SWEEP_REQUESTED_EVENT }],
   },
   async ({ event, step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, CONCIERGE_SWEEP_REQUESTED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     const raw = (event.data as { maxPanels?: unknown } | undefined)?.maxPanels;
     const limit = typeof raw === "number" && raw > 0 ? Math.floor(raw) : undefined;

@@ -20,6 +20,7 @@ import type { ScheduledJobCatalogEntry } from "./catalog-types";
 export const DECISION_GOVERNANCE_JOBS: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: CONCIERGE_SWEEP_JOB_ID,
+    honorsEnabledGate: true,
     inngestId: CONCIERGE_SWEEP_SCHEDULED_INNGEST_ID,
     name: CONCIERGE_SWEEP_JOB_NAME,
     purpose:
