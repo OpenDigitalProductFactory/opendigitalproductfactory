@@ -57,13 +57,21 @@ state because they lack the immutable head binding.
 
 ## Acceptance criteria
 
-| Acceptance | Objectives | Statement |
-| --- | --- | --- |
-| **AC-9FF-1** | OBJ-9FF-1 | Authenticated inventory stores `state=all` observations with the exact repository, head SHA, merge SHA/time, provider update time/API version, and a stable fingerprint. |
-| **AC-9FF-2** | OBJ-9FF-2 | A merged provider observation whose repository, PR number, and head all match produces `delivered`, including on a runtime without Git. |
-| **AC-9FF-3** | OBJ-9FF-2, OBJ-9FF-3 | A newer Workroom head, mismatched repository/PR, closed PR, stale open PR, malformed legacy payload, or missing provider snapshot does not produce delivered or open-PR liveness. |
-| **AC-9FF-4** | OBJ-9FF-3 | A prior matching merge remains usable from the latest successful snapshot when a later provider sync fails; an open observation expires from liveness after the freshness window. |
-| **AC-9FF-5** | OBJ-9FF-4 | Existing local positive ancestry remains a fallback, dry-run remains the default, and no filesystem mutation is added to the reaper. |
+- **AC-9FF-1:** [OBJ-9FF-1] Authenticated inventory stores `state=all`
+  observations with the exact repository, head SHA, merge SHA/time, provider
+  update time/API version, and a stable fingerprint.
+- **AC-9FF-2:** [OBJ-9FF-2] A merged provider observation whose repository, PR
+  number, and head all match produces `delivered`, including on a runtime
+  without Git.
+- **AC-9FF-3:** [OBJ-9FF-2, OBJ-9FF-3] A newer Workroom head, mismatched
+  repository/PR, closed PR, stale open PR, malformed legacy payload, or missing
+  provider snapshot does not produce delivered or open-PR liveness.
+- **AC-9FF-4:** [OBJ-9FF-3] A prior matching merge remains usable from the latest
+  successful snapshot when a later provider sync fails; an authenticated
+  not-modified response renews the prior open observation, and an unconfirmed
+  open observation expires after the freshness window.
+- **AC-9FF-5:** [OBJ-9FF-4] Existing local positive ancestry remains a fallback,
+  dry-run remains the default, and no filesystem mutation is added to the reaper.
 
 ## Failure and compatibility behavior
 
