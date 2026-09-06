@@ -30,7 +30,7 @@ const MAX_PER_RUN = 25;
 export const backlogTriageDrain = inngest.createFunction(
   { id: "ops/backlog-triage-drain", retries: 1, triggers: [cron("23 * * * *")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/backlog-triage-drain");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     // Step 1 — fetch the bounded batch. DB-only, so it returns response headers

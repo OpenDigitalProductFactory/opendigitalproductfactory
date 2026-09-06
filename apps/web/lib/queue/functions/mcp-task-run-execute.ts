@@ -36,7 +36,7 @@ export const mcpTaskRunDispatchReconciliation = inngest.createFunction(
     triggers: [cron("*/2 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "mcp/task-run-dispatch-reconciliation");
     if (!gate.proceed) return gate;
     return step.run("reconcile-submitted-external-tasks", () =>
       reconcilePersistedRemoteTaskDispatches({

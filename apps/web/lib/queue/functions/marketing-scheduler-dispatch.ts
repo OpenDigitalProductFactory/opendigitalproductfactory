@@ -22,7 +22,7 @@ import { gateAtEntry } from "../quiescence-gates";
 export const marketingSchedulerDispatch = inngest.createFunction(
   { id: "marketing/scheduler-dispatch", retries: 1, triggers: [cron("5,35 * * * *")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "marketing/scheduler-dispatch");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return await step.run("tick-marketing-scheduler", async () => {

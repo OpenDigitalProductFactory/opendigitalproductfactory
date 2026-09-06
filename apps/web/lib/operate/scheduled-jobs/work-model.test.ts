@@ -285,10 +285,12 @@ describe("buildWorkView", () => {
 
   it("says a cron with no entry gate has no working kill switch", () => {
     // Disabling one of these persists a column nothing reads; the job runs on.
+    // worktree-janitor does not call gateAtEntry and carries an ungatedReason
+    // in the catalog (BI-7E49FA15).
     const ungated = {
-      jobId: "log-signature-scanner",
-      name: "Log signature scanner",
-      schedule: "*/15 * * * *",
+      jobId: "worktree-janitor",
+      name: "Worktree janitor",
+      schedule: "40 5 * * *",
       lastRunAt: null,
       nextRunAt: null,
       lastStatus: null as string | null,
@@ -297,7 +299,7 @@ describe("buildWorkView", () => {
       locked: false,
       enabled: true,
     };
-    expect(buildWorkView("log-signature-scanner", ungated, undefined, NOW).killSwitchEnforced).toBe(false);
+    expect(buildWorkView("worktree-janitor", ungated, undefined, NOW).killSwitchEnforced).toBe(false);
   });
 
   it("says an agent task's kill switch is load-bearing", () => {

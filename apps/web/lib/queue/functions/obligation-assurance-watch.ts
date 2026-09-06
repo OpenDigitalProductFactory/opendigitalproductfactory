@@ -57,7 +57,7 @@ export const obligationAssuranceWatchScheduled = inngest.createFunction(
     triggers: [cron(OBLIGATION_WATCH_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, OBLIGATION_WATCH_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("obligation-assurance-watch", () => runObligationAssuranceWatchJob());
   },
@@ -71,7 +71,7 @@ export const obligationAssuranceWatchRunNow = inngest.createFunction(
     triggers: [{ event: OBLIGATION_WATCH_REQUESTED_EVENT }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, OBLIGATION_WATCH_RUN_NOW_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("obligation-assurance-watch", () => runObligationAssuranceWatchJob());
   },

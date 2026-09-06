@@ -150,6 +150,11 @@ export const PUBLIC_SCOPE_TO_GRANTS: Record<PublicScope, readonly string[]> = {
     "initiative_security_review",
     "initiative_ux_review",
     "registry_write",
+    // BI-8E1FD1BD. Propose-only: it records a statutory figure as `proposed` with
+    // its citation. It cannot ratify — checkStatutoryRatification refuses every
+    // agent unconditionally and no ratify tool exists — so it belongs with the
+    // other propose/review writes here rather than in an admin scope.
+    "statutory_reference_propose",
     "thread_write",
     "tool_evaluation_create",
     "work_capsule_adopt",

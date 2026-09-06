@@ -51,7 +51,7 @@ export const embeddingCoverageReconcileScheduled = inngest.createFunction(
     triggers: [cron(EMBEDDING_COVERAGE_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, EMBEDDING_COVERAGE_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("embedding-coverage-reconcile", () => runEmbeddingCoverageJob());
   },
@@ -65,7 +65,7 @@ export const embeddingCoverageReconcileRunNow = inngest.createFunction(
     triggers: [{ event: EMBEDDING_COVERAGE_REQUESTED_EVENT }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, EMBEDDING_COVERAGE_RUN_NOW_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("embedding-coverage-reconcile", () => runEmbeddingCoverageJob());
   },

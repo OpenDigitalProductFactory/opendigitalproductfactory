@@ -19,7 +19,7 @@ export const assuranceRemediationTeeUpScheduled = inngest.createFunction(
     triggers: [cron("41 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "assurance/remediation-tee-up-scheduled");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("assurance-remediation-tee-up", async () => {

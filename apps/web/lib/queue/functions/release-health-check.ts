@@ -19,7 +19,7 @@ export const releaseHealthCheck = inngest.createFunction(
     triggers: [cron("12,27,42,57 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/release-health-check");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return await step.run("check-release-health", () => runReleaseHealthCheck());

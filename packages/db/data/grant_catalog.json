@@ -99,38 +99,6 @@
       "implies": []
     },
     {
-      "key": "banking_read",
-      "description": "Read the banking books surface: bank accounts, transactions, suggested transaction matches, bank rules, and reconciliation summaries.",
-      "category": "operate",
-      "sensitivity": "confidential",
-      "honored_by_tools": [
-        "list_bank_accounts",
-        "get_bank_account",
-        "get_bank_transactions",
-        "suggest_transaction_matches",
-        "list_bank_rules",
-        "get_reconciliation_summary"
-      ],
-      "implies": []
-    },
-    {
-      "key": "banking_write",
-      "description": "Mutate the banking books surface: create bank accounts, import statements, match/unmatch transactions, and create/delete bank rules. Reconciles what happened; never moves money.",
-      "category": "operate",
-      "sensitivity": "confidential",
-      "honored_by_tools": [
-        "create_bank_account",
-        "import_bank_statement",
-        "match_transaction",
-        "unmatch_transaction",
-        "create_bank_rule",
-        "delete_bank_rule"
-      ],
-      "implies": [
-        "banking_read"
-      ]
-    },
-    {
       "key": "backlog_read",
       "description": "Read backlog.",
       "category": "backlog",
@@ -188,6 +156,38 @@
       "implies": [
         "build_evidence",
         "build_phase_advance"
+      ]
+    },
+    {
+      "key": "banking_read",
+      "description": "Read the banking books surface: bank accounts, transactions, suggested transaction matches, bank rules, and reconciliation summaries.",
+      "category": "operate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "list_bank_accounts",
+        "get_bank_account",
+        "get_bank_transactions",
+        "suggest_transaction_matches",
+        "list_bank_rules",
+        "get_reconciliation_summary"
+      ],
+      "implies": []
+    },
+    {
+      "key": "banking_write",
+      "description": "Mutate the banking books surface: create bank accounts, import statements, match/unmatch transactions, and create/delete bank rules. Reconciles what happened; never moves money.",
+      "category": "operate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "create_bank_account",
+        "import_bank_statement",
+        "match_transaction",
+        "unmatch_transaction",
+        "create_bank_rule",
+        "delete_bank_rule"
+      ],
+      "implies": [
+        "banking_read"
       ]
     },
     {
@@ -831,19 +831,23 @@
       "implies": []
     },
     {
-      "key": "initiative_architecture_review",
-      "description": "Record an independent initiative architecture-review receipt.",
-      "category": "governance",
-      "sensitivity": "confidential",
-      "honored_by_tools": ["record_initiative_architecture_review"],
-      "implies": []
-    },
-    {
       "key": "initiative_archetype_review",
       "description": "Record independent archetype provisioning and completeness receipts.",
       "category": "governance",
       "sensitivity": "confidential",
-      "honored_by_tools": ["record_initiative_archetype_review"],
+      "honored_by_tools": [
+        "record_initiative_archetype_review"
+      ],
+      "implies": []
+    },
+    {
+      "key": "initiative_architecture_review",
+      "description": "Record an independent initiative architecture-review receipt.",
+      "category": "governance",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "record_initiative_architecture_review"
+      ],
       "implies": []
     },
     {
@@ -851,7 +855,9 @@
       "description": "Record an independent initiative compliance-review receipt.",
       "category": "governance",
       "sensitivity": "confidential",
-      "honored_by_tools": ["record_initiative_compliance_review"],
+      "honored_by_tools": [
+        "record_initiative_compliance_review"
+      ],
       "implies": []
     },
     {
@@ -859,7 +865,9 @@
       "description": "Record an independent initiative data-review receipt.",
       "category": "governance",
       "sensitivity": "confidential",
-      "honored_by_tools": ["record_initiative_data_review"],
+      "honored_by_tools": [
+        "record_initiative_data_review"
+      ],
       "implies": []
     },
     {
@@ -867,7 +875,9 @@
       "description": "Record independent design, specification, and plan-review receipts.",
       "category": "governance",
       "sensitivity": "confidential",
-      "honored_by_tools": ["record_initiative_design_review"],
+      "honored_by_tools": [
+        "record_initiative_design_review"
+      ],
       "implies": []
     },
     {
@@ -875,7 +885,9 @@
       "description": "Record an independent domain or clinical review receipt.",
       "category": "governance",
       "sensitivity": "confidential",
-      "honored_by_tools": ["record_initiative_domain_review"],
+      "honored_by_tools": [
+        "record_initiative_domain_review"
+      ],
       "implies": []
     },
     {
@@ -883,7 +895,9 @@
       "description": "Record non-approval initiative classification, research, and dependency evidence.",
       "category": "governance",
       "sensitivity": "confidential",
-      "honored_by_tools": ["record_initiative_evidence"],
+      "honored_by_tools": [
+        "record_initiative_evidence"
+      ],
       "implies": []
     },
     {
@@ -891,7 +905,9 @@
       "description": "Record an independent initiative security-review receipt.",
       "category": "governance",
       "sensitivity": "confidential",
-      "honored_by_tools": ["record_initiative_security_review"],
+      "honored_by_tools": [
+        "record_initiative_security_review"
+      ],
       "implies": []
     },
     {
@@ -899,7 +915,9 @@
       "description": "Record an independent initiative UX-fit review receipt.",
       "category": "governance",
       "sensitivity": "confidential",
-      "honored_by_tools": ["record_initiative_ux_review"],
+      "honored_by_tools": [
+        "record_initiative_ux_review"
+      ],
       "implies": []
     },
     {
@@ -1331,6 +1349,17 @@
       "implies": []
     },
     {
+      "key": "statutory_reference_propose",
+      "description": "Propose a published statutory figure (tax rate, wage base, threshold) as reference data, with the authority's citation. Recorded as PROPOSED for human ratification; never computes money and never files. Ratification is a human-only action and is deliberately NOT covered by this grant.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "propose_statutory_rate",
+        "list_statutory_rate_gaps"
+      ],
+      "implies": []
+    },
+    {
       "key": "stock_read",
       "description": "Read stocked-supply levels and derived coverage: on-hand quantity, consumption from sales, days of cover, and suggested reorder quantity.",
       "category": "consume",
@@ -1562,30 +1591,6 @@
       ]
     },
     {
-      "key": "work_room_read",
-      "description": "Read a Work Room's message feed and coworker room engagement.",
-      "category": "integrate",
-      "sensitivity": "internal",
-      "honored_by_tools": [
-        "get_coworker_room_engagement",
-        "read_room_messages"
-      ],
-      "implies": []
-    },
-    {
-      "key": "work_room_write",
-      "description": "Post a message into a Work Room and invite participants.",
-      "category": "integrate",
-      "sensitivity": "internal",
-      "honored_by_tools": [
-        "invite_room_participant",
-        "post_room_message"
-      ],
-      "implies": [
-        "work_room_read"
-      ]
-    },
-    {
       "key": "work_engagement_read",
       "description": "Read work engagements and their materialized recurring instances.",
       "category": "work_engagement",
@@ -1615,6 +1620,30 @@
         "record_work_engagement_activity"
       ],
       "implies": []
+    },
+    {
+      "key": "work_room_read",
+      "description": "Read a Work Room's message feed and coworker room engagement.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "get_coworker_room_engagement",
+        "read_room_messages"
+      ],
+      "implies": []
+    },
+    {
+      "key": "work_room_write",
+      "description": "Post a message into a Work Room and invite participants.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "invite_room_participant",
+        "post_room_message"
+      ],
+      "implies": [
+        "work_room_read"
+      ]
     },
     {
       "key": "workbook_read",

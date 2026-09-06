@@ -569,6 +569,53 @@ The drive tick now reconciles the declared tree before driving:
 `nestedRelations` on the drive result is how an operator tells "nesting is done"
 from "nesting was never written" — the distinction that hid this defect.
 
+## Who may coordinate: authority, and a gate with no key
+
+Conformance refuses an AI Process Overseer unless its authority binding and its
+TAK-JSI qualification are both eligible. It reads `coordinatorEligibility` and
+defaults to `unknown` when absent — and until `BI-E0728215` **nothing populated
+that field**. It was undefined on every tick of every room, so every AI overseer
+was refused permanently: not for want of configuration, but because the check had
+no producer. Measured at the time: 124 AI coworkers, 0 with coordination
+authority, 0 dispatches ever.
+
+Two governed decisions, both scored rather than assumed:
+
+**Authority comes from an explicit binding** (`DI-F8C8042FBB5D`, margin 9.318,
+high confidence). Reusing an agent's route binding, or letting the work shape's
+own declaration stand as authority, both scored ~2.3-2.9 — `Least privilege, deny
+by default` contributed *negatively* to each. A route binding
+(`platform-engineer on /platform`) is page access; it is not authority to drive a
+room to verdict.
+
+The shape *proposes* and the binding *grants*. Coordination bindings are derived
+from the standing shapes and materialized as explicit `AuthorityBinding` rows
+(`scopeType: workroom`, `resourceType: work-shape`), exactly as
+`bootstrapAuthorityBindings` derives route bindings from `ROUTE_AGENT_MAP_ENTRIES`.
+The distinction the kernel drew is not where the proposal comes from but what the
+grant *is*: a row an operator can see, suspend and revoke. Re-seeding never
+re-grants a binding a human suspended.
+
+The driver comes from the ownership ladder's shape rung, which already excludes
+the governed-decision stage — so seeding can never introduce
+`coordinator_approver_overlap`.
+
+**An absent scheme is not a failed one** (`DI-FF4A015CF917`, margin 5.420, high
+confidence). There is no TAK-JSI qualification substrate in the schema: no
+qualification model exists, so no coworker on any install could ever be
+qualified. A precondition nothing can satisfy is not a safeguard; it is a
+permanent denial wearing a safeguard's clothes, and it offers no graduated
+control at all.
+
+So `jsi` resolves `not-applicable` when the platform has no scheme — recorded on
+the room, not blocking — while a scheme that exists and is unmet blocks exactly
+as before. Deleting the check outright scored 0.713 and was rejected. Scheme
+presence is detected from the live Prisma client rather than a constant, so the
+control becomes real the day a qualification model lands, with no code change and
+nobody needing to remember.
+
+`unknown` still blocks. Only `eligible` and `not-applicable` satisfy the gate.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer

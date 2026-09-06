@@ -57,6 +57,40 @@ statutory engine consumes effective-dated rules with a `sourceUrl` instead. Unti
 are seeded, **no install can run a real payroll or file a real return**, and no public
 claim may imply otherwise.
 
+### Statutory rate acquisition — propose, ratify, resolve (2026-09-01)
+
+The engine could compute and had no figures to compute with, and the platform
+could not tell the difference between "no rates" and "fresh rates" because both
+were silent. `PayrollTaxRule` is now the home a cited figure lands in, and
+`assessStatutoryReadiness` makes an absent figure louder than a present one.
+
+**One rule, in code rather than convention.** A coworker PROPOSES with a
+citation; a person RATIFIES; `resolveStatutoryRule` returns only ratified rows.
+`checkStatutoryRatification` refuses a non-human actor unconditionally — without
+that the split would be decorative, and an uncited figure would compute
+withholding behind an audit trail that made it look reviewed.
+
+**A citation is refused before the write, not flagged after it.** An uncited or
+undated figure is never stored, because a row that exists tends to get used.
+
+**Readiness distinguishes two failures** that need different human actions:
+nobody has researched a figure yet, versus a coworker researched it and it is
+waiting on a confirmation. It also blocks on a stale or never-verified authority
+record, which is the first consumer of `packages/db/src/reference-freshness` —
+that module carried a 90-day ceiling and an `unverified`/`stale` distinction
+with zero importers since 2026-08-25.
+
+**Two MCP tools, no ratify tool.** `list_statutory_rate_gaps` and
+`propose_statutory_rate` sit behind the new `statutory_reference_propose` grant,
+held by AGT-WS-COMPLIANCE and AGT-905. Ratification is a human action on the
+finance surface and is deliberately absent from MCP.
+
+**Still unseeded.** `PayrollTaxRule` ships empty (BI-4EB27955). No install can
+run a real payroll until figures are proposed and ratified. What changed is that
+the gap is visible and the path exists.
+
+Plan: [statutory rate acquisition](../superpowers/plans/2026-09-01-statutory-rate-acquisition.md).
+
 ### Payroll tax persistence and period components (2026-08-26)
 
 The payroll tax emitter shipped as a pure function in PR #4490 and nothing wrote

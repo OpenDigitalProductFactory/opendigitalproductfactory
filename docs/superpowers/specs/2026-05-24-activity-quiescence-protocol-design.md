@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Activity Quiescence Protocol
 
 > **Observation architecture note:** this spec owns the durable quiescence lifecycle. Browser
@@ -525,7 +528,7 @@ Each subsection covers a surface category from §2.1 with its four answers (Dete
 
 **Stop-accept** — Two helpers in `apps/web/lib/queue/inngest-client.ts`:
 
-- `gateAtEntry(step)` — for cron functions. Returns early with `{ skipped: true, reason: "quiescing" }` if level ≥ `draining`. Function will re-fire on next cron tick after `cleared`.
+- `gateAtEntry(step, inngestId)` — for cron functions. Returns early with `{ skipped: true, reason: "quiescing" }` if level ≥ `draining`. Function will re-fire on next cron tick after `cleared`. Since BI-7E49FA15 the same gate also enforces the per-job kill switch (`ScheduledJob.enabled`, reason `disabled-by-operator`) for catalog entries declaring `honorsEnabledGate: true`; the required `inngestId` is how it resolves the job — see `docs/superpowers/specs/2026-08-28-scheduled-job-kill-switch-design.md`.
 - `gateBetweenSteps(step)` — for long-running event-driven functions. Calls `step.waitForEvent("platform.quiescence-cleared", { timeout: "30m" })` between major steps to suspend cleanly. Resumes when the durable Inngest `platform.quiescence-cleared` event fires for any terminal outcome. The UI `system:quiescence` event is emitted from the same transition but is not the durable wake signal.
 
 Every existing Inngest function in `apps/web/lib/queue/functions/` is wrapped with the appropriate gate as a Phase 1 deliverable. Cron functions get `gateAtEntry`; event-driven and long-running functions get `gateBetweenSteps` between their natural steps.

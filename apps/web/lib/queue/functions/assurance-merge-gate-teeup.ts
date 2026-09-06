@@ -20,7 +20,7 @@ export const assuranceMergeGateScheduled = inngest.createFunction(
     triggers: [cron("47 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "assurance/merge-gate-scheduled");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("assurance-merge-gate", async () => {

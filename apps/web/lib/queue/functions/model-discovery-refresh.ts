@@ -40,7 +40,7 @@ export const modelDiscoveryRefresh = inngest.createFunction(
     triggers: [cron("10 3 * * *")], // 03:10 UTC — staggered off the 03:00 batch (EP-MODEL-CAP-001-D)
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "inference/model-discovery-refresh");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     try {

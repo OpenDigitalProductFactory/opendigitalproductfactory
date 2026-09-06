@@ -10,6 +10,7 @@ export const PR_TRAILER_NAMES = Object.freeze({
   seedFit: "Seed-Fit-Decision",
   designGrounding: "Design-Grounding-Decision",
   docsImpact: "Docs-Impact-Decision",
+  convergenceImpact: "Convergence-Impact-Decision",
   localCiEvidence: "Local-CI-Evidence",
   localCiOverride: "Local-CI-Override",
 });

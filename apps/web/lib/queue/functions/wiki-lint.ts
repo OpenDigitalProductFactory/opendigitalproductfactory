@@ -17,7 +17,7 @@ import { gateAtEntry } from "../quiescence-gates";
 export const wikiLint = inngest.createFunction(
   { id: "wiki/lint-daily", retries: 2, triggers: [cron("30 3 * * *")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "wiki/lint-daily");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const orgIds = await step.run("collect-active-orgs", async () => {

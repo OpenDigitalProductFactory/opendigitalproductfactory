@@ -30,7 +30,7 @@ export const qualityIssueDriftSweepScheduled = inngest.createFunction(
     triggers: [cron("23 5 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "governance/quality-issue-drift-sweep-scheduled");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("quality-issue-drift-sweep", async () => {

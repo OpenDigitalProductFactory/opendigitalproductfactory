@@ -174,7 +174,7 @@ export const memoryConsolidationNightly = inngest.createFunction(
     triggers: [cron(MEMORY_CONSOLIDATION_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "coworker/memory-consolidation-nightly");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const swept = await step.run("memory-consolidation-sweep", async () =>

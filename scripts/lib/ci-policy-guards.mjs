@@ -232,6 +232,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/documentation-evidence-lane.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
+        "scripts/lib/host-available-memory.test.mjs",
         "packages/dpf-skill-pack/hooks/claim-work-guidance.test.mjs",
         "packages/dpf-skill-pack/hooks/plan-coverage-guidance.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
@@ -730,6 +731,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("data-impact-gate", "Data-Impact Gate", [
       node("--test", "scripts/check-data-impact.test.mjs"),
       node("scripts/check-data-impact.mjs"),
+    ]),
+    // BI-B19BE117: the sibling of Data-Impact for every non-data surface that
+    // reaches an existing install only through a convergence mechanism. The
+    // red/green fixtures run first so a validator that stops rejecting
+    // attestation theater fails here, not silently in every compose PR.
+    guard("convergence-impact-gate", "Convergence-Impact Gate", [
+      node("--test", "scripts/check-convergence-impact.test.mjs"),
+      node("scripts/check-convergence-impact.mjs"),
     ]),
     guard("design-grounding-gate", "Design Grounding Gate", [
       node(

@@ -78,7 +78,8 @@ export interface MembershipDb extends FederationIdentityDb {
   $transaction<T>(fn: (tx: Parameters<typeof createFederationLinkRow>[0]) => Promise<T>): Promise<T>;
 }
 
-async function localOrganizationRef(db: MembershipDb, env?: Record<string, string | undefined>): Promise<string | null> {
+/** The estate name as declared (display form), or null when the installation is unnamed. */
+async function localEstateName(db: MembershipDb, env?: Record<string, string | undefined>): Promise<string | null> {
   const resolution = await loadEstateNameResolution(
     {
       readConfig: async (key: string) => (await db.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ?? null,
@@ -89,7 +90,11 @@ async function localOrganizationRef(db: MembershipDb, env?: Record<string, strin
     },
     env ? { env } : {},
   );
-  return normalizeOrganizationRef(resolution.estateName);
+  return resolution.estateName;
+}
+
+async function localOrganizationRef(db: MembershipDb, env?: Record<string, string | undefined>): Promise<string | null> {
+  return normalizeOrganizationRef(await localEstateName(db, env));
 }
 
 export interface MembershipProofEnvelope {
@@ -431,7 +436,9 @@ export async function reconcileOrganizationMembership(
     if (links.some((link) => { try { return hosts.has(new URL(link.peerAuthorityUrl).hostname.toLowerCase()); } catch { return false; } })) {
       return { outcome: "already-linked" };
     }
-    const displayName = (await localOrganizationRef(db, env)) ?? "Member installation";
+    // The name the authority shows for us is the declared estate name, not its
+    // normalised comparison form (the live pair listed the member as "<slug>(<slug>)").
+    const displayName = (await localEstateName(db, env)) ?? "Member installation";
     const result = await enrolWithOrganizationAuthority(db, {
       material, authorityUrls, localAuthorityUrl, displayName, now: deps.now, env, post: deps.post,
     });

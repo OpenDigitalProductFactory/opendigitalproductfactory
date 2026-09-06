@@ -659,6 +659,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   open_security_case:       ["siem_investigate"],
   update_security_case:     ["siem_investigate"],
   propose_detection_tuning: ["siem_tune"],
+  // Propose-only; ratification is human-side, so no ratify tool (BI-8E1FD1BD).
+  list_statutory_rate_gaps: ["statutory_reference_propose"],
+  propose_statutory_rate:   ["statutory_reference_propose"],
   propose_response:         ["incident_respond"],
 
   // Finance

@@ -10,7 +10,7 @@ import { gateAtEntry } from "../quiescence-gates";
 export const canonicalImprovementDigest = inngest.createFunction(
   { id: "ops/canonical-improvement-digest", retries: 1, triggers: [cron("17 6 * * 1")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/canonical-improvement-digest");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("digest-reference-doc-proposals", async () => {

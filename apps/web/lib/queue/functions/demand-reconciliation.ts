@@ -12,7 +12,7 @@ export const demandReconciliationScheduled = inngest.createFunction(
     triggers: [cron("1,6,11,16,21,26,31,36,41,46,51,56 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "federation/demand-reconciliation");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const demand = await step.run("reconcile-federated-demand", async () => {

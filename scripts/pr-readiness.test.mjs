@@ -276,6 +276,7 @@ test("one trailer contract feeds readiness parsing and gate-context names", () =
   assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.designGrounding));
   assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.seedFit));
   assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.docsImpact));
+  assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.convergenceImpact));
   assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.localCiEvidence));
   assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.localCiOverride));
 });
