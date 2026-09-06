@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Semantic review provider admission
 
 Parent: BI-06AE6833. Admission executor: WC-27D00458.
@@ -23,7 +27,9 @@ model while CI owns the host.
 
 ## Backlog coverage
 
-Decision: decomposed. Live receipt pending publication of this immutable plan.
+Decision: decomposed. Live coverage is recorded through
+`record_plan_backlog_coverage` against the published plan revision; the database
+is the receipt source of truth.
 All requirements and acceptance IDs below come from the approved baseline.
 Contract and flow references name the corresponding existing design sections.
 
@@ -68,7 +74,8 @@ outcome cohorts with explicit denominators and measurement limitations.
    Preserve explicit residency, provider clearance, export obligations and mixed
    sensitive-content screening. No new provider setting or admission controller.
 3. Verify both fallback directions. Cloud failure followed by a capacity-deferred
-   local candidate must retain the typed refusal; a blocked local primary may
+   local candidate must retain the typed refusal as the aggregate error's cause
+   alongside failed-attempt details; a blocked local primary may
    continue to an eligible cloud fallback. Run the actual adapter-boundary and
    screening tests alongside the wrapper tests; mocks alone are not dispatch proof.
 4. Run affected tests, typecheck and relevant source guards in this compile-ready
