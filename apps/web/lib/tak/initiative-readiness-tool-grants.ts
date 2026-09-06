@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@/lib/shared/canonical-json";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 import type {
   InitiativeGateKey,
@@ -499,10 +501,7 @@ function requestCoworkerPacket(args: {
     targetAgent: args.targetAgentId,
     objective,
     questionPacketSummary,
-    requestKey: `initiative-readiness:${args.decision.subject.id}:${args.gate}:${args.dispatch.headSha}${
-      args.gate === "plan-review" && args.artifact
-        ? `:plan:${reviewSha}:${args.artifact.providerBlobId}` : ""
-    }`,
+    requestKey: `initiative-readiness:${args.decision.subject.id}:${args.gate}:${args.dispatch.headSha}`,
     tier: 2 as const,
     enteredVia: "handoff" as const,
   };
@@ -547,7 +546,11 @@ function requestCoworkerPacket(args: {
         workroomRef: binding.workroomRef!,
       },
     })
-    : base.requestKey;
+    : args.gate === "plan-review"
+      ? `${base.requestKey}:plan:${createHash("sha256").update(canonicalJson({
+        binding, targetAgent: args.targetAgentId, objective,
+      })).digest("hex")}`
+      : base.requestKey;
   return {
     ...base,
     requestKey,
