@@ -560,6 +560,9 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -2353,6 +2356,7 @@
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/backlog/deferral-contract.ts",
+      "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts",
       "apps/web/lib/govern/data/field-classification.ts",
       "packages/db/src/table-classification.ts",
       "scripts/check-no-unattributable-deferral.mjs"

@@ -11,6 +11,7 @@ import { canonicalJson } from "@/lib/shared/canonical-json";
 import { isReachableFromTrunk, trunkRefExists } from "@/lib/work-capsules/git-scanner";
 
 import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
+import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import {
   reconcileInitiativeObjectives,
   type ObjectiveReconciliationActivity,
@@ -265,9 +266,14 @@ export async function completeBacklogItemTransition(args: {
       const acceptancePass =
         reconciliation.state === "pass" ||
         (recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
+      const inheritedScope = await loadInheritedInitiativeScope(
+        tx as unknown as InheritanceDb,
+        { childItemId: lockedItem.itemId, childRowId: lockedItem.id },
+      );
       const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
         item: { ...lockedItem, activeBuildKind: lockedItem.activeBuild?.kind ?? null },
         activities: activities as InitiativeReadinessActivity[],
+        inheritedScope,
         target: "completion",
         transitionObject: { kind: "backlog-item", id: lockedItem.id, expectedVersion: args.expectedStatus, targetState: "done" },
         authorization: "pass",

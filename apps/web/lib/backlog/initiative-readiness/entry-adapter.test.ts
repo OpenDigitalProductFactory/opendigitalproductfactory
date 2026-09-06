@@ -377,3 +377,68 @@ describe("projectBacklogItemReadiness", () => {
     expect(projection.decision.blockers.map((entry) => entry.code)).toContain("READINESS_PROJECTION_FAILED");
   });
 });
+
+describe("parent scope inheritance", () => {
+  const child = { ...item, id: "row-child", itemId: "BI-CHILD", workType: "feature" };
+  const inheritedScope = () => ({
+    parentItemId: "BI-ENTRY",
+    coverageActivityId: "coverage-1",
+    activities: readyActivities().map((entry) => entry.kind === "plan_backlog_coverage"
+      ? { ...entry, payload: { ...(entry.payload as Record<string, unknown>), decision: "decomposed",
+          deliverables: [{ key: "slice-1", title: "Slice 1", independentlyShippable: true, backlogItemId: "BI-CHILD" }] } }
+      : entry),
+  });
+
+  it("lets a mapped child implement on the parent baseline and receipts without raising its profile", () => {
+    const projection = projectBacklogItemReadiness({
+      item: child,
+      activities: [],
+      inheritedScope: inheritedScope(),
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.decision.verdict).toBe("allowed");
+    expect(projection.decision.profile).toBe("feature");
+    expect(projection.inheritedFrom).toBe("BI-ENTRY");
+    expect(projection.baselineId).toBe("baseline-1");
+  });
+
+  it("keeps the child on its own evidence when it minted a baseline itself", () => {
+    const ownBaseline = {
+      id: "own-baseline", kind: "initiative_scope_baseline", gateKey: null, recordedAt: new Date(),
+      payload: { ...baseline, baselineId: "baseline-child", subject: { kind: "backlog-item", id: "BI-CHILD" }, artifactDigest: "sha256:child" },
+    };
+    const projection = projectBacklogItemReadiness({
+      item: child,
+      activities: [ownBaseline],
+      inheritedScope: inheritedScope(),
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.inheritedFrom).toBeNull();
+    expect(projection.baselineId).toBe("baseline-child");
+    expect(projection.decision.verdict).not.toBe("allowed");
+  });
+
+  it("does not inherit when the parent itself has no current baseline", () => {
+    const scope = inheritedScope();
+    const projection = projectBacklogItemReadiness({
+      item: child,
+      activities: [],
+      inheritedScope: { ...scope, activities: scope.activities.filter((entry) => entry.kind !== "initiative_scope_baseline") },
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.inheritedFrom).toBeNull();
+    expect(projection.decision.unmet.map((entry) => entry.code)).toContain("OBJECTIVE_BASELINE_REQUIRED");
+  });
+});

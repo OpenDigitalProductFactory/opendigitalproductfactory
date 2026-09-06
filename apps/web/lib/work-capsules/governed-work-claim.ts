@@ -12,6 +12,7 @@ import {
   type WorkCapsuleExecutorKind,
   type WorkIntent,
 } from "@/lib/work-capsules";
+import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   resolveInitiativeReviewerRecovery,
@@ -363,9 +364,14 @@ export async function claimGovernedBacklogWorkspace(args: {
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
       }) as InitiativeReadinessActivity[];
+      const inheritedScope = await loadInheritedInitiativeScope(
+        tx as unknown as InheritanceDb,
+        { childItemId: item.itemId, childRowId: item.id },
+      );
       const projection = projectBacklogItemReadiness({
         item: { ...item, activeBuildKind: item.activeBuild?.kind ?? null },
         activities,
+        inheritedScope,
         target,
         transitionObject: {
           kind: "work-capsule",
