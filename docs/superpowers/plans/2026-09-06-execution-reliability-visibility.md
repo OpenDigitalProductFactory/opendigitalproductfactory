@@ -345,3 +345,84 @@ every other route remains unchanged. The Workroom's additional 50 words relative
 to the pre-feature baseline expose state, freshness and the requested inspection,
 within its 450-word absolute budget. Protected enforcing CI must accept this
 reviewed baseline before merge. Functional runtime scenarios remain outstanding.
+
+## Reviewer transport and retry repair
+
+PR #5167 merged as `6751cec01fe`; accessibility follow-up #5182 is separate.
+Canonical readiness last observed `9283441fe711` after the governed upgrade;
+it still requires advancement for the core slice at `6751cec01fe`.
+TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-2C001C673264` exposes
+the next execution defect: Gemini was eligible at 02:56:12 UTC on September 7,
+then excluded by the request denylist at 02:56:52. Both persisted screening
+receipts allowed the request with a log-use obligation. The remaining Codex
+CLI adapter refused the required terminal writer. Source inspection identifies
+unconditional provider rotation on a terminal nudge. It also identifies the
+Gemini adapter dropping every tool-result message and assistant tool call,
+including the immutable evidence already read by the reviewer.
+
+Repair this existing path before extending the runtime acceptance exercise:
+
+1. Reproduce omitted evidence at the outgoing HTTP request, and keep call/result
+   identities and native Gemini continuation signatures in the shared tool-call
+   contract. Use one provider formatter; preserve normalized execution evidence
+   separately from the original provider call in conversation history.
+2. Carry the existing required-tool-choice contract into endpoint eligibility.
+   Reuse the dispatch adapter's incompatibility rule so a required writer cannot
+   select a known incompatible CLI adapter or degrade to prose.
+3. Rotate only a writer-phase prose failure when another eligible route exists.
+   Reader recovery and correctable receipt feedback do not establish provider
+   noncompliance. With no eligible alternative, retain the existing bounded
+   retry without removing policy exclusions or bypassing approvals.
+4. Test actual HTTP payloads, native and cross-provider history, capability
+   exclusions, bounded retries, canonical writer duplication, approval waits,
+   and exhaustion. These source checks do not establish live restart recovery.
+
+Google's [function-calling continuation contract](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures)
+requires returned signatures on native function calls and describes history
+transfer from other models. The adapter boundary owns those wire details;
+Workrooms, governed tools and screening retain execution and data authority.
+Consolidating the duplicated tool-call types, provider message formatting and
+required-call capability checks contributes to the requested refactoring share.
+
+Source verification reproduced the missing Gemini evidence, premature rotation,
+and required-tool routing defects before repair. The focused suites pass 65 tests,
+the related suites pass 294, and routing/fallback suites pass 99, including a
+regression that forbids stripping required tools on compatibility retry. Web
+typechecking, module-size, style, prose and whitespace checks pass. These suites
+overlap in coverage and are not distinct runtime scenarios. Full preflight and
+review of the final repair tree remain required before publication.
+
+## Native review persistence, next implementation unit
+
+The current native `review_semantic_change` handler persists a TaskRun identity,
+then awaits reviewer branches inline. It does not persist `operationInput` and
+marks the TaskRun working before dispatch. A restart can therefore leave an
+unresumable subscription. The release owner confirmed no competing implementation
+on 2026-09-07. Extend this same Workroom and the selected DPF/Inngest decision.
+
+1. Persist the versioned immutable request as a TaskArtifact nested in TaskRun
+   creation, with a digest, submitting actor reference and absolute deadline.
+   Persist queue intent in the same write. Do not store credentials or duplicate
+   the packet in a second ledger. Older tasks without a packet remain explicitly
+   unrecoverable until an authorized caller supplies a new request.
+2. Extend the existing task execution event and reconciliation path. Revalidate
+   current actor, credential, grants and Workroom authority before dispatch.
+   Persist each reviewer branch's result before aggregate finalization. Completed
+   branches are reused by exact identity; expired or ambiguous in-flight calls
+   cannot silently become successful or trigger an unbounded replacement.
+3. Fence each claim and finalization against terminal status, attempt and version.
+   Commit the canonical receipt and task completion atomically; repeat delivery
+   returns the same evidence identity. Cancellation or supersession wins over a
+   late result. Provider continuation uses the existing AsyncInferenceOp contract
+   when supported; a CLI process is not a resumable provider operation.
+4. Expose pending, running, approval, recovery, exhaustion and stale state through
+   the existing task and Workroom projections. Test lost enqueue, process restart,
+   concurrent duplicate delivery, revoked authority and late completion before
+   exercising the canonical portal. Define and test an explicit persisted-packet
+   size limit; the inspected handler has no artifact-length check. Reuse existing
+   queue batch limits; this unit remains under EP-ABB3AC9D.
+
+Inngest [durable steps](https://www.inngest.com/docs/learn/inngest-functions)
+provide checkpoints, but [event deduplication](https://www.inngest.com/docs/guides/handling-idempotency)
+has a 24-hour window. Database claim and receipt fences remain necessary across
+that window. This is an implementation plan, not a delivered durability claim.

@@ -36,6 +36,9 @@ export interface RequestContract {
 
   // ── Hard Requirements ──────────────────────────────────────────
   requiresTools: boolean;
+  /** Caller requirement must constrain selection before the dispatch override. */
+  toolChoice?: import("./recipe-types").RoutedExecutionPlan["toolPolicy"]["toolChoice"];
+  terminalWriterToolName?: string;
   requiresStrictSchema: boolean;
   requiresStreaming: boolean;
   requiresCodeExecution?: boolean;
