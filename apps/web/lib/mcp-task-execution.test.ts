@@ -275,17 +275,82 @@ describe("remote task terminal-writer postcondition", () => {
       terminalWriterAttempt: 2,
     });
 
+    // BI-A57B6185: the writer ran and refused. That is a packet problem, and
+    // the caller must see the writer's own error, not "missing writer".
     expect(outcome).toMatchObject({
       kind: "result",
       result: {
         status: "input-required",
         idempotentReplay: true,
         resumable: true,
-        waitReason: "missing-terminal-writer",
+        waitReason: "terminal-writer-rejected",
+        structuredContent: {
+          error: "terminal_writer_rejected",
+          writerToolName,
+          attempt: 2,
+          writerRejection: { error: "CANONICAL_DESIGN_REQUIRED", message: "No canonical receipt was created." },
+          action: "fix-packet-and-resume",
+        },
       },
     });
+    expect(JSON.stringify((outcome as unknown as { result: { content: unknown } }).result.content)).toContain("CANONICAL_DESIGN_REQUIRED: No canonical receipt was created.");
+    expect(db.updateTaskRun).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        progressPayload: expect.objectContaining({
+          terminalWriterWait: expect.objectContaining({
+            writerRejection: expect.objectContaining({ error: "CANONICAL_DESIGN_REQUIRED" }),
+          }),
+        }),
+      }),
+    }));
     expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "completed" }),
+    }));
+  });
+
+  it("BI-A57B6185 never escalates a rejected writer to select-different-reviewer, even on attempt 3", async () => {
+    autonomous.execute.mockResolvedValue({
+      content: "The governed writer rejected the packet.",
+      executedTools: [{
+        name: writerToolName,
+        args: { decision: "pass" },
+        result: {
+          success: false,
+          error: "CANONICAL_DESIGN_AMBIGUOUS",
+          message: "No live workroom for this subject records head abc123. Sync the branch head with adopt_worktree then retry.",
+        },
+      }],
+      failure: { kind: "terminal-writer-missing", message: "generic loop text that must not win" },
+    });
+
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-WRITER-REJECTED-3", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-REJECTED", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed,
+      idempotentReplay: true,
+      resumeKind: "terminal-writer",
+      capacityAttempt: 1,
+      terminalWriterAttempt: 3,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        status: "input-required",
+        resumable: true,
+        waitReason: "terminal-writer-rejected",
+        structuredContent: { error: "terminal_writer_rejected", attempt: 3 },
+      },
+    });
+    const content = JSON.stringify((outcome as unknown as { result: { content: unknown } }).result.content);
+    expect(content).toContain("adopt_worktree");
+    expect(content).not.toContain("omitted");
+    expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        progressPayload: expect.objectContaining({ terminalWriterEscalation: expect.anything() }),
+      }),
     }));
   });
 
