@@ -54,7 +54,7 @@ export function ReferenceModelDirectory({ models }: Props) {
                   <span>{model.proposalCount} proposals</span>
                 </div>
               ) : (
-                <p className="mt-3 text-[11px] text-[var(--dpf-muted)]">
+                <p className="mt-3 text-dpf-caption text-[var(--dpf-muted)]">
                   {model.applicabilityReason}
                 </p>
               )}
