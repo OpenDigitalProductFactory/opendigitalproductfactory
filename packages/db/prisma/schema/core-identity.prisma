@@ -190,6 +190,7 @@ model Principal {
   aliases                             PrincipalAlias[]
   deferredBacklogItems                BacklogItem[]                       @relation("BacklogDeferralOwner")
   sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
+  accountableForOrganizations         Organization[]                      @relation("OrganizationTopAccountable")
   sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")
   communicationChannelBindings        CommunicationChannelBinding[]
   communicationChannelSessions        CommunicationChannelSession[]
@@ -404,6 +405,17 @@ model Organization {
   //            replacement; falls back to "vector" when the subgraph
   //            is sparse or PPR fails.
   wikiRetrievalMode                 String                             @default("vector")
+  // The human who answers for this organization's outcomes — its owner or CEO.
+  //
+  // Nullable on purpose. An organization that has not recorded one must read as
+  // unset so the product can ask for it, because the alternative is deriving an
+  // owner from the first administrator, the install's creator, or whoever
+  // happens to hold a lease, and a guessed accountable reads as a decision
+  // somebody made. Accountability inherits from here down explicit containment
+  // (apps/web/lib/work-management/human-accountability.ts); this column is the
+  // root of that lineage and grants no capability by itself.
+  topAccountablePrincipalId         String?
+  topAccountablePrincipal           Principal?                         @relation("OrganizationTopAccountable", fields: [topAccountablePrincipalId], references: [id], onDelete: SetNull)
   createdAt                         DateTime                           @default(now())
   updatedAt                         DateTime                           @updatedAt
   brandingConfig                    BrandingConfig?
@@ -531,6 +543,10 @@ model Organization {
   tripClassificationRules           TripClassificationRule[]           @relation("TripRuleOrganization")
   driverLocationConsents            DriverLocationConsent[]            @relation("DriverConsentOrganization")
   mileageRatePlans                  MileageRatePlan[]                  @relation("MileageRatePlanOrganization")
+
+  // FK-leading: resolve the accountable principal's organizations, and detect
+  // orphaned bindings when a principal is retired.
+  @@index([topAccountablePrincipalId])
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
