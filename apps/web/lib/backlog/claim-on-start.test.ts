@@ -96,10 +96,29 @@ describe("buildAtomicClaimWhere", () => {
 });
 
 describe("tryAcquireBacklogClaimAtomic", () => {
+  it("BI-05F8860A: re-entry by the same owner keeps claimedAt (the completion window does not reset)", async () => {
+    const updateMany = vi.fn(async ({ where }: { where: Record<string, unknown> }) => (
+      where.claimStatus === "active" && Array.isArray(where.OR) ? { count: 1 } : { count: 0 }
+    ));
+    const res = await tryAcquireBacklogClaimAtomic({
+      db: { backlogItem: { updateMany, findUnique: vi.fn(async () => null) } } as never,
+      itemRowId: "row-1",
+      userId: "user-1",
+      agentId: null,
+      now: NOW,
+    });
+    expect(res).toEqual({ ok: true, forced: false, reentered: true });
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    const call = updateMany.mock.calls[0]![0] as { where: Record<string, unknown>; data: Record<string, unknown> };
+    expect(call.data).not.toHaveProperty("claimedAt");
+    expect(call.where).toMatchObject({ id: "row-1", claimStatus: "active", claimedAt: { gte: new Date(NOW.getTime() - STALE_BACKLOG_CLAIM_MS) } });
+  });
+
   it("wins when updateMany affects one row", async () => {
     const db = {
       backlogItem: {
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        // First call is the BI-05F8860A re-entry probe (no live owned claim -> 0), then the acquire.
+        updateMany: vi.fn().mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 }),
         findUnique: vi.fn(),
       },
     };
@@ -111,7 +130,7 @@ describe("tryAcquireBacklogClaimAtomic", () => {
       now: NOW,
     });
     expect(res).toEqual({ ok: true, forced: false });
-    expect(db.backlogItem.updateMany).toHaveBeenCalledWith({
+    expect(db.backlogItem.updateMany).toHaveBeenLastCalledWith({
       where: buildAtomicClaimWhere("row-1", { userId: "u1", agentId: "a1", force: false, now: NOW }),
       data: buildClaimAcquireData({ userId: "u1", agentId: "a1", now: NOW }),
     });

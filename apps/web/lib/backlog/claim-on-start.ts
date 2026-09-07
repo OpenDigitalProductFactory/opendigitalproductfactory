@@ -127,7 +127,7 @@ export type BacklogClaimDb = {
 };
 
 export type AtomicClaimResult =
-  | { ok: true; forced: boolean }
+  | { ok: true; forced: boolean; reentered?: boolean }
   | {
       ok: false;
       error: "claim_conflict";
@@ -156,6 +156,26 @@ export async function tryAcquireBacklogClaimAtomic(params: {
     force: params.force === true,
     now: params.now,
   };
+  // BI-05F8860A: re-entry by the owner of a fresh active claim must NOT rewrite
+  // claimedAt. claimedAt opens the completion-evidence window, so bumping it on
+  // every claim_backlog_item_for_work silently invalidated every evidence row
+  // recorded before the re-claim. Same owner, same item, live claim: keep it.
+  if (!input.force) {
+    const now = input.now ?? new Date();
+    const staleBefore = new Date(now.getTime() - STALE_BACKLOG_CLAIM_MS);
+    const ownershipBranches: Record<string, unknown>[] = [{ claimedById: input.userId }];
+    if (input.agentId) ownershipBranches.push({ claimedByAgentId: input.agentId });
+    const reentered = await params.db.backlogItem.updateMany({
+      where: {
+        id: params.itemRowId,
+        claimStatus: "active",
+        claimedAt: { gte: staleBefore },
+        OR: ownershipBranches,
+      },
+      data: { claimStatus: "active", claimedById: input.userId, claimedByAgentId: input.agentId },
+    });
+    if (reentered.count > 0) return { ok: true, forced: false, reentered: true };
+  }
   const where = buildAtomicClaimWhere(params.itemRowId, input);
   const data = buildClaimAcquireData(input);
   const result = await params.db.backlogItem.updateMany({ where, data });
