@@ -32,6 +32,8 @@ export const INITIATIVE_READINESS_LANES: Record<string, InitiativeReadinessLane>
   record_initiative_security_review: { capability: "manage_compliance", grant: "initiative_security_review", gates: ["security-review"], accountableRoles: ["security-reviewer"], independent: true },
   record_initiative_compliance_review: { capability: "manage_compliance", grant: "initiative_compliance_review", gates: ["compliance-review"], accountableRoles: ["compliance-reviewer"], independent: true },
   record_initiative_domain_review: { capability: "manage_backlog", grant: "initiative_domain_review", gates: ["domain-review"], accountableRoles: ["domain-reviewer"], independent: true },
+  // Break-fix PIR (BI-F2FEC1EB): independent by construction — the declarer authored the repair.
+  record_initiative_post_implementation_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["post-implementation-review"], accountableRoles: ["post-implementation-reviewer"], independent: true },
   record_initiative_archetype_review: { capability: "manage_taxonomy", grant: "initiative_archetype_review", gates: ["archetype-provisioning", "archetype-completeness"], accountableRoles: ["archetype-steward"], independent: true },
 };
 
@@ -47,6 +49,7 @@ export const INITIATIVE_READINESS_TOOL_GRANTS: Record<string, string[]> = {
   record_initiative_compliance_review: ["initiative_compliance_review"],
   record_initiative_domain_review: ["initiative_domain_review"],
   record_initiative_archetype_review: ["initiative_archetype_review"],
+  record_initiative_post_implementation_review: ["initiative_design_review"],
 };
 
 export function readinessLaneForRole(role: string): { toolName: string; lane: InitiativeReadinessLane } | null {
