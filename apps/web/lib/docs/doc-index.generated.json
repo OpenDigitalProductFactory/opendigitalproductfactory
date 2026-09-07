@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 698,
+  "pageCount": 699,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3400,6 +3400,17 @@
         "what39s-still-missing",
         "how-to-navigate",
         "status-of-this-index-page"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md": {
+      "publicHref": "/founder-kernel/wiki/principles/a-room-is-reachable-by-construction/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-rule",
+        "why",
+        "how-it-is-enforced"
       ]
     },
     "docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md": {
@@ -10735,6 +10746,7 @@
         "live-blocker-references-guard",
         "agent-principal-convergence-guard",
         "label-association-guard-ratchet",
+        "room-addressing-guard",
         "what-this-gate-is-not"
       ]
     },
