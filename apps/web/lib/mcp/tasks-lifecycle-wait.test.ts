@@ -63,7 +63,7 @@ describe.each([handleTasksGet, handleTasksResult])("task wait projection (%#)", 
     db.taskRun.findUnique.mockResolvedValue({ ...row, progressPayload: { approvalEnvelopeId: "approval-1" } });
     db.coworkerActionEnvelope.findFirst.mockResolvedValue({
       id: "approval-1", delegatingUserId: "owner", taskRunId: row.taskRunId,
-      status: "proposed", expiresAt: new Date("2099-01-01"),
+      status: "proposed", expiresAt: new Date(Date.now() + 60_000),
     });
     expect(await read()).toMatchObject({ requiresApproval: true });
   });
