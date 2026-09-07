@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeCallEfficiency,
+  compareEfficiencyIds,
+  createCallEfficiencyAccumulator,
   type CallEfficiencyEvent,
 } from "./analysis";
 
@@ -24,6 +26,12 @@ function ev(
 }
 
 describe("analyzeCallEfficiency (BI-A08EBAEC)", () => {
+  it("orders tied identities like PostgreSQL C collation, including supplementary Unicode", () => {
+    const ids = ["\u{10000}", "\ue000", "a", "aa", "A", "é"];
+    expect(ids.sort(compareEfficiencyIds)).toEqual(["A", "a", "aa", "é", "\ue000", "\u{10000}"]);
+    expect(compareEfficiencyIds("same", "same")).toBe(0);
+  });
+
   it("flags thrash when the same tool dominates one thread", () => {
     const events: CallEfficiencyEvent[] = Array.from({ length: 12 }, (_, i) =>
       ev({
@@ -206,11 +214,94 @@ describe("analyzeCallEfficiency (BI-A08EBAEC)", () => {
   });
 });
 
+describe("bounded ordered efficiency accumulation", () => {
+  it("keeps aggregate state bounded as one execution grows beyond 5,000 calls", () => {
+    const accumulator = createCallEfficiencyAccumulator({ maxStateEntries: 20 });
+    for (let i = 0; i < 10_001; i++) {
+      expect(accumulator.push(ev({
+        id: String(i).padStart(6, "0"), toolName: "get_workroom",
+        createdAt: new Date(1_000 + i), success: i !== 10_000,
+      }))).toBe(true);
+    }
+    expect(accumulator.stats.stateEntries).toBe(4);
+    expect(accumulator.finish()).toMatchObject({ totalCalls: 10_001 });
+    expect(accumulator.finish().topTools[0]?.failCount).toBe(1);
+  });
+
+  it("stops atomically before a new key exceeds the state budget", () => {
+    const accumulator = createCallEfficiencyAccumulator({ maxStateEntries: 4 });
+    expect(accumulator.push(ev({ id: "a", toolName: "get_workroom" }))).toBe(true);
+    expect(accumulator.push(ev({ id: "b", toolName: "new_tool" }))).toBe(false);
+    expect(accumulator.stats).toMatchObject({ stateEntries: 4, includedCount: 1, stopReason: "state-budget" });
+    expect(accumulator.finish().topTools.map((tool) => tool.toolName)).toEqual(["get_workroom"]);
+    // Once partial, a subsequent known key cannot make the missing row disappear.
+    expect(accumulator.push(ev({ id: "c", toolName: "get_workroom" }))).toBe(false);
+  });
+
+  it("rejects an out-of-order page instead of publishing misleading adjacency", () => {
+    const accumulator = createCallEfficiencyAccumulator();
+    accumulator.push(ev({ id: "b", toolName: "get_workroom" }));
+    expect(() => accumulator.push(ev({ id: "a", toolName: "get_workroom" }))).toThrow(/order/i);
+  });
+
+  it("preserves reports when retry and cadence groups cross page boundaries", () => {
+    const events = Array.from({ length: 80 }, (_, i) => ev({
+      id: String(i).padStart(3, "0"),
+      toolName: i % 3 ? "get_workroom" : "edge.heartbeat",
+      threadId: i % 3 ? "thread-a" : "", agentId: i % 3 ? "agent-1" : "edge-a",
+      success: i % 5 !== 0, governedRefusal: i % 10 === 0,
+      createdAt: new Date(1_000 + i * 30_000),
+    }));
+    const accumulator = createCallEfficiencyAccumulator();
+    for (let offset = 0; offset < events.length; offset += 7) {
+      for (const event of events.slice(offset, offset + 7)) accumulator.push(event);
+    }
+    expect(accumulator.finish()).toEqual(analyzeCallEfficiency([...events].reverse()));
+  });
+});
+
 // A governed refusal is not a tool failure. ToolExecution.success is false for
 // both a broken tool and a gate correctly saying no, and counting them together
 // filed `fix_instructions` findings against working gates. Measured live over
 // seven days: ~4,900 of ~5,700 failures were governed refusals.
 describe("governed refusals are not tool failures", () => {
+  it("retains distinct headline, surface and answerable-call denominators", () => {
+    const events = [
+      ev({ id: "a", toolName: "gate", success: false, governedRefusal: true }),
+      ev({ id: "b", toolName: "gate", success: false }),
+      ev({ id: "c", toolName: "gate", success: true, durationMs: null }),
+    ];
+    const report = analyzeCallEfficiency(events);
+    expect(report.successRate).toBe(1 / 3);
+    expect(report.bySurface).toEqual([
+      { surface: "external-pat:external-jsonrpc", count: 3, failCount: 2 },
+    ]);
+    expect(report.topTools[0]).toEqual({
+      toolName: "gate", count: 3, refusalCount: 1, failCount: 1,
+      successRate: 1 / 2, avgDurationMs: 50,
+    });
+  });
+
+  it("does not join retries across an intervening tool in the same execution", () => {
+    const events = Array.from({ length: 8 }, (_, i) => ev({
+      id: String(i).padStart(2, "0"),
+      toolName: i % 2 ? "read_context" : "some_gate",
+      success: i % 2 === 1,
+      governedRefusal: i % 2 === 0,
+      createdAt: new Date(1_000 + i),
+    }));
+    expect(analyzeCallEfficiency(events).findings.filter(
+      (finding) => finding.kind === "retry_storm",
+    )).toEqual([]);
+  });
+
+  it("makes tied timestamps deterministic by identity regardless of input order", () => {
+    const events = Array.from({ length: 8 }, (_, i) => ev({
+      id: String(i).padStart(2, "0"), toolName: "some_gate", success: i % 2 === 1,
+    }));
+    expect(analyzeCallEfficiency([...events].reverse())).toEqual(analyzeCallEfficiency(events));
+  });
+
   it("does not raise high_failure for a gate that declines most calls", () => {
     // The live shape: record_plan_backlog_coverage at 91% "failure", every one a
     // readiness refusal. The tool is working; the work was not ready.
