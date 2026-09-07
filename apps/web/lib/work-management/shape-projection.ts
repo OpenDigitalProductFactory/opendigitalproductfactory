@@ -247,6 +247,9 @@ export function projectRoomShape(
   if (definition && !currentStageKey) gaps.push("No observed execution stage is linked to this definition.");
   if (view.projection.sourceHealth !== "ok") gaps.push("Some execution sources are unavailable or incomplete.");
   if (definition) {
+    const permittedStage = definition.stages.find((stage) => stage.key === check.nextPermittedStageKey);
+    const permission = permittedStage ? `Permitted stage: ${permittedStage.title}.` : "No permitted transition recorded.";
+    const recordedAction = view.work.nextAction ? ` Recorded action: ${view.work.nextAction}` : "";
     // Definition order is stable. A receipt kind alone cannot bind a receipt to
     // one of these steps; leave uncorrelated receipts in the evidence lane.
     stages = definition.stages.map((stage) => ({
@@ -258,7 +261,9 @@ export function projectRoomShape(
       inspection: {
         position: stage.key === currentStageKey ? "Current stage reported by the process check" : "Intended step; execution not verified",
         reason: stage.key === currentStageKey ? check.interventionReason ?? view.work.attentionReason ?? "The process check reports this stage." : "No step-linked execution receipt is available.",
-        next: stage.key === currentStageKey ? view.work.nextAction || "Next action not recorded" : stage.advance.condition,
+        next: stage.key === currentStageKey
+          ? `${permission}${recordedAction}`
+          : `Intended advance condition: ${stage.advance.condition}`,
         owner: ownerName(stage.accountablePrincipalRef), expectedEvidence: stage.evidence, affected,
       },
     }));

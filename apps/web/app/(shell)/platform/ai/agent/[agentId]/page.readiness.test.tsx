@@ -44,6 +44,9 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/platform/ai/agent/AGT-001",
+  useSearchParams: () => new URLSearchParams(),
   notFound: () => {
     throw new Error("notFound");
   },

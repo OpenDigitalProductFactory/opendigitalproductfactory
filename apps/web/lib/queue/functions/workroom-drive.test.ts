@@ -5,12 +5,20 @@ import { buildWorkroomPostureClaim } from "@/lib/work-management/workroom-postur
 import { workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
 import {
   applyDrivePlan,
+  createWorkroomDriveEffects,
   runWorkroomDriveJob,
   type WorkroomDriveEffects,
   type WorkroomDriveRoom,
 } from "./workroom-drive";
 import { resolveDrivePlan } from "@/lib/work-management/drive-resolution";
 import { readWorkShapeDefinitionContract, getWorkShape } from "@/lib/work-management/work-shapes";
+
+const driveDb = {
+  workroom: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  workroomActivity: { create: vi.fn() },
+  scheduledAgentTask: { upsert: vi.fn() },
+  $transaction: vi.fn(),
+};
 
 function coordinatorAssignment(workroomId: string) {
   return {
@@ -53,7 +61,7 @@ function room(over: Partial<WorkroomDriveRoom> = {}): WorkroomDriveRoom {
 function effects() {
   const persist = vi.fn<WorkroomDriveEffects["persist"]>(async () => {});
   const acquireLease = vi.fn<WorkroomDriveEffects["acquireLease"]>(async () => "acquired");
-  const upsertAgentTask = vi.fn<WorkroomDriveEffects["upsertAgentTask"]>(async () => {});
+  const upsertAgentTask = vi.fn<WorkroomDriveEffects["upsertAgentTask"]>(async () => true);
   const deactivateAgentTask = vi.fn<WorkroomDriveEffects["deactivateAgentTask"]>(async () => {});
   return { persist, acquireLease, upsertAgentTask, deactivateAgentTask };
 }
@@ -145,6 +153,94 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
 });
 
 describe("applyDrivePlan lease expiry", () => {
+  function persistedLease(status = "ready") {
+    const persisted = { expiresAt: null as Date | null, holder: "prn-row-coord", status };
+    driveDb.scheduledAgentTask.upsert.mockReset().mockResolvedValue({});
+    driveDb.$transaction.mockImplementation(async (run) => run(driveDb));
+    driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: {} });
+    driveDb.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+    driveDb.workroom.update.mockImplementation(async ({ data }) => {
+      if (data.leaseExpiresAt) persisted.expiresAt = data.leaseExpiresAt;
+      return {};
+    });
+    driveDb.workroom.updateMany.mockImplementation(async ({ where, data }) => {
+      if (("leaseExpiresAt" in where && where.leaseExpiresAt !== persisted.expiresAt)
+        || ("leaseHolderPrincipalId" in where && where.leaseHolderPrincipalId !== persisted.holder)
+        || where.status?.notIn?.includes(persisted.status)) return { count: 0 };
+      if (data.leaseExpiresAt) persisted.expiresAt = data.leaseExpiresAt;
+      return { count: 1 };
+    });
+    return { ...createWorkroomDriveEffects(async () => driveDb as never, () => new Date("2026-09-01T00:00:00.000Z")), persist: vi.fn(async () => {}), state: persisted };
+  }
+
+  it("admits only one dispatch when scheduled and manual drivers read the same expired lease", async () => {
+    const fx = persistedLease();
+    const now = new Date("2026-09-01T00:00:00.000Z");
+    const runs = await Promise.all([
+      runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx }),
+      runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx }),
+    ]);
+    expect(runs.reduce((count, run) => count + run.dispatched, 0)).toBe(1);
+    expect(driveDb.scheduledAgentTask.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not dispatch a room that completed after the driver loaded it", async () => {
+    const fx = persistedLease("complete");
+    const result = await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()],
+      effects: fx,
+    });
+    expect(result.dispatched).toBe(0);
+    expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
+  });
+
+  it("fences scheduling when ownership changes after acquisition", async () => {
+    const fx = persistedLease();
+    const acquire = fx.acquireLease;
+    fx.acquireLease = async (input) => {
+      const result = await acquire(input);
+      fx.state.holder = "replacement-worker";
+      return result;
+    };
+    const result = await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()], effects: fx,
+    });
+    expect(result.dispatched).toBe(0);
+    expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a concurrent room update or publish an uncommitted snapshot", async () => {
+    persistedLease();
+    let workspace: Record<string, unknown> = { existing: true };
+    driveDb.workroom.findUnique.mockImplementation(async () => {
+      const read = workspace;
+      workspace = { ...workspace, concurrent: true };
+      return { workspaceState: read, updatedAt: new Date("2026-09-01T00:00:00.000Z") };
+    });
+    driveDb.workroom.update.mockImplementation(async ({ data }) => { workspace = data.workspaceState; return {}; });
+    driveDb.workroom.updateMany.mockResolvedValue({ count: 0 });
+    driveDb.workroomActivity.create.mockClear();
+    await createWorkroomDriveEffects(async () => driveDb as never).persist({
+      roomId: "row-1", snapshot: { stageKey: "sweep" }, activityKind: "verification",
+      summary: "Stage observed", payload: {},
+    });
+    expect(workspace.concurrent).toBe(true);
+    expect(driveDb.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("does not publish a dispatch snapshot after the lease holder changes", async () => {
+    const fx = persistedLease();
+    const expiry = new Date("2026-09-01T00:05:00.000Z");
+    fx.state.expiresAt = expiry;
+    fx.state.holder = "replacement-worker";
+    driveDb.workroomActivity.create.mockClear();
+    await createWorkroomDriveEffects(async () => driveDb as never).persist({
+      roomId: "row-1", snapshot: { stageKey: "sweep" }, activityKind: "verification",
+      summary: "Stage observed", payload: {}, lease: { expiresAt: expiry, holderPrincipalId: "prn-row-coord" },
+    });
+    expect(driveDb.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
   it("treats an expired lease as acquirable", async () => {
     const shape = getWorkShape("obligation-assurance-watch");
     expect(shape).not.toBeNull();

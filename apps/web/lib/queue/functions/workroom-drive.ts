@@ -8,6 +8,7 @@
 // wrappers behind gateAtEntry.
 
 import { cron } from "inngest";
+import type { PrismaClient } from "@dpf/db";
 import { inngest } from "../inngest-client";
 import {
   COORDINATION_RESOURCE_TYPE,
@@ -71,6 +72,8 @@ export type WorkroomDriveEffects = {
     activityKind: string;
     summary: string;
     payload: Record<string, unknown>;
+    observationOnly?: boolean;
+    lease?: { expiresAt: Date; holderPrincipalId: string | null };
   }) => Promise<void>;
   acquireLease: (input: {
     roomId: string;
@@ -87,7 +90,8 @@ export type WorkroomDriveEffects = {
     title: string;
     prompt: string;
     now: Date;
-  }) => Promise<void>;
+    lease: { roomId: string; expiresAt: Date; holderPrincipalId: string | null };
+  }) => Promise<boolean>;
   deactivateAgentTask: (taskId: string) => Promise<void>;
 };
 
@@ -181,11 +185,12 @@ export async function applyDrivePlan(input: {
 
   if (plan.action === "dispatch_agent") {
     if (!plan.taskId || !plan.agentId) return "skipped";
+    const expiresAt = new Date(now.getTime() + WORKROOM_DRIVE_LEASE_MS);
     const lease = await effects.acquireLease({
       roomId: room.id,
       now,
       holderPrincipalId: room.leaseHolderPrincipalId,
-      expiresAt: new Date(now.getTime() + WORKROOM_DRIVE_LEASE_MS),
+      expiresAt,
       currentExpiresAt: room.leaseExpiresAt,
       currentHolder: room.leaseHolderPrincipalId,
     });
@@ -196,6 +201,7 @@ export async function applyDrivePlan(input: {
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
         summary: "Drive lease held by another worker; stage remains eligible when it expires.",
         payload: { ...snapshot, reason: "lease_held" },
+        observationOnly: true,
       });
       return "skipped";
     }
@@ -209,20 +215,23 @@ export async function applyDrivePlan(input: {
       });
       return "skipped";
     }
-    await effects.upsertAgentTask({
+    const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
       agentId: plan.agentId,
       ownerUserId: room.ownerUserId,
       title: `Workroom ${room.capsuleId} / ${plan.stageKey}`,
       prompt: `Execute Workroom ${room.capsuleId} stage ${plan.stageKey} for shape ${plan.shapeKey}@${plan.shapeVersion}. Stay inside the declared grants. Do not skip stages, widen authority, or invent occupants.`,
       now,
+      lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
+    if (!scheduled) return "skipped";
     await effects.persist({
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
       summary: `Dispatched ${plan.taskId} for stage ${plan.stageKey}`,
       payload: snapshot,
+      lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
     return "dispatched";
   }
@@ -273,7 +282,7 @@ export async function runWorkroomDriveJob(
     ];
     rooms = await loadStandingRooms(bindings, schemePresent);
   }
-  const effects = deps?.effects ?? liveEffects();
+  const effects = deps?.effects ?? createWorkroomDriveEffects();
   const plans: WorkroomDriveResult["plans"] = [];
   let dispatched = 0;
   let attention = 0;
@@ -588,27 +597,43 @@ async function loadStandingRooms(
   });
 }
 
-function liveEffects(): WorkroomDriveEffects {
+export function createWorkroomDriveEffects(
+  loadDb: () => Promise<Pick<PrismaClient, "workroom" | "workroomActivity" | "scheduledAgentTask" | "$transaction">>
+    = async () => (await import("@dpf/db")).prisma,
+  clock: () => Date = () => new Date(),
+): WorkroomDriveEffects {
   return {
     async persist(input) {
-      const { prisma } = await import("@dpf/db");
-      const current = await prisma.workroom.findUnique({
-        where: { id: input.roomId },
-        select: { workspaceState: true },
+      const prisma = await loadDb();
+      const activity = await prisma.$transaction(async (tx) => {
+        if (!input.observationOnly) {
+          const current = await tx.workroom.findUnique({
+            where: { id: input.roomId },
+            select: { workspaceState: true, updatedAt: true },
+          });
+          if (!current) return null;
+          const updated = await tx.workroom.updateMany({
+            where: {
+              id: input.roomId, updatedAt: current.updatedAt, archivedAt: null, status: { notIn: [...TERMINAL] },
+              ...(input.lease ? {
+                leaseExpiresAt: input.lease.expiresAt, leaseHolderPrincipalId: input.lease.holderPrincipalId,
+                AND: [{ leaseExpiresAt: { gt: clock() } }],
+              } : {}),
+            },
+            data: { workspaceState: { ...asRecord(current.workspaceState), workroomDrive: input.snapshot } as object },
+          });
+          if (updated.count !== 1) return null;
+        }
+        return tx.workroomActivity.create({
+          data: {
+            workCapsuleId: input.roomId,
+            kind: input.activityKind,
+            summary: input.summary,
+            payload: input.payload as object,
+          },
+        });
       });
-      const existing = asRecord(current?.workspaceState) ?? {};
-      await prisma.workroom.update({
-        where: { id: input.roomId },
-        data: { workspaceState: { ...existing, workroomDrive: input.snapshot } as object },
-      });
-      const activity = await prisma.workroomActivity.create({
-        data: {
-          workCapsuleId: input.roomId,
-          kind: input.activityKind,
-          summary: input.summary,
-          payload: input.payload as object,
-        },
-      });
+      if (!activity) return;
       const { publishRecordedWorkCapsuleActivity } = await import("@/lib/work-capsules/activity-events");
       publishRecordedWorkCapsuleActivity(input.roomId, activity.id);
     },
@@ -616,43 +641,64 @@ function liveEffects(): WorkroomDriveEffects {
       if (input.currentExpiresAt && input.currentExpiresAt.getTime() > input.now.getTime()) {
         return "held";
       }
-      const { prisma } = await import("@dpf/db");
-      await prisma.workroom.update({
-        where: { id: input.roomId },
+      const prisma = await loadDb();
+      const claimed = await prisma.workroom.updateMany({
+        where: {
+          id: input.roomId,
+          archivedAt: null,
+          status: { notIn: [...TERMINAL] },
+          leaseExpiresAt: input.currentExpiresAt,
+          leaseHolderPrincipalId: input.currentHolder,
+        },
         data: {
           leaseExpiresAt: input.expiresAt,
           leaseHolderPrincipalId: input.holderPrincipalId,
         },
       });
-      return "acquired";
+      return claimed.count === 1 ? "acquired" : "held";
     },
     async upsertAgentTask(input) {
-      const { prisma } = await import("@dpf/db");
-      await prisma.scheduledAgentTask.upsert({
-        where: { taskId: input.taskId },
-        create: {
-          taskId: input.taskId,
-          agentId: input.agentId,
-          title: input.title,
-          prompt: input.prompt,
-          routeContext: "/ops/workrooms",
-          schedule: WORKROOM_DRIVE_CRON,
-          timezone: "UTC",
-          ownerUserId: input.ownerUserId,
-          nextRunAt: input.now,
-          isActive: true,
-        },
-        update: {
-          agentId: input.agentId,
-          title: input.title,
-          prompt: input.prompt,
-          nextRunAt: input.now,
-          isActive: true,
-        },
+      const prisma = await loadDb();
+      return prisma.$transaction(async (tx) => {
+        // Lock the room through the scheduling write. An expired or superseded
+        // driver cannot reactivate a task after another owner takes over.
+        const owned = await tx.workroom.updateMany({
+          where: {
+            id: input.lease.roomId, archivedAt: null, status: { notIn: [...TERMINAL] },
+            leaseExpiresAt: input.lease.expiresAt,
+            leaseHolderPrincipalId: input.lease.holderPrincipalId,
+            AND: [{ leaseExpiresAt: { gt: clock() } }],
+          },
+          data: { leaseExpiresAt: input.lease.expiresAt },
+        });
+        if (owned.count !== 1) return false;
+        await tx.scheduledAgentTask.upsert({
+          where: { taskId: input.taskId },
+          create: {
+            taskId: input.taskId,
+            agentId: input.agentId,
+            title: input.title,
+            prompt: input.prompt,
+            routeContext: "/ops/workrooms",
+            schedule: WORKROOM_DRIVE_CRON,
+            timezone: "UTC",
+            ownerUserId: input.ownerUserId,
+            nextRunAt: input.now,
+            isActive: true,
+          },
+          update: {
+            agentId: input.agentId,
+            title: input.title,
+            prompt: input.prompt,
+            nextRunAt: input.now,
+            isActive: true,
+          },
+        });
+        return true;
       });
     },
     async deactivateAgentTask(taskId) {
-      const { prisma } = await import("@dpf/db");
+      const prisma = await loadDb();
       await prisma.scheduledAgentTask.updateMany({
         where: { taskId },
         data: { isActive: false },

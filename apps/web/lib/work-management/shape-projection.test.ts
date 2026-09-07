@@ -94,6 +94,7 @@ describe("execution truth", () => {
     expect(graph.stages.map((stage) => stage.key)).toEqual(getWorkShape("delivery-large")!.stages.map((stage) => stage.key));
     expect(graph.stages.every((stage) => stage.state === "unknown")).toBe(true);
     expect(graph.process?.nextPermittedStageKey).toBeNull();
+    expect(graph.stages.every((stage) => stage.inspection?.next.startsWith("Intended advance condition:"))).toBe(true);
     expect(graph.process?.gaps).toContain("No observed execution stage is linked to this definition.");
   });
 

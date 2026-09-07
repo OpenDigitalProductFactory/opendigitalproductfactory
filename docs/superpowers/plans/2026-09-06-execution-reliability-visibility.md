@@ -274,3 +274,24 @@ The first merged-tree preflight identified missing architecture/user-interface g
 and a convergence declaration; both are addressed in this increment. The prose baseline
 is copied by the canonical Dockerfile and advances with the governed image release.
 The release gate and served portal checks remain outstanding.
+
+## Implementation evidence: driver ownership
+
+Driver regressions reproduced two dispatches from one expired lease, dispatch after
+completion, scheduling after ownership replacement, and loss of a concurrent room
+update. Acquisition now compares the observed lease atomically. Scheduling checks
+the unexpired lease inside the transaction that creates or updates the task. Snapshot
+writes compare the read revision and retain the dispatch lease fence; journal creation
+commits with the snapshot. A driver that encounters another owner's lease records an
+observation without replacing that owner's snapshot. The effect adapter accepts an
+explicit database dependency so concurrent source tests cannot escape into a live client.
+
+The expanded driver suite passed 58 tests across five files and web typecheck.
+This protects scheduling and snapshot persistence; provider effects, autonomous reviewer
+successors and crash/restart reconciliation still require their own runtime proof.
+
+The merged-tree CI attempt at 96e96509cf0 completed migration setup and typecheck,
+then reported six failing coworker-page tests whose navigation mocks omitted the newly
+used shared-renderer hooks. Its wrapper also lost the MCP connection during a portal
+restart. The test failures are real and are being repaired; the wrapper interruption
+does not erase them or establish a gate pass.
