@@ -106,10 +106,11 @@ export const PLAN_DEFINITIONS: Record<ReadinessProfile, ReadinessRequirementDefi
   "doc-only": null,
   fix: {
     summary:
-      "For a fix, the plan is the ordered fix sequence recorded in the design doc — not a separate plan document.",
+      "For a fix, the ordered sequence stays in the design doc — not a separate plan document; implementation coverage belongs to the governed implementation parent rather than the documentation artifact.",
     satisfiedBy: [
       "the design doc naming the deliverables in order",
-      "a coverage record citing that doc against the current scope baseline",
+      "an explicit binding to the implementation parent or child that owns the current scope baseline",
+      "a coverage record against that implementation item's canonical plan",
     ],
     writerTool: "record_plan_backlog_coverage",
   },
