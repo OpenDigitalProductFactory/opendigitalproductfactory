@@ -172,6 +172,43 @@ The self-upgrade swap **recreates the portal container**, which drops any open b
 your session. After it completes, hard-refresh the portal and sign in again — this is expected, not a
 fault.
 
+## First question after any failed upgrade: how far did it get?
+
+`promote.sh` appends every step it announces to a durable trail on the shared state
+mount, so the answer survives the thing that destroyed it before — the orchestrating
+portal dying mid-upgrade, whether from a Docker restart, a host reboot or a power cut.
+
+```powershell
+# on the host (DPF_STATE_DIR, default %USERPROFILE%\.dpf)
+Get-Content "$env:USERPROFILE\.dpf\self-upgrade-steps.log" -Tail 20
+```
+
+```bash
+# or through the portal, which mounts the same directory read-only
+docker exec dpf-portal-1 tail -20 /dpf-state/self-upgrade-steps.log
+```
+
+Each line is `<utc>\t<mode>\t<step>\t<target-sha>`. Read the **last** line whose target
+matches the failed run, and whose mode is `real` (a `dry-run` line never touched the
+install):
+
+| Last step reached | What it means |
+| --- | --- |
+| `prepare` … `migrate` | The container swap never started. The install is untouched and still on its pre-upgrade image; re-trigger the upgrade normally. |
+| `docker-up` or later | The swap had begun. Check what is actually running (`docker ps`, `/api/health`) before re-triggering. |
+| nothing for that target | The promotion died before its first step, or this install's promoter predates the trail. Treat the outcome as unknown. |
+
+`migrate` counts as pre-swap: schema migrations run before the container is replaced and
+are forward-only, so a re-run after an interruption there re-applies nothing.
+
+The portal records the same verdict on the run itself
+(`SelfUpgradeRun.completionEvidence.interruption`) the next time an upgrade is
+requested, including an explicit indeterminate verdict with its basis. If the trail is
+missing entirely the answer is "unknown" — never assume the install was untouched.
+
+The file is bounded at 2000 lines and rotated to the newest 1000, so an old incident may
+have aged out. Copy it before a long investigation.
+
 ## If it fails anyway (recovery)
 
 These should not occur once the promoter is rebuilt from current `main`, but for reference:
