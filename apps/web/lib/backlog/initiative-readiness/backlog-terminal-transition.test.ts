@@ -25,7 +25,7 @@ function projected(verdict: "allowed" | "input-required") {
   return { governed: true, baselineId: "BASE-1", inheritedFrom: null, artifactHints: { hasSpec: true, hasPlan: true }, planArtifact: null, decision };
 }
 
-function fakeDb(casCount = 1, workType = "feature", itemOverrides: Record<string, unknown> = {}) {
+function fakeDb(casCount = 1, workType = "feature", itemOverrides: Record<string, unknown> = {}, scopeClaims: unknown = null) {
   const creates: unknown[] = [];
   const updateMany = vi.fn(async () => ({ count: casCount }));
   const item = {
@@ -48,6 +48,7 @@ function fakeDb(casCount = 1, workType = "feature", itemOverrides: Record<string
       create: vi.fn(async (args: unknown) => { creates.push(args); return args; }),
     },
     authorizationDecisionLog: { create: vi.fn(async (args: unknown) => args) },
+    ...(scopeClaims ? { workroom: { findFirst: vi.fn(async () => ({ scopeClaims })) } } : {}),
   };
   return {
     creates,
@@ -217,6 +218,81 @@ describe("completeBacklogItemTransition", () => {
 
     expect(seen[0]?.completion.acceptanceEvidence).toBe("missing");
     expect(fake.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("BI-05F8860A: a small-shape item is accepted by cited manual evidence, without objective reconciliation", async () => {
+    const fake = fakeDb(1, "bug", {}, [{ workShape: "delivery-small@1.0.0", recordedAt: "2026-09-07T00:43:51.594Z" }]);
+    const seen: Array<{ completion: { acceptanceEvidence: string; objectiveReconciliation: string; evidenceRefs: Record<string, string[]> } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Fixed and merged.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({
+          kind: "evaluated",
+          item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "bug" },
+          verdict: {
+            allowed: true,
+            noOp: false,
+            normalizedManifest: {
+              workClass: "implementation",
+              evidenceActivityIds: ["E-SOURCE", "E-TEST", "E-BUILD", "E-ACCEPT"],
+              useActiveBuildEvidence: false,
+            },
+            acceptanceEvidenceRefs: ["E-ACCEPT"],
+            blockers: [],
+            nextAction: null,
+          },
+        }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => false,
+        projectReadiness: ((input: { completion: { acceptanceEvidence: string; objectiveReconciliation: string; evidenceRefs: Record<string, string[]> } }) => {
+          seen.push(input);
+          return projected("allowed");
+        }) as never,
+      },
+    });
+
+    expect(seen[0]?.completion.acceptanceEvidence).toBe("pass");
+    expect(seen[0]?.completion.objectiveReconciliation).toBe("pass");
+    expect(seen[0]?.completion.evidenceRefs.ACCEPTANCE_EVIDENCE_REQUIRED).toEqual(["E-ACCEPT"]);
+    expect(fake.updateMany).toHaveBeenCalled();
+  });
+
+  it("BI-05F8860A: an UNSHAPED implementation item still needs objective reconciliation (v2 unchanged)", async () => {
+    const fake = fakeDb(1, "bug");
+    const seen: Array<{ completion: { acceptanceEvidence: string } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Fixed.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({
+          kind: "evaluated",
+          item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "bug" },
+          verdict: {
+            allowed: true,
+            noOp: false,
+            normalizedManifest: { workClass: "implementation", evidenceActivityIds: ["E-ACCEPT"], useActiveBuildEvidence: false },
+            acceptanceEvidenceRefs: ["E-ACCEPT"],
+            blockers: [],
+            nextAction: null,
+          },
+        }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => false,
+        projectReadiness: ((input: { completion: { acceptanceEvidence: string } }) => { seen.push(input); return projected("input-required"); }) as never,
+      },
+    });
+    expect(seen[0]?.completion.acceptanceEvidence).toBe("missing");
   });
 
   it("uses an exact status compare-and-set and records the status change after allowed readiness", async () => {

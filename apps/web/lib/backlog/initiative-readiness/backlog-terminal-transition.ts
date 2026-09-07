@@ -10,7 +10,7 @@ import {
 import { canonicalJson } from "@/lib/shared/canonical-json";
 import { isReachableFromTrunk, trunkHasMergedPullRequest, trunkRefExists } from "@/lib/work-capsules/git-scanner";
 
-import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
+import { projectBacklogItemReadiness, readinessShapeFromWorkShape, type InitiativeReadinessActivity } from "./entry-adapter";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import { type BoundWorkShapeDb, readBoundWorkShapeRef } from "./bound-work-shape";
 import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
@@ -310,19 +310,33 @@ export async function completeBacklogItemTransition(args: {
         && completion.verdict.allowed
         && completion.verdict.normalizedManifest?.workClass === "documentation"
         && (completion.verdict.acceptanceEvidenceRefs?.length ?? 0) > 0;
+      const boundWorkShape = await readBoundWorkShapeRef(tx as unknown as BoundWorkShapeDb, lockedItem.itemId);
+      // BI-05F8860A / readiness.v3 shape-requirements: a small or break-fix item
+      // is accepted by the runtime check on the live install or the
+      // failing-to-passing test, recorded as manual/ux evidence — "no spec, no
+      // plan, no reconciliation receipt". The projector already assigns that
+      // lane to the delivery-coordinator; this is the transition-side half of
+      // the same contract, so cited acceptance evidence is honoured instead of
+      // falling through to an objective-mapping route the shape never grants.
+      const boundShape = readinessShapeFromWorkShape(boundWorkShape);
+      const smallShapeAcceptance = (boundShape === "small" || boundShape === "break-fix")
+        && completion.kind === "evaluated"
+        && completion.verdict.allowed
+        && (completion.verdict.acceptanceEvidenceRefs?.length ?? 0) > 0;
       // Recognized platform work: the merge is the acceptance too — but only when
       // reconciliation is not in a real conflict/malformed state (those still block).
       const acceptancePass =
         reconciliation.state === "pass" ||
         directDocumentationAcceptance ||
+        smallShapeAcceptance ||
         (recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
       const objectiveReconciliationPass = reconciliation.state === "pass"
+        || smallShapeAcceptance
         || (recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
       const inheritedScope = await loadInheritedInitiativeScope(
         tx as unknown as InheritanceDb,
         { childItemId: lockedItem.itemId, childRowId: lockedItem.id },
       );
-      const boundWorkShape = await readBoundWorkShapeRef(tx as unknown as BoundWorkShapeDb, lockedItem.itemId);
       const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
         item: {
           ...lockedItem,
@@ -347,7 +361,7 @@ export async function completeBacklogItemTransition(args: {
             DELIVERY_EVIDENCE_REQUIRED: completion.kind === "evaluated"
               ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
               : [],
-            ACCEPTANCE_EVIDENCE_REQUIRED: directDocumentationAcceptance && completion.kind === "evaluated"
+            ACCEPTANCE_EVIDENCE_REQUIRED: (directDocumentationAcceptance || smallShapeAcceptance) && completion.kind === "evaluated"
               ? completion.verdict.acceptanceEvidenceRefs ?? []
               : reconciliation.evidenceRefs,
             OBJECTIVE_RECONCILIATION_REQUIRED: reconciliation.evidenceRefs,

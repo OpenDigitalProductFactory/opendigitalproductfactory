@@ -34,6 +34,7 @@ export type TerminalRecoveryRoom = {
 };
 
 export type TerminalRecoveryEscalationReason =
+  | "acceptance-evidence-required"
   | "workroom-not-found"
   | "workroom-ambiguous"
   | "workroom-identity-incomplete"
@@ -48,12 +49,34 @@ export type TerminalRecoveryEscalationReason =
   | "canonical-artifact-unavailable";
 
 type TerminalEscalation = {
-  accountableRole: "acceptance-reviewer";
-  toolName: "record_initiative_evidence";
-  grant: "initiative_evidence_write";
+  accountableRole: "acceptance-reviewer" | "delivery-coordinator";
+  toolName: "record_initiative_evidence" | "record_execution_evidence";
+  grant: "initiative_evidence_write" | "backlog_write";
   reason: TerminalRecoveryEscalationReason;
   nextAction: string;
 };
+
+/**
+ * BI-05F8860A: under readiness.v3 a small or break-fix item owes no objective
+ * mapping — its acceptance lane belongs to the delivery-coordinator and is met
+ * by cited manual/ux evidence (the runtime check or the failing-to-passing
+ * test). Routing that lane at objective-mapping produced "baseline-not-found",
+ * then "eligible-evidence-not-found", then "objective-mapping-history-
+ * unavailable" — three misleading escalations for one missing evidence row.
+ */
+function smallShapeAcceptanceEscalation(): TerminalInitiativeRecovery {
+  return {
+    reviewerRoutes: [],
+    unroutable: [],
+    escalations: [{
+      accountableRole: "delivery-coordinator",
+      toolName: "record_execution_evidence",
+      grant: "backlog_write",
+      reason: "acceptance-evidence-required",
+      nextAction: "This delivery shape is accepted by the runtime check on the live install or by the failing-to-passing test, not by objective mapping. Record it with record_execution_evidence (kind manual_check or ux_verified) inside the current completion window, then cite that activity id in completionEvidence.evidenceActivityIds. Do not re-claim the item to refresh readiness; a re-claim does not reopen the window.",
+    }],
+  };
+}
 
 export type TerminalInitiativeRecovery = Omit<InitiativeReviewerRecovery, "escalations"> & {
   escalations: Array<InitiativeReviewerRecovery["escalations"][number] | TerminalEscalation>;
@@ -531,6 +554,11 @@ export async function resolveTerminalInitiativeRecovery(args: {
   ports?: TerminalRecoveryPorts;
 }): Promise<TerminalInitiativeRecovery> {
   const ports = args.ports ?? DEFAULT_PORTS;
+  const acceptanceLane = [...args.decision.blockers, ...args.decision.unmet]
+    .find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
+  if (acceptanceLane && acceptanceLane.accountableRole === "delivery-coordinator") {
+    return smallShapeAcceptanceEscalation();
+  }
   const rooms = await ports.loadLiveRooms({
     itemId: args.decision.subject.id,
     refusedWorkroomId: args.refusedWorkroomId,
