@@ -154,6 +154,14 @@ Key checkpoints:
   `CREATE EXTENSION vector` succeeds. (A prior failed attempt is auto-healed via P3009 resolve.)
 - Portal boot logs (`docker logs dpf-portal-1`) show `[bet5-backfill] ... done.` with counts, then the
   server starts (`✓ Ready`). With #2981 the backfill exits cleanly — **no manual intervention needed.**
+- **`cleanup`** — runs only after every verify passed, best-effort. Besides dangling images and the
+  bounded build cache, it now untags superseded version images: for each of `dpf-portal`,
+  `dpf-postgres`, `dpf-promoter` and `dpf-sandbox` it keeps every tag a container still references
+  plus the `PROMOTE_IMAGE_KEEP` (default 3) newest others, and removes the rest (BI-1172E86A). Before
+  this, every upgrade left its ~5 GB tag triple behind; a dev install reached 388 GB reclaimable in
+  16 days. Volumes are never touched. To retain more rollback candidates, set `PROMOTE_IMAGE_KEEP` in
+  the promoter environment; `docker images ghcr.io/opendigitalproductfactory/dpf-portal` should
+  show at most in-use + `PROMOTE_IMAGE_KEEP` version tags after a run.
 - **decommission** — Neo4j + Qdrant containers **and** volumes are removed.
 
 ## Step 4 — verify Postgres-only (done criteria)
