@@ -7,6 +7,7 @@ const INITIATIVE_READINESS_ACTIVITY_KINDS = [
   "initiative_scope_baseline",
   "plan_backlog_coverage",
   "initiative_readiness_decision",
+  "break_fix_declared",
 ];
 
 function addDeferralFilters(where: Record<string, unknown>, params: Record<string, unknown>): ToolResult | null {

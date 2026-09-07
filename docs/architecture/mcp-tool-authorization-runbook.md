@@ -177,3 +177,12 @@ SELECT id, name, scope, "agentId" FROM "McpApiToken" WHERE "revokedAt" IS NULL;
 `agentId` NULL on the row your client is using is the whole diagnosis. Re-issue
 (or rotate) the token with an acting coworker selected. If the dropdown is
 empty, no active agent in the registry holds `work_room_write`.
+
+### Diagnosing an empty `load_tools` result
+
+An empty exact-name discovery result now includes a structured `noMatch.reason`.
+`unknown-tool-name` means the name is not in the platform registry;
+`not-granted` means the known tool is unavailable to the current token; and
+`reviewer-route-required` means an initiative review writer must be reached via
+`get_backlog_item` and its server-issued `reviewerRoutes` packet. Do not grant or
+invoke a reviewer writer directly to work around that boundary.
