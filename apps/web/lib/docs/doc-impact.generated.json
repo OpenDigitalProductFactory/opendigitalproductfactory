@@ -1636,6 +1636,7 @@
       "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/check-guard-conformance-marks.mjs": [
+      "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-guards.mjs": [
@@ -1698,6 +1699,10 @@
     ],
     "scripts/check-no-unattributable-deferral.mjs": [
       "docs/architecture/backlog-and-planning-runbook.md"
+    ],
+    "scripts/check-no-unreachable-room-links.mjs": [
+      "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-override-comments.mjs": [
       "docs/architecture/contributor-procedure-runbook.md"
@@ -2730,6 +2735,10 @@
       "apps/web/lib/queue/functions/wiki-lint.ts",
       "packages/db/src/wiki-taxonomy.ts"
     ],
+    "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md": [
+      "scripts/check-guard-conformance-marks.mjs",
+      "scripts/check-no-unreachable-room-links.mjs"
+    ],
     "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md": [
       "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs"
     ],
@@ -3101,6 +3110,7 @@
       "scripts/check-label-association.mjs",
       "scripts/check-live-blocker-references.mjs",
       "scripts/check-mobile-jest-pin.mjs",
+      "scripts/check-no-unreachable-room-links.mjs",
       "scripts/ci-change-scope.mjs",
       "scripts/ci-policy-guards.test.mjs",
       "scripts/gate-worktree.mjs",

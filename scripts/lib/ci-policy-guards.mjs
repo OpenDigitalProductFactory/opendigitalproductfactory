@@ -333,6 +333,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-n-minus-one-caller-honesty.test.mjs"),
       node("scripts/check-n-minus-one-caller-honesty.mjs"),
     ], { inputs: ["code"] }),
+    // BI-00727E59: an operator reported that no "Open room" button worked. It
+    // was three defects stacked on one button (BI-6F2CC21B, BI-EBEB77E2,
+    // BI-97B24FB5) and a fourth found by this guard — every one the same
+    // missing rule: nothing guaranteed a room was reachable, so each surface
+    // re-derived how to address one. This closes the class.
+    guard("no-unreachable-room-links", "Room Addressing Guard", [
+      node("scripts/check-no-unreachable-room-links.mjs"),
+      conformanceTest("scripts/check-no-unreachable-room-links.test.mjs"),
+    ], { inputs: ["code"] }),
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
     ], { inputs: ["code"] }),

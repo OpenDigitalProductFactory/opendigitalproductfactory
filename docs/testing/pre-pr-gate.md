@@ -1047,6 +1047,35 @@ composite widget rather than one control (a radio-group heading), add a
 is the checked-in baseline itself; file a live BI before proposing a separate
 paydown campaign.
 
+### Room Addressing Guard
+
+`scripts/check-no-unreachable-room-links.mjs` fails a PR that makes a room
+unopenable. An operator reported that no **Open room** button on the attention
+inbox worked; it was four defects across four surfaces, each a different wrong
+answer to "how do I address a room", and none caught by a test.
+
+Two rules:
+
+- **Rule 1 — no hand-built work-case path.** `/workspace/cases/${x}` must come
+  from `encodeWorkCaseKey`. A key without its source-type prefix does not decode,
+  so the link 404s. No baseline: this is always wrong.
+- **Rule 2 — no provably-unreachable link.** An interpolated link whose route
+  prefix names an App Router directory with no dynamic child can never resolve.
+  Baselined (`scripts/room-addressing-baseline.json`, owned and expiring) so the
+  class cannot grow while each pre-existing entry is judged on its own.
+
+Only link contexts are considered. `revalidatePath`, `fetch` and cache keys take
+the same shape but cannot 404 at a person; folding them in would make the guard
+noisy enough to be ignored.
+
+```bash
+node scripts/check-no-unreachable-room-links.mjs            # check (what CI runs)
+node scripts/check-no-unreachable-room-links.mjs --update   # retighten after fixing a link
+```
+
+The reasoning lives in the kernel principle
+[A Room Is Reachable by Construction](../founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md).
+
 ## What this gate is NOT
 
 - **Not an e2e gate.** The Playwright suite under `tests/e2e/` runs separately on

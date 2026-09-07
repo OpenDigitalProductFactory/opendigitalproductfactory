@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AlertTriangle, ExternalLink, Play, RotateCcw } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { deleteBacklogItem, escalateBacklogItemUpstream } from "@/lib/actions/backlog";
 import { startBacklogBuild } from "@/lib/actions/backlog-build";
@@ -282,7 +283,7 @@ function ActiveWorkroomOwnership({
         {workrooms.map((room) => (
           <div key={room.capsuleId} className="flex min-w-0 flex-wrap items-center gap-2">
             <Link
-              href={`/workspace/cases/${room.capsuleId}`}
+              href={`/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId })}`}
               className="font-dpf-medium text-[var(--dpf-accent)] hover:underline"
             >
               {room.title}
