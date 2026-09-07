@@ -463,6 +463,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
     data: {
       itemId: item.itemId,
+      workShape: boundWorkShape,
       title: item.title,
       status: item.status,
       type: item.type,

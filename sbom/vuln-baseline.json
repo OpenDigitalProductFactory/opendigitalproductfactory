@@ -1,5 +1,5 @@
 {
-  "note": "Accepted vulnerability advisories for scripts/sbom/scan-dependencies.mjs (the local Dependabot-equivalent). Each entry needs a real `reason`; `expires` (YYYY-MM-DD) forces re-review \u2014 past expiry the finding re-surfaces and the gate can fail again. This is the local mirror of Dependabot/CodeQL dismiss-with-justification. See docs/architecture/dependency-reduction-routine.md.",
+  "note": "Accepted vulnerability advisories for scripts/sbom/scan-dependencies.mjs (the local Dependabot-equivalent). Each entry needs a real `reason`; `expires` (YYYY-MM-DD) forces re-review — past expiry the finding re-surfaces and the gate can fail again. This is the local mirror of Dependabot/CodeQL dismiss-with-justification. See docs/architecture/dependency-reduction-routine.md.",
   "accepted": [
     {
       "id": "GHSA-h67p-54hq-rp68",
@@ -8,7 +8,17 @@
       ],
       "package": "js-yaml@3.14.2",
       "severity": "moderate",
-      "reason": "Trusted-input-only. js-yaml 3.14.2 is a transitive dep of gray-matter, used for build-time frontmatter parsing of our own repo-controlled .md files \u2014 never attacker-supplied YAML, so the quadratic-complexity DoS is not reachable. The fix is in js-yaml 4.x, a breaking major gray-matter does not support (consistent with the prior tolerable_risk dismissal, Dependabot #74). Re-evaluate if gray-matter adopts js-yaml 4 or a 3.x patch ships.",
+      "reason": "Trusted-input-only. js-yaml 3.14.2 is a transitive dep of gray-matter, used for build-time frontmatter parsing of our own repo-controlled .md files — never attacker-supplied YAML, so the quadratic-complexity DoS is not reachable. The fix is in js-yaml 4.x, a breaking major gray-matter does not support (consistent with the prior tolerable_risk dismissal, Dependabot #74). Re-evaluate if gray-matter adopts js-yaml 4 or a 3.x patch ships.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-qxc2-j82w-r537",
+      "aliases": [
+        "CVE-2026-73231"
+      ],
+      "package": "@faker-js/faker@5.5.3",
+      "severity": "high",
+      "reason": "Dev/mock-server tooling only, trusted input. faker 5.5.3 is pulled by postman-collection via @stoplight/prism (the API mock server used in development), never by the apps/web production runtime. The advisory is code execution through helpers.fake() templates; Prism only feeds it its own dynamic-variable names, never attacker-supplied templates. The fix is faker 10.x, a breaking major that postman-collection (^5.5.3) does not accept, so a floor would break the mock server. Re-evaluate when postman-collection or prism moves off faker 5 (BI-6B317EFA).",
       "expires": "2026-12-31"
     }
   ]

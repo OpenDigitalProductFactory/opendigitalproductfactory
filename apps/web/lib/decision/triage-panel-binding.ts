@@ -162,15 +162,11 @@ export async function runGovernanceTriagePanel(input: {
   // created, zero completed, zero drafts. The same send is what
   // `lib/actions/deliberation.ts` does after orchestrating.
   try {
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    await inngest.send({
-      name: "deliberation/run.start",
-      data: {
-        deliberationRunId,
-        taskRunId: panelTaskRunId,
-        threadId: null,
-        userId: input.userId,
-      },
+    const { startDeliberationRun } = await import("@/lib/deliberation/start-run");
+    await startDeliberationRun({
+      deliberationRunId,
+      taskRunId: panelTaskRunId,
+      userId: input.userId,
     });
   } catch {
     // The graph exists but nothing will execute it. Say the panel did not

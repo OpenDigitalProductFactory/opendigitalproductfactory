@@ -564,7 +564,8 @@
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
-      "docs/architecture/backlog-and-planning-runbook.md"
+      "docs/architecture/backlog-and-planning-runbook.md",
+      "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1157,6 +1158,9 @@
     ],
     "apps/web/lib/work-management/coworker-engagement-case-projection.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-management/delivery-shapes.ts": [
+      "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -2706,6 +2710,10 @@
     ],
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
+    ],
+    "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
+      "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
+      "apps/web/lib/work-management/delivery-shapes.ts"
     ],
     "docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md": [
       "scripts/check-no-native-dialogs.mjs"

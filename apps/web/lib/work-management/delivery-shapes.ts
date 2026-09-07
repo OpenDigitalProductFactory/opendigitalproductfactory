@@ -309,3 +309,22 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
     collaborationShape: "approval-sign-off",
   },
 };
+
+/**
+ * Delivery shape → Build Studio matrix size (BI-D03BE728, design §3.1): the
+ * sized shapes ARE BacklogEffortSize; break-fix is the expedite lane on a
+ * small fix. A bound Workroom shape is declared truth and wins over triage size.
+ */
+export const DELIVERY_SHAPE_SIZE: Record<DeliveryShapeKey, "small" | "medium" | "large" | "xlarge"> = {
+  "delivery-break-fix": "small",
+  "delivery-small": "small",
+  "delivery-medium": "medium",
+  "delivery-large": "large",
+  "delivery-xlarge": "xlarge",
+};
+
+/** Matrix size for a bound shape ref (`key@version`), or null when the ref is not a delivery shape. */
+export function deliveryShapeSize(ref: string | null | undefined): "small" | "medium" | "large" | "xlarge" | null {
+  const key = ref?.split("@")[0];
+  return isDeliveryShapeKey(key) ? DELIVERY_SHAPE_SIZE[key] : null;
+}
