@@ -358,3 +358,32 @@ Every activity line carries its room's title alongside the action or blocker.
 Blockers are frequently generic and shared: at scale, several rooms blocked on
 one liveness reason rendered as identical lines with no way to tell which room
 each described, or that they were different rooms at all.
+
+## The room inspector renders what the projections resolve
+
+Accountability and the worker roster were computable before they were visible.
+The room inspector is where they surface, and it keeps three claims apart.
+
+A human is accountable: answerable for the work, defaulting to the
+organization's recorded owner and inherited down the responsibility graph unless
+a room records its own. The panel states where the answer came from — this room,
+a room N steps up, or the organization — because "who is accountable" and "why
+them" are different questions and the second one is how an operator corrects a
+wrong answer.
+
+Inheritance follows responsibility relations only. `contains` and `spawned-from`
+delegate answerability; every other relation links two rooms without delegating
+anything, and walking one would inherit an owner from a room that never owned
+this work.
+
+Coordination and execution are not accountability. A named worker is one
+identity across every surface it was reached through, its subagents are grouped
+under whoever delegated them, and none of that moves answerability from the
+accountable human.
+
+Where nothing was recorded, the panel says so. A participant row records who is
+in a room and what they said they are doing; it is not a progress observation,
+so a worker's state reads as not recorded rather than being derived from a row's
+`updatedAt` — which changes on any edit and is not evidence that anyone is
+working. Unrecorded delegation reads as unknown parentage, never as a plausible
+parent.

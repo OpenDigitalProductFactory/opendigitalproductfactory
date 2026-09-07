@@ -248,3 +248,25 @@ any room where pace or verification actually matters.
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.
 
 If you do not have access, the internal room title, participants, source references, and sensitivity details are not shown. External customer case pages remain customer-safe case summaries; they do not expose internal Workroom controls or participants.
+
+## Who Is Accountable, and Who Is Working
+
+Each room states the person accountable for it — the human answerable for the work — and where
+that answer came from: recorded on this room, inherited from a room further up, or inherited from
+the organization's recorded owner. Knowing which one it is matters, because it tells you where to
+go to change it.
+
+If nobody is recorded, the room says setup is required rather than naming whoever happens to be
+handy. The install's first administrator, the person who created the room and whoever holds the
+lease are all available, and all of them would be a guess presented as a decision.
+
+Accountability is answerability for the work. It is deliberately separate from who coordinates
+the room and from what any AI coworker is permitted to do — a coworker doing the work does not
+become accountable for it.
+
+Beneath that, the room lists the workers in it. An AI coworker reached through several tools is
+one worker, not one row per tool, and any subagents it delegated appear grouped beneath it. Where
+delegation was never recorded, the room says so instead of placing workers under a likely parent.
+Where the platform holds no observation of what a worker is doing, the room says the state is not
+recorded rather than reporting it as idle. With many workers the list is bounded and tells you how
+many of the total it is showing.
