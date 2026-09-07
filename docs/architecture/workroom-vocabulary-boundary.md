@@ -207,6 +207,26 @@ a running count answers nothing, and giving each a top-level destination floods
 navigation. They are grouped under the worker that delegated them, paged, and
 searchable by name or by what they are currently doing.
 
+## Expansion is not selection
+
+The activity tree separates two things a compact view usually conflates. The
+chevron discloses a branch's rooms; it does not change what the inspector shows.
+Selecting an activity does not collapse, reorder, or scroll anything. An
+operator who looks at one room must not lose their place in the estate.
+
+A collapsed branch already carries its representative activity, so the tree is
+readable without expanding anything, and each representative line carries the
+canonical destination of the room it describes. A summary is always one click
+from the thing it summarises, never a prompt to go hunting through ancestors.
+
+Counts supplement statements; they never replace them. A branch row shows how
+many rooms it holds and how many need attention, beside the concrete statements,
+not instead of them.
+
+Symbols are rendered from the server-decided signal, each with an accessible
+name, and only the executing state animates — stilled under reduced motion. See
+[`PortfolioActivityTree.tsx`](../../apps/web/components/ops/workrooms/PortfolioActivityTree.tsx).
+
 ## Naming rules
 
 - One stem, one casing: **`Workroom`** — never `WorkRoom`, `work-room` or

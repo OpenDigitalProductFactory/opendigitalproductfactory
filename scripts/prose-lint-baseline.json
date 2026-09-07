@@ -973,7 +973,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 60
+    "textMass": 57
   },
   "apps/web/app/(shell)/employee/page.tsx": {
     "vocabulary": 0,
@@ -1589,7 +1589,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 20
+    "textMass": 23
   },
   "apps/web/app/(shell)/performance/loading.tsx": {
     "vocabulary": 0,
@@ -6886,6 +6886,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 11
+  },
+  "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
   },
   "apps/web/components/ops/workrooms/WorkroomInventory.tsx": {
     "vocabulary": 0,

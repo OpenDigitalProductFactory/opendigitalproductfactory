@@ -430,6 +430,9 @@
     "apps/web/components/ops/SelfUpgradeLiveProvider.tsx": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
+    "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": [
+      "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -2664,6 +2667,7 @@
       "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
+      "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx",
       "apps/web/lib/work-management/human-accountability.ts",
       "apps/web/lib/work-management/portfolio-activity-projection.ts",
       "apps/web/lib/work-management/worker-rollup.ts",
