@@ -322,3 +322,14 @@ colocated suites, a bounded caller search and the queue-function tests supplied 
 fallback coverage. These source tests are not PostgreSQL concurrency or live restart
 evidence. Native inline semantic review, interrupted in-flight provider calls and the
 complete seven-scenario portal demonstration remain outstanding.
+
+The first cloud sweep measured all 213 eligible routes. Production build, typecheck,
+unit suites and ADP integration passed. The two changed routes required structural
+baseline review; the Workroom arrival also grew from 250 to 329 words with two
+filter fields. Optional filters and detailed projection gaps now use collapsed
+disclosures, retaining the process and selected-step answers on arrival. The explicit
+four-word search/filter disclosure label raises only this component's source-copy
+baseline from 48 to 52; it reduces served arrival load rather than adding an always
+visible form. Fresh served measurement and the route-only baseline review remain
+required. The independent review of this repair was infrastructure-inconclusive
+because two responses could not be parsed, not a semantic pass.
