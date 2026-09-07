@@ -51,6 +51,7 @@ import {
   shouldMarkAwaitingAcceptance,
   shouldReopenFromWithdrawnPr,
   applyGitHubPullRequestToBacklog,
+  applyObservedPullRequestsToBacklog,
   sweepPrSubmittedBacklogItems,
 } from "./pr-submit-awaiting-acceptance";
 
@@ -124,6 +125,7 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
       action: "closed",
       pull_request: { ...prPayload().pull_request, state: "closed", merged: true },
     }));
+    expect(shouldMarkAwaitingAcceptance(merged!)).toBe(true);
     expect(shouldReopenFromWithdrawnPr(merged!)).toBe(false);
   });
 
@@ -194,6 +196,30 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     const result = await sweepPrSubmittedBacklogItems();
     expect(result.moved).toEqual(["BI-E54F7F87"]);
     expect(CODING_POOL_STATUSES).toEqual(["triaging", "open", "in-progress"]);
+  });
+
+  it("stamps a CLI workroom from an observed merged PR on the same head branch", async () => {
+    mockWorkroomFindMany.mockResolvedValue([
+      { id: "room-cli", backlogItemId: "BI-CA54ACC8", pullRequestNumber: null },
+    ]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "released" },
+    ]);
+
+    const result = await applyObservedPullRequestsToBacklog([
+      {
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        number: 5126,
+        url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5126",
+        title: "feat: BI-CA54ACC8",
+        headBranch: "feat/example",
+        state: "merged",
+        isDraft: false,
+      },
+    ]);
+
+    expect(result.moved).toEqual(["BI-CA54ACC8"]);
+    expect(mockWorkroomUpdateMany).toHaveBeenCalled();
   });
 
   it("creates one corrective BI and leaves the original awaiting-acceptance", async () => {

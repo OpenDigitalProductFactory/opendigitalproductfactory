@@ -188,6 +188,43 @@ export async function runContributorInventorySync(
     insertedRows += created.count;
   }
 
+  if (githubRes.ok && githubRes.rows.length > 0) {
+    try {
+      const { applyObservedPullRequestsToBacklog } = await import(
+        "@/lib/backlog/pr-submit-awaiting-acceptance"
+      );
+      const observations = githubRes.rows.flatMap((row) => {
+        const payload = row.payload as {
+          repositoryFullName?: string;
+          number?: number;
+          url?: string;
+          title?: string;
+          headBranch?: string;
+          state?: "open" | "merged" | "closed";
+          isDraft?: boolean;
+        } | null;
+        if (!payload?.repositoryFullName || typeof payload.number !== "number" || !payload.url || !payload.headBranch) {
+          return [];
+        }
+        if (payload.state !== "open" && payload.state !== "merged" && payload.state !== "closed") {
+          return [];
+        }
+        return [{
+          repositoryFullName: payload.repositoryFullName,
+          number: payload.number,
+          url: payload.url,
+          title: payload.title,
+          headBranch: payload.headBranch,
+          state: payload.state,
+          isDraft: payload.isDraft === true,
+        }];
+      });
+      await applyObservedPullRequestsToBacklog(observations);
+    } catch (err) {
+      console.error("[contributor-inventory-sync] awaiting-acceptance reconcile failed", err);
+    }
+  }
+
   const okCount = [worktreeRes, branchRes, githubRes].filter((r) => r.ok).length;
   const status: "completed" | "partial" | "failed" =
     okCount === 3 ? "completed" : okCount === 0 ? "failed" : "partial";

@@ -74,7 +74,9 @@ export function parseGitHubPullRequestEvent(payload: unknown): GitHubPullRequest
 
 export function shouldMarkAwaitingAcceptance(event: GitHubPullRequestEvent): boolean {
   if (event.draft) return false;
-  if (event.merged) return false;
+  // Merged PRs have already left coding; still not accepted. Needed for CLI
+  // rooms whose open event was never seen (Workroom.pullRequestNumber is sparse).
+  if (event.merged) return true;
   if (event.state === "closed") return false;
   return event.action === "opened"
     || event.action === "reopened"
@@ -82,7 +84,8 @@ export function shouldMarkAwaitingAcceptance(event: GitHubPullRequestEvent): boo
     || event.action === "synchronize"
     || event.action === "edited"
     || event.action === "labeled"
-    || event.action === "unlabeled";
+    || event.action === "unlabeled"
+    || event.action === "observed";
 }
 
 export function shouldReopenFromWithdrawnPr(event: GitHubPullRequestEvent): boolean {
@@ -255,6 +258,41 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
     else skipped += 1;
   }
   return { moved, skipped, reason: null };
+}
+
+export async function applyObservedPullRequestsToBacklog(
+  observations: readonly {
+    repositoryFullName: string;
+    number: number;
+    url: string;
+    title?: string;
+    headBranch: string;
+    state: "open" | "merged" | "closed";
+    isDraft: boolean;
+  }[],
+): Promise<PrSubmitActuatorResult> {
+  const moved: string[] = [];
+  let skipped = 0;
+  for (const observation of observations) {
+    const result = await applyGitHubPullRequestToBacklog({
+      action: "observed",
+      number: observation.number,
+      pull_request: {
+        number: observation.number,
+        html_url: observation.url,
+        draft: observation.isDraft,
+        merged: observation.state === "merged",
+        state: observation.state === "open" ? "open" : "closed",
+        title: observation.title ?? "",
+        body: "",
+        head: { ref: observation.headBranch },
+      },
+      repository: { full_name: observation.repositoryFullName },
+    });
+    moved.push(...result.moved);
+    skipped += result.skipped;
+  }
+  return { moved: [...new Set(moved)], skipped, reason: moved.length === 0 ? "no-linked-items" : null };
 }
 
 export async function fileAcceptanceMiss(args: {
