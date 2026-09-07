@@ -1,5 +1,5 @@
 ---
-status: approved
+status: active
 ---
 
 # PR-submit awaiting-acceptance (BI-7161625D)
@@ -29,12 +29,9 @@ candidates), `Workroom.pullRequestNumber`,
 
 - Decision: atomic
 - Parent: BI-7161625D
-- Rationale: the enum, CHECK, transition table, webhook actuator, already-PRed
-  sweep, next-work exclusion, and verification `done` path are one revert. An
-  enum without the actuator leaves a status nothing writes; an actuator without
-  the enum fails the CHECK; a sweep without the status cannot clear the coding
-  pool. None of those slices is independently shippable.
-- Receipt: recorded after the immutable plan blob exists on this branch.
+- Rationale: the enum, CHECK, transition table, webhook actuator, already-PRed sweep, next-work exclusion, and verification `done` path are one revert. An enum without the actuator leaves a status nothing writes; an actuator without the enum fails the CHECK; a sweep without the status cannot clear the coding pool. None of those slices is independently shippable.
+- Dependencies: none
+- Receipt: blocked-by: record_plan_backlog_coverage needs a provider-verified GitHub blob at this branch head after push; the writer is not callable until origin has that blob.
 
 ## Phases (sequencing, not separate BIs)
 

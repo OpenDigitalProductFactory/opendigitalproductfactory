@@ -29,7 +29,6 @@ const BACKLOG_STATUS_OPTIONS = [
   { value: "triaging", label: "Triaging" },
   { value: "open", label: "Open" },
   { value: "in-progress", label: "In progress" },
-  { value: "awaiting-acceptance", label: "Awaiting acceptance" },
   { value: "done", label: "Done" },
   { value: "deferred", label: "Deferred" },
   { value: "retired", label: "Retired" },
