@@ -55,6 +55,26 @@ Project prerequisite blockers separately from reviewer execution. Reuse reviewer
 
 Clarify supported authoring/implementation parent binding in the existing planning instructions and skill. Include the objective/acceptance manifest prerequisite identified during this review so authors validate it before dispatch. Use the existing manifest parser instead of a second format checker. Hook label/discovery ranking improvements remain separate work.
 
+### Implementation checkpoint, 2026-09-06
+
+The identity-repair projection is now shared by transition recovery and the
+read-side Workroom inventory. `list_work_capsules` and `get_workroom` expose the
+same additive `recovery` shape: prerequisite identity repair is separate from
+the linked reviewer TaskRun, terminal TaskRuns are never projected as pending,
+and missing `baseSha` retains a valid `headSha` in an executable
+`adopt_worktree` packet. The transition path enriches that same packet with its
+write-only claim metadata rather than maintaining a second diagnosis. This
+removes the duplicated identity-repair construction while preserving existing
+response fields and authorization boundaries.
+
+Focused coverage exercises missing-base preservation, terminal reviewer state,
+the transition packet, schema/handler scope parity, and the existing negative
+grant cases. Source-local capacity gates remain evidence, not authority: an
+unavailable or nonperforming lane may be recorded as inconclusive under the
+operator instruction, while DCO and every protected pull-request and merge-group
+check remain mandatory. This checkpoint does not infer a scope baseline,
+coverage receipt, or independent reviewer PASS.
+
 ## 4. Verify and deliver
 
 Run affected tests in a compile-ready worktree or the canonical shared verification environment, never treating missing dependencies as product failure. The current worktree is source-only. Claim the appropriate shared nonproduction lease for runtime-bound checks. Test the complete external-author journey with distinct author/reviewer identities, immutable provider reads and persisted approval readback; mocks must not be the only authority test.

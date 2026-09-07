@@ -25,6 +25,7 @@ import {
 import { claimBacklogItemWorkspace } from "./work-capsule-store";
 import { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import { projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
 
 type ClaimInput = {
   backlogItemId: string;
@@ -157,34 +158,20 @@ async function resolveRecoveryOutsideTransaction(args: {
     expectedCurrentBaselineId: pending.baselineId,
   });
   if (!pending.baseSha || !pending.dispatchContext?.headSha) {
-    const missingFields = [
-      ...(!pending.baseSha ? ["baseSha" as const] : []),
-      ...(!pending.dispatchContext?.headSha ? ["headSha" as const] : []),
-    ];
-    recovery.identityRepair = {
-      toolName: "adopt_worktree",
-      missingFields,
-      retainedFields: {
-        repositoryFullName: args.input.repositoryFullName,
-        headBranch: args.input.headBranch,
-        worktreePath: args.input.worktreePath,
-        ...(pending.baseSha ? { baseSha: pending.baseSha } : {}),
-        ...(pending.dispatchContext?.headSha ? { headSha: pending.dispatchContext.headSha } : {}),
-      },
-      packet: {
+    recovery.identityRepair = projectWorkroomIdentityRepair({
+      repositoryFullName: args.input.repositoryFullName,
+      headBranch: args.input.headBranch,
+      worktreePath: args.input.worktreePath,
+      baseSha: pending.baseSha,
+      headSha: pending.dispatchContext?.headSha ?? null,
+    }, {
         title: args.input.title ?? `Work on ${args.input.backlogItemId}`,
         objective: args.input.objective ?? `Claim-at-start binding for ${args.input.backlogItemId}`,
-        repositoryFullName: args.input.repositoryFullName,
-        headBranch: args.input.headBranch,
-        worktreePath: args.input.worktreePath,
         backlogItemId: args.input.backlogItemId,
         baseBranch: args.input.baseBranch ?? "main",
-        ...(pending.baseSha ? { baseSha: pending.baseSha } : {}),
-        ...(pending.dispatchContext?.headSha ? { headSha: pending.dispatchContext.headSha } : {}),
         ...(args.input.executorKind ? { executorKind: args.input.executorKind } : {}),
         ...(args.input.executorRef ? { sessionRef: args.input.executorRef } : {}),
-      },
-    };
+    }) ?? undefined;
   }
   return recovery;
 }
