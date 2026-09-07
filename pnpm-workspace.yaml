@@ -70,7 +70,14 @@ overrides:
   # canonicalization (Dependabot #109) + GHSA-v2hh-gcrm-f6hx host confusion via a
   # literal backslash authority delimiter (Dependabot #111), both high. Floor to
   # the patched 3.1.4 on the 3.x line (fast-uri's runtime consumers pin ^3).
-  fast-uri: '^3.1.4'
+  # fast-uri < 3.1.6: GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf,
+  # GHSA-jqff-g426-hqxp (host confusion / SSRF via IDN, IPv6 and percent-decoding
+  # normalization; all high, BI-6B317EFA). Transitive of ajv. Floor to the patched 3.1.7.
+  fast-uri: '^3.1.7'
+  # mysql2 < 3.22.0: GHSA-3f6p-5ww8-9rcr auth-plugin downgrade to mysql_clear_password
+  # leaks plaintext credentials (high, BI-6B317EFA). Optional transitive of prisma;
+  # this workspace runs PostgreSQL, but the package is in the tree. Floor to 3.24.3.
+  mysql2: '>=3.24.3'
   # hono < 4.12.27: GHSA-hvrm-45r6-mjfj hono/jsx cross-request context disclosure,
   # GHSA-w62v-xxxg-mg59 server-side XSS via cx() JSX escaping bypass, and
   # GHSA-xgm2-5f3f-mvvc API Gateway v1 header de-dup drop (Dependabot #106/#107/#108,
