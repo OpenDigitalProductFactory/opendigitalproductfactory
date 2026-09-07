@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash, createHmac } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, rmSync, readFileSync, realpathSync, readdirSync, statSync } from "node:fs";
+import { createHmac } from "node:crypto";
+import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -177,7 +177,6 @@ export function runPromote(opts: {
   const secret = "s".repeat(32);
   const secretPath = join(stateDir, "runtime-transition.secret");
   writeFileSync(secretPath, secret);
-  const stateBytes = readFileSync(join(stateDir, "install-state.json"));
   // Use the canonical migrator: a real projection hash differs from sourceHash,
   // and the fixture must exercise that CAS binding (BI-AA6FBAD0).
   const projection = JSON.parse(execFileSync(process.execPath, [MIGRATOR,
