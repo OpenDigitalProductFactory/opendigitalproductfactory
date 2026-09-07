@@ -15,12 +15,17 @@
 // the box on every later turn, and restricting is correct. The defect is that
 // the constraint is invisible and appears unclearable.
 //
-// The one judgement this module makes is WHEN a fresh thread would help. If
-// every escalating match sits in history, starting a new thread restores
-// normal routing and saying so is true. If any escalating match is in the
-// current exchange, a new thread would re-trigger on the very next message,
-// and offering it would be a lie that costs the owner their context. So the
-// action is offered on `history` alone — never on `mixed`.
+// The one judgement this module makes is WHEN the remedy would help. If every
+// escalating match sits in history, withholding that history from dispatch
+// restores normal routing and saying so is true. If any escalating match is in
+// the current exchange, withholding the past changes nothing — the very next
+// message re-triggers — and offering it would be a lie. So the action is
+// offered on `history` alone, never on `mixed`.
+//
+// The remedy itself is payload-side, operator-ratified 2026-09-07 against
+// kernel DI-B60AD9E7746F: the withheld span stops being SENT, so the screen
+// legitimately re-scores a smaller payload. Evidence is never aged out from
+// under data that is still travelling. See lib/tak/thread-history-withholding.ts.
 
 import type {
   InferenceDataClass,
@@ -51,7 +56,7 @@ export type ThreadSensitivityNotice = {
   headline: string;
   detail: string;
   /** Present only when it would actually work. */
-  action: { kind: "continue-in-new-thread"; label: string } | null;
+  action: { kind: "withhold-earlier-history"; label: string } | null;
 };
 
 const MESSAGE_PATH = /^messages\[(\d+)\]/;
@@ -120,8 +125,8 @@ export function deriveThreadSensitivityNotice(input: {
       headline: "This coworker is running on a local model",
       detail:
         `Its own setup — instructions, tools or connected data — involves ${classText}, ` +
-        "so its work stays on this machine. Nothing you write changes that, and a new " +
-        "conversation carries the same setup.",
+        "so its work stays on this machine. Nothing you write changes that, and setting " +
+        "earlier messages aside carries the same setup over.",
       action: null,
     };
   }
@@ -143,8 +148,9 @@ export function deriveThreadSensitivityNotice(input: {
       detail:
         `Something earlier in it involves ${classText}. Every message is re-read each ` +
         "time you reply, so that earlier part keeps applying even when it has nothing to " +
-        "do with what you are asking now. A new conversation with this coworker starts clear.",
-      action: { kind: "continue-in-new-thread", label: "Start a fresh conversation" },
+        "do with what you are asking now. You can carry on here without sending the " +
+        "earlier messages — they stay in your record, this coworker just stops re-reading them.",
+      action: { kind: "withhold-earlier-history", label: "Continue without the earlier messages" },
     };
   }
 
@@ -155,7 +161,7 @@ export function deriveThreadSensitivityNotice(input: {
     headline: "This conversation is staying on a local model",
     detail:
       `What you are discussing involves ${classText}, so it stays on this machine. ` +
-      "A new conversation would not change that while the same subject is in it.",
+      "Setting the earlier messages aside would not change that while the same subject is live.",
     action: null,
   };
 }
