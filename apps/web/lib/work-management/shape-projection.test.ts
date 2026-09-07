@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { projectRoomShape } from "./shape-projection";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkroomView } from "./room-types";
+import { getWorkShape } from "./work-shapes";
 
 const receipt = (over: Partial<ReceiptEnvelope> & { id: string }): ReceiptEnvelope => ({
   receiptId: over.id,
@@ -54,7 +55,7 @@ describe("BI-23DB08BB — the room's shape is readable without reading", () => {
   it("keeps the spine constant and marks everything past the current stage not-reached", () => {
     const graph = projectRoomShape(view({ state: "active" }));
     expect(graph.stages.map((s) => s.key)).toEqual(["convene", "act", "decide", "verify", "close"]);
-    expect(graph.stages[0]!.state).toBe("passed");
+    expect(graph.stages[0]!.state).toBe("unknown");
     expect(graph.stages[3]!.state).toBe("not-reached");
     expect(graph.stages[4]!.state).toBe("not-reached");
   });
@@ -73,10 +74,61 @@ describe("BI-23DB08BB — the room's shape is readable without reading", () => {
     expect(source).not.toContain("updatedAt");
   });
 
-  it("counts a terminal room as through its whole shape", () => {
+  it("does not infer verified stages from a terminal case state", () => {
     const graph = projectRoomShape(view({ state: "closed" }));
-    expect(graph.progress.passed).toBe(graph.progress.total);
+    expect(graph.progress.passed).toBe(0);
     expect(graph.blockingStageKey).toBeNull();
+  });
+});
+
+describe("execution truth", () => {
+  it("shows the versioned intended process separately from observed receipts", () => {
+    const graph = projectRoomShape(view({ processOverseer: {
+      shapeKey: "delivery-large", shapeVersion: "1.0.0", currentStageKey: null,
+      nextPermittedStageKey: null, disposition: "pause", interventionReason: "Independent review required",
+      checkedAt: "2026-09-06T12:00:00.000Z", deviations: [],
+      collaborationShape: null, processOverseerPrincipalRef: null, processOverseerSource: "none",
+      reconciliationKey: "test-check", observed: { participantCount: 0, receiptKinds: [], proposedGrantCount: 0, budgetUsage: [], stopConditionHits: [], reviewDue: false },
+    } }));
+    expect(graph.process?.definitionRef).toBe("delivery-large@1.0.0");
+    expect(graph.stages.map((stage) => stage.key)).toEqual(getWorkShape("delivery-large")!.stages.map((stage) => stage.key));
+    expect(graph.stages.every((stage) => stage.state === "unknown")).toBe(true);
+    expect(graph.process?.nextPermittedStageKey).toBeNull();
+    expect(graph.stages.every((stage) => stage.inspection?.next.startsWith("Intended advance condition:"))).toBe(true);
+    expect(graph.process?.gaps).toContain("No observed execution stage is linked to this definition.");
+  });
+
+  it("shows cancellation without marking any stage passed", () => {
+    const graph = projectRoomShape(view({ state: "cancelled" }));
+    expect(graph.progress.passed).toBe(0);
+    expect(graph.stages.find((stage) => stage.key === "close")?.state).toBe("cancelled");
+  });
+
+  it("does not call a continuing or cancelled defined stage a wait", () => {
+    const base = view();
+    const stageKey = getWorkShape("delivery-large")!.stages[0].key;
+    const check: WorkroomView["processOverseer"] = {
+      shapeKey: "delivery-large", shapeVersion: "1.0.0", currentStageKey: stageKey,
+      nextPermittedStageKey: stageKey, disposition: "continue", interventionReason: null,
+      checkedAt: "2026-09-06T12:00:00.000Z", deviations: [], collaborationShape: null,
+      processOverseerPrincipalRef: null, processOverseerSource: "none", reconciliationKey: "test",
+      observed: { participantCount: 0, receiptKinds: [], proposedGrantCount: 0, budgetUsage: [], stopConditionHits: [], reviewDue: false },
+    };
+    expect(projectRoomShape({ ...base, processOverseer: check }).stages[0].state).toBe("observed");
+    expect(projectRoomShape({ ...base, state: "cancelled", processOverseer: check }).stages[0].state).toBe("cancelled");
+  });
+
+  it("does not treat an observed recommendation as a passed gate", () => {
+    const graph = projectRoomShape(view({ state: "awaiting-decision", receipts: [receipt({ id: "recommendation" })] }));
+    expect(graph.stages.find((stage) => stage.key === "decide")?.rows[0]?.state).toBe("observed");
+    expect(graph.progress.passed).toBe(0);
+  });
+
+  it("keeps receipt identity stable when other receipts are inserted", () => {
+    const first = projectRoomShape(view({ receipts: [receipt({ id: "stable" })] }));
+    const next = projectRoomShape(view({ receipts: [receipt({ id: "new" }), receipt({ id: "stable" })] }));
+    expect(next.stages.flatMap((stage) => stage.rows).find((row) => row.receiptRef?.id === "stable")?.key)
+      .toBe(first.stages.flatMap((stage) => stage.rows).find((row) => row.receiptRef?.id === "stable")?.key);
   });
 });
 

@@ -439,7 +439,7 @@ Workroom/cycle/task records. These are DPF contracts, not BPMN XML or SysML text
 
 | View | Purpose | Current implementation boundary |
 | --- | --- | --- |
-| Workroom Overview/Details | Explain current progress, evidence and what holds the work | `shape-projection.ts` builds the five-stage DPF graph rendered by `WorkroomShape`; it is not a BPMN editor or a full rendering of every activity definition |
+| Workroom Overview/Details | Explain current state, evidence and what holds the work | `shape-projection.ts` projects registered versioned steps into `WorkroomShape`, with the legacy five-stage fallback when no executable definition resolves. The selected-step inspector separates intended conditions from observed evidence; missing step correlation remains explicit. This is not a BPMN editor. |
 | BPMN | Process tasks, gateways, waits, recovery paths and ownership lanes | `process-extract.ts` and `reconcile-process.ts` project selected state machines; WorkShape recovery extraction needs explicit coverage |
 | SysML v2 | Requirements, interfaces, allocation to components and verification evidence | Existing EA notation and Parity Engine; use stable source keys rather than a separately maintained model |
 
@@ -459,6 +459,12 @@ adoption handler drops `workShape`, and the store does not update scope on reuse
 Readback, not tool success text, determines whether a shape is active. The recovery
 amendment assigns repair and round-trip verification to `BI-06AE6833`; do not create
 a duplicate room or edit the database to make a diagram look configured.
+
+The source repair centralizes creation, adoption and scope-update persistence in
+`scope-input.ts`, preserves unrelated claims and rejects conflicting writes.
+Its regression tests cover both creation and update readback. Verification on the
+governed installation remains a separate release requirement; the historical
+observation above is not evidence that the new code is already deployed.
 
 ## A stalled room reaches a human
 
@@ -566,8 +572,10 @@ The drive tick now reconciles the declared tree before driving:
   writes nothing and reports `nestedRelations: 0`. A failure to write a parent link
   never blocks a room that could otherwise be driven.
 
-`nestedRelations` on the drive result is how an operator tells "nesting is done"
-from "nesting was never written" — the distinction that hid this defect.
+`nestedRelations` counts newly written links. Zero alone does not establish a
+complete tree: an unchanged tree, absent parent, or contained reconciliation failure
+can all produce zero. Verify the declared relationships against persisted rows;
+missing links remain a projection gap.
 
 ## Who may coordinate: authority, and a gate with no key
 
@@ -615,6 +623,29 @@ control becomes real the day a qualification model lands, with no code change an
 nobody needing to remember.
 
 `unknown` still blocks. Only `eligible` and `not-applicable` satisfy the gate.
+
+## Concurrent execution and recorded state
+
+The scheduled and manual drive paths share conditional database ownership checks.
+Lease acquisition compares the observed holder and expiry and rejects archived or
+terminal rooms. Scheduling checks the same unexpired lease while holding the room
+row in the transaction that creates or updates the scheduled task. A replaced worker
+cannot reactivate work using its old lease.
+
+Snapshot persistence compares the read revision and, after dispatch, the lease.
+The snapshot and its journal entry commit together. A lease-held observation adds
+an activity without replacing the current owner's snapshot. These checks protect
+driver scheduling and state writes; they do not prove idempotency of downstream
+provider effects or automatic reviewer successor recovery. Those require correlated
+execution receipts and separate restart/duplicate-delivery verification.
+
+The external reviewer TaskRun reconciler also admits a narrowly defined recovery:
+the runtime explicitly recorded prose without the required initiative receipt, the
+existing three-attempt budget remains, and no writer attempt or approval envelope
+exists. It reuses the persisted request, identity, authority checks and generation
+reservation from normal replay. Unknown waits, rejected writers, approvals and
+exhausted recovery stay outside this automatic path. This does not make the separate
+inline semantic-review operation restartable or resume an interrupted provider call.
 
 ## Related references
 

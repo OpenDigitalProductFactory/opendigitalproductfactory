@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { normalizePersistedScope, adoptionScopePatch, assertScopeReadback, replaceOwnershipClaims, scopeChangeEvidence, scopeWriteWhere } from "./scope-input";
 import {
   STATUS_OVERRIDE_TTL_MS,
   buildCapsuleBranchName,
@@ -13,7 +14,6 @@ import {
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
   normalizeBranchTaxonomy,
-  normalizeWorkCapsuleScopeInput,
   parseScopeClaims,
   type ScopeClaim,
   type WorkCapsuleBranchTaxonomy,
@@ -130,12 +130,12 @@ export async function createWorkCapsule(args: {
   if (args.input.status === "complete") {
     throw new Error("Create the Work Capsule in a non-terminal state, then request governed completion");
   }
-  const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
+  const scope = normalizePersistedScope(args.input.scope);
 
   const existing = await args.db.workroom.findUnique({
     where: { idempotencyKey: args.input.idempotencyKey },
   });
-  if (existing) return existing;
+  if (existing) { assertScopeReadback(existing, args.input.scope); return existing; }
 
   const now = new Date();
   try {
@@ -188,7 +188,7 @@ export async function createWorkCapsule(args: {
       const winner = await args.db.workroom.findUnique({
         where: { idempotencyKey: args.input.idempotencyKey },
       });
-      if (winner) return winner;
+      if (winner) { assertScopeReadback(winner, args.input.scope); return winner; }
     }
     throw error;
   }
@@ -202,7 +202,7 @@ export async function adoptWorktreeCapsule(args: {
   if (args.input.executorKind && !isWorkCapsuleExecutorKind(args.input.executorKind)) {
     throw new Error("Invalid executor kind");
   }
-  const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
+  const scope = normalizePersistedScope(args.input.scope);
 
   const { existing, repositoryUnbound } = await readBranchIdentityCapsule(args.db, args.input);
 
@@ -211,42 +211,33 @@ export async function adoptWorktreeCapsule(args: {
   if (resumePlan) {
     return inTransaction(args.db, async (tx) => {
       await admitCapsuleWork(tx, "work-capsule:external-adoption");
-      const resumed = await tx.workroom.update(resumePlan.update);
-      await recordActivity(tx, { ...resumePlan.activity, actor: args.actor });
+      const resumed = await tx.workroom.update({ where: scopeWriteWhere(existing!), data: {
+        ...resumePlan.update.data, ...adoptionScopePatch(existing!, args.input.scope, now),
+      } });
+      await recordActivity(tx, { ...resumePlan.activity, payload: {
+        ...resumePlan.activity.payload, scopeChanges: scopeChangeEvidence(existing!, resumed),
+      }, actor: args.actor });
       return resumed;
     });
   }
 
   if (existing && isReusableLiveCapsule(existing, args.input)) {
-    // Late-bind (BI-7D20BFDF): a branch adopted before its BacklogItem was known
-    // has a null backlogItemId. When a claim now supplies one, bind the existing
-    // capsule instead of leaving the work orphaned — this is what lets a worktree
-    // cut before the BI was chosen still join the BI↔location record.
+    // Re-adoption advances supplied identity fields and preserves omitted scope.
     const lateBind = Boolean(args.input.backlogItemId) && existing.backlogItemId == null;
-    // BI-F83CF689: bind the repository onto a capsule that predates the
-    // create/plan default, so its branch identity becomes keyed and the next
-    // caller matches it directly.
     const repoBound = repositoryUnbound;
-    // Head sync (BI-B9403248): headSha used to be written only on CREATE, so a
-    // capsule adopted or claimed before the artifact commit existed could never
-    // satisfy the plan-coverage ownership check, and any amend/rebase/squash
-    // after adoption stranded it for good. The branch head is the caller's own
-    // state, not privileged data, so re-adopting the same branch advances it.
     const headSynced = Boolean(args.input.headSha) && args.input.headSha !== existing.headSha;
     const baseSynced = Boolean(args.input.baseSha) && args.input.baseSha !== existing.baseSha;
-    // BI-69BBC446: the worktree path used to move only on lateBind, so
-    // re-adopting an ALREADY-bound room accepted worktreePath, reported success,
-    // and kept the old path — while headSha next to it synced fine. A worktree
-    // gets reaped and rebuilt under a new directory far more often than a room
-    // changes branches, and the stale path then fails the claim readback. It is
-    // the caller's own local state, exactly like the branch head, so it advances
-    // on the same footing rather than only at first binding.
     const worktreeMoved = Boolean(args.input.worktreePath) && args.input.worktreePath !== existing.worktreePath;
-    if (lateBind || headSynced || baseSynced || repoBound || worktreeMoved) {
+    const scopePatch = adoptionScopePatch(existing, args.input.scope, now);
+    if (Object.keys(scopePatch).length && existing.executorRef && existing.executorRef !== args.input.executorRef) {
+      throw new CapsuleBranchOccupiedError(existing);
+    }
+    if (lateBind || headSynced || baseSynced || repoBound || worktreeMoved || Object.keys(scopePatch).length) {
       const bound = await inTransaction(args.db, async (tx) => {
         const updated = await tx.workroom.update({
-          where: { capsuleId: existing.capsuleId },
+          where: scopeWriteWhere(existing),
           data: {
+            ...scopePatch,
             ...(lateBind
               ? {
                 backlogItemId: args.input.backlogItemId,
@@ -268,6 +259,7 @@ export async function adoptWorktreeCapsule(args: {
             : repoBound ? `Bound ${existing.capsuleId} to ${args.input.repositoryFullName} for ${args.input.headBranch}`
             : `Synced ${existing.capsuleId} branch state for ${args.input.headBranch}`,
           payload: {
+            scopeChanges: scopeChangeEvidence(existing, updated),
             ...(lateBind ? { backlogItemId: args.input.backlogItemId, lateBind: true } : {}),
             ...(repoBound ? { repositoryFullName: args.input.repositoryFullName, repositoryLateBind: true } : {}),
             ...(worktreeMoved ? { worktreePath: args.input.worktreePath, previousWorktreePath: existing.worktreePath ?? null } : {}),
@@ -307,6 +299,7 @@ export async function adoptWorktreeCapsule(args: {
           headSha: args.input.headSha ?? null,
           worktreePath: args.input.worktreePath,
           branchTaxonomy: normalizeBranchTaxonomy(args.input.headBranch),
+          scopeClaims: buildWorkCapsuleScopeClaims(scope, now),
           decisionScope: scope.decisionScope,
           portfolioRole: scope.portfolioRole,
           servedPersona: scope.servedPersona,
@@ -340,7 +333,10 @@ export async function adoptWorktreeCapsule(args: {
         },
         orderBy: { updatedAt: "desc" },
       });
-      if (winner && isReusableLiveCapsule(winner, args.input)) return winner;
+      if (winner && isReusableLiveCapsule(winner, args.input)) {
+        assertScopeReadback(winner, args.input.scope);
+        return winner;
+      }
       if (winner) throw new CapsuleBranchOccupiedError(winner);
     }
     throw error;
@@ -904,16 +900,16 @@ export async function claimWorkCapsuleScope(args: {
     nextClaims.set(key, normalized);
   }
 
-  const scopeClaims = Array.from(nextClaims.values());
+  const scopeClaims = replaceOwnershipClaims(capsule.scopeClaims, Array.from(nextClaims.values()));
   const impact = await planCapsuleChangeImpact({
-    scopeClaims,
+    scopeClaims: parseScopeClaims(scopeClaims),
     incomingClaims: args.claims,
     verificationState: capsule.verificationState,
     build: args.buildChangeImpactContract,
   });
   return inTransaction(args.db, async (tx) => {
     const updated = await tx.workroom.update({
-      where: { capsuleId: args.capsuleId },
+      where: scopeWriteWhere(capsule),
       data: {
         scopeClaims,
         ...(impact.verificationState ? { verificationState: impact.verificationState } : {}),
@@ -957,12 +953,12 @@ export async function releaseWorkCapsuleScope(args: {
 
   const releaseKeys = new Set(args.claims.map((claim) => `${claim.kind}:${claim.value}`));
   const existing = parseScopeClaims(capsule.scopeClaims);
-  const scopeClaims = existing.filter((claim) => !releaseKeys.has(`${claim.kind}:${claim.value}`));
+  const scopeClaims = replaceOwnershipClaims(capsule.scopeClaims, existing.filter((claim) => !releaseKeys.has(`${claim.kind}:${claim.value}`)));
   const released = existing.filter((claim) => releaseKeys.has(`${claim.kind}:${claim.value}`));
 
   return inTransaction(args.db, async (tx) => {
     const updated = await tx.workroom.update({
-      where: { capsuleId: args.capsuleId },
+      where: scopeWriteWhere(capsule),
       data: { scopeClaims },
     });
     await recordActivity(tx, {

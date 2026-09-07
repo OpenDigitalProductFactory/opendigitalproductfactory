@@ -49,6 +49,24 @@ the work.
 
 ## Activity and Participants
 
+### Inspecting the process
+
+The process view separates the versioned **Intended process** from **Observed
+execution** records. Select a step to see its position, reason, next action,
+owner, supporting evidence, and affected work. Required evidence is not proof
+that the evidence has been recorded. Where a receipt cannot be linked to an
+individual step, the view reports that gap and keeps it in the room evidence.
+
+Use **Map** or **List**, search by step or owner, and filter by state. Arrow keys
+move between visible steps; Home and End select the first and last. The selected
+step and filters stay in the URL so returning to the room preserves context.
+Selecting a step inspects it; it does not execute a transition or approve work.
+
+**Not verified** means the view lacks proof. **Recorded** means an observation
+exists without a verified completion verdict. **Cancelled** is distinct from
+success. The projection check time and latest evidence time are separate; an
+unknown timestamp does not imply a fresh observation.
+
 The **Activity** stream distinguishes messages, asks, coworker handoffs, work changes, decisions, artifacts, governed actions, verification, receipts, and cycle transitions. A message is an update; it is not proof that the outcome was achieved.
 
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:

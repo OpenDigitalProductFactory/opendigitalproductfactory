@@ -1,123 +1,134 @@
-import { CircleDashed, CircleSlash, Clock, Check, CircleDot } from "lucide-react";
+"use client";
 
-import type { ShapeGraph, ShapeNodeState, ShapeRow, ShapeStage } from "@/lib/work-management/shape-projection";
-
-type Props = {
-  graph: ShapeGraph;
-};
-
-/**
- * BI-23DB08BB / BI-405AD4FD. The room's gates as a picture: stages left to
- * right, concurrent rows clustered inside a stage, one status mark per row.
- *
- * State is encoded in FORM (icon + border weight) as well as colour, so the
- * blocking stage reads before any label does and survives a colourblind reader.
- * Colour comes from --dpf-* tokens only.
- */
-const STATE_ICON: Record<ShapeNodeState, typeof Check> = {
-  passed: Check,
-  holding: CircleDot,
-  denied: CircleSlash,
-  "awaiting-confirmation": Clock,
-  "not-reached": CircleDashed,
-};
+import { useEffect, useId, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
+import { FilterBar } from "@/components/ui/report-kit/FilterBar";
+import type { ShapeGraph, ShapeNodeState, ShapeRow } from "@/lib/work-management/shape-projection";
 
 const STATE_LABEL: Record<ShapeNodeState, string> = {
-  passed: "Passed",
-  holding: "Holding",
-  denied: "Declined",
-  "awaiting-confirmation": "Awaiting a person",
-  "not-reached": "Not reached",
+  passed: "Verified", holding: "Waiting", denied: "Declined",
+  "awaiting-confirmation": "Awaiting a person", "not-reached": "Not reached",
+  unknown: "Not verified", observed: "Recorded", cancelled: "Cancelled",
 };
 
-const STATE_TONE: Record<ShapeNodeState, string> = {
-  passed: "text-[var(--dpf-success)]",
-  holding: "text-[var(--dpf-warning)]",
-  denied: "text-[var(--dpf-error)]",
-  "awaiting-confirmation": "text-[var(--dpf-warning)]",
-  "not-reached": "text-[var(--dpf-muted)]",
-};
-
-function StateMark({ state }: { state: ShapeNodeState }) {
-  const Icon = STATE_ICON[state];
-  return (
-    <Icon
-      className={`size-4 shrink-0 ${STATE_TONE[state]}`}
-      aria-hidden="true"
-    />
-  );
+function Evidence({ rows }: { rows: ShapeRow[] }) {
+  if (!rows.length) return <p>No correlated records.</p>;
+  return <ul className="space-y-2">{rows.map((row) => <li key={row.key}>
+    <details className="rounded border border-[var(--dpf-border)] p-2">
+      <summary className="cursor-pointer">{row.label} · {STATE_LABEL[row.state]}</summary>
+      <dl className="mt-2 space-y-1 break-words">
+        <dt>Source</dt><dd>{row.receiptRef ? `${row.receiptRef.table}:${row.receiptRef.id}` : "Unknown"}</dd>
+        <dt>Actor</dt><dd>{row.actor ?? "Unknown"}</dd>
+        <dt>Recorded</dt><dd>{row.occurredAt ?? "Unknown"}</dd>
+        {row.summary ? <><dt>Finding</dt><dd>{row.summary}</dd></> : null}
+      </dl>
+    </details>
+  </li>)}</ul>;
 }
 
-function Row({ row }: { row: ShapeRow }) {
-  return (
-    <li className="flex items-center gap-2 text-sm">
-      <StateMark state={row.state} />
-      <span className="min-w-0 flex-1 truncate text-[var(--dpf-text)]">{row.label}</span>
-      {row.detail ? (
-        <span className="shrink-0 text-xs text-[var(--dpf-muted)]">{row.detail}</span>
-      ) : null}
-      <span className="sr-only">{STATE_LABEL[row.state]}</span>
-    </li>
-  );
-}
-
-function Stage({ stage, blocking }: { stage: ShapeStage; blocking: boolean }) {
-  return (
-    <li
-      className={`min-w-56 flex-1 rounded-lg border p-3 ${
-        blocking
-          ? "border-2 border-[var(--dpf-warning)]"
-          : "border border-[var(--dpf-border)]"
-      }`}
-    >
-      <div className="flex items-center gap-2">
-        <StateMark state={stage.state} />
-        <h3 className="text-sm font-medium text-[var(--dpf-text)]">{stage.label}</h3>
-        <span className="ml-auto text-xs text-[var(--dpf-muted)]">
-          {STATE_LABEL[stage.state]}
-        </span>
+/** Intended order and observed evidence remain separate in both layouts. */
+export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
+  const titleId = useId();
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams().toString();
+  const operation = new URLSearchParams(params).get("operation");
+  const [selected, setSelected] = useState(() => new URLSearchParams(params).get("processStep") ?? graph.process?.currentStageKey ?? "");
+  const [layout, setLayout] = useState(() => new URLSearchParams(params).get("processLayout") ?? "map");
+  const [filters, setFilters] = useState<Record<string, string>>(() => ({ processQuery: new URLSearchParams(params).get("processQuery") ?? "", processState: new URLSearchParams(params).get("processState") ?? "" }));
+  const stepsRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    const search = new URLSearchParams(params);
+    setSelected(search.get("processStep") ?? graph.process?.currentStageKey ?? "");
+    setLayout(search.get("processLayout") ?? "map");
+    setFilters({ processQuery: search.get("processQuery") ?? "", processState: search.get("processState") ?? "" });
+  }, [params, graph.process?.currentStageKey]);
+  function navigate(step: string, nextLayout = layout, nextFilters = filters) {
+    setSelected(step);
+    setLayout(nextLayout);
+    setFilters(nextFilters);
+    const search = new URLSearchParams(params);
+    if (step) search.set("processStep", step); else search.delete("processStep");
+    search.set("processLayout", nextLayout);
+    for (const [key, value] of Object.entries(nextFilters)) {
+      if (value) search.set(key, value); else search.delete(key);
+    }
+    router.replace(`${pathname}?${search}${window.location.hash}`, { scroll: false });
+  }
+  const stage = graph.stages.find((candidate) => candidate.key === selected);
+  const inspection = stage?.inspection;
+  const visibleStages = graph.stages.filter((item) => (!filters.processState || item.state === filters.processState)
+    && `${item.label} ${item.inspection?.owner ?? ""}`.toLowerCase().includes((filters.processQuery ?? "").trim().toLowerCase()));
+  return <section aria-labelledby={titleId} className="mt-4 space-y-4 text-sm text-[var(--dpf-text)]">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><h2 id={titleId} className="text-base font-semibold">{graph.process?.title ?? "Process"}</h2>
+        <p className="text-[var(--dpf-muted)]">{graph.process?.definitionRef ?? "Definition unavailable"}</p></div>
+      <div aria-label="Process layout" className="flex gap-2">
+        {operation ? <ButtonLink variant="ghost" href={`/ea/workrooms?operation=${encodeURIComponent(operation)}#coordination`}>Operation</ButtonLink> : null}
+        {(["map", "list"] as const).map((value) => <Button key={value} variant="secondary" className="min-h-11" aria-pressed={layout === value} onClick={() => navigate(selected, value)}>{value === "map" ? "Map" : "List"}</Button>)}
       </div>
-      {stage.rows.length > 0 ? (
-        <ul className="mt-2 space-y-1.5">
-          {stage.rows.map((row) => <Row key={row.key} row={row} />)}
+    </div>
+    {graph.process ? <div className="text-[var(--dpf-muted)]">
+      <p>Projection checked: {graph.process.readAt ?? "Freshness unknown"} · Latest evidence: {graph.process.lastEvidenceAt ?? "Unknown"}</p>
+      {graph.process.gaps.length ? <details className="mt-2 rounded border border-[var(--dpf-border)] p-3">
+        <summary className="cursor-pointer">Projection gaps ({graph.process.gaps.length})</summary>
+        <ul className="mt-2 list-disc space-y-1 pl-5">{graph.process.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul>
+      </details> : null}
+    </div> : null}
+    <div className="space-y-2"><h3 className="font-medium">Intended process</h3>
+      <details open={Boolean(filters.processQuery || filters.processState)}>
+        <summary className="min-h-11 cursor-pointer py-3">Search and filter steps</summary>
+        <FilterBar mode="client" value={filters} onChange={(next) => navigate(selected, layout, next)}
+        className="[&_input]:min-h-11 [&_select]:min-h-11 [&_input]:text-sm [&_select]:text-sm"
+        facets={[{ kind: "search", key: "processQuery", placeholder: "Search steps" },
+          { kind: "select", key: "processState", label: "State", options: [{ value: "", label: "All states" }, ...Object.entries(STATE_LABEL).map(([value, label]) => ({ value, label }))] }]} />
+      </details>
+      {!visibleStages.length ? <p>No matching steps</p> : null}
+      <div className="overflow-x-auto pb-2">
+        <ul ref={stepsRef} aria-label="Process steps" className={layout === "list" ? "space-y-2" : "flex min-w-max gap-3"}>
+          {visibleStages.map((item, index) => <li key={item.key} className={layout === "list" ? "" : "w-64 shrink-0"}>
+            <Button variant="secondary" aria-pressed={selected === item.key} aria-controls={`${titleId}-inspection`} data-step-key={item.key}
+              className={`min-h-20 w-full flex-col items-start text-left ${selected === item.key ? "outline-2 outline-[var(--dpf-accent)]" : ""}`}
+              onClick={() => navigate(item.key)} onKeyDown={(event) => {
+                let target: number;
+                if (event.key === "ArrowRight" || event.key === "ArrowDown") target = Math.min(index + 1, visibleStages.length - 1);
+                else if (event.key === "ArrowLeft" || event.key === "ArrowUp") target = Math.max(index - 1, 0);
+                else if (event.key === "Home") target = 0;
+                else if (event.key === "End") target = visibleStages.length - 1;
+                else return;
+                event.preventDefault();
+                navigate(visibleStages[target].key);
+                stepsRef.current?.querySelectorAll<HTMLButtonElement>("button[data-step-key]")[target]?.focus();
+              }}>
+              <span>{graph.stages.indexOf(item) + 1}. {item.label}</span>
+              <StatusBadge domain="workroomStage" status={item.state} label={STATE_LABEL[item.state]} size="md" uppercase={false} />
+            </Button>
+          </li>)}
         </ul>
-      ) : (
-        // Showing less is deliberate: where the gate recorded nothing, the
-        // picture says nothing rather than inventing a verdict.
-        <p className="mt-2 text-xs text-[var(--dpf-muted)]">No records yet</p>
-      )}
-    </li>
-  );
-}
-
-export function WorkroomShape({ graph }: Props) {
-  return (
-    <section aria-labelledby="workroom-shape-title" className="mt-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="workroom-shape-title" className="text-base font-semibold text-[var(--dpf-text)]">
-          Shape
-        </h2>
-        <p className="text-xs text-[var(--dpf-muted)]">
-          {graph.progress.passed} of {graph.progress.total} stages passed
-          {graph.blockingStageKey ? ` · holding at ${graph.blockingStageKey}` : ""}
-        </p>
       </div>
-      {/* The canvas scrolls on its own so the page body never scrolls sideways. */}
-      <div
-        aria-labelledby="workroom-shape-title"
-        tabIndex={0}
-        className="mt-3 overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
-      >
-        <ul className="flex min-w-max gap-3">
-          {graph.stages.map((stage) => (
-            <Stage
-              key={stage.key}
-              stage={stage}
-              blocking={graph.blockingStageKey === stage.key}
-            />
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
+    </div>
+    <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+      {stage ? `${stage.label}. ${STATE_LABEL[stage.state]}. ${inspection?.reason ?? ""}` : ""}
+    </p>
+    {stage ? <aside id={`${titleId}-inspection`} aria-label={`${stage.label} inspection`} className="rounded-lg border border-[var(--dpf-border)] p-4">
+      <h3 className="mb-3 text-base font-semibold">{stage.label}</h3>
+      <dl className="grid gap-4 sm:grid-cols-2">
+        <div><dt className="font-medium">Where are we?</dt><dd>{inspection?.position ?? `${stage.label}: ${STATE_LABEL[stage.state]}`}</dd></div>
+        <div><dt className="font-medium">Why are we here?</dt><dd>{inspection?.reason ?? "No reason recorded."}</dd></div>
+        <div><dt className="font-medium">What can happen next?</dt><dd>{inspection?.next ?? "Permitted transitions are unknown."}</dd></div>
+        <div><dt className="font-medium">Who owns the action?</dt><dd>{inspection?.owner ?? "Owner unknown"}</dd></div>
+        <div><dt className="font-medium">What evidence supports this?</dt><dd className="mt-1 space-y-2">
+          <Evidence rows={stage.rows} />
+          {inspection?.expectedEvidence.length ? <p>Required: {inspection.expectedEvidence.join(", ")}</p> : null}
+        </dd></div>
+        <div><dt className="font-medium">What else is affected?</dt><dd className="break-words">{inspection?.affected.length ? inspection.affected.map((ref) => `${ref.kind}:${ref.id}`).join(", ") : "Dependencies unknown"}</dd></div>
+      </dl>
+    </aside> : <p className="text-[var(--dpf-muted)]">Select a step to inspect its state and evidence.</p>}
+    {graph.process ? <details className="rounded border border-[var(--dpf-border)] p-3">
+      <summary className="cursor-pointer font-medium">Observed execution · {graph.process.receipts.length} room records</summary>
+      <div className="mt-3"><Evidence rows={graph.process.receipts} /></div>
+    </details> : null}
+  </section>;
 }

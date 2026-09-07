@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "existing-shape-progressive-inspector",
+  "decisionInteractionId": "DI-B8832D1C621B",
+  "scope": { "files": ["apps/web/components/workspace/workroom/WorkroomShape.tsx", "apps/web/app/(shell)/ea/workrooms/page.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["existing-shape-progressive-inspector", "full-step-details-in-every-card", "separate-process-detail-route"],
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "Workspace",
+    "routeFamily": "/workspace/cases/[caseKey] and /ea/workrooms",
+    "primaryPersona": "operator identifying the next accountable action and its evidence",
+    "reuseConvergence": "Existing WorkroomShape and canonical FilterBar, Button and StatusBadge; stage states join the shared color registry. The existing EA Workrooms home adds a progressive coordination list, rather than a new dashboard, and links to the same case inspector with operation context.",
+    "basis": "Implementation judgment within the user's explicit instruction to extend existing views with progressive disclosure and six answers per selected step. Full details in every card increase repetition; a separate route adds another navigation and loading boundary.",
+    "consultLimitation": "The ledger recorded all three scored options. Contextual retrieval was unavailable, so the numerical recommendation is incomplete and is not claimed as autonomous kernel approval. The chosen presentation follows the user's existing authorization; this limitation is recorded in Workroom evidence.",
+    "sourceTruth": "Versioned shape definition, Workroom conformance result and receipt envelopes. Uncorrelated room receipts remain separate; absent proof is never inferred as completion.",
+    "aiBoundary": "Inspection and URL navigation only; no transition, approval or coworker dispatch.",
+    "verification": "42 focused tests pass including keyboard focus, list equivalence, filters, operation return navigation, bounded reads and projection state truth. Served-browser viewport, theme and accessibility verification remains outstanding and is not claimed here."
+  }
+}
