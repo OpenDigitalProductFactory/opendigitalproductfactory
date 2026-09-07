@@ -24,6 +24,19 @@ import {
   type WorkroomShapeConformance,
   type WorkroomShapeConformanceDeviation,
 } from "./workroom-shape-conformance";
+import {
+  EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
+  WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+  isCompletingWorkroomDriveReceipt,
+  type PriorWorkroomDrive,
+} from "./workroom-drive-receipts";
+
+export {
+  EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
+  WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+  isCompletingWorkroomDriveReceipt,
+} from "./workroom-drive-receipts";
+export type { PriorWorkroomDrive } from "./workroom-drive-receipts";
 
 export type DriveAction =
   | "do_not_wake"
@@ -63,6 +76,8 @@ export type DriveResolutionInput = {
   trigger?: WorkShapeTriggerClass;
   /** Test/override only. Production callers omit this and the next permitted stage is derived. */
   proposedStageKey?: string | null;
+  /** Last persisted drive tick. Used to fail closed when a dispatch produced no writeback. */
+  priorDrive?: PriorWorkroomDrive | null;
 };
 
 export type DrivePlan = {
@@ -126,7 +141,9 @@ function nextStageKey(
 ): string | null {
   if (definition.stages.length === 0) return null;
   if (!currentStageKey) return definition.stages[0]?.key ?? null;
-  const currentHasReceipt = receipts.some((receipt) => receipt.stageKey === currentStageKey);
+  const currentHasReceipt = receipts.some((receipt) =>
+    isCompletingWorkroomDriveReceipt(receipt, currentStageKey),
+  );
   if (!currentHasReceipt) return currentStageKey;
   const index = definition.stages.findIndex((stage) => stage.key === currentStageKey);
   if (index < 0 || index + 1 >= definition.stages.length) return null;
@@ -291,6 +308,49 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
       cycle,
       ledger: [`Stage ${stage.key} has no dispatchable agent principal.`],
     });
+  }
+
+  const completing = input.receipts.some((receipt) =>
+    isCompletingWorkroomDriveReceipt(receipt, stage.key),
+  );
+  const blocked = input.receipts.some(
+    (receipt) =>
+      receipt.stageKey === stage.key && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+  );
+  const prior = input.priorDrive;
+  const alreadyTriedWriteback = Boolean(
+    !completing
+    && (
+      blocked
+      || (
+        prior
+        && prior.stageKey === stage.key
+        && (
+          prior.action === "dispatch_agent"
+          || prior.reason === EXECUTOR_WRITEBACK_UNAVAILABLE_REASON
+        )
+      )
+    ),
+  );
+  if (alreadyTriedWriteback) {
+    return {
+      action: "pause",
+      reason: EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
+      roomId: input.roomId,
+      shapeKey: input.definition.key,
+      shapeVersion: input.definition.version,
+      stageKey: stage.key,
+      accountablePrincipalRef: stage.accountablePrincipalRef,
+      agentId: null,
+      attentionPrincipalRef: null,
+      taskId: null,
+      conformance,
+      cycle,
+      deviations: [],
+      ledger: [
+        `Stage ${stage.key} already dispatched without a completing receipt; pause until writeback exists.`,
+      ],
+    };
   }
 
   return {

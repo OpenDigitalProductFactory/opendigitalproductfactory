@@ -37,12 +37,17 @@ import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture
 import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import {
+  EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   resolveDrivePlan,
   workroomDriveTaskId,
   type DrivePlan,
 } from "@/lib/work-management/drive-resolution";
 import type { WorkroomCoordinatorEligibility } from "@/lib/work-management/workroom-shape-conformance";
-import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
+import {
+  priorDriveFromStored,
+  readStoredWorkroomDriveState,
+} from "@/lib/work-management/workroom-drive-state";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
 
 export type WorkroomDriveRoom = {
   id: string;
@@ -130,6 +135,16 @@ export async function applyDrivePlan(input: {
   effects: WorkroomDriveEffects;
 }): Promise<"dispatched" | "attention" | "stopped" | "skipped"> {
   const { room, plan, now, effects } = input;
+  const receipts = [...room.receipts];
+  if (
+    plan.reason === EXECUTOR_WRITEBACK_UNAVAILABLE_REASON
+    && plan.stageKey
+    && !receipts.some((receipt) =>
+      receipt.stageKey === plan.stageKey && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
+    )
+  ) {
+    receipts.push({ stageKey: plan.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND });
+  }
   const snapshot = {
     kind: "workroom-drive",
     version: 1,
@@ -139,7 +154,7 @@ export async function applyDrivePlan(input: {
     taskId: plan.taskId,
     lastRunAt: now.toISOString(),
     lastCycleKey: plan.cycle?.cycleKey ?? null,
-    receipts: room.receipts,
+    receipts,
     budgetUsage: room.budgetUsage,
     stopConditionHits: room.stopConditionHits,
     reviewDue: room.reviewDue,
@@ -301,6 +316,7 @@ export async function runWorkroomDriveJob(
       substrateEmpty: room.substrateEmpty,
       coordinatorEligibility: room.coordinatorEligibility,
       now,
+      priorDrive: priorDriveFromStored(stored),
     });
     plans.push({
       roomId: room.capsuleId,
