@@ -15,6 +15,6 @@
     "consultLimitation": "The ledger recorded all three scored options. Contextual retrieval was unavailable, so the numerical recommendation is incomplete and is not claimed as autonomous kernel approval. The chosen presentation follows the user's existing authorization; this limitation is recorded in Workroom evidence.",
     "sourceTruth": "Versioned shape definition, Workroom conformance result and receipt envelopes. Uncorrelated room receipts remain separate; absent proof is never inferred as completion.",
     "aiBoundary": "Inspection and URL navigation only; no transition, approval or coworker dispatch.",
-    "verification": "42 focused tests pass including keyboard focus, list equivalence, filters, operation return navigation, bounded reads and projection state truth. Served-browser viewport, theme and accessibility verification remains outstanding and is not claimed here."
+    "verification": "The post-5167 interaction repair passes five WorkroomShape tests on main merge 6751cec01fe: clearing a focused search leaves its disclosure open, unselected buttons do not reference an absent inspector, keyboard selection announces the selected step, and operation context survives navigation. It retains this recorded presentation choice and adds no controls, copy or layout. Prior enforcing browser CI 34077557361 passed the two changed routes; canonical served-browser viewport, theme and accessibility verification remains outstanding."
   }
 }
