@@ -59,7 +59,8 @@ function sourceFiles(root) {
 // Rule 2 carries a baseline, the way module-size and prose-lint do. The rule is
 // enforced from today forward; the entries below are pre-existing links whose
 // prefix cannot accept a dynamic segment, recorded so the class cannot GROW
-// while each one is judged on its own (BI-ROOM-ADDR-FOLLOWUP). Rule 1 has no
+// while each one is judged on its own. The baseline file carries its own owner
+// and expiry, which is what forces that judgement. Rule 1 has no
 // baseline: a hand-built work-case path is always wrong.
 const BASELINE_PATH = join(REPO, "scripts/room-addressing-baseline.json");
 const UPDATE = process.argv.includes("--update");
