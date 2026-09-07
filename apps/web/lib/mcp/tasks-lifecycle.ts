@@ -25,6 +25,7 @@ import {
 import type { AuthorizedAsyncOperationResult } from "@/lib/inference/async-operation-read-model";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 import { withTaskRunApprovalLocation } from "./external-approval-location-lookup";
+import { projectRemoteTaskReplay } from "../mcp-task-replay-projection";
 import {
   DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
   parseDurableInferenceTaskMetadata,
@@ -169,6 +170,16 @@ const MCP_TASK_DURABLE_SELECT = {
 
 type DurableTaskRow = McpTaskRunRow & { a2aMetadata: unknown };
 
+/** Share recovery semantics with submission replay without exposing its request metadata. */
+function taskWaitProjection(row: DurableTaskRow): Record<string, unknown> {
+  const { result } = projectRemoteTaskReplay({ existing: row, requestMatches: true });
+  return {
+    requiresApproval: false, // Only the live, caller-bound envelope lookup establishes approval.
+    ...(typeof result.resumable === "boolean" ? { resumable: result.resumable } : {}),
+    ...(typeof result.waitReason === "string" ? { waitReason: result.waitReason } : {}),
+  };
+}
+
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -272,7 +283,7 @@ export async function handleTasksGet(
   return {
     kind: "ok",
     value: await withTaskRunApprovalLocation(
-      { ...task, requiresApproval: true },
+      { ...task, ...taskWaitProjection(row) },
       { taskRunId: row.taskRunId, callerUserId: userId },
     ),
   };
@@ -346,7 +357,7 @@ export async function handleTasksResult(
     };
     const located = row.status === "input-required" || row.status === "auth-required"
       ? await withTaskRunApprovalLocation(
-          { ...structuredContent, requiresApproval: true },
+          { ...structuredContent, ...taskWaitProjection(row) },
           { taskRunId: row.taskRunId, callerUserId: userId },
         )
       : structuredContent;

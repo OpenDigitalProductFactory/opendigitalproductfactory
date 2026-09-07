@@ -29,4 +29,15 @@ describe("recoverTerminalWriterEscalation", () => {
   it("keeps a pre-marker wait below the retry ceiling resumable", () => {
     expect(recoverTerminalWriterEscalation(legacyWait(2))).toBeNull();
   });
+
+  it("BI-A57B6185 never escalates a wait that carries a writer rejection, whatever the attempt", () => {
+    const wait = legacyWait(4);
+    (wait.terminalWriterWait as Record<string, unknown>)["writerRejection"] = {
+      schemaVersion: 1,
+      error: "CANONICAL_DESIGN_AMBIGUOUS",
+      message: "No live workroom records head abc123.",
+      observedAt: "2026-09-06T19:07:46.000Z",
+    };
+    expect(recoverTerminalWriterEscalation(wait)).toBeNull();
+  });
 });
