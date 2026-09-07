@@ -160,12 +160,13 @@ export async function tryAcquireBacklogClaimAtomic(params: {
   // claimedAt. claimedAt opens the completion-evidence window, so bumping it on
   // every claim_backlog_item_for_work silently invalidated every evidence row
   // recorded before the re-claim. Same owner, same item, live claim: keep it.
+  let reentered = false;
   if (!input.force) {
     const now = input.now ?? new Date();
     const staleBefore = new Date(now.getTime() - STALE_BACKLOG_CLAIM_MS);
     const ownershipBranches: Record<string, unknown>[] = [{ claimedById: input.userId }];
     if (input.agentId) ownershipBranches.push({ claimedByAgentId: input.agentId });
-    const reentered = await params.db.backlogItem.updateMany({
+    const reentry = await params.db.backlogItem.updateMany({
       where: {
         id: params.itemRowId,
         claimStatus: "active",
@@ -174,13 +175,13 @@ export async function tryAcquireBacklogClaimAtomic(params: {
       },
       data: { claimStatus: "active", claimedById: input.userId, claimedByAgentId: input.agentId },
     });
-    if (reentered.count > 0) return { ok: true, forced: false, reentered: true };
+    reentered = reentry.count > 0;
   }
   const where = buildAtomicClaimWhere(params.itemRowId, input);
   const data = buildClaimAcquireData(input);
-  const result = await params.db.backlogItem.updateMany({ where, data });
+  const result = reentered ? { count: 1 } : await params.db.backlogItem.updateMany({ where, data });
   if (result.count > 0) {
-    return { ok: true, forced: input.force === true };
+    return { ok: true, forced: input.force === true, ...(reentered ? { reentered } : {}) };
   }
 
   const current = await params.db.backlogItem.findUnique({
