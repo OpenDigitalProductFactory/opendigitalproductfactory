@@ -218,6 +218,14 @@ Local models are automatically discovered and profiled. They are assigned the `b
 - Routing filters candidates on `retiredAt IS NULL`, **not** on `modelStatus`. A profile can therefore read `active` in the admin UI and still be invisible to routing. Compare the router's excluded-endpoint count against the profiles the manifest query would return — an endpoint missing from the rejection list never became a candidate at all.
 - Auto-retirement will not strand a class on its own (see the lifecycle table), but a row stranded before that guard existed is healed at boot.
 
+**One coworker conversation got slower and less capable, but others are fine:**
+- The conversation is being kept on a local model. Every message in a thread is re-read on each reply, so something written earlier keeps counting — even when it has nothing to do with what you are asking now. A single mention of a governed subject (payroll, an invoice, a customer's contact details) can hold a whole thread there.
+- The coworker panel says so directly, under its header: it names what kind of information is involved and whether the cause is earlier in the conversation or in what you just asked.
+- When the cause is earlier, the notice offers **Continue without the earlier messages**. This keeps the conversation and everything you can read in it; the coworker simply stops re-reading the earlier part, so it is no longer sent to a model and normal routing resumes. It applies to the summary and recall of those messages too, not only the messages themselves.
+- When the cause is what you are currently discussing, no such option appears — setting the past aside would not change anything while the same subject is live, and the notice says so rather than offering a control that would not work.
+- If the cause is the coworker's own setup (its instructions, tools, or connected data) rather than anything in the conversation, the notice says that too. Nothing you write will change it, and a new conversation carries the same setup over.
+- This is working as intended, not a fault: information that is sent to a model really does leave this machine, so DPF keeps that work local. The remedy narrows what is sent — it never relaxes the rule.
+
 **A provider is active but restricted work is blocked:**
 - Open the provider detail page and review **Provider trust evidence**.
 - Confirm the evidence is attached to the same connected account that will execute the work.
