@@ -92,6 +92,36 @@ The coworker directory remains a directory, reached from Work and people-related
 
 The Workforce portfolio is a business-work grouping. The coworker directory is a people/agent view across all four portfolios. They must not be conflated. Update route registry, navigation tests and user documentation together; do not scatter path decisions through individual pages.
 
+## Objectives and acceptance baseline
+
+These statements are the initiative scope baseline for BI-8DACBA07. Each objective names the requirement sections it consolidates; each acceptance statement is verified by the listed verification contract.
+
+- **OBJ-HIERARCHY:** Work is presented under the four existing portfolio roots and the organization's actual taxonomy with explicit workroom containment, unique room counting and a visible exception group for unmapped work (PWA-01).
+- **OBJ-ACTIVITY:** Collapsed rows show concrete current actions and blockers with truthful, accessible activity symbols; expansion and selection are independent and the view is progressively disclosed (PWA-02, PWA-06).
+- **OBJ-INSPECT:** Any visible room or representative activity opens the canonical Workroom inspector in one click, exposing process shape, named workers and delegated subagents with bounded evidence (PWA-03).
+- **OBJ-ACCOUNTABILITY:** The effective human accountable resolves from the organization's recorded top accountable through explicit delegation with provenance, and stays distinct from AI coordination, execution and access (PWA-04, PWA-05).
+- **OBJ-SCALE:** The projection is server-owned, authorization-filtered, cursor-bounded and measured at 1,000 rooms with 100 active agents (PWA-07).
+- **OBJ-NAVIGATION:** One operator Work entry consolidates activity navigation while the Workforce portfolio and the coworker directory remain distinct and old links keep resolving (PWA-08).
+
+| Acceptance | Objective | Statement |
+| --- | --- | --- |
+| AC-HIERARCHY-1 | OBJ-HIERARCHY | All four roots render with real taxonomy depth and nested rooms; a room is counted once per aggregate scope and cross-portfolio links resolve to one canonical room (V1). |
+| AC-HIERARCHY-2 | OBJ-HIERARCHY | Unmapped, cyclic or conflicting placement appears in a labeled exception group and is never silently classified as Foundational (V1). |
+| AC-ACTIVITY-1 | OBJ-ACTIVITY | The first viewport shows compact portfolio rows with at most three representative concrete actions or blockers per collapsed branch, attention first (V2). |
+| AC-ACTIVITY-2 | OBJ-ACTIVITY | A chevron expands without changing selection; structural order and focus stay stable while events update contents; expansion fetches only the requested page (V2). |
+| AC-ACTIVITY-3 | OBJ-ACTIVITY | Symbols animate only on fresh execution evidence; waiting, queued, blocked, completed, stale and unknown are distinct static states with accessible names and reduced-motion support (V2, V4). |
+| AC-INSPECT-1 | OBJ-INSPECT | One click on any rendered room title or representative activity opens that exact room in the adjacent inspector without expanding its ancestors (V2). |
+| AC-INSPECT-2 | OBJ-INSPECT | The inspector lists named workers with state, current task and last observed progress, expands delegated subagents by paging or grouped expansion, and shows recorded parentage or unknown (V2). |
+| AC-INSPECT-3 | OBJ-INSPECT | Stage state comes from governed receipts; a claimed shape, held lease or completed task never renders as verified delivery (V2). |
+| AC-ACCOUNTABILITY-1 | OBJ-ACCOUNTABILITY | With no explicit assignment the effective human accountable is the organization's recorded top accountable, including a solo founder, shown with its inheritance provenance (V3). |
+| AC-ACCOUNTABILITY-2 | OBJ-ACCOUNTABILITY | Explicit room or ancestor delegation overrides inheritance, revocation recomputes lineage, and missing or ambiguous top responsibility shows an actionable setup state rather than a guessed principal (V3). |
+| AC-ACCOUNTABILITY-3 | OBJ-ACCOUNTABILITY | Human accountable, AI coordinator, executor, requester and lease holder carry separate labels; a missing coordinator keeps its execution refusal and accountability grants no extra capability or cross-organization visibility (V3). |
+| AC-SCALE-1 | OBJ-SCALE | Branch pages and selected-room detail are separate cursor-bounded reads with authorization applied before counts and summaries; truncated results are labeled partial (V1). |
+| AC-SCALE-2 | OBJ-SCALE | A recorded measurement on the declared nonproduction profile with 1,000 rooms and 100 active agents reports p95 branch response, first authorized activity time, query count and payload size against the PWA-07 targets (V1, V2). |
+| AC-NAVIGATION-1 | OBJ-NAVIGATION | One Work entry in the navigation model leads to the activity view and canonical room detail; redundant top-level activity discovery is removed only after consumers and redirects are verified (V4). |
+| AC-NAVIGATION-2 | OBJ-NAVIGATION | Coworker identity, EA definition and legacy activity links resolve to the same canonical room with back navigation preserved (V4). |
+| AC-NAVIGATION-3 | OBJ-NAVIGATION | Keyboard, screen reader, theme, 360/736/1024-pixel layouts and empty, loading, partial and failed states pass the platform usability standards (V4). |
+
 ## Contracts to extend
 
 ### C1: portfolio and room identity
