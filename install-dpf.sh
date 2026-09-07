@@ -1219,6 +1219,13 @@ else
   info "Skipping autostart install (--no-autostart)."
 fi
 
+# ── Worktree hygiene (BI-5F4F0146) ────────────────────────────────────────────
+# Schedule the reaper + keep the worktree base out of the OS file indexer, for both
+# customer and contributor installs. Shared helper; best-effort (never fails the
+# install). Runs only on a real install — dry-run has already exited above.
+step "Worktree hygiene"
+bash "$REPO_ROOT/scripts/setup-worktree-hygiene.sh" "$REPO_ROOT" || true
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 printf '%b  Install complete!%b\n' "${DPF_GREEN:-}" "${DPF_NC:-}"

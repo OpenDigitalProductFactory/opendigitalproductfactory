@@ -207,29 +207,10 @@ if (Test-Path $bootstrapScript) {
 }
 
 # -- Worktree hygiene defaults (BI-5F4F0146) -------------------------------------
-# Reap merged+clean worktrees on a schedule, and keep the worktree base out of
-# Windows Defender real-time scanning. Unreaped worktrees accumulate into the
-# hundreds, and Defender scanning their node_modules trees thrashes the host.
-# Best-effort: never fail setup.
+# Schedule the reaper + keep the worktree base out of Defender, via the shared
+# helper every install surface calls (one source of truth). Best-effort.
 Write-Step "Configuring worktree hygiene defaults"
-$wtBase = Join-Path (Split-Path (Get-Location).Path -Parent) 'dpf-worktrees'
-try { New-Item -ItemType Directory -Force -Path $wtBase | Out-Null } catch {}
-try {
-    $node = (Get-Command node).Source
-    $janitor = Join-Path (Get-Location).Path 'scripts\worktree-janitor.mjs'
-    $action = New-ScheduledTaskAction -Execute $node -Argument "`"$janitor`" --root `"$((Get-Location).Path)`" --grace-days 14 --live --tier-a-only"
-    $trigger = New-ScheduledTaskTrigger -Daily -At '3:00AM'
-    Register-ScheduledTask -TaskName 'DPF Worktree Janitor' -Action $action -Trigger $trigger -Force -ErrorAction Stop | Out-Null
-    Write-Ok "Worktree janitor scheduled (daily, merged+clean only)"
-} catch {
-    Write-Warn "Could not register the worktree janitor task (non-fatal): $_"
-}
-try {
-    Add-MpPreference -ExclusionPath $wtBase -ErrorAction Stop
-    Write-Ok "Excluded the worktree base from Defender real-time scanning"
-} catch {
-    Write-Warn "Defender exclusion needs admin (non-fatal) - run elevated: Add-MpPreference -ExclusionPath '$wtBase'"
-}
+try { & (Join-Path $PSScriptRoot 'setup-worktree-hygiene.ps1') -RepoRoot (Get-Location).Path } catch { Write-Warn "Worktree hygiene step encountered an issue (non-fatal): $_" }
 
 # -- Done ------------------------------------------------------------------------
 
