@@ -262,3 +262,15 @@ as linked rooms, because it includes terminal rooms and cannot establish livenes
 Returning from the process inspector restores the selected operation and disclosure.
 The expanded focused suite passes 42 tests across six files. Broader EA canvas,
 operational-health and accountability projections still require implementation.
+
+The case loader now projects recorded Workroom evidence through the existing receipt
+adapter, preserving the journal row identity, actor and payload. Journal assertions
+remain observed events rather than verified completion. A bounded journal read reports
+partial source health when more records exist. The expanded regression suite passes
+67 tests across ten files, including case loading, receipt adapters and detail views.
+These results do not establish receipt-to-step correlation or runtime recovery.
+
+The first merged-tree preflight identified missing architecture/user-interface guidance
+and a convergence declaration; both are addressed in this increment. The prose baseline
+is copied by the canonical Dockerfile and advances with the governed image release.
+The release gate and served portal checks remain outstanding.
