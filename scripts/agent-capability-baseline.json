@@ -12,8 +12,8 @@
   ],
   "consequentialGateFloor": {
     "note": "TAK §8.4.2 — consult-gate coverage is a governed metric. RISE-ONLY: this floor is reach to hold, not debt to burn down. It falls only by a tool losing its declared `consequence` or the composition root losing the resolver install, both of which leave a gate that still passes its own tests.",
-    "gateClassified": 57,
-    "sideEffectingTools": 180,
+    "gateClassified": 58,
+    "sideEffectingTools": 181,
     "coveragePct": 32,
     "resolverInstalled": true
   },
