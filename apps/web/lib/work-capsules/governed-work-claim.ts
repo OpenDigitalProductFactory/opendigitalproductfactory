@@ -25,6 +25,7 @@ import {
 import { claimBacklogItemWorkspace } from "./work-capsule-store";
 import { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import { projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
 
 type ClaimInput = {
   backlogItemId: string;
@@ -129,6 +130,7 @@ async function resolveRecoveryOutsideTransaction(args: {
   actor: WorkCapsuleActor;
   pending: PendingRecovery;
   discover: DiscoverCanonicalArtifact;
+  input: ClaimInput;
 }): Promise<InitiativeReviewerRecovery> {
   const { pending } = args;
   const canonicalArtifact: InitiativeRecoveryCanonicalArtifact = pending.dispatchContext && pending.baseSha
@@ -142,7 +144,7 @@ async function resolveRecoveryOutsideTransaction(args: {
       nextAction: `The workroom lacks ${!pending.baseSha ? "baseSha" : "a valid reviewer dispatch identity (including headSha)"}, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, baseSha, headSha), supplying full immutable commit SHAs for both fields and preserving any valid recorded identity, then retry.`,
     };
 
-  return resolveInitiativeReviewerRecovery({
+  const recovery = await resolveInitiativeReviewerRecovery({
     decision: pending.decision,
     currentAgentId: args.actor.agentId,
     db: args.db,
@@ -155,6 +157,23 @@ async function resolveRecoveryOutsideTransaction(args: {
       : { resolved: false, nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review." },
     expectedCurrentBaselineId: pending.baselineId,
   });
+  if (!pending.baseSha || !pending.dispatchContext?.headSha) {
+    recovery.identityRepair = projectWorkroomIdentityRepair({
+      repositoryFullName: args.input.repositoryFullName,
+      headBranch: args.input.headBranch,
+      worktreePath: args.input.worktreePath,
+      baseSha: pending.baseSha,
+      headSha: pending.dispatchContext?.headSha ?? null,
+    }, {
+        title: args.input.title ?? `Work on ${args.input.backlogItemId}`,
+        objective: args.input.objective ?? `Claim-at-start binding for ${args.input.backlogItemId}`,
+        backlogItemId: args.input.backlogItemId,
+        baseBranch: args.input.baseBranch ?? "main",
+        ...(args.input.executorKind ? { executorKind: args.input.executorKind } : {}),
+        ...(args.input.executorRef ? { sessionRef: args.input.executorRef } : {}),
+    }) ?? undefined;
+  }
+  return recovery;
 }
 
 class CapsuleIdentityMismatch extends Error {
@@ -442,6 +461,8 @@ export async function claimGovernedBacklogWorkspace(args: {
         const recoveryWorkroom =
           recoveryWorkrooms.find((room) => room.backlogItemId === item.itemId && room.headSha)
           ?? recoveryWorkrooms.find((room) => room.headSha)
+          ?? recoveryWorkrooms.find((room) => room.backlogItemId === item.itemId)
+          ?? recoveryWorkrooms[0]
           ?? null;
         // Recovery needs a repository-provider round trip to bind the canonical
         // design (BI-9FE775F9). That must not run inside this transaction, so
@@ -516,6 +537,7 @@ export async function claimGovernedBacklogWorkspace(args: {
           actor: args.actor,
           pending: pendingRecovery,
           discover: args.dependencies?.discoverCanonicalArtifact ?? discoverCanonicalArtifactFromProvider,
+          input: args.input,
         }),
       },
     };
