@@ -4,6 +4,7 @@ import {
   MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS,
   buildLoadToolsResult,
   buildUnknownToolResult,
+  classifyLoadToolsNoMatch,
 } from "./load-tools";
 
 describe("MCP progressive-disclosure bootstrap contract", () => {
@@ -49,5 +50,31 @@ describe("MCP progressive-disclosure bootstrap contract", () => {
     expect(result.structuredContent.recovery).toHaveProperty("exactName");
     expect(result.structuredContent.recovery).toHaveProperty("intentQuery");
     expect(result.structuredContent.error).not.toBe("insufficient_token_scope");
+  });
+
+  it("distinguishes an unknown exact name from a known reviewer-only writer", () => {
+    const known = new Set(["get_backlog_item", "record_initiative_design_review"]);
+    const granted = new Set(["get_backlog_item"]);
+    const unknown = buildLoadToolsResult([], [], classifyLoadToolsNoMatch(
+      { names: ["record_initiative_plan_review"] }, known, granted, 0,
+    ));
+    const reviewerOnly = buildLoadToolsResult([], [], classifyLoadToolsNoMatch(
+      { names: ["record_initiative_design_review"] }, known, granted, 0,
+    ));
+
+    expect(unknown.structuredContent.noMatch).toMatchObject({
+      reason: "unknown-tool-name",
+      requestedNames: ["record_initiative_plan_review"],
+    });
+    expect(reviewerOnly.structuredContent.noMatch).toMatchObject({
+      reason: "reviewer-route-required",
+      supportedEntryPoint: { toolName: "get_backlog_item" },
+    });
+  });
+
+  it("returns no no-match reason when discovery selected a tool", () => {
+    expect(classifyLoadToolsNoMatch(
+      { names: ["get_backlog_item"] }, new Set(["get_backlog_item"]), new Set(["get_backlog_item"]), 1,
+    )).toBeUndefined();
   });
 });

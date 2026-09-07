@@ -75,7 +75,7 @@ import {
   type ResolvedMcpTransportAuth as ResolvedAuth,
 } from "@/lib/mcp/transport-auth";
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
-import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildUnknownToolResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -345,6 +345,9 @@ async function handleLoadTools(
     await resolveListingAuthorityForToken(token, userContext),
   );
   const selected = resolveLoadToolsSelection(authorized, args);
+  const noMatch = classifyLoadToolsNoMatch(
+    args, new Set(PLATFORM_TOOLS.map((tool) => tool.name)), new Set(granted.map((tool) => tool.name)), selected.length,
+  );
   // W12 (BI-EE64547B): internal session-JWT calls are per-call stateless — the
   // result still carries the selected definitions inline, but no per-token
   // session row is written (internal lists are full-tier; nothing to append).
@@ -355,6 +358,7 @@ async function handleLoadTools(
   const result = buildLoadToolsResult(
     selected.map((t) => ({ name: t.name, description: t.description })),
     loadedToolNames,
+    noMatch,
   );
   return acceptsEventStream && selected.length > 0
     ? loadToolsSseResponse(id, result)
