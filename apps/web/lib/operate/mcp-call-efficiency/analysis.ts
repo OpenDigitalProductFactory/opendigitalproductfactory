@@ -151,46 +151,51 @@ function eventCorrelationId(event: CallEfficiencyEvent): string | null {
   return null;
 }
 
-function groupByCorrelation(
-  events: readonly CallEfficiencyEvent[],
-): Map<string, CallEfficiencyEvent[]> {
-  const groups = new Map<string, CallEfficiencyEvent[]>();
-  for (const event of events) {
-    const correlationId = eventCorrelationId(event);
-    if (!correlationId) continue;
-    const rows = groups.get(correlationId) ?? [];
-    rows.push(event);
-    groups.set(correlationId, rows);
+export const MAX_EFFICIENCY_FIELD_CHARS = 1024;
+
+export type EfficiencyCheckpoint = { createdAt: string; id: string };
+export type EfficiencyStateStopReason = "state-budget" | "memory-budget" | "field-budget";
+type EventHead = Pick<CallEfficiencyEvent, "toolName" | "threadId" | "agentId"> & { surface: string };
+type PreviousEvent = Pick<CallEfficiencyEvent, "id" | "toolName" | "agentId" | "success" | "governedRefusal"> & { time: number };
+type RetryAggregate = { n: number; refused: number; ids: string[]; agentId: string; firstSeen: number };
+type ExecutionGroup = {
+  correlationId: string; count: number; failCount: number; first: number; last: number;
+  head: EventHead; sampleIds: string[]; retry: RetryAggregate;
+};
+type ToolAggregate = {
+  count: number; failCount: number; refusalCount: number; durationSum: number; durationN: number;
+  correlatedCount: number; failureIds: string[]; groups: ExecutionGroup[];
+};
+type CorrelationAggregate = { firstThreadId: string; order: number; previous: PreviousEvent; previousBytes: number };
+
+/** PostgreSQL COLLATE "C" order for valid Unicode strings, without locale state. */
+export function compareEfficiencyIds(a: string, b: string): number {
+  for (let i = 0, j = 0; i < a.length && j < b.length;) {
+    const left = a.codePointAt(i)!;
+    const right = b.codePointAt(j)!;
+    if (left !== right) return left - right;
+    i += left > 0xffff ? 2 : 1;
+    j += right > 0xffff ? 2 : 1;
   }
-  return groups;
+  return a.length - b.length;
 }
 
-function fitsRoutineMachineCadence(
-  events: CallEfficiencyEvent[],
-  minimumIntervalMs: number,
-): boolean {
-  const byPrincipal = groupByCorrelation(events);
-  if (events.length > 0 && byPrincipal.size === 0) return false;
-  if ([...byPrincipal.values()].reduce((sum, rows) => sum + rows.length, 0) !== events.length) {
-    return false;
-  }
-
-  for (const rows of byPrincipal.values()) {
-    if (rows.length < 2) continue;
-    const first = rows[0]!.createdAt.getTime();
-    const last = rows[rows.length - 1]!.createdAt.getTime();
-    const expected = Math.floor(Math.max(0, last - first) / minimumIntervalMs) + 1;
-    // Permit scheduler jitter and one boundary call in a truncated ledger.
-    const allowed = Math.ceil(expected * 1.15) + 1;
-    if (rows.length > allowed) return false;
-  }
-  return true;
+function isRoutineMachineCadence(group: ExecutionGroup): boolean {
+  const interval = ROUTINE_MACHINE_MIN_INTERVAL_MS[group.head.toolName];
+  if (interval === undefined) return false;
+  const expected = Math.floor(Math.max(0, group.last - group.first) / interval) + 1;
+  return group.count <= Math.ceil(expected * 1.15) + 1;
 }
 
-function isRoutineMachineCadence(events: CallEfficiencyEvent[]): boolean {
-  const minimumIntervalMs = ROUTINE_MACHINE_MIN_INTERVAL_MS[events[0]?.toolName ?? ""];
-  return minimumIntervalMs !== undefined
-    && fitsRoutineMachineCadence(events, minimumIntervalMs);
+function retainedStringsBytes(...values: string[]): number {
+  // UTF-16 payload plus a conservative per-string bookkeeping allowance.
+  return values.reduce((sum, value) => sum + value.length * 2 + 64, 0);
+}
+
+export function efficiencyBudget(value: number | undefined, fallback: number, ceiling: number, minimum = 1): number {
+  return Math.min(ceiling, Math.max(minimum, Math.floor(
+    typeof value === "number" && Number.isFinite(value) ? value : fallback,
+  )));
 }
 
 function surfaceLabel(e: CallEfficiencyEvent): string {
@@ -216,295 +221,347 @@ function recommendForTool(toolName: string, kind: EfficiencyFindingKind): Effici
   return "investigate";
 }
 
-/**
- * Analyze a bag of call events and produce ranked efficiency findings.
- */
-export function analyzeCallEfficiency(
-  events: CallEfficiencyEvent[],
-  opts: AnalyzeCallEfficiencyOptions = {},
-): CallEfficiencyReport {
+/** Shared streaming policy. No raw event or argument/result payload is retained. */
+export function createCallEfficiencyAccumulator(
+  opts: AnalyzeCallEfficiencyOptions & { maxStateEntries?: number; maxRetainedBytes?: number } = {},
+) {
   const thrashThreshold = opts.thrashThreshold ?? 8;
   const highVolumeFloor = opts.highVolumeFloor ?? 25;
   const highFailureRate = opts.highFailureRate ?? 0.35;
   const highFailureMinSamples = opts.highFailureMinSamples ?? 8;
   const retryWindowMs = opts.retryWindowMs ?? 120_000;
   const retryStormMin = opts.retryStormMin ?? 3;
-  const maxFindings = opts.maxFindings ?? 25;
-
-  const sorted = [...events].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
-  );
-
-  const windowStart =
-    sorted[0]?.createdAt.toISOString() ?? new Date(0).toISOString();
-  const windowEnd =
-    sorted[sorted.length - 1]?.createdAt.toISOString() ??
-    new Date(0).toISOString();
-
-  const totalCalls = sorted.length;
-  const successCount = sorted.filter((e) => e.success).length;
-  const successRate = totalCalls > 0 ? successCount / totalCalls : 1;
-
-  // Surface rollup
+  const maxFindings = efficiencyBudget(opts.maxFindings, 25, 100, 0);
+  const maxStateEntries = efficiencyBudget(opts.maxStateEntries, 20_000, 20_000, 0);
+  const maxRetainedBytes = efficiencyBudget(opts.maxRetainedBytes, 16 * 1024 * 1024, 16 * 1024 * 1024, 0);
+  let totalCalls = 0;
+  let successCount = 0;
+  let firstTime: number | null = null;
+  let lastTime: number | null = null;
+  let checkpoint: EfficiencyCheckpoint | null = null;
+  let checkpointBytes = 0;
+  let stateEntries = 0;
+  let retainedBytes = 0;
+  let stopReason: EfficiencyStateStopReason | null = null;
   const surfaceMap = new Map<string, { count: number; failCount: number }>();
-  for (const e of sorted) {
-    const s = surfaceLabel(e);
-    const row = surfaceMap.get(s) ?? { count: 0, failCount: 0 };
-    row.count += 1;
-    if (!e.success) row.failCount += 1;
-    surfaceMap.set(s, row);
-  }
-  const bySurface = Array.from(surfaceMap.entries())
-    .map(([surface, v]) => ({ surface, ...v }))
-    .sort((a, b) => b.count - a.count);
+  const toolMap = new Map<string, ToolAggregate>();
+  const groups = new Map<string, ExecutionGroup>();
+  const correlations = new Map<string, CorrelationAggregate>();
 
-  // Per-tool rollup
-  const toolMap = new Map<
-    string,
-    {
-      count: number;
-      failCount: number;
-      refusalCount: number;
-      durationSum: number;
-      durationN: number;
-      events: CallEfficiencyEvent[];
+  function push(e: CallEfficiencyEvent): boolean {
+    if (stopReason) return false;
+    const time = e.createdAt.getTime();
+    if (!Number.isFinite(time) || (lastTime !== null && (time < lastTime ||
+      (time === lastTime && compareEfficiencyIds(e.id, checkpoint!.id) <= 0)))) {
+      throw new Error("Efficiency events must have unique identities in (createdAt, id) order");
     }
-  >();
-  for (const e of sorted) {
-    const row = toolMap.get(e.toolName) ?? {
-      count: 0,
-      failCount: 0,
-      refusalCount: 0,
-      durationSum: 0,
-      durationN: 0,
-      events: [],
-    };
-    row.count += 1;
-    // A governed refusal is neither a success nor a tool failure: it is the
-    // system correctly declining. Counting it as a failure is what filed
-    // `fix_instructions` findings against gates that were working.
-    if (e.governedRefusal) row.refusalCount += 1;
-    else if (!e.success) row.failCount += 1;
-    if (e.durationMs != null) {
-      row.durationSum += e.durationMs;
-      row.durationN += 1;
+    const owner = recordParameter(e.parameters, "ownerSessionId") ?? "";
+    if ([e.id, e.toolName, e.threadId, e.agentId, e.executionMode, owner]
+      .some((value) => value.length > MAX_EFFICIENCY_FIELD_CHARS)) {
+      stopReason = "field-budget";
+      return false;
     }
-    row.events.push(e);
-    toolMap.set(e.toolName, row);
-  }
-  const topTools = Array.from(toolMap.entries())
-    .map(([toolName, v]) => ({
-      toolName,
-      count: v.count,
-      failCount: v.failCount,
-      refusalCount: v.refusalCount,
-      // Rate the TOOL on the calls it was actually responsible for. A gate that
-      // declines 90% of calls is not a 10%-reliable tool.
-      successRate: v.count - v.refusalCount > 0
-        ? (v.count - v.refusalCount - v.failCount) / (v.count - v.refusalCount)
-        : 1,
-      avgDurationMs: v.durationN > 0 ? v.durationSum / v.durationN : null,
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 20);
-
-  const findings: EfficiencyFinding[] = [];
-
-  let suppressedRoutineCadenceFindings = 0;
-  let suppressedAggregateVolumeFindings = 0;
-
-  // Thrash: per best-known execution correlation and tool.
-  const thrashMap = new Map<string, CallEfficiencyEvent[]>();
-  for (const e of sorted) {
+    const surface = surfaceLabel(e);
     const correlationId = eventCorrelationId(e);
-    if (!correlationId) continue;
-    const key = `${correlationId}::${e.toolName}`;
-    const list = thrashMap.get(key) ?? [];
-    list.push(e);
-    thrashMap.set(key, list);
-  }
-  for (const [, list] of thrashMap) {
-    if (list.length < thrashThreshold) continue;
-    const head = list[0]!;
-    if (isRoutineMachineCadence(list)) {
-      suppressedRoutineCadenceFindings += 1;
-      continue;
+    const key = correlationId === null ? null : JSON.stringify([correlationId, e.toolName]);
+    const tool = toolMap.get(e.toolName);
+    const group = key === null ? undefined : groups.get(key);
+    const correlation = correlationId === null ? undefined : correlations.get(correlationId);
+    const previous = correlation?.previous;
+    const retry = previous && !previous.success && previous.toolName === e.toolName &&
+      time - previous.time <= retryWindowMs;
+    const newEntries = Number(!surfaceMap.has(surface)) + Number(!tool) +
+      Number(correlationId !== null && !correlation) + Number(key !== null && !group);
+    const previousBytes = retainedStringsBytes(e.id, e.toolName, e.agentId);
+    const nextCheckpointBytes = retainedStringsBytes(e.id);
+    // Charges include aggregate objects, map/array entries and bounded samples.
+    // This is a conservative retained-state estimate, not a JS heap measurement.
+    const addedBytes = newEntries * 1024 +
+      (!surfaceMap.has(surface) ? retainedStringsBytes(surface) : 0) +
+      (!tool ? retainedStringsBytes(e.toolName) : 0) +
+      (correlationId !== null && !correlation ? retainedStringsBytes(correlationId, e.threadId) : 0) +
+      (key !== null && !group ? retainedStringsBytes(key, e.toolName, e.threadId, e.agentId, surface) : 0) +
+      (key !== null && (!group || group.sampleIds.length < 5) ? retainedStringsBytes(e.id) : 0) +
+      (!e.success && !e.governedRefusal && (!tool || tool.failureIds.length < 5) ? retainedStringsBytes(e.id) : 0) +
+      (retry && group && group.retry.ids.length < 5 ? retainedStringsBytes(previous.id, e.id) : 0) +
+      (retry && group?.retry.n === 0 ? retainedStringsBytes(previous.agentId) : 0) +
+      (correlationId !== null ? Math.max(0, previousBytes - (correlation?.previousBytes ?? 0)) : 0) +
+      Math.max(0, nextCheckpointBytes - checkpointBytes);
+    if (stateEntries + newEntries > maxStateEntries || retainedBytes + addedBytes > maxRetainedBytes) {
+      stopReason = stateEntries + newEntries > maxStateEntries ? "state-budget" : "memory-budget";
+      return false;
     }
-    const correlationId = eventCorrelationId(head)!;
-    const waste = list.length - Math.max(2, Math.floor(thrashThreshold / 2));
-    findings.push({
-      kind: "thrash",
-      severity: list.length >= thrashThreshold * 2 ? "critical" : "warning",
-      toolName: head.toolName,
-      title: `Thrash: ${head.toolName} ×${list.length} in one execution`,
-      detail:
-        `Execution principal ${correlationId} called ${head.toolName} ${list.length} times ` +
-        `(threshold ${thrashThreshold}). Likely missing skill, over-broad tool, or poll loop.`,
-      evidence: {
-        count: list.length,
-        ...(head.threadId ? { threadId: head.threadId } : {}),
-        agentId: head.agentId,
-        correlationId,
-        surface: surfaceLabel(head),
-        sampleIds: list.slice(0, 5).map((x) => x.id),
-      },
-      recommendedAction: recommendForTool(head.toolName, "thrash"),
-      wasteCallEstimate: Math.max(0, waste),
-    });
-  }
-
-  // Retry storm: fail then same tool within retryWindowMs (per correlation).
-  const byCorrelation = groupByCorrelation(sorted);
-  for (const [correlationId, list] of byCorrelation) {
-    const pairs = new Map<string, { n: number; refused: number; ids: string[]; agentId: string }>();
-    for (let i = 0; i < list.length - 1; i++) {
-      const a = list[i]!;
-      const b = list[i + 1]!;
-      if (a.success) continue;
-      if (a.toolName !== b.toolName) continue;
-      const dt = b.createdAt.getTime() - a.createdAt.getTime();
-      if (dt < 0 || dt > retryWindowMs) continue;
-      const row = pairs.get(a.toolName) ?? {
-        n: 0,
-        refused: 0,
-        ids: [] as string[],
-        agentId: a.agentId,
+    stateEntries += newEntries;
+    retainedBytes += addedBytes;
+    checkpointBytes = Math.max(checkpointBytes, nextCheckpointBytes);
+    totalCalls += 1;
+    if (e.success) successCount += 1;
+    firstTime ??= time;
+    lastTime = time;
+    checkpoint = { createdAt: e.createdAt.toISOString(), id: e.id };
+    const surfaceRow = surfaceMap.get(surface) ?? { count: 0, failCount: 0 };
+    surfaceRow.count += 1;
+    if (!e.success) surfaceRow.failCount += 1;
+    surfaceMap.set(surface, surfaceRow);
+    const toolRow = tool ?? {
+      count: 0, failCount: 0, refusalCount: 0, durationSum: 0, durationN: 0,
+      correlatedCount: 0, failureIds: [], groups: [],
+    };
+    toolRow.count += 1;
+    if (e.governedRefusal) toolRow.refusalCount += 1;
+    else if (!e.success) {
+      toolRow.failCount += 1;
+      if (toolRow.failureIds.length < 5) toolRow.failureIds.push(e.id);
+    }
+    if (e.durationMs != null) { toolRow.durationSum += e.durationMs; toolRow.durationN += 1; }
+    toolMap.set(e.toolName, toolRow);
+    if (correlationId !== null && key !== null) {
+      const groupRow = group ?? {
+        correlationId, count: 0, failCount: 0, first: time, last: time,
+        head: { toolName: e.toolName, threadId: e.threadId, agentId: e.agentId, surface },
+        sampleIds: [], retry: { n: 0, refused: 0, ids: [], agentId: "", firstSeen: 0 },
       };
-      row.n += 1;
-      // Retrying a governed refusal is still waste — often worse, because the
-      // refusal is non-retryable and the loop cannot terminate by succeeding.
-      // But it is the CALLER's loop, not a broken tool, and saying "fix tool
-      // errors" sends the reader to the wrong place.
-      if (a.governedRefusal) row.refused += 1;
-      if (row.ids.length < 5) row.ids.push(a.id, b.id);
-      pairs.set(a.toolName, row);
-    }
-    for (const [toolName, row] of pairs) {
-      if (row.n < retryStormMin) continue;
-      findings.push({
-        kind: "retry_storm",
-        severity: row.n >= retryStormMin * 2 ? "critical" : "warning",
-        toolName,
-        title: `Retry storm: ${toolName} (${row.n} fail→retry pairs)`,
-        detail: row.refused >= row.n / 2
-          ? `Execution principal ${correlationId} retried ${toolName} ${row.n} times within `
-            + `${retryWindowMs / 1000}s windows, and ${row.refused} of those followed a GOVERNED REFUSAL `
-            + `rather than a tool failure. The policy declined the action; re-calling cannot make it `
-            + `succeed. Fix the caller's retry loop — not the tool, and not its instructions on how to `
-            + `call it correctly.`
-          : `Execution principal ${correlationId} retried ${toolName} after failure ${row.n} times `
-            + `within ${retryWindowMs / 1000}s windows. Fix tool errors or agent instructions.`,
-        evidence: {
-          count: row.n,
-          ...(list[0]?.threadId ? { threadId: list[0].threadId } : {}),
-          agentId: row.agentId,
-          correlationId,
-          sampleIds: row.ids.slice(0, 5),
-        },
-        recommendedAction: "fix_instructions",
-        wasteCallEstimate: row.n,
+      if (!group) { groups.set(key, groupRow); toolRow.groups.push(groupRow); }
+      groupRow.count += 1;
+      groupRow.last = time;
+      if (!e.success) groupRow.failCount += 1;
+      if (groupRow.sampleIds.length < 5) groupRow.sampleIds.push(e.id);
+      toolRow.correlatedCount += 1;
+      if (retry) {
+        const pair = groupRow.retry;
+        if (pair.n === 0) { pair.agentId = previous.agentId; pair.firstSeen = totalCalls; }
+        pair.n += 1;
+        if (previous.governedRefusal) pair.refused += 1;
+        if (pair.ids.length < 5) pair.ids.push(...[previous.id, e.id].slice(0, 5 - pair.ids.length));
+      }
+      correlations.set(correlationId, {
+        firstThreadId: correlation?.firstThreadId ?? e.threadId,
+        order: correlation?.order ?? correlations.size,
+        previous: { id: e.id, toolName: e.toolName, agentId: e.agentId, success: e.success,
+          governedRefusal: e.governedRefusal, time },
+        previousBytes: Math.max(correlation?.previousBytes ?? 0, previousBytes),
       });
     }
+    return true;
   }
 
-  // High volume / high failure from tool rollup
-  for (const t of topTools) {
-    const toolEvents = toolMap.get(t.toolName)!.events;
-    const routineCadenceHealthy = isRoutineMachineCadence(toolEvents);
-    if (t.count >= highVolumeFloor && routineCadenceHealthy) {
-      suppressedRoutineCadenceFindings += 1;
-    } else if (t.count >= highVolumeFloor) {
-      const dominant = [...groupByCorrelation(toolEvents).entries()]
-        .sort((a, b) => b[1].length - a[1].length)[0];
-      if (!dominant || dominant[1].length < highVolumeFloor) {
-        suppressedAggregateVolumeFindings += 1;
-      } else {
-        const [correlationId, correlatedEvents] = dominant;
-        const failCount = correlatedEvents.filter((event) => !event.success).length;
-        const correlatedSuccessRate =
-          (correlatedEvents.length - failCount) / correlatedEvents.length;
-        findings.push({
-          kind: "high_volume",
-          severity: correlatedEvents.length >= highVolumeFloor * 3 ? "critical" : "warning",
-          toolName: t.toolName,
-          title: `High volume: ${t.toolName} (${correlatedEvents.length} calls)`,
-          detail:
-            `${t.toolName} accounts for ${correlatedEvents.length} calls from ${correlationId} ` +
-            `(${(correlatedSuccessRate * 100).toFixed(0)}% success). Candidate for skill packaging, ` +
-            `richer tool, or event/webhook replacement if status-polling.`,
+  function finish(): CallEfficiencyReport {
+    const windowStart = new Date(firstTime ?? 0).toISOString();
+    const windowEnd = new Date(lastTime ?? 0).toISOString();
+    const successRate = totalCalls > 0 ? successCount / totalCalls : 1;
+    const bySurface = Array.from(surfaceMap.entries())
+      .map(([surface, v]) => ({ surface, ...v }))
+      .sort((a, b) => b.count - a.count);
+
+    const topTools = Array.from(toolMap.entries())
+      .map(([toolName, v]) => ({
+        toolName,
+        count: v.count,
+        failCount: v.failCount,
+        refusalCount: v.refusalCount,
+        // Rate the TOOL on the calls it was actually responsible for. A gate that
+        // declines 90% of calls is not a 10%-reliable tool.
+        successRate: v.count - v.refusalCount > 0
+          ? (v.count - v.refusalCount - v.failCount) / (v.count - v.refusalCount)
+          : 1,
+        avgDurationMs: v.durationN > 0 ? v.durationSum / v.durationN : null,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20);
+
+    const findings: EfficiencyFinding[] = [];
+    function addFinding(finding: EfficiencyFinding) {
+      const position = findings.findIndex((prior) =>
+        severityRank(finding.severity) < severityRank(prior.severity) ||
+        (finding.severity === prior.severity && finding.wasteCallEstimate > prior.wasteCallEstimate));
+      if (position < 0) findings.push(finding);
+      else findings.splice(position, 0, finding);
+      if (findings.length > maxFindings) findings.pop();
+    }
+
+    let suppressedRoutineCadenceFindings = 0;
+    let suppressedAggregateVolumeFindings = 0;
+
+    // Thrash: per best-known execution correlation and tool.
+    for (const group of groups.values()) {
+      if (group.count < thrashThreshold) continue;
+      const head = group.head;
+      if (isRoutineMachineCadence(group)) {
+        suppressedRoutineCadenceFindings += 1;
+        continue;
+      }
+      const correlationId = group.correlationId;
+      const waste = group.count - Math.max(2, Math.floor(thrashThreshold / 2));
+      addFinding({
+        kind: "thrash",
+        severity: group.count >= thrashThreshold * 2 ? "critical" : "warning",
+        toolName: head.toolName,
+        title: `Thrash: ${head.toolName} ×${group.count} in one execution`,
+        detail:
+          `Execution principal ${correlationId} called ${head.toolName} ${group.count} times ` +
+          `(threshold ${thrashThreshold}). Likely missing skill, over-broad tool, or poll loop.`,
+        evidence: {
+          count: group.count,
+          ...(head.threadId ? { threadId: head.threadId } : {}),
+          agentId: head.agentId,
+          correlationId,
+          surface: head.surface,
+          sampleIds: [...group.sampleIds],
+        },
+        recommendedAction: recommendForTool(head.toolName, "thrash"),
+        wasteCallEstimate: Math.max(0, waste),
+      });
+    }
+
+    // Retry storm: fail then same tool within retryWindowMs (per correlation).
+    const retryGroups = [...groups.values()].filter((group) => group.retry.n >= retryStormMin)
+      .sort((a, b) => correlations.get(a.correlationId)!.order - correlations.get(b.correlationId)!.order ||
+        a.retry.firstSeen - b.retry.firstSeen);
+    for (const group of retryGroups) {
+        const correlationId = group.correlationId;
+        const toolName = group.head.toolName;
+        const row = group.retry;
+        const firstThreadId = correlations.get(correlationId)!.firstThreadId;
+        addFinding({
+          kind: "retry_storm",
+          severity: row.n >= retryStormMin * 2 ? "critical" : "warning",
+          toolName,
+          title: `Retry storm: ${toolName} (${row.n} fail→retry pairs)`,
+          detail: row.refused >= row.n / 2
+            ? `Execution principal ${correlationId} retried ${toolName} ${row.n} times within `
+              + `${retryWindowMs / 1000}s windows, and ${row.refused} of those followed a GOVERNED REFUSAL `
+              + `rather than a tool failure. The policy declined the action; re-calling cannot make it `
+              + `succeed. Fix the caller's retry loop — not the tool, and not its instructions on how to `
+              + `call it correctly.`
+            : `Execution principal ${correlationId} retried ${toolName} after failure ${row.n} times `
+              + `within ${retryWindowMs / 1000}s windows. Fix tool errors or agent instructions.`,
           evidence: {
-            count: correlatedEvents.length,
-            failCount,
+            count: row.n,
+            ...(firstThreadId ? { threadId: firstThreadId } : {}),
+            agentId: row.agentId,
             correlationId,
-            sampleIds: correlatedEvents.slice(0, 5).map((event) => event.id),
+            sampleIds: row.ids.slice(0, 5),
           },
-          recommendedAction: recommendForTool(t.toolName, "high_volume"),
-          wasteCallEstimate: Math.max(0, correlatedEvents.length - highVolumeFloor),
+          recommendedAction: "fix_instructions",
+          wasteCallEstimate: row.n,
+        });
+    }
+
+    // High volume / high failure from tool rollup
+    for (const t of topTools) {
+      const tool = toolMap.get(t.toolName)!;
+      const routineCadenceHealthy = tool.correlatedCount === tool.count &&
+        tool.groups.length > 0 && tool.groups.every(isRoutineMachineCadence);
+      if (t.count >= highVolumeFloor && routineCadenceHealthy) {
+        suppressedRoutineCadenceFindings += 1;
+      } else if (t.count >= highVolumeFloor) {
+        const dominant = tool.groups.reduce<ExecutionGroup | undefined>((best, group) =>
+          !best || group.count > best.count ? group : best, undefined);
+        if (!dominant || dominant.count < highVolumeFloor) {
+          suppressedAggregateVolumeFindings += 1;
+        } else {
+          const { correlationId, failCount } = dominant;
+          const correlatedSuccessRate =
+            (dominant.count - failCount) / dominant.count;
+          addFinding({
+            kind: "high_volume",
+            severity: dominant.count >= highVolumeFloor * 3 ? "critical" : "warning",
+            toolName: t.toolName,
+            title: `High volume: ${t.toolName} (${dominant.count} calls)`,
+            detail:
+              `${t.toolName} accounts for ${dominant.count} calls from ${correlationId} ` +
+              `(${(correlatedSuccessRate * 100).toFixed(0)}% success). Candidate for skill packaging, ` +
+              `richer tool, or event/webhook replacement if status-polling.`,
+            evidence: {
+              count: dominant.count,
+              failCount,
+              correlationId,
+              sampleIds: [...dominant.sampleIds],
+            },
+            recommendedAction: recommendForTool(t.toolName, "high_volume"),
+            wasteCallEstimate: Math.max(0, dominant.count - highVolumeFloor),
+          });
+        }
+      }
+      // Rate the tool on the calls it was answerable for. Governed refusals are
+      // excluded from both the numerator and the denominator: a gate that declines
+      // most of what it is asked is working, and filing `fix_instructions` against
+      // it sends the next agent looking for a defect that is not there.
+      const answerableCalls = t.count - t.refusalCount;
+      const failureRate = answerableCalls > 0 ? t.failCount / answerableCalls : 0;
+      if (
+        answerableCalls >= highFailureMinSamples &&
+        failureRate >= highFailureRate
+      ) {
+        addFinding({
+          kind: "high_failure",
+          severity: failureRate >= 0.6 ? "critical" : "warning",
+          toolName: t.toolName,
+          title: `High failure: ${t.toolName} (${(failureRate * 100).toFixed(0)}%)`,
+          detail:
+            `${t.failCount}/${answerableCalls} answerable calls failed. Agents may be retrying blindly — ` +
+            `fix tool contract, grants, or skill guidance.` +
+            (t.refusalCount > 0
+              ? ` ${t.refusalCount} further call(s) were governed refusals and are excluded — the policy declined them, the tool did not fail.`
+              : ""),
+          evidence: {
+            count: answerableCalls,
+            failCount: t.failCount,
+            sampleIds: [...tool.failureIds],
+          },
+          recommendedAction: "fix_instructions",
+          wasteCallEstimate: t.failCount,
         });
       }
     }
-    // Rate the tool on the calls it was answerable for. Governed refusals are
-    // excluded from both the numerator and the denominator: a gate that declines
-    // most of what it is asked is working, and filing `fix_instructions` against
-    // it sends the next agent looking for a defect that is not there.
-    const answerableCalls = t.count - t.refusalCount;
-    const failureRate = answerableCalls > 0 ? t.failCount / answerableCalls : 0;
-    if (
-      answerableCalls >= highFailureMinSamples &&
-      failureRate >= highFailureRate
-    ) {
-      findings.push({
-        kind: "high_failure",
-        severity: failureRate >= 0.6 ? "critical" : "warning",
-        toolName: t.toolName,
-        title: `High failure: ${t.toolName} (${(failureRate * 100).toFixed(0)}%)`,
-        detail:
-          `${t.failCount}/${answerableCalls} answerable calls failed. Agents may be retrying blindly — ` +
-          `fix tool contract, grants, or skill guidance.` +
-          (t.refusalCount > 0
-            ? ` ${t.refusalCount} further call(s) were governed refusals and are excluded — the policy declined them, the tool did not fail.`
-            : ""),
-        evidence: {
-          count: answerableCalls,
-          failCount: t.failCount,
-          sampleIds: sorted
-            .filter((e) => e.toolName === t.toolName && !e.success && !e.governedRefusal)
-            .slice(0, 5)
-            .map((e) => e.id),
-        },
-        recommendedAction: "fix_instructions",
-        wasteCallEstimate: t.failCount,
-      });
-    }
+
+    const usable = totalCalls >= 10 && stopReason === null;
+    return {
+      windowStart,
+      windowEnd,
+      totalCalls,
+      successRate,
+      bySurface,
+      topTools,
+      findings: findings.slice(0, maxFindings),
+      ledgerSufficiency: {
+        usable,
+        note: stopReason ? `Partial diagnostics: ${stopReason}; no complete-window conclusion is available.` : usable
+          ? "ToolExecution volume is sufficient for thrash/volume/failure findings. " +
+            (suppressedRoutineCadenceFindings > 0
+              ? `${suppressedRoutineCadenceFindings} raw-volume finding(s) were suppressed because calls fit contractual machine cadence. `
+              : "") +
+            (suppressedAggregateVolumeFindings > 0
+              ? `${suppressedAggregateVolumeFindings} raw-volume finding(s) were suppressed because unattributed aggregate traffic did not reach the threshold for one execution principal. `
+              : "") +
+            "tools/list and pre-auth denials remain unlogged gaps."
+          : "Too few ToolExecution rows in window for reliable optimization; collect more traffic or widen the window.",
+      },
+    };
   }
 
-  findings.sort((a, b) => {
-    const sr = severityRank(a.severity) - severityRank(b.severity);
-    if (sr !== 0) return sr;
-    return b.wasteCallEstimate - a.wasteCallEstimate;
-  });
-
-  const usable = totalCalls >= 10;
   return {
-    windowStart,
-    windowEnd,
-    totalCalls,
-    successRate,
-    bySurface,
-    topTools,
-    findings: findings.slice(0, maxFindings),
-    ledgerSufficiency: {
-      usable,
-      note: usable
-        ? "ToolExecution volume is sufficient for thrash/volume/failure findings. " +
-          (suppressedRoutineCadenceFindings > 0
-            ? `${suppressedRoutineCadenceFindings} raw-volume finding(s) were suppressed because calls fit contractual machine cadence. `
-            : "") +
-          (suppressedAggregateVolumeFindings > 0
-            ? `${suppressedAggregateVolumeFindings} raw-volume finding(s) were suppressed because unattributed aggregate traffic did not reach the threshold for one execution principal. `
-            : "") +
-          "tools/list and pre-auth denials remain unlogged gaps."
-        : "Too few ToolExecution rows in window for reliable optimization; collect more traffic or widen the window.",
+    push,
+    finish,
+    get stats() {
+      return { stateEntries, estimatedRetainedBytes: retainedBytes, includedCount: totalCalls,
+        lastProcessed: checkpoint ? { ...checkpoint } : null, stopReason };
     },
   };
+}
+
+/** Compatibility adapter for callers that already have an in-memory bag. */
+export function analyzeCallEfficiency(
+  events: CallEfficiencyEvent[],
+  opts: AnalyzeCallEfficiencyOptions = {},
+): CallEfficiencyReport {
+  const accumulator = createCallEfficiencyAccumulator(opts);
+  const sorted = [...events].sort((a, b) =>
+    a.createdAt.getTime() - b.createdAt.getTime() || compareEfficiencyIds(a.id, b.id));
+  for (const event of sorted) {
+    if (!accumulator.push(event)) {
+      throw new Error(`Efficiency input exceeds ${accumulator.stats.stopReason}; use the window scanner for partial diagnostics`);
+    }
+  }
+  return accumulator.finish();
 }
