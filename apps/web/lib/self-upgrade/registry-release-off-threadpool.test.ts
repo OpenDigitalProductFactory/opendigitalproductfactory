@@ -33,6 +33,7 @@ describe("registry release transport", () => {
     })).resolves.toEqual({
       ok: false,
       reason: "registry-unavailable",
+      detail: "Error: fetch failed",
     });
 
     expect(transport.create).toHaveBeenCalledTimes(2);
