@@ -8,6 +8,8 @@ import {
   getWorkCaseSourceEntry,
   getWorkroomDefinitionIdentity,
 } from "./source-registry";
+import { WORK_CASE_ROOM_TRIGGER_KINDS, narrowRoomToolGrant } from "./room-definition-contract";
+import { getWorkCaseRoomTrigger, resolveRoomToolGrantForSource } from "./room-definition-resolvers";
 
 describe("Work Case source registry", () => {
   it("covers every existing WorkItem source type", () => {
@@ -67,7 +69,7 @@ describe("Work Case source registry", () => {
   it("derives one stable definition identity from the registered source", () => {
     expect(getWorkroomDefinitionIdentity(" booking ")).toEqual({
       definitionId: "workroom-definition:booking",
-      version: 1,
+      version: 2,
       sourceKey: "booking",
       label: "Storefront booking",
       mode: "finite",
@@ -171,6 +173,95 @@ describe("employment lifecycle definitions", () => {
       const identity = getWorkroomDefinitionIdentity(key);
       expect(identity, `no definition identity for ${key}`).toBeTruthy();
       expect(identity?.sourceKey).toBe(key);
+    }
+  });
+});
+
+describe("room trigger vocabulary", () => {
+  it("is the closed event / cadence / threshold set", () => {
+    expect([...WORK_CASE_ROOM_TRIGGER_KINDS]).toEqual(["event", "cadence", "threshold"]);
+  });
+
+  it("gives every entry a trigger slot, and every non-null trigger a known kind", () => {
+    for (const entry of WORK_CASE_SOURCE_REGISTRY) {
+      expect(entry, `${entry.sourceKey} missing trigger slot`).toHaveProperty("trigger");
+      if (entry.trigger === null) continue;
+      expect(
+        WORK_CASE_ROOM_TRIGGER_KINDS as readonly string[],
+        `${entry.sourceKey} has an unknown trigger kind`,
+      ).toContain(entry.trigger.kind);
+    }
+  });
+
+  it("keeps the two working standing rooms on a cadence", () => {
+    const scheduled = getWorkCaseRoomTrigger("scheduled");
+    const books = getWorkCaseRoomTrigger("bookkeeping-period");
+    expect(scheduled?.kind).toBe("cadence");
+    expect(books?.kind).toBe("cadence");
+    // RFC-5545, the grammar RecurrenceSchedule already stores — not a second scheduler.
+    expect(books?.kind === "cadence" && books.rrule).toBe("FREQ=MONTHLY;BYMONTHDAY=1");
+  });
+
+  it("leaves an imperatively opened room's trigger null rather than inventing one", () => {
+    expect(getWorkCaseRoomTrigger("manual-task")).toBeNull();
+    expect(getWorkCaseRoomTrigger("backlog-item")).toBeNull();
+  });
+});
+
+describe("room tool grant is tighten-only", () => {
+  it("cannot widen authority the agent does not already hold", () => {
+    // The room names a grant the agent lacks. It must be refused, not conferred.
+    const result = narrowRoomToolGrant(
+      { grantKeys: ["work_room_read", "banking_write"] },
+      ["work_room_read"],
+    );
+    expect(result.granted).toEqual(["work_room_read"]);
+    expect(result.refused).toEqual(["banking_write"]);
+    expect(result.granted).not.toContain("banking_write");
+  });
+
+  it("confers nothing at all to an agent with no standing grants", () => {
+    const result = narrowRoomToolGrant({ grantKeys: ["work_room_read", "crm_write"] }, []);
+    expect(result.granted).toEqual([]);
+    expect(result.refused).toEqual(["work_room_read", "crm_write"]);
+  });
+
+  it("never returns a granted key outside the agent's standing set, for every entry", () => {
+    const standing = ["work_room_read"];
+    for (const entry of WORK_CASE_SOURCE_REGISTRY) {
+      const { granted } = narrowRoomToolGrant(entry.toolGrant, standing);
+      for (const key of granted) {
+        expect(standing, `${entry.sourceKey} widened authority to ${key}`).toContain(key);
+      }
+    }
+  });
+
+  it("is bounded by the room ceiling even when the agent holds more", () => {
+    // The agent holds banking_write; the task-node room does not permit it.
+    const entry = getWorkCaseSourceEntry("task-node");
+    const { granted } = narrowRoomToolGrant(entry!.toolGrant, [
+      "work_room_read",
+      "work_room_write",
+      "thread_write",
+      "banking_write",
+    ]);
+    expect(granted).not.toContain("banking_write");
+  });
+
+  it("resolves an unknown source to null rather than an empty allowance", () => {
+    expect(resolveRoomToolGrantForSource("external-ticket", ["work_room_read"])).toBeNull();
+  });
+});
+
+describe("room measures", () => {
+  it("gives every entry at least one measure with a binding key", () => {
+    for (const entry of WORK_CASE_SOURCE_REGISTRY) {
+      expect(entry.measures.length, `${entry.sourceKey} has no measure`).toBeGreaterThan(0);
+      for (const measure of entry.measures) {
+        expect(measure.key.length).toBeGreaterThan(0);
+        expect(measure.label.length).toBeGreaterThan(0);
+        expect(measure.bindingKey.length).toBeGreaterThan(0);
+      }
     }
   });
 });

@@ -54,6 +54,7 @@ import {
   postgresTrialRestoreRequested,
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
+import { edgeNodeJanitor } from "./edge-node-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
 import { worktreeJanitor } from "./worktree-janitor";
 import { sandboxBuildGc } from "./sandbox-build-gc";
@@ -82,6 +83,10 @@ import { marketingSchedulerDispatch, postmarkCallbackDispatchRequested, postmark
 import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
 import { siemCorrelationSweep } from "./siem-correlation-sweep";
 import { patchAssessmentSweep } from "./patch-assessment-sweep";
+import {
+  decisionConciergeSweepScheduled,
+  decisionConciergeSweepRequested,
+} from "./decision-concierge-sweep";
 import {
   catalogEnrichmentSweepScheduled,
   catalogEnrichmentSweepRequested,
@@ -140,6 +145,7 @@ import {
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
+  decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
   prometheusPoll,
   fullDiscoverySweep,
   modelDiscoveryRefresh,
@@ -172,6 +178,7 @@ export const scheduledFunctions = [
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
+  edgeNodeJanitor, // BI-D4F79CE2: retire an installer enrollment a live one has superseded, hourly
   runtimeArtifactJanitor, // BI-DBF3F426/BI-A55BE432: orphaned CI images + stray compose projects (+ their volumes), daily 05:20; DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED=observe, +DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=live
   worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
   sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
@@ -213,6 +220,7 @@ export const scheduledFunctions = [
 ];
 
 export const eventFunctions = [
+  decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
   localModelInstall,
   rateRecovery,
   mcpCatalogSync,

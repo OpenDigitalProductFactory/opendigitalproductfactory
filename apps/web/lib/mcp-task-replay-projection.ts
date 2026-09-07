@@ -1,4 +1,5 @@
 import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
+import type { Prisma } from "@dpf/db";
 import {
   recoverTerminalWriterEscalation,
   terminalWriterEscalationMessage,
@@ -15,6 +16,7 @@ export type TerminalWriterWait = {
   observedAt: string;
   dispatchContract?: "required-tool-call";
   noncompliance?: "prose-without-required-writer";
+  validationFailure?: { error: string; message: string; proposal?: Prisma.JsonValue };
 };
 
 type TerminalWriterDispatchFailure = {
@@ -100,13 +102,16 @@ export function projectRemoteTaskReplay(input: {
     terminalWriterWait,
   );
   const resourceWait = parseResourceWaitProjection(input.existing.progressPayload);
+  const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+    ? input.existing.progressPayload as Record<string, unknown> : {};
   return {
     kind: "result",
     result: {
       taskRunId: input.existing.taskRunId,
       status: input.existing.status,
       idempotentReplay: true,
-      requiresApproval: input.existing.status === "input-required" && !terminalWriterWait && !terminalWriterEscalation,
+      requiresApproval: input.existing.status === "input-required" && !terminalWriterWait && !terminalWriterEscalation
+        && typeof progress.approvalEnvelopeId === "string" && progress.approvalEnvelopeId.length > 0,
       ...(terminalWriterEscalation ? {
         resumable: false,
         waitReason: terminalWriterEscalationWaitReason(terminalWriterEscalation),

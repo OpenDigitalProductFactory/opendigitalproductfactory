@@ -132,3 +132,85 @@ describe("projectRoomStall", () => {
     expect(projectRoomStall(row({ drive: { action: "pause" }, consecutivePauses: 9 }))).not.toBeNull();
   });
 });
+
+// ─── The ladder seam (BI-24E7D59F) ───────────────────────────────────────────
+//
+// Reporting "nobody owns this" is a diagnosis. Naming who the work shape says
+// should drive it is an instruction the operator can act on in one step. All
+// twelve standing rooms on this install resolve a driver from their shape, so
+// this is the difference between twelve alerts and twelve appointments.
+
+describe("projectRoomStall with a resolved ladder owner", () => {
+  it("names the principal the ladder resolved, and how it was resolved", () => {
+    const item = projectRoomStall(
+      row({ ladderOwner: { principalRef: "agent:security-engineer", source: "shape" } }),
+    );
+    expect(item?.context).toContain("agent:security-engineer");
+    expect(item?.context.toLowerCase()).toContain("shape");
+  });
+
+  it("still refuses to assign the item to a merely-derived owner", () => {
+    // A derived owner is a SUGGESTION. Routing the item to them would make the
+    // room look owned to the very surface reporting that it is not, and
+    // conformance still requires an explicit appointment to execute.
+    const item = projectRoomStall(
+      row({ ladderOwner: { principalRef: "agent:security-engineer", source: "shape" } }),
+    );
+    expect(item?.audience.assigneePrincipalId).toBeUndefined();
+    expect(item?.audience.operator).toBe(true);
+  });
+
+  it("says plainly that nobody can be derived when the ladder returns null", () => {
+    const item = projectRoomStall(row({ ladderOwner: null }));
+    expect(item?.context).toContain("No owner can be derived");
+  });
+});
+
+// ─── Escalation is a stall too (BI-2A5F1E77) ─────────────────────────────────
+//
+// Found live, immediately after the first appointment worked. WC-A69BCABB left
+// `pause` and entered `escalate` — and escalate writes no pendingAttention, so a
+// source watching only `pause` handed the room from a state it covered into a
+// state nothing reads. The room stopped being reported at the exact moment it
+// started needing a human.
+//
+// An escalation with no channel is a stall with extra steps.
+
+describe("projectRoomStall over escalating rooms", () => {
+  const escalating = (over: Record<string, unknown> = {}) => ({
+    kind: "workroom-drive",
+    action: "escalate",
+    reason: "conformance_escalate",
+    conformance: {
+      deviations: [{ code: "coordinator_authority_binding_ineligible", summary: "s" }],
+      processOverseerPrincipalRef: "PRN-SEC-1",
+      interventionReason: "The AI Process Overseer's TAK authority binding is unknown.",
+    },
+    ...over,
+  });
+
+  it("raises attention for a room stuck escalating", () => {
+    const item = projectRoomStall(row({ drive: escalating() }));
+    expect(item).not.toBeNull();
+    expect(item?.context).toContain("coordinator_authority_binding_ineligible");
+  });
+
+  it("routes an escalating room to its overseer, who now exists", () => {
+    // Unlike the unowned case, an escalating room HAS an owner — the escalation
+    // is theirs to answer.
+    const item = projectRoomStall(row({ drive: escalating() }));
+    expect(item?.audience.assigneePrincipalId).toBe("PRN-SEC-1");
+  });
+
+  it("still stays silent for a room that is advancing", () => {
+    expect(
+      projectRoomStall(
+        row({ drive: { kind: "workroom-drive", action: "dispatch" }, consecutivePauses: 9 }),
+      ),
+    ).toBeNull();
+  });
+
+  it("counts an escalation streak the same way it counts a pause streak", () => {
+    expect(projectRoomStall(row({ drive: escalating(), consecutivePauses: 1 }))).toBeNull();
+  });
+});

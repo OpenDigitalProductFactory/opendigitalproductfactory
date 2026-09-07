@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 697,
+  "pageCount": 698,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -897,7 +897,7 @@
         "0-why-this-document-exists",
         "1-two-senses-of-value-stream-keep-them-distinct",
         "2-the-default-small-business-value-stream",
-        "21-leaf-process-profiles-replace-the-fallback-when-the-business-works-differently",
+        "21-leaf-process-profiles-compose-with-the-backbone-when-the-business-works-differently",
         "3-the-commercial-model-decides-the-value-stream-shape",
         "4-the-bridge-value-stream-stage-platform-surface-audit-phase",
         "5-the-value-stream-stages-map-onto-substrate-the-platform-already-carries",
@@ -1591,6 +1591,7 @@
         "maturity-labels-closed-set",
         "finance-matrix-snapshot",
         "payroll-absorption-stance-reversal-2026-08-22",
+        "statutory-rate-acquisition-propose-ratify-resolve-2026-09-01",
         "payroll-tax-persistence-and-period-components-2026-08-26",
         "mileage-jurisdiction-resolution-2026-08-26",
         "finance-doc-reconciliation-rules",
@@ -2456,6 +2457,9 @@
         "known-gaps",
         "encoding-and-visualization",
         "a-stalled-room-reaches-a-human",
+        "who-answers-for-a-room",
+        "nesting-has-to-be-written-not-just-declared",
+        "who-may-coordinate-authority-and-a-gate-with-no-key",
         "related-references"
       ]
     },
@@ -3914,6 +3918,17 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": {
+      "publicHref": "/founder-kernel/wiki/principles/gates-proportional-to-shape/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "gates-are-proportional-to-the-shape-of-the-work",
+        "the-rule",
+        "where-it-lives"
       ]
     },
     "docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md": {
@@ -8863,6 +8878,7 @@
         "step-2-trigger-the-upgrade",
         "step-3-monitor-the-chain",
         "step-4-verify-postgres-only-done-criteria",
+        "first-question-after-any-failed-upgrade-how-far-did-it-get",
         "if-it-fails-anyway-recovery",
         "failure-class-host-out-of-memory-candidate-build-enomem",
         "failure-class-promoter-context-n1-a-new-copy-made-the-candidate-unbuildable",
@@ -11909,6 +11925,7 @@
         "what-this-installation-is",
         "who-runs-this-installation",
         "what-your-ai-coworkers-may-do-here",
+        "operational-posture-across-your-installations",
         "correcting-the-identity"
       ]
     },

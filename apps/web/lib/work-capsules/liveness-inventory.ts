@@ -29,6 +29,7 @@ const INVENTORY_SELECT = {
   worktreePath: true,
   pullRequestUrl: true,
   pullRequestNumber: true,
+  scopeClaims: true,
   leaseExpiresAt: true,
   lastSyncedAt: true,
   updatedAt: true,

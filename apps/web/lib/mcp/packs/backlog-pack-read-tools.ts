@@ -427,11 +427,20 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   const { mapDemandRows } = await import("@/lib/demand/demand-data");
   const demandView = mapDemandRows([item])[0]!;
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
+  const { loadInheritedInitiativeScope } = await import("@/lib/backlog/initiative-readiness/parent-scope-inheritance");
   const hasSpec = specPlanRefs.some((entry) => entry.kind === "spec");
   const hasPlan = specPlanRefs.some((entry) => entry.kind === "plan");
+  const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
+  const { readBoundWorkShapeRef } = await import("@/lib/backlog/initiative-readiness/bound-work-shape");
+  const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+  const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
   const readiness = projectBacklogItemReadinessSummary({
+    inheritedScope,
     item: {
       id: item.id,
+      workShape: boundWorkShape,
+      deliverySensitivity: deriveDeliverableSensitivity({ text: `${item.title ?? ""}\n${item.body ?? ""}`, workType: item.workType }),
+      body: item.body,
       itemId: item.itemId,
       status: item.status,
       type: item.type,
@@ -454,6 +463,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
     data: {
       itemId: item.itemId,
+      workShape: boundWorkShape,
       title: item.title,
       status: item.status,
       type: item.type,

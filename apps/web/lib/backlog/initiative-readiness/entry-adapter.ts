@@ -2,6 +2,9 @@ import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evid
 
 import { evaluateInitiativeReadiness } from "./evaluate";
 import { deriveAuthoritativeReadinessProfile } from "./profiles";
+import { itemBodyBaselineState } from "./item-body-baseline";
+import type { InheritedInitiativeScope } from "./parent-scope-inheritance";
+import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
 import type {
   InitiativeReadinessDecision,
@@ -11,7 +14,10 @@ import type {
   ReadinessEvidenceState,
   ReadinessTarget,
 } from "./types";
-import { READINESS_CODES, READINESS_EVIDENCE_LANES, READINESS_PROFILES } from "./types";
+import {
+  READINESS_CODES, READINESS_EVIDENCE_LANES, READINESS_PROFILES, READINESS_SHAPES,
+  type ReadinessSensitivity, type ReadinessShape,
+} from "./types";
 
 export type InitiativeReadinessActivity = {
   id: string;
@@ -32,7 +38,19 @@ export type InitiativeReadinessItem = {
   archetypeCategories?: readonly string[];
   archetypeIds?: readonly string[];
   activeBuildKind?: string | null;
+  /** v3: the Workroom's declared/derived delivery shape as `delivery-<shape>@<version>`, when bound. */
+  workShape?: string | null;
+  /** v3: deliverable sensitivity (design 3.2); distinct from BacklogItem.sensitivity, the data classification. */
+  deliverySensitivity?: ReadinessSensitivity | null;
+  /** v3: the item body is the baseline for small/medium shapes. */
+  body?: string | null;
 };
+
+/** `delivery-small@1.0.0` → `small`; anything else → null (an unshaped item). */
+export function readinessShapeFromWorkShape(ref: string | null | undefined): ReadinessShape | null {
+  const key = typeof ref === "string" ? ref.split("@")[0]?.replace(/^delivery-/, "") : null;
+  return key && (READINESS_SHAPES as readonly string[]).includes(key) ? key as ReadinessShape : null;
+}
 
 type Baseline = {
   baselineId: string;
@@ -45,6 +63,7 @@ const GATE_NAMES = new Set([
   "classification", "research", "design-spec", "spec-approval", "architecture-review",
   "data-review", "ux-fit-review", "security-review", "compliance-review", "domain-review",
   "plan-review", "dependency-disposition", "archetype-provisioning", "archetype-completeness",
+  "post-implementation-review",
 ]);
 
 function normalizeGate(value: string | null): string | null {
@@ -214,9 +233,27 @@ function persistedTerminalCompletionDecision(
   return null;
 }
 
+/**
+ * Which artifact a gate receipt is bound to. Every design gate binds the
+ * canonical design; plan-review binds the PLAN the coverage record names (and
+ * still accepts the design digest, which earlier receipts were bound to)
+ * (BI-B5C8FEFC, 2026-09-06: a reviewer routed to the design honestly failed
+ * plan-review because "this document is a design specification", and a
+ * receipt recorded against the plan read as stale against the design digest).
+ */
+type AcceptedDigests = { canonical: string | null; plan: string | null };
+
+function isStaleFor(gate: string, artifactDigest: unknown, digests: AcceptedDigests): boolean {
+  if (gate === "plan-review") {
+    const accepted = [digests.plan, digests.canonical].filter((value): value is string => Boolean(value));
+    return accepted.length > 0 && !accepted.includes(String(artifactDigest));
+  }
+  return Boolean(digests.canonical) && artifactDigest !== digests.canonical;
+}
+
 function projectGateReceipt(
   activity: InitiativeReadinessActivity,
-  canonicalDigest: string | null,
+  digests: AcceptedDigests,
   itemId: string,
 ): { state: ReadinessEvidenceState; malformed: boolean; gate: string | null } {
   const payload = object(activity.payload);
@@ -249,7 +286,7 @@ function projectGateReceipt(
     && (gate === "classification" || payload.selectedProfile === undefined)
     && (decision === "fail" || payload.findingRefs.length === 0);
   if (!valid) return { state: "malformed", malformed: true, gate };
-  if (canonicalDigest && payload.artifactDigest !== canonicalDigest) {
+  if (isStaleFor(gate, payload.artifactDigest, digests)) {
     return { state: "stale", malformed: false, gate };
   }
   return { state: decision as ReadinessEvidenceState, malformed: false, gate };
@@ -257,7 +294,7 @@ function projectGateReceipt(
 
 function latestGateStates(
   activities: readonly InitiativeReadinessActivity[],
-  canonicalDigest: string | null,
+  digests: AcceptedDigests,
   itemId: string,
 ): { states: Map<string, ReadinessEvidenceState>; malformed: boolean } {
   const latest = [...activities]
@@ -268,7 +305,7 @@ function latestGateStates(
   for (const activity of latest) {
     const gate = normalizeGate(activity.gateKey);
     if (gate && states.has(gate)) continue;
-    const projected = projectGateReceipt(activity, canonicalDigest, itemId);
+    const projected = projectGateReceipt(activity, digests, itemId);
     malformed ||= projected.malformed;
     if (projected.gate) states.set(projected.gate, projected.state);
   }
@@ -313,14 +350,16 @@ function unreadEvidenceByCode(
   return byCode;
 }
 
+type InitiativePlanArtifact = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
+
 function projectPlanCoverage(
   activities: readonly InitiativeReadinessActivity[],
   baseline: Baseline | null,
-): ReadinessEvidenceState {
+): { state: ReadinessEvidenceState; planDigest: string | null; planArtifact: InitiativePlanArtifact | null } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "plan_backlog_coverage")
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id))[0];
-  if (!latest) return "missing";
+  if (!latest) return { state: "missing", planDigest: null, planArtifact: null };
   const payload = object(latest.payload);
   const artifact = object(payload?.planArtifactRef);
   if (!payload
@@ -334,9 +373,20 @@ function projectPlanCoverage(
     || !baseline
     || payload.scopeBaselineId !== baseline.baselineId
     || payload.scopeBaselineArtifactDigest !== baseline.artifactDigest) {
-    return "malformed";
+    return { state: "malformed", planDigest: null, planArtifact: null };
   }
-  return "pass";
+  // Reuse this baseline-validated selection for dispatch too. Historical
+  // coverage can still project its digest without inventing missing locators.
+  const planArtifact: InitiativePlanArtifact | null =
+    typeof artifact.repositoryFullName === "string" && /^[^/\s]+\/[^/\s]+$/.test(artifact.repositoryFullName)
+      && typeof artifact.commitSha === "string" && /^[a-f0-9]{40}$/i.test(artifact.commitSha)
+      && typeof artifact.providerBlobId === "string" && /^[a-f0-9]{40}$/i.test(artifact.providerBlobId)
+      && typeof artifact.path === "string" && /^docs\/superpowers\/plans\/[A-Za-z0-9][A-Za-z0-9._/-]*\.md$/.test(artifact.path)
+      && !artifact.path.split("/").some((part) => part === "." || part === "..")
+      ? { kind: "repo-blob-at-commit", repositoryFullName: artifact.repositoryFullName,
+        commitSha: artifact.commitSha, path: artifact.path, providerBlobId: artifact.providerBlobId }
+      : null;
+  return { state: "pass", planDigest: String(payload.planArtifactDigest), planArtifact };
 }
 
 export function projectBacklogItemReadiness(args: {
@@ -347,6 +397,12 @@ export function projectBacklogItemReadiness(args: {
   authorization: ReadinessEvidenceState;
   capsuleIdentity: ReadinessEvidenceState;
   planCoverage?: ReadinessEvidenceState;
+  /**
+   * The parent's scope rows when a decomposed coverage record maps this item
+   * (see parent-scope-inheritance.ts). Used only when the item minted no
+   * baseline of its own; the item's own receipts still win per gate.
+   */
+  inheritedScope?: InheritedInitiativeScope | null;
   artifactHints?: { hasSpec: boolean; hasPlan: boolean };
   /**
    * EP-4614F35E / merge-through-gates completion: when true, the design-side and
@@ -373,19 +429,43 @@ export function projectBacklogItemReadiness(args: {
 }): {
   governed: boolean;
   baselineId: string | null;
+  planArtifact: InitiativePlanArtifact | null;
+  /** Parent item whose scope this projection borrowed, or null when the item stands alone. */
+  inheritedFrom: string | null;
   artifactHints: { hasSpec: boolean; hasPlan: boolean };
   decision: InitiativeReadinessDecision;
 } {
-  const baseline = parseBaselines(args.activities, args.item.itemId);
-  const receipts = latestGateStates(args.activities, baseline.current?.artifactDigest ?? null, args.item.itemId);
+  const own = parseBaselines(args.activities, args.item.itemId);
+  const parent = args.inheritedScope && !own.current && !own.malformed && !own.ambiguous
+    ? parseBaselines(args.inheritedScope.activities, args.inheritedScope.parentItemId)
+    : null;
+  const inherited = parent?.current ? args.inheritedScope! : null;
+  const baseline = inherited ? parent! : own;
+  const digest = baseline.current?.artifactDigest ?? null;
+  const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current);
+  const digests: AcceptedDigests = { canonical: digest, plan: projectedCoverage.planDigest };
+  const ownReceipts = latestGateStates(args.activities, digests, args.item.itemId);
+  const parentReceipts = inherited ? latestGateStates(inherited.activities, digests, inherited.parentItemId) : null;
+  const receipts = parentReceipts
+    ? {
+      states: new Map([...parentReceipts.states, ...[...ownReceipts.states].filter(([, state]) => state !== "missing")]),
+      malformed: ownReceipts.malformed || parentReceipts.malformed,
+    }
+    : ownReceipts;
+  // The parent's profile is the parent's risk, not the child's: a decomposed
+  // cross-domain design yields children that are sized on their own signals.
   const profile = deriveAuthoritativeReadinessProfile({
     ...args.item,
-    recordedProfiles: baseline.current ? [baseline.current.profile] : [],
+    recordedProfiles: own.current ? [own.current.profile] : [],
   });
   const governed = profile !== null;
   const evidence = receipts.states;
-  const baselineState: ReadinessEvidenceState = baseline.current ? "pass" : "missing";
-  const coverage = args.planCoverage ?? projectPlanCoverage(args.activities, baseline.current);
+  const shape = readinessShapeFromWorkShape(args.item.workShape);
+  // v3: small and medium mint their baseline from the item body, not a spec.
+  const baselineState: ReadinessEvidenceState = baseline.current
+    ? "pass"
+    : shape === "small" || shape === "medium" ? itemBodyBaselineState(args.item.body) : "missing";
+  const coverage = args.planCoverage ?? projectedCoverage.state;
   const dependency = state(evidence, "dependency-disposition");
   const archetypeProvisioning = state(evidence, "archetype-provisioning");
   // merge-through-gates recognition (EP-4614F35E): coerce the design/plan lanes to
@@ -397,6 +477,8 @@ export function projectBacklogItemReadiness(args: {
     subject: { kind: "backlog-item", id: args.item.itemId },
     transitionObject: args.transitionObject,
     profile: profile ?? "doc-only",
+    shape,
+    sensitivity: args.item.deliverySensitivity ?? null,
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
     canonicalDesign: pass(baselineState),
@@ -431,6 +513,7 @@ export function projectBacklogItemReadiness(args: {
       skillsAndTools: archetypeProvisioning,
     },
     archetypeCompleteness: state(evidence, "archetype-completeness"),
+    postImplementationReview: state(evidence, "post-implementation-review"),
     projectionError: baseline.malformed || receipts.malformed || args.completion?.projectionError,
     evidenceRefs: args.completion?.evidenceRefs,
     unreadEvidenceRefs: unreadEvidenceByCode(args.activities),
@@ -439,6 +522,8 @@ export function projectBacklogItemReadiness(args: {
   return {
     governed,
     baselineId: baseline.current?.baselineId ?? null,
+    planArtifact: projectedCoverage.planArtifact,
+    inheritedFrom: inherited?.parentItemId ?? null,
     artifactHints: args.artifactHints ?? { hasSpec: false, hasPlan: false },
     decision: evaluateInitiativeReadiness(facts, args.target),
   };
@@ -447,6 +532,7 @@ export function projectBacklogItemReadiness(args: {
 export function projectBacklogItemReadinessSummary(args: {
   item: InitiativeReadinessItem;
   activities: readonly InitiativeReadinessActivity[];
+  inheritedScope?: InheritedInitiativeScope | null;
   hasSpec: boolean;
   hasPlan: boolean;
   evaluatedAt: string;
@@ -457,6 +543,7 @@ export function projectBacklogItemReadinessSummary(args: {
     const projected = projectBacklogItemReadiness({
       item: args.item,
       activities: args.activities,
+      inheritedScope: args.inheritedScope,
       target,
       transitionObject: {
         kind: "backlog-item",
@@ -472,6 +559,7 @@ export function projectBacklogItemReadinessSummary(args: {
     return [target, projected.decision];
   })) as Record<ReadinessTarget, InitiativeReadinessDecision>;
   return {
+    inheritedFrom: args.inheritedScope?.parentItemId ?? null,
     governed: projectBacklogItemReadiness({
       item: args.item,
       activities: args.activities,

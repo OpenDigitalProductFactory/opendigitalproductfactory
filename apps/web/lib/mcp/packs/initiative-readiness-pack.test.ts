@@ -4,6 +4,7 @@ import { ok } from "@/lib/shared/action-result";
 
 const mocks = vi.hoisted(() => ({
   findTaskRun: vi.fn(),
+  findReads: vi.fn(),
   recordGateReceipt: vi.fn(),
   recordSpecApproval: vi.fn(),
   recordObjectiveMapping: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({
   prisma: {
     taskRun: { findUnique: (...args: unknown[]) => mocks.findTaskRun(...args) },
+    toolExecution: { findMany: (...args: unknown[]) => mocks.findReads(...args) },
   },
 }));
 
@@ -38,6 +40,57 @@ const expected = {
 } as const;
 
 describe("initiative readiness reviewer tools", () => {
+  it("BI-31159978 rejects positive observations encoded as passing research findings without deleting them", async () => {
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: {
+      trigger: "external-mcp",
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_evidence", itemId: "BI-31159978", gate: "research",
+        artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
+          commitSha: "7d22b24673c138036685312387a425984c7a330d",
+          providerBlobId: "511894b16063195e4bf9f6977f1f5a3fd0549693", path: "design.md" },
+      },
+    } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "unexpected-receipt" });
+    const assessment = { decision: "pass", reason: "The reproduction is complete.",
+      findings: [{ issue: "The design clearly documents the ownership boundary.", severity: "important" }],
+      resolvedFindingRefs: [] };
+    const original = structuredClone(assessment);
+    const result = await initiativeReadinessPack.handlers.record_initiative_evidence!(
+      assessment, "user-1", { taskRunId: "TR-REPRO", agentId: "AGT-WS-PORTFOLIO" } as never,
+    );
+    expect(result).toMatchObject({ success: false, error: "malformed-receipt" });
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
+    expect(assessment).toEqual(original);
+    const corrected = await initiativeReadinessPack.handlers.record_initiative_evidence!(
+      { ...assessment, findings: [], reason: assessment.reason + " The design clearly documents the ownership boundary." },
+      "user-1", { taskRunId: "TR-REPRO", agentId: "AGT-WS-PORTFOLIO" } as never,
+    );
+    expect(corrected).toMatchObject({ success: true, data: { receiptId: "unexpected-receipt" } });
+    expect(mocks.recordGateReceipt).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires bound read evidence for a failing finding and preserves a supported finding", async () => {
+    const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "sha", providerBlobId: "blob", path: "design.md" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
+      writerToolName: "record_initiative_evidence", itemId: "BI-31159978", gate: "research", artifactRef,
+    } } });
+    const assessment = { decision: "fail", reason: "A verification requirement remains open.", resolvedFindingRefs: [],
+      findings: [{ issue: "Verification is unspecified.", severity: "important", evidence: {
+        blobId: "blob", startLine: 2, endLine: 2, quote: "Verification: TBD",
+      } }] };
+    const context = { taskRunId: "TR-BOUND", agentId: "AGT-WS-PORTFOLIO" } as never;
+    mocks.findReads.mockResolvedValue([]);
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(assessment, "user-1", context))
+      .toMatchObject({ success: false, error: "malformed-receipt" });
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
+    mocks.findReads.mockResolvedValue([{ result: { data: { repositoryFullName: "owner/repo", version: "sha", path: "design.md",
+      blobId: "blob", startLine: 1, endLine: 2, content: "# Design\nVerification: TBD" } } }]);
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "failed-receipt" });
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(assessment, "user-1", context))
+      .toMatchObject({ success: true, data: { receiptId: "failed-receipt" } });
+    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ findings: assessment.findings, decision: "fail" }));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -116,6 +169,9 @@ describe("initiative readiness reviewer tools", () => {
       gate: "classification",
       artifactRef: { kind: "document-version", versionId: "spoofed" },
       decision: "pass",
+      reason: "Independent assessment from the bound artifact.",
+      findings: [],
+      resolvedFindingRefs: [],
     }, "user-1", {
       taskRunId: "TR-MCP-BOUND",
       agentId: "AGT-WS-BUILD",
@@ -133,7 +189,7 @@ describe("initiative readiness reviewer tools", () => {
       decision: "pass",
       findings: [],
       resolvedFindingRefs: [],
-      reason: "Independent reviewer AGT-WS-BUILD recorded pass for the immutable research artifact bound to TaskRun TR-MCP-BOUND.",
+      reason: "Independent assessment from the bound artifact.",
     }));
     expect(result).toMatchObject({ success: true, entityId: "IRR-RESEARCH-1" });
   });
@@ -204,7 +260,7 @@ describe("initiative readiness reviewer tools", () => {
 
     await initiativeReadinessPack.handlers.record_initiative_evidence!({
       operation: "objective-mapping",
-      baselineId: "baseline-current",
+      baselineId: "baseline-spoofed",
       objectiveMappings: [{ objectiveId: "OBJ-1", evidenceRefs: ["E-1"] }],
       reason: "Bound mapping.",
     }, "user-1", {
@@ -215,9 +271,28 @@ describe("initiative readiness reviewer tools", () => {
     } as never);
 
     expect(mocks.recordObjectiveMapping).toHaveBeenCalledWith(expect.objectContaining({
+      taskRunId: "TR-MCP-MAPPING",
       itemId: "BI-BOUND",
       baselineId: "baseline-current",
       eligibleEvidenceActivityIds,
     }));
+  });
+});
+
+describe("the writer schema states its contract before the writer refuses it (BI-9E522F11)", () => {
+  // Measured 2026-09-06 on the reference install: four spec-approval attempts
+  // in one hour ended malformed-receipt ("A passing spec approval cannot
+  // introduce findings"), one CLASSIFICATION_REQUIRED (profile copied from the
+  // spec header), one finding-resolution-invalid. Every rule was enforced on
+  // the server and stated nowhere the reviewer could read before calling.
+  it("tells the reviewer that a pass carries no findings, what profile to name, and what a resolution may cite", () => {
+    const tool = initiativeReadinessPack.definitions.find((definition) => definition.name === "record_initiative_design_review");
+    const properties = (tool?.inputSchema as { properties: Record<string, { description?: string }> }).properties;
+    expect(properties.decision?.description).toMatch(/findings=\[\]/);
+    expect(properties.findings?.description).toMatch(/ONLY on a failing receipt/);
+    expect(properties.findings?.description).toMatch(/malformed-receipt/);
+    expect(properties.profile?.description).toMatch(/authoritative classification/);
+    expect(properties.profile?.description).toMatch(/CLASSIFICATION_REQUIRED/);
+    expect(properties.resolvedFindingRefs?.description).toMatch(/finding-resolution-invalid/);
   });
 });

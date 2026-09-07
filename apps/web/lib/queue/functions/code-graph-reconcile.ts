@@ -88,7 +88,7 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
     triggers: [cron("*/15 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/code-graph-reconcile-scheduled");
     if (!gate.proceed) {
       // BI-9BF17415: record the deferral as a counter before bailing, so a job
       // repeatedly starved by the drain gate surfaces instead of silently skipping.

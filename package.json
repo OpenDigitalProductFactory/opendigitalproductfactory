@@ -60,6 +60,8 @@
     "check:baseline-budgets": "node scripts/check-no-expired-baseline-budgets.mjs",
     "check:spec-status": "node scripts/check-spec-status-frontmatter.mjs",
     "check:data-impact": "node scripts/check-data-impact.mjs",
+    "check:convergence-impact": "node scripts/check-convergence-impact.mjs",
+    "check:convergence-impact:test": "node --test scripts/check-convergence-impact.test.mjs",
     "measure:substrate": "node scripts/measure-platform-substrate.mjs --json",
     "check:substrate": "node scripts/measure-platform-substrate.mjs",
     "compile:capability-services": "node scripts/compile-capability-service-catalog.mjs",

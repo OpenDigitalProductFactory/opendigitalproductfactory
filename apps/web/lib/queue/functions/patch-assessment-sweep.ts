@@ -52,7 +52,7 @@ export async function runPatchAssessmentSweep(): Promise<PatchAssessmentSummary>
 export const patchAssessmentSweep = inngest.createFunction(
   { id: "ops/patch-assessment-sweep", retries: 2, triggers: [cron("0 5 * * *")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/patch-assessment-sweep");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return await step.run("patch-assessment", runPatchAssessmentSweep);

@@ -102,6 +102,7 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
       {/* Altitude signal (BI-9952EA9E) — effort size, so a trivial tweak doesn't
           read with the same weight as a platform-scale item. */}
       <EffortSizeBadge effortSize={item.effortSize} />
+      <DeliveryShapeBadge workrooms={item.activeWorkrooms ?? []} />
 
       {/* Origin badge — which source this work came from (improvements,
           capability needs, issue reports, signals…), now that /ops is the one
@@ -387,12 +388,47 @@ const EFFORT_SIZE_BADGE: Record<string, { label: string; cls: string }> = {
   xlarge: { label: "XL", cls: "border-[var(--dpf-error)]/40 bg-[var(--dpf-error)]/10 text-[var(--dpf-error)]" },
 };
 
+/**
+ * The delivery shape the item is being worked in (BI-D03BE728, design §3.3):
+ * the newest live Workroom's `workShape` claim. Distinct from effort size —
+ * the shape is what the work OWES before it is done, and a break-fix or a
+ * sensitivity-raised small item does not read from the size alone. Shown only
+ * when a live room carries one; an unshaped item shows nothing extra.
+ */
+const DELIVERY_SHAPE_BADGE: Record<string, { label: string; title: string; cls: string }> = {
+  "delivery-break-fix": { label: "BF", title: "break-fix shape", cls: "border-[var(--dpf-error)]/40 bg-[var(--dpf-error)]/10 text-[var(--dpf-error)]" },
+  "delivery-small": { label: "small", title: "small shape", cls: "border-[var(--dpf-success)]/40 bg-[var(--dpf-success)]/10 text-[var(--dpf-success)]" },
+  "delivery-medium": { label: "medium", title: "medium shape", cls: "border-[var(--dpf-info)]/40 bg-[var(--dpf-info)]/10 text-[var(--dpf-info)]" },
+  "delivery-large": { label: "large", title: "large shape", cls: "border-[var(--dpf-warning)]/40 bg-[var(--dpf-warning)]/10 text-[var(--dpf-warning)]" },
+  "delivery-xlarge": { label: "xlarge", title: "xlarge shape", cls: "border-[var(--dpf-error)]/40 bg-[var(--dpf-error)]/10 text-[var(--dpf-error)]" },
+};
+
+export function deliveryShapeOf(workrooms: ReadonlyArray<{ isLive: boolean; workShape?: string | null }>): string | null {
+  const live = workrooms.find((room) => room.isLive && room.workShape?.startsWith("delivery-"));
+  return live?.workShape?.split("@")[0] ?? null;
+}
+
+function DeliveryShapeBadge({ workrooms }: { workrooms: ReadonlyArray<{ isLive: boolean; workShape?: string | null }> }) {
+  const key = deliveryShapeOf(workrooms);
+  const meta = key ? DELIVERY_SHAPE_BADGE[key] : undefined;
+  if (!meta) return null;
+  return (
+    <span
+      className={`shrink-0 rounded border px-1.5 py-0.5 text-dpf-caption font-semibold ${meta.cls}`}
+      title={meta.title}
+      aria-label={meta.title}
+    >
+      {meta.label}
+    </span>
+  );
+}
+
 function EffortSizeBadge({ effortSize }: { effortSize: string | null }) {
   const meta = effortSize ? EFFORT_SIZE_BADGE[effortSize] : undefined;
   if (!meta) {
     return (
       <span
-        className="shrink-0 rounded border border-dashed border-[var(--dpf-border)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--dpf-muted)]"
+        className="shrink-0 rounded border border-dashed border-[var(--dpf-border)] px-1.5 py-0.5 text-dpf-caption font-semibold text-[var(--dpf-muted)]"
         title="effort size not set — a light altitude signal is missing"
         aria-label="effort size unsized"
       >
@@ -402,7 +438,7 @@ function EffortSizeBadge({ effortSize }: { effortSize: string | null }) {
   }
   return (
     <span
-      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${meta.cls}`}
+      className={`shrink-0 rounded border px-1.5 py-0.5 text-dpf-caption font-semibold tabular-nums ${meta.cls}`}
       title={`effort size: ${effortSize}`}
       aria-label={`effort size ${effortSize}`}
     >
@@ -419,7 +455,7 @@ function WorkTypeBadge({ workType }: { workType: string | null }) {
       : "border-dashed border-[var(--dpf-border)] bg-transparent text-[var(--dpf-muted)]";
   return (
     <span
-      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
+      className={`shrink-0 rounded border px-1.5 py-0.5 text-dpf-caption font-semibold uppercase tracking-wide ${cls}`}
       title={workType ? `work type: ${workType}` : "work type not classified — open and reclassify"}
       aria-label={`work type ${label}`}
     >

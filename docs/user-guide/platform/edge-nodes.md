@@ -33,7 +33,7 @@ The card checks the supervised service, enrollment, trust, heartbeat freshness, 
 
 Health and trust are different axes. A node can be trusted yet offline, or alive yet quarantined. The fleet table therefore shows both columns, plus the first failed readiness check and its next action, and derives health from live evidence rather than `EdgeNode.status` alone.
 
-If **Connections** reports an **Enrollment conflict**, discovery may still be running, but the Authority cannot safely prove which installer-managed node belongs to this installation. DPF does not guess from the newest heartbeat or hostname; open **Edge Nodes**, identify the obsolete enrollment, and retire or repair it through the governed lifecycle.
+If **Connections** reports an **Enrollment conflict**, discovery may still be running, but the Authority cannot safely prove which installer-managed node belongs to this installation. DPF does not guess from the newest heartbeat or hostname. The common cause heals on its own: an installer-managed enrollment that has been silent for a week while another installer-managed node is live is retired automatically, both right after a new installer enrollment and by an hourly sweep, and its retirement reason names the live node that superseded it. Only two live installer-managed nodes remain a conflict; then open **Edge Nodes**, identify the obsolete enrollment, and retire or repair it through the governed lifecycle.
 
 Once Edge is enabled, each governed install or self-upgrade refreshes the checksum-bound native binary and its supervisor while preserving the enrolled machine identity. Replacement bytes are staged before the service stops, and a failed restart restores the prior binary. A platform version change does not issue a new bootstrap token.
 

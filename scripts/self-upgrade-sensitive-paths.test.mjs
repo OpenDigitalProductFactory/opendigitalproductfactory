@@ -73,6 +73,10 @@ test("acceptance workflow is path-sensitive, nightly, least-privilege, bounded, 
   assert.match(workflow, /Build candidate promoter with immutable contract identity/);
   assert.match(workflow, /Signed promotion rollback restores exact legacy state/);
   assert.match(workflow, /promote-install-state-rollback\.test\.mjs/);
+  // BI-55A30F8B: the promoter must keep a pre-existing install's LAN exposure
+  // through the portal swap, which happens before the installer writes the key.
+  assert.match(workflow, /Promotion keeps a pre-existing install's LAN exposure through the portal swap/);
+  assert.match(workflow, /promote-host-bind-address\.test\.mjs/);
   assert.match(workflow, /Invalid state refuses before quiescence/);
   assert.match(workflow, /\.quiescenceBegan == false/);
   // BI-AA6FBAD0: readiness must be proven against the shape every live install

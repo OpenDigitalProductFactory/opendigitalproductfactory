@@ -92,6 +92,16 @@ export default async function DecisionRecordPage({ params }: { params: Params })
     prisma as unknown as ProposalClient,
     row.id,
   );
+  // The panel roster lives on the run, not on the proposal — read it there so
+  // the card can never claim a coworker the run did not actually seat.
+  const panelRoster = proposalRow?.deliberationRunId
+    ? (
+      await prisma.deliberationOutcome.findUnique({
+        where: { deliberationRunId: proposalRow.deliberationRunId },
+        select: { branchRoster: true },
+      })
+    )?.branchRoster ?? null
+    : null;
   const proposal = proposalRow
     ? presentProposal({
       proposalId: proposalRow.proposalId,
@@ -102,6 +112,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
       draftPayload: proposalRow.draftPayload,
       dissent: proposalRow.dissent,
       confidence: proposalRow.confidence,
+      panelRoster,
     })
     : null;
 

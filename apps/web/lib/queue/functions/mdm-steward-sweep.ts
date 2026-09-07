@@ -21,15 +21,12 @@ import {
   MDM_STEWARD_JOB_ID,
 } from "@/lib/mdm/steward-schedule-constants";
 
-/** Kill switch: operators pause the Data Steward via ScheduledJob.enabled=false. */
+/** Kill switch: operators pause the Data Steward via ScheduledJob.enabled=false.
+ *  Routed through the one shared implementation (BI-7E49FA15); default-on when
+ *  no row exists or the read fails. */
 async function isEnabled(): Promise<boolean> {
-  const { prisma } = await import("@dpf/db");
-  const row = await prisma.scheduledJob.findUnique({
-    where: { jobId: MDM_STEWARD_JOB_ID },
-    select: { enabled: true },
-  });
-  // Default-on: no row means never toggled, so it runs.
-  return row?.enabled ?? true;
+  const { isJobEnabled } = await import("@/lib/operate/scheduled-jobs/core");
+  return isJobEnabled(MDM_STEWARD_JOB_ID);
 }
 
 export const mdmStewardSweepScheduled = inngest.createFunction(
@@ -40,7 +37,7 @@ export const mdmStewardSweepScheduled = inngest.createFunction(
     triggers: [cron(MDM_STEWARD_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, MDM_STEWARD_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     if (!(await step.run("mdm-steward-enabled", isEnabled))) {
       return { skipped: true, reason: "disabled" };

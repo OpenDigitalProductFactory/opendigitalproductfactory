@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isEligibleRecoveryPredecessor } from "@/lib/self-upgrade/recovery-eligibility";
 import { prisma, Prisma } from "@dpf/db";
 import { safeSyncSelfUpgradeChangeRecord } from "@/lib/self-upgrade/change-record";
 import { agentEventBus } from "@/lib/agent-event-bus";
@@ -118,15 +119,7 @@ export const selfUpgradeAdmissionRepository: SelfUpgradeAdmissionRepository = {
             run: null,
           };
         }
-        if (
-          !predecessor.admissionFingerprint ||
-          !predecessor.dispatchStatus ||
-          !predecessor.targetSha ||
-          !predecessor.targetTag ||
-          predecessor.dispatchAttemptCount !== 0 ||
-          predecessor.dispatchAcknowledgedAt !== null ||
-          predecessor.dispatchEventIds.length !== 0
-        ) {
+        if (!isEligibleRecoveryPredecessor(predecessor)) {
           return { disposition: "recovery_refused" as const, reason: "recovery-predecessor-ambiguous" as const, run: null };
         }
         const targetRelationship = classifyRecoveryTargetRelationship(
@@ -481,6 +474,36 @@ export async function recordRunRecoveryPoint(
       completionEvidence: toJson({
         ...asEvidenceRecord(current?.completionEvidence),
         recoveryPoint,
+      }),
+    },
+  });
+}
+
+/**
+ * BI-41D7A057 — persist how a run's interruption was classified against the
+ * durable promoter step trail.
+ *
+ * Written even when the verdict is inconclusive. The recovery decision is
+ * re-made by a pure predicate inside the admission transaction, which cannot
+ * read the filesystem, so the verdict has to live on the row; and an operator
+ * facing a run that could NOT be healed needs to see that it was examined and
+ * why it was indeterminate, which is precisely the record whose absence made
+ * the 2026-09-06 interruption undiagnosable.
+ */
+export async function recordInterruptionEvidence(
+  runId: string,
+  interruption: unknown,
+) {
+  const current = await prisma.selfUpgradeRun.findUnique({
+    where: { runId },
+    select: { completionEvidence: true },
+  });
+  return prisma.selfUpgradeRun.update({
+    where: { runId },
+    data: {
+      completionEvidence: toJson({
+        ...asEvidenceRecord(current?.completionEvidence),
+        interruption,
       }),
     },
   });

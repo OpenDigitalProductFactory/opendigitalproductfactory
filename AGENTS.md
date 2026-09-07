@@ -81,6 +81,7 @@ Tooling detail, hygiene cadence and the enforced-gate list: [backlog & planning 
 - **Backlog lives in PostgreSQL** (`Epic`, `BacklogItem`) — always query live state before planning or changing backlog work. Use the DPF MCP backlog tools first; a direct-DB fallback must be explicit and stated in the response. → [kernel principle](docs/professions/portfolio-management/wiki/backlog-lives-in-postgresql.md)
 - **Work enters as a backlog item; plan before you build.** Specs and plans live under `docs/superpowers/`; check for an existing design before writing a new one, and give a plan live backlog coverage before implementing it. Epic overlap is the §1 check applied to the backlog.
 - **Update status in the DB immediately on completing items**, and record execution evidence as canonical-runtime evidence.
+- **Declare the delivery shape at the claim**; an unshaped claim is refused with a pick list. → [kernel principle](docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md)
 
 
 ## 6. Tool Authorization

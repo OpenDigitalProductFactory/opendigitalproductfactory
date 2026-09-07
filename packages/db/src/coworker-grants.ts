@@ -15,22 +15,6 @@
 // individually defensible.
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
-  // Value-stream orchestrators (LIFE-001). Coordination is READ plus ROUTE:
-  // they survey a stream and hand work to a specialist, so they need to see
-  // backlog and registry state and nothing that executes. The stream's
-  // direction is a governed decision taken by its human owner, so no
-  // *_write beyond backlog routing appears here deliberately.
-  "evaluate-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "explore-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "integrate-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "deploy-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "release-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "consume-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "operate-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "governance-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  // Cross-cutting finance: reads the recorded position and reports. It records
-  // nothing, so it holds no write grant at all.
-  "finance-agent": ["registry_read", "portfolio_read"],
   "portfolio-advisor": ["portfolio_read", "registry_read", "backlog_read"],
   "external-catalog-scout": ["backlog_read", "backlog_write", "registry_read"],
   // The Digital Product Estate Specialist stewards the product estate (discovery
@@ -151,6 +135,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   "doc-specialist": ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
   "compliance-officer": [
     "policy_write",
+    // BI-8E1FD1BD: this coworker could already research a statutory figure with
+    // web_search and had nowhere to put it — its entire write surface was
+    // policy_write (one tool) plus backlog. statutory_reference_propose gives the
+    // research a governed destination. It proposes only; ratification is refused
+    // to every agent unconditionally and has no tool at all.
+    "statutory_reference_propose",
     "data_governance_validate",
     "file_read",
     "backlog_read",
@@ -264,7 +254,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "tool_script_exec",
     "web_search",
   ],
-  "licensing-specialist": ["registry_read", "backlog_read", "backlog_write", "consumer_read", "policy_write", "policy_read", "initiative_compliance_review", "spec_plan_read", "web_search"],
+  // BI-8E1FD1BD: statutory_reference_propose. This is the agent behind the
+  // LicenseRequirementReference corpus — the platform's existing precedent for an
+  // acquired external corpus carrying citations — so the same hand that maintains
+  // licence references maintains statutory rate references.
+  "licensing-specialist": ["registry_read", "backlog_read", "backlog_write", "consumer_read", "policy_write", "policy_read", "initiative_compliance_review", "spec_plan_read", "web_search", "statutory_reference_propose"],
   "ux-accessibility-agent": ["file_read", "sandbox_execute", "work_capsule_read", "work_capsule_write", "work_capsule_adopt", "registry_read", "backlog_write", "decision_record_create", "initiative_ux_review", "web_search"],
   "soc-triage-analyst": ["siem_read", "siem_investigate", "registry_read"],
   "soc-investigator": ["siem_read", "siem_investigate", "siem_tune", "registry_read"],
@@ -273,4 +267,17 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   "external-claude-code": ["work_room_read", "work_room_write", "registry_read"],
   "external-codex": ["work_room_read", "work_room_write", "registry_read"],
   "external-grok": ["work_room_read", "work_room_write", "registry_read"],
+  // Value-stream orchestrators (LIFE-001). Coordination is READ plus ROUTE:
+  // they survey a stream and hand work to a specialist, so they need to see
+  // backlog and registry state and nothing that executes. The stream's
+  // direction is a governed decision taken by its human owner.
+  "evaluate-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
+  "explore-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
+  "integrate-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
+  "deploy-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
+  "release-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
+  "consume-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
+  "operate-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
+  "governance-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
+  "finance-agent": ["registry_read", "portfolio_read"],
 };

@@ -69,6 +69,7 @@ const mockPrisma = vi.hoisted(() => ({
   workroom: {
     create: vi.fn(),
     findUnique: vi.fn(),
+    findFirst: vi.fn().mockResolvedValue(null),
   },
   workroomActivity: {
     create: vi.fn(),

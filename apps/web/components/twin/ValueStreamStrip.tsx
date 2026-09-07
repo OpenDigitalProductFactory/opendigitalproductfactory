@@ -27,16 +27,12 @@ export interface ValueStreamStripProps {
   className?: string;
 }
 
-export function ValueStreamStrip({ stages, className = "" }: ValueStreamStripProps) {
-  if (stages.length === 0) return null;
-  const anyUntracked = stages.some((stage) => !stage.observable);
-
+function StageTiles({ stages, label }: { stages: TwinStageFlow[]; label: string }) {
   return (
-    <div className={className}>
-      <div
-        className="flex items-stretch gap-px overflow-x-auto rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-2"
-        aria-label="Value stream"
-      >
+    <div
+      className="flex items-stretch gap-px overflow-x-auto rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-2"
+      aria-label={label}
+    >
         {stages.map((stage) => (
           <div
             key={stage.stageKey}
@@ -63,7 +59,7 @@ export function ValueStreamStrip({ stages, className = "" }: ValueStreamStripPro
               ) : (
                 <span className="text-sm font-semibold text-[var(--dpf-muted)]">
                   <span aria-hidden>—</span>
-                  <span className="sr-only">Not tracked yet</span>
+                  <span className="sr-only">Untracked</span>
                 </span>
               )}
               {stage.longestWait ? (
@@ -72,7 +68,31 @@ export function ValueStreamStrip({ stages, className = "" }: ValueStreamStripPro
             </div>
           </div>
         ))}
-      </div>
+    </div>
+  );
+}
+
+export function ValueStreamStrip({ stages, className = "" }: ValueStreamStripProps) {
+  if (stages.length === 0) return null;
+  const anyUntracked = stages.some((stage) => !stage.observable);
+  // A leaf profile composes with the universal backbone (BI-4B11F98E). The
+  // archetype's own stages are its day and stay visible on arrival; the backbone
+  // stages it inherits are generic and sit behind a disclosure, so composing the
+  // model did not add words to the surface.
+  const own = stages.filter((stage) => !stage.inherited);
+  const inherited = stages.filter((stage) => stage.inherited);
+
+  return (
+    <div className={className}>
+      <StageTiles stages={own.length > 0 ? own : stages} label="Value stream" />
+      {own.length > 0 && inherited.length > 0 ? (
+        <details data-dpf-disclosure className="mt-1 text-dpf-caption text-[var(--dpf-muted)]">
+          <summary className="cursor-pointer text-[var(--dpf-accent)]">
+            {inherited.length} inherited
+          </summary>
+          <StageTiles stages={inherited} label="Inherited stages" />
+        </details>
+      ) : null}
       {anyUntracked ? (
         <p className="mt-1 text-dpf-caption text-[var(--dpf-muted)]">
           A dash means nothing records that stage yet.

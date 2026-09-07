@@ -107,6 +107,16 @@ function database(activities: unknown[] = []) {
             lifecycleStage: "production",
           },
         },
+        {
+          grantKey: "file_read",
+          agent: {
+            agentId: "AGT-INDEPENDENT-REVIEWER",
+            displayName: "Independent Design Reviewer",
+            status: "active",
+            archived: false,
+            lifecycleStage: "production",
+          },
+        },
       ]),
     },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
@@ -115,6 +125,34 @@ function database(activities: unknown[] = []) {
 }
 
 describe("claimGovernedBacklogWorkspace", () => {
+  it.each([input.repositoryFullName, "other/repository"])("routes only the current baseline's same-repository coverage plan (%s)", async (repositoryFullName) => {
+    const planArtifactRef = { kind: "repo-blob-at-commit", repositoryFullName,
+      path: "docs/superpowers/plans/admission.md", commitSha: "a".repeat(40), providerBlobId: "b".repeat(40) };
+    const db = database([
+      { id: "baseline", kind: "initiative_scope_baseline", gateKey: null, recordedAt: new Date(), payload: {
+        schemaVersion: 1, baselineId: "baseline-current", subject: { kind: "backlog-item", id: "BI-ENTRY" },
+        profile: "feature", artifactDigest: "sha256:design", supersedesBaselineId: null,
+        objectiveStatements: [{ objectiveId: "OBJ-1" }], acceptanceStatements: [{ acceptanceId: "AC-1" }],
+        approvalReceiptId: "approval", authoritySnapshot: { decision: "allow" },
+      } },
+      { id: "coverage", kind: "plan_backlog_coverage", gateKey: null, recordedAt: new Date(), payload: {
+        schemaVersion: 2, decision: "atomic", planPath: planArtifactRef.path, planArtifactRef,
+        planArtifactDigest: "sha256:plan", scopeBaselineId: "baseline-current", scopeBaselineArtifactDigest: "sha256:design", deliverables: [],
+      } },
+    ]);
+    const result = await claimGovernedBacklogWorkspace({ db, input, actor, workIntent: "implementation",
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact } });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const planRoute = result.data.recovery.reviewerRoutes.find((route) => route.gate === "plan-review");
+    if (repositoryFullName === input.repositoryFullName) {
+      expect(planRoute?.requestCoworker.initiativeReviewBinding?.artifactRef).toEqual(planArtifactRef);
+    } else {
+      expect(planRoute).toBeUndefined();
+      expect(result.data.recovery.escalations.some((entry) => entry.accountableRole === "plan-reviewer")).toBe(true);
+    }
+  });
+
   // BI-512214EA. Recovery used to require a Workroom already bound to the item,
   // but that binding is written by the successful-claim path — so a refused
   // claim could never find one, and every reviewer route came back empty. These

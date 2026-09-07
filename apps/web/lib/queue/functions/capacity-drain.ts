@@ -15,7 +15,7 @@ export const capacityDrainScheduled = inngest.createFunction(
     triggers: [cron("17 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "build/capacity-drain-scheduled");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("evaluate-capacity-drain", async () => {

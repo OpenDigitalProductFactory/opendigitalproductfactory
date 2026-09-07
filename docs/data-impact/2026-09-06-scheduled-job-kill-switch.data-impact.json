@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-operations",
+  "affectedCopies": [
+    "ScheduledJob rows (jobId, enabled) read by the cron entry gate and by the retention / inngest-retention / catalog-sweep / identity-inference / mdm-steward runners"
+  ],
+  "migration": {
+    "name": "none",
+    "backfill": "no schema change \u2014 ScheduledJob.enabled already exists and every row defaults to enabled=true. This change only makes existing rows load-bearing: crons now READ the column through the one shared isJobEnabled() helper (fail-open on read error) and skip with reason disabled-by-operator when an operator has set it false. No row is created, deleted, or modified by the change itself; the retention runners still write their existing heartbeat/metadata exactly as before"
+  },
+  "tests": [
+    "apps/web/lib/queue/quiescence-gates.test.ts",
+    "apps/web/lib/operate/scheduled-jobs/core.test.ts",
+    "apps/web/lib/operate/scheduled-jobs/catalog.test.ts",
+    "apps/web/lib/queue/functions/index.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:ScheduledJob#enabled-kill-switch",
+      "prismaModel": "ScheduledJob",
+      "lifecycleDisposition": "no-schema-change: the retention lifecycle executors (lib/operate/retention/run.ts, lib/operate/inngest-retention/run.ts) change only HOW they read the operator kill switch \u2014 through the shared isJobEnabled() helper instead of a hand-rolled findUnique \u2014 and what they purge, when, and how they record disposition is untouched. Legal-hold handling and disposition evidence are unchanged (BI-7E49FA15)",
+      "fields": [
+        {
+          "fieldId": "data:ScheduledJob#enabled",
+          "resolution": "governed",
+          "reason": "the column is documented as the per-job kill switch; this change makes every catalogued cron honour it via gateAtEntry(step, inngestId) so the Scheduled Jobs surface's Disable action is true rather than merely labelled. Read failures default to enabled so a database blip cannot take the schedule down",
+          "provenance": "BI-7E49FA15; design docs/superpowers/specs/2026-08-28-scheduled-job-kill-switch-design.md; surface honesty landed in #4667 (honorsEnabledGate)"
+        }
+      ]
+    }
+  ]
+}

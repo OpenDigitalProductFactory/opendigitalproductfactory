@@ -230,6 +230,7 @@ export const SHAPE_SOURCE_FILES = [
   "apps/web/lib/work-management/work-shapes.ts",
   "apps/web/lib/work-management/standing-operations-shapes.ts",
   "apps/web/lib/work-management/coworker-standing-shapes.ts",
+  "apps/web/lib/work-management/delivery-shapes.ts",
   "apps/web/lib/work-management/orchestration-shapes.ts",
 ];
 

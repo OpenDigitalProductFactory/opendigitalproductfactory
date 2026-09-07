@@ -19,7 +19,8 @@ const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    backlogItem: { count: mocks.count, findMany: mocks.findMany, findUnique: mocks.findUnique },
+    backlogItem: { count: mocks.count, findMany: mocks.findMany, findUnique: mocks.findUnique, findFirst: vi.fn().mockResolvedValue(null) },
+    backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]) },
     epic: { findFirst: mocks.findEpic, count: mocks.countEpics, findMany: mocks.findEpics },
   },
 }));

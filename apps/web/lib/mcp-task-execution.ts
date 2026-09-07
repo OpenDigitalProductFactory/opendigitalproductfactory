@@ -1,5 +1,6 @@
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { prisma } from "@dpf/db";
+import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import {
   executeAutonomousAgenticLoop,
@@ -11,6 +12,7 @@ import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
 import {
   createInitiativeReviewTerminalToolPolicy,
   enterTerminalWriterPhase,
+  terminalWriterFailureMessage as describeTerminalWriterFailure,
 } from "@/lib/tak/terminal-tool-policy";
 import {
   createResourceWaitProjection,
@@ -28,7 +30,11 @@ import type {
 } from "./mcp-task-submit";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 import {
+  TERMINAL_WRITER_REJECTED_WAIT_REASON,
   createTerminalWriterEscalation,
+  lastTerminalWriterRejection,
+  terminalWriterRejectionMessage,
+  terminalWriterRejectionStructuredContent,
   terminalWriterEscalationMessage,
   terminalWriterEscalationStructuredContent,
   terminalWriterEscalationWaitReason,
@@ -185,6 +191,22 @@ export async function executeRemoteTaskAttempt(input: {
       ...(modelRequirements ? { modelRequirements } : {}),
     });
 
+    const writerResult = parsed.initiativeReviewBinding
+      ? result.executedTools?.filter((tool) => tool.name === parsed.initiativeReviewBinding!.writerToolName && tool.result.success).at(-1)?.result
+      : undefined;
+    const receiptId = optionalString(writerResult?.data?.["receiptId"]);
+    const persistedOutcome = receiptId && parsed.initiativeReviewBinding
+      ? await loadInitiativeReviewOutcome(parsed.initiativeReviewBinding, receiptId) : null;
+    if (persistedOutcome) {
+      result.content = persistedOutcome.summary;
+      result.failure = undefined;
+    }
+    const receiptExpected = !!parsed.initiativeReviewBinding && parsed.initiativeReviewBinding.gate !== "objective-mapping"
+      && !parsed.initiativeReviewBinding.eligibleEvidenceActivityIds?.length;
+    if (writerResult && receiptExpected && !persistedOutcome) {
+      result.content = `The writer returned success${receiptId ? ` for receipt ${receiptId}` : " without a receipt ID"}, but its persisted gate and immutable artifact could not be verified. Read back the writer result before retrying or advancing readiness.`;
+    }
+
     await createTaskMessage({
       taskRunId: run.taskRunId,
       taskRunRecordId: run.id,
@@ -195,6 +217,7 @@ export async function executeRemoteTaskAttempt(input: {
         source: "mcp.tasks/submit",
         executedToolCount: result.executedTools?.length ?? 0,
         capacityAttempt: input.capacityAttempt,
+        ...(persistedOutcome ? { reviewOutcome: persistedOutcome } : {}),
       },
     });
 
@@ -216,7 +239,8 @@ export async function executeRemoteTaskAttempt(input: {
           .map((tool) => approvalRequiredEnvelopeId(tool.result))
           .find((envelopeId): envelopeId is string => envelopeId !== null) ?? null
       : null;
-    const terminalWriterSucceeded = terminalWriterExecutions.some((tool) => tool.result.success);
+    const terminalWriterSucceeded = receiptExpected
+      ? persistedOutcome !== null : terminalWriterExecutions.some((tool) => tool.result.success);
     const terminalWriterMissing = terminalToolPolicy !== null
       && !terminalWriterSucceeded
       && terminalWriterApprovalEnvelopeId === null;
@@ -227,7 +251,7 @@ export async function executeRemoteTaskAttempt(input: {
     // unreachable and every deferral was reported as a missing receipt writer.
     // Let the resource wait win; it resumes on the same TaskRun either way.
     const resourceWaitOwnsThisTurn = preInferenceResourceWait(result) !== null;
-    if (terminalWriterApprovalEnvelopeId && terminalToolPolicy) {
+    if (terminalWriterApprovalEnvelopeId && terminalToolPolicy && !persistedOutcome) {
       const priorProgress = currentRun?.progressPayload
         && typeof currentRun.progressPayload === "object"
         && !Array.isArray(currentRun.progressPayload)
@@ -346,12 +370,20 @@ export async function executeRemoteTaskAttempt(input: {
       && terminalToolPolicy
     ) {
       const terminalWriterAttempt = input.terminalWriterAttempt ?? 1;
-      const terminalWriterFailureMessage = result.failure?.kind === "terminal-writer-missing"
+      // BI-A57B6185: a writer that ran and REFUSED is a packet problem. Surface
+      // its error verbatim, never count it as an omitted attempt, and never
+      // advise switching reviewer: the next reviewer hits the same rejection.
+      const writerRejection = lastTerminalWriterRejection(
+        terminalToolPolicy.writerToolName,
+        terminalWriterExecutions,
+      );
+      const terminalWriterFailureMessage = writerRejection
+        ? terminalWriterRejectionMessage(terminalToolPolicy.writerToolName, writerRejection)
+        : result.failure?.kind === "terminal-writer-missing"
         ? result.failure.message
-        : terminalWriterExecutions.length > 0
-          ? `The required governed writer ${terminalToolPolicy.writerToolName} was called but did not produce a receipt or approval envelope. The same TaskRun remains resumable.`
-        : `The required governed writer ${terminalToolPolicy.writerToolName} was not recorded before the review attempt ended. The same TaskRun remains resumable. No receipt was created.`;
-      const escalation = terminalWriterRetryIsExhausted(terminalWriterAttempt)
+        : writerResult && receiptExpected && !persistedOutcome ? result.content
+        : describeTerminalWriterFailure(terminalToolPolicy, terminalWriterExecutions);
+      const escalation = !writerRejection && terminalWriterRetryIsExhausted(terminalWriterAttempt)
         ? createTerminalWriterEscalation({
             writerToolName: terminalToolPolicy.writerToolName,
             attempt: terminalWriterAttempt,
@@ -377,6 +409,7 @@ export async function executeRemoteTaskAttempt(input: {
               ...(terminalWriterFailureMessage.includes("did not honor the required writer tool-call contract")
                 ? { noncompliance: "prose-without-required-writer" }
                 : {}),
+              ...(writerRejection ? { writerRejection } : {}),
             },
             ...(escalation ? { terminalWriterEscalation: escalation } : {}),
           },
@@ -393,19 +426,29 @@ export async function executeRemoteTaskAttempt(input: {
           resumable: escalation ? false : true,
           waitReason: escalation
             ? terminalWriterEscalationWaitReason(escalation)
+            : writerRejection
+            ? TERMINAL_WRITER_REJECTED_WAIT_REASON
             : "missing-terminal-writer",
           content: remoteTaskContent(
             escalation ? terminalWriterEscalationMessage(escalation) : terminalWriterFailureMessage,
           ),
           ...(escalation
             ? { structuredContent: terminalWriterEscalationStructuredContent(escalation) }
+            : writerRejection
+            ? {
+                structuredContent: terminalWriterRejectionStructuredContent(
+                  terminalToolPolicy.writerToolName,
+                  terminalWriterAttempt,
+                  writerRejection,
+                ),
+              }
             : {}),
           executedToolCount: result.executedTools?.length ?? 0,
           isError: false,
         },
       };
     }
-    if (currentRun?.status === "input-required") {
+    if (currentRun?.status === "input-required" && !persistedOutcome && !terminalToolPolicy) {
       return {
         kind: "result",
         result: await withTaskRunApprovalLocation({
@@ -495,6 +538,7 @@ export async function executeRemoteTaskAttempt(input: {
           riskClass: parsed.riskClass,
           executedToolCount: result.executedTools?.length ?? 0,
           ...resumedFlag,
+          ...(persistedOutcome ? { reviewOutcome: persistedOutcome, requiresApproval: false } : {}),
         },
       },
     });
@@ -510,6 +554,7 @@ export async function executeRemoteTaskAttempt(input: {
         content: remoteTaskContent(result.content),
         executedToolCount: result.executedTools?.length ?? 0,
         isError: false,
+        ...(persistedOutcome ? { structuredContent: persistedOutcome } : {}),
       },
     };
   } catch (err) {

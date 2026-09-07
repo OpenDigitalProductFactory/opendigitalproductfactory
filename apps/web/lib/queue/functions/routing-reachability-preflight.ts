@@ -44,7 +44,7 @@ export const routingReachabilityPreflight = inngest.createFunction(
     triggers: [cron("37 */6 * * *")], // every 6h, offset to avoid the :00/:10 batches
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "inference/routing-reachability-preflight");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     try {

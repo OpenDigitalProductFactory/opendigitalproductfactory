@@ -12,9 +12,23 @@ export const demandReconciliationScheduled = inngest.createFunction(
     triggers: [cron("1,6,11,16,21,26,31,36,41,46,51,56 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "federation/demand-reconciliation");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    // This install's operational posture goes to every trusted same-organization
+    // peer on the same cadence (BI-648F01A0 Slice 2.2). Queued first so the demand
+    // step's outbox drain delivers it in this cycle; its own drain is a no-op then.
+    const posture = await step.run("project-operational-posture", async () => {
+      const { runOperationalPostureReconciliation } = await import("@/lib/federation/operational-posture-reconciliation");
+      return runOperationalPostureReconciliation();
+    });
+    // Receiving side of the same exchange: every peer's mirrored posture is
+    // reflected into this install's runtime-target registry, so the coordination
+    // map shows both installs (BI-648F01A0 Slice 3).
+    const peerTargets = await step.run("reflect-peer-runtime-targets", async () => {
+      const { syncPeerRuntimeTargets } = await import("@/lib/federation/operational-posture-peer-targets");
+      return syncPeerRuntimeTargets();
+    });
     const demand = await step.run("reconcile-federated-demand", async () => {
       const { runDemandReconciliation } = await import("@/lib/federation/demand-reconciliation");
       return runDemandReconciliation();
@@ -38,6 +52,6 @@ export const demandReconciliationScheduled = inngest.createFunction(
       const { reconcileOrganizationMembership } = await import("@/lib/federation/organization-membership");
       return reconcileOrganizationMembership();
     });
-    return { demand, work, links, membership };
+    return { posture, peerTargets, demand, work, links, membership };
   },
 );

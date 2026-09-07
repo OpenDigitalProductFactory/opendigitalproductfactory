@@ -79,6 +79,28 @@ const writer = (success = true): TerminalToolRecord => ({
 });
 
 describe("terminal tool policy", () => {
+  it("bounds malformed correction and never retries success, approval, or authority failure", () => {
+    const malformed = { name: policy.writerToolName, result: { success: false, error: "malformed-receipt" } };
+    expect(resolveTerminalToolCall(policy, [read(), malformed, malformed, malformed], policy.writerToolName).kind).toBe("refuse");
+    for (const result of [
+      { success: true },
+      { success: false, error: "approval_required", data: { envelopeId: "envelope" } },
+      { success: false, error: "AUTHORIZATION_DENIED" },
+    ]) {
+      expect(resolveTerminalToolCall(policy, [read(), malformed, { name: policy.writerToolName, result }], policy.writerToolName).kind).toBe("refuse");
+    }
+  });
+  it("BI-31159978 retains the writer for bounded correction of a malformed receipt", () => {
+    const records: TerminalToolRecord[] = [read(), {
+      name: policy.writerToolName,
+      result: { success: false, error: "malformed-receipt" },
+    }];
+    expect(resolveTerminalToolCall(policy, records, policy.writerToolName)).toEqual({ kind: "allow" });
+    expect(applyTerminalToolSurface(policy, records, [
+      { type: "function", function: { name: policy.writerToolName } },
+    ])).toHaveLength(1);
+  });
+
   it("activates only when the bound reader and writer tools are both required", () => {
     expect(createInitiativeReviewTerminalToolPolicy(policy.writerToolName, [
       "read_source_at_version",
@@ -318,7 +340,7 @@ describe("terminal tool policy", () => {
     expect(resolveTerminalTextExit(policy, [read(), writer(false)], 0)).toMatchObject({
       kind: "input-required",
       reason: "missing-terminal-writer",
-      message: expect.stringContaining("did not produce a receipt"),
+      message: expect.stringContaining("did not persist a valid receipt"),
     });
     expect(summarizeTerminalToolProgress(policy, [read(), writer(false)])).toMatchObject({
       writerAttempted: true,
@@ -525,6 +547,23 @@ describe("agent loop terminal writer integration", () => {
       message: expect.stringContaining("No receipt was created"),
     });
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(3);
+  });
+
+  it("routes the terminal-writer retry away from a provider that returned prose", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("The evidence is sufficient for a judgment.") as never)
+      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "anthropic-sub" } as never)
+      .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
+
+    await runAgenticLoop(params);
+
+    const retryOptions = vi.mocked(routeAndCall).mock.calls[2]![3] as {
+      deniedProviders?: string[];
+      preferredProviderId?: string;
+    };
+    expect(retryOptions.deniedProviders).toEqual(["local"]);
+    expect(retryOptions.preferredProviderId).toBeUndefined();
   });
 
   it("returns a missing-writer failure when the review budget expires after a successful read", async () => {

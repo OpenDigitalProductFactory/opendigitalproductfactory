@@ -22,7 +22,7 @@ function projected(verdict: "allowed" | "input-required") {
     blockers: [],
     evaluatedAt: "2026-08-22T08:00:00.000Z",
   };
-  return { governed: true, baselineId: "BASE-1", artifactHints: { hasSpec: true, hasPlan: true }, decision };
+  return { governed: true, baselineId: "BASE-1", inheritedFrom: null, artifactHints: { hasSpec: true, hasPlan: true }, planArtifact: null, decision };
 }
 
 function fakeDb(casCount = 1, workType = "feature", itemOverrides: Record<string, unknown> = {}) {
@@ -132,6 +132,90 @@ describe("completeBacklogItemTransition", () => {
     });
 
     expect(result).toMatchObject({ ok: false, code: "OBJECTIVE_RECONCILIATION_REQUIRED" });
+    expect(fake.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("accepts cited substantive evidence for doc-only completion without inventing objective reconciliation", async () => {
+    const fake = fakeDb(1, "doc");
+    const seen: Array<{ completion: { acceptanceEvidence: string; objectiveReconciliation: string; evidenceRefs: Record<string, string[]> } }> = [];
+    const result = await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Updated and manually accepted the documentation.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({
+          kind: "evaluated",
+          item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "doc" },
+          verdict: {
+            allowed: true,
+            noOp: false,
+            normalizedManifest: {
+              workClass: "documentation",
+              evidenceActivityIds: ["E-DOC", "E-ACCEPT"],
+              useActiveBuildEvidence: false,
+            },
+            acceptanceEvidenceRefs: ["E-ACCEPT"],
+            blockers: [],
+            nextAction: null,
+          },
+        }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => false,
+        projectReadiness: ((input: { completion: { acceptanceEvidence: string; objectiveReconciliation: string; evidenceRefs: Record<string, string[]> } }) => {
+          seen.push(input);
+          return projected("allowed");
+        }) as never,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(seen[0]?.completion.acceptanceEvidence).toBe("pass");
+    expect(seen[0]?.completion.objectiveReconciliation).toBe("missing");
+    expect(seen[0]?.completion.evidenceRefs.ACCEPTANCE_EVIDENCE_REQUIRED).toEqual(["E-ACCEPT"]);
+  });
+
+  it("does not let manual evidence bypass objective reconciliation for implementation completion", async () => {
+    const fake = fakeDb(1, "feature");
+    const seen: Array<{ completion: { acceptanceEvidence: string } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Implemented the feature.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({
+          kind: "evaluated",
+          item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" },
+          verdict: {
+            allowed: true,
+            noOp: false,
+            normalizedManifest: {
+              workClass: "implementation",
+              evidenceActivityIds: ["E-SOURCE", "E-TEST", "E-BUILD", "E-MANUAL"],
+              useActiveBuildEvidence: false,
+            },
+            acceptanceEvidenceRefs: ["E-MANUAL"],
+            blockers: [],
+            nextAction: null,
+          },
+        }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => false,
+        projectReadiness: ((input: { completion: { acceptanceEvidence: string } }) => {
+          seen.push(input);
+          return projected("input-required");
+        }) as never,
+      },
+    });
+
+    expect(seen[0]?.completion.acceptanceEvidence).toBe("missing");
     expect(fake.updateMany).not.toHaveBeenCalled();
   });
 
@@ -257,5 +341,19 @@ describe("completeBacklogItemTransition", () => {
     expect(seen[0]?.recognizeMergeThroughGates).toBe(false);
     // Acceptance is NOT waved through for product work with no reconciliation.
     expect(seen[0]?.completion.acceptanceEvidence).toBe("missing");
+  });
+});
+
+describe("pullRequestNumbersFromActivities (BI-AFE8BB73)", () => {
+  it("reads distinct PR numbers from evidence links and ignores everything else", async () => {
+    const { pullRequestNumbersFromActivities } = await import("./backlog-terminal-transition");
+    expect(pullRequestNumbersFromActivities([
+      { kind: "evidence", payload: { url: "https://github.com/o/r/pull/5119" } },
+      { kind: "evidence", payload: { url: "https://github.com/o/r/pull/5119/files" } },
+      { kind: "evidence", payload: { url: "https://github.com/o/r/pull/5124?x=1" } },
+      { kind: "evidence", payload: { url: "https://github.com/o/r/issues/12" } },
+      { kind: "initiative_gate_receipt", payload: { url: "https://github.com/o/r/pull/7" } },
+      { kind: "evidence", payload: null },
+    ])).toEqual([5119, 5124]);
   });
 });

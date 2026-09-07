@@ -9,6 +9,15 @@
 
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import {
+  COORDINATION_RESOURCE_TYPE,
+  COORDINATION_SCOPE_TYPE,
+  jsiSchemePresent,
+  resolveCoordinatorEligibility,
+} from "@/lib/work-management/coordinator-eligibility";
+import { planCoordinationBindings } from "@/lib/authority/coordination-bindings";
+import { planContainmentRelations } from "@/lib/work-management/standing-room-nesting";
+
 import { gateAtEntry } from "../quiescence-gates";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import {
@@ -89,6 +98,11 @@ export type WorkroomDriveResult = {
   attention: number;
   stopped: number;
   skipped: number;
+  /** `contains` relations materialized this tick from the declared standing-room
+   *  tree. Non-zero only while the estate is catching up; a settled estate reports
+   *  0 forever, which is how an operator tells "nesting is done" from "nesting was
+   *  never written" (BI-AEAA90A9). */
+  nestedRelations: number;
   plans: Array<{ roomId: string; action: string; reason: string; taskId: string | null }>;
 };
 
@@ -232,9 +246,33 @@ export async function runWorkroomDriveJob(
     listRooms?: () => Promise<WorkroomDriveRoom[]>;
     effects?: WorkroomDriveEffects;
     reconcileNotifications?: () => Promise<void>;
+    reconcileNesting?: () => Promise<number>;
   },
 ): Promise<WorkroomDriveResult> {
-  const rooms = deps?.listRooms ? await deps.listRooms() : await loadStandingRooms();
+  // Materialize the declared nesting before driving. The tree is declared in
+  // standing-rooms.ts and, until BI-AEAA90A9, was written nowhere: this install
+  // held eighteen standing rooms and ZERO relations, so the five parents floated
+  // unlinked from their children and every hierarchy walk ran over an empty set.
+  // Idempotent and cheap (one insert with skipDuplicates), so it costs a settled
+  // estate nothing per tick.
+  // A caller supplying its own room list owns nesting too, so the live
+  // reconciler runs only alongside the live loader.
+  const reconcile =
+    deps?.reconcileNesting ?? (deps?.listRooms ? async () => 0 : reconcileStandingRoomNesting);
+  const nested = await reconcile();
+
+  let rooms: WorkroomDriveRoom[];
+  if (deps?.listRooms) {
+    rooms = await deps.listRooms();
+  } else {
+    await reconcileCoordinationBindings();
+    const { prisma } = await import("@dpf/db");
+    const [bindings, schemePresent] = [
+      await loadCoordinationBindings(),
+      jsiSchemePresent(prisma as unknown as Record<string, unknown>),
+    ];
+    rooms = await loadStandingRooms(bindings, schemePresent);
+  }
   const effects = deps?.effects ?? liveEffects();
   const plans: WorkroomDriveResult["plans"] = [];
   let dispatched = 0;
@@ -292,6 +330,7 @@ export async function runWorkroomDriveJob(
   return {
     runId: `workroom-drive:${now.toISOString()}`,
     scanned: rooms.length,
+    nestedRelations: nested,
     dispatched,
     attention,
     stopped,
@@ -333,7 +372,139 @@ export async function loadStandingRoomIds(db: {
   return rows.map((row) => row.id);
 }
 
-async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
+/**
+ * Write the declared standing-room tree, returning how many relations were newly
+ * created. Idempotent: the (from, to, relation) unique constraint plus
+ * skipDuplicates means a settled estate writes nothing and reports 0.
+ *
+ * Failure is non-fatal. Nesting is what the hierarchy is built on, but a room
+ * that can still be driven must not be blocked because its parent link could not
+ * be written this minute.
+ */
+export async function reconcileStandingRoomNesting(): Promise<number> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const rooms = await prisma.workroom.findMany({
+      where: { archivedAt: null, idempotencyKey: { startsWith: "standing-room:" } },
+      select: { id: true, capsuleId: true, idempotencyKey: true },
+    });
+    const byCapsuleId = new Map(rooms.map((room) => [room.capsuleId, room.id]));
+    const plans = planContainmentRelations(
+      rooms.map((room) => ({ capsuleId: room.capsuleId, idempotencyKey: room.idempotencyKey })),
+    );
+    if (plans.length === 0) return 0;
+    const created = await prisma.workroomRelation.createMany({
+      data: plans.flatMap((plan) => {
+        const fromWorkroomId = byCapsuleId.get(plan.fromCapsuleId);
+        const toWorkroomId = byCapsuleId.get(plan.toCapsuleId);
+        return fromWorkroomId && toWorkroomId
+          ? [{ fromWorkroomId, toWorkroomId, relation: "contains" as const }]
+          : [];
+      }),
+      skipDuplicates: true,
+    });
+    return created.count;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Coordination bindings, keyed by the shape they grant coordination over.
+ *
+ * One query for the whole tick rather than one per room: the binding set is
+ * small (a row per shape the install staffs) and the drive reads every standing
+ * room on every pass.
+ */
+/**
+ * Materialize coordination authority for the shapes this install ships.
+ *
+ * Idempotent by derivable bindingId: an existing binding is left exactly as the
+ * operator has it — including SUSPENDED. Re-seeding must never silently
+ * re-grant authority a human deliberately withdrew, which is the one way this
+ * could become an authority-laundering path rather than a grant.
+ *
+ * Returns how many were newly created; a settled install reports 0.
+ */
+export async function reconcileCoordinationBindings(): Promise<number> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const plans = planCoordinationBindings();
+    if (plans.length === 0) return 0;
+    const existing = await prisma.authorityBinding.findMany({
+      where: { bindingId: { in: plans.map((plan) => plan.bindingId) } },
+      select: { bindingId: true },
+    });
+    const known = new Set(existing.map((row) => row.bindingId));
+    const missing = plans.filter((plan) => !known.has(plan.bindingId));
+    if (missing.length === 0) return 0;
+    let created = 0;
+    for (const plan of missing) {
+      const agent = await prisma.principal.findFirst({
+        where: { kind: "agent", principalId: plan.agentId },
+        select: { id: true, principalId: true },
+      });
+      await prisma.authorityBinding.create({
+        data: {
+          bindingId: plan.bindingId,
+          name: plan.name,
+          scopeType: plan.scopeType,
+          resourceType: plan.resourceType,
+          resourceRef: plan.resourceRef,
+          status: plan.status,
+          approvalMode: plan.approvalMode,
+          appliedAgentId: agent?.id ?? null,
+          subjects: {
+            create: plan.subjects.map((subject) => ({
+              subjectType: subject.subjectType,
+              subjectRef: subject.subjectRef,
+              relation: subject.relation,
+            })),
+          },
+        },
+      });
+      created += 1;
+    }
+    return created;
+  } catch {
+    // Never take the drive down over a seeding failure; rooms then read "absent"
+    // and refuse, which is the safe pre-existing behaviour.
+    return 0;
+  }
+}
+
+async function loadCoordinationBindings(): Promise<
+  Map<string, Array<{ status: string; scopeType: string; resourceType: string; resourceRef: string }>>
+> {
+  const byShape = new Map<
+    string,
+    Array<{ status: string; scopeType: string; resourceType: string; resourceRef: string }>
+  >();
+  try {
+    const { prisma } = await import("@dpf/db");
+    const rows = await prisma.authorityBinding.findMany({
+      where: { scopeType: COORDINATION_SCOPE_TYPE, resourceType: COORDINATION_RESOURCE_TYPE },
+      select: { status: true, scopeType: true, resourceType: true, resourceRef: true },
+    });
+    for (const row of rows) {
+      const bucket = byShape.get(row.resourceRef);
+      if (bucket) bucket.push(row);
+      else byShape.set(row.resourceRef, [row]);
+    }
+  } catch {
+    // A binding lookup that fails must not take the drive down. Rooms then read
+    // "unknown" and refuse, which is the pre-existing safe behaviour.
+  }
+  return byShape;
+}
+
+async function loadStandingRooms(
+  coordinationBindings?: Map<
+    string,
+    Array<{ status: string; scopeType: string; resourceType: string; resourceRef: string }>
+  >,
+  schemePresent = false,
+): Promise<WorkroomDriveRoom[]> {
   const { prisma } = await import("@dpf/db");
   const ids = await loadStandingRoomIds(prisma as never);
   if (ids.length === 0) return [];
@@ -371,10 +542,18 @@ async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
   });
 
   return rows.flatMap((row) => {
-    if (!resolveWorkShapeClaim(row.scopeClaims)) return [];
+    const shapeRef = resolveWorkShapeClaim(row.scopeClaims);
+    if (!shapeRef) return [];
+    // Authority is granted over the shape, not one of its revisions.
+    const shapeKey = shapeRef.key;
     return [{
       id: row.id,
       capsuleId: row.capsuleId,
+      coordinatorEligibility: resolveCoordinatorEligibility({
+        shapeKey,
+        bindings: (shapeKey ? coordinationBindings?.get(shapeKey) : undefined) ?? [],
+        schemePresent,
+      }),
       scopeClaims: row.scopeClaims,
       workspaceState: row.workspaceState,
       leaseExpiresAt: row.leaseExpiresAt,
@@ -490,7 +669,7 @@ export const workroomDriveScheduled = inngest.createFunction(
     triggers: [cron(WORKROOM_DRIVE_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, WORKROOM_DRIVE_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("workroom-drive", () => runWorkroomDriveJob());
   },
@@ -504,7 +683,7 @@ export const workroomDriveRunNow = inngest.createFunction(
     triggers: [{ event: WORKROOM_DRIVE_REQUESTED_EVENT }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, WORKROOM_DRIVE_RUN_NOW_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("workroom-drive", () => runWorkroomDriveJob());
   },

@@ -1,6 +1,8 @@
 import { prisma } from "@dpf/db";
 
 import { resolveRepositoryArtifact, type InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness";
+import { deriveAuthoritativeReadinessProfile } from "@/lib/backlog/initiative-readiness/profiles";
+import { projectMissingBaselineRecovery } from "./plan-coverage-recovery";
 
 export {
   projectPlanBacklogDependencies,
@@ -43,7 +45,17 @@ export type PlanBacklogCoverageReceipt = {
   deliverables: PlanBacklogDeliverable[] | PlanBacklogDeliverableV2[];
 };
 
-export type MappedBacklogItem = { itemId: string; status: string };
+export type MappedBacklogItem = { itemId: string; status: string; workType?: string | null };
+
+type CoverageBacklogItem = {
+  id: string;
+  itemId: string;
+  effortSize: string | null;
+  type?: string | null;
+  source?: string | null;
+  workType?: string | null;
+  scopeKind?: string | null;
+};
 
 export type PlanBacklogCoverageValidation =
   | {
@@ -204,6 +216,11 @@ function isCanonicalPlanPath(value: string): boolean {
     && !value.split("/").some((segment) => segment === "." || segment === "..");
 }
 
+function isCanonicalFixDesignPath(value: string): boolean {
+  return /^docs\/superpowers\/specs\/[A-Za-z0-9][A-Za-z0-9._/-]*\.md$/.test(value)
+    && !value.split("/").some((segment) => segment === "." || segment === "..");
+}
+
 export type PlanTraceabilityContext = {
   planText: string;
   baselineId: string;
@@ -255,6 +272,7 @@ export function validatePlanBacklogCoverageReceipt(args: {
   requireGovernedImplementation: boolean;
   currentPlanDigest: string;
   traceabilityContext?: PlanTraceabilityContext;
+  allowFixDesignArtifact?: boolean;
 }): PlanBacklogCoverageReceiptValidation {
   const schemaVersion = args.receipt.schemaVersion ?? 1;
   if (args.requireGovernedImplementation && schemaVersion !== 2) {
@@ -264,7 +282,9 @@ export function validatePlanBacklogCoverageReceipt(args: {
     const locator = args.receipt.planArtifactRef;
     if (!locator || locator.kind !== "repo-blob-at-commit"
       || !locator.repositoryFullName || !locator.commitSha || !locator.path || !locator.providerBlobId
-      || !isCanonicalPlanPath(args.receipt.planPath) || locator.path !== args.receipt.planPath
+      || !(isCanonicalPlanPath(args.receipt.planPath)
+        || (args.allowFixDesignArtifact === true && isCanonicalFixDesignPath(args.receipt.planPath)))
+      || locator.path !== args.receipt.planPath
       || !args.receipt.planArtifactDigest
       || args.receipt.planArtifactDigest !== args.currentPlanDigest) {
       return { ok: false, code: "stale-plan-artifact", error: "Plan coverage is not bound to the current immutable plan artifact." };
@@ -345,11 +365,11 @@ export type PlanBacklogCoverageDb = {
   backlogItem: {
     findUnique: (args: {
       where: { itemId: string };
-      select: { id: true; itemId: true; effortSize: true };
-    }) => Promise<{ id: string; itemId: string; effortSize: string | null } | null>;
+      select: { id: true; itemId: true; effortSize: true; type?: true; source?: true; workType?: true; scopeKind?: true };
+    }) => Promise<CoverageBacklogItem | null>;
     findMany: (args: {
       where: { itemId: { in: string[] } };
-      select: { itemId: true; status: true };
+      select: { itemId: true; status: true; workType?: true };
     }) => Promise<MappedBacklogItem[]>;
   };
   backlogItemActivity: {
@@ -503,7 +523,7 @@ export async function checkPlanBacklogCoverage(args: {
   };
   const parent = await db.backlogItem.findUnique({
     where: { itemId: args.itemId },
-    select: { id: true, itemId: true, effortSize: true },
+    select: { id: true, itemId: true, effortSize: true, workType: true },
   });
   if (!parent) {
     return { ok: false, valid: false, code: "backlog-item-not-found", error: `BacklogItem ${args.itemId} was not found.` };
@@ -583,6 +603,7 @@ export async function checkPlanBacklogCoverage(args: {
         objectiveIds: baseline.objectiveIds,
         acceptanceIds: baseline.acceptanceIds,
       } : undefined,
+      allowFixDesignArtifact: deriveAuthoritativeReadinessProfile(parent) === "fix",
     });
     if (!governed.ok) return { ok: false, valid: false, code: "receipt-invalid", error: governed.error };
     return { ok: true, valid: true, decision: governed.decision, mappedItemIds: governed.mappedItemIds };
@@ -622,7 +643,7 @@ export async function recordPlanBacklogCoverage(args: {
   const db = args.db ?? (prisma as unknown as PlanBacklogCoverageDb);
   const parent = await db.backlogItem.findUnique({
     where: { itemId: args.itemId },
-    select: { id: true, itemId: true, effortSize: true },
+    select: { id: true, itemId: true, effortSize: true, type: true, source: true, workType: true, scopeKind: true },
   });
   if (!parent) {
     return {
@@ -631,8 +652,10 @@ export async function recordPlanBacklogCoverage(args: {
       error: `BacklogItem ${args.itemId} was not found.`,
     };
   }
-  if (!isCanonicalPlanPath(args.planPath) || args.planArtifactRef.path !== args.planPath) {
-    return { ok: false, code: "plan-artifact-invalid", error: "Plan artifact must be a canonical docs/superpowers/plans/*.md path." };
+  const parentProfile = deriveAuthoritativeReadinessProfile(parent);
+  const acceptsFixDesign = parentProfile === "fix" && isCanonicalFixDesignPath(args.planPath);
+  if ((!isCanonicalPlanPath(args.planPath) && !acceptsFixDesign) || args.planArtifactRef.path !== args.planPath) {
+    return { ok: false, code: "plan-artifact-invalid", error: "Plan artifact must be a canonical docs/superpowers/plans/*.md path, or the item's canonical ordered fix design for profile=fix." };
   }
   if (!db.$transaction) {
     return { ok: false, code: "plan-artifact-invalid", error: "Serializable plan coverage persistence is unavailable." };
@@ -661,7 +684,7 @@ export async function recordPlanBacklogCoverage(args: {
     }
     const currentParent = await tx.backlogItem.findUnique({
       where: { itemId: args.itemId },
-      select: { id: true, itemId: true, effortSize: true },
+      select: { id: true, itemId: true, effortSize: true, type: true, source: true, workType: true, scopeKind: true },
     });
     if (!currentParent || currentParent.id !== parent.id) {
       return { ok: false as const, code: "backlog-item-not-found" as const, error: `BacklogItem ${args.itemId} was not found.` };
@@ -691,7 +714,7 @@ export async function recordPlanBacklogCoverage(args: {
     const mappedBacklogItems = requestedIds.length
       ? await tx.backlogItem.findMany({
           where: { itemId: { in: requestedIds } },
-          select: { itemId: true, status: true },
+          select: { itemId: true, status: true, workType: true },
         })
       : [];
     const baseline = projectCurrentScopeBaselineTraceability(await tx.backlogItemActivity.findMany({
@@ -700,6 +723,10 @@ export async function recordPlanBacklogCoverage(args: {
       select: { payload: true },
     }));
     if (!baseline) {
+      const { recovery, instruction } = projectMissingBaselineRecovery({
+        item: currentParent,
+        mappedItems: mappedBacklogItems,
+      });
       // The remediation text names the CONDITION, never a blocker id. It used
       // to instruct callers to "cite BI-B9403248 for the blocked receipt";
       // that BI closed on 2026-08-21 (PR #4422) while the block stayed live,
@@ -711,9 +738,9 @@ export async function recordPlanBacklogCoverage(args: {
         ok: false as const,
         code: "traceability-incomplete" as const,
         error: `BacklogItem ${currentParent.itemId} has no initiative scope baseline, so plan coverage cannot be bound to a governed scope. `
-          + "A baseline is written only when the initiative's spec-approval gate passes. From an external client, call `claim_backlog_item_for_work` for the existing Workroom identity with workIntent=`implementation`, then execute the returned `recovery.reviewerRoutes` spec-approval `request_coworker` packet verbatim. "
-          + "That server-issued packet binds `record_initiative_design_review` to the canonical design under `docs/superpowers/specs/`, an exact immutable repository version, and an eligible reviewer independent of the artifact's author; the author cannot record it. "
+          + instruction + " "
           + "Until this item carries a baseline, record the plan's coverage table in the plan itself and state the blocking CONDITION — \"no initiative scope baseline exists for <item>\" — rather than citing a backlog id, which goes stale when that id closes.",
+        recovery,
       };
     }
     const receipt: PlanBacklogCoverageReceipt = {
@@ -739,6 +766,7 @@ export async function recordPlanBacklogCoverage(args: {
         objectiveIds: baseline.objectiveIds,
         acceptanceIds: baseline.acceptanceIds,
       },
+      allowFixDesignArtifact: parentProfile === "fix",
     });
     if (!validation.ok) return validation;
 

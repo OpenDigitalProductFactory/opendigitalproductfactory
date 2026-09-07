@@ -10,6 +10,11 @@ const autonomous = vi.hoisted(() => ({
   resolveAgent: vi.fn(),
   resolveTools: vi.fn(),
 }));
+vi.mock("./mcp-task-review-outcome", () => ({
+  loadInitiativeReviewOutcome: vi.fn(async (_binding: unknown, receiptId: string) => ({
+    receiptId, summary: `Receipt ${receiptId} persisted. Implementation readiness: input-required; plan coverage remains missing.`,
+  })),
+}));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -63,6 +68,37 @@ const parsed = {
 };
 
 describe("remote task terminal-writer postcondition", () => {
+  it("refuses completion from writer success without a receipt ID", async () => {
+    autonomous.execute.mockResolvedValue({ content: "Approved, start implementation.", executedTools: [{ name: writerToolName, result: { success: true } }] });
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run", taskRunId: "TR-NO-RECEIPT", contextId: "thread-1" }, threadId: "thread-1",
+      token: { tokenId: "PAT", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false }, parsed, idempotentReplay: false, capacityAttempt: 1,
+    });
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "input-required" } });
+    expect(JSON.stringify(outcome)).toContain("without a receipt ID");
+    expect(JSON.stringify(outcome)).not.toContain("start implementation");
+  });
+  it("BI-31159978 does not invent approval after a successful writer with stale input-required state", async () => {
+    db.findTaskRun.mockResolvedValue({ status: "input-required", progressPayload: {} });
+    autonomous.execute.mockResolvedValue({
+      content: "Blocked: no receipt exists; request human approval.",
+      executedTools: [{ name: writerToolName, result: {
+        success: true, entityId: "initiative-persisted-receipt",
+        data: { receiptId: "initiative-persisted-receipt" },
+      } }],
+    });
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-STATUS-REPRO", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-DURATION", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed, idempotentReplay: true, capacityAttempt: 1,
+    });
+    expect(outcome).toMatchObject({ kind: "result", result: { requiresApproval: false } });
+    expect(JSON.stringify(outcome)).not.toContain("no receipt exists");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     db.findModelConfig.mockResolvedValue(null);
@@ -239,17 +275,82 @@ describe("remote task terminal-writer postcondition", () => {
       terminalWriterAttempt: 2,
     });
 
+    // BI-A57B6185: the writer ran and refused. That is a packet problem, and
+    // the caller must see the writer's own error, not "missing writer".
     expect(outcome).toMatchObject({
       kind: "result",
       result: {
         status: "input-required",
         idempotentReplay: true,
         resumable: true,
-        waitReason: "missing-terminal-writer",
+        waitReason: "terminal-writer-rejected",
+        structuredContent: {
+          error: "terminal_writer_rejected",
+          writerToolName,
+          attempt: 2,
+          writerRejection: { error: "CANONICAL_DESIGN_REQUIRED", message: "No canonical receipt was created." },
+          action: "fix-packet-and-resume",
+        },
       },
     });
+    expect(JSON.stringify((outcome as unknown as { result: { content: unknown } }).result.content)).toContain("CANONICAL_DESIGN_REQUIRED: No canonical receipt was created.");
+    expect(db.updateTaskRun).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        progressPayload: expect.objectContaining({
+          terminalWriterWait: expect.objectContaining({
+            writerRejection: expect.objectContaining({ error: "CANONICAL_DESIGN_REQUIRED" }),
+          }),
+        }),
+      }),
+    }));
     expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "completed" }),
+    }));
+  });
+
+  it("BI-A57B6185 never escalates a rejected writer to select-different-reviewer, even on attempt 3", async () => {
+    autonomous.execute.mockResolvedValue({
+      content: "The governed writer rejected the packet.",
+      executedTools: [{
+        name: writerToolName,
+        args: { decision: "pass" },
+        result: {
+          success: false,
+          error: "CANONICAL_DESIGN_AMBIGUOUS",
+          message: "No live workroom for this subject records head abc123. Sync the branch head with adopt_worktree then retry.",
+        },
+      }],
+      failure: { kind: "terminal-writer-missing", message: "generic loop text that must not win" },
+    });
+
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-WRITER-REJECTED-3", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-REJECTED", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed,
+      idempotentReplay: true,
+      resumeKind: "terminal-writer",
+      capacityAttempt: 1,
+      terminalWriterAttempt: 3,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        status: "input-required",
+        resumable: true,
+        waitReason: "terminal-writer-rejected",
+        structuredContent: { error: "terminal_writer_rejected", attempt: 3 },
+      },
+    });
+    const content = JSON.stringify((outcome as unknown as { result: { content: unknown } }).result.content);
+    expect(content).toContain("adopt_worktree");
+    expect(content).not.toContain("omitted");
+    expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        progressPayload: expect.objectContaining({ terminalWriterEscalation: expect.anything() }),
+      }),
     }));
   });
 
@@ -432,7 +533,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
         waitReason: "missing-terminal-writer",
         content: [{
           type: "text",
-          text: expect.stringContaining("was not recorded before the review attempt ended"),
+          text: expect.stringContaining("did not invoke required writer"),
         }],
       },
     });

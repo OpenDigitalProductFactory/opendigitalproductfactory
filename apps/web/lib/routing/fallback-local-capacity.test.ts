@@ -69,6 +69,34 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("fallback local-CI capacity arbitration", () => {
+  it.each([
+    "local-ci-active-capacity-reservation",
+    "local-ci-queued-capacity-reservation",
+    "local-ci-capacity-reservation-unavailable",
+  ] as const)("retains %s as the cause alongside the failed cloud attempt", async (reason) => {
+    const deferred = new LocalProviderCapacityDeferredError(reason);
+    mockCallProvider
+      .mockRejectedValueOnce(new Error("cloud transport unavailable"))
+      .mockRejectedValueOnce(deferred);
+    const decision = decisionWithCloudFallback();
+    decision.selectedEndpoint = "cloud-endpoint";
+    decision.selectedModelId = "gpt-cloud";
+    decision.fallbackChain = ["local-endpoint"];
+
+    const pending = callWithFallbackChain(
+      decision, [{ role: "user", content: "review" }], "system",
+    ).catch((error: unknown) => error);
+    await vi.runAllTimersAsync();
+    const error = await pending;
+    expect(error).toMatchObject({ cause: deferred });
+    expect((error as Error).message).toContain("cloud transport unavailable");
+    expect((error as Error).message).toContain(reason);
+    expect(mockCallProvider.mock.calls.map((call) => call.slice(0, 2))).toEqual([
+      ["openai", "gpt-cloud"],
+      ["local", "qwen3-coder"],
+    ]);
+  });
+
   it("returns the typed deferral for a local-only chain", async () => {
     mockCallProvider.mockRejectedValueOnce(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),

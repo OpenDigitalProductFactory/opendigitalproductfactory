@@ -214,7 +214,7 @@ export const edgeIncidentCorrelation = inngest.createFunction(
     if (!envFlagEnabled(process.env, "DPF_EDGE_INCIDENT_CORRELATION_ENABLED")) {
       return { skipped: true, reason: "flag-disabled" };
     }
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/edge-incident-correlation");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return await step.run("correlate-edge-incidents", async () => runEdgeIncidentCorrelation());
   },

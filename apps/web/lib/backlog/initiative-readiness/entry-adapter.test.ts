@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectBacklogItemReadiness, projectBacklogItemReadinessSummary } from "./entry-adapter";
+import { projectBacklogItemReadiness, projectBacklogItemReadinessSummary, readinessShapeFromWorkShape } from "./entry-adapter";
 
 const item = {
   id: "row-1",
@@ -148,6 +148,22 @@ function terminalFixture(payloadOverride: Record<string, unknown> = {}) {
     },
   };
 }
+
+describe("plan recovery locator", () => {
+  it.each(["current", "stale", "incomplete", "unsafe-path"])("exposes only a valid current-baseline locator: %s", (scenario) => {
+    const activities = readyActivities();
+    const coverage = activities.find((entry) => entry.kind === "plan_backlog_coverage")!;
+    const artifact = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
+      commitSha: "a".repeat(40), providerBlobId: "b".repeat(40),
+      path: scenario === "unsafe-path" ? "docs/superpowers/plans/../specs/a.md" : "docs/superpowers/plans/plan.md" };
+    coverage.payload = { ...coverage.payload, planPath: artifact.path, planArtifactRef: {
+      ...artifact, ...(scenario === "incomplete" ? { providerBlobId: "" } : {}),
+    }, ...(scenario === "stale" ? { scopeBaselineId: "old-baseline" } : {}) } as typeof coverage.payload;
+    const result = projectBacklogItemReadiness({ item, activities, target: "implementation", transitionObject,
+      authorization: "pass", capsuleIdentity: "pass", evaluatedAt: "2026-09-06T21:00:00.000Z" });
+    expect(result.planArtifact).toEqual(scenario === "current" ? artifact : null);
+  });
+});
 
 describe("projectBacklogItemReadiness", () => {
   it("preserves the enforced allowed completion decision for a done item", () => {
@@ -375,5 +391,183 @@ describe("projectBacklogItemReadiness", () => {
 
     expect(projection.decision.verdict).toBe("denied");
     expect(projection.decision.blockers.map((entry) => entry.code)).toContain("READINESS_PROJECTION_FAILED");
+  });
+});
+
+describe("parent scope inheritance", () => {
+  const child = { ...item, id: "row-child", itemId: "BI-CHILD", workType: "feature" };
+  const inheritedScope = () => ({
+    parentItemId: "BI-ENTRY",
+    coverageActivityId: "coverage-1",
+    activities: readyActivities().map((entry) => entry.kind === "plan_backlog_coverage"
+      ? { ...entry, payload: { ...(entry.payload as Record<string, unknown>), decision: "decomposed",
+          deliverables: [{ key: "slice-1", title: "Slice 1", independentlyShippable: true, backlogItemId: "BI-CHILD" }] } }
+      : entry),
+  });
+
+  it("lets a mapped child implement on the parent baseline and receipts without raising its profile", () => {
+    const projection = projectBacklogItemReadiness({
+      item: child,
+      activities: [],
+      inheritedScope: inheritedScope(),
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.decision.verdict).toBe("allowed");
+    expect(projection.decision.profile).toBe("feature");
+    expect(projection.inheritedFrom).toBe("BI-ENTRY");
+    expect(projection.baselineId).toBe("baseline-1");
+  });
+
+  it("keeps the child on its own evidence when it minted a baseline itself", () => {
+    const ownBaseline = {
+      id: "own-baseline", kind: "initiative_scope_baseline", gateKey: null, recordedAt: new Date(),
+      payload: { ...baseline, baselineId: "baseline-child", subject: { kind: "backlog-item", id: "BI-CHILD" }, artifactDigest: "sha256:child" },
+    };
+    const projection = projectBacklogItemReadiness({
+      item: child,
+      activities: [ownBaseline],
+      inheritedScope: inheritedScope(),
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.inheritedFrom).toBeNull();
+    expect(projection.baselineId).toBe("baseline-child");
+    expect(projection.decision.verdict).not.toBe("allowed");
+  });
+
+  it("does not inherit when the parent itself has no current baseline", () => {
+    const scope = inheritedScope();
+    const projection = projectBacklogItemReadiness({
+      item: child,
+      activities: [],
+      inheritedScope: { ...scope, activities: scope.activities.filter((entry) => entry.kind !== "initiative_scope_baseline") },
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.inheritedFrom).toBeNull();
+    expect(projection.decision.unmet.map((entry) => entry.code)).toContain("OBJECTIVE_BASELINE_REQUIRED");
+  });
+});
+
+describe("plan-review binds the plan artifact, not the design (BI-B5C8FEFC)", () => {
+  const planReviewAgainstPlan = { ...receipt("r-plan-review-plan", "plan-review"), payload: { ...receipt("r-plan-review-plan", "plan-review").payload, artifactDigest: "sha256:plan" } };
+  const withoutPlanReview = () => readyActivities().filter((entry) => entry.gateKey !== "plan-review");
+
+  it("accepts a plan-review receipt recorded against the coverage record's plan digest", () => {
+    const projection = projectBacklogItemReadiness({
+      item,
+      activities: [...withoutPlanReview(), planReviewAgainstPlan],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.decision.verdict).toBe("allowed");
+  });
+
+  it("still marks a plan-review receipt stale when it matches neither the plan nor the design", () => {
+    const foreign = { ...planReviewAgainstPlan, payload: { ...planReviewAgainstPlan.payload, artifactDigest: "sha256:elsewhere" } };
+    const projection = projectBacklogItemReadiness({
+      item,
+      activities: [...withoutPlanReview(), foreign],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.decision.unmet.find((entry) => entry.code === "PLAN_REVIEW_REQUIRED")?.state).toBe("stale");
+  });
+
+  it("keeps the design digest for every other gate", () => {
+    const specAgainstPlan = { ...receipt("r-approval-plan", "spec-approval"), payload: { ...receipt("r-approval-plan", "spec-approval").payload, artifactDigest: "sha256:plan" } };
+    const projection = projectBacklogItemReadiness({
+      item,
+      activities: [...readyActivities().filter((entry) => entry.gateKey !== "spec-approval"), specAgainstPlan],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")?.state).toBe("stale");
+  });
+});
+
+describe("v3: the bound delivery shape keys the gates", () => {
+  it("parses the Workroom workShape ref and ignores non-delivery shapes", () => {
+    expect(readinessShapeFromWorkShape("delivery-small@1.0.0")).toBe("small");
+    expect(readinessShapeFromWorkShape("delivery-break-fix@1.0.0")).toBe("break-fix");
+    expect(readinessShapeFromWorkShape("dependency-advisory-watch@1.0.0")).toBeNull();
+    expect(readinessShapeFromWorkShape(null)).toBeNull();
+  });
+
+  it("lets a small item implement on research alone and mints a medium baseline from the item body", () => {
+    const small = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "low" },
+      activities: [receipt("r-research", "research")],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(small.decision.verdict).toBe("allowed");
+    expect(small.decision.policyVersion).toBe("initiative-readiness.v3");
+
+    const medium = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-medium@1.0.0", deliverySensitivity: "low", body: "## Acceptance\n- the shape shows on the header" },
+      activities: [receipt("r-research", "research")],
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(medium.decision.verdict).toBe("allowed");
+    const noCriteria = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-medium@1.0.0", body: "just prose" },
+      activities: [receipt("r-research", "research")],
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(noCriteria.decision.unmet.map((entry) => entry.code)).toEqual(["OBJECTIVE_BASELINE_REQUIRED"]);
+  });
+
+  it("raises a small item at high sensitivity to the large gates and leaves an unshaped item on v2", () => {
+    const raised = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "high" },
+      activities: [receipt("r-research", "research")],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(raised.decision.unmet.map((entry) => entry.code)).toContain("SPEC_APPROVAL_REQUIRED");
+    const unshaped = projectBacklogItemReadiness({
+      item,
+      activities: readyActivities(),
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(unshaped.decision.verdict).toBe("allowed");
   });
 });

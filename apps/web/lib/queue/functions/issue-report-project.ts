@@ -14,7 +14,7 @@ export const issueReportProjectOnCreate = inngest.createFunction(
     triggers: [{ event: "quality/issue-report.created" }],
   },
   async ({ event, step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "quality/issue-report-project-on-create");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("project-one-report", async () => {

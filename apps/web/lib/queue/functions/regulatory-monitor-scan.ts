@@ -46,7 +46,7 @@ export const regulatoryMonitorScanScheduled = inngest.createFunction(
     triggers: [cron(REGULATORY_MONITOR_SCAN_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, REGULATORY_MONITOR_SCAN_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("regulatory-monitor-scan", runScheduledRegulatoryScan);

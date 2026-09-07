@@ -30,6 +30,14 @@ vi.mock("@dpf/db", () => ({
 vi.mock("@/lib/tak/autonomous-work-run", () => ({
   executeAutonomousWorkTool: (...args: unknown[]) => autonomous.executeTool(...args),
 }));
+vi.mock("./mcp-task-objective-mapping-admission", () => ({
+  prepareRemoteObjectiveMappingAdmission: vi.fn().mockResolvedValue({
+    ok: true,
+    data: { admission: null },
+  }),
+  revalidateRemoteObjectiveMappingReplay: vi.fn().mockResolvedValue(null),
+  remoteObjectiveMappingAdmissionErrorResult: vi.fn().mockReturnValue(null),
+}));
 
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
 

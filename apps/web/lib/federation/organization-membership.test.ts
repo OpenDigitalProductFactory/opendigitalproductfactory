@@ -204,7 +204,34 @@ describe("enrolWithOrganizationAuthority + reconcile", () => {
 
     const old = vi.fn(async () => ({ ok: false, status: 404 }));
     expect(await enrolWithOrganizationAuthority(member.db, { material: memberMaterial, authorityUrls: ["http://192.168.0.152:3000"], localAuthorityUrl: "http://m", displayName: "D", now, post: old as never }))
-      .toMatchObject({ enrolled: false, reason: "peer responded 404" });
+      .toMatchObject({ enrolled: false, reason: "peer responded 404 (http://192.168.0.152:3000)" });
+  });
+
+  // BI-39C06F70: on the live pair the authority's 403 (no-local-organization)
+  // was hidden behind the https fallback URL's socket error for four ticks.
+  it("reports the authority's refusal reason, stops at it, and never lets a fallback URL's socket error hide it", async () => {
+    const member = installation("member");
+    const refusing = vi.fn(async ({ peerAuthorityUrl }: { peerAuthorityUrl: string }) =>
+      peerAuthorityUrl.startsWith("https://")
+        ? { ok: false, status: 0, error: "fetch failed" }
+        : { ok: false, status: 403, body: { code: "MEMBERSHIP_PROOF_REFUSED", details: { reason: "no-local-organization" } } });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(await enrolWithOrganizationAuthority(member.db, { material: memberMaterial, authorityUrls: ["http://192.168.0.152:3000", "https://192.168.0.152"], localAuthorityUrl: "http://m", displayName: "D", now, post: refusing as never }))
+        .toEqual({ enrolled: false, reason: "authority refused: no-local-organization (http://192.168.0.152:3000)" });
+      expect(refusing).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("no-local-organization"));
+    } finally {
+      warn.mockRestore();
+    }
+
+    // A non-definitive answer (500) still beats the fallback's socket error.
+    const flaky = vi.fn(async ({ peerAuthorityUrl }: { peerAuthorityUrl: string }) =>
+      peerAuthorityUrl.startsWith("https://") ? { ok: false, status: 0, error: "fetch failed" } : { ok: false, status: 500, body: { code: "INTERNAL" } });
+    expect(await enrolWithOrganizationAuthority(member.db, { material: memberMaterial, authorityUrls: ["http://192.168.0.152:3000", "https://192.168.0.152"], localAuthorityUrl: "http://m", displayName: "D", now, post: flaky as never }))
+      .toEqual({ enrolled: false, reason: "peer responded 500 (http://192.168.0.152:3000)" });
+    expect(flaky).toHaveBeenCalledTimes(2);
+    expect(member.created).toHaveLength(0);
   });
 
   it("reconcile: not a member without material; already linked when a trusted link to the authority host exists", async () => {
@@ -217,5 +244,18 @@ describe("enrolWithOrganizationAuthority + reconcile", () => {
 
     expect(deriveAuthorityPortalUrls("https://192.168.0.152:9000")).toEqual(["http://192.168.0.152:3000", "https://192.168.0.152"]);
     expect(deriveAuthorityPortalUrls("nope")).toEqual([]);
+  });
+
+  it("reconcile: presents the declared estate name to the authority, not its normalised comparison form", async () => {
+    const member = installation("member");
+    const seen: string[] = [];
+    const post = vi.fn(async ({ cloudEvent }: { cloudEvent: { statement: { displayName: string; organizationRef: string } } }) => {
+      seen.push(`${cloudEvent.statement.displayName}|${cloudEvent.statement.organizationRef}`);
+      return { ok: false, status: 404 };
+    });
+    expect(await reconcileOrganizationMembership(member.db, { readText: readMember, caUrl: "https://192.168.0.152:9000", localAuthorityUrl: "http://192.168.0.200:3000", post: post as never }))
+      .toMatchObject({ outcome: "failed" });
+    // The live pair showed the same slug twice on the authority: display and ref had collapsed together.
+    expect(seen[0]).toBe("Northwind Test|northwind test");
   });
 });

@@ -19,6 +19,12 @@ export const OPERATIONAL_POSTURE_SCHEMA_VERSIONS = ["dpf.operational-posture/1"]
 export type OperationalPostureSchemaVersion = (typeof OPERATIONAL_POSTURE_SCHEMA_VERSIONS)[number];
 
 export const POSTURE_HEALTH_STATUSES = ["healthy", "degraded", "offline"] as const;
+
+/** Outbound activity carried on the shared federation inbox for a posture report.
+ *  One activity: the record is a singleton per origin install, so "reported"
+ *  covers create and update alike (the peer reconciles by originVersion). */
+export const OPERATIONAL_POSTURE_ACTIVITIES = ["dpf.operational-posture.reported"] as const;
+export type OperationalPostureActivity = (typeof OPERATIONAL_POSTURE_ACTIVITIES)[number];
 export type PostureHealthStatus = (typeof POSTURE_HEALTH_STATUSES)[number];
 
 /** Summary count of open patch findings by severity — counts only, never the findings. */

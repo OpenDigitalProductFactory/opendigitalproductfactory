@@ -5,7 +5,7 @@ import { gateAtEntry } from "../quiescence-gates";
 export const infraPrune = inngest.createFunction(
   { id: "ops/infra-prune", retries: 2, triggers: [cron("0 3 * * 0")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/infra-prune");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     await step.run("prune-stale", async () => {

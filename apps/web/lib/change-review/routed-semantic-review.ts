@@ -1,5 +1,4 @@
 import { routeAndCall } from "@/lib/inference/routed-inference";
-import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
 import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
 import { semanticReviewMinimumContextTokens } from "./semantic-review-context-floor";
@@ -31,47 +30,14 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
   };
 }
 
-async function localCiCapacityGuard(): Promise<SemanticReviewResult | null> {
-  const capacity = await inspectLocalProviderCapacity();
-  if (capacity.available) return null;
-  if (capacity.reason === "local-ci-active-capacity-reservation") {
-    return {
-      decision: "inconclusive",
-      issues: [],
-      summary: "Semantic review deferred while governed local CI owns host capacity.",
-      inconclusiveReason: "local-ci-active-capacity-reservation",
-    };
-  }
-  if (capacity.reason === "local-ci-queued-capacity-reservation") {
-    return {
-      decision: "inconclusive",
-      issues: [],
-      summary: "Semantic review deferred so the established local-CI queue can claim the next safe host window.",
-      inconclusiveReason: "local-ci-queued-capacity-reservation",
-    };
-  }
-  return {
-    decision: "inconclusive",
-    issues: [],
-    summary: "Semantic review deferred because host-capacity ownership could not be verified.",
-    inconclusiveReason: "local-ci-capacity-reservation-unavailable",
-  };
-}
-
 /** Execute the governed Change Reviewer plus content-scoped specialist branches. */
 export async function dispatchRoutedSemanticReview(
   prompt: string,
   context: SemanticChangeReviewDispatchContext,
 ): Promise<SemanticReviewResult> {
-  // Local-CI admission already accounts for a model that is resident before
-  // the lease is bound. Protect the opposite ordering too: once local CI owns
-  // the host, no semantic-review route may begin because a remote route can
-  // still fall back to the bundled 32k-context model after dispatch. Returning
-  // an infrastructure-inconclusive result keeps the immutable review identity
-  // retryable without misclassifying capacity as a code finding.
-  const capacityGuard = await localCiCapacityGuard();
-  if (capacityGuard) return capacityGuard;
-
+  // Capacity belongs to the actual provider dispatch, including every fallback
+  // through callProvider. A local reservation must not veto an eligible remote
+  // review before routing has selected its provider.
   const branches = [
     {
       agentId: "change-reviewer",
@@ -88,7 +54,9 @@ export async function dispatchRoutedSemanticReview(
     const response = await routeAndCall(
       [{ role: "user", content: prompt }],
       branch.systemPrompt,
-      "confidential",
+      // Ordinary platform development is internal. The shared screener still
+      // classifies the full payload and enforces export/clearance obligations.
+      "internal",
       {
         taskType: "build-review",
         budgetClass: context.strategyProfile === "economy" ? "balanced" : "quality_first",

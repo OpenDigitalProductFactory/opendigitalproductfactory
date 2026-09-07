@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@/lib/shared/canonical-json";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 import type {
   InitiativeGateKey,
@@ -181,6 +183,12 @@ type ReviewerRouteDb = {
   };
 };
 
+const IMMUTABLE_READER_GRANT = "file_read";
+
+function isBindableReviewWriter(toolName: string): boolean {
+  return toolName.startsWith("record_initiative_");
+}
+
 /** Resolve actionable, exact-grant reviewer routes without changing readiness. */
 export async function resolveInitiativeReviewerRecovery(input: {
   decision: InitiativeReadinessDecision;
@@ -188,6 +196,8 @@ export async function resolveInitiativeReviewerRecovery(input: {
   db: ReviewerRouteDb;
   dispatchContext: InitiativeRecoveryDispatchContext | null;
   canonicalArtifact?: InitiativeRecoveryCanonicalArtifact | null;
+  /** Exact plan selected by the baseline-validated coverage projection. */
+  planArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
 }): Promise<InitiativeReviewerRecovery> {
@@ -223,7 +233,12 @@ export async function resolveInitiativeReviewerRecovery(input: {
   ])).values()];
   if (distinct.length === 0) return { reviewerRoutes: [], escalations: [], unroutable };
 
-  const grants = [...new Set(distinct.map((entry) => entry.route.lane.grant))];
+  const grants = [...new Set([
+    ...distinct.map((entry) => entry.route.lane.grant),
+    ...(distinct.some((entry) => isBindableReviewWriter(entry.route.toolName))
+      ? [IMMUTABLE_READER_GRANT]
+      : []),
+  ])];
   const rows = input.db.agentToolGrant
     ? await input.db.agentToolGrant.findMany({
         where: {
@@ -236,17 +251,30 @@ export async function resolveInitiativeReviewerRecovery(input: {
         },
       })
     : [];
-  const deterministicRows = [...rows].sort((left, right) =>
-    left.agent.agentId.localeCompare(right.agent.agentId));
+  const activeProductionRows = rows.filter((row) =>
+    row.agent.status === "active"
+    && !row.agent.archived
+    && row.agent.lifecycleStage === "production");
+  const grantsByAgent = new Map<string, Set<string>>();
+  for (const row of activeProductionRows) {
+    const held = grantsByAgent.get(row.agent.agentId) ?? new Set<string>();
+    held.add(row.grantKey);
+    grantsByAgent.set(row.agent.agentId, held);
+  }
+  const deterministicRows = [...activeProductionRows].sort((left, right) =>
+    left.agent.agentId.localeCompare(right.agent.agentId)
+    || left.grantKey.localeCompare(right.grantKey));
 
   const reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"] = [];
   const escalations: InitiativeReviewerRecovery["escalations"] = [];
   for (const entry of distinct) {
+    const bindable = isBindableReviewWriter(entry.route.toolName);
+    const requiredGrants = bindable
+      ? [entry.route.lane.grant, IMMUTABLE_READER_GRANT]
+      : [entry.route.lane.grant];
     const candidate = deterministicRows.find((row) =>
       row.grantKey === entry.route.lane.grant
-      && row.agent.status === "active"
-      && !row.agent.archived
-      && row.agent.lifecycleStage === "production"
+      && requiredGrants.every((grant) => grantsByAgent.get(row.agent.agentId)?.has(grant))
       && (!entry.route.lane.independent || row.agent.agentId !== input.currentAgentId));
     if (candidate) {
       if (!input.dispatchContext) {
@@ -255,7 +283,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
           toolName: entry.route.toolName,
           grant: entry.route.lane.grant,
           reason: "dispatch-context-required",
-          nextAction: `Eligible reviewer ${candidate.agent.agentId} holds ${entry.route.lane.grant}; supply the Workroom branch and immutable head to dispatch. Do not synthesize reviewer artifact bindings.`,
+          nextAction: `Eligible reviewer ${candidate.agent.agentId} holds ${requiredGrants.join(" and ")}; supply the Workroom branch and immutable head to dispatch. Do not synthesize reviewer artifact bindings.`,
         });
         continue;
       }
@@ -265,8 +293,9 @@ export async function resolveInitiativeReviewerRecovery(input: {
       // rejects — the very defect this lane routing exists to end. Plan coverage
       // is not a review of immutable bytes, so it carries no artifact identity
       // and is not blocked by one being unresolvable (BI-9FE775F9).
-      const bindable = entry.route.toolName.startsWith("record_initiative_");
-      const artifact = input.canonicalArtifact ?? null;
+      const artifact = entry.gate === "plan-review"
+        ? input.planArtifact ?? { resolved: false as const, nextAction: "Record valid plan coverage against the current baseline, then retry plan review. The design cannot substitute for the implementation plan." }
+        : input.canonicalArtifact ?? null;
       if (bindable && (!artifact || !artifact.resolved)) {
         // A route without a binding is not a lesser route — it is an unusable
         // one: `request_coworker` rejects `requiredToolNames` unless the binding
@@ -328,7 +357,9 @@ export async function resolveInitiativeReviewerRecovery(input: {
       toolName: entry.route.toolName,
       grant: entry.route.lane.grant,
       reason: "no-eligible-reviewer",
-      nextAction: `Assign or activate a production reviewer with exact grant ${entry.route.lane.grant}; do not proxy the receipt.`,
+      nextAction: bindable
+        ? `Assign or activate a production reviewer with exact grants ${requiredGrants.join(" and ")} on the same agent; do not proxy the receipt.`
+        : `Assign or activate a production reviewer with exact grant ${entry.route.lane.grant}; do not proxy the receipt.`,
     });
   }
   return { reviewerRoutes, escalations, unroutable };
@@ -515,7 +546,11 @@ function requestCoworkerPacket(args: {
         workroomRef: binding.workroomRef!,
       },
     })
-    : base.requestKey;
+    : args.gate === "plan-review"
+      ? `${base.requestKey}:plan:${createHash("sha256").update(canonicalJson({
+        binding, targetAgent: args.targetAgentId, objective,
+      })).digest("hex")}`
+      : base.requestKey;
   return {
     ...base,
     requestKey,

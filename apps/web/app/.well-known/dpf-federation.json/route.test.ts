@@ -15,6 +15,8 @@ vi.mock("@/lib/federation/demand-identity", () => ({
 }));
 vi.mock("@/lib/install/estate-identity", () => ({
   loadEstateNameResolution: mockEstate,
+  // BI-CA54ACC8: the route composes its store through this builder.
+  prismaEstateIdentityStore: vi.fn(() => ({ readConfig: async () => null, readOrganizationName: async () => null })),
 }));
 
 import { GET } from "./route";

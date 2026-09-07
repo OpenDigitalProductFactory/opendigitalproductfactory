@@ -25,6 +25,7 @@ describe("readActivationProfile", () => {
       resourceKinds: [],
       valueStreams: [],
       supportingCapabilities: [],
+      omittedBackboneStages: [],
     });
   });
 
@@ -98,6 +99,7 @@ describe("readActivationProfile", () => {
         },
       ],
       supportingCapabilities: ["fundraising", "volunteer-coordination"],
+      omittedBackboneStages: [],
     });
   });
 

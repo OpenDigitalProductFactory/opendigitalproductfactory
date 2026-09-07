@@ -13,7 +13,7 @@ function projected(verdict: "allowed" | "input-required") {
     unmet: verdict === "allowed" ? [] : [readinessRequirement({ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" })],
     evaluatedAt: "2026-08-22T08:00:00.000Z",
   };
-  return { governed: true, baselineId: "BASE-1", artifactHints: { hasSpec: true, hasPlan: true }, decision };
+  return { governed: true, baselineId: "BASE-1", inheritedFrom: null, artifactHints: { hasSpec: true, hasPlan: true }, planArtifact: null, decision };
 }
 
 function fakeDb() {

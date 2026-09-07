@@ -105,6 +105,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // liveness test above: in ci-policy-test-inventory-allowlist.txt it would
       // never run.
       node("--test", "scripts/gate-worktree-lease-timeout.test.mjs"),
+      // BI-D908DA0A: a parked claim says whether it waits behind work or behind
+      // a closed pool; the two used to print identically.
+      node("--test", "scripts/gate-worktree-pool-closed.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken
@@ -229,6 +232,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/documentation-evidence-lane.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
+        "scripts/lib/host-available-memory.test.mjs",
         "packages/dpf-skill-pack/hooks/claim-work-guidance.test.mjs",
         "packages/dpf-skill-pack/hooks/plan-coverage-guidance.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
@@ -727,6 +731,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("data-impact-gate", "Data-Impact Gate", [
       node("--test", "scripts/check-data-impact.test.mjs"),
       node("scripts/check-data-impact.mjs"),
+    ]),
+    // BI-B19BE117: the sibling of Data-Impact for every non-data surface that
+    // reaches an existing install only through a convergence mechanism. The
+    // red/green fixtures run first so a validator that stops rejecting
+    // attestation theater fails here, not silently in every compose PR.
+    guard("convergence-impact-gate", "Convergence-Impact Gate", [
+      node("--test", "scripts/check-convergence-impact.test.mjs"),
+      node("scripts/check-convergence-impact.mjs"),
     ]),
     guard("design-grounding-gate", "Design Grounding Gate", [
       node(

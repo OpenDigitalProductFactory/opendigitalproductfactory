@@ -18,6 +18,7 @@ import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
+import { resolveRecoveryPredecessor } from "@/lib/self-upgrade/recovery-predecessor";
 import { admitSelfUpgrade, resolveCurrentSelfUpgradeTarget } from "@/lib/self-upgrade/admission";
 import { selectSelfUpgradeAdmissionTarget } from "@/lib/self-upgrade/target-admission";
 import {
@@ -793,10 +794,7 @@ export async function triggerSelfUpgrade(opts?: {
     if (!support.enabled) {
       return { queued: false, reason: "disabled" } as const;
     }
-    // A manual trigger is NOT window-gated: the operator clicking "Upgrade now"
-    // has chosen this moment. The store-closed window only governs the unattended
-    // scheduled poll (runSelfUpgrade skips the window for non-scheduled runs).
-    // `force` is reserved for bypassing the quiescence drain in an emergency.
+    // Manual triggers skip the routine window; force is only for an emergency drain override.
   }
   const latestRun = await getLatestRun();
   if (latestRun?.status === "running") {
@@ -805,7 +803,9 @@ export async function triggerSelfUpgrade(opts?: {
   if (latestRun?.status === "queued" || latestRun?.status === "pending") {
     return { queued: false, reason: "already-queued", runId: latestRun.runId } as const;
   }
-  if (latestRun?.status === "failed" && !opts?.targetBinding) return { queued: false, reason: "recovery-binding-required", runId: latestRun.runId } as const;
+  if (latestRun?.status === "failed" && latestRun.completedAt == null) return { queued: false, reason: "recovery-predecessor-not-terminal", runId: latestRun.runId } as const;
+  const recoveryRun = await resolveRecoveryPredecessor(latestRun);
+  if (recoveryRun && !opts?.targetBinding) return { queued: false, reason: "recovery-binding-required", runId: recoveryRun.runId } as const;
   const resolvedTarget = await resolveCurrentSelfUpgradeTarget();
   const selection = selectSelfUpgradeAdmissionTarget({
     targetBinding: opts?.targetBinding,
@@ -818,7 +818,7 @@ export async function triggerSelfUpgrade(opts?: {
   // any) so the run records the changes it carried. Best effort — the upgrade
   // proceeds whether or not a summary was generated.
   const impactSummaryId = await getCurrentImpactSummaryId();
-  const admission = await admitSelfUpgrade({ triggeredBy, target, recoveryOfRunId: latestRun?.status === "failed" ? latestRun.runId : null,
+  const admission = await admitSelfUpgrade({ triggeredBy, target, recoveryOfRunId: recoveryRun?.runId ?? null,
     requestedForce: opts?.force === true,
     dryRun: opts?.dryRun === true,
     routine: false,

@@ -24,7 +24,7 @@ export const catalogEnrichmentSweepScheduled = inngest.createFunction(
     triggers: [cron(CATALOG_SWEEP_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, CATALOG_SWEEP_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("catalog-enrichment-sweep", async () => {
       const { runCatalogEnrichmentSweepJob } = await import(

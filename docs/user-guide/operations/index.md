@@ -227,6 +227,22 @@ Five stances, each shown with the reason it resolved that way:
 An installation that has not said what it is counts as production, so every
 brake stays on until someone declares otherwise.
 
+### Operational posture across your installations
+
+Below the identity, one card per installation shows its version and build, how
+many of its runtimes are serving, how many estate items it tracks, and its open
+patch findings by severity. Your own card is captured the moment the page loads.
+A connected installation's card is what it last reported over the approved
+link, and the card says so — **Reported by** the installation, with how old the
+report is. Only counts travel between installations; the findings themselves
+stay where they were found.
+
+A connected installation reports every five minutes when something changes and
+at least hourly otherwise. A card marked **Stale** has missed heartbeats; one
+marked **Silent** has been quiet for three hours and shows as **Offline** rather
+than repeating its last self-assessment. A connection that has not reported yet
+is listed as waiting.
+
 ### Correcting the identity
 
 Open **Change what this installation is** to set its main job, its environment,

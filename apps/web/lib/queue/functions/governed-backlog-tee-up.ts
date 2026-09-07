@@ -10,7 +10,7 @@ export const governedBacklogTeeUpScheduled = inngest.createFunction(
     triggers: [cron("0 14 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "build/governed-backlog-tee-up-scheduled");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("tee-up-governed-backlog-daily", async () => {

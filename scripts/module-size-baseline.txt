@@ -18,7 +18,7 @@ apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	923
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
 apps/web/components/workbooks/Grid.tsx	1830
 apps/web/instrumentation.test.ts	943
-apps/web/instrumentation.ts	1472
+apps/web/instrumentation.ts	1467
 apps/web/lib/actions/agent-coworker-external.test.ts	889
 apps/web/lib/actions/agent-coworker.ts	2816
 apps/web/lib/actions/agent-task-scheduler.test.ts	1132
@@ -50,12 +50,12 @@ apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1379
 apps/web/lib/routing/chat-adapter.test.ts	1073
 apps/web/lib/routing/eval-runner.ts	803
-apps/web/lib/routing/fallback.test.ts	1299
+apps/web/lib/routing/fallback.test.ts	1297
 apps/web/lib/self-upgrade/quiescence.test.ts	951
 apps/web/lib/self-upgrade/quiescence.ts	1621
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	940
-apps/web/lib/tak/agent-grants.ts	996
+apps/web/lib/tak/agent-grants.ts	999
 apps/web/lib/tak/agent-routing.ts	1191
 apps/web/lib/tak/agentic-loop.test.ts	2485
 apps/web/lib/tak/agentic-loop.ts	2681

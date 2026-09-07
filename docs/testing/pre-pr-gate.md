@@ -218,8 +218,8 @@ pnpm run pregate            # → node scripts/pregate.mjs
 `local-integration-ci` lease, `pregate.mjs` runs the deterministic CI policy
 guards host-natively — the same check commands CI's Policy Guards jobs run
 (module size, style drift, derived-artifact staleness, doc links, SBOM, plus
-the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit and
-Design Grounding trailer gates), with guard self-tests stripped and
+the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit,
+Design Grounding and Convergence-Impact trailer gates), with guard self-tests stripped and
 PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI.
 
 **Not every `node --test` is a self-test (BI-7B249AFE).** Some files in the
@@ -390,6 +390,20 @@ host free-memory metric crossing the CI fence; it does not claim that Docker's
 displayed model size is ordinary RAM, conflate GPU VRAM with physical memory,
 or infer the Docker/WSL/shared-memory mechanism. It also does not terminate a
 model that was already resident before admission.
+
+**The fence measures available memory, not free memory (BI-EB6DBAF0).** The
+execution-pressure fence revokes an admitted lease when the host observation
+reports less than 4 GiB. That observation is reclaimable-inclusive: `vm_stat`
+free + inactive + speculative + purgeable on Darwin, `/proc/meminfo`
+`MemAvailable` on Linux, with `os.freemem()` kept only as a last resort so a
+wedged probe cannot wedge the gate. `os.freemem()` alone reports the free page
+pool, which excludes memory the kernel returns on demand — on a 128 GiB macOS
+host it read 17.5 GiB against 47.5 GiB genuinely available. Measuring the free
+pool made the gate fence its own work: `next build`, running under the 16 GiB
+heap the gate had just granted, drove the free pool under the floor while tens
+of GiB stayed reclaimable, and the run was killed as `host-memory-low` after
+its tests had already passed. A reading that matched only the free bucket is
+refused rather than reported as available.
 
 **Fail-fast command order (BI-7BCCDE3D).** Inside an admitted runtime-code
 gate, freshness, Prisma generation, migrations, and the cheap doc/repository
@@ -572,6 +586,21 @@ terminal writes retain the latest admission record. Diagnose a timeout from
 that durable record; do not infer the refusal from process residency, cancel
 and recreate a healthy FIFO claim, or conflate Docker model residency and GPU
 VRAM with Windows physical-memory telemetry.
+
+**A queue and a closed pool are two different waits, and the gate says which.**
+When the host rollback contracts the pool to `effectiveCapacity: 0`
+(`host-stage-headroom-low`, `host-memory-low`, `host-observation-stale`, ...),
+no slot can admit anyone, yet the claim is still parked with
+`admission.status: "queued"`. The waiting line then reads
+`local-CI pool is CLOSED (<rollbackReason>)` instead of `queued at position N`,
+the queued lease event and the durable-wait record carry `poolClosedReason`,
+and `pnpm run pregate:status` names host pressure rather than "the gate did not
+run". Behind a queue you wait; behind a closed pool you free host memory (on a
+Windows host, usually the WSL page cache held by `vmmemWSL`) or wait for the
+pressure to pass. Waiting in line does nothing for a closed pool
+(BI-D908DA0A). A fenced run likewise records *which* fence fired
+(`fence reason: lease-authority-deadline`, ...) in its gate record, so a
+self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a

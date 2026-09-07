@@ -1,5 +1,12 @@
 import type { ToolResult } from "@/lib/mcp-tools";
+import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
 import { WORK_INTENTS, type WorkIntent } from "@/lib/work-capsules";
+import {
+  DELIVERY_SHAPE_PICK_LIST,
+  buildDeliveryShapeClaim,
+  resolveDeliveryShape,
+  type DeliveryShapeResolution,
+} from "@/lib/work-management/derive-delivery-shape";
 import { ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 
 import { providerToExecutorKind } from "./external-session-capture";
@@ -14,6 +21,70 @@ type ToolContext = { agentId?: string; threadId?: string; taskRunId?: string; ro
 function stringParam(params: Record<string, unknown>, key: string): string | null {
   const value = params[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/** Executors with nobody at the keyboard: a refusal to them must raise attention, not wait for an answer. */
+const UNATTENDED_EXECUTORS = new Set(["build-studio", "dpf-native", "git-webhook"]);
+
+/**
+ * Design §3.3: declared → derived → refused with the pick list. The shape is
+ * required before implementation; design, review and plan intents record a
+ * derived shape when the rules agree and otherwise proceed unshaped.
+ */
+async function resolveClaimShape(args: {
+  db: CapsuleDb;
+  itemId: string;
+  declared: string | null;
+  workIntent: WorkIntent;
+}): Promise<{ resolution: DeliveryShapeResolution | null; refusal: ToolResult | null }> {
+  const item = args.db.backlogItem
+    ? await args.db.backlogItem.findFirst({
+      where: { OR: [{ itemId: args.itemId }, { id: args.itemId }] },
+      select: { effortSize: true, workType: true, title: true, body: true },
+    }) as { effortSize?: string | null; workType?: string | null; title?: string | null; body?: string | null } | null
+    : null;
+  const signals = {
+    effortSize: item?.effortSize ?? null,
+    workType: item?.workType ?? null,
+    sensitivity: deriveDeliverableSensitivity({ text: `${item?.title ?? ""}\n${item?.body ?? ""}`, workType: item?.workType ?? null }),
+  };
+  const resolution = resolveDeliveryShape({ declared: args.declared, signals });
+  if (resolution.kind === "invalid") {
+    return { resolution, refusal: { success: false, error: "invalid_work_shape", message: resolution.message, data: { pickList: DELIVERY_SHAPE_PICK_LIST } } };
+  }
+  if (resolution.kind === "ambiguous") {
+    if (args.workIntent !== "implementation") return { resolution: null, refusal: null };
+    return {
+      resolution,
+      refusal: {
+        success: false,
+        error: "work_shape_required",
+        message: `${resolution.reason} Re-claim ${args.itemId} with workShape set to one of the five delivery shapes; do not guess.`,
+        data: { itemId: args.itemId, signals: resolution.signals, pickList: DELIVERY_SHAPE_PICK_LIST },
+      },
+    };
+  }
+  if (resolution.key === "delivery-xlarge" && args.workIntent === "implementation") {
+    return {
+      resolution,
+      refusal: {
+        success: false,
+        error: "work_shape_xlarge_requires_decomposition",
+        message: `${args.itemId} is xlarge: it never enters implementation. Decompose it into shaped children and claim those (design §3.4 rule 7).`,
+        data: { itemId: args.itemId, workShape: resolution.ref, pickList: DELIVERY_SHAPE_PICK_LIST },
+      },
+    };
+  }
+  return { resolution, refusal: null };
+}
+
+async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolution: DeliveryShapeResolution | null): Promise<void> {
+  if (!resolution || (resolution.kind !== "declared" && resolution.kind !== "derived")) return;
+  if (!db.workroom?.findUnique) return;
+  const row = await db.workroom.findUnique({ where: { capsuleId }, select: { scopeClaims: true } }) as { scopeClaims?: unknown } | null;
+  const existing = Array.isArray(row?.scopeClaims) ? row!.scopeClaims as unknown[] : [];
+  const preserved = existing.filter((entry) => !(entry && typeof entry === "object" && "workShape" in (entry as Record<string, unknown>)));
+  await db.workroom.update({ where: { capsuleId }, data: { scopeClaims: [...preserved, buildDeliveryShapeClaim(resolution)] } });
 }
 
 export async function claimBacklogItemForWork(args: {
@@ -38,6 +109,21 @@ export async function claimBacklogItemForWork(args: {
   }
   const repositoryFullName = stringParam(params, "repositoryFullName")
     ?? defaultPlatformRepositoryFullName();
+  const executorKind = providerToExecutorKind(provider);
+  const shape = await resolveClaimShape({
+    db: args.db,
+    itemId,
+    declared: stringParam(params, "workShape"),
+    workIntent: (requestedIntent as WorkIntent | null) ?? "implementation",
+  });
+  if (shape.refusal) {
+    // An unattended caller cannot answer a pick list: say so on the refusal so
+    // the dispatcher raises attention to the item's owner instead of retrying.
+    const unattended = UNATTENDED_EXECUTORS.has(executorKind) || Boolean(args.context?.taskRunId);
+    return unattended
+      ? { ...shape.refusal, data: { ...(shape.refusal.data as Record<string, unknown>), attentionRequired: true, executorKind } }
+      : shape.refusal;
+  }
   try {
     const governed = await claimGovernedBacklogWorkspace({
       db: args.db,
@@ -47,10 +133,11 @@ export async function claimBacklogItemForWork(args: {
         headBranch: branchName,
         worktreePath,
         baseBranch: stringParam(params, "baseBranch") ?? "main",
-        executorKind: providerToExecutorKind(provider),
+        executorKind,
         executorRef: sessionRef,
         force: params["force"] === true,
         overrideReason: stringParam(params, "overrideReason"),
+        workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived") ? shape.resolution.ref : null,
       },
       actor: await args.resolveActor(args.userId, args.context),
       workIntent: requestedIntent as WorkIntent | null,
@@ -68,6 +155,7 @@ export async function claimBacklogItemForWork(args: {
       };
     }
     const result = governed.data.claim;
+    await persistClaimShape(args.db, result.capsuleId, shape.resolution);
     await ensureCapsuleWorkItemAnchorWithPrisma({
       capsuleId: result.capsuleId,
       backlogItemId: result.backlogItemId,
@@ -90,6 +178,9 @@ export async function claimBacklogItemForWork(args: {
         : `${base} Claim-at-start recorded for this session.`,
       data: {
         ...result,
+        workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived")
+          ? { ref: shape.resolution.ref, source: shape.resolution.kind, ...(shape.resolution.kind === "derived" ? { reasonCode: shape.resolution.reasonCode, signals: shape.resolution.signals } : {}) }
+          : null,
         workIntent: governed.data.workIntent,
         readiness: governed.data.readiness,
         readback: governed.data.readback,
