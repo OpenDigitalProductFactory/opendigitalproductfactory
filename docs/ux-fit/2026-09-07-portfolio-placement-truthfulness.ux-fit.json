@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "notices-beside-the-content-they-qualify",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ea/workrooms/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/ea/workrooms": {
+        "defaultVisibleWords": 191,
+        "leadBandWords": 9,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  }
+}

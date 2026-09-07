@@ -20,7 +20,11 @@ The EA Modeler is a canvas-based tool for building and maintaining your organiza
 
 ## Workroom Definitions
 
-Open **Architecture > Workrooms** (`/ea/workrooms`) to review collaboration from the definition perspective. The page keeps all four portfolios visible, groups each Value Stream Team under its owning portfolio, and links the reusable shape to its process view and operational instances. Define or refine the underlying Value Stream Team when participants, queues, or approval triggers need to change; use **Operations > Workrooms** to inspect activity created from those definitions.
+Open **Architecture > Workrooms** (`/ea/workrooms`) to review collaboration from the definition perspective. The page keeps all four portfolios visible, groups each Value Stream Team under its owning portfolio, and links the reusable shape to its process view and operational instances.
+
+A team is placed in a portfolio from what the platform actually records: an explicit portfolio role on the team wins, and its portfolio slug or name are used only as weaker fallbacks. When none of those decides the question, the team is listed under **Not placed in a portfolio** with the reason, instead of being shown inside a portfolio nobody assigned it to. Those teams are counted separately, so a portfolio's total only ever counts teams that genuinely belong to it. Correct a placement by setting the team's portfolio role or linking it to the right portfolio.
+
+The page reads a bounded page of teams rather than the whole estate. When more exist than it shows, it says **Partial read**, so the counts above are never mistaken for an estate-wide total. Define or refine the underlying Value Stream Team when participants, queues, or approval triggers need to change; use **Operations > Workrooms** to inspect activity created from those definitions.
 
 ## What You Can Do
 

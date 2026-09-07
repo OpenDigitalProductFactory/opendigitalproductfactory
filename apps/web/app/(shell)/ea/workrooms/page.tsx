@@ -24,7 +24,8 @@ function HumanGateList({ triggers }: { triggers: Array<{ triggerPoint: string; r
 
 export default async function WorkroomArchitecturePage({ searchParams }: { searchParams?: Promise<{ operation?: string }> } = {}) {
   const operation = (await searchParams)?.operation;
-  const [bands, coordination] = await Promise.all([loadWorkroomArchitecture(prisma), loadWorkroomCoordination(prisma, new Date(), { teamId: operation === "unmapped" ? null : operation })]);
+  const [architecture, coordination] = await Promise.all([loadWorkroomArchitecture(prisma), loadWorkroomCoordination(prisma, new Date(), { teamId: operation === "unmapped" ? null : operation })]);
+  const { bands, unplaced, truncated: architectureTruncated } = architecture;
   const definitions = bands.flatMap((band) => band.definitions);
   const instanceCount = definitions.reduce((total, definition) => total + definition.instanceCount, 0);
 
@@ -44,6 +45,7 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
             ? "No Workroom plans are set yet."
             : `${definitions.length} Workroom plan${definitions.length === 1 ? "" : "s"} guide work in ${bands.filter((band) => band.definitions.length > 0).length} portfolios.`}
         </p>
+
         <Link data-owner-first-next-action href={definitions.length > 0 ? `#portfolio-${bands.find((band) => band.definitions.length > 0)?.role ?? "foundational"}` : "/ea/value-streams"} className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
           {definitions.length > 0 ? "Review Workroom plans" : "Review value streams"}
         </Link>
@@ -54,6 +56,27 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
         <StatCard label="Linked rooms" value={instanceCount} href="#coordination" hint="Includes completed work" />
         <StatCard label="Portfolios" value={`${bands.filter((band) => band.definitions.length > 0).length} / 4`} hint="All four stay in view" />
       </div>
+
+      {architectureTruncated ? (
+        <p className="mb-6 text-xs text-[var(--dpf-muted)]">Partial read: more plans exist than shown.</p>
+      ) : null}
+
+      {unplaced.length > 0 ? (
+        <Surface id="portfolio-unplaced" className="mb-6" rounded="xl">
+          <h2 className="text-base font-semibold text-[var(--dpf-text)]">Not placed in a portfolio · {unplaced.length}</h2>
+          <p className="my-2 text-xs text-[var(--dpf-muted)]">Outside the four portfolios until placement is corrected.</p>
+          <ul className="divide-y divide-[var(--dpf-border)]">
+            {unplaced.map((definition) => (
+              <li key={definition.id} className="py-3">
+                <p className="text-sm font-medium text-[var(--dpf-text)]">{definition.name}</p>
+                <p className="text-xs text-[var(--dpf-muted)]">
+                  {definition.placement.role === null ? definition.placement.reason : null}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Surface>
+      ) : null}
 
       <Surface id="coordination" className="mb-6" rounded="xl">
         <details open={Boolean(operation)}>
