@@ -502,7 +502,9 @@ function requestCoworkerPacket(args: {
     : "";
   const objective = `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at Workroom head ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
     args.artifact
-      ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_READER_TOOL},`
+      // A reviewer reached over native MCP never sees the bound schema, so the
+      // objective itself carries every locator input the reader needs.
+      ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_READER_TOOL} (repositoryFullName ${args.dispatch.repositoryFullName}, version ${reviewSha}, expectedBlobId ${args.artifact.providerBlobId}),`
       : ""
   } record a governed receipt only when the gate passes.${mappingInstruction}`;
   const questionPacketSummary = `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`;

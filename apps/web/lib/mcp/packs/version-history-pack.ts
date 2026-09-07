@@ -285,10 +285,22 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
   const path = String(params.path ?? "");
   const repositoryFullName = typeof params.repositoryFullName === "string" ? params.repositoryFullName : null;
   const expectedBlobId = typeof params.expectedBlobId === "string" ? params.expectedBlobId : null;
+  // The provider fallback needs the canonical repository and an immutable
+  // commit. The blob id is verification when the caller has one (a bound review
+  // packet), not a precondition: a caller that knows only commit + path — a
+  // reviewer reached over native MCP, which never sees the bound schema — is
+  // still asking for an immutable artifact.
+  const isSha = (value: string) => /^[a-f0-9]{40}$/i.test(value);
   const providerBound = repositoryFullName !== null
-    && expectedBlobId !== null
-    && /^[a-f0-9]{40}$/i.test(ref)
-    && /^[a-f0-9]{40}$/i.test(expectedBlobId);
+    && isSha(ref)
+    && (expectedBlobId === null || isSha(expectedBlobId));
+  const providerInputsMissing = (): string => {
+    const missing: string[] = [];
+    if (repositoryFullName === null) missing.push("repositoryFullName (the canonical repository owner/name)");
+    if (!isSha(ref)) missing.push("version as the 40-character commit sha");
+    if (expectedBlobId !== null && !isSha(expectedBlobId)) missing.push("expectedBlobId as a 40-character blob sha, or omit it");
+    return `This deployment's git volume does not hold ${ref}:${path}. The repository provider serves any commit + path; pass ${missing.join(" and ")} to read it.`;
+  };
 
   let content: string | null = null;
   let blobId: string | null = null;
@@ -317,11 +329,7 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
 
   if (content === null || blobId === null) {
     if (!providerBound) {
-      return {
-        success: false,
-        error: localError,
-        message: localError === gitUnavailable ? "Git not available." : localError,
-      };
+      return { success: false, error: localError, message: providerInputsMissing() };
     }
     const { readRepositoryProviderBlob } = await import("@/lib/backlog/initiative-readiness/repository-artifact");
     const providerBlob = await readRepositoryProviderBlob({
@@ -331,12 +339,12 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
       expectedBlobId,
     });
     if (!providerBlob.ok) return { success: false, error: providerBlob.code, message: providerBlob.error };
+    blobId = providerBlob.blobId;
     try {
       content = new TextDecoder("utf-8", { fatal: true }).decode(providerBlob.data);
     } catch {
       return { success: false, error: "IMMUTABLE_SOURCE_NOT_UTF8", message: "Repository artifact is not valid UTF-8 source text." };
     }
-    blobId = expectedBlobId;
   }
   const page = pageSource({
     content,
