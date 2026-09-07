@@ -170,7 +170,7 @@ function validRequirementResults(value: unknown): boolean {
   return Array.isArray(value) && value.every(validRequirementResult);
 }
 
-function persistedTerminalCompletionDecision(
+export function persistedTerminalCompletionDecision(
   activities: readonly InitiativeReadinessActivity[],
   item: InitiativeReadinessItem,
 ): InitiativeReadinessDecision | null {
