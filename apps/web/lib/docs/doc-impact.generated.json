@@ -1194,6 +1194,9 @@
     "apps/web/lib/work-management/work-unit.ts": [
       "docs/founder-kernel/wiki/principles/universal-work-formula.md"
     ],
+    "apps/web/lib/work-management/worker-rollup.ts": [
+      "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
     "apps/web/lib/work-management/workspace-case-loader.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -2659,6 +2662,7 @@
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
       "apps/web/lib/work-management/human-accountability.ts",
+      "apps/web/lib/work-management/worker-rollup.ts",
       "scripts/check-prose-lint.ts"
     ],
     "docs/design/golden-triangle-design.md": [

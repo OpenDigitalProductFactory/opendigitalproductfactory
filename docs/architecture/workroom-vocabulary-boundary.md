@@ -151,6 +151,33 @@ is, rooms with no explicit assignment resolve to that setup state, which is the
 intended behaviour rather than a defect. Recording it is a schema change with
 its own migration acceptance.
 
+## An executor is a teammate, not a surface
+
+The same worker reached through Claude Code, Codex, Grok or the portal is one
+identity with one session on the room. A roster deduplicates by identity rather
+than listing a row per connection, and multi-agent orchestration rolls up the
+same way: a planner and its specialists are one worker with subagents beneath
+it, never N peers competing for attention.
+
+`rollUpNamedWorkers` in
+[`apps/web/lib/work-management/worker-rollup.ts`](../../apps/web/lib/work-management/worker-rollup.ts)
+performs that rollup. A worker is described from its freshest observation, and
+`working` is a claim about now: without a recent progress observation it
+degrades to idle, and with none at all to unknown. `waiting` and `idle` are not
+claims about now and are reported as given.
+
+Delegation is not dependency. A worker's parent is the worker that delegated it,
+recorded at delegation time. Where that was never recorded the parentage stays
+`unknown`, and where two surfaces name different delegators it collapses to
+`unknown` rather than taking a vote. A child whose parent is not visible — hidden
+by authorization, or simply not loaded — is never promoted to a root, because
+that would present a subagent as an independent worker.
+
+A hundred subagents stay inspectable without either extreme: hiding them behind
+a running count answers nothing, and giving each a top-level destination floods
+navigation. They are grouped under the worker that delegated them, paged, and
+searchable by name or by what they are currently doing.
+
 ## Naming rules
 
 - One stem, one casing: **`Workroom`** — never `WorkRoom`, `work-room` or
