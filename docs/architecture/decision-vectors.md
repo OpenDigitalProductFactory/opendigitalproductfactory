@@ -333,6 +333,30 @@ material scores **zero outright** rather than being argued down; and because con
 adding weakly-graded material to a strong domain **dilutes** it. More sources is not automatically
 more confidence.
 
+A third consequence is sharper, and the consult now reports it rather than leaving it to be
+inferred. Because the weight is a **product**, one low factor caps every item in a set at the same
+value — so a set can sit below the 0.7 recommendation band with **no amount of further authoring
+able to lift it**. The common case is promotion state: seeded doctrine lands as `candidate` (0.45),
+which against the medium and high risk penalties gives ceilings of **0.35** and **0.20**. Both are
+roughly half the band, permanently.
+
+That was measured live under `BI-0F3D5F94`: five acumens holding between 3 and 12 material rows each
+returned exactly 0.35 at medium risk and 0.20 at high. A 4x spread in volume changing nothing is the
+tell that the number is structural rather than a coverage artifact.
+
+Every scored consult therefore carries **`decidability`** (`BI-5843CD9C`): the ceiling this material
+could reach at this risk tier, whether that clears the band, which factor is binding when it does
+not, and the remedy that would actually change the outcome. The sub-band escalation splits in two:
+`material-below-confidence` when more or better material would help, and
+`ceiling-below-recommendation-band` when it cannot. The distinction matters because the remedies
+differ — promotion needs *promoting*, staleness needs *refreshing*, weak evidence needs *better
+sources*, and none of those is "write more material". Without the split, an escalation from an
+unreachable ceiling is indistinguishable from one where the evidence was genuinely weighed, and the
+natural response is the one action that cannot possibly work.
+
+Whether seeded doctrine *should* be able to recommend is a governance question, not an arithmetic
+one; `BI-0F3D5F94` owns it. `decidability` exists so the question is visible enough to ask.
+
 ### 5.3 The high-stakes hold, and how it is released
 
 An unattended platform seed does **not** make craft doctrine live for a high-stakes profession.
