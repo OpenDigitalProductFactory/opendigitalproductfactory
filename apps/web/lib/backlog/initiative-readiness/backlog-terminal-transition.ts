@@ -306,11 +306,18 @@ export async function completeBacklogItemTransition(args: {
       // A merge through branch protection is authoritative delivery evidence and
       // supersedes a missing/hand-built manifest (BI-B04A0203).
       const delivery = mergedThroughGates ? "pass" : deliveryState(completion);
+      const directDocumentationAcceptance = completion.kind === "evaluated"
+        && completion.verdict.allowed
+        && completion.verdict.normalizedManifest?.workClass === "documentation"
+        && (completion.verdict.acceptanceEvidenceRefs?.length ?? 0) > 0;
       // Recognized platform work: the merge is the acceptance too — but only when
       // reconciliation is not in a real conflict/malformed state (those still block).
       const acceptancePass =
         reconciliation.state === "pass" ||
+        directDocumentationAcceptance ||
         (recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
+      const objectiveReconciliationPass = reconciliation.state === "pass"
+        || (recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
       const inheritedScope = await loadInheritedInitiativeScope(
         tx as unknown as InheritanceDb,
         { childItemId: lockedItem.itemId, childRowId: lockedItem.id },
@@ -333,14 +340,16 @@ export async function completeBacklogItemTransition(args: {
         completion: {
           deliveryEvidence: delivery,
           acceptanceEvidence: acceptancePass ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
-          objectiveReconciliation: acceptancePass ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+          objectiveReconciliation: objectiveReconciliationPass ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
           objectiveBaselineConflict: reconciliation.state === "conflict",
           projectionError: reconciliation.state === "malformed",
           evidenceRefs: {
             DELIVERY_EVIDENCE_REQUIRED: completion.kind === "evaluated"
               ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
               : [],
-            ACCEPTANCE_EVIDENCE_REQUIRED: reconciliation.evidenceRefs,
+            ACCEPTANCE_EVIDENCE_REQUIRED: directDocumentationAcceptance && completion.kind === "evaluated"
+              ? completion.verdict.acceptanceEvidenceRefs ?? []
+              : reconciliation.evidenceRefs,
             OBJECTIVE_RECONCILIATION_REQUIRED: reconciliation.evidenceRefs,
           },
           requirementReasons: { DELIVERY_EVIDENCE_REQUIRED: mergedThroughGates ? [] : deliveryReasons(completion) },
