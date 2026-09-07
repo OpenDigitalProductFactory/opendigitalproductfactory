@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Portfolio work activity refactoring plan
 
 Date: 2026-09-07 · Umbrella: BI-8DACBA07 · Epic: EP-WORK-CONVERGENCE
@@ -73,6 +77,8 @@ For this documentation PR: validate Markdown links, visual reference, prose/sour
 For implementation: affected unit/contract tests and cheap local checks precede push; cloud build and canonical-runtime UX/migration gates follow the current AGENTS.md. Attach runtime evidence to the delivering workroom and keep unavailable gates inconclusive. Do not mark the umbrella complete until all five deliverables and their cross-flow acceptance pass.
 
 Publish an immutable signed plan blob, synchronize the design workroom's head, and record `record_plan_backlog_coverage` with the five rows above. Design approval, architecture review and plan approval remain distinct governed receipts; this plan does not self-certify them. Live backlog bodies point here and to the canonical requirements; status changes occur through DPF tools.
+
+Publication-time condition: no initiative scope baseline exists for BI-8DACBA07, so the platform refused formal coverage registration. Its prescribed recovery through an implementation claim was also refused because an xlarge initiative never enters implementation. The five live mappings above remain the delivery plan; obtain independent initiative scope approval and approved shaped decomposition before execution. Do not bypass the refusal or reclassify the initiative to make the gate pass.
 
 ## Overlap and deferred work
 

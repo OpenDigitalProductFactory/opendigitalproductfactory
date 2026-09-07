@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Portfolio work activity and human accountability
 
 Date: 2026-09-07 · Scope: platform refactoring · Umbrella: BI-8DACBA07
