@@ -9,6 +9,7 @@
 
 import type { prisma } from "@dpf/db";
 
+import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 import { resolveRoomOwner, type RoomOwner } from "@/lib/work-management/room-owner-ladder";
 import { STANDING_SHAPES } from "@/lib/work-management/standing-operations-shapes";
 
@@ -100,6 +101,13 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
   // is the finding. It goes to the operator, who can appoint one.
   const overseer = readOverseerPrincipalRef(drive);
 
+  // The room's address is composed, never hand-built: a path spelled out here is
+  // a path nothing keeps honest, and the operator finds out by clicking (BI-6F2CC21B).
+  const roomHref = `/workspace/cases/${encodeWorkCaseKey({
+    sourceType: "work-capsule",
+    sourceId: row.capsuleId,
+  })}`;
+
   // Naming who should drive turns a diagnosis into a one-step instruction.
   const suggestion =
     row.ladderOwner === undefined
@@ -129,8 +137,8 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
       irreversible: false,
     },
     createdAtIso: row.updatedAt.toISOString(),
-    actions: [{ kind: "open-in-context", label: "Open room", href: `/ea/workrooms/${row.capsuleId}` }],
-    deepLink: `/ea/workrooms/${row.capsuleId}`,
+    actions: [{ kind: "open-in-context", label: "Open room", href: roomHref }],
+    deepLink: roomHref,
     audience: { operator: true, ...(overseer ? { assigneePrincipalId: overseer } : {}) },
     ...(row.portfolioRole && PORTFOLIO_BY_ROLE[row.portfolioRole]
       ? { portfolio: PORTFOLIO_BY_ROLE[row.portfolioRole] }
