@@ -8,7 +8,7 @@ import {
   type ResolveCompletionEvidenceResult,
 } from "@/lib/backlog/completion-evidence-runtime";
 import { canonicalJson } from "@/lib/shared/canonical-json";
-import { isReachableFromTrunk, trunkRefExists } from "@/lib/work-capsules/git-scanner";
+import { isReachableFromTrunk, trunkHasMergedPullRequest, trunkRefExists } from "@/lib/work-capsules/git-scanner";
 
 import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
@@ -126,19 +126,60 @@ function mergeSignalRoots(): string[] {
   return [...new Set(roots.filter((r): r is string => Boolean(r)))];
 }
 
-async function defaultResolveMergeDelivery({ itemId }: { itemRowId: string; itemId: string }): Promise<boolean> {
+/** Pull-request numbers named by an item's evidence links (`.../pull/123`). */
+export function pullRequestNumbersFromActivities(
+  activities: readonly { kind: string; payload: unknown }[],
+): number[] {
+  const numbers = new Set<number>();
+  for (const activity of activities) {
+    if (activity.kind !== "evidence") continue;
+    const url = (activity.payload as { url?: unknown } | null)?.url;
+    const match = typeof url === "string" ? url.match(/\/pull\/(\d+)(?:[/?#]|$)/) : null;
+    if (match) numbers.add(Number(match[1]));
+  }
+  return [...numbers];
+}
+
+/**
+ * Delivery evidence is the trunk (BI-AFE8BB73, design §4): a SHA reachable
+ * from origin/main satisfies DELIVERY_EVIDENCE_REQUIRED for every shape.
+ * Read the Workroom heads first; when no room recorded a head (a fix worked
+ * outside a Workroom, or a room whose head was never synced), fall back to the
+ * item's linked pull request — the room's `pullRequestNumber` or an evidence
+ * link — and look for its merge commit on the trunk. The manifest path stays
+ * as the fallback the caller already has.
+ */
+async function defaultResolveMergeDelivery({ itemRowId, itemId }: { itemRowId: string; itemId: string }): Promise<boolean> {
   try {
-    const room = await (prisma as unknown as {
-      workroom: { findFirst(args: unknown): Promise<{ headSha: string | null } | null> };
-    }).workroom.findFirst({
-      where: { backlogItemId: itemId, headSha: { not: null } },
+    const db = prisma as unknown as {
+      workroom: { findMany(args: unknown): Promise<{ headSha: string | null; pullRequestNumber: number | null }[]> };
+      backlogItemActivity: { findMany(args: unknown): Promise<{ kind: string; payload: unknown }[]> };
+    };
+    const rooms = await db.workroom.findMany({
+      where: { backlogItemId: itemId },
       orderBy: { updatedAt: "desc" },
-      select: { headSha: true },
+      select: { headSha: true, pullRequestNumber: true },
     });
-    if (!room?.headSha) return false;
+    const heads = rooms.map((room) => room.headSha).filter((sha): sha is string => Boolean(sha));
+    const evidence = await db.backlogItemActivity.findMany({
+      where: { backlogItemId: itemRowId, kind: "evidence" },
+      select: { kind: true, payload: true },
+      take: 200,
+    });
+    const pullRequests = [
+      ...rooms.map((room) => room.pullRequestNumber).filter((n): n is number => typeof n === "number"),
+      ...pullRequestNumbersFromActivities(evidence),
+    ];
+    if (heads.length === 0 && pullRequests.length === 0) return false;
     for (const root of mergeSignalRoots()) {
       if (!(await trunkRefExists(root))) continue;
-      return (await isReachableFromTrunk(root, room.headSha)) === true;
+      for (const sha of heads) {
+        if ((await isReachableFromTrunk(root, sha)) === true) return true;
+      }
+      for (const prNumber of new Set(pullRequests)) {
+        if ((await trunkHasMergedPullRequest(root, prNumber)) === true) return true;
+      }
+      return false;
     }
     return false;
   } catch {

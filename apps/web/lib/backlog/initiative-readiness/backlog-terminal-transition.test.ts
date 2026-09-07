@@ -259,3 +259,17 @@ describe("completeBacklogItemTransition", () => {
     expect(seen[0]?.completion.acceptanceEvidence).toBe("missing");
   });
 });
+
+describe("pullRequestNumbersFromActivities (BI-AFE8BB73)", () => {
+  it("reads distinct PR numbers from evidence links and ignores everything else", async () => {
+    const { pullRequestNumbersFromActivities } = await import("./backlog-terminal-transition");
+    expect(pullRequestNumbersFromActivities([
+      { kind: "evidence", payload: { url: "https://github.com/o/r/pull/5119" } },
+      { kind: "evidence", payload: { url: "https://github.com/o/r/pull/5119/files" } },
+      { kind: "evidence", payload: { url: "https://github.com/o/r/pull/5124?x=1" } },
+      { kind: "evidence", payload: { url: "https://github.com/o/r/issues/12" } },
+      { kind: "initiative_gate_receipt", payload: { url: "https://github.com/o/r/pull/7" } },
+      { kind: "evidence", payload: null },
+    ])).toEqual([5119, 5124]);
+  });
+});
