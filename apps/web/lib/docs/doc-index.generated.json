@@ -679,7 +679,8 @@
         "short-term",
         "medium-term",
         "prototype-outcomes",
-        "submission-ready-future-work"
+        "submission-ready-future-work",
+        "mcp-discovery-refusal-conformance"
       ]
     },
     "docs/architecture/agent-standards-external-alignment.md": {
@@ -1925,7 +1926,8 @@
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
         "terminal-readiness-recovery-packets",
         "acting-coworker-binding-what-lets-a-token-join-a-work-room",
-        "diagnosing-requires-an-acting-coworker"
+        "diagnosing-requires-an-acting-coworker",
+        "diagnosing-an-empty-loadtools-result"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
