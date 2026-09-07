@@ -86,8 +86,8 @@ describe("selectRepresentativeActivities", () => {
       room({ roomId: "run", evidenceAt: ago(1_000), latestAction: "Checking invoice matching" }),
       room({ roomId: "stuck", blocker: "Waiting for release review" }),
     ], NOW, 2);
-    expect(picked[0]!.statement).toBe("Blocked: Waiting for release review");
-    expect(picked[1]!.statement).toBe("Checking invoice matching");
+    expect(picked[0]!.statement).toBe("Room stuck · blocked: Waiting for release review");
+    expect(picked[1]!.statement).toBe("Room run · Checking invoice matching");
     for (const p of picked) expect(p.statement).not.toMatch(/^\d+$/);
   });
 

@@ -15,8 +15,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/** Rooms read for one render of this page. */
+const WORKROOM_READ_LIMIT = 200;
+
 export default async function WorkroomsPage() {
-  const inventory = await loadCapsuleLivenessInventory(prisma, { where: {}, take: 200 });
+  const inventory = await loadCapsuleLivenessInventory(prisma, { where: {}, take: WORKROOM_READ_LIMIT });
+  // A full page means the read stopped at its limit, so branch counts describe
+  // the rooms read rather than the rooms that exist. The tree is told, and says so.
+  const roomReadBounded = inventory.capsulesAll.length >= WORKROOM_READ_LIMIT;
   const workrooms = inventory.capsulesAll.map((room) => ({
     ...room,
     updatedAt: room.updatedAt instanceof Date ? room.updatedAt.toISOString() : String(room.updatedAt),
@@ -73,7 +79,11 @@ export default async function WorkroomsPage() {
       </Surface>
       <Surface className="mt-6" rounded="xl">
         <h2 className="text-base font-semibold text-[var(--dpf-text)]">Activity by portfolio</h2>
-        <PortfolioActivityTree rows={activityRows} partial={activity.partial} />
+          <PortfolioActivityTree
+          rows={activityRows}
+          partial={activity.partial}
+          roomReadBounded={roomReadBounded}
+        />
       </Surface>
 
       <div className="mt-6">

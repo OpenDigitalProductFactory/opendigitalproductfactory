@@ -2501,7 +2501,10 @@
         "a-known-tension-accepted-deliberately",
         "what-is-deliberately-not-renamed-yet",
         "what-a-human-reads-is-renamed-and-now-guarded",
-        "related"
+        "related",
+        "a-disclosure-control-discloses",
+        "a-count-says-what-it-counted",
+        "a-statement-names-its-room"
       ]
     },
     "docs/business-types/_readability-report.md": {

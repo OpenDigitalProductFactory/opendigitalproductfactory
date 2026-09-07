@@ -153,8 +153,14 @@ export type RepresentativeActivity = {
 };
 
 function statementFor(room: RoomActivityInput, signal: ActivitySignal): string {
-  if (room.blocker) return `Blocked: ${room.blocker}`;
-  if (room.latestAction) return room.latestAction;
+  // Every statement names its room. Measured at 1,001 rooms, blockers and
+  // actions are frequently identical across rooms — several rooms blocked on
+  // the same generic liveness reason rendered as three indistinguishable
+  // "Blocked: ..." lines, so the operator could not tell which room each line
+  // was about or that they were different rooms at all. The room is the thing
+  // being acted on; it belongs in the sentence.
+  if (room.blocker) return `${room.title} · blocked: ${room.blocker}`;
+  if (room.latestAction) return `${room.title} · ${room.latestAction}`;
   // No concrete action recorded — say that, rather than manufacturing one.
   return `${room.title} · ${signal.label.toLocaleLowerCase("en-US")}`;
 }
@@ -190,6 +196,15 @@ export function selectRepresentativeActivities(
   }));
 }
 
+/**
+ * How many rooms one expanded branch discloses at most.
+ *
+ * Expansion has to stay bounded independently of how many rooms exist: the
+ * whole point of the tree is that a portfolio with a thousand rooms is still
+ * readable. Beyond this, the branch says how many it is not showing.
+ */
+export const DEFAULT_DISCLOSURE_LIMIT = 25;
+
 export type BranchRow = {
   branchId: string;
   portfolioRole: WorkCapsulePortfolioRole | null;
@@ -198,6 +213,17 @@ export type BranchRow = {
   /** Rooms needing attention: blocked or waiting on a person. */
   attentionCount: number;
   representative: RepresentativeActivity[];
+  /**
+   * The rooms a branch discloses when it is expanded, in the same order the
+   * summary uses. Bounded: a portfolio holding a thousand rooms must not empty
+   * all of them into the document the moment someone opens the chevron, so this
+   * carries at most `disclosureLimit` and reports the remainder instead.
+   */
+  disclosed: RepresentativeActivity[];
+  /** True when the branch holds more rooms than `disclosed` carries. */
+  disclosedTruncated: boolean;
+  /** Rooms in this branch beyond the disclosed bound. Never negative. */
+  undisclosedCount: number;
 };
 
 export type PortfolioActivityPage = {
@@ -227,11 +253,14 @@ export function projectPortfolioActivityPage(input: {
   pageSize?: number;
   /** Max representative activities per collapsed branch. */
   representativeLimit?: number;
+  /** Max rooms an expanded branch discloses before it reports a remainder. */
+  disclosureLimit?: number;
   /** Resume after this branch id. */
   cursor?: string | null;
 }): PortfolioActivityPage {
   const pageSize = Math.max(1, input.pageSize ?? 50);
   const representativeLimit = input.representativeLimit ?? 3;
+  const disclosureLimit = input.disclosureLimit ?? DEFAULT_DISCLOSURE_LIMIT;
 
   const seen = new Set<string>();
   const byBranch = new Map<string, RoomActivityInput[]>();
@@ -256,12 +285,17 @@ export function projectPortfolioActivityPage(input: {
       const state = deriveActivitySignal(room, input.now).state;
       return state === "blocked" || state === "waiting-on-person";
     }).length;
+    const disclosed = selectRepresentativeActivities(rooms, input.now, disclosureLimit);
+
     return {
       branchId,
       portfolioRole: rooms[0]!.portfolioRole,
       roomCount: rooms.length,
       attentionCount,
       representative: selectRepresentativeActivities(rooms, input.now, representativeLimit),
+      disclosed,
+      disclosedTruncated: rooms.length > disclosed.length,
+      undisclosedCount: Math.max(0, rooms.length - disclosed.length),
     };
   });
 

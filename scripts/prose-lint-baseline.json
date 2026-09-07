@@ -6893,7 +6893,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 9
+    "textMass": 25
   },
   "apps/web/components/ops/workrooms/WorkroomInventory.tsx": {
     "vocabulary": 0,
