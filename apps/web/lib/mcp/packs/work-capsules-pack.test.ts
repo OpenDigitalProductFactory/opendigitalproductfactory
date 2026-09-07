@@ -249,6 +249,65 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
+  it("record_workroom_stage_receipt writes a completing receipt onto the drive snapshot", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
+      id: "row-pay",
+      capsuleId: "WC-B02C8BFA",
+      workspaceState: {
+        workroomDrive: {
+          action: "pause",
+          reason: "executor_writeback_unavailable",
+          stageKey: "read",
+          receipts: [{ stageKey: "read", kind: "blocked" }],
+        },
+      },
+    });
+    mockPrisma.workroom.update.mockResolvedValue({ id: "row-pay", capsuleId: "WC-B02C8BFA" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool(
+      "record_workroom_stage_receipt",
+      { capsuleId: "WC-B02C8BFA", stageKey: "read", kind: "findings", summary: "Due obligations listed." },
+      "user-1",
+      { agentId: "finance-controller" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { capsuleId: "WC-B02C8BFA" },
+      data: expect.objectContaining({
+        workspaceState: expect.objectContaining({
+          workroomDrive: expect.objectContaining({
+            receipts: [{ stageKey: "read", kind: "findings" }],
+          }),
+        }),
+      }),
+    }));
+  });
+
+  it("record_workroom_stage_receipt refuses blocked as a completing kind", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
+      id: "row-pay",
+      capsuleId: "WC-B02C8BFA",
+      workspaceState: {
+        workroomDrive: { action: "pause", stageKey: "read", receipts: [] },
+      },
+    });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool(
+      "record_workroom_stage_receipt",
+      { capsuleId: "WC-B02C8BFA", stageKey: "read", kind: "blocked" },
+      "user-1",
+      { agentId: "finance-controller" },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("blocked_kind_not_completing");
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+  });
+
   it("adopt_worktree creates a capsule for a branch/worktree pair", async () => {
     mockPrisma.workroom.findFirst.mockResolvedValue(null);
     mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPT" });

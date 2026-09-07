@@ -307,6 +307,23 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "record_workroom_stage_receipt",
+    description:
+      "Record a completing receipt for the Workroom's current drive stage after doing the stage work with granted tools. The server-owned drive still advances; this does not execute the stage or skip it. kind must not be blocked. TaskRun completion is not a receipt.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        stageKey: { type: "string", description: "The current drive stage this receipt completes." },
+        kind: { type: "string", description: "Completing receipt kind (not blocked)." },
+        summary: { type: "string", description: "Optional one-line outcome of the stage." },
+      },
+      required: ["capsuleId", "stageKey", "kind"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "reassign_workroom_executor",
     description:
       "Hand a Workroom off to a different executor: change the executor, transfer the active lease to the caller, and record an executor-changed event with the handoff manifest (next action, open risks, evidence digest). Renders as a plain status event, not raw agent plumbing.",
@@ -387,6 +404,7 @@ export const workCapsulesPack: ToolPack = {
     update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
     release_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
     record_workroom_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
+    record_workroom_stage_receipt: (params, userId, context) => HANDLERS().then((m) => m.recordWorkroomDriveReceiptTool(params, userId, context)),
     reassign_workroom_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
     record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),
@@ -415,6 +433,7 @@ export const workCapsulesPack: ToolPack = {
     update_workroom_status: ["work_capsule_write"],
     release_workroom_scope: ["work_capsule_write"],
     record_workroom_evidence: ["work_capsule_write"],
+    record_workroom_stage_receipt: ["workroom_drive_write"],
     reassign_workroom_executor: ["work_capsule_write"],
     start_external_work: ["work_capsule_adopt"],
     record_agent_activity: ["work_capsule_write"],

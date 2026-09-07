@@ -3,6 +3,8 @@ export const WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND = "blocked";
 
 export const EXECUTOR_WRITEBACK_UNAVAILABLE_REASON = "executor_writeback_unavailable";
 
+export type WorkroomDriveReceipt = { stageKey: string; kind: string };
+
 export type PriorWorkroomDrive = {
   action: string;
   reason: string;
@@ -14,4 +16,28 @@ export function isCompletingWorkroomDriveReceipt(
   stageKey: string,
 ): boolean {
   return receipt.stageKey === stageKey && receipt.kind !== WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND;
+}
+
+export function appendCompletingWorkroomDriveReceipt(
+  existing: readonly WorkroomDriveReceipt[],
+  receipt: WorkroomDriveReceipt,
+): { ok: true; receipts: WorkroomDriveReceipt[] } | { ok: false; error: string } {
+  const stageKey = receipt.stageKey.trim();
+  const kind = receipt.kind.trim();
+  if (!stageKey || !kind) return { ok: false, error: "invalid_receipt" };
+  if (kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) {
+    return { ok: false, error: "blocked_kind_not_completing" };
+  }
+  if (existing.some((entry) => entry.stageKey === stageKey && entry.kind === kind)) {
+    return { ok: true, receipts: [...existing] };
+  }
+  return {
+    ok: true,
+    receipts: [
+      ...existing.filter((entry) =>
+        !(entry.stageKey === stageKey && entry.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND)
+      ),
+      { stageKey, kind },
+    ],
+  };
 }

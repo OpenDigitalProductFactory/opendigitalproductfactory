@@ -137,6 +137,7 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     const now = new Date("2026-09-01T00:00:00.000Z");
     const first = await runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
     expect(first.dispatched).toBe(1);
+    expect(String(fx.upsertAgentTask.mock.calls[0]?.[0]?.prompt)).toMatch(/record_workroom_stage_receipt/);
     const snapshot = fx.persist.mock.calls[0]?.[0]?.snapshot as Record<string, unknown>;
     expect(snapshot.action).toBe("dispatch_agent");
     const second = await runWorkroomDriveJob(now, {

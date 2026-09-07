@@ -100,6 +100,35 @@ describe("standing business-operations shapes", () => {
     }
   });
 
+  it("gives every dispatched standing-room coworker the drive receipt writer", () => {
+    const file = path.join(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "..",
+      "packages",
+      "db",
+      "data",
+      "agent_registry.json",
+    );
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as { agents: Array<Record<string, unknown>> };
+    const grantsByName = new Map<string, string[]>();
+    for (const row of parsed.agents ?? []) {
+      const name = row.agent_name;
+      const grants = (row.config_profile as { tool_grants?: string[] } | undefined)?.tool_grants;
+      if (typeof name === "string" && Array.isArray(grants)) grantsByName.set(name, grants);
+    }
+    for (const shape of STANDING_SHAPES) {
+      for (const agent of agentRefs(shape)) {
+        expect(
+          grantsByName.get(agent),
+          `${shape.key} agent:${agent} must hold workroom_drive_write`,
+        ).toContain("workroom_drive_write");
+      }
+    }
+  });
+
   it("binds each shape to a real collaboration shape", () => {
     for (const shape of STANDING_SHAPES) {
       expect(WORKROOM_SHAPE_KEYS, shape.key).toContain(shape.collaborationShape);

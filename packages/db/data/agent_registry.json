@@ -2702,7 +2702,8 @@
           "release_plan_read",
           "coworker_screen_read",
           "coworker_screen_drive",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "workroom_drive_write"
         ]
       }
     },
@@ -2755,7 +2756,8 @@
           "backlog_read",
           "registry_read",
           "initiative_design_review",
-          "initiative_domain_review"
+          "initiative_domain_review",
+          "workroom_drive_write"
         ]
       }
     },
@@ -2799,7 +2801,8 @@
           "consumer_read",
           "crm_read",
           "crm_write",
-          "web_search"
+          "web_search",
+          "workroom_drive_write"
         ]
       }
     },
@@ -3200,7 +3203,8 @@
           "backlog_write",
           "registry_read",
           "registry_write",
-          "web_search"
+          "web_search",
+          "workroom_drive_write"
         ]
       }
     },
@@ -3249,7 +3253,8 @@
           "registry_read",
           "web_search",
           "work_capsule_read",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "workroom_drive_write"
         ]
       }
     },
@@ -3971,7 +3976,8 @@
           "backlog_write",
           "telemetry_read",
           "web_search",
-          "registry_read"
+          "registry_read",
+          "workroom_drive_write"
         ]
       }
     },
@@ -4055,7 +4061,8 @@
         "tool_grants": [
           "registry_read",
           "backlog_read",
-          "portfolio_read"
+          "portfolio_read",
+          "workroom_drive_write"
         ]
       }
     },

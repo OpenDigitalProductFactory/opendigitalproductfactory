@@ -606,6 +606,13 @@ describe("Refactored build-scoped tools — backwards compat via implications", 
     expect(isToolAllowedByGrants("record_execution_evidence", ["build_evidence"])).toBe(true);
   });
 
+  it("record_workroom_stage_receipt accepts workroom_drive_write and work_capsule_write via implication", () => {
+    expect(isToolAllowedByGrants("record_workroom_stage_receipt", ["workroom_drive_write"])).toBe(true);
+    expect(isToolAllowedByGrants("record_workroom_stage_receipt", ["work_capsule_write"])).toBe(true);
+    expect(isToolAllowedByGrants("record_workroom_stage_receipt", ["work_room_write"])).toBe(false);
+    expect(isToolAllowedByGrants("record_workroom_stage_receipt", ["backlog_read"])).toBe(false);
+  });
+
   it("record_execution_evidence still accepts the legacy backlog_write via implications", () => {
     expect(isToolAllowedByGrants("record_execution_evidence", ["backlog_write"])).toBe(true);
   });

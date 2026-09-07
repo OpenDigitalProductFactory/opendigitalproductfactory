@@ -38,7 +38,7 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // EP-WORKROOM-COMMS (BI-4402DABB): a coworker that can write a work capsule (the
   // executors that claim/work rooms, incl. the external CLIs) may post to the room
   // it is admitted to. One-way — work_room_write never implies capsule write.
-  work_capsule_write: ["work_room_write"],
+  work_capsule_write: ["work_room_write", "workroom_drive_write"],
   // CRM drafting (crm_write) implies CRM inspection (crm_read): a coworker that
   // can draft an opportunity or quote can always read the accounts/pipeline it
   // is drafting against. One-way — crm_read alone never implies crm_write.
@@ -218,6 +218,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   claim_workroom_scope: ["work_capsule_write"],
   declare_break_fix: ["work_capsule_write"],
   record_workroom_evidence: ["work_capsule_write"],
+  record_workroom_stage_receipt: ["workroom_drive_write"],
   record_agent_activity: ["work_capsule_write"],
   heartbeat_workroom: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],

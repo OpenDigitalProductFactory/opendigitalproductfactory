@@ -229,7 +229,7 @@ export async function applyDrivePlan(input: {
       agentId: plan.agentId,
       ownerUserId: room.ownerUserId,
       title: `Workroom ${room.capsuleId} / ${plan.stageKey}`,
-      prompt: `Execute Workroom ${room.capsuleId} stage ${plan.stageKey} for shape ${plan.shapeKey}@${plan.shapeVersion}. Stay inside the declared grants. Do not skip stages, widen authority, or invent occupants.`,
+      prompt: `Execute Workroom ${room.capsuleId} stage ${plan.stageKey} for shape ${plan.shapeKey}@${plan.shapeVersion}. Do the stage with your granted tools, then call record_workroom_stage_receipt with capsuleId ${room.capsuleId}, stageKey ${plan.stageKey}, and a completing kind. The drive advances; this tool does not execute or skip the stage. Stay inside the declared grants. Do not skip stages, widen authority, invent occupants, or treat a chat COMPLETE or TaskRun completion as writeback.`,
       now,
     });
     await effects.persist({

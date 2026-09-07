@@ -1647,6 +1647,16 @@
       ]
     },
     {
+      "key": "workroom_drive_write",
+      "description": "Record a completing receipt on a Workroom drive so the server-owned runner can advance the stage.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "record_workroom_stage_receipt"
+      ],
+      "implies": []
+    },
+    {
       "key": "workbook_read",
       "description": "Read user-defined Workbook / Universal Grid tables: list tables, read schema, and query rows (EP-GRID-WORKBOOKS).",
       "category": "platform",
