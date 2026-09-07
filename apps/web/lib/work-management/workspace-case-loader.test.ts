@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   decodeWorkCaseKey,
@@ -79,6 +79,23 @@ const baseEngagement: CoworkerEngagementFixture = {
 };
 
 describe("workspace Work Case loader", () => {
+  it("resolves a Workroom URL through its canonical anchor even when the case source is a backlog item", async () => {
+    const anchored = { ...baseItem, sourceType: "backlog-item", sourceId: "BI-06AE6833" };
+    const db = prismaFor([anchored]);
+    const findFirst = vi.fn(async (args: unknown) => {
+      const where = (args as { where: { capsules?: { some: { capsuleId: string } } } }).where;
+      return where.capsules?.some.capsuleId === "WC-4A72DC95" ? anchored : null;
+    });
+    db.workItem.findFirst = findFirst;
+    const findMany = vi.fn().mockResolvedValue([{ id: "room-1", capsuleId: "WC-4A72DC95", status: "ready", title: "Reviewer recovery" }]);
+    db.workroom.findMany = findMany;
+    const detail = await loadWorkspaceWorkCaseDetail({ prismaClient: db,
+      caseKey: encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: "WC-4A72DC95" }), userId: "user-1" });
+    expect(detail).not.toBeNull();
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { capsules: { some: { capsuleId: "WC-4A72DC95" } } } }));
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { workItemId: "row-1", capsuleId: "WC-4A72DC95" } }));
+  });
+
   it("projects queued work as attention-first Work Cases", async () => {
     const dashboard = await loadWorkspaceWorkCaseLens({
       prismaClient: prismaFor([

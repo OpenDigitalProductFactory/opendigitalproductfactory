@@ -690,6 +690,7 @@ export async function recordWorkCapsuleEvidence(args: {
   capsuleId: string;
   evidence: CapsuleEvidenceInput;
   actor: WorkCapsuleActor;
+  deferPublication?: boolean;
 }) {
   if (!isWorkCapsuleEvidenceKind(args.evidence.kind)) {
     throw new Error("Invalid evidence kind");
@@ -706,7 +707,7 @@ export async function recordWorkCapsuleEvidence(args: {
     summary: args.evidence.summary,
     payload: args.evidence,
     actor: args.actor,
-  });
+  }, { deferPublication: args.deferPublication });
 }
 
 /**

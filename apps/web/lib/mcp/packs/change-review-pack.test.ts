@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 
 const mocks = vi.hoisted(() => ({
   prisma: {
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   recordExternalEvidence: vi.fn(),
   recordWorkCapsuleEvidence: vi.fn(),
   dispatchRoutedSemanticReview: vi.fn(),
+  enqueueSemanticReview: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
@@ -23,6 +25,7 @@ vi.mock("@/lib/change-review/routed-semantic-review", () => ({
   dispatchRoutedSemanticReview: mocks.dispatchRoutedSemanticReview,
 }));
 vi.mock("@/lib/work-capsules/work-capsule-store", () => ({ recordWorkCapsuleEvidence: mocks.recordWorkCapsuleEvidence }));
+vi.mock("@/lib/change-review/semantic-review-background", () => ({ enqueueSemanticReview: mocks.enqueueSemanticReview }));
 
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { changeReviewPack } from "./change-review-pack";
@@ -52,7 +55,7 @@ describe("change-review MCP pack", () => {
       }
       const row = {
         ...data,
-        progressPayload: null,
+        progressPayload: data.progressPayload ?? null,
         createdAt: new Date(),
       };
       taskRows.push(row);
@@ -121,18 +124,18 @@ describe("change-review MCP pack", () => {
     ]));
   });
 
-  it("dispatches one semantic review and subscribes a concurrent equivalent caller", async () => {
+  it("persists one review before queueing and subscribes a concurrent caller without inline inference", async () => {
     const input = {
       capsuleId: "WC-SINGLE-FLIGHT",
       authorSurface: "codex-desktop",
       artifactType: "code-change",
       title: "Immutable gate coordination",
-      artifact: "diff --git a/file.ts b/file.ts",
+      artifact: "diff --git a/file.ts b/file.ts\n",
       verificationEvidence: "Focused tests passed.",
       changedFiles: ["apps/web/lib/file.ts"],
       baseTreeHash: "a".repeat(40),
       headTreeHash: "b".repeat(40),
-      diffDigest: "c".repeat(64),
+      diffDigest: createHash("sha256").update("diff --git a/file.ts b/file.ts\n").digest("hex"),
     };
 
     const [left, right] = await Promise.all([
@@ -142,10 +145,13 @@ describe("change-review MCP pack", () => {
 
     expect([left.data?.disposition, right.data?.disposition].sort())
       .toEqual(["admitted", "subscribed"]);
-    expect(mocks.dispatchRoutedSemanticReview).toHaveBeenCalledOnce();
-    expect(mocks.recordExternalEvidence).toHaveBeenCalledOnce();
+    expect(mocks.dispatchRoutedSemanticReview).not.toHaveBeenCalled();
+    expect(mocks.recordExternalEvidence).not.toHaveBeenCalled();
+    expect(mocks.enqueueSemanticReview).toHaveBeenCalledOnce();
     expect(taskRows).toHaveLength(1);
-    expect(taskRows[0]).toMatchObject({ status: "completed" });
+    expect(taskRows[0]).toMatchObject({ status: "submitted", artifacts: { create: {
+      parts: [{ kind: "data", data: { input: { artifact: input.artifact } } }],
+    } } });
   });
 
   it("records infrastructure-inconclusive correlation without semantic quality counts", async () => {

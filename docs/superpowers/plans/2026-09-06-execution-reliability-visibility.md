@@ -426,3 +426,44 @@ Inngest [durable steps](https://www.inngest.com/docs/learn/inngest-functions)
 provide checkpoints, but [event deduplication](https://www.inngest.com/docs/guides/handling-idempotency)
 has a 24-hour window. Database claim and receipt fences remain necessary across
 that window. This is an implementation plan, not a delivered durability claim.
+
+## September 7 runtime acceptance and native admission
+
+The canonical release `v2026.09.07-workroom-execution-visibility.1`, target
+`f3c7bd183c1a9a4e62d5143ec24f8019684bd2d2`, passed publisher `34084039523`
+and release `34084039575`. Normal upgrade `SUR-DE459EDA` succeeded and exact-target
+readiness returned CAN-TEST. This establishes deployment, not acceptance.
+Reviewer transport repair #5186 subsequently merged as `793d0855ecf`.
+
+The actual `/ea` → `/ea/workrooms` → `WC-4A72DC95` journey returned a 404.
+The Workroom belongs to backlog case `BI-06AE6833`; it does not own a separate
+WorkItem whose source is `work-capsule`. The loader now follows the existing
+capsule foreign key, preserves the canonical case identity, and selects the
+requested capsule when reading its process. Fourteen loader tests pass. Runtime
+retest after release remains required. The canonical backlog case opens today,
+but the observed EA view still has no linked value-stream teams, and its flat
+200-room coordination list does not meet the complete navigation objective.
+
+Native review admission now stores a bounded, versioned TaskArtifact and queue
+intent in the same TaskRun creation. The existing execution event, two-minute
+reconciler, current authority check, generation reservation and heartbeat own the
+server run. Completed TaskNode branches are reused by request digest. The receipt,
+room evidence and final TaskRun state commit in one transaction; activity is
+published after commit. The existing Tasks result method reads the canonical
+receipt through its caller/task/Workroom binding and reports missing evidence.
+Cancellation compares the observed state and revision before writing.
+
+The affected source suite passes 164 tests, including duplicate admission and
+delivery, lost enqueue, revoked authority, deadline exhaustion, completed-branch
+restart and cancellation races. These are source tests, not the seven live
+acceptance scenarios. An interrupted synchronous provider branch remains an
+explicit reconciliation wait; this implementation does not manufacture a
+provider handle or repeat an uncertain call. Integrating the existing
+AsyncInferenceOp continuation contract, authorized recovery and its portal
+projection remains required for the full reviewer-recovery acceptance.
+
+Refactoring consolidates the request vocabulary and digest contract, canonical
+task states, reviewer branch dispatch, transactional external-evidence writer,
+and deferred activity publication. The broader goal still requires the versioned
+reviewer flow, actual nesting and accountable coordination, archetype-specific
+model bindings, and the complete enterprise-to-evidence runtime demonstration.

@@ -13,6 +13,7 @@ export async function recordWorkCapsuleActivity(
     payload?: Record<string, unknown>;
     actor: WorkCapsuleActor;
   },
+  options: { deferPublication?: boolean } = {},
 ) {
   const activity = await db.workroomActivity.create({
     data: {
@@ -24,7 +25,9 @@ export async function recordWorkCapsuleActivity(
       recordedByAgentId: input.actor.agentId,
     },
   });
-  publishRecordedWorkCapsuleActivity(input.workCapsuleId, activity?.id);
-  revalidatePortalContext();
+  if (!options.deferPublication) {
+    publishRecordedWorkCapsuleActivity(input.workCapsuleId, activity?.id);
+    revalidatePortalContext();
+  }
   return activity;
 }

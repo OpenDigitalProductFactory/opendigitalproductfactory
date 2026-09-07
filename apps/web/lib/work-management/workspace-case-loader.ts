@@ -29,9 +29,10 @@ import { readWorkroomShapeClaim } from "./workroom-shape-claim";
 import { readWorkroomPostureClaim } from "./workroom-posture-claim";
 import { readStoredWorkroomDriveState } from "./workroom-drive-state";
 import { deriveWorkroomShape } from "./derive-workroom-shape";
-import type { WorkroomActivityKind, WorkroomParticipantView, WorkroomView } from "./room-types";
+import type { WorkroomParticipantView, WorkroomView } from "./room-types";
+import { roomActivitiesFromCapsuleActivity } from "./room-activity";
 import { getWorkCaseSourceEntry } from "./source-registry";
-import { fromWorkItemMessage, fromWorkCapsuleActivity } from "./receipt-envelope";
+import { fromWorkItemMessage, fromWorkCapsuleActivity, type WorkCapsuleActivityRow } from "./receipt-envelope";
 import {
   authorizeWorkspaceRoomItem,
   readWorkspaceRoomPolicy,
@@ -125,16 +126,7 @@ export type WorkspaceWorkCapsuleRecord = {
 
 /** A capsule-activity row (WorkroomActivity, physical table WorkCapsuleActivity) —
  *  the coding carrier's own execution journal (BI-1CF7B600). */
-export type WorkspaceWorkroomActivityRecord = {
-  id: string;
-  workCapsuleId: string;
-  kind: string;
-  summary: string;
-  payload?: unknown;
-  recordedAt: Date | string;
-  recordedById?: string | null;
-  recordedByAgentId?: string | null;
-};
+export type WorkspaceWorkroomActivityRecord = WorkCapsuleActivityRow;
 
 export type WorkspaceCasePrismaClient = {
   workItem: {
@@ -480,44 +472,6 @@ function roomActivitiesFromMessages(
   }));
 }
 
-// The WorkroomActivityKind values a capsule row's `kind` may already be; anything
-// else degrades to a generic "external-event" so the entry still renders.
-const KNOWN_ACTIVITY_KINDS = new Set<WorkroomActivityKind>([
-  "message", "ask", "coworker-joined", "coworker-left", "coworker-handoff",
-  "work-started", "work-paused", "work-completed", "decision-proposed",
-  "decision-resolved", "artifact-added", "governed-action", "external-event",
-  "verification", "receipt", "cycle-opened", "cycle-closed",
-]);
-
-/**
- * BI-1CF7B600: project the capsule's own execution journal (WorkroomActivity rows)
- * into the room activity feed, so a capsule-sourced room no longer reads "No activity
- * yet" while 20+ rows exist. `capsuleIdByRowId` maps the row's workCapsuleId (a Workroom
- * row id) back to the WC-* id for the source reference.
- */
-function roomActivitiesFromCapsuleActivity(
-  rows: readonly WorkspaceWorkroomActivityRecord[],
-  capsuleIdByRowId: ReadonlyMap<string, string>,
-): WorkroomActivityInput[] {
-  return rows.map((row) => ({
-    sourceEventId: row.id,
-    kind: KNOWN_ACTIVITY_KINDS.has(row.kind as WorkroomActivityKind)
-      ? (row.kind as WorkroomActivityKind)
-      : "external-event",
-    occurredAt: row.recordedAt,
-    actorRef: {
-      actorKind: row.recordedByAgentId ? "agent" : row.recordedById ? "person" : "system",
-      actorId: row.recordedByAgentId ?? row.recordedById ?? undefined,
-    },
-    summary: row.summary,
-    sourceRef: {
-      kind: "work-capsule",
-      id: capsuleIdByRowId.get(row.workCapsuleId) ?? row.workCapsuleId,
-      status: row.kind,
-    },
-  }));
-}
-
 function roomReceiptsFromMessages(
   item: WorkspaceWorkItemRecord,
   messages: WorkspaceWorkItemMessageRecord[],
@@ -579,7 +533,12 @@ export async function loadWorkspaceWorkCaseDetail({
   }
 
   const item = await prismaClient.workItem.findFirst({
-    where: {
+    // A capsule is an execution carrier of its canonical case. Its WorkItem
+    // may be backlog-, booking-, or service-sourced; do not require a second
+    // work-capsule-sourced WorkItem merely to make the carrier URL addressable.
+    where: decoded.sourceType === "work-capsule"
+      ? { capsules: { some: { capsuleId: decoded.sourceId } } }
+      : {
       OR: [
         { sourceType: decoded.sourceType, sourceId: decoded.sourceId },
         { sourceType: decoded.sourceType, itemId: decoded.sourceId },
@@ -607,7 +566,9 @@ export async function loadWorkspaceWorkCaseDetail({
     // EP-WORK-CONVERGENCE (BI-650994D7): join the capsule(s) anchored to this WorkItem
     // so a coding carrier surfaces in its case instead of as a disjoint row.
     prismaClient.workroom.findMany({
-      where: { workItemId: item.id },
+      where: { workItemId: item.id,
+        ...(decoded.sourceType === "work-capsule" ? { capsuleId: decoded.sourceId } : {}),
+      },
       // EP-WORK-POSTURE Slice D (BI-4F468192): scopeClaims carries the room's
       // declared collaboration shape AND its declared posture; activityKind is
       // one of the four shape axes. Both ride the existing query — no extra
@@ -659,6 +620,7 @@ export async function loadWorkspaceWorkCaseDetail({
     ...evidenceFromWorkItem(item),
     ...evidenceFromMessages(messages),
   ];
+  const resolvedCaseKey = encodeWorkCaseKey(source);
   const detail = buildWorkCaseDetail({
     source,
     workItem: {
@@ -711,13 +673,13 @@ export async function loadWorkspaceWorkCaseDetail({
   const editablePosture = anchoredCapsule?.id
     ? {
         roomRowId: anchoredCapsule.id,
-        caseKey,
+        caseKey: resolvedCaseKey,
         declaredShape: readWorkroomShapeClaim(anchoredCapsule.scopeClaims),
         hasDeclaration: readWorkroomPostureClaim(anchoredCapsule.scopeClaims) !== null,
       }
     : null;
   const room = buildWorkroomView({
-    caseKey,
+    caseKey: resolvedCaseKey,
     sourceHealth: capsuleActivityRows.length > 20 ? "partial" : undefined,
     detail,
     structure,

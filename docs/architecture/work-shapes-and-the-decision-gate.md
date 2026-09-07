@@ -655,8 +655,16 @@ the runtime explicitly recorded prose without the required initiative receipt, t
 existing three-attempt budget remains, and no writer attempt or approval envelope
 exists. It reuses the persisted request, identity, authority checks and generation
 reservation from normal replay. Unknown waits, rejected writers, approvals and
-exhausted recovery stay outside this automatic path. This does not make the separate
-inline semantic-review operation restartable or resume an interrupted provider call.
+exhausted recovery stay outside this automatic path.
+
+Native semantic reviews persist their immutable request before returning a TaskRun
+identity. The existing queue worker revalidates the submitting authority, records
+reviewer branch checkpoints, and commits the final receipt with task completion.
+The existing Tasks read methods expose the bound receipt or its explicit absence.
+Completed branches can be reused after restart; an interrupted synchronous provider
+call remains a reconciliation wait. It must not be replayed merely because the
+client disconnected or a queue event arrived again. A resumable provider handle and
+authorized recovery are still required to close that part of the execution contract.
 
 ## Related references
 
