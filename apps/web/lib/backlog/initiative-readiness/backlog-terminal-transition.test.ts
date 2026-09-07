@@ -135,6 +135,90 @@ describe("completeBacklogItemTransition", () => {
     expect(fake.updateMany).not.toHaveBeenCalled();
   });
 
+  it("accepts cited substantive evidence for doc-only completion without inventing objective reconciliation", async () => {
+    const fake = fakeDb(1, "doc");
+    const seen: Array<{ completion: { acceptanceEvidence: string; objectiveReconciliation: string; evidenceRefs: Record<string, string[]> } }> = [];
+    const result = await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Updated and manually accepted the documentation.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({
+          kind: "evaluated",
+          item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "doc" },
+          verdict: {
+            allowed: true,
+            noOp: false,
+            normalizedManifest: {
+              workClass: "documentation",
+              evidenceActivityIds: ["E-DOC", "E-ACCEPT"],
+              useActiveBuildEvidence: false,
+            },
+            acceptanceEvidenceRefs: ["E-ACCEPT"],
+            blockers: [],
+            nextAction: null,
+          },
+        }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => false,
+        projectReadiness: ((input: { completion: { acceptanceEvidence: string; objectiveReconciliation: string; evidenceRefs: Record<string, string[]> } }) => {
+          seen.push(input);
+          return projected("allowed");
+        }) as never,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(seen[0]?.completion.acceptanceEvidence).toBe("pass");
+    expect(seen[0]?.completion.objectiveReconciliation).toBe("missing");
+    expect(seen[0]?.completion.evidenceRefs.ACCEPTANCE_EVIDENCE_REQUIRED).toEqual(["E-ACCEPT"]);
+  });
+
+  it("does not let manual evidence bypass objective reconciliation for implementation completion", async () => {
+    const fake = fakeDb(1, "feature");
+    const seen: Array<{ completion: { acceptanceEvidence: string } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Implemented the feature.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({
+          kind: "evaluated",
+          item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" },
+          verdict: {
+            allowed: true,
+            noOp: false,
+            normalizedManifest: {
+              workClass: "implementation",
+              evidenceActivityIds: ["E-SOURCE", "E-TEST", "E-BUILD", "E-MANUAL"],
+              useActiveBuildEvidence: false,
+            },
+            acceptanceEvidenceRefs: ["E-MANUAL"],
+            blockers: [],
+            nextAction: null,
+          },
+        }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => false,
+        projectReadiness: ((input: { completion: { acceptanceEvidence: string } }) => {
+          seen.push(input);
+          return projected("input-required");
+        }) as never,
+      },
+    });
+
+    expect(seen[0]?.completion.acceptanceEvidence).toBe("missing");
+    expect(fake.updateMany).not.toHaveBeenCalled();
+  });
+
   it("uses an exact status compare-and-set and records the status change after allowed readiness", async () => {
     const fake = fakeDb();
     const result = await completeBacklogItemTransition({

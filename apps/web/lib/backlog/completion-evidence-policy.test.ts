@@ -60,6 +60,44 @@ describe("evaluateCompletionEvidence", () => {
     expect(result.allowed).toBe(true);
   });
 
+  it("returns only valid cited manual or UX evidence as substantive acceptance refs", () => {
+    const result = evaluateCompletionEvidence(input({
+      item: { id: "row-1", itemId: "BI-DOC", status: "open", workType: "doc" },
+      rawManifest: {
+        workClass: "documentation",
+        evidenceActivityIds: ["spec", "manual", "ux"],
+      },
+      evidence: [
+        fact("spec", "spec_review"),
+        fact("manual", "manual_check"),
+        fact("ux", "ux_verified"),
+      ],
+    }));
+
+    expect(result).toMatchObject({
+      allowed: true,
+      acceptanceEvidenceRefs: ["manual", "ux"],
+    });
+  });
+
+  it("does not return stale UX acceptance when a newer UX failure exists", () => {
+    const result = evaluateCompletionEvidence(input({
+      item: { id: "row-1", itemId: "BI-DOC", status: "open", workType: "doc" },
+      rawManifest: {
+        workClass: "documentation",
+        evidenceActivityIds: ["spec", "ux-pass"],
+      },
+      evidence: [
+        fact("spec", "spec_review"),
+        fact("ux-pass", "ux_verified", new Date("2026-07-26T09:00:00.000Z")),
+        fact("ux-fail", "ux_fail", new Date("2026-07-26T11:00:00.000Z")),
+      ],
+    }));
+
+    expect(result.allowed).toBe(true);
+    expect(result.acceptanceEvidenceRefs).toEqual([]);
+  });
+
   it("allows verified-existing work with source and manual verification", () => {
     const result = evaluateCompletionEvidence(input({
       rawManifest: {

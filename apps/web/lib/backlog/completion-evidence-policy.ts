@@ -79,6 +79,7 @@ export type CompletionEvidenceVerdict = {
   allowed: boolean;
   noOp: boolean;
   normalizedManifest: CompletionEvidenceManifest | null;
+  acceptanceEvidenceRefs?: string[];
   blockers: CompletionEvidenceBlocker[];
   nextAction: string | null;
 };
@@ -221,6 +222,7 @@ export function evaluateCompletionEvidence(
       allowed: true,
       noOp: true,
       normalizedManifest: null,
+      acceptanceEvidenceRefs: [],
       blockers: [],
       nextAction: null,
     };
@@ -239,6 +241,7 @@ export function evaluateCompletionEvidence(
       allowed: false,
       noOp: false,
       normalizedManifest: null,
+      acceptanceEvidenceRefs: [],
       blockers,
       nextAction: nextActionFor(blockers),
     };
@@ -251,6 +254,7 @@ export function evaluateCompletionEvidence(
 
   const byId = new Map(input.evidence.map((entry) => [entry.id, entry]));
   const satisfied = new Set<ExecutionEvidenceDimension>();
+  const acceptanceEvidenceRefsByDimension = new Map<ExecutionEvidenceDimension, string[]>();
   for (const evidenceActivityId of manifest.evidenceActivityIds) {
     const evidence = byId.get(evidenceActivityId);
     if (!evidence) {
@@ -291,6 +295,11 @@ export function evaluateCompletionEvidence(
       continue;
     }
     satisfied.add(metadata.dimension);
+    if (metadata.dimension === "manual" || metadata.dimension === "ux") {
+      const refs = acceptanceEvidenceRefsByDimension.get(metadata.dimension) ?? [];
+      refs.push(evidence.id);
+      acceptanceEvidenceRefsByDimension.set(metadata.dimension, refs);
+    }
   }
 
   if (manifest.useActiveBuildEvidence) {
@@ -335,9 +344,16 @@ export function evaluateCompletionEvidence(
       latestByDimension.set(dimension, evidence);
     }
   }
+  for (const dimension of ["manual", "ux"] as const) {
+    const latest = latestByDimension.get(dimension);
+    if (latest && evidenceKindMetadata(latest.evidenceKind).polarity === "fail") {
+      acceptanceEvidenceRefsByDimension.delete(dimension);
+    }
+  }
   for (const dimension of new Set(required)) {
     const latest = latestByDimension.get(dimension);
     if (latest && evidenceKindMetadata(latest.evidenceKind).polarity === "fail") {
+      acceptanceEvidenceRefsByDimension.delete(dimension);
       blockers.push(blocker(
         "newer-failure",
         `A newer ${dimension} failure invalidates the prior pass`,
@@ -351,6 +367,10 @@ export function evaluateCompletionEvidence(
     allowed: blockers.length === 0,
     noOp: false,
     normalizedManifest: manifest,
+    acceptanceEvidenceRefs: [
+      ...(acceptanceEvidenceRefsByDimension.get("manual") ?? []),
+      ...(acceptanceEvidenceRefsByDimension.get("ux") ?? []),
+    ],
     blockers,
     nextAction: nextActionFor(blockers),
   };
