@@ -114,6 +114,50 @@ function createRegistryTransport(): RegistryTransport {
   };
 }
 
+/**
+ * Name a failure that is NOT a `RegistryReadError` — BI-1E8C1930.
+ *
+ * `registry-unavailable` has three lanes that already explain themselves: the
+ * non-OK responses carry `HTTP <status>`, and a resolution that throws out to
+ * the caller is logged separately. The fourth lane said nothing at all. Anything
+ * thrown inside `readCandidate` that was not a `RegistryReadError` collapsed to
+ * a bare `registry-unavailable`, so the one failure mode with no explanation was
+ * the only one left unexplained.
+ *
+ * That is not hypothetical: on a live install the update control disappeared
+ * entirely, every page load reproduced `release-target-unavailable:
+ * registry-unavailable` with no detail, and the whole GHCR chain — token, index,
+ * manifest, config blob, 307 redirect — succeeded when replayed by hand inside
+ * the same container. The evidence was sufficient to exclude every OTHER lane
+ * and insufficient to say anything about this one.
+ *
+ * Undici reports transport faults as a bare `TypeError("fetch failed")` with the
+ * real condition nested underneath, sometimes more than one level down, so the
+ * chain is walked for the first `code` rather than read at the top level.
+ *
+ * Deliberately narrow: error class, the first `code` found, and a bounded slice
+ * of the message. A registry read handles bearer tokens and signed redirect
+ * URLs, and this string goes to a log an operator reads, so the full message is
+ * never emitted.
+ */
+function describeUnexpectedFailure(error: unknown): string {
+  if (!(error instanceof Error)) return `non-error throw (${typeof error})`;
+  let code: string | undefined;
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current instanceof Error; depth += 1) {
+    const candidate = (current as { code?: unknown }).code;
+    if (typeof candidate === "string" && candidate.length > 0) {
+      code = candidate;
+      break;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  const message = error.message.slice(0, 120);
+  return code
+    ? `${error.name}: ${message} (${code})`
+    : `${error.name}: ${message}`;
+}
+
 function sha256(body: Uint8Array): string {
   return `sha256:${createHash("sha256").update(body).digest("hex")}`;
 }
@@ -443,10 +487,16 @@ export async function readRegistryReleaseCandidate(input: {
       return await readCandidate(transport.fetch);
     } catch (error) {
       if (error instanceof RegistryReadError || attempt === maxAttempts) {
+        // A non-RegistryReadError reaching here used to return the bare reason,
+        // leaving the only unexplained lane also the only silent one
+        // (BI-1E8C1930). It now names itself like every other failure does.
+        const detail = error instanceof RegistryReadError
+          ? error.detail
+          : describeUnexpectedFailure(error);
         return {
           ok: false,
           reason: error instanceof RegistryReadError ? error.reason : "registry-unavailable",
-          ...(error instanceof RegistryReadError && error.detail ? { detail: error.detail } : {}),
+          ...(detail ? { detail } : {}),
         };
       }
     } finally {

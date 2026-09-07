@@ -21,12 +21,12 @@ vi.mock("@dpf/db", () => ({
     coworkerTurnMetric: { upsert: vi.fn() },
   },
 }));
-vi.mock("@/lib/routed-inference", () => ({ routeAndCall: vi.fn() }));
+vi.mock("@/lib/routed-inference", () => ({ routeAndCall: vi.fn(), previewRoute: vi.fn() }));
 vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [], toolsToOpenAIFormat: vi.fn(() => []) }));
 vi.mock("@/lib/mcp-governed-execute", () => ({ governedExecuteTool: vi.fn() }));
 
 import { prisma } from "@dpf/db";
-import { routeAndCall } from "@/lib/routed-inference";
+import { routeAndCall, previewRoute } from "@/lib/routed-inference";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { runAgenticLoop } from "./agentic-loop";
 
@@ -445,6 +445,7 @@ describe("agent loop terminal writer integration", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(previewRoute).mockResolvedValue({ decision: { selectedEndpoint: "eligible-alternative" } } as never);
     vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       isSuperuser: true,
@@ -515,6 +516,7 @@ describe("agent loop terminal writer integration", () => {
     const thirdTools = (vi.mocked(routeAndCall).mock.calls[2]![3] as { tools: typeof providerTools }).tools;
     expect(secondTools.map((tool) => tool.function.name)).toEqual(policy.readerToolNames);
     expect(thirdTools.map((tool) => tool.function.name)).toContain(policy.writerToolName);
+    expect(vi.mocked(routeAndCall).mock.calls[1]![3]?.deniedProviders).toBeUndefined();
   });
 
   it("executes only the first writer when a provider emits duplicates in one batch", async () => {
@@ -553,7 +555,7 @@ describe("agent loop terminal writer integration", () => {
     vi.mocked(routeAndCall)
       .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
       .mockResolvedValueOnce(response("The evidence is sufficient for a judgment.") as never)
-      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "anthropic-sub" } as never)
+      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "gemini" } as never)
       .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
 
     await runAgenticLoop(params);
@@ -564,6 +566,34 @@ describe("agent loop terminal writer integration", () => {
     };
     expect(retryOptions.deniedProviders).toEqual(["local"]);
     expect(retryOptions.preferredProviderId).toBeUndefined();
+  });
+
+  it("uses one bounded retry on the sole eligible provider and records the writer only once", async () => {
+    vi.mocked(previewRoute).mockResolvedValue({ decision: { selectedEndpoint: null } } as never);
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true, message: "Receipt recorded." } as never);
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce({ ...response("I have assessed the evidence."), providerId: "gemini" } as never)
+      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "gemini" } as never)
+      .mockResolvedValueOnce({ ...response("Receipt recorded."), providerId: "gemini" } as never);
+    const result = await runAgenticLoop({ ...params, terminalToolPolicy: enterTerminalWriterPhase(policy) });
+    expect(result.failure).toBeUndefined();
+    expect(governedExecuteTool).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(routeAndCall).mock.calls[1]![3]?.deniedProviders).toBeUndefined();
+    expect(result.executedTools).toHaveLength(1);
+  });
+
+  it("preserves the native signed call while executing and recording server-bound arguments", async () => {
+    const nativeCall = { id: "native-read", name: "read_source_at_version", arguments: {}, gemini: { modelId: "gemini-3", thoughtSignature: "opaque" } };
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [nativeCall]) as never)
+      .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("Writer rejected.") as never);
+    const result = await runAgenticLoop(params);
+    expect(result.executedTools[0]?.args).toEqual(policy.immutableReaderArguments);
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]![0].rawParams).toEqual(policy.immutableReaderArguments);
+    const nextHistory = vi.mocked(routeAndCall).mock.calls[1]![0];
+    expect(nextHistory.find((message) => message.role === "assistant")?.toolCalls?.[0]).toEqual(nativeCall);
+    expect(nextHistory.find((message) => message.role === "tool")?.content).toContain(policy.immutableReaderArguments!.version);
   });
 
   it("returns a missing-writer failure when the review budget expires after a successful read", async () => {

@@ -64,6 +64,8 @@ export async function buildEffectiveRequestContract(input: {
           input.taskRequirement,
         );
 
+  contract.toolChoice = input.options?.toolChoice;
+  contract.terminalWriterToolName = input.options?.terminalWriterToolName;
   contract.minimumDimensions = mergeMinimumDimensions(
     contract.minimumDimensions,
     input.options?.minimumDimensions,

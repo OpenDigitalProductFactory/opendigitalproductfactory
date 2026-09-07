@@ -449,6 +449,38 @@ Evidence links retain source IDs, revision/digest, observed time and source stat
 Projection records carry their extractor version and source revision; missing
 joins and stale facts appear explicitly and feed existing EaConformanceIssue.
 
+#### Reviewer transport and bounded route recovery
+
+The 2026-09-07 trace of architecture TaskRun
+`TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-2C001C673264` reached
+`required-terminal-writer-not-enforceable` after Gemini providers became
+request-denylisted. Source inspection found that Gemini omitted prior tool calls
+and results, while every terminal nudge could rotate providers, including reader
+recovery. These findings do not establish a provider outage or permission defect.
+
+Required writer choice must enter the routing contract before endpoint selection.
+Known CLI adapters that cannot enforce it are excluded without relaxing data or
+provider policy. Neither fallback nor compatibility recovery may strip a required
+writer into an ordinary chat request. Dispatch retains its final capability check.
+
+Gemini continuation preserves correlated function calls, results, native call IDs
+and native model signatures. Original signed arguments remain in model history;
+server-bound arguments remain authoritative for execution and journaling. Foreign
+history uses Google's documented transfer marker; an orphan result is refused.
+This supports reviewer tool continuation, not every Gemini response construct.
+
+A bounded retry rotates providers only after prerequisite evidence exists, before
+a writer has been attempted, and when a policy preview finds an eligible
+alternative. Reader recovery, writer feedback and approval waits retain their
+route. If no alternative exists or preview fails, the existing bounded retry
+retains all policy fences. Preview grants no execution authority; dispatch
+revalidates policy. Exhaustion remains visible and must not start an unbounded
+replacement loop.
+
+This amendment is implemented and source-tested in the reviewer repair. Canonical
+runtime verification remains outstanding; unit tests do not prove recovery after
+restart, native review packet persistence, or duplicate-free external effects.
+
 ### 8.6 Enterprise-to-evidence interaction and archetype semantics
 
 Extend the EA canvas, `WorkroomShape`, process graph and shared UI primitives.

@@ -1103,6 +1103,29 @@ if [[ $_dry_run -eq 0 ]]; then
     _imgs="$(docker images --filter "reference=${_ref}" -q 2>/dev/null | sort -u)"
     [[ -n "${_imgs}" ]] && docker rmi -f ${_imgs} >/dev/null 2>&1 || true
   done
+  # BI-1172E86A: the two sweeps above still leave every SUPERSEDED
+  # version tag alive. Each upgrade tags a fresh dpf-portal / dpf-postgres /
+  # dpf-promoter / dpf-sandbox (`:v<date>-<slug>.<n>`), and because those tags
+  # stay attached, dangling-prune never sees them: one dev install accumulated
+  # 92 portal tags (4 GB each) in 16 days, 388 GB reclaimable. Bound the pile
+  # per repository: keep every tag some container still references (running
+  # portal, the just-swapped sandbox, the promoter itself) plus the
+  # PROMOTE_IMAGE_KEEP most recent others as a rollback margin, remove the rest
+  # by repo:tag (untagging, never by id, so a shared layer stays if another tag
+  # needs it). `docker images` lists newest first. Best-effort, volumes untouched.
+  _keep="${PROMOTE_IMAGE_KEEP:-3}"
+  [[ "$_keep" =~ ^[0-9]+$ ]] || _keep=3
+  _in_use="$(docker ps -a --format '{{.Image}}' 2>/dev/null | sort -u)"
+  for _repo in dpf-portal dpf-postgres dpf-promoter dpf-sandbox; do
+    _ref="ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/${_repo}"
+    _kept=0
+    while IFS= read -r _tagged; do
+      [[ -n "$_tagged" && "$_tagged" != *'<none>'* ]] || continue
+      if grep -qxF -- "$_tagged" <<<"$_in_use"; then continue; fi
+      if (( _kept < _keep )); then _kept=$((_kept + 1)); continue; fi
+      docker rmi "$_tagged" >/dev/null 2>&1 || true
+    done < <(docker images --filter "reference=${_ref}:v*" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)
+  done
 fi
 
 # Terminal success marker — emitted only after every verify AND the cleanup sweep, so

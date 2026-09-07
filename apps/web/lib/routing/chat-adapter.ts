@@ -24,6 +24,7 @@ import {
   formatMessageForResponses,
 } from "@/lib/ai-inference";
 import { isAnthropic } from "./provider-utils";
+import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
@@ -71,7 +72,8 @@ export { withLocalInferenceLock };
 
 interface GeminiPart {
   text?: string;
-  functionCall?: { name: string; args: Record<string, unknown> };
+  functionCall?: { id?: string; name: string; args: Record<string, unknown> };
+  thoughtSignature?: string;
   executableCode?: { language: string; code: string };
   codeExecutionResult?: { outcome: string; output: string };
 }
@@ -285,16 +287,12 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // ── Gemini ─────────────────────────────────────────────────────────
       chatUrl = `${baseUrl}/models/${modelId}:generateContent`;
 
-      const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+      const contents: ReturnType<typeof formatMessagesForGemini> = [];
       if (systemPrompt) {
         contents.push({ role: "user", parts: [{ text: systemPrompt }] });
         contents.push({ role: "model", parts: [{ text: "Understood. I will follow these instructions." }] });
       }
-      for (const m of messages) {
-        if (m.role === "tool") continue; // Gemini doesn't support tool role
-        const textContent = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
-        contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: textContent }] });
-      }
+      contents.push(...formatMessagesForGemini(messages, modelId));
 
       body = { contents };
 
@@ -565,9 +563,11 @@ export const chatAdapter: ExecutionAdapterHandler = {
         // functionCall parts are extracted as tool calls, not text
         if (part.functionCall) {
           toolCalls.push({
-            id: `gemini_${Math.random().toString(36).slice(2, 9)}`,
+            id: part.functionCall.id ?? `gemini_${Math.random().toString(36).slice(2, 9)}`,
             name: part.functionCall.name,
             arguments: part.functionCall.args ?? {},
+            gemini: { modelId, ...(part.functionCall.id ? { functionCallId: part.functionCall.id } : {}),
+              ...(part.thoughtSignature ? { thoughtSignature: part.thoughtSignature } : {}) },
           });
         }
       }

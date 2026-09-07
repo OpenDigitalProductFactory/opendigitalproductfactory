@@ -108,6 +108,14 @@ const VALID_AUTH_MODES: ReadonlySet<ExecutionAdapterSelector["authMode"]> = new 
   ExecutionAdapterSelector["authMode"]
 >(["api-key", "oauth", "local"]);
 
+/** Known transport limitation, shared by routing eligibility and final dispatch. */
+export function requiredToolChoiceExclusionReason(adapter: string | ExecutionAdapterSelector | null): string | null {
+  const kind = typeof adapter === "string" ? (adapter === "claude-cli" ? "claude-code-cli" : adapter) : adapter?.kind;
+  return kind === "claude-code-cli" || kind === "codex-cli"
+    ? `Execution adapter ${kind} cannot enforce required tool choice with a server-verifiable mechanism.`
+    : null;
+}
+
 /**
  * Round-trip a legacy string-typed `executionAdapter` value (or an already-
  * structured selector) into the new ExecutionAdapterSelector shape.

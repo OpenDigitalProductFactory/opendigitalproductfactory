@@ -69,6 +69,12 @@ function contract(overrides: Partial<RequestContract> = {}): RequestContract {
 }
 
 describe("getExclusionReasonV2 — capability floor (EP-AGENT-CAP-002)", () => {
+  it.each(["codex", "anthropic-sub"])("excludes %s before a required tool call is dispatched", (providerId) => {
+    const required = { ...contract({ requiresTools: true }), toolChoice: "required" } as RequestContract;
+    expect(getExclusionReasonV2(activeEp({ providerId }), required)).toContain("cannot enforce required tool choice");
+    expect(getExclusionReasonV2(activeEp({ providerId: "gemini" }), required)).toBeNull();
+  });
+
   it("passes when no minimumCapabilities set (null/undefined)", () => {
     const ep = activeEp({ supportsToolUse: false });
     const c = contract(); // no minimumCapabilities

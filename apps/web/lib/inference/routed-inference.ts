@@ -9,6 +9,7 @@
  */
 
 import type { ChatMessage } from "@/lib/ai-inference";
+import type { ToolCallEntry } from "@/lib/routing/adapter-types";
 import type {
   RouteDecision,
   EndpointManifest,
@@ -73,7 +74,7 @@ export interface RoutedInferenceResult {
   providerId: string;
   modelId: string;
   content: string;
-  toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  toolCalls: ToolCallEntry[];
   inputTokens: number;
   outputTokens: number;
   downgraded: boolean;
@@ -456,7 +457,7 @@ async function routeAndCallAttempt(
   // EXCEPTION: When requireTools is set (Build Studio, coding agents), tool
   // stripping destroys task semantics. Fail fast instead of silently degrading.
   if (!decision.selectedEndpoint && contract.requiresTools) {
-    if (options?.requireTools) {
+    if (options?.requireTools || contract.toolChoice === "required") {
       const fix = contract.residencyPolicy === "local_only"
         ? `Local-only inference is ON (cloud disabled), so routing will not fall back to a cloud provider. ` +
           `Enable a tool-capable LOCAL model (or run the build through the opencode engine, which supplies the tool loop), ` +
