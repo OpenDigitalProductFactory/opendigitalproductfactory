@@ -563,6 +563,9 @@
     "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -1763,6 +1766,9 @@
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
     ],
+    "scripts/hooks/session-reaper.sh": [
+      "docs/architecture/branch-and-worktree-runbook.md"
+    ],
     "scripts/host-resource-runner.mjs": [
       "docs/architecture/dpf-patterns.md",
       "docs/operations/local-ci-sandbox-slots.md",
@@ -2360,6 +2366,7 @@
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/backlog/deferral-contract.ts",
       "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts",
+      "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
       "apps/web/lib/govern/data/field-classification.ts",
       "packages/db/src/table-classification.ts",
       "scripts/check-no-unattributable-deferral.mjs"
@@ -2375,6 +2382,7 @@
       "apps/web/lib/self-upgrade/local-changes-ledger.ts",
       "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs",
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
+      "scripts/hooks/session-reaper.sh",
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [

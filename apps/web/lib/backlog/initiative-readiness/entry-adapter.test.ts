@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectBacklogItemReadiness, projectBacklogItemReadinessSummary } from "./entry-adapter";
+import { projectBacklogItemReadiness, projectBacklogItemReadinessSummary, readinessShapeFromWorkShape } from "./entry-adapter";
 
 const item = {
   id: "row-1",
@@ -148,6 +148,22 @@ function terminalFixture(payloadOverride: Record<string, unknown> = {}) {
     },
   };
 }
+
+describe("plan recovery locator", () => {
+  it.each(["current", "stale", "incomplete", "unsafe-path"])("exposes only a valid current-baseline locator: %s", (scenario) => {
+    const activities = readyActivities();
+    const coverage = activities.find((entry) => entry.kind === "plan_backlog_coverage")!;
+    const artifact = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
+      commitSha: "a".repeat(40), providerBlobId: "b".repeat(40),
+      path: scenario === "unsafe-path" ? "docs/superpowers/plans/../specs/a.md" : "docs/superpowers/plans/plan.md" };
+    coverage.payload = { ...coverage.payload, planPath: artifact.path, planArtifactRef: {
+      ...artifact, ...(scenario === "incomplete" ? { providerBlobId: "" } : {}),
+    }, ...(scenario === "stale" ? { scopeBaselineId: "old-baseline" } : {}) } as typeof coverage.payload;
+    const result = projectBacklogItemReadiness({ item, activities, target: "implementation", transitionObject,
+      authorization: "pass", capsuleIdentity: "pass", evaluatedAt: "2026-09-06T21:00:00.000Z" });
+    expect(result.planArtifact).toEqual(scenario === "current" ? artifact : null);
+  });
+});
 
 describe("projectBacklogItemReadiness", () => {
   it("preserves the enforced allowed completion decision for a done item", () => {
@@ -486,5 +502,72 @@ describe("plan-review binds the plan artifact, not the design (BI-B5C8FEFC)", ()
       evaluatedAt: "2026-08-22T00:00:00.000Z",
     });
     expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")?.state).toBe("stale");
+  });
+});
+
+describe("v3: the bound delivery shape keys the gates", () => {
+  it("parses the Workroom workShape ref and ignores non-delivery shapes", () => {
+    expect(readinessShapeFromWorkShape("delivery-small@1.0.0")).toBe("small");
+    expect(readinessShapeFromWorkShape("delivery-break-fix@1.0.0")).toBe("break-fix");
+    expect(readinessShapeFromWorkShape("dependency-advisory-watch@1.0.0")).toBeNull();
+    expect(readinessShapeFromWorkShape(null)).toBeNull();
+  });
+
+  it("lets a small item implement on research alone and mints a medium baseline from the item body", () => {
+    const small = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "low" },
+      activities: [receipt("r-research", "research")],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(small.decision.verdict).toBe("allowed");
+    expect(small.decision.policyVersion).toBe("initiative-readiness.v3");
+
+    const medium = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-medium@1.0.0", deliverySensitivity: "low", body: "## Acceptance\n- the shape shows on the header" },
+      activities: [receipt("r-research", "research")],
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(medium.decision.verdict).toBe("allowed");
+    const noCriteria = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-medium@1.0.0", body: "just prose" },
+      activities: [receipt("r-research", "research")],
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(noCriteria.decision.unmet.map((entry) => entry.code)).toEqual(["OBJECTIVE_BASELINE_REQUIRED"]);
+  });
+
+  it("raises a small item at high sensitivity to the large gates and leaves an unshaped item on v2", () => {
+    const raised = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "high" },
+      activities: [receipt("r-research", "research")],
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(raised.decision.unmet.map((entry) => entry.code)).toContain("SPEC_APPROVAL_REQUIRED");
+    const unshaped = projectBacklogItemReadiness({
+      item,
+      activities: readyActivities(),
+      target: "implementation",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-06T00:00:00.000Z",
+    });
+    expect(unshaped.decision.verdict).toBe("allowed");
   });
 });

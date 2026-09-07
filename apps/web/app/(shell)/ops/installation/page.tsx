@@ -17,6 +17,7 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
 
+import { PairedEstatePosturePanel } from "@/components/ops/PairedEstatePosturePanel";
 import { EstateNameField } from "@/components/workspace/EstateNameField";
 import { InstallationIdentityPanel } from "@/components/workspace/InstallationIdentityPanel";
 import { auth } from "@/lib/auth";
@@ -24,6 +25,8 @@ import {
   ENVIRONMENT_ROLE_WORD,
   loadEstateNameResolution,
 } from "@/lib/install/estate-identity";
+import { resolveFederationIdentity, type FederationIdentityDb } from "@/lib/federation/demand-identity";
+import { getPairedEstatePosture } from "@/lib/federation/operational-posture-read-model";
 import { prismaInstanceStanceStore } from "@/lib/install/instance-stance";
 import { loadInstallationIdentityView } from "@/lib/installation-journey/installation-identity-view";
 import { can } from "@/lib/permissions";
@@ -43,10 +46,17 @@ export default async function InstallationIdentityPage() {
   if (!canManageInstallation) redirect("/workspace");
 
   const store = prismaInstanceStanceStore(prisma);
-  const [view, estate] = await Promise.all([
+  const [view, estate, identity] = await Promise.all([
     loadInstallationIdentityView(prisma, store),
     loadEstateNameResolution(store),
+    resolveFederationIdentity(prisma as unknown as FederationIdentityDb),
   ]);
+  // The paired estate: this installation's posture captured now, beside what
+  // each same-organization peer last reported (BI-648F01A0 Slice 3).
+  const posture = await getPairedEstatePosture({
+    installationId: identity.installationId,
+    label: `${estate.estateName} ${ENVIRONMENT_ROLE_WORD[view.environment.environmentClass]}`.trim(),
+  });
 
   // The badge pairs the estate name with the role word, and renders at all only
   // when the installation is not production. Passing null for production keeps
@@ -65,6 +75,9 @@ export default async function InstallationIdentityPage() {
           badgePreview={badgePreview}
           organizationFallback={estate.tier === "organization-name" ? estate.estateName : null}
         />
+      </div>
+      <div className="px-4 pb-6 sm:px-6">
+        <PairedEstatePosturePanel view={JSON.parse(JSON.stringify(posture))} />
       </div>
     </div>
   );

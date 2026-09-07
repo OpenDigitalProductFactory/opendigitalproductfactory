@@ -107,7 +107,20 @@ export function resolveBoundInitiativeReviewItem(
 ): string | null {
   if (!task) return null;
   const metadata = objectRecord(task.a2aMetadata);
-  if (!metadata || metadata["initiativeReviewBinding"] === undefined) return null;
+  // `== null` catches BOTH an absent key and a persisted JSON null. It used to
+  // be `=== undefined`, which a JSON null slips past: summon_coworker stores the
+  // key unconditionally, so an ORDINARY dispatch with no review binding at all
+  // arrived here as `null`, fell through to parseInitiativeReviewBinding(null),
+  // and threw "invalid immutable initiative review binding". The gate then
+  // rejected every governed tool on that task with "verified authority context
+  // is unavailable".
+  //
+  // Observed 2026-09-06: the Compliance Officer was dispatched to research a
+  // statutory rate, loaded its tools successfully, and had search_public_web
+  // rejected twice. Nothing about that task involved an initiative review. This
+  // failed closed on the absence of a thing that was never required, which is
+  // the one direction a fail-closed check must not fire in.
+  if (!metadata || metadata["initiativeReviewBinding"] == null) return null;
   const sourceRef = objectRecord(metadata["sourceRef"]);
   if (
     metadata["trigger"] !== "external-mcp"

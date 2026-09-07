@@ -13,6 +13,7 @@ import {
   type WorkIntent,
 } from "@/lib/work-capsules";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
+import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   resolveInitiativeReviewerRecovery,
@@ -37,6 +38,8 @@ type ClaimInput = {
   objective?: string;
   force?: boolean;
   overrideReason?: string | null;
+  /** v3: the delivery shape resolved at the claim (`delivery-<shape>@<version>`), when any. */
+  workShape?: string | null;
 };
 
 type ClaimResult = Awaited<ReturnType<typeof claimBacklogItemWorkspace>>;
@@ -112,6 +115,7 @@ type PendingRecovery = {
   baselineId: string | null;
   dispatchContext: InitiativeRecoveryDispatchContext | null;
   baseSha: string | null;
+  planArtifact: ReturnType<typeof projectBacklogItemReadiness>["planArtifact"];
 };
 
 /**
@@ -144,6 +148,11 @@ async function resolveRecoveryOutsideTransaction(args: {
     db: args.db,
     dispatchContext: pending.dispatchContext,
     canonicalArtifact,
+    planArtifact: pending.planArtifact && pending.dispatchContext
+      && pending.planArtifact.repositoryFullName.toLowerCase() === pending.dispatchContext.repositoryFullName.toLowerCase()
+      ? { resolved: true, path: pending.planArtifact.path,
+        commitSha: pending.planArtifact.commitSha, providerBlobId: pending.planArtifact.providerBlobId }
+      : { resolved: false, nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review." },
     expectedCurrentBaselineId: pending.baselineId,
   });
 }
@@ -353,7 +362,7 @@ export async function claimGovernedBacklogWorkspace(args: {
       const item = await tx.backlogItem.findFirst({
         where: { OR: [{ itemId: args.input.backlogItemId }, { id: args.input.backlogItemId }] },
         select: {
-          id: true, itemId: true, type: true, source: true, workType: true, scopeKind: true,
+          id: true, itemId: true, type: true, source: true, workType: true, scopeKind: true, title: true, body: true,
           archetypeCategories: true, archetypeIds: true, activeBuild: { select: { kind: true } },
         },
       });
@@ -369,7 +378,13 @@ export async function claimGovernedBacklogWorkspace(args: {
         { childItemId: item.itemId, childRowId: item.id },
       );
       const projection = projectBacklogItemReadiness({
-        item: { ...item, activeBuildKind: item.activeBuild?.kind ?? null },
+        item: {
+          ...item,
+          activeBuildKind: item.activeBuild?.kind ?? null,
+          // v3: the shape resolved for this claim keys the gates; sensitivity raises them.
+          workShape: args.input.workShape ?? null,
+          deliverySensitivity: deriveDeliverableSensitivity({ text: `${item.title ?? ""}\n${item.body ?? ""}`, workType: item.workType ?? null }),
+        },
         activities,
         inheritedScope,
         target,
@@ -435,6 +450,7 @@ export async function claimGovernedBacklogWorkspace(args: {
         pendingRecovery = {
           decision: evaluated,
           baselineId: projection.baselineId,
+          planArtifact: projection.planArtifact,
           dispatchContext: recoveryWorkroom?.headSha ? {
             workroomId: recoveryWorkroom.capsuleId,
             repositoryFullName: recoveryWorkroom.repositoryFullName,

@@ -62,7 +62,7 @@ describe("ValueStreamStrip", () => {
       expect(tile.textContent).toContain("—");
     }
     // and it is legible to a screen reader, not only to the eye
-    expect(screen.getAllByText("Not tracked yet")).toHaveLength(2);
+    expect(screen.getAllByText("Untracked")).toHaveLength(2);
   });
 
   it("still names every stage of the operator's day", () => {
@@ -85,5 +85,24 @@ describe("ValueStreamStrip", () => {
   it("renders nothing when the archetype has no stages", () => {
     const { container } = render(<ValueStreamStrip stages={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("keeps inherited backbone stages behind a disclosure so composing the model adds no words on arrival", () => {
+    render(
+      <ValueStreamStrip
+        stages={[
+          stage({ stageKey: "welfare-daily-care", label: "Deliver daily care", order: 210 }),
+          stage({ stageKey: "attract", label: "Attract", order: 1010, inherited: true }),
+          stage({ stageKey: "capture", label: "Capture", order: 1020, inherited: true }),
+        ]}
+      />,
+    );
+    const details = document.querySelector("details[data-dpf-disclosure]");
+    expect(details).not.toBeNull();
+    expect(details?.hasAttribute("open")).toBe(false);
+    expect(screen.getByText("2 inherited")).toBeTruthy();
+    expect(screen.getByLabelText("Value stream").textContent).toContain("Deliver daily care");
+    expect(screen.getByLabelText("Value stream").textContent).not.toContain("Attract");
+    expect(screen.getByLabelText("Inherited stages").textContent).toContain("Attract");
   });
 });

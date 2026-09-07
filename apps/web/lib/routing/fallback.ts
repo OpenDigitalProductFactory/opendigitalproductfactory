@@ -703,6 +703,10 @@ export async function callWithFallbackChain(
 
   throw new Error(
     `All endpoints failed for ${decision.taskType}. Attempts: ${JSON.stringify(attempts)}`,
+    // Keep both the remote failure history and a typed local capacity reason.
+    // A mixed chain is not a local-only outage, but its deferred candidate must
+    // remain distinguishable from a provider failure to recovery callers.
+    capacityDeferrals.length > 0 ? { cause: capacityDeferrals.at(-1) } : undefined,
   );
 }
 

@@ -38,7 +38,7 @@ Use the Platform area to supervise AI operations, Edge Nodes, integrations, iden
 
 Open **Platform > Connections** to find nearby DPF installations or connect by invitation. A nearby result is only a setup suggestion: it never creates trust or shares backlog data by itself. Both installations must approve a connection before any shared demand or disposition can cross it.
 
-The page reports whether the native Edge Node is listening for nearby installations. If discovery is not set up, paused, unhealthy, or blocked by an **Enrollment conflict**, use the Edge Nodes link to review its authority and network status. An enrollment conflict means that more than one installer-managed node claims this installation; DPF will not guess which node is authoritative. Invitation-based setup remains available when local-network discovery cannot be used.
+The page reports whether the native Edge Node is listening for nearby installations. If discovery is not set up, paused, unhealthy, or blocked by an **Enrollment conflict**, use the Edge Nodes link to review its authority and network status. An enrollment conflict means that more than one installer-managed node claims this installation; DPF will not guess which node is authoritative, but it does retire an enrollment that has been silent for a week once a live one has replaced it. Invitation-based setup remains available when local-network discovery cannot be used.
 
 For another installation owned by the same organization, choose **Set up this
 DPF**. Automatic setup is available only when both installations advertise a

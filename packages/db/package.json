@@ -17,6 +17,7 @@
     "./doc-impact-graph": "./src/doc-impact-graph.ts",
     "./reference-model-projection": "./src/reference-model-projection.ts",
     "./archetype-value-stream-projection": "./src/archetype-value-stream-projection.ts",
+    "./archetype-room-definition-projection": "./src/archetype-room-definition-projection.ts",
     "./discovery-attribution": "./src/discovery-attribution.ts",
     "./estate-scope": "./src/estate-scope.ts",
     "./service-ticket-types": "./src/service-ticket-types.ts",

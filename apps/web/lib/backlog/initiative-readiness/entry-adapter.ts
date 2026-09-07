@@ -2,7 +2,9 @@ import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evid
 
 import { evaluateInitiativeReadiness } from "./evaluate";
 import { deriveAuthoritativeReadinessProfile } from "./profiles";
+import { itemBodyBaselineState } from "./item-body-baseline";
 import type { InheritedInitiativeScope } from "./parent-scope-inheritance";
+import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
 import type {
   InitiativeReadinessDecision,
@@ -12,7 +14,10 @@ import type {
   ReadinessEvidenceState,
   ReadinessTarget,
 } from "./types";
-import { READINESS_CODES, READINESS_EVIDENCE_LANES, READINESS_PROFILES } from "./types";
+import {
+  READINESS_CODES, READINESS_EVIDENCE_LANES, READINESS_PROFILES, READINESS_SHAPES,
+  type ReadinessSensitivity, type ReadinessShape,
+} from "./types";
 
 export type InitiativeReadinessActivity = {
   id: string;
@@ -33,7 +38,19 @@ export type InitiativeReadinessItem = {
   archetypeCategories?: readonly string[];
   archetypeIds?: readonly string[];
   activeBuildKind?: string | null;
+  /** v3: the Workroom's declared/derived delivery shape as `delivery-<shape>@<version>`, when bound. */
+  workShape?: string | null;
+  /** v3: deliverable sensitivity (design 3.2); distinct from BacklogItem.sensitivity, the data classification. */
+  deliverySensitivity?: ReadinessSensitivity | null;
+  /** v3: the item body is the baseline for small/medium shapes. */
+  body?: string | null;
 };
+
+/** `delivery-small@1.0.0` → `small`; anything else → null (an unshaped item). */
+export function readinessShapeFromWorkShape(ref: string | null | undefined): ReadinessShape | null {
+  const key = typeof ref === "string" ? ref.split("@")[0]?.replace(/^delivery-/, "") : null;
+  return key && (READINESS_SHAPES as readonly string[]).includes(key) ? key as ReadinessShape : null;
+}
 
 type Baseline = {
   baselineId: string;
@@ -46,6 +63,7 @@ const GATE_NAMES = new Set([
   "classification", "research", "design-spec", "spec-approval", "architecture-review",
   "data-review", "ux-fit-review", "security-review", "compliance-review", "domain-review",
   "plan-review", "dependency-disposition", "archetype-provisioning", "archetype-completeness",
+  "post-implementation-review",
 ]);
 
 function normalizeGate(value: string | null): string | null {
@@ -332,14 +350,16 @@ function unreadEvidenceByCode(
   return byCode;
 }
 
+type InitiativePlanArtifact = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
+
 function projectPlanCoverage(
   activities: readonly InitiativeReadinessActivity[],
   baseline: Baseline | null,
-): { state: ReadinessEvidenceState; planDigest: string | null } {
+): { state: ReadinessEvidenceState; planDigest: string | null; planArtifact: InitiativePlanArtifact | null } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "plan_backlog_coverage")
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id))[0];
-  if (!latest) return { state: "missing", planDigest: null };
+  if (!latest) return { state: "missing", planDigest: null, planArtifact: null };
   const payload = object(latest.payload);
   const artifact = object(payload?.planArtifactRef);
   if (!payload
@@ -353,9 +373,20 @@ function projectPlanCoverage(
     || !baseline
     || payload.scopeBaselineId !== baseline.baselineId
     || payload.scopeBaselineArtifactDigest !== baseline.artifactDigest) {
-    return { state: "malformed", planDigest: null };
+    return { state: "malformed", planDigest: null, planArtifact: null };
   }
-  return { state: "pass", planDigest: String(payload.planArtifactDigest) };
+  // Reuse this baseline-validated selection for dispatch too. Historical
+  // coverage can still project its digest without inventing missing locators.
+  const planArtifact: InitiativePlanArtifact | null =
+    typeof artifact.repositoryFullName === "string" && /^[^/\s]+\/[^/\s]+$/.test(artifact.repositoryFullName)
+      && typeof artifact.commitSha === "string" && /^[a-f0-9]{40}$/i.test(artifact.commitSha)
+      && typeof artifact.providerBlobId === "string" && /^[a-f0-9]{40}$/i.test(artifact.providerBlobId)
+      && typeof artifact.path === "string" && /^docs\/superpowers\/plans\/[A-Za-z0-9][A-Za-z0-9._/-]*\.md$/.test(artifact.path)
+      && !artifact.path.split("/").some((part) => part === "." || part === "..")
+      ? { kind: "repo-blob-at-commit", repositoryFullName: artifact.repositoryFullName,
+        commitSha: artifact.commitSha, path: artifact.path, providerBlobId: artifact.providerBlobId }
+      : null;
+  return { state: "pass", planDigest: String(payload.planArtifactDigest), planArtifact };
 }
 
 export function projectBacklogItemReadiness(args: {
@@ -398,6 +429,7 @@ export function projectBacklogItemReadiness(args: {
 }): {
   governed: boolean;
   baselineId: string | null;
+  planArtifact: InitiativePlanArtifact | null;
   /** Parent item whose scope this projection borrowed, or null when the item stands alone. */
   inheritedFrom: string | null;
   artifactHints: { hasSpec: boolean; hasPlan: boolean };
@@ -428,7 +460,11 @@ export function projectBacklogItemReadiness(args: {
   });
   const governed = profile !== null;
   const evidence = receipts.states;
-  const baselineState: ReadinessEvidenceState = baseline.current ? "pass" : "missing";
+  const shape = readinessShapeFromWorkShape(args.item.workShape);
+  // v3: small and medium mint their baseline from the item body, not a spec.
+  const baselineState: ReadinessEvidenceState = baseline.current
+    ? "pass"
+    : shape === "small" || shape === "medium" ? itemBodyBaselineState(args.item.body) : "missing";
   const coverage = args.planCoverage ?? projectedCoverage.state;
   const dependency = state(evidence, "dependency-disposition");
   const archetypeProvisioning = state(evidence, "archetype-provisioning");
@@ -441,6 +477,8 @@ export function projectBacklogItemReadiness(args: {
     subject: { kind: "backlog-item", id: args.item.itemId },
     transitionObject: args.transitionObject,
     profile: profile ?? "doc-only",
+    shape,
+    sensitivity: args.item.deliverySensitivity ?? null,
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
     canonicalDesign: pass(baselineState),
@@ -475,6 +513,7 @@ export function projectBacklogItemReadiness(args: {
       skillsAndTools: archetypeProvisioning,
     },
     archetypeCompleteness: state(evidence, "archetype-completeness"),
+    postImplementationReview: state(evidence, "post-implementation-review"),
     projectionError: baseline.malformed || receipts.malformed || args.completion?.projectionError,
     evidenceRefs: args.completion?.evidenceRefs,
     unreadEvidenceRefs: unreadEvidenceByCode(args.activities),
@@ -483,6 +522,7 @@ export function projectBacklogItemReadiness(args: {
   return {
     governed,
     baselineId: baseline.current?.baselineId ?? null,
+    planArtifact: projectedCoverage.planArtifact,
     inheritedFrom: inherited?.parentItemId ?? null,
     artifactHints: args.artifactHints ?? { hasSpec: false, hasPlan: false },
     decision: evaluateInitiativeReadiness(facts, args.target),

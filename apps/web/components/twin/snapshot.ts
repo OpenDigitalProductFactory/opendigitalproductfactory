@@ -53,6 +53,10 @@ export interface TwinStageFlow {
    *  the absence of one, and the strip must say so rather than print 0
    *  (BI-AF50DBD5). */
   observable: boolean;
+  /** Backbone stage a leaf profile inherits rather than declares (BI-4B11F98E).
+   *  The strip defers these behind a disclosure so the archetype's own day
+   *  stays what is visible on arrival. */
+  inherited?: boolean;
   /** Demand units currently at this stage. */
   count: number;
   /** Longest wait among demand at this stage ("8m", "2d"); omitted when none waits. */

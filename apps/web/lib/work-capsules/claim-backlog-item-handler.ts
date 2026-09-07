@@ -141,6 +141,7 @@ export async function claimBacklogItemForWork(args: {
         executorRef: sessionRef,
         force: params["force"] === true,
         overrideReason: stringParam(params, "overrideReason"),
+        workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived") ? shape.resolution.ref : null,
       },
       actor: await args.resolveActor(args.userId, args.context),
       workIntent: requestedIntent as WorkIntent | null,

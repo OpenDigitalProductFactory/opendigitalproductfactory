@@ -6783,6 +6783,14 @@
     "longSentences": 0,
     "textMass": 22
   },
+  "apps/web/components/ops/PairedEstatePosturePanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
   "apps/web/components/ops/PromotionsClient.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -7813,7 +7821,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 156
+    "textMass": 113
   },
   "apps/web/components/platform/federation-links/PartnerBusinessPanel.tsx": {
     "vocabulary": 0,

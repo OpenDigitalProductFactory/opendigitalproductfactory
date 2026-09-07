@@ -573,6 +573,18 @@ export interface ArchetypeValueStreamStageProfile {
   handoffTo?: string;
   capabilityBindings?: ArchetypeModule[];
   metricBindings?: string[];
+  /**
+   * Backbone stages this leaf stage already does the work of. A covered stage is
+   * not re-added from the shared backbone; an uncovered one is retained, so a
+   * leaf profile extends the backbone instead of replacing it.
+   */
+  coversBackboneStages?: string[];
+}
+
+/** A backbone stage an archetype genuinely does not run, with the reason it does not. */
+export interface ArchetypeBackboneStageOmission {
+  stageKey: string;
+  reason: string;
 }
 
 export interface ArchetypeValueStreamProfile {
@@ -597,8 +609,17 @@ export interface ArchetypeProcessProfile {
   housesSubjects: boolean;
   schedulesSubjects: boolean;
   resourceKinds: ResourceKindProfile[];
-  /** Leaf-specific operating flows. Omit to use the shared commercial backbone. */
+  /**
+   * Leaf-specific operating flows. These compose with the shared backbone: a
+   * backbone stage no leaf stage covers is retained rather than dropped. Omit
+   * for the backbone alone.
+   */
   valueStreams?: ArchetypeValueStreamProfile[];
+  /**
+   * Backbone stages this archetype declares it does not run. An omission needs a
+   * reason — silent loss is the defect this replaces.
+   */
+  omittedBackboneStages?: ArchetypeBackboneStageOmission[];
   /** Supporting work that enables, but must not replace, the subject's primary flow. */
   supportingCapabilities?: string[];
 }

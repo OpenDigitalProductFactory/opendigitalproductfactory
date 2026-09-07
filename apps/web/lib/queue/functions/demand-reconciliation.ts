@@ -22,6 +22,13 @@ export const demandReconciliationScheduled = inngest.createFunction(
       const { runOperationalPostureReconciliation } = await import("@/lib/federation/operational-posture-reconciliation");
       return runOperationalPostureReconciliation();
     });
+    // Receiving side of the same exchange: every peer's mirrored posture is
+    // reflected into this install's runtime-target registry, so the coordination
+    // map shows both installs (BI-648F01A0 Slice 3).
+    const peerTargets = await step.run("reflect-peer-runtime-targets", async () => {
+      const { syncPeerRuntimeTargets } = await import("@/lib/federation/operational-posture-peer-targets");
+      return syncPeerRuntimeTargets();
+    });
     const demand = await step.run("reconcile-federated-demand", async () => {
       const { runDemandReconciliation } = await import("@/lib/federation/demand-reconciliation");
       return runDemandReconciliation();
@@ -45,6 +52,6 @@ export const demandReconciliationScheduled = inngest.createFunction(
       const { reconcileOrganizationMembership } = await import("@/lib/federation/organization-membership");
       return reconcileOrganizationMembership();
     });
-    return { posture, demand, work, links, membership };
+    return { posture, peerTargets, demand, work, links, membership };
   },
 );

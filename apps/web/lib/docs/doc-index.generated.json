@@ -896,7 +896,7 @@
         "0-why-this-document-exists",
         "1-two-senses-of-value-stream-keep-them-distinct",
         "2-the-default-small-business-value-stream",
-        "21-leaf-process-profiles-replace-the-fallback-when-the-business-works-differently",
+        "21-leaf-process-profiles-compose-with-the-backbone-when-the-business-works-differently",
         "3-the-commercial-model-decides-the-value-stream-shape",
         "4-the-bridge-value-stream-stage-platform-surface-audit-phase",
         "5-the-value-stream-stages-map-onto-substrate-the-platform-already-carries",
@@ -11912,6 +11912,7 @@
         "what-this-installation-is",
         "who-runs-this-installation",
         "what-your-ai-coworkers-may-do-here",
+        "operational-posture-across-your-installations",
         "correcting-the-identity"
       ]
     },
