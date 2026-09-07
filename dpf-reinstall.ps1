@@ -8,8 +8,12 @@
 # What this does:
 #   1. Checks for uncommitted changes (warns you before destroying anything)
 #   2. Closes VS Code if it has the directory locked
-#   3. Stops all DPF Docker containers
-#   4. Removes all DPF Docker volumes (including PostgreSQL)
+#   3. Dumps the live PostgreSQL database to $DPF_DIR-backups\pre-destructive\
+#      (Workrooms, decisions and backlog rows survive the reinstall as a
+#      restorable pg_dump; BI-F9939341). Refuses to continue if the dump fails
+#      unless -SkipPreDestructiveDump is passed.
+#   4. Stops all DPF Docker containers and removes all DPF Docker volumes
+#      (including PostgreSQL)
 #   5. Removes DPF Docker images
 #   6. Removes bind-mount data directories
 #   7. Migrates any legacy in-tree backups under $DPF_DIR\backups\ to the
@@ -25,6 +29,7 @@
 
 param(
     [string]$InstallDir,
+    [switch]$SkipPreDestructiveDump,  # accept losing every unmirrored DB row
     [switch]$FromTemp  # internal flag -- do not use directly
 )
 
@@ -49,7 +54,7 @@ if (-not $FromTemp) {
     Copy-Item $MyInvocation.MyCommand.Definition $tempScript -Force
     Write-Host ""
     Write-Host "Re-launching from $tempScript so the project directory can be deleted..." -ForegroundColor Cyan
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tempScript -InstallDir $DPF_DIR -FromTemp
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tempScript -InstallDir $DPF_DIR -FromTemp -SkipPreDestructiveDump:$SkipPreDestructiveDump
     exit $LASTEXITCODE
 }
 
@@ -141,6 +146,84 @@ if ($vscodeLocked) {
     }
 } else {
     Write-Ok "No VS Code lock detected"
+}
+
+# --- Pre-destructive Postgres dump -----------------------------------------
+# `docker compose down -v` below destroys the database, and with it every
+# Workroom, decision and backlog row that is not already mirrored elsewhere
+# (BI-F9939341). The nightly backup is hours old and the backlog bundle does
+# not run from a consumer install, so the only honest move is to dump the live
+# database right here, right before the volume goes. The dump lands under the
+# operator backup root (outside the install directory) so the rm cannot touch
+# it, and restores with the same pg_restore the DR runbook documents.
+function Invoke-PreDestructivePostgresDump {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstallDir,
+        [Parameter(Mandatory = $true)][string]$Trigger,
+        [switch]$Skip
+    )
+    if ($Skip) {
+        Write-Warn "Pre-destructive Postgres dump SKIPPED by -SkipPreDestructiveDump. Every row not already mirrored is gone after this step."
+        return $null
+    }
+    $pgUser = "dpf"; $pgDb = "dpf"; $container = "dpf-postgres-1"; $backupsRoot = $null
+    $envPath = Join-Path $InstallDir ".env"
+    if (Test-Path $envPath) {
+        foreach ($line in Get-Content $envPath) {
+            if ($line -match '^DPF_BACKUPS_HOST_PATH=(.+)$') { $backupsRoot = $Matches[1].Trim().Trim('"').Trim("'") }
+            elseif ($line -match '^POSTGRES_USER=(.+)$') { $pgUser = $Matches[1].Trim().Trim('"').Trim("'") }
+            elseif ($line -match '^POSTGRES_DB=(.+)$') { $pgDb = $Matches[1].Trim().Trim('"').Trim("'") }
+            elseif ($line -match '^DPF_PRODUCTION_DB_CONTAINER=(.+)$') { $container = $Matches[1].Trim().Trim('"').Trim("'") }
+        }
+    }
+    if (-not $backupsRoot) { $backupsRoot = "$InstallDir-backups" }
+
+    $running = docker ps --filter "name=^$container$" --format "{{.Names}}" 2>$null
+    if (-not $running) {
+        Write-Ok "No running Postgres container ($container); nothing to dump before teardown."
+        return $null
+    }
+
+    $now = (Get-Date).ToUniversalTime()
+    $target = Join-Path $backupsRoot ("pre-destructive\" + $now.ToString("yyyy-MM-dd") + "\" + $Trigger + "-" + $now.ToString("yyyy-MM-ddTHH-mm-ssZ"))
+    New-Item -ItemType Directory -Force -Path $target | Out-Null
+    $dump = Join-Path $target "dpf.dump"
+    Write-Host "  Dumping $pgDb from $container to $dump ..."
+    # cmd.exe redirection keeps the custom-format dump byte-exact; PowerShell
+    # redirection would re-encode it as text and corrupt it.
+    & cmd.exe /c "docker exec $container pg_dump -U $pgUser -Fc $pgDb > `"$dump`""
+    $exit = $LASTEXITCODE
+    $size = if (Test-Path $dump) { (Get-Item $dump).Length } else { 0 }
+    if ($exit -ne 0 -or $size -eq 0) {
+        if (Test-Path $dump) { Remove-Item $dump -Force }
+        Write-Fail "Pre-destructive Postgres dump FAILED (pg_dump exit=$exit, bytes=$size). Refusing to destroy the database. Fix the dump (is $container healthy? is $backupsRoot writable?) and re-run; pass -SkipPreDestructiveDump only if losing every unmirrored Workroom, decision and backlog row is acceptable."
+    }
+    $sha = (Get-FileHash -Path $dump -Algorithm SHA256).Hash.ToLower()
+    # LF-terminated so `sha256sum -c dpf.dump.sha256` works on any host (Set-Content would write CRLF).
+    [System.IO.File]::WriteAllText((Join-Path $target "dpf.dump.sha256"), "$sha  dpf.dump`n")
+    $manifest = [ordered]@{
+        schemaVersion = 1
+        trigger       = $Trigger
+        capturedAt    = $now.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        container     = $container
+        database      = $pgDb
+        dumpFormat    = "pg_dump -Fc"
+        sizeBytes     = $size
+        sha256        = $sha
+        restore       = "docker exec -i <postgres> pg_restore --clean --if-exists -U $pgUser -d $pgDb < dpf.dump  (or /admin/backups -> Restore)"
+    }
+    ($manifest | ConvertTo-Json) | Set-Content -Path (Join-Path $target "manifest.json") -Encoding UTF8
+    Write-Ok ("Pre-destructive dump saved: {0} ({1:N1} MB, sha256 {2}...)" -f $dump, ($size / 1MB), $sha.Substring(0, 12))
+    return $target
+}
+
+# --- Step 2c: Dump the live database before anything destroys it ------------
+
+Write-Step "Preserving the live database (pre-destructive dump)"
+if (Test-Path "$DPF_DIR\docker-compose.yml") {
+    $preDestructiveDump = Invoke-PreDestructivePostgresDump -InstallDir $DPF_DIR -Trigger "dpf-reinstall" -Skip:$SkipPreDestructiveDump
+} else {
+    Write-Ok "No docker-compose.yml in $DPF_DIR; no database to preserve."
 }
 
 # --- Step 3: Stop Docker containers and remove volumes ---------------------

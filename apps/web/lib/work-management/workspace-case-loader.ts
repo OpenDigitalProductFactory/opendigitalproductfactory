@@ -31,7 +31,7 @@ import { readStoredWorkroomDriveState } from "./workroom-drive-state";
 import { deriveWorkroomShape } from "./derive-workroom-shape";
 import type { WorkroomActivityKind, WorkroomParticipantView, WorkroomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
-import { fromWorkItemMessage } from "./receipt-envelope";
+import { fromWorkItemMessage, fromWorkCapsuleActivity } from "./receipt-envelope";
 import {
   authorizeWorkspaceRoomItem,
   readWorkspaceRoomPolicy,
@@ -130,6 +130,7 @@ export type WorkspaceWorkroomActivityRecord = {
   workCapsuleId: string;
   kind: string;
   summary: string;
+  payload?: unknown;
   recordedAt: Date | string;
   recordedById?: string | null;
   recordedByAgentId?: string | null;
@@ -645,8 +646,8 @@ export async function loadWorkspaceWorkCaseDetail({
   const capsuleActivityRows = capsuleRowIds.length
     ? await prismaClient.workroomActivity.findMany({
         where: { workCapsuleId: { in: capsuleRowIds } },
-        orderBy: [{ recordedAt: "desc" }],
-        take: 20,
+        orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+        take: 21,
       })
     : [];
   const capsuleIdByRowId = new Map<string, string>();
@@ -717,6 +718,7 @@ export async function loadWorkspaceWorkCaseDetail({
     : null;
   const room = buildWorkroomView({
     caseKey,
+    sourceHealth: capsuleActivityRows.length > 20 ? "partial" : undefined,
     detail,
     structure,
     postureContext: postureContext ? { ...postureContext, editable: editablePosture } : null,
@@ -768,7 +770,11 @@ export async function loadWorkspaceWorkCaseDetail({
     currentCycle,
     completedCycles,
     outcomePacket: storedPackets[0] ?? null,
-    receipts: roomReceiptsFromMessages(item, messages),
+    receipts: [
+      ...roomReceiptsFromMessages(item, messages),
+      ...capsuleActivityRows.filter((row) => ["evidence-recorded", "verification", "receipt"].includes(row.kind))
+        .map((row) => fromWorkCapsuleActivity(row, { capsuleId: capsuleIdByRowId.get(row.workCapsuleId) })),
+    ],
     participants,
     context: {
       refs: sourceRefs,

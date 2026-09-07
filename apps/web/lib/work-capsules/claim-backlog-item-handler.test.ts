@@ -26,7 +26,7 @@ const okClaim = (capsuleId = "WC-SHAPE") => ({
   },
 });
 
-function shapeDb(item: Record<string, unknown> | null, scopeClaims: unknown[] = []) {
+function shapeDb(item: Record<string, unknown> | null, scopeClaims: unknown = []) {
   return {
     backlogItem: { findFirst: vi.fn().mockResolvedValue(item), update: vi.fn() },
     workroom: {
@@ -169,6 +169,20 @@ describe("the claim asks for the delivery shape (BI-02470C7E, design §3.3)", ()
         expect.objectContaining({ workShape: "delivery-medium@1.0.0", source: "declared" }),
       ] },
     });
+  });
+
+  it("preserves legacy scope metadata when binding a delivery shape", async () => {
+    const db = shapeDb({ effortSize: "small", workType: "chore", title: "tidy", body: "" }, { workShapeKey: "delivery-medium", workShapeVersion: "1.0.0", extension: "retained" });
+    await claimBacklogItemForWork({ params: base, userId: "user-1", context: {}, db, resolveActor: actor });
+    expect((db.workroom.update as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toMatchObject({ data: { scopeClaims: [
+      { extension: "retained" }, expect.objectContaining({ workShape: "delivery-small@1.0.0", source: "derived" }),
+    ] } });
+  });
+
+  it("does not rewrite an unchanged delivery binding on claim replay", async () => {
+    const db = shapeDb({ effortSize: "small", workType: "chore", title: "tidy", body: "" }, [{ workShape: "delivery-small@1.0.0", recordedAt: "original" }]);
+    await claimBacklogItemForWork({ params: base, userId: "user-1", context: {}, db, resolveActor: actor });
+    expect(db.workroom.update).not.toHaveBeenCalled();
   });
 
   it("derives the shape when the rules agree and records the signals", async () => {

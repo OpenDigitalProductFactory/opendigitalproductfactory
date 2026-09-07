@@ -130,3 +130,11 @@ The most important prototype outcomes implied by the current standards refresh a
 - Expose `GAID` claims through `MCP`, `A2A`, and HTTP transport profiles.
 - Build repeatable `TAK`, `GAID`, and `TAK-JSI` conformance suites and preserve the resulting evidence.
 - Extend `DPF` from platform-local identity into a demonstrable cross-boundary trust implementation suitable for standards-body review.
+
+### MCP discovery refusal conformance
+
+Progressive tool discovery is an authorization-preserving projection. Empty
+results carry a structured reason and finite next step, while reviewer-only
+initiative writers point to the server-issued `get_backlog_item` reviewer route.
+The discovery response never converts catalog visibility into a grant or
+collapses a separate reviewer identity into the requesting author.

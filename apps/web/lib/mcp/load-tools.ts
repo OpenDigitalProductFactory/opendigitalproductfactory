@@ -10,6 +10,31 @@ import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
 type JsonRpcId = string | number | null;
+type NoMatchReason = "unknown-tool-name" | "reviewer-route-required" | "not-granted" | "intent-no-match" | "missing-query";
+type LoadToolsNoMatch = { reason: NoMatchReason; requestedNames?: string[] };
+
+export function classifyLoadToolsNoMatch(
+  args: Record<string, unknown>,
+  knownNames: ReadonlySet<string>,
+  grantedNames: ReadonlySet<string>,
+  selectedCount: number,
+): LoadToolsNoMatch | undefined {
+  if (selectedCount > 0) return undefined;
+  const requestedNames = Array.isArray(args.names)
+    ? args.names.filter((name): name is string => typeof name === "string")
+    : [];
+  if (requestedNames.length > 0) {
+    const reason = requestedNames.some((name) => !knownNames.has(name))
+      ? "unknown-tool-name"
+      : requestedNames.some((name) => name.startsWith("record_initiative_"))
+        ? "reviewer-route-required"
+        : requestedNames.some((name) => !grantedNames.has(name))
+          ? "not-granted"
+          : "intent-no-match";
+    return { reason, requestedNames };
+  }
+  return { reason: typeof args.query === "string" && args.query.trim() ? "intent-no-match" : "missing-query" };
+}
 
 /**
  * Keep the cross-client recovery contract inside Codex's documented 512-char
@@ -66,12 +91,29 @@ function firstSentence(text: string): string {
 export function buildLoadToolsResult(
   selected: ReadonlyArray<{ name: string; description: string }>,
   loadedToolNames: string[],
+  noMatch?: LoadToolsNoMatch,
 ): { content: Array<{ type: "text"; text: string }>; structuredContent: Record<string, unknown> } {
+  const noMatchRecovery = selected.length === 0 && noMatch
+    ? {
+      ...noMatch,
+      ...(noMatch.reason === "reviewer-route-required"
+        ? {
+          supportedEntryPoint: { toolName: "get_backlog_item" },
+          nextStep: "Call get_backlog_item for the initiative and use its server-issued reviewerRoutes packet. The author must not invoke the reviewer writer directly.",
+        }
+        : {
+          nextStep: noMatch.reason === "unknown-tool-name"
+            ? "Use an intent query or search_tool_marketplace; do not retry the nonexistent exact name."
+            : "Use a broader intent query or an authorized workflow entry point; do not retry the same unavailable exact name.",
+        }),
+    }
+    : undefined;
   let data: Record<string, unknown> = {
     newlyLoaded: selected.map((t) => ({ name: t.name, description: firstSentence(t.description) })),
     loadedToolNames,
     count: selected.length,
     listChanged: selected.length > 0,
+    noMatch: noMatchRecovery,
     recovery:
       selected.length > 0
         ? { reListTools: true, programmaticCatalogFallback: true }

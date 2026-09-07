@@ -327,6 +327,13 @@ Every asynchronous action MUST show a visible, consistent activity indicator. A 
 
 **Refreshing existing content:** keep the current content visible and dimmed (`opacity`) with the region marked `aria-busy`, and show the spinner on the trigger. Don't blank out good content to show a placeholder.
 
+**Process evidence:** use the shared `workroomStage` status domain. `passed`
+requires a verification verdict; `observed` records an event without asserting
+success; `unknown` lacks proof; `cancelled` is separate from completion. A terminal
+room state does not prove that earlier steps passed. Keep intended definitions,
+observed execution, and any simulation distinct, with a keyboard-accessible list
+and step inspector. Do not turn stage position into an estimated percentage.
+
 **Accessibility (required):**
 - Mark the region being updated with `aria-busy="true"`.
 - Announce status text with `role="status"` + `aria-live="polite"` (the primitives do this; a bare `role="status"` in the codebase usually wraps a *result/error* region, which is a different use).

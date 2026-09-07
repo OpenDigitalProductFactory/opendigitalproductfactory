@@ -12,10 +12,12 @@ describe("loadCapsuleLivenessInventory", () => {
         leaseHolderPrincipalId: "principal-1", repositoryFullName: "owner/repo",
         decisionScope: null, portfolioRole: null, servedPersona: null, activityKind: null,
         outcomeAnchor: {}, servesPortfolioRoles: [], dependsOnPortfolioRoles: [],
-        headBranch: "fix/x", worktreePath: "D:/x", pullRequestUrl: null, pullRequestNumber: null,
+        headBranch: "fix/x", baseSha: "0000000000000000000000000000000000000000",
+        headSha: "1111111111111111111111111111111111111111", worktreePath: "D:/x",
+        pullRequestUrl: null, pullRequestNumber: null,
         leaseExpiresAt: new Date("2026-08-24T19:00:00.000Z"), lastSyncedAt: null,
         updatedAt: now, featureBuildId: null,
-        taskRun: { status: "completed", updatedAt: new Date("2026-08-24T17:55:00.000Z") },
+        taskRun: { taskRunId: "TR-TERMINAL", status: "completed", updatedAt: new Date("2026-08-24T17:55:00.000Z") },
       }]) },
       featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
       nonProductionEnvironmentLease: { findMany: vi.fn().mockResolvedValue([]) },
@@ -27,10 +29,61 @@ describe("loadCapsuleLivenessInventory", () => {
       capsuleId: "WC-TERMINAL-TURN",
       liveness: "execution-terminal",
       isReapable: true,
+      recovery: {
+        state: "terminal",
+        prerequisite: null,
+        reviewerExecution: {
+          taskRunId: "TR-TERMINAL",
+          status: "completed",
+          pending: false,
+        },
+      },
     });
     expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      select: expect.objectContaining({ taskRun: { select: { status: true, updatedAt: true } } }),
+      select: expect.objectContaining({ taskRun: { select: { taskRunId: true, status: true, updatedAt: true } } }),
     }));
+  });
+
+  it("returns the same exact author repair used by transition recovery", async () => {
+    const now = new Date("2026-08-24T18:00:00.000Z");
+    const db = {
+      workroom: { findMany: vi.fn().mockResolvedValue([{
+        capsuleId: "WC-MISSING-BASE", title: "Missing base", status: "ready",
+        source: "external-adoption", executorKind: "codex-desktop", executorRef: "session",
+        leaseHolderPrincipalId: "principal-1", repositoryFullName: "owner/repo",
+        decisionScope: null, portfolioRole: null, servedPersona: null, activityKind: null,
+        outcomeAnchor: {}, servesPortfolioRoles: [], dependsOnPortfolioRoles: [],
+        baseSha: null, headSha: "1111111111111111111111111111111111111111",
+        headBranch: "fix/x", worktreePath: "D:/x", pullRequestUrl: null, pullRequestNumber: null,
+        leaseExpiresAt: new Date("2026-08-24T19:00:00.000Z"), lastSyncedAt: null,
+        updatedAt: now, featureBuildId: null, taskRun: null,
+      }]) },
+      featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
+      nonProductionEnvironmentLease: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
+
+    expect(result.capsulesAll[0]).toMatchObject({
+      recovery: {
+        state: "blocked",
+        reviewerExecution: null,
+        prerequisite: {
+          accountableRole: "artifact-resolver",
+          missingFields: ["baseSha"],
+          retainedFields: { headSha: "1111111111111111111111111111111111111111" },
+          repair: {
+            toolName: "adopt_worktree",
+            packet: {
+              repositoryFullName: "owner/repo",
+              headBranch: "fix/x",
+              worktreePath: "D:/x",
+              headSha: "1111111111111111111111111111111111111111",
+            },
+          },
+        },
+      },
+    });
   });
 
   it("keeps stored, live, reapable, and history counts distinct", async () => {

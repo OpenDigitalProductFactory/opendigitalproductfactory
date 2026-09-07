@@ -4,18 +4,18 @@ name: Governance Triage
 status: active
 purpose: The coworkers who own the affected domains recommend what the owner should do about a decision the kernel could not settle, and draft it.
 defaultRoles:
-  - roleId: domain-specialist
+  - roleId: debater
     count: 3
     required: true
   - roleId: skeptic
     count: 1
     required: true
-  - roleId: resolution-adjudicator
+  - roleId: adjudicator
     count: 1
     required: true
 topologyTemplate:
-  rootNodeType: governance_triage
-  branchNodeType: governance_triage
+  rootNodeType: analyze
+  branchNodeType: analyze
   skepticalNodeType: skeptical_review
   edgeTypes: ["informs", "opposes"]
 activationPolicyHints:

@@ -26,6 +26,7 @@ import {
 } from "./capacity-routing-exclude";
 import { cliSaturationPercent } from "./cli-concurrency";
 import { usesCodexCli, usesCliAdapter } from "./provider-utils";
+import { requiredToolChoiceExclusionReason } from "./execution-adapter-types";
 import { isLocalProviderId } from "./provider-locality";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
 import {
@@ -47,6 +48,7 @@ import {
   attachHarnessRecipeToPlan,
   buildPlanFromRecipe,
   buildDefaultPlan,
+  resolveDefaultExecutionAdapter,
 } from "./execution-plan";
 import {
   applyHarnessConfidenceOverride,
@@ -111,6 +113,9 @@ export function getExclusionReasonV2(
   // Preserve the endpoint in the excluded trace so runtime-health previews
   // explain the incompatibility while a supported sibling model can win.
   if (ep.eligibilityExclusionReason) return ep.eligibilityExclusionReason;
+  const toolChoiceExclusion = contract.toolChoice === "required"
+    ? requiredToolChoiceExclusionReason(resolveDefaultExecutionAdapter(ep.providerId, contract.requiredModelClass)) : null;
+  if (toolChoiceExclusion) return `${contract.terminalWriterToolName ? "required-terminal-writer-not-enforceable: " : ""}${toolChoiceExclusion}`;
 
   // EP-AGENT-CAP-002: Agent capability floor — hard filter, non-negotiable.
   // Must run BEFORE status/graceful-degradation checks so a tool-incapable

@@ -473,13 +473,14 @@ describe("initiative readiness recovery routing", () => {
 
     expect(recovery.reviewerRoutes).toEqual([]);
     expect(recovery.escalations).toEqual([]);
-    expect(recovery.unroutable).toMatchObject([
-      {
-        accountableRole: "artifact-resolver",
-        code: "ARTIFACT_AUTHOR_REQUIRED",
-        nextAction: expect.stringContaining("git commit -s"),
-      },
-    ]);
+    expect(recovery.unroutable).toHaveLength(1);
+    expect(recovery.unroutable[0]).toMatchObject({
+      accountableRole: "artifact-resolver",
+      code: "ARTIFACT_AUTHOR_REQUIRED",
+    });
+    expect(recovery.unroutable[0]?.nextAction).toContain(
+      "if it is already valid, preserve its bytes and sha",
+    );
   });
 
   it("returns both exact next-action mappings when immutable dispatch identity is unavailable", async () => {

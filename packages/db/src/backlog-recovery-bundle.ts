@@ -401,7 +401,9 @@ export async function reconcileBacklogRecoveryBundle(
 /** An item the capture could not represent, and why. Never silently dropped. */
 export interface BacklogCaptureSkip {
   itemId: string;
-  reason: "done-item-has-no-evidence-activity" | "item-has-no-epic";
+  reason: "done-item-has-no-evidence-activity" | "item-has-no-epic" | "epic-not-representable";
+  /** For `epic-not-representable`: the contract violation the bundle format raised. */
+  detail?: string;
 }
 
 /**
@@ -677,4 +679,113 @@ export function buildBacklogRecoveryBundle(input: {
 
   // Round-trip so an unreconcilable bundle fails at capture, not at recovery.
   return { bundle: parseBacklogRecoveryBundle(bundle), skipped };
+}
+
+// ── Workroom capture ─────────────────────────────────────────────────────────
+//
+// A backlog bundle preserves WHAT was asked for. It says nothing about WHERE the
+// work is: the Workroom rows that bind a backlog item to a branch, a worktree, a
+// lease holder and the evidence recorded along the way live only in Postgres and
+// die with it on reinstall (BI-F9939341). The teardown stance calls that work
+// "irreplaceable" and asks for a bundle before teardown, so the bundle has to
+// carry the Workrooms too. This record is a faithful, non-reconcilable capture:
+// a later slice rebinds it to worktrees that still exist on disk.
+
+export interface WorkroomCaptureActivityRow {
+  id: string;
+  kind: string;
+  summary: string;
+  payload: unknown;
+  recordedAt: Date | string;
+}
+
+export interface WorkroomCaptureRow {
+  capsuleId: string;
+  title: string;
+  objective: string;
+  status: string;
+  source: string;
+  executorKind: string | null;
+  executorRef: string | null;
+  backlogItemId: string | null;
+  epicId: string | null;
+  repositoryFullName: string | null;
+  baseBranch: string | null;
+  baseSha: string | null;
+  headBranch: string | null;
+  headSha: string | null;
+  worktreePath: string | null;
+  pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
+  contributionMode: string | null;
+  branchTaxonomy: string | null;
+  idempotencyKey: string | null;
+  scopeClaims: unknown;
+  workspaceState: unknown;
+  verificationState: unknown;
+  leaseHolderPrincipalId: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  lastSyncedAt: Date | string | null;
+  archivedAt: Date | string | null;
+  activities: WorkroomCaptureActivityRow[];
+}
+
+export interface WorkroomCaptureRecord {
+  schemaVersion: 1;
+  capturedAt: string;
+  /** Every Workroom in the record. */
+  workroomCount: number;
+  /** Workrooms that name a branch — the ones a reinstall would otherwise orphan on disk. */
+  boundBranchCount: number;
+  /** Workrooms in a non-terminal status: the work someone would still expect to find. */
+  openCount: number;
+  workrooms: Array<
+    Omit<WorkroomCaptureRow, "createdAt" | "updatedAt" | "lastSyncedAt" | "archivedAt" | "activities"> & {
+      createdAt: string;
+      updatedAt: string;
+      lastSyncedAt: string | null;
+      archivedAt: string | null;
+      activities: Array<Omit<WorkroomCaptureActivityRow, "recordedAt"> & { recordedAt: string }>;
+    }
+  >;
+}
+
+const TERMINAL_WORKROOM_STATUSES = new Set(["complete", "abandoned", "archived"]);
+
+function isoOrNull(value: Date | string | null | undefined): string | null {
+  if (value == null) return null;
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+/**
+ * Serialize Workroom rows into the bundle's `workrooms.json` record. Pure and
+ * deterministic: rows sort by `capsuleId`, activities by `recordedAt` then id,
+ * every date is ISO, and nothing is dropped — a Workroom with no branch is still
+ * a Workroom someone opened.
+ */
+export function buildWorkroomCaptureRecord(
+  rows: readonly WorkroomCaptureRow[],
+  capturedAt: string,
+): WorkroomCaptureRecord {
+  const workrooms = [...rows]
+    .sort((a, b) => a.capsuleId.localeCompare(b.capsuleId))
+    .map((row) => ({
+      ...row,
+      createdAt: isoOrNull(row.createdAt) as string,
+      updatedAt: isoOrNull(row.updatedAt) as string,
+      lastSyncedAt: isoOrNull(row.lastSyncedAt),
+      archivedAt: isoOrNull(row.archivedAt),
+      activities: [...row.activities]
+        .map((activity) => ({ ...activity, recordedAt: isoOrNull(activity.recordedAt) as string }))
+        .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt) || a.id.localeCompare(b.id)),
+    }));
+  return {
+    schemaVersion: 1,
+    capturedAt,
+    workroomCount: workrooms.length,
+    boundBranchCount: workrooms.filter((room) => room.headBranch !== null && room.headBranch !== "").length,
+    openCount: workrooms.filter((room) => !TERMINAL_WORKROOM_STATUSES.has(room.status)).length,
+    workrooms,
+  };
 }

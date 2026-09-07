@@ -6,13 +6,19 @@ import { STATUS_OVERRIDE_TTL_MS } from "@/lib/work-capsules";
 import type { WorkCapsuleActor } from "@/lib/work-capsules/work-capsule-store-types";
 import { canonicalJson } from "@/lib/shared/canonical-json";
 
-import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
+import {
+  persistedTerminalCompletionDecision,
+  projectBacklogItemReadiness,
+  type InitiativeReadinessActivity,
+} from "./entry-adapter";
 import { reconcileInitiativeObjectives, type ObjectiveReconciliationActivity } from "./objective-reconciliation";
 import {
   executeGovernedTerminalTransition,
   type GovernedTerminalTransitionResult,
   type TerminalTransitionDb,
 } from "./terminal-transition-repository";
+import { readinessRequirement } from "./readiness-guidance";
+import type { InitiativeReadinessDecision } from "./types";
 
 type TerminalCapsule = {
   id: string;
@@ -29,6 +35,7 @@ type TerminalCapsule = {
 type CapsuleSubject = {
   id: string;
   itemId: string;
+  status: string;
   type: string | null;
   source: string | null;
   workType: string | null;
@@ -92,7 +99,7 @@ function passedEvidenceIds(activities: CapsuleEvidenceActivity[]): string[] {
 
 async function resolveSubject(tx: CapsuleTerminalClient, capsule: TerminalCapsule): Promise<CapsuleSubject | null> {
   const select = {
-    id: true, itemId: true, type: true, source: true, workType: true, scopeKind: true,
+    id: true, itemId: true, status: true, type: true, source: true, workType: true, scopeKind: true,
     archetypeCategories: true, archetypeIds: true, organizationId: true,
     activities: {
       where: { kind: { in: [
@@ -122,6 +129,45 @@ function capsuleIdentityState(capsule: TerminalCapsule, actor: WorkCapsuleActor)
   if (capsule.archivedAt) return "fail" as const;
   if (!actor.principalId || capsule.leaseHolderPrincipalId !== actor.principalId) return "fail" as const;
   return "pass" as const;
+}
+
+const WORKROOM_LOCAL_REQUIREMENTS = new Set([
+  "CAPSULE_IDENTITY_MISMATCH",
+  "DELIVERY_EVIDENCE_REQUIRED",
+]);
+
+function rebindAllowedItemCompletion(args: {
+  persisted: InitiativeReadinessDecision;
+  transitionObject: InitiativeReadinessDecision["transitionObject"];
+  capsuleId: string;
+  deliveryEvidenceRefs: readonly string[];
+  evaluatedAt: string;
+}): InitiativeReadinessDecision {
+  return {
+    ...args.persisted,
+    decisionId: "unpersisted",
+    transitionObject: args.transitionObject,
+    evaluatedAt: args.evaluatedAt,
+    satisfied: [
+      ...args.persisted.satisfied.filter((requirement) => !WORKROOM_LOCAL_REQUIREMENTS.has(requirement.code)),
+      readinessRequirement({
+        code: "CAPSULE_IDENTITY_MISMATCH",
+        state: "pass",
+        accountableRole: "delivery-coordinator",
+        profile: args.persisted.profile,
+        evidenceRefs: [args.capsuleId],
+      }),
+      readinessRequirement({
+        code: "DELIVERY_EVIDENCE_REQUIRED",
+        state: "pass",
+        accountableRole: "delivery-coordinator",
+        profile: args.persisted.profile,
+        evidenceRefs: args.deliveryEvidenceRefs,
+      }),
+    ],
+    unmet: [],
+    blockers: [],
+  };
 }
 
 /** Complete a governed Workroom through the shared audited terminal boundary. */
@@ -206,13 +252,14 @@ export async function completeWorkCapsuleTransition(args: {
         activities: subject.activities,
       });
       const identity = capsuleIdentityState(capsule, args.actor);
-      const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
+      const transitionObject = {
+        kind: "work-capsule" as const, id: capsule.id, expectedVersion: args.expectedStatus, targetState: "complete" as const,
+      };
+      const currentProjection = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
         item: subject,
         activities: subject.activities as InitiativeReadinessActivity[],
         target: "completion",
-        transitionObject: {
-          kind: "work-capsule", id: capsule.id, expectedVersion: args.expectedStatus, targetState: "complete",
-        },
+        transitionObject,
         authorization: "pass",
         capsuleIdentity: identity,
         completion: {
@@ -230,6 +277,24 @@ export async function completeWorkCapsuleTransition(args: {
         },
         evaluatedAt,
       });
+      const persistedCompletion = persistedTerminalCompletionDecision(subject.activities, subject);
+      const canReuseItemCompletion = persistedCompletion !== null
+        && persistedCompletion.transitionObject.kind === "backlog-item"
+        && persistedCompletion.transitionObject.id === subject.id
+        && identity === "pass"
+        && deliveryEvidenceRefs.length > 0;
+      const projected = canReuseItemCompletion
+        ? {
+            ...currentProjection,
+            decision: rebindAllowedItemCompletion({
+              persisted: persistedCompletion,
+              transitionObject,
+              capsuleId: capsule.capsuleId,
+              deliveryEvidenceRefs,
+              evaluatedAt,
+            }),
+          }
+        : currentProjection;
       return {
         governed: projected.governed,
         decision: projected.decision,
@@ -244,6 +309,7 @@ export async function completeWorkCapsuleTransition(args: {
           objectiveEvidenceRefs: reconciliation.evidenceRefs,
           deliveryEvidenceRefs,
           capsuleIdentity: identity,
+          reusedItemCompletionDecisionId: canReuseItemCompletion ? persistedCompletion.decisionId : null,
           evaluatedAt,
         }),
       };

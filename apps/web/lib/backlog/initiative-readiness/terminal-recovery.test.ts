@@ -116,6 +116,34 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
 }
 
 describe("terminal initiative recovery", () => {
+  it("BI-05F8860A: a small-shape acceptance lane escalates to record_execution_evidence, never to objective mapping", async () => {
+    const ports = deps();
+    const smallShapeDecision: InitiativeReadinessDecision = {
+      ...decision,
+      policyVersion: "initiative-readiness.v3",
+      unmet: [readinessRequirement({
+        code: "ACCEPTANCE_EVIDENCE_REQUIRED",
+        state: "missing",
+        accountableRole: "delivery-coordinator",
+      })],
+    };
+    const recovery = await resolveTerminalInitiativeRecovery({
+      decision: smallShapeDecision,
+      currentAgentId: null,
+      refusedWorkroomId: null,
+      ports,
+    });
+    expect(recovery.reviewerRoutes).toEqual([]);
+    expect(recovery.escalations).toEqual([expect.objectContaining({
+      reason: "acceptance-evidence-required",
+      accountableRole: "delivery-coordinator",
+      toolName: "record_execution_evidence",
+    })]);
+    expect(String(recovery.escalations[0]?.nextAction)).toContain("manual_check");
+    expect(ports.loadLiveRooms).not.toHaveBeenCalled();
+    expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
+  });
+
   it("binds the unique live room, current baseline, and provider-verified artifact", async () => {
     const ports = deps();
     const result = await resolveTerminalInitiativeRecovery({

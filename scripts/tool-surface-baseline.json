@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 409,
-      "reason": "appoint_room_coordinator (BI-F63200A8). Conformance refuses to execute a Workroom without exactly one explicit Process Overseer, and no tool could set that role: persistWorkroomParticipantAssignment had zero callers and invite_room_participant admits a participant without ever making them coordinator. A live room woke 291 times and refused every one for want of an owner. This earns a permanent place because ownership is a standing property of every room on every install, not a one-off repair \u2014 and because the tool is deliberately callable without an acting coworker, so a stalled room can be given an owner by whoever notices it.",
-      "recordedAt": "2026-09-05"
+      "value": 411,
+      "reason": "declare_break_fix and record_initiative_post_implementation_review (BI-F2FEC1EB, design 2026-09-02 s4 / s5 rulings 1-2). A break-fix is the one lane that skips pre-authorisation, so it must be declared by a person on a live Workroom, capped at WIP 1, and audited by a 48-hour post-implementation review recorded by someone other than the declarer. Neither can ride an existing tool: claim_backlog_item_for_work binds a shape at the claim and cannot be re-run on a claimed item, and the design/architecture/plan review lanes each carry their own gate key, while the PIR gate needs an independent lane on the Change Reviewer grant. Both earn a permanent place because every install runs the expedite lane, and an unaudited expedite is exactly the hole the taxonomy closes.",
+      "recordedAt": "2026-09-06"
     },
     "registry.packFiles": {
       "value": 101,

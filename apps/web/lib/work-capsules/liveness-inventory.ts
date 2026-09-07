@@ -7,6 +7,7 @@
 // by the `list_work_capsules` MCP tool so the handler stays thin.
 
 import { classifyWorkCapsuleLiveness } from "./liveness";
+import { projectWorkroomRecovery } from "./workroom-recovery-projection";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -26,6 +27,8 @@ const INVENTORY_SELECT = {
   servesPortfolioRoles: true,
   dependsOnPortfolioRoles: true,
   headBranch: true,
+  baseSha: true,
+  headSha: true,
   worktreePath: true,
   pullRequestUrl: true,
   pullRequestNumber: true,
@@ -34,7 +37,7 @@ const INVENTORY_SELECT = {
   lastSyncedAt: true,
   updatedAt: true,
   featureBuildId: true,
-  taskRun: { select: { status: true, updatedAt: true } },
+  taskRun: { select: { taskRunId: true, status: true, updatedAt: true } },
 } as const;
 
 type InventoryDb = {
@@ -113,6 +116,7 @@ export async function loadCapsuleLivenessInventory(
     const { featureBuildId: _omit, taskRun: _taskRun, ...rest } = row;
     return {
       ...rest,
+      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }),
       liveness: verdict.liveness,
       isLive: verdict.isLive,
       isReapable: verdict.isReapable,

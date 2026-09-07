@@ -31,7 +31,7 @@ apps/web/lib/actions/crm.ts	1043
 apps/web/lib/actions/ea.ts	918
 apps/web/lib/actions/mcp-tokens.test.ts	1369
 apps/web/lib/actions/platform-dev-config.ts	1254
-apps/web/lib/actions/promotions.self-upgrade.test.ts	1098
+apps/web/lib/actions/promotions.self-upgrade.test.ts	1096
 apps/web/lib/actions/promotions.ts	982
 apps/web/lib/actions/tax-remittance.test.ts	1084
 apps/web/lib/actions/tax-remittance.ts	971
@@ -55,7 +55,7 @@ apps/web/lib/self-upgrade/quiescence.test.ts	951
 apps/web/lib/self-upgrade/quiescence.ts	1621
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	940
-apps/web/lib/tak/agent-grants.ts	999
+apps/web/lib/tak/agent-grants.ts	1000
 apps/web/lib/tak/agent-routing.ts	1191
 apps/web/lib/tak/agentic-loop.test.ts	2485
 apps/web/lib/tak/agentic-loop.ts	2681

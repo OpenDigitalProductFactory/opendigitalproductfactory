@@ -25,6 +25,8 @@ function fakePrisma(data: {
   delegated?: unknown[];
   handoffs?: unknown[];
   evidence?: unknown[];
+  doneWeek?: unknown[];
+  breakFixDone?: unknown[];
 }) {
   return {
     agent: { findMany: async () => data.agents },
@@ -36,7 +38,8 @@ function fakePrisma(data: {
     tokenUsage: { groupBy: async () => data.tokens ?? [] },
     delegationChain: { groupBy: async () => data.delegated ?? [] },
     phaseHandoff: { groupBy: async () => data.handoffs ?? [] },
-    backlogItemActivity: { groupBy: async () => data.evidence ?? [] },
+    backlogItemActivity: { groupBy: async () => data.evidence ?? [], findMany: async () => data.breakFixDone ?? [] },
+    backlogItem: { findMany: async () => data.doneWeek ?? [] },
   } as never;
 }
 
@@ -158,7 +161,8 @@ describe("loadWorkforceActivity", () => {
       tokenUsage: { groupBy: async () => [] },
       delegationChain: { groupBy: async () => [] },
       phaseHandoff: { groupBy: async () => [] },
-      backlogItemActivity: { groupBy: async () => [] },
+      backlogItemActivity: { groupBy: async () => [], findMany: async () => [] },
+      backlogItem: { findMany: async () => [] },
     } as never;
     await loadWorkforceActivity({ prisma, now: () => NOW });
     // the tool-by-tool outcome query is the one filtered to success:true
@@ -270,5 +274,22 @@ describe("loadWorkforceActivity", () => {
     });
     expect(wf.pulse.platformWorkCount).toBe(2);
     expect(wf.pulse.workingCount).toBe(1);
+  });
+});
+
+describe("break-fix share of the rolling week (BI-F2FEC1EB)", () => {
+  it("counts declared break-fix items among items closed in the last 7 days and reports the share", async () => {
+    const { loadWorkforceActivity } = await import("./workforce-activity");
+    const prisma = fakePrisma({
+      agents: [],
+      doneWeek: [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }],
+      breakFixDone: [{ backlogItemId: "a" }, { backlogItemId: "a" }],
+    });
+    const wf = await loadWorkforceActivity({ prisma: prisma as never, now: () => Date.parse("2026-09-06T12:00:00Z") });
+    expect(wf.pulse.doneWeekCount).toBe(4);
+    expect(wf.pulse.breakFixDoneWeekCount).toBe(1);
+    expect(wf.pulse.breakFixShareWeek).toBeCloseTo(0.25);
+    const empty = await loadWorkforceActivity({ prisma: fakePrisma({ agents: [] }) as never, now: () => Date.parse("2026-09-06T12:00:00Z") });
+    expect(empty.pulse.breakFixShareWeek).toBe(0);
   });
 });

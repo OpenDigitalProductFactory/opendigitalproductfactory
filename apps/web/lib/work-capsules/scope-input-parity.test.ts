@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import { workCapsulesPack } from "@/lib/mcp/packs/work-capsules-pack";
 import { normalizeWorkCapsuleScopeInput } from "@/lib/work-capsules";
 import { __testing__ } from "./mcp-handlers";
+import { adoptionScopePatch, replaceOwnershipClaims } from "./scope-input";
 
 /** Scope keys the create_workroom tool schema advertises to callers. */
 function advertisedScopeKeys(): string[] {
@@ -39,6 +40,24 @@ function advertisedScopeKeys(): string[] {
 }
 
 describe("the scope block the schema advertises is the scope block the handler carries", () => {
+  it("releases an ownership claim without erasing a shape in the same legacy record", () => {
+    expect(replaceOwnershipClaims({ kind: "path", value: "apps/web", intent: "edit", recordedByPrincipalId: "owner", recordedAt: "2026-09-01T00:00:00.000Z", workShape: "delivery-small@1.0.0" }, [])).toEqual([
+      { recordedAt: "2026-09-01T00:00:00.000Z", workShape: "delivery-small@1.0.0" },
+    ]);
+  });
+  it("replaces a legacy versioned shape without losing its other claims", () => {
+    const scopeClaims = { workShapeKey: "delivery-small", workShapeVersion: "1.0.0", extension: "retained" };
+    expect(adoptionScopePatch({ scopeClaims }, { workShape: "delivery-large@1.0.0" }, new Date(0))).toEqual({
+      scopeClaims: [{ extension: "retained" }, { workShape: "delivery-large@1.0.0", recordedAt: new Date(0).toISOString() }],
+    });
+  });
+
+  it("does not rewrite a shape on replay or clear omitted scope", () => {
+    const existing = { scopeClaims: [{ workShape: "delivery-large@1.0.0", recordedAt: "original" }], portfolioRole: "existing-role" };
+    expect(adoptionScopePatch(existing, { workShape: "delivery-large@1.0.0" }, new Date())).toEqual({});
+    expect(adoptionScopePatch(existing, {}, new Date())).toEqual({});
+  });
+
   it("carries every advertised scope key through parseScopeInput", () => {
     const keys = advertisedScopeKeys();
     expect(keys.length).toBeGreaterThan(0);

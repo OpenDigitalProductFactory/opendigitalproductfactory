@@ -20,11 +20,13 @@ import {
   ANTHROPIC_OAUTH_BETA_HEADERS,
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
+import type { ToolCallEntry } from "../routing/adapter-types";
 import { resolveDefaultExecutionAdapter } from "../routing/execution-plan";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
 import {
   parseExecutionAdapterSelector,
+  requiredToolChoiceExclusionReason,
   type ExecutionAdapterSelector,
 } from "../routing/execution-adapter-types";
 import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
@@ -106,7 +108,7 @@ export type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
   content: string | ContentBlock[];
   /** Tool calls the assistant made (present when role=assistant and model called tools) */
-  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  toolCalls?: ToolCallEntry[];
   /** For role=tool messages: which tool call this result responds to */
   toolCallId?: string;
 };
@@ -116,7 +118,7 @@ export type InferenceResult = {
   outputTokens: number;
   inferenceMs: number;
   asyncOperation?: import("../routing/adapter-types").AsyncOperationStartResult;
-  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  toolCalls?: ToolCallEntry[];
   /** Responses API: chain subsequent calls with this ID for conversation state. */
   responseId?: string;
   /** True when the provider stopped at the output-token ceiling (BI-1D144CC1). */
@@ -490,7 +492,8 @@ export async function callProvider(
   }
   const isCliAdapter = selector !== null
     && (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
-  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter) {
+  const toolChoiceExclusion = requiredToolChoiceExclusionReason(selector);
+  if (effectivePlan.toolPolicy.toolChoice === "required" && toolChoiceExclusion) {
     const soleToolFunction = tools?.length === 1 ? tools[0]?.["function"] : undefined;
     const soleToolName = soleToolFunction && typeof soleToolFunction === "object" && !Array.isArray(soleToolFunction)
       ? (soleToolFunction as Record<string, unknown>)["name"]
@@ -499,8 +502,8 @@ export async function callProvider(
       && effectivePlan.responsePolicy.terminalWriterToolName === soleToolName;
     throw new InferenceError(
       requiredTerminalWriter
-        ? `required-terminal-writer-not-enforceable: execution adapter ${selector?.kind ?? String(executionAdapterRaw)} cannot enforce required tool choice with a server-verifiable mechanism.`
-        : `Execution adapter ${selector?.kind ?? String(executionAdapterRaw)} cannot enforce required tool choice.`,
+        ? `required-terminal-writer-not-enforceable: ${toolChoiceExclusion}`
+        : toolChoiceExclusion,
       requiredTerminalWriter ? "required_terminal_writer_not_enforceable" : "provider_error",
       providerId,
     );

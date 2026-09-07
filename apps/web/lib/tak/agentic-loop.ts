@@ -24,6 +24,7 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage } from "@/lib/ai-inference";
+import type { ToolCallEntry } from "@/lib/routing/adapter-types";
 import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
@@ -62,12 +63,13 @@ import {
 import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
-  normalizeTerminalToolArguments, rotateTerminalWriterProvider,
+  normalizeTerminalToolArguments,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   selectTerminalToolSurface,
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
+import { rotateTerminalWriterRoute } from "./terminal-writer-route";
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -1756,10 +1758,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           return completeResult(result.content, result);
         }
         if (exit.kind === "nudge") {
-          rotateTerminalWriterProvider(routeOptions, result.providerId);
           terminalToolNudges++;
           terminalToolSurfaceOverride = exit.allowedToolNames;
           messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];
+          await rotateTerminalWriterRoute({ policy: params.terminalToolPolicy, records: executedTools, options: routeOptions, providerId: result.providerId, messages, systemPrompt: params.systemPrompt, sensitivity: params.sensitivity });
           continue;
         }
         if (exit.kind === "input-required") {
@@ -2292,10 +2294,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
 
     // Collect all immediate tool results for this iteration
-    const iterationResults: Array<{
-      tc: { id: string; name: string; arguments: Record<string, unknown> };
-      toolResult: ToolResult;
-    }> = [];
+    const iterationResults: Array<{ tc: ToolCallEntry; toolResult: ToolResult }> = [];
 
     for (const providerToolCall of result.toolCalls) {
       let tc = providerToolCall;
@@ -2586,7 +2585,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       {
         role: "assistant" as const,
         content: result.content,
-        toolCalls: iterationResults.map(({ tc }) => tc),
+        toolCalls: iterationResults.map(({ tc }) => tc.gemini ? result.toolCalls!.find((original) => original.id === tc.id) ?? tc : tc),
       },
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,

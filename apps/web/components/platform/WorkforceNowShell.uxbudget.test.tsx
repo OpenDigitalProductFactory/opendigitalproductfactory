@@ -83,6 +83,9 @@ const DATA: WorkforceActivity = {
     platformWorkCount: 2,
     quietOverThresholdCount: 2,
     coworkersWithoutOwnerCount: 37,
+    doneWeekCount: 9,
+    breakFixDoneWeekCount: 3,
+    breakFixShareWeek: 3 / 9,
   },
 };
 
@@ -106,6 +109,7 @@ describe("WorkforceNowShell UX budget", () => {
     expect(container.textContent).toContain("Deliberation: review");
     expect(container.textContent).toContain("FB-FCAC756D");
     expect(container.textContent).toContain("unattributed");
+    expect(container.textContent).toContain("33% break-fix this week");
     // No coworker row claims a task it does not own.
     expect(container.textContent).not.toContain("Now →");
   });
