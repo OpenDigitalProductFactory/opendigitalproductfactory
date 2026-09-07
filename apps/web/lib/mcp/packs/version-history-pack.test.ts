@@ -26,6 +26,7 @@ const db = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => db);
 
 import { versionHistoryPack } from "./version-history-pack";
+import { summarizeTerminalToolProgress, type TerminalToolRecord } from "@/lib/tak/terminal-tool-policy";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
 const EXPECTED_TOOLS = [
@@ -76,6 +77,46 @@ describe("version-history pack — registration", () => {
 });
 
 describe("version-history pack — handler behavior (delegation preserved)", () => {
+  it.each([
+    "first\n" + "x".repeat(25_000) + "\nlast\n",
+    "x".repeat(25_000),
+    "first\n" + "x".repeat(25_000),
+  ])("the terminal policy accepts the real reader's split-line cursor chain (%#)", async (content) => {
+    gitUtils.gitShow.mockResolvedValue({ content });
+    const binding = { repositoryFullName: "example/project", path: "docs/review.md", version: "v1", expectedBlobId: "blob-1" };
+    const policy = {
+      writerToolName: "record_initiative_evidence",
+      readerToolNames: ["read_source_at_version"],
+      minimumSuccessfulReaderCalls: 1,
+      maximumReaderCalls: 6,
+      immutableReaderArguments: binding,
+    };
+    const records: TerminalToolRecord[] = [];
+    let cursor: string | undefined;
+    let assembled = "";
+    do {
+      const args = { ...binding, ...(cursor ? { cursor } : {}) };
+      const result = await versionHistoryPack.handlers.read_source_at_version(args, "u1");
+      expect(result.success).toBe(true);
+      const page = result.data as { content: string; nextCursor: string | null };
+      assembled += page.content;
+      records.push({ name: "read_source_at_version", args, result });
+      cursor = page.nextCursor ?? undefined;
+      expect(records.length).toBeLessThanOrEqual(6);
+    } while (cursor);
+    expect(assembled).toBe(content);
+    expect(summarizeTerminalToolProgress(policy, records)).toMatchObject({ evidenceAvailable: true });
+    expect(summarizeTerminalToolProgress(policy, [records[0]!, records[2]!]))
+      .toMatchObject({ evidenceAvailable: false });
+    expect(summarizeTerminalToolProgress(policy, [records[0]!, records[1]!, records[1]!, records[2]!]))
+      .toMatchObject({ evidenceAvailable: false });
+    const repeatedCursor = { ...records[1]!, result: { ...records[1]!.result, data: {
+      ...records[1]!.result.data, nextCursor: records[0]!.result.data!.nextCursor,
+    } } };
+    expect(summarizeTerminalToolProgress(policy, [records[0]!, repeatedCursor, records[2]!]))
+      .toMatchObject({ evidenceAvailable: false });
+  });
+
   it("query_version_history summarizes product versions from prisma", async () => {
     db.prisma.productVersion.findMany.mockResolvedValue([
       {
