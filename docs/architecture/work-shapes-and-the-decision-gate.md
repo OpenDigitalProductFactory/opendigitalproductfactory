@@ -633,6 +633,14 @@ driver scheduling and state writes; they do not prove idempotency of downstream
 provider effects or automatic reviewer successor recovery. Those require correlated
 execution receipts and separate restart/duplicate-delivery verification.
 
+The external reviewer TaskRun reconciler also admits a narrowly defined recovery:
+the runtime explicitly recorded prose without the required initiative receipt, the
+existing three-attempt budget remains, and no writer attempt or approval envelope
+exists. It reuses the persisted request, identity, authority checks and generation
+reservation from normal replay. Unknown waits, rejected writers, approvals and
+exhausted recovery stay outside this automatic path. This does not make the separate
+inline semantic-review operation restartable or resume an interrupted provider call.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer

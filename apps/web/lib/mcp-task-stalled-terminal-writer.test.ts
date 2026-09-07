@@ -230,6 +230,22 @@ describe("reaper-stalled terminal writer resumption", () => {
     });
   });
 
+  it("admits only one provider loop for duplicate exact-bound recovery deliveries", async () => {
+    let claimed = false;
+    db.updateMany.mockImplementation(async () => {
+      if (claimed) return { count: 0 };
+      claimed = true;
+      return { count: 1 };
+    });
+    const request = {
+      token: { tokenId: "token-research", userId: "user-1", capability: "write" as const, source: "pat" as const },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      params,
+    };
+    await Promise.all([submitRemoteCoworkerTask(request), submitRemoteCoworkerTask(request)]);
+    expect(autonomous.execute).toHaveBeenCalledTimes(1);
+  });
+
   it("resumes a failed exact-bound wait after a rejected non-proposal writer", async () => {
     db.findFirst.mockResolvedValue(existingRun("failed"));
     db.findToolExecution.mockImplementation(async (query: { where?: { success?: unknown } }) => (

@@ -7,8 +7,11 @@ const db = vi.hoisted(() => ({
   findToken: vi.fn(),
   claim: vi.fn(),
   update: vi.fn(),
+  findWriter: vi.fn(),
+  findEnvelope: vi.fn(),
 }));
 const execution = vi.hoisted(() => ({ run: vi.fn() }));
+const recovery = vi.hoisted(() => ({ submit: vi.fn() }));
 const durableInference = vi.hoisted(() => ({ admit: vi.fn() }));
 const asyncRuntime = vi.hoisted(() => ({ cancel: vi.fn(), enqueue: vi.fn() }));
 const events = vi.hoisted(() => ({ emit: vi.fn() }));
@@ -22,10 +25,15 @@ vi.mock("@dpf/db", () => ({
       update: (...args: unknown[]) => db.update(...args),
     },
     mcpApiToken: { findFirst: (...args: unknown[]) => db.findToken(...args) },
+    toolExecution: { findFirst: (...args: unknown[]) => db.findWriter(...args) },
+    coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
   },
 }));
 vi.mock("./mcp-task-execution", () => ({
   executeRemoteTaskAttempt: (...args: unknown[]) => execution.run(...args),
+}));
+vi.mock("./mcp-task-submit", () => ({
+  submitRemoteCoworkerTask: (...args: unknown[]) => recovery.submit(...args),
 }));
 vi.mock("./mcp-task-durable-inference-runtime", () => ({
   admitDurableInferenceTask: (...args: unknown[]) => durableInference.admit(...args),
@@ -123,6 +131,9 @@ beforeEach(() => {
     },
   });
   db.findToken.mockResolvedValue({ id: "token-1", capability: "write" });
+  db.findWriter.mockResolvedValue(null);
+  db.findEnvelope.mockResolvedValue(null);
+  recovery.submit.mockResolvedValue({ kind: "result", result: { taskRunId: "TR-MCP-ASYNC", status: "completed" } });
   db.claim.mockResolvedValue({ count: 1 });
   db.update.mockResolvedValue({});
   execution.run.mockResolvedValue({
@@ -138,6 +149,28 @@ beforeEach(() => {
 });
 
 describe("persisted remote TaskRun worker", () => {
+  it("resumes a missing reviewer receipt from its persisted request without a client", async () => {
+    const binding = {
+      writerToolName: "record_initiative_design_review", itemId: "BI-2014236E", gate: "design",
+      artifactRef: { kind: "repo-blob-at-commit" as const, repositoryFullName: "org/repo",
+        commitSha: "a".repeat(40), path: "docs/spec.md", providerBlobId: "b".repeat(40) },
+    };
+    const reviewParams = { ...params, initiativeReviewBinding: binding,
+      authorityScope: [...params.authorityScope, `tool:${binding.writerToolName}`, `backlog-item:${binding.itemId}`] };
+    const original = row();
+    db.findTask.mockResolvedValue(row({
+      status: "input-required", authorityScope: reviewParams.authorityScope,
+      progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer",
+        writerToolName: binding.writerToolName, resumeMode: "same-taskrun", attempt: 1,
+        noncompliance: "prose-without-required-writer",
+        observedAt: "2026-08-31T04:00:00.000Z" } },
+      a2aMetadata: { ...original.a2aMetadata, trigger: "external-mcp", initiativeReviewBinding: binding,
+        requestDigest: remoteTaskRequestDigest(reviewParams) },
+    }));
+    await executePersistedRemoteTask({ taskRunId: "TR-MCP-ASYNC" });
+    expect(recovery.submit).toHaveBeenCalledWith(expect.objectContaining({ params: reviewParams }));
+    expect(execution.run).not.toHaveBeenCalled();
+  });
   it("reconstructs the exact execution packet from server-owned persisted state", () => {
     const reconstructed = reconstructPersistedRemoteTask(row());
 

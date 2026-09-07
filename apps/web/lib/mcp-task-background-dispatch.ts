@@ -21,8 +21,38 @@ import {
 import { ensureDurableInferenceTaskRecipes } from "./mcp-task-durable-inference-runtime";
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
 import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
+import { parseTerminalWriterWait } from "./mcp-task-replay-projection";
+import { recoverTerminalWriterEscalation, TERMINAL_WRITER_MAX_ATTEMPTS } from "./mcp-task-terminal-writer-escalation";
+import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 
 export { REMOTE_TASK_EXECUTION_EVENT };
+
+/** Shared admission for the reconciler and worker. A missing call can retry;
+ * a recorded writer call is an outcome/approval to reconcile, never to guess. */
+export async function automaticReviewerRecoveryWait(row: {
+  taskRunId: string; status: string; progressPayload: unknown; a2aMetadata: unknown;
+}, now: Date = new Date()) {
+  if (row.status !== "input-required") return null;
+  const metadata = record(row.a2aMetadata);
+  if (metadata?.["trigger"] !== "external-mcp") return null;
+  const binding = parseInitiativeReviewBinding(metadata["initiativeReviewBinding"]);
+  const wait = parseTerminalWriterWait(row.progressPayload);
+  if (!binding || !wait || wait.noncompliance !== "prose-without-required-writer"
+    || binding.writerToolName !== wait.writerToolName
+    || wait.validationFailure || recoverTerminalWriterEscalation(row.progressPayload)) return null;
+  const observedAt = Date.parse(wait.observedAt);
+  if (!Number.isFinite(observedAt) || now.getTime() - observedAt < DISPATCH_STALE_MS) return null;
+  const [writer, envelope] = await Promise.all([
+    prisma.toolExecution.findFirst({
+      where: { taskRunId: row.taskRunId, toolName: wait.writerToolName },
+      select: { id: true },
+    }),
+    prisma.coworkerActionEnvelope.findFirst({
+      where: { taskRunId: row.taskRunId }, select: { id: true },
+    }),
+  ]);
+  return writer || envelope ? null : wait;
+}
 
 export type RemoteTaskDispatchProjection = {
   schemaVersion: 1;
@@ -278,6 +308,17 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     a2aMetadata: { path: ["trigger"], equals: "external-mcp" },
     progressPayload: { path: ["resourceWait", "kind"], equals: "provider-capacity" },
   };
+  const missingReviewerReceipt: Prisma.TaskRunWhereInput = {
+    status: "input-required",
+    archivedAt: null,
+    actionEnvelopes: { none: {} },
+    a2aMetadata: { path: ["trigger"], equals: "external-mcp" },
+    AND: [
+      { progressPayload: { path: ["terminalWriterWait", "kind"], equals: "missing-terminal-writer" } },
+      { progressPayload: { path: ["terminalWriterWait", "noncompliance"], equals: "prose-without-required-writer" } },
+      { progressPayload: { path: ["terminalWriterWait", "attempt"], lt: TERMINAL_WRITER_MAX_ATTEMPTS } },
+    ],
+  };
   const rows = await prisma.taskRun.findMany({
     where: {
       updatedAt: { lt: cutoff },
@@ -285,6 +326,7 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
         durableSubmitted,
         durableAdmitting,
         resourceWaitSubmitted,
+        missingReviewerReceipt,
         ...(input?.includeOrdinary === false ? [] : [ordinarySubmitted]),
       ],
     },
@@ -321,7 +363,8 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     const isResourceWaitCandidate = row.status === "submitted"
       && metadata?.["trigger"] === "external-mcp"
       && parseResourceWaitProjection(progress) !== null;
-    if (!isDurableCandidate && !isOrdinaryCandidate && !isResourceWaitCandidate) {
+    const isReviewerRecoveryCandidate = await automaticReviewerRecoveryWait(row, now);
+    if (!isDurableCandidate && !isOrdinaryCandidate && !isResourceWaitCandidate && !isReviewerRecoveryCandidate) {
       raced += 1;
       continue;
     }

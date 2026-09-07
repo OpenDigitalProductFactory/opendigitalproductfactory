@@ -24,6 +24,7 @@ import {
 import { admitDurableInferenceTask } from "./mcp-task-durable-inference-runtime";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
+import { automaticReviewerRecoveryWait } from "./mcp-task-background-dispatch";
 import type {
   RemoteTaskSubmitAuth,
   RemoteTaskSubmitParams,
@@ -420,6 +421,19 @@ export async function executePersistedRemoteTask(input: {
 
   const progress = record(row.progressPayload) ?? {};
   const dispatch = record(progress["dispatch"]) ?? {};
+  if (await automaticReviewerRecoveryWait(row)) {
+    // The existing replay path owns request matching, generation CAS, bounded
+    // attempts, immutable reader evidence and the terminal writer's authority.
+    const { submitRemoteCoworkerTask } = await import("./mcp-task-submit");
+    const resumed = await submitRemoteCoworkerTask({
+      token: reconstructed.data.token,
+      userContext: reconstructed.data.userContext,
+      params: reconstructed.data.parsed,
+    });
+    return resumed.kind === "result"
+      ? resumed.result
+      : { taskRunId: row.taskRunId, status: row.status, recoveryError: resumed.message };
+  }
   const claimedAt = new Date();
   const durableRecipeId = reconstructed.data.parsed.recipeId;
   const existingDurableProgress = parseDurableInferenceProgress(progress["durableInference"]);

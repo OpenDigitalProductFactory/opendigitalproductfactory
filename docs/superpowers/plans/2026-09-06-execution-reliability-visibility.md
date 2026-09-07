@@ -303,3 +303,22 @@ does not erase them or establish a gate pass.
 All 65 source preflight guards passed at d5119dd78c28. Its merged-code gate queued
 without admission because host stage headroom was low. That request was cancelled
 when the legacy-carrier query repair superseded the candidate; no CI pass is claimed.
+
+## Implementation evidence: missing reviewer receipt recovery
+
+The existing external TaskRun reconciler and worker now share one admission check
+for an explicit `prose-without-required-writer` wait. The reconciler includes this
+case even when ordinary asynchronous submission is disabled. The worker rebuilds
+the persisted request, verifies current credential authority and enters the existing
+same-TaskRun replay path, retaining its immutable artifact and generation reservation.
+Recorded writer attempts, approval envelopes, invalid bindings, unknown waits and
+the existing three-attempt ceiling prevent automatic replay.
+
+Both missing-receipt regressions failed before implementation. The expanded suites
+passed 62 tests across seven files, including two concurrent replay requests admitting
+one provider loop through a simulated atomic reservation. Typecheck also passed.
+The code-graph impact lookup was unavailable during the governed runtime restart;
+colocated suites, a bounded caller search and the queue-function tests supplied the
+fallback coverage. These source tests are not PostgreSQL concurrency or live restart
+evidence. Native inline semantic review, interrupted in-flight provider calls and the
+complete seven-scenario portal demonstration remain outstanding.
