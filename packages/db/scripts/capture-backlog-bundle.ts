@@ -5,7 +5,11 @@
 // a bundle, but nothing produced one, so work created on a development
 // installation had no path off it before teardown. This closes that loop.
 //
-// Writes one bundle per epic (the bundle schema is single-epic), plus a manifest.
+// Writes one bundle per epic (the bundle schema is single-epic), plus a manifest,
+// plus `workrooms.json`: the Workroom rows that bind each item to a branch,
+// worktree and evidence trail. Those rows live only in Postgres and a reinstall
+// destroys them (BI-F9939341); without them the backlog comes back but nobody
+// can tell which worktree on disk carries which item.
 // Everything it cannot represent is listed, never silently dropped.
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
@@ -13,8 +17,10 @@ import { resolve } from "node:path";
 
 import {
   buildBacklogRecoveryBundle,
+  buildWorkroomCaptureRecord,
   type BacklogCaptureItemRow,
   type BacklogCaptureSkip,
+  type WorkroomCaptureRow,
 } from "../src/backlog-recovery-bundle";
 import { prisma } from "../src/client";
 
@@ -29,7 +35,8 @@ function usage(): string {
   return [
     "Usage: pnpm --filter @dpf/db backlog:capture -- --out <dir> [--all] [--no-receipt]",
     "",
-    "Captures every not-done backlog item as reconcilable recovery bundles.",
+    "Captures every not-done backlog item as reconcilable recovery bundles, and every",
+    "non-archived Workroom (branch, worktree, lease, evidence) into workrooms.json.",
     "  --out <dir>    Directory to write bundles into (required).",
     "  --all          Include done items too, not just work that is not done.",
     "  --no-receipt   Do not record the capture receipt in PlatformConfig.",
@@ -38,7 +45,10 @@ function usage(): string {
   ].join("\n");
 }
 
-function parseArgs(argv: string[]): { out: string; all: boolean; receipt: boolean } {
+function parseArgs(rawArgv: string[]): { out: string; all: boolean; receipt: boolean } {
+  // `pnpm run script -- --out x` forwards the literal `--` on some pnpm versions;
+  // it is a separator, not an option, and used to abort the whole capture.
+  const argv = rawArgv.filter((arg) => arg !== "--");
   if (argv.includes("--help") || argv.includes("-h")) {
     process.stdout.write(`${usage()}\n`);
     process.exit(0);
@@ -76,7 +86,7 @@ function epicDescription(epic: { description?: string | null; title: string }): 
 }
 
 /** Files in the output directory that are records, not single-epic bundles. */
-const NON_BUNDLE_FILES = new Set(["manifest.json", "unassigned-items.json"]);
+const NON_BUNDLE_FILES = new Set(["manifest.json", "unassigned-items.json", "workrooms.json"]);
 
 /**
  * Map each epic to the bundle file already committed for it.
@@ -185,13 +195,28 @@ async function main(): Promise<void> {
 
   for (const epic of epics) {
     if (epic.items.length === 0) continue;
+    // The bundle contract requires a non-empty body, and one body-less item used
+    // to abort the ENTIRE capture (observed 2026-09-06: every other epic's work
+    // lost with it). The title describes the item as truthfully as anything
+    // available, so fall back to it rather than refuse to back up.
     const items = epic.items.map(
-      (item) => ({ ...item, epicId: epic.epicId }) as unknown as BacklogCaptureItemRow,
+      (item) =>
+        ({
+          ...item,
+          body: item.body?.trim() ? item.body : item.title,
+          epicId: epic.epicId,
+        }) as unknown as BacklogCaptureItemRow,
     );
     // Refreshing an epic keeps the identity and curation of its committed
     // bundle; only a genuinely new epic gets generated defaults.
     const prior = existing.get(epic.epicId);
-    const result = buildBacklogRecoveryBundle({
+    // One epic the bundle format cannot represent (a mirrored epic whose id is
+    // not EP-*, for example) must not abort every other epic's capture. It is
+    // listed under `skipped` with the contract violation, never dropped in
+    // silence — the manifest closes against unfinishedItemCount either way.
+    let result: ReturnType<typeof buildBacklogRecoveryBundle>;
+    try {
+      result = buildBacklogRecoveryBundle({
       bundleId: prior?.bundleId || `capture-${epic.epicId.toLowerCase()}`,
       description:
         prior?.description || `Backlog captured from this installation on ${capturedAt}.`,
@@ -207,6 +232,13 @@ async function main(): Promise<void> {
       epic: { ...epic, epicId: epic.epicId, description: epicDescription(epic) } as never,
       items,
     });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      for (const item of items) {
+        skipped.push({ itemId: item.itemId, reason: "epic-not-representable", detail });
+      }
+      continue;
+    }
     skipped.push(...result.skipped);
     if (!result.bundle) continue;
 
@@ -262,6 +294,59 @@ async function main(): Promise<void> {
     where: { status: { in: [...NOT_DONE_STATUSES] } },
   });
 
+  // Workrooms: what binds a backlog item to a branch, a worktree, a lease and
+  // its evidence. Archived rooms are the only ones left out by default; complete
+  // and abandoned rooms stay because their branch dispositions ARE the record
+  // (BI-F9939341). --all captures archived rooms too.
+  const workroomRows = await prisma.workroom.findMany({
+    where: args.all ? undefined : { status: { not: "archived" } },
+    orderBy: { capsuleId: "asc" },
+    select: {
+      capsuleId: true,
+      title: true,
+      objective: true,
+      status: true,
+      source: true,
+      executorKind: true,
+      executorRef: true,
+      backlogItemId: true,
+      epicId: true,
+      repositoryFullName: true,
+      baseBranch: true,
+      baseSha: true,
+      headBranch: true,
+      headSha: true,
+      worktreePath: true,
+      pullRequestUrl: true,
+      pullRequestNumber: true,
+      contributionMode: true,
+      branchTaxonomy: true,
+      idempotencyKey: true,
+      scopeClaims: true,
+      workspaceState: true,
+      verificationState: true,
+      leaseHolderPrincipalId: true,
+      createdAt: true,
+      updatedAt: true,
+      lastSyncedAt: true,
+      archivedAt: true,
+      activities: {
+        orderBy: { recordedAt: "asc" },
+        select: { id: true, kind: true, summary: true, payload: true, recordedAt: true },
+      },
+    },
+  });
+  const workrooms = buildWorkroomCaptureRecord(
+    workroomRows as unknown as WorkroomCaptureRow[],
+    capturedAt,
+  );
+  await writeFile(
+    resolve(args.out, "workrooms.json"),
+    `${JSON.stringify(workrooms, null, 2)}
+`,
+    "utf8",
+  );
+
   const manifest = {
     schemaVersion: 1,
     capturedAt,
@@ -270,6 +355,9 @@ async function main(): Promise<void> {
     capturedItemCount: capturedItems,
     unassignedItemCount: orphans.length,
     unfinishedItemCount,
+    workroomCount: workrooms.workroomCount,
+    workroomBoundBranchCount: workrooms.boundBranchCount,
+    workroomOpenCount: workrooms.openCount,
     skipped,
   };
   await writeFile(
@@ -286,6 +374,7 @@ async function main(): Promise<void> {
       bundlePath: args.out,
       itemCount: capturedItems,
       unfinishedItemCount,
+      workroomCount: workrooms.workroomCount,
     };
     await prisma.platformConfig.upsert({
       where: { key: CAPTURE_CONFIG_KEY },
@@ -298,6 +387,7 @@ async function main(): Promise<void> {
     [
       `Captured ${capturedItems} item(s) across ${written.length} bundle(s) into ${args.out}`,
       `Not-done items on this installation: ${unfinishedItemCount}`,
+      `Workrooms captured: ${workrooms.workroomCount} (${workrooms.boundBranchCount} bound to a branch, ${workrooms.openCount} open) -> workrooms.json`,
       orphans.length
         ? `Wrote ${orphans.length} item(s) with no epic to unassigned-items.json (not reconcilable — re-file them under an epic).`
         : "No items without an epic.",

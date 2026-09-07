@@ -217,9 +217,16 @@ uninstall, or a volume removal destroys them. Capture them first:
 pnpm --filter @dpf/db backlog:capture -- --out D:\DPF-backups\backlog\capture
 ```
 
-That writes one recovery bundle per epic, a manifest, and a list of anything it
-could not represent. Restore on another installation with
-`pnpm --filter @dpf/db backlog:reconcile -- <bundle.json> --apply`.
+That writes one recovery bundle per epic, a manifest, `workrooms.json` (the
+Workroom rows that bind each item to its branch, worktree, lease and evidence),
+and a list of anything it could not represent. Restore on another installation
+with `pnpm --filter @dpf/db backlog:reconcile -- <bundle.json> --apply`.
+
+`dpf-reinstall.ps1` and `scripts\fresh-install.ps1` also take a full `pg_dump`
+into `D:\DPF-backups\pre-destructive\<date>\` immediately before they run
+`docker compose down -v`, and refuse to continue if that dump fails.
+`-SkipPreDestructiveDump` is the only way past, and it costs every row that is
+not mirrored elsewhere (BI-F9939341).
 
 ## Docker memory
 
