@@ -24,6 +24,7 @@
 import type { WorkroomShapeKey } from "./room-shapes";
 import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
 import { DELIVERY_SHAPES } from "./delivery-shapes";
+import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
 
 /** §8.11.1 trigger vocabulary, verbatim and closed. */
@@ -208,8 +209,17 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
 };
 
 
-/** The full registry: the anchor compliance shape, the standing operations, and the five delivery shapes. */
-const ALL_SHAPES: Record<string, WorkShapeDefinition> = { ...SHAPES, ...STANDING_SHAPES, ...COWORKER_STANDING_SHAPES, ...DELIVERY_SHAPES };
+/**
+ * The full registry: the anchor compliance shape, the standing operations, the
+ * five delivery shapes, and one orchestration cycle per IT4IT value stream.
+ */
+const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
+  ...SHAPES,
+  ...STANDING_SHAPES,
+  ...COWORKER_STANDING_SHAPES,
+  ...DELIVERY_SHAPES,
+  ...ORCHESTRATION_SHAPES,
+};
 
 export function listWorkShapes(): WorkShapeDefinition[] {
   return Object.values(ALL_SHAPES);

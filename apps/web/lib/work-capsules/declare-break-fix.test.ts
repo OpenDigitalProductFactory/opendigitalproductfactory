@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { BREAK_FIX_SHAPE_REF, declareBreakFix, findMissedPir } from "./declare-break-fix";
+import { BREAK_FIX_SHAPE_REF, PIR_GATE_WIRE_KEY, declareBreakFix, findMissedPir } from "./declare-break-fix";
 
 const now = new Date("2026-09-06T23:00:00Z");
 const human = { userId: "user-1", agentId: null, principalId: "PRN-1" };
@@ -58,6 +58,26 @@ describe("declareBreakFix (BI-F2FEC1EB)", () => {
     const result = await declareBreakFix({ db: db({ history }), itemId: "BI-ONE", reason: "x", actor: human, now });
     expect(result).toMatchObject({ ok: false, error: "break_fix_pir_missed", data: { backlogItemId: "row-old" } });
     expect(findMissedPir([...history, { id: "b", backlogItemId: "row-old", kind: "initiative_gate_receipt", gateKey: "post-implementation-review", recordedAt: now, payload: {} }], now)).toBeNull();
+  });
+
+  it("queries the PIR gate by its Prisma member and reads receipts back in either spelling", async () => {
+    // Live acceptance on v2026.09.07-work-shape-taxonomy.1 threw here: the
+    // hyphenated wire key is the mapped DATABASE value, and Prisma rejects it
+    // in a where clause. Only the underscore member is a valid filter.
+    const store = db();
+    await declareBreakFix({ db: store, itemId: "BI-ONE", reason: "x", actor: human, now });
+    const filter = store.backlogItemActivity.findMany.mock.calls[0]?.[0] as { where: { OR: Array<{ gateKey?: string }> } };
+    const receiptClause = filter.where.OR.find((clause) => "gateKey" in clause);
+    expect(receiptClause?.gateKey).toBe("post_implementation_review");
+    expect(receiptClause?.gateKey).not.toBe(PIR_GATE_WIRE_KEY);
+
+    // Prisma hands the member back with underscores; the reader must still see it.
+    const declared = { id: "a", backlogItemId: "row-old", kind: "break_fix_declared", gateKey: null, recordedAt: new Date("2026-09-01T00:00:00Z"), payload: { schemaVersion: 1, declaredAt: "2026-09-01T00:00:00.000Z", pirDueAt: "2026-09-03T00:00:00.000Z" } };
+    for (const spelling of ["post_implementation_review", PIR_GATE_WIRE_KEY]) {
+      const receipt = { id: "b", backlogItemId: "row-old", kind: "initiative_gate_receipt", gateKey: spelling, recordedAt: now, payload: {} };
+      expect(findMissedPir([declared, receipt], now)).toBeNull();
+    }
+    expect(findMissedPir([declared], now)).toMatchObject({ backlogItemId: "row-old" });
   });
 
   it("needs a live Workroom and refuses a double declaration", async () => {

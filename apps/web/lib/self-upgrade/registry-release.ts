@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Agent, fetch as undiciFetch } from "undici";
+import { createOffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 const DEFAULT_REGISTRY_ORIGIN = "https://ghcr.io";
@@ -102,16 +102,7 @@ class RegistryReadError extends Error {
 }
 
 function createRegistryTransport(): RegistryTransport {
-  const dispatcher = new Agent();
-  const isolatedFetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
-    undiciFetch(
-      input as Parameters<typeof undiciFetch>[0],
-      { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
-    ) as unknown as Promise<Response>) as typeof fetch;
-  return {
-    fetch: isolatedFetch,
-    close: () => dispatcher.close(),
-  };
+  return createOffThreadpoolFetchTransport();
 }
 
 /**

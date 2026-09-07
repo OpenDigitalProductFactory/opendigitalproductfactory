@@ -27,6 +27,7 @@ import {
   parseTopLevelKeys,
   stripLineComments,
   SHAPE_SOURCE_FILES,
+  GRANTS_SOURCE_FILES,
 } from "./measure-capability-completeness.mjs";
 
 test("canonical registry tool grants participate in capability reachability", () => {
@@ -289,4 +290,33 @@ test("the standing-operations shapes are actually seen by the measure", () => {
       `${key} is accountable for a standing-operations stage but measures shape level ${agent.planes.shape.level}`,
     );
   }
+});
+
+test("every file declaring HARDCODED_COWORKER_GRANTS is a declared grants source", () => {
+  // Fourth instance of one bug: a registry moves to a second file and the static
+  // scanner keeps reading the first. Here the seed file re-exports the map, and a
+  // re-export carries no entries — so slicing it alone reported a roster coworker
+  // as "holds no grants at all — no tool surface is authorised", which is the
+  // most alarming thing this measure can say about a live coworker.
+  const declaring = ["packages/db/src/coworker-grants.ts", "packages/db/src/workforce-seed.ts"]
+    .filter((rel) => {
+      const abs = path.join(REPO_ROOT, rel);
+      return fs.existsSync(abs)
+        && /HARDCODED_COWORKER_GRANTS[^}]*?[:=]\s*\{/.test(fs.readFileSync(abs, "utf8"));
+    });
+
+  assert.deepEqual(
+    declaring.filter((f) => !GRANTS_SOURCE_FILES.includes(f)),
+    [],
+    "a file declares the grants map but is not in GRANTS_SOURCE_FILES",
+  );
+});
+
+test("the grants map is actually parsed — no roster coworker reads as ungranted", () => {
+  const artifact = shippedArtifact();
+  const ungranted = artifact.agents
+    .filter((a) => a.identityClass === "active-roster" && a.planes.governance.level === 0)
+    .map((a) => a.key);
+
+  assert.deepEqual(ungranted, [], "an active-roster coworker resolves to zero grants");
 });
