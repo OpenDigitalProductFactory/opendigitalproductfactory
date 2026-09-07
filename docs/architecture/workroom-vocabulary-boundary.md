@@ -117,6 +117,40 @@ dependency; it is not recreated as a child record every day. A standing
 `Restaurant Operations` instance can receive each day's outcome packet through
 `contributes-to` without owning every operational record.
 
+## Human accountability is not coordination, execution, or access
+
+Who answers for a room's outcome is a separate axis from who coordinates it, who
+executes it, who requested it, and who holds its lease. They are separate
+identities with separate labels, and an AI coordinator can be absent while a
+human remains accountable. Resolving accountability grants no capability to
+anyone and never widens what a principal can read or write.
+
+`resolveEffectiveHumanAccountability` in
+[`apps/web/lib/work-management/human-accountability.ts`](../../apps/web/lib/work-management/human-accountability.ts)
+is the single place that answers it. Order: an explicit accountable principal on
+the room, then the nearest ancestor along containment, then the organization's
+recorded owner. A solo founder is the ordinary case of that last step.
+
+Two rules matter more than the order.
+
+Responsibility travels only along `contains` and `spawned-from`. The other three
+relation kinds — `depends-on`, `blocks`, `contributes-to` — describe execution
+order, and treating one as an ownership edge would make whoever a room waits on
+answerable for it.
+
+When nothing resolves, the result is a setup state naming what is missing. It
+never falls back to the room's creator, requester, lease holder, or the first
+administrator on the install. A guessed accountable is worse than a visible gap,
+because it reads as a decision somebody made. Ambiguity is reported the same
+way: two accountable principals on one room, two containers for one room, or a
+containment cycle each return a correctable state rather than an arbitrary
+answer.
+
+The organization's recorded owner is not yet persisted on this schema. Until it
+is, rooms with no explicit assignment resolve to that setup state, which is the
+intended behaviour rather than a defect. Recording it is a schema change with
+its own migration acceptance.
+
 ## Naming rules
 
 - One stem, one casing: **`Workroom`** — never `WorkRoom`, `work-room` or
