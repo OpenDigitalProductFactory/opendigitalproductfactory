@@ -24,8 +24,22 @@ const graph: ShapeGraph = {
 };
 
 describe("Workroom process inspection", () => {
+  it("keeps the filter disclosure open and focus intact when a filter is cleared", () => {
+    render(<WorkroomShape graph={graph} />);
+    const disclosure = screen.getByText("Search and filter steps").closest("details")!;
+    disclosure.open = true;
+    fireEvent(disclosure, new Event("toggle"));
+    const search = screen.getByRole("searchbox", { name: "Search steps" });
+    search.focus();
+    fireEvent.change(search, { target: { value: "Prepare" } });
+    fireEvent.change(search, { target: { value: "" } });
+    expect(disclosure).toHaveAttribute("open");
+    expect(search).toHaveFocus();
+  });
+
   it("answers the six questions without implying verified progress", () => {
     render(<WorkroomShape graph={graph} />);
+    expect(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ })).not.toHaveAttribute("aria-controls");
     fireEvent.click(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ }));
     for (const label of ["Where are we?", "Why are we here?", "What can happen next?", "Who owns the action?", "What evidence supports this?", "What else is affected?"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
