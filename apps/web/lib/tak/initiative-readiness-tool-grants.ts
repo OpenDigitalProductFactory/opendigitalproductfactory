@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@/lib/shared/canonical-json";
-import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import { ARTIFACT_AUTHOR_RECOVERY, readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 import type {
   InitiativeGateKey,
   InitiativeReadinessDecision,
@@ -84,6 +84,12 @@ export type InitiativeReviewBindingPacket = {
 };
 
 export type InitiativeReviewerRecovery = {
+  identityRepair?: {
+    toolName: "adopt_worktree";
+    missingFields: Array<"baseSha" | "headSha">;
+    retainedFields: Record<string, string>;
+    packet: Record<string, string>;
+  };
   reviewerRoutes: Array<{
     accountableRole: string;
     toolName: string;
@@ -422,7 +428,7 @@ function sequenceBaselineBeforePlanCoverage(
  * recording a receipt. Inventing a lane would invent an approver.
  */
 const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
-  ARTIFACT_AUTHOR_REQUIRED: "Sign the design commit off (git commit -s), push the rewritten sha, then re-sync the workroom head with adopt_worktree.",
+  ARTIFACT_AUTHOR_REQUIRED: ARTIFACT_AUTHOR_RECOVERY,
   CLASSIFICATION_REQUIRED: "Classify the demand before shaping it: set the investment bucket and score inputs on the backlog item.",
   AUTHORIZATION_DENIED: "The caller's authority does not cover this transition. Re-run from a principal holding the required capability.",
   CAPSULE_IDENTITY_MISMATCH: "The claim did not match the workroom's recorded identity. The reasons above name which fields differ: a stale branch or head re-syncs with adopt_worktree(headBranch, headSha), an expired lease renews with heartbeat_workroom, and a terminal or foreign-held room needs a new claim.",
