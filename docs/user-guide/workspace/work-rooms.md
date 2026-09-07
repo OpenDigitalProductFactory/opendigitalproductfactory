@@ -128,6 +128,12 @@ Completion produces an Outcome Packet from governed decisions, artifacts, action
 
 In a standing room, the **Current cycle** panel shows the objective, trigger, review point, measure of done, and stop conditions before the general activity stream. When no cycle is active, the room says that it is healthy and idle rather than implying that recurring work is complete.
 
+If a room's cycle cannot be worked out, the cycle section says so instead of
+reporting the room as idle — an idle room and a room whose cycle failed are not
+the same thing, and only one of them is fine to leave alone. Everything else on
+the page stays accurate and safe to act on; the reason is recorded for your
+platform team rather than shown to you.
+
 **Completed cycles** are ordered by completion time. Open a completed cycle to read its Outcome Packet, durable-record count, verification state, and unresolved work. Each unresolved item has an explicit disposition: carry it into the next cycle, open a separate case, defer it, or accept it. Retrying carry-over does not create duplicate work.
 
 ## Pace and Priority

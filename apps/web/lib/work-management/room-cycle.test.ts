@@ -191,3 +191,65 @@ describe("standing Work Room cycles", () => {
     expect(new Set(first.map((command) => command.idempotencyKey)).size).toBe(2);
   });
 });
+
+// A standing room must project its cycle, not crash (BI-97B24FB5).
+//
+// Every room sourced `work-capsule` was registered FINITE_ROOM_PROJECTION, so a
+// standing operational room — which by definition always holds an active
+// carrier — threw finite_room_has_cycle. The throw was uncaught in the server
+// component, so the operator got "Something went wrong" instead of the room:
+// on the live install WC-D40E9C3C (Inquiry response) and WC-0A92C30D (Adopter
+// health) had each refused 41 consecutive wakes and neither could be opened.
+//
+// The classification fact was already on the room. Both declare a work shape in
+// scopeClaims (adopter-health-watch@1.0.0), and every standing shape declares a
+// `cadence` trigger while every finite delivery shape triggers on `claim`. So
+// the source entry supplies the DEFAULT and the room's declared shape overrides
+// it — kernel decision DI-5F69035EC6B9.
+//
+// The override is deliberately one-way: a declared standing shape can widen a
+// finite source to standing, never the reverse. An unknown or absent shape keeps
+// today's finite behaviour, so no existing room changes meaning.
+describe("a room's declared shape decides its projection", () => {
+  it("projects a cycle for a standing shape on a finite source, instead of throwing", () => {
+    const cycle = selectCurrentWorkroomCycle("work-capsule", [candidate()], {
+      declaredShapeKey: "adopter-health-watch",
+    });
+    expect(cycle).not.toBeNull();
+    expect(cycle?.carrierId).toBe(candidate().carrierId);
+  });
+
+  it("still refuses a cycle on a finite source with no declared shape", () => {
+    expect(() => selectCurrentWorkroomCycle("work-capsule", [candidate()]))
+      .toThrowError(/finite and cannot project a recurring cycle/);
+  });
+
+  it("still refuses a cycle when the declared shape is a finite delivery shape", () => {
+    expect(() =>
+      selectCurrentWorkroomCycle("work-capsule", [candidate()], {
+        declaredShapeKey: "delivery-small",
+      }),
+    ).toThrowError(/finite and cannot project a recurring cycle/);
+  });
+
+  it("surfaces completed cycles for a standing shape, which a finite source hides", () => {
+    const packet = buildWorkroomOutcomePacket({
+      sourceKey: "work-capsule",
+      outcomeState: "achieved",
+      summary: "Adopter health swept.",
+      facts: [
+        { category: "receipts", sourceRef: receiptRef, provenance: "canonical" },
+        { category: "evidence", sourceRef: verificationRef, provenance: "canonical" },
+      ],
+      accountablePrincipalRef: "prn-finance-owner",
+      completedAt: "2026-08-01T16:00:00.000Z",
+    });
+    const closed = candidate({ status: "closed", carrierId: "WI-DONE", outcomePacket: packet });
+    expect(selectCompletedWorkroomCycles("work-capsule", [closed])).toHaveLength(0);
+    expect(
+      selectCompletedWorkroomCycles("work-capsule", [closed], {
+        declaredShapeKey: "adopter-health-watch",
+      }),
+    ).toHaveLength(1);
+  });
+});

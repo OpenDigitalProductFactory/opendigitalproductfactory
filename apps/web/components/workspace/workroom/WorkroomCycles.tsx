@@ -136,8 +136,23 @@ function CompletedCycles({ cycles }: { cycles: readonly WorkroomCycleView[] }) {
   );
 }
 
+// A cycle that could not be projected is UNKNOWN, not idle: claiming the room is
+// healthy would report a state nobody established, on a room in trouble
+// (BI-97B24FB5).
+const IDLE_COPY = {
+  healthy: {
+    title: "Ready for the next cycle",
+    description: "Healthy and idle. Open a cycle when the next trigger arrives.",
+  },
+  unavailable: {
+    title: "Cycle unavailable",
+    description: "The rest of this room is accurate. Your platform team can see why.",
+  },
+} as const;
+
 export function WorkroomCycles({ room }: { room: WorkroomView }) {
   if (room.mode !== "standing") return null;
+  const idle = room.cycleProjectionError ? IDLE_COPY.unavailable : IDLE_COPY.healthy;
 
   return (
     <div className="space-y-3">
@@ -148,8 +163,8 @@ export function WorkroomCycles({ room }: { room: WorkroomView }) {
           <EmptyState
             size="sm"
             bordered={false}
-            title="Ready for the next cycle"
-            description="This standing room is healthy and idle. Open a bounded cycle when the next trigger arrives."
+            title={idle.title}
+            description={idle.description}
             icon={<RefreshCw className="size-6" />}
           />
         </section>
