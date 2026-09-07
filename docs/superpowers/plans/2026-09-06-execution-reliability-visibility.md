@@ -333,3 +333,15 @@ baseline from 48 to 52; it reduces served arrival load rather than adding an alw
 visible form. Fresh served measurement and the route-only baseline review remain
 required. The independent review of this repair was infrastructure-inconclusive
 because two responses could not be parsed, not a semantic pass.
+
+The branch browser measurement at `fc622d4d054` reduced Workroom arrival from
+329 to 300 words and filter fields/choices from 2/10 to 0/0; the selected-step
+inspector stays available. EA arrival measured 222 words against the old 239.
+Both surfaces retain zero undersized controls and the two pre-existing axe
+violations; these are not accessibility-clean claims. The manual workflow
+`34076669743` supplies the measured accessibility snapshots. Only `/ea/workrooms`
+and `/workspace/cases/[caseKey]` are re-frozen for these intentional feature changes;
+every other route remains unchanged. The Workroom's additional 50 words relative
+to the pre-feature baseline expose state, freshness and the requested inspection,
+within its 450-word absolute budget. Protected enforcing CI must accept this
+reviewed baseline before merge. Functional runtime scenarios remain outstanding.

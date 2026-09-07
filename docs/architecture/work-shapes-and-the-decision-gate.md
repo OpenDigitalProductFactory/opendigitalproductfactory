@@ -439,7 +439,7 @@ Workroom/cycle/task records. These are DPF contracts, not BPMN XML or SysML text
 
 | View | Purpose | Current implementation boundary |
 | --- | --- | --- |
-| Workroom Overview/Details | Explain current progress, evidence and what holds the work | `shape-projection.ts` builds the five-stage DPF graph rendered by `WorkroomShape`; it is not a BPMN editor or a full rendering of every activity definition |
+| Workroom Overview/Details | Explain current state, evidence and what holds the work | `shape-projection.ts` projects registered versioned steps into `WorkroomShape`, with the legacy five-stage fallback when no executable definition resolves. The selected-step inspector separates intended conditions from observed evidence; missing step correlation remains explicit. This is not a BPMN editor. |
 | BPMN | Process tasks, gateways, waits, recovery paths and ownership lanes | `process-extract.ts` and `reconcile-process.ts` project selected state machines; WorkShape recovery extraction needs explicit coverage |
 | SysML v2 | Requirements, interfaces, allocation to components and verification evidence | Existing EA notation and Parity Engine; use stable source keys rather than a separately maintained model |
 
@@ -459,6 +459,12 @@ adoption handler drops `workShape`, and the store does not update scope on reuse
 Readback, not tool success text, determines whether a shape is active. The recovery
 amendment assigns repair and round-trip verification to `BI-06AE6833`; do not create
 a duplicate room or edit the database to make a diagram look configured.
+
+The source repair centralizes creation, adoption and scope-update persistence in
+`scope-input.ts`, preserves unrelated claims and rejects conflicting writes.
+Its regression tests cover both creation and update readback. Verification on the
+governed installation remains a separate release requirement; the historical
+observation above is not evidence that the new code is already deployed.
 
 ## A stalled room reaches a human
 
