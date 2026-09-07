@@ -23,7 +23,7 @@ const CAPTURE_CONFIG_KEY = "installation.backlog-capture.v1";
 // work too: a reset destroys the row either way, and "we decided to stop" is a
 // judgement someone may revisit, unlike completed work which git already
 // records as a merged PR. Pass --all to include `done` as well.
-const NOT_DONE_STATUSES = ["triaging", "open", "in-progress", "deferred", "retired"] as const;
+const NOT_DONE_STATUSES = ["triaging", "open", "in-progress", "awaiting-acceptance", "deferred", "retired"] as const;
 
 function usage(): string {
   return [

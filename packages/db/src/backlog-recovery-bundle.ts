@@ -1,6 +1,6 @@
 export const BACKLOG_RECOVERY_SCHEMA_VERSION = 1 as const;
 
-const ITEM_STATUSES = ["triaging", "open", "in-progress", "done", "deferred", "retired"] as const;
+const ITEM_STATUSES = ["triaging", "open", "in-progress", "awaiting-acceptance", "done", "deferred", "retired"] as const;
 const ITEM_TYPES = ["portfolio", "product"] as const;
 const WORK_TYPES = ["bug", "feature", "chore", "doc", "tool", "skill", "refactor"] as const;
 const SOURCES = ["user-request", "automated-detection"] as const;

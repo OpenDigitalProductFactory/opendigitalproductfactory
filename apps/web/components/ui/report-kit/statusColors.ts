@@ -460,6 +460,7 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     triaging: "warning",
     open: "info",
     "in-progress": "accent",
+    "awaiting-acceptance": "info",
     done: "success",
     deferred: "neutral",
     retired: "neutral",

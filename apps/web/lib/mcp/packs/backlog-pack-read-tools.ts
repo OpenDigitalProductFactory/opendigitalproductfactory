@@ -89,7 +89,7 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
   if (epicRowId !== undefined) where["epicId"] = epicRowId;
   const limit = resolveListLimit(params["limit"]);
 
-  const [items, matching, epics, epicTotal, open, inProgress, done, deferred, retired] = await Promise.all([
+  const [items, matching, epics, epicTotal, open, inProgress, awaitingAcceptance, done, deferred, retired] = await Promise.all([
     prisma.backlogItem.findMany({
       where,
       orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
@@ -122,6 +122,7 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
     prisma.epic.count({ where: epicWhere }),
     prisma.backlogItem.count({ where: { status: "open" } }),
     prisma.backlogItem.count({ where: { status: "in-progress" } }),
+    prisma.backlogItem.count({ where: { status: "awaiting-acceptance" } }),
     prisma.backlogItem.count({ where: { status: "done" } }),
     prisma.backlogItem.count({ where: { status: "deferred" } }),
     prisma.backlogItem.count({ where: { status: "retired" } }),
@@ -129,9 +130,9 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
 
   return {
     success: true,
-    message: `Backlog: ${open} open, ${inProgress} in-progress, ${deferred} deferred, ${done} done, ${retired} retired. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
+    message: `Backlog: ${open} open, ${inProgress} in-progress, ${awaitingAcceptance} awaiting-acceptance, ${deferred} deferred, ${done} done, ${retired} retired. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
     data: {
-      summary: { open, inProgress, deferred, done, retired },
+      summary: { open, inProgress, awaitingAcceptance, deferred, done, retired },
       total: matching,
       truncated: items.length < matching,
       epicTotal,

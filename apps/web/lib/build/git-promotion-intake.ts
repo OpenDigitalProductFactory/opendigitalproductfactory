@@ -178,23 +178,26 @@ export async function handleGitHubWebhook(input: {
     throw new Error("Invalid GitHub webhook signature");
   }
 
-  if (input.eventName !== "push") {
-    const payload = parseGitHubWebhookPayload(input.rawBody);
-    return recordGitPromotionCandidate({
-      provider: "github",
-      eventName: input.eventName,
-      deliveryId: input.deliveryId,
-      payload: {
-        ...payload,
-        repository: payload.repository ?? { full_name: "unknown" },
-      },
-    });
-  }
-
-  return recordGitPromotionCandidate({
+  const payload = parseGitHubWebhookPayload(input.rawBody);
+  const recorded = await recordGitPromotionCandidate({
     provider: "github",
     eventName: input.eventName,
     deliveryId: input.deliveryId,
-    payload: parseGitHubWebhookPayload(input.rawBody),
+    payload: input.eventName !== "push"
+      ? { ...payload, repository: payload.repository ?? { full_name: "unknown" } }
+      : payload,
   });
+
+  if (input.eventName === "pull_request") {
+    try {
+      const { applyGitHubPullRequestToBacklog } = await import(
+        "@/lib/backlog/pr-submit-awaiting-acceptance"
+      );
+      await applyGitHubPullRequestToBacklog(JSON.parse(input.rawBody) as unknown);
+    } catch (err) {
+      console.error("[git-promotion-intake] awaiting-acceptance actuator failed", err);
+    }
+  }
+
+  return recorded;
 }
