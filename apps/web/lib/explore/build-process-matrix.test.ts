@@ -122,6 +122,13 @@ describe("deriveBuildProcessSize", () => {
     expect(deriveBuildProcessSize({ effortSize: null })).toBe("medium");
     expect(deriveBuildProcessSize({ effortSize: "huge" })).toBe("medium");
   });
+
+  it("lets a bound delivery shape win over the triage size (BI-D03BE728)", () => {
+    expect(deriveBuildProcessSize({ effortSize: "large", workShape: "delivery-small@1.0.0" })).toBe("small");
+    expect(deriveBuildProcessSize({ effortSize: null, workShape: "delivery-break-fix@1.0.0" })).toBe("small");
+    expect(deriveBuildProcessSize({ effortSize: "small", workShape: "delivery-xlarge@1.0.0" })).toBe("xlarge");
+    expect(deriveBuildProcessSize({ effortSize: "large", workShape: "dependency-advisory-watch@1.0.0" })).toBe("large");
+  });
 });
 
 describe("getProcessPolicy — matrix coverage", () => {

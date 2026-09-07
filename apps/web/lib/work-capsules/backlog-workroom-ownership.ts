@@ -1,4 +1,5 @@
 import { loadCapsuleLivenessInventory } from "./liveness-inventory";
+import { readWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 type OwnershipDb = {
   workroom: { findMany(args: unknown): Promise<any[]> };
@@ -26,7 +27,14 @@ export type BacklogWorkroomSummary = {
   isLive: boolean;
   livenessReason: string;
   trueLivenessAt: string | null;
+  /** The room's declared/derived delivery shape as `key@version`, when bound (BI-D03BE728). */
+  workShape?: string | null;
 };
+
+function workShapeRefOf(scopeClaims: unknown): string | null {
+  const ref = readWorkShapeClaim(scopeClaims);
+  return ref ? `${ref.key}@${ref.version}` : null;
+}
 
 function nullableString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
@@ -62,6 +70,7 @@ export async function loadBacklogWorkroomOwnership(
     isLive: row.isLive === true,
     livenessReason: String(row.livenessReason),
     trueLivenessAt: nullableString(row.trueLivenessAt),
+    workShape: workShapeRefOf((row as { scopeClaims?: unknown }).scopeClaims),
   }));
   return { workrooms, liveWorkrooms: workrooms.filter((room) => room.isLive) };
 }
