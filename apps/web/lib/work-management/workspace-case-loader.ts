@@ -19,10 +19,7 @@ import {
   projectWorkItemCycleCarriers,
   WORKROOM_OUTCOME_MESSAGE_TYPE,
 } from "./room-cycle-adapter";
-import {
-  selectCompletedWorkroomCycles,
-  selectCurrentWorkroomCycle,
-} from "./room-cycle";
+import { projectRoomCycles } from "./room-cycle-projection";
 import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureContext } from "./room-posture";
 import { readWorkroomShapeClaim } from "./workroom-shape-claim";
@@ -687,12 +684,13 @@ export async function loadWorkspaceWorkCaseDetail({
     openedAt: item.createdAt,
   });
   const sourceEntry = getWorkCaseSourceEntry(item.sourceType);
-  const currentCycle = sourceEntry
-    ? selectCurrentWorkroomCycle(item.sourceType, cycleCandidates)
-    : null;
-  const completedCycles = sourceEntry
-    ? selectCompletedWorkroomCycles(item.sourceType, cycleCandidates)
-    : [];
+  const { currentCycle, completedCycles, cycleProjectionError } = projectRoomCycles({
+    sourceKey: item.sourceType,
+    sourceId: decoded.sourceId,
+    candidates: cycleCandidates,
+    scopeClaims: capsules[0]?.scopeClaims,
+    registered: Boolean(sourceEntry),
+  });
   const storedPackets = projectStoredWorkroomOutcomePackets(messages);
   const structure = structureLoader
     ? await structureLoader({ sourceType: source.sourceType, sourceId: source.sourceId })
@@ -771,6 +769,7 @@ export async function loadWorkspaceWorkCaseDetail({
     ].sort((a, b) => new Date(b.occurredAt ?? 0).getTime() - new Date(a.occurredAt ?? 0).getTime()),
     currentCycle,
     completedCycles,
+    cycleProjectionError,
     outcomePacket: storedPackets[0] ?? null,
     receipts: [
       ...roomReceiptsFromMessages(item, messages),

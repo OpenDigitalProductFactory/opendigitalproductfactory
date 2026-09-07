@@ -89,6 +89,17 @@ shape; every merge, deploy, acceptance and authority-changing advance is a `gove
 and the author never holds the receipt writer. `small | medium | large | xlarge` are
 `BacklogEffortSize`; `break-fix` is the expedite lane on a small fix (post-hoc review, WIP 1).
 
+That `claim` vs `cadence` split is load-bearing, not decorative. A shape's own
+declared triggers decide whether the room it drives RECURS: every standing shape
+declares `cadence`, every finite delivery shape declares `claim`, and
+`isStandingWorkShape` reads that rather than a hand-kept list. The source-registry
+entry supplies a room's default projection mode; the room's declared shape
+overrides it, one way only — a declared standing shape widens a finite source to
+standing, never the reverse, and an absent or unknown shape leaves the source's
+policy untouched. A new standing shape is therefore standing the day it is
+declared, with nothing else to remember to update
+(BI-97B24FB5, kernel decision DI-5F69035EC6B9).
+
 A delivery room gets its shape at the claim (`claim_backlog_item_for_work`, BI-02470C7E, design §3.3): declared by the caller as `workShape`, or derived from the item's `effortSize` and work type when every classification rule in design §3.4 agrees (`derive-delivery-shape.ts`, recorded with `source: derived` and the signals used). An implementation claim with no derivable shape is refused with `work_shape_required` and the five-shape pick list; an unattended caller gets `attentionRequired` on the refusal; `delivery-xlarge` is refused for implementation because it only ever decomposes. The shape persists as the room's `workShape` scope claim, read back by `readWorkShapeClaim` / `resolveWorkShapeClaim` like any activity shape.
 
 **This claim is what makes a room wake.** The standing-Workroom drive

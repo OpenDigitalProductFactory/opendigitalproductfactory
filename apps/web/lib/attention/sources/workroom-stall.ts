@@ -12,6 +12,7 @@ import type { prisma } from "@dpf/db";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 import { resolveRoomOwner, type RoomOwner } from "@/lib/work-management/room-owner-ladder";
 import { STANDING_SHAPES } from "@/lib/work-management/standing-operations-shapes";
+import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
 
 import type { AttentionItem, AttentionPortfolio } from "../types";
 
@@ -146,23 +147,12 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
   };
 }
 
-/** The room's declared work shape key, e.g. "dependency-advisory-watch@1.0.0".
- *  scopeClaims is an untyped JSON array written by several writers; read it
- *  defensively rather than assuming a shape. */
-function readWorkShapeKey(scopeClaims: unknown): string | null {
-  if (!Array.isArray(scopeClaims)) return null;
-  for (const claim of scopeClaims) {
-    const ref = asRecord(claim)?.workShape;
-    if (typeof ref === "string" && ref.length > 0) return ref.split("@")[0] ?? null;
-  }
-  return null;
-}
 
 /** What the ladder resolves for a room, from its shape. Explicit appointments are
  *  not consulted here: a room that HAS an explicit coordinator is not refusing on
  *  missing_explicit_coordinator, so it never reaches this projection unowned. */
 function resolveLadderOwner(scopeClaims: unknown): RoomOwner | null {
-  const key = readWorkShapeKey(scopeClaims);
+  const key = readDeclaredWorkShapeKey(scopeClaims);
   const shape = key ? STANDING_SHAPES[key] : undefined;
   if (!shape) return null;
   return resolveRoomOwner({

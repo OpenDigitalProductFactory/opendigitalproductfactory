@@ -9397,7 +9397,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 39
+    "textMass": 49
   },
   "apps/web/components/workspace/workroom/WorkroomHeader.tsx": {
     "vocabulary": 0,
