@@ -7,6 +7,21 @@ import {
   slugifyReferenceModelName,
 } from "./reference-model-import.js";
 import { readWorkbook, requireSheetData, sheetDataToObjects } from "./excel-sheet-reader.js";
+import {
+  referenceModelAppliesToInstall,
+  type InstallArchetype,
+} from "./reference-model-applicability";
+
+// Re-exported so the seed stays the one place callers already know to look for
+// this rule; the rule itself now lives in one module the read path shares
+// (BI-C44EAEE6).
+export {
+  REFERENCE_MODEL_ARCHETYPES,
+  describeReferenceModelApplicability,
+  referenceModelAppliesToInstall,
+  type InstallArchetype,
+} from "./reference-model-applicability";
+
 import type {
   FunctionalCriteriaRow,
   ParticipationMatrixRow,
@@ -169,27 +184,6 @@ const BIAN_SD_TO_CAPABILITY_KEY: Readonly<Record<string, string>> = {
 };
 
 /**
- * Which archetypes an industry-specific reference model serves.
- *
- * Entries may be archetype CATEGORY slugs (`banking-financial-services`) or
- * specific archetype ids (`credit-union`), matching either — the same contract
- * `RegulationApplicability.archetypes` already uses, so an operator reads one
- * rule for "is this vertical content mine?", not two.
- *
- * An empty/absent list means universal: IT4IT describes IT management for any
- * organisation that runs IT, which is every install.
- */
-const REFERENCE_MODEL_ARCHETYPES: Readonly<Record<string, readonly string[]>> = {
-  bian_service_landscape_v14_0_0: ["banking-financial-services"],
-};
-
-/** The install's declared archetype, as category slug + specific archetype id. */
-interface InstallArchetype {
-  category: string | null;
-  archetypeId: string | null;
-}
-
-/**
  * Read the install's setup-chosen archetype. `StorefrontConfig.archetypeId` is a
  * cuid FK, not a slug, so the join to StorefrontArchetype is required to reach
  * the category/id slugs the applicability lists are written in.
@@ -213,24 +207,6 @@ async function resolveInstallArchetype(): Promise<InstallArchetype> {
     category: archetype?.category ?? null,
     archetypeId: archetype?.archetypeId ?? null,
   };
-}
-
-/**
- * Does this install need the element hierarchy for `modelSlug`?
- *
- * Universal models (no declared archetypes) always apply. An industry model
- * applies only when the install's category or archetype id is in its list.
- */
-export function referenceModelAppliesToInstall(
-  modelSlug: string,
-  install: InstallArchetype,
-  archetypesBySlug: Readonly<Record<string, readonly string[]>> = REFERENCE_MODEL_ARCHETYPES,
-): boolean {
-  const archetypes = archetypesBySlug[modelSlug];
-  if (!archetypes || archetypes.length === 0) return true;
-  return archetypes.some(
-    (a) => a === install.category || a === install.archetypeId,
-  );
 }
 
 async function seedBianReferenceModel(modelId: string): Promise<void> {
