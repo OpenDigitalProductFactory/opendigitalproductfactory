@@ -17,6 +17,7 @@
 //     falls back to "medium". Existing in-flight builds keep working.
 
 import type { BacklogItemWithRelations } from "./backlog";
+import { deliveryShapeSize } from "@/lib/work-management/delivery-shapes";
 import { BACKLOG_EFFORT_SIZES } from "./backlog";
 import type { BuildPhase, FeatureBuildKind } from "./feature-build-types";
 import { checkVerificationDepthSatisfied } from "./verification-depth-requirement";
@@ -576,10 +577,8 @@ export function deriveBuildProcessType(
   return "feature";
 }
 
-export function deriveBuildProcessSize(
-  bi: { effortSize?: string | null },
-): BuildProcessSize {
-  return normalizeSize(bi.effortSize ?? null);
+export function deriveBuildProcessSize(bi: { effortSize?: string | null; workShape?: string | null }): BuildProcessSize {
+  return deliveryShapeSize(bi.workShape) ?? normalizeSize(bi.effortSize ?? null);
 }
 
 // ─── Model tier (EP-MODEL-TIER-ROUTING) ──────────────────────────────────────
