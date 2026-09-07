@@ -53,11 +53,11 @@ export async function handleUpdateBacklogItem(
         message: "Items in triaging must be moved out via triage_backlog_item so the decision is recorded with rationale.",
       };
     }
-    if (params["status"] === "deferred" || params["status"] === "retired") {
+    if (params["status"] === "deferred" || params["status"] === "retired" || params["status"] === "awaiting-acceptance") {
       return {
         success: false,
         error: "use_update_backlog_item_status",
-        message: "Use update_backlog_item_status for deferred or retired lifecycle decisions so required evidence and deferral metadata are audited.",
+        message: "Use update_backlog_item_status for deferred, retired, or awaiting-acceptance lifecycle decisions so required evidence is audited. PR submit is the server actuator for awaiting-acceptance.",
       };
     }
     data["status"] = params["status"];

@@ -263,13 +263,14 @@ function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemI
 }
 
 const STATUS_MIX_PARTS: Array<{
-  key: keyof Pick<BacklogStatusSummary, "triaging" | "open" | "inProgress" | "done" | "deferred" | "retired">;
+  key: keyof Pick<BacklogStatusSummary, "triaging" | "open" | "inProgress" | "awaitingAcceptance" | "done" | "deferred" | "retired">;
   label: string;
   className: string;
 }> = [
   { key: "triaging", label: "triaging", className: "text-[var(--dpf-muted)]" },
   { key: "open", label: "open", className: "text-[var(--dpf-info)]" },
   { key: "inProgress", label: "in progress", className: "text-[var(--dpf-accent)]" },
+  { key: "awaitingAcceptance", label: "awaiting acceptance", className: "text-[var(--dpf-accent)]" },
   { key: "done", label: "done", className: "text-[var(--dpf-success)]" },
   { key: "deferred", label: "deferred", className: "text-[var(--dpf-muted)]" },
   { key: "retired", label: "retired", className: "text-[var(--dpf-muted)]" },

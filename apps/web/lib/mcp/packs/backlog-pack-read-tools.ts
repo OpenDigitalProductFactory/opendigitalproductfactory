@@ -190,6 +190,7 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
       const total = e.items.length;
       const open = e.items.filter((it) => it.status === "open").length;
       const inProgress = e.items.filter((it) => it.status === "in-progress").length;
+      const awaitingAcceptance = e.items.filter((it) => it.status === "awaiting-acceptance").length;
       const done = e.items.filter((it) => it.status === "done").length;
       const triaging = e.items.filter((it) => it.status === "triaging").length;
       const deferred = e.items.filter((it) => it.status === "deferred").length;
@@ -200,11 +201,11 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
         status: e.status,
         priority: e.priority,
         ...scopeData(e),
-        itemCount: { total, triaging, open, inProgress, deferred, done, retired },
+        itemCount: { total, triaging, open, inProgress, awaitingAcceptance, deferred, done, retired },
         hasSpec: refIndex.specs.has(e.epicId),
         hasPlan: refIndex.plans.has(e.epicId),
         updatedAt: e.updatedAt.toISOString(),
-        _hasOpen: triaging + open + inProgress + deferred > 0,
+        _hasOpen: triaging + open + inProgress + awaitingAcceptance + deferred > 0,
       };
     })
     .filter((row) => (wantOpenItems ? row._hasOpen : true))
