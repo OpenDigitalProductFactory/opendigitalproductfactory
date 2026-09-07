@@ -566,8 +566,10 @@ The drive tick now reconciles the declared tree before driving:
   writes nothing and reports `nestedRelations: 0`. A failure to write a parent link
   never blocks a room that could otherwise be driven.
 
-`nestedRelations` on the drive result is how an operator tells "nesting is done"
-from "nesting was never written" — the distinction that hid this defect.
+`nestedRelations` counts newly written links. Zero alone does not establish a
+complete tree: an unchanged tree, absent parent, or contained reconciliation failure
+can all produce zero. Verify the declared relationships against persisted rows;
+missing links remain a projection gap.
 
 ## Who may coordinate: authority, and a gate with no key
 
@@ -615,6 +617,21 @@ control becomes real the day a qualification model lands, with no code change an
 nobody needing to remember.
 
 `unknown` still blocks. Only `eligible` and `not-applicable` satisfy the gate.
+
+## Concurrent execution and recorded state
+
+The scheduled and manual drive paths share conditional database ownership checks.
+Lease acquisition compares the observed holder and expiry and rejects archived or
+terminal rooms. Scheduling checks the same unexpired lease while holding the room
+row in the transaction that creates or updates the scheduled task. A replaced worker
+cannot reactivate work using its old lease.
+
+Snapshot persistence compares the read revision and, after dispatch, the lease.
+The snapshot and its journal entry commit together. A lease-held observation adds
+an activity without replacing the current owner's snapshot. These checks protect
+driver scheduling and state writes; they do not prove idempotency of downstream
+provider effects or automatic reviewer successor recovery. Those require correlated
+execution receipts and separate restart/duplicate-delivery verification.
 
 ## Related references
 
