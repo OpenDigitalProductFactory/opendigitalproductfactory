@@ -18,7 +18,7 @@ import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
-import { isEligibleRecoveryPredecessor } from "@/lib/self-upgrade/recovery-eligibility";
+import { resolveRecoveryPredecessor } from "@/lib/self-upgrade/recovery-predecessor";
 import { admitSelfUpgrade, resolveCurrentSelfUpgradeTarget } from "@/lib/self-upgrade/admission";
 import { selectSelfUpgradeAdmissionTarget } from "@/lib/self-upgrade/target-admission";
 import {
@@ -804,7 +804,7 @@ export async function triggerSelfUpgrade(opts?: {
     return { queued: false, reason: "already-queued", runId: latestRun.runId } as const;
   }
   if (latestRun?.status === "failed" && latestRun.completedAt == null) return { queued: false, reason: "recovery-predecessor-not-terminal", runId: latestRun.runId } as const;
-  const recoveryRun = isEligibleRecoveryPredecessor(latestRun) ? latestRun : null;
+  const recoveryRun = await resolveRecoveryPredecessor(latestRun);
   if (recoveryRun && !opts?.targetBinding) return { queued: false, reason: "recovery-binding-required", runId: recoveryRun.runId } as const;
   const resolvedTarget = await resolveCurrentSelfUpgradeTarget();
   const selection = selectSelfUpgradeAdmissionTarget({

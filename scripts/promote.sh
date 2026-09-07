@@ -485,7 +485,48 @@ emit_step() {
   else
     printf 'step=%s target=%s\n' "$1" "$PROMOTE_TARGET_SHA"
   fi
+  _persist_step "$1"
 }
+
+# Durable step trail (BI-41D7A057). stdout dies with the orchestrating portal —
+# which is exactly what a mid-swap container recreate, a Docker restart or a
+# power cut destroys, leaving a failed run whose progress is unknowable. Append
+# the same step to the shared state mount instead: it is host-backed, it
+# survives the process, and the portal already mounts it read-only — so no new
+# mount, no compose change and no portal/promoter env contract is introduced.
+# That matters for the fleet: an install running an older portal or an older
+# promote.sh is unaffected either way.
+#
+# Best-effort by construction. A promotion must never fail because its own
+# progress log could not be written, and an install whose state mount is absent
+# simply keeps today's behaviour — no trail means "unknown", never a false
+# "swap not applied". Dry runs are tagged so they can never be read as real
+# progress.
+_persist_step() {
+  local _dir="${DPF_PROMOTER_STATE_DIR:-}"
+  [[ -n "$_dir" && -d "$_dir" && -w "$_dir" ]] || return 0
+  local _trail="$_dir/self-upgrade-steps.log"
+  local _mode=real
+  [[ $_dry_run -eq 1 ]] && _mode=dry-run
+  printf '%s\t%s\t%s\t%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$_mode" "$1" "$PROMOTE_TARGET_SHA" \
+    >> "$_trail" 2>/dev/null || return 0
+  # Bounded so the file cannot grow without limit across an install's lifetime.
+  # Rotate through a temp file in the same directory, so a crash mid-rotate
+  # leaves either the whole old file or the whole new one, never a partial read.
+  local _lines
+  _lines="$(wc -l < "$_trail" 2>/dev/null || echo 0)"
+  _lines="${_lines//[^0-9]/}"
+  if [[ -n "$_lines" ]] && (( _lines > 2000 )); then
+    if tail -n 1000 "$_trail" > "$_trail.tmp" 2>/dev/null; then
+      mv -f "$_trail.tmp" "$_trail" 2>/dev/null || rm -f "$_trail.tmp" 2>/dev/null || true
+    else
+      rm -f "$_trail.tmp" 2>/dev/null || true
+    fi
+  fi
+  return 0
+}
+
 if [[ $_host_bind_preserved -eq 1 ]]; then
   emit_step host-bind-address-preserved
 fi

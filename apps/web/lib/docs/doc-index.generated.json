@@ -8866,6 +8866,7 @@
         "step-2-trigger-the-upgrade",
         "step-3-monitor-the-chain",
         "step-4-verify-postgres-only-done-criteria",
+        "first-question-after-any-failed-upgrade-how-far-did-it-get",
         "if-it-fails-anyway-recovery",
         "failure-class-host-out-of-memory-candidate-build-enomem",
         "failure-class-promoter-context-n1-a-new-copy-made-the-candidate-unbuildable",

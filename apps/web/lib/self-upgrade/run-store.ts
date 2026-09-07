@@ -479,6 +479,36 @@ export async function recordRunRecoveryPoint(
   });
 }
 
+/**
+ * BI-41D7A057 — persist how a run's interruption was classified against the
+ * durable promoter step trail.
+ *
+ * Written even when the verdict is inconclusive. The recovery decision is
+ * re-made by a pure predicate inside the admission transaction, which cannot
+ * read the filesystem, so the verdict has to live on the row; and an operator
+ * facing a run that could NOT be healed needs to see that it was examined and
+ * why it was indeterminate, which is precisely the record whose absence made
+ * the 2026-09-06 interruption undiagnosable.
+ */
+export async function recordInterruptionEvidence(
+  runId: string,
+  interruption: unknown,
+) {
+  const current = await prisma.selfUpgradeRun.findUnique({
+    where: { runId },
+    select: { completionEvidence: true },
+  });
+  return prisma.selfUpgradeRun.update({
+    where: { runId },
+    data: {
+      completionEvidence: toJson({
+        ...asEvidenceRecord(current?.completionEvidence),
+        interruption,
+      }),
+    },
+  });
+}
+
 export type PromoterReadinessReport = {
   stage: "preflight";
   owner: "bridge" | "portal" | "unavailable";
