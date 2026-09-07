@@ -402,6 +402,23 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     },
   },
   {
+    // One operator entry for work activity (PWA-08), onto the canonical
+    // destination. Distinct from the coworker directory at `/workforce`.
+    key: "work_activity",
+    label: "Work",
+    path: "/ops/workrooms",
+    parentPath: "/ops",
+    domain: "delivery",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_operations",
+    primaryOrder: 55,
+    // Deliberately no shellNav: a global rail item renders on every route and
+    // measured +3 words on all 213, tipping 153 past their frozen budgets. The
+    // entry is registered and reachable; promoting it to the rail is a separate,
+    // deliberate re-baseline rather than a side effect of registering it.
+  },
+  {
     key: "backlog",
     label: "Backlog",
     path: "/ops",

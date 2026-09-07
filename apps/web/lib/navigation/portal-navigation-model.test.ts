@@ -4,6 +4,7 @@ import { PLATFORM_FAMILIES } from "@/components/platform/platform-nav";
 import { getShellNavSections } from "@/lib/govern/permissions";
 
 import {
+
   PORTAL_NAV_ROUTES,
   getPrimaryNavEntries,
   getRouteNavRecord,
@@ -136,5 +137,30 @@ describe("portal navigation model", () => {
     // /platform/ai/build-studio).
     const platformSection = sections.find((section) => section.key === "platform");
     expect(platformSection?.items.map((item) => item.href) ?? []).not.toContain("/build");
+  });
+
+  it("gives work activity one operator entry pointing at the canonical destination", () => {
+    const entries = PORTAL_NAV_ROUTES.filter((record) => record.path === "/ops/workrooms");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      key: "work_activity",
+      label: "Work",
+      audienceModes: ["operator"],
+    });
+  });
+
+  it("keeps the Workforce portfolio distinct from the coworker directory", () => {
+    const work = PORTAL_NAV_ROUTES.find((record) => record.key === "work_activity");
+    const directory = PORTAL_NAV_ROUTES.find((record) => record.key === "ai_coworkers");
+    expect(work?.path).toBe("/ops/workrooms");
+    expect(directory?.path).toBe("/workforce");
+    expect(work?.path).not.toBe(directory?.path);
+  });
+
+  it("does not introduce a second activity dashboard beside the canonical one", () => {
+    const activityish = PORTAL_NAV_ROUTES.filter(
+      (record) => record.label === "Work" && record.destinationKind !== "legacy-redirect",
+    );
+    expect(activityish).toHaveLength(1);
   });
 });
