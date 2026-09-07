@@ -219,6 +219,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
 - Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.
+- Each room also names the human accountable for it and says where that answer came from, alongside the workers in the room and any subagents they delegated — see [who is accountable, and who is working](work-rooms.md#who-is-accountable-and-who-is-working)
 - Use your digital coworker to get a personalized briefing on what needs your attention
 - Select the installation badge beside the logo to open [what this installation is](../operations/index.md#what-this-installation-is) and correct it
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed
