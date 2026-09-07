@@ -168,6 +168,7 @@ async function resolveRecoveryOutsideTransaction(args: {
         repositoryFullName: args.input.repositoryFullName,
         headBranch: args.input.headBranch,
         worktreePath: args.input.worktreePath,
+        ...(pending.baseSha ? { baseSha: pending.baseSha } : {}),
         ...(pending.dispatchContext?.headSha ? { headSha: pending.dispatchContext.headSha } : {}),
       },
       packet: {
@@ -473,6 +474,8 @@ export async function claimGovernedBacklogWorkspace(args: {
         const recoveryWorkroom =
           recoveryWorkrooms.find((room) => room.backlogItemId === item.itemId && room.headSha)
           ?? recoveryWorkrooms.find((room) => room.headSha)
+          ?? recoveryWorkrooms.find((room) => room.backlogItemId === item.itemId)
+          ?? recoveryWorkrooms[0]
           ?? null;
         // Recovery needs a repository-provider round trip to bind the canonical
         // design (BI-9FE775F9). That must not run inside this transaction, so

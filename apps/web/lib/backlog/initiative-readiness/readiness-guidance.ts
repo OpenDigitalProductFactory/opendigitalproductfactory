@@ -155,6 +155,9 @@ export function readinessCodesForEvidenceDimension(
  * mirror the recovery-router text so a caller reading the decision alone is not
  * worse off than one who also called the recovery route.
  */
+export const ARTIFACT_AUTHOR_RECOVERY =
+  "Verify the design commit carries the required author/DCO identity. If it is unsigned, sign and push the new sha; if it is already valid, preserve its bytes and sha. Then re-sync the workroom with adopt_worktree using the exact baseSha and headSha.";
+
 const GENERIC_REMEDIES: Partial<Record<ReadinessCode, string>> = {
   CLASSIFICATION_REQUIRED:
     "Classify the item before shaping it: set the work type and scope so a readiness profile can be derived.",
@@ -169,7 +172,7 @@ const GENERIC_REMEDIES: Partial<Record<ReadinessCode, string>> = {
   PLAN_REVIEW_REQUIRED:
     "An independent reviewer approves the plan with record_initiative_design_review(gate: \"plan-review\").",
   ARTIFACT_AUTHOR_REQUIRED:
-    "Sign the design commit off (git commit -s), push the rewritten sha, then re-sync the workroom head with adopt_worktree.",
+    ARTIFACT_AUTHOR_RECOVERY,
   CAPSULE_IDENTITY_MISMATCH:
     "The claim did not match the workroom's recorded identity. The reasons above name which fields differ: a stale branch or head re-syncs with adopt_worktree(headBranch, headSha), an expired lease renews with heartbeat_workroom, and a terminal or foreign-held room needs a new claim.",
   DELIVERY_EVIDENCE_REQUIRED:
