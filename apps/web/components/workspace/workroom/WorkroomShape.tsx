@@ -86,7 +86,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
       <div className="overflow-x-auto pb-2">
         <ul ref={stepsRef} aria-label="Process steps" className={layout === "list" ? "space-y-2" : "flex min-w-max gap-3"}>
           {visibleStages.map((item, index) => <li key={item.key} className={layout === "list" ? "" : "w-64 shrink-0"}>
-            <Button variant="secondary" aria-label={item.label} aria-pressed={selected === item.key} data-step-key={item.key}
+            <Button variant="secondary" aria-pressed={selected === item.key} data-step-key={item.key}
               className={`min-h-20 w-full flex-col items-start text-left ${selected === item.key ? "outline-2 outline-[var(--dpf-accent)]" : ""}`}
               onClick={() => navigate(item.key)} onKeyDown={(event) => {
                 let target = index;

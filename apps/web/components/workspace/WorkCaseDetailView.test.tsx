@@ -257,7 +257,7 @@ describe("WorkCaseDetailView", () => {
     expect(html).toContain("Storefront booking");
     expect(html).toContain("Definition v1");
     expect(html.match(/aria-label="Process steps"/g)).toHaveLength(1);
-    expect(html).toContain('aria-label="Convene"');
+    expect(html).toContain('data-step-key="convene"');
     expect(html).not.toContain('aria-labelledby="work-room-activity-title"');
     expect(html).not.toContain('aria-labelledby="work-room-participants-title"');
     expect(html).not.toContain("Room details");

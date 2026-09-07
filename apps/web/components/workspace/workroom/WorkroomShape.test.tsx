@@ -26,7 +26,7 @@ const graph: ShapeGraph = {
 describe("Workroom process inspection", () => {
   it("answers the six questions without implying verified progress", () => {
     render(<WorkroomShape graph={graph} />);
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ }));
     for (const label of ["Where are we?", "Why are we here?", "What can happen next?", "Who owns the action?", "What evidence supports this?", "What else is affected?"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
@@ -38,31 +38,31 @@ describe("Workroom process inspection", () => {
 
   it("supports keyboard selection and preserves operation context in the URL", () => {
     render(<WorkroomShape graph={graph} />);
-    const first = screen.getByRole("button", { name: "Prepare" });
+    const first = screen.getByRole("button", { name: /1\.\s*Prepare.*Not verified/ });
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowRight" });
-    expect(screen.getByRole("button", { name: "Review" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ })).toHaveFocus();
     expect(replace).toHaveBeenCalledWith(expect.stringContaining("operation=reviewer-recovery"), { scroll: false });
     expect(replace).toHaveBeenCalledWith(expect.stringContaining("processStep=review"), { scroll: false });
   });
 
   it("offers a list alternative with the same selected step", () => {
     render(<WorkroomShape graph={graph} />);
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ }));
     fireEvent.click(screen.getByRole("button", { name: "List" }));
-    expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("list", { name: "Process steps" })).toBeInTheDocument();
   });
 
   it("filters steps without losing selection or navigation context", () => {
     render(<WorkroomShape graph={graph} />);
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ }));
     fireEvent.change(screen.getByRole("searchbox", { name: "Search steps" }), { target: { value: "Prepare" } });
-    expect(screen.queryByRole("button", { name: "Review" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /2\.\s*Review.*Not verified/ })).not.toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Review inspection" })).toBeInTheDocument();
     expect(replace).toHaveBeenLastCalledWith(expect.stringContaining("processStep=review"), { scroll: false });
     fireEvent.change(screen.getByRole("combobox", { name: "State" }), { target: { value: "holding" } });
-    expect(screen.queryByRole("button", { name: "Prepare" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /1\.\s*Prepare.*Not verified/ })).not.toBeInTheDocument();
     expect(screen.getByText("No matching steps")).toBeInTheDocument();
   });
 });
