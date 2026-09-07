@@ -8,6 +8,7 @@ import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-con
 import { loadPrismaWorkroomParticipants } from "@/lib/work-management/room-participation-prisma.server";
 import { loadWorkroomPostureContext } from "@/lib/work-management/room-posture.server";
 import { resolveWorkroomStructureForCase } from "@/lib/work-management/room-structure.server";
+import { resolveCanonicalWorkCaseKey } from "@/lib/work-management/canonical-case-key";
 import { loadWorkspaceWorkCaseDetail } from "@/lib/work-management/workspace-case-loader";
 
 type Props = {
@@ -28,6 +29,13 @@ export default async function WorkspaceCaseDetailPage({ params }: Props) {
   });
 
   const { caseKey } = await params;
+
+  // A room addressed by capsule id is the same case as the WorkItem it anchors
+  // to, not a second one. Send it to the canonical key so every surface that
+  // links a room by capsule id lands on the one case (BI-EBEB77E2).
+  const canonicalKey = await resolveCanonicalWorkCaseKey(prisma, caseKey);
+  if (canonicalKey) redirect(`/workspace/cases/${canonicalKey}`);
+
   const detail = await loadWorkspaceWorkCaseDetail({
     prismaClient: prisma,
     caseKey,
