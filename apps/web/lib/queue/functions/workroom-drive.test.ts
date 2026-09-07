@@ -6,6 +6,7 @@ import { workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
 import {
   applyDrivePlan,
   createWorkroomDriveEffects,
+  loadStandingRoomIds,
   runWorkroomDriveJob,
   type WorkroomDriveEffects,
   type WorkroomDriveRoom,
@@ -19,6 +20,19 @@ const driveDb = {
   scheduledAgentTask: { upsert: vi.fn() },
   $transaction: vi.fn(),
 };
+
+it("normalizes legacy object and malformed scope carriers before expanding SQL candidates", async () => {
+  let query = "";
+  await loadStandingRoomIds({
+    $queryRaw: async (parts) => { query = parts.join("?"); return []; },
+  });
+  // PostgreSQL throws on jsonb_array_elements(object/scalar). A WHERE filter
+  // outside the function cannot protect against planner evaluation order.
+  expect(query).toMatch(/jsonb_array_elements\(\s*CASE\s+jsonb_typeof\("scopeClaims"\)/i);
+  expect(query).toMatch(/WHEN 'array' THEN "scopeClaims"/);
+  expect(query).toMatch(/WHEN 'object' THEN jsonb_build_array\("scopeClaims"\)/);
+  expect(query).toMatch(/ELSE '\[\]'::jsonb/);
+});
 
 function coordinatorAssignment(workroomId: string) {
   return {

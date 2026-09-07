@@ -286,12 +286,20 @@ commits with the snapshot. A driver that encounters another owner's lease record
 observation without replacing that owner's snapshot. The effect adapter accepts an
 explicit database dependency so concurrent source tests cannot escape into a live client.
 
-The expanded driver suite passed 58 tests across five files and web typecheck.
+The expanded driver suite passed 59 tests across five files. The preceding driver
+increment also passed web typecheck. Candidate selection now normalizes legacy object
+claims and treats scalar/null claims as empty before expanding JSON in SQL, matching
+the existing tolerant shape reader. A query-contract regression failed before this
+repair and passed after it; this is not yet a PostgreSQL runtime scenario.
 This protects scheduling and snapshot persistence; provider effects, autonomous reviewer
 successors and crash/restart reconciliation still require their own runtime proof.
 
 The merged-tree CI attempt at 96e96509cf0 completed migration setup and typecheck,
 then reported six failing coworker-page tests whose navigation mocks omitted the newly
 used shared-renderer hooks. Its wrapper also lost the MCP connection during a portal
-restart. The test failures are real and are being repaired; the wrapper interruption
+restart. The test failures were repaired in 9dec47a95ac; the wrapper interruption
 does not erase them or establish a gate pass.
+
+All 65 source preflight guards passed at d5119dd78c28. Its merged-code gate queued
+without admission because host stage headroom was low. That request was cancelled
+when the legacy-carrier query repair superseded the candidate; no CI pass is claimed.

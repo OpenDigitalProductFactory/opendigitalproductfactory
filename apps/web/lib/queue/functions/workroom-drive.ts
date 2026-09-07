@@ -102,10 +102,9 @@ export type WorkroomDriveResult = {
   attention: number;
   stopped: number;
   skipped: number;
-  /** `contains` relations materialized this tick from the declared standing-room
-   *  tree. Non-zero only while the estate is catching up; a settled estate reports
-   *  0 forever, which is how an operator tells "nesting is done" from "nesting was
-   *  never written" (BI-AEAA90A9). */
+  /** `contains` relations added this tick. Zero does not prove nesting is
+   * complete: unchanged trees, absent parents and contained failures all yield
+   * zero. Read persisted relations to establish hierarchy coverage. */
   nestedRelations: number;
   plans: Array<{ roomId: string; action: string; reason: string; taskId: string | null }>;
 };
@@ -372,7 +371,13 @@ export async function loadStandingRoomIds(db: {
     WHERE "archivedAt" IS NULL
       AND "status" NOT IN ('abandoned', 'archived', 'complete')
       AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements("scopeClaims") AS claim
+        SELECT 1 FROM jsonb_array_elements(
+          CASE jsonb_typeof("scopeClaims")
+            WHEN 'array' THEN "scopeClaims"
+            WHEN 'object' THEN jsonb_build_array("scopeClaims")
+            ELSE '[]'::jsonb
+          END
+        ) AS claim
         WHERE claim ? 'workShape'
       )
     ORDER BY "updatedAt" ASC, "id" ASC
