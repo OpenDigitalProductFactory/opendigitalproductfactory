@@ -11,6 +11,7 @@ describe("readStoredWorkroomDriveState", () => {
         budgetUsage: [{ kind: "findings-per-run", used: 4 }, { kind: "bad", used: "4" }],
         stopConditionHits: ["substrate-failed", 2],
         reviewDue: true,
+        lastCycleKey: null,
       },
     })).toEqual({
       currentStageKey: "raise",
@@ -18,6 +19,7 @@ describe("readStoredWorkroomDriveState", () => {
       budgetUsage: [{ kind: "findings-per-run", used: 4 }],
       stopConditionHits: ["substrate-failed"],
       reviewDue: true,
+      lastCycleKey: null,
     });
   });
 
@@ -28,6 +30,7 @@ describe("readStoredWorkroomDriveState", () => {
       budgetUsage: [],
       stopConditionHits: [],
       reviewDue: false,
+      lastCycleKey: null,
     });
   });
 });

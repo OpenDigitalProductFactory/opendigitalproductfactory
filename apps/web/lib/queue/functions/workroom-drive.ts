@@ -16,6 +16,12 @@ import {
   resolveCoordinatorEligibility,
 } from "@/lib/work-management/coordinator-eligibility";
 import { planCoordinationBindings } from "@/lib/authority/coordination-bindings";
+import {
+  carryReceipts,
+  earnStageReceipts,
+  workroomStageTaskTitle,
+  type CompletedRun,
+} from "@/lib/work-management/stage-receipts";
 import { planContainmentRelations } from "@/lib/work-management/standing-room-nesting";
 
 import { gateAtEntry } from "../quiescence-gates";
@@ -55,6 +61,10 @@ export type WorkroomDriveRoom = {
   participants: ProjectableWorkroomParticipantAssignment[];
   currentStageKey: string | null;
   receipts: { stageKey: string; kind: string }[];
+  /** Task runs for this room's stages, used to earn stage receipts. */
+  stageRuns?: CompletedRun[];
+  /** The cycle the stored receipts belong to, so a rollover can clear them. */
+  lastCycleKey?: string | null;
   budgetUsage: { kind: string; used: number }[];
   stopConditionHits: string[];
   reviewDue: boolean;
@@ -139,7 +149,13 @@ export async function applyDrivePlan(input: {
     taskId: plan.taskId,
     lastRunAt: now.toISOString(),
     lastCycleKey: plan.cycle?.cycleKey ?? null,
-    receipts: room.receipts,
+    // A new cycle starts its stages again, so last cycle's receipts must not
+    // satisfy this cycle's — the same defect inverted.
+    receipts: carryReceipts({
+      receipts: room.receipts,
+      previousCycleKey: room.lastCycleKey ?? null,
+      currentCycleKey: plan.cycle?.cycleKey ?? null,
+    }),
     budgetUsage: room.budgetUsage,
     stopConditionHits: room.stopConditionHits,
     reviewDue: room.reviewDue,
@@ -213,7 +229,7 @@ export async function applyDrivePlan(input: {
       taskId: plan.taskId,
       agentId: plan.agentId,
       ownerUserId: room.ownerUserId,
-      title: `Workroom ${room.capsuleId} / ${plan.stageKey}`,
+      title: workroomStageTaskTitle(room.capsuleId, plan.stageKey ?? ""),
       prompt: `Execute Workroom ${room.capsuleId} stage ${plan.stageKey} for shape ${plan.shapeKey}@${plan.shapeVersion}. Stay inside the declared grants. Do not skip stages, widen authority, or invent occupants.`,
       now,
     });
@@ -272,6 +288,8 @@ export async function runWorkroomDriveJob(
       jsiSchemePresent(prisma as unknown as Record<string, unknown>),
     ];
     rooms = await loadStandingRooms(bindings, schemePresent);
+    const runsByRoom = await loadStageRuns(rooms.map((room) => room.capsuleId));
+    rooms = rooms.map((room) => ({ ...room, stageRuns: runsByRoom.get(room.capsuleId) ?? [] }));
   }
   const effects = deps?.effects ?? liveEffects();
   const plans: WorkroomDriveResult["plans"] = [];
@@ -283,6 +301,15 @@ export async function runWorkroomDriveJob(
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
     const stored = readStoredWorkroomDriveState(room.workspaceState);
+    // A completed stage run earns the receipt that lets the shape advance.
+    // Receipts were read in three places and written in none, so every room
+    // re-dispatched its first stage forever (BI-76B35820).
+    const earnedReceipts = earnStageReceipts({
+      capsuleId: room.capsuleId,
+      currentStageKey: room.currentStageKey ?? stored.currentStageKey,
+      runs: room.stageRuns ?? [],
+      existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
+    }) as { stageKey: string; kind: string }[];
     const plan = resolveDrivePlan({
       roomId: room.capsuleId,
       definition: shape ? readWorkShapeDefinitionContract(shape) : null,
@@ -293,7 +320,7 @@ export async function runWorkroomDriveJob(
         presencePrincipalRefs: [],
       }),
       currentStageKey: room.currentStageKey ?? stored.currentStageKey,
-      receipts: room.receipts.length > 0 ? room.receipts : stored.receipts,
+      receipts: earnedReceipts,
       budgetUsage: room.budgetUsage.length > 0 ? room.budgetUsage : stored.budgetUsage,
       stopConditionHits: room.stopConditionHits.length > 0 ? room.stopConditionHits : stored.stopConditionHits,
       reviewDue: room.reviewDue || stored.reviewDue,
@@ -308,7 +335,12 @@ export async function runWorkroomDriveJob(
       reason: plan.reason,
       taskId: plan.taskId,
     });
-    const outcome = await applyDrivePlan({ room, plan, now, effects });
+    const outcome = await applyDrivePlan({
+      room: { ...room, receipts: earnedReceipts, lastCycleKey: stored.lastCycleKey ?? null },
+      plan,
+      now,
+      effects,
+    });
     if (outcome === "dispatched") dispatched += 1;
     else if (outcome === "attention") attention += 1;
     else if (outcome === "stopped") stopped += 1;
@@ -471,6 +503,41 @@ export async function reconcileCoordinationBindings(): Promise<number> {
     // and refuse, which is the safe pre-existing behaviour.
     return 0;
   }
+}
+
+/**
+ * Completed stage runs for the rooms being driven, titled by
+ * workroomStageTaskTitle. One query per tick rather than one per room.
+ *
+ * Only terminal statuses are read: a working run must not earn a receipt, and a
+ * failed one must re-dispatch rather than advance.
+ */
+async function loadStageRuns(capsuleIds: readonly string[]): Promise<Map<string, CompletedRun[]>> {
+  const byRoom = new Map<string, CompletedRun[]>();
+  if (capsuleIds.length === 0) return byRoom;
+  try {
+    const { prisma } = await import("@dpf/db");
+    const rows = await prisma.taskRun.findMany({
+      where: {
+        status: "completed",
+        OR: capsuleIds.map((capsuleId) => ({ title: { startsWith: `Workroom ${capsuleId} / ` } })),
+      },
+      select: { title: true, status: true },
+      orderBy: { startedAt: "desc" },
+      take: 500,
+    });
+    for (const row of rows) {
+      // "Workroom <capsuleId> / <stage>"
+      const capsuleId = row.title.split(" ")[1] ?? "";
+      const bucket = byRoom.get(capsuleId);
+      if (bucket) bucket.push(row);
+      else byRoom.set(capsuleId, [row]);
+    }
+  } catch {
+    // No runs read means no receipts earned: rooms re-dispatch, which is the
+    // safe pre-existing behaviour rather than a false advance.
+  }
+  return byRoom;
 }
 
 async function loadCoordinationBindings(): Promise<

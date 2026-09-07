@@ -6,6 +6,9 @@ export type StoredWorkroomDriveState = {
   budgetUsage: { kind: string; used: number }[];
   stopConditionHits: string[];
   reviewDue: boolean;
+  /** The cycle the stored receipts belong to. A rollover clears them, so last
+   *  cycle's receipts cannot satisfy this cycle's stages (BI-76B35820). */
+  lastCycleKey: string | null;
 };
 
 /** Read only verifier-relevant observations from the persisted runner snapshot. */
@@ -36,5 +39,6 @@ export function readStoredWorkroomDriveState(workspaceState: unknown): StoredWor
       ? drive.stopConditionHits.filter((entry): entry is string => typeof entry === "string")
       : [],
     reviewDue: drive?.reviewDue === true,
+    lastCycleKey: typeof drive?.lastCycleKey === "string" ? drive.lastCycleKey : null,
   };
 }

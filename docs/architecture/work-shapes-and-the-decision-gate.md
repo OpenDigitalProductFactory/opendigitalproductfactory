@@ -616,6 +616,42 @@ nobody needing to remember.
 
 `unknown` still blocks. Only `eligible` and `not-applicable` satisfy the gate.
 
+## A completed stage earns a receipt
+
+`nextStageKey` advances only when the current stage holds a receipt. Receipts were
+READ in three places — the drive state reader, the plan resolver, the conformance
+observation — and WRITTEN in none. Always `[]`, so every room re-dispatched its
+first stage on every tick, forever.
+
+Measured on this install once the rooms started dispatching: twelve rooms,
+`COUNT(DISTINCT stageKey) = 1` on all of them, and 15-28 completed task runs each
+of that one stage. `WC-A69BCABB` ran `sweep` 28 times and never reached `raise`
+or `decide`.
+
+Three things made it hard to see:
+
+- **It looks healthy.** `action: dispatch_agent` on every room reads as success.
+  Only the stage histogram shows the loop.
+- **Real work happens.** The coworkers ran and completed. Nothing errored.
+- **The stall source does not cover it.** `workroom-stall` watches
+  `{pause, escalate}`; a room looping on stage one is dispatching, so it raises
+  no attention. An estate can burn model capacity indefinitely while every
+  surface is green.
+
+The rules:
+
+- **Only a completed run earns a receipt.** A failed or working run earns
+  nothing, so the stage stays current and re-dispatches — the correct retry, and
+  it keeps a failure from being laundered into progress.
+- **Earning is idempotent.** Twenty-eight completed sweeps produce one receipt.
+- **A cycle rollover clears them.** Otherwise a daily watch would run once and
+  then satisfy every stage forever from yesterday's receipts — the same defect
+  inverted.
+- **The correlation key has ONE builder.** `workroomStageTaskTitle` is used by
+  the dispatcher that writes the task title and by the reader that looks for its
+  completion. Writer/reader drift is precisely how this class of defect recurs,
+  so the two callers share the function rather than the format.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
