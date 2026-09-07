@@ -14,6 +14,12 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 
 Open **Operations > Workrooms** (`/ops/workrooms`) for one operational inventory across business work, coworker activity, and development. **Live now** requires current execution evidence such as a valid lease, an open pull request, or recent activity. **History and cleanup** retains terminal, expired, stalled, and cleanup-eligible records without counting them as active. Select a Workroom to open its canonical activity case; open **Architecture > Workrooms** when you need the reusable definition instead of the instance history.
 
+**Activity by portfolio** groups the same Workrooms under the four portfolios and summarises each one with a few concrete activities rather than a bare count. Every line names its Workroom and says what is happening to it, so two Workrooms blocked for the same reason stay distinguishable. Select any line to open that Workroom's activity case in one step.
+
+Use the arrow beside a portfolio to expand it. Expanding lists the Workrooms in that portfolio, up to twenty-five at a time, and tells you how many it is not listing. Expanding one portfolio does not collapse the others and does not change what you already have open.
+
+Counts describe the Workrooms the page read, not everything in the portfolio. When the page reads its limit, each count reads "N rooms read" and a note below the tree says so. To see beyond that, narrow the inventory below or open the portfolio itself.
+
 ## Key Concepts
 
 - **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, done, deferred, or retired.

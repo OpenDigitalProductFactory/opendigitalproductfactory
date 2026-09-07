@@ -45,7 +45,7 @@ describe("PortfolioActivityTree", () => {
     const html = renderToStaticMarkup(
       <PortfolioActivityTree rows={withLabels(page.rows)} partial={page.partial} />,
     );
-    expect(html).toContain("Blocked: Waiting for release review");
+    expect(html).toContain("blocked: Waiting for release review");
     expect(html).toContain("Checking invoice matching");
     // The count is present, but as a supplement beside the statements.
     expect(html).toContain("3 rooms");
@@ -95,7 +95,7 @@ describe("PortfolioActivityTree", () => {
     );
     expect(html).toContain('aria-current="true"');
     expect(html).toContain('aria-expanded="false"');
-    const order = ["Blocked: Waiting for release review", "Checking invoice matching"];
+    const order = ["blocked: Waiting for release review", "Checking invoice matching"];
     expect(html.indexOf(order[0]!)).toBeLessThan(html.indexOf(order[1]!));
   });
 
@@ -142,5 +142,83 @@ describe("PortfolioActivityTree", () => {
       expect(typeof value, `prop "${key}" must be serializable`).not.toBe("function");
     }
     expect(() => JSON.stringify(props)).not.toThrow();
+  });
+});
+
+describe("expansion actually discloses (BI-8DACBA07 scale verification)", () => {
+  // Caught by rendering /ops/workrooms against 1,001 rooms: the chevron flipped
+  // `aria-expanded` and its own glyph while the list below it never changed.
+  // A disclosure control that discloses nothing is the defect this pins.
+  const page = projectPortfolioActivityPage({
+    rooms: Array.from({ length: 40 }, (_, i) =>
+      room({ roomId: `r-${String(i).padStart(3, "0")}`, branchId: "finance" }),
+    ),
+    now: NOW,
+  });
+  const branch = page.rows[0]!;
+
+  it("carries more rooms to disclose than the collapsed summary shows", () => {
+    expect(branch.representative.length).toBe(3);
+    expect(branch.disclosed.length).toBeGreaterThan(branch.representative.length);
+  });
+
+  it("bounds an expanded branch instead of emptying every room into the page", () => {
+    expect(branch.disclosed.length).toBe(25);
+    expect(branch.disclosedTruncated).toBe(true);
+    expect(branch.undisclosedCount).toBe(15);
+    expect(branch.disclosed.length + branch.undisclosedCount).toBe(branch.roomCount);
+  });
+
+  it("opens on the representative rooms it was already summarising", () => {
+    // Opening a branch must not reshuffle what the operator was just reading.
+    expect(branch.disclosed.slice(0, 3).map((a) => a.roomId)).toEqual(
+      branch.representative.map((a) => a.roomId),
+    );
+  });
+
+  it("renders the collapsed summary, not the disclosed set, before any click", () => {
+    const html = renderToStaticMarkup(
+      <PortfolioActivityTree rows={withLabels(page.rows)} partial={page.partial} />,
+    );
+    const links = html.match(/\/workspace\/cases\//g) ?? [];
+    expect(links.length).toBe(3);
+    expect(html).toContain('aria-expanded="false"');
+  });
+});
+
+describe("statements and counts stay truthful at scale (BI-8DACBA07)", () => {
+  it("names the room in a blocker line so identical blockers stay distinguishable", () => {
+    // At 1,001 rooms several rooms shared one generic liveness reason and
+    // rendered as three identical "Blocked: ..." lines.
+    const page = projectPortfolioActivityPage({
+      rooms: [
+        room({ roomId: "r-a", title: "Payroll run", blocker: "Synced 12m ago." }),
+        room({ roomId: "r-b", title: "Invoice sync", blocker: "Synced 12m ago." }),
+      ],
+      now: NOW,
+    });
+    const statements = page.rows[0]!.representative.map((a) => a.statement);
+    expect(new Set(statements).size).toBe(statements.length);
+    expect(statements.some((s) => s.includes("Payroll run"))).toBe(true);
+    expect(statements.some((s) => s.includes("Invoice sync"))).toBe(true);
+  });
+
+  it("marks counts as read-scoped when the room read was bounded", () => {
+    const page = projectPortfolioActivityPage({
+      rooms: [room({ roomId: "r-1" }), room({ roomId: "r-2" })],
+      now: NOW,
+    });
+    const bounded = renderToStaticMarkup(
+      <PortfolioActivityTree rows={withLabels(page.rows)} partial={false} roomReadBounded />,
+    );
+    expect(bounded).toContain("2 rooms read");
+    expect(bounded).toContain("not every Workroom in");
+
+    const complete = renderToStaticMarkup(
+      <PortfolioActivityTree rows={withLabels(page.rows)} partial={false} />,
+    );
+    expect(complete).toContain("2 rooms");
+    expect(complete).not.toContain("2 rooms read");
+    expect(complete).not.toContain("not every Workroom in");
   });
 });

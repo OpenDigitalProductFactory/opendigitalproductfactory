@@ -49,7 +49,10 @@ describe("Work activity page", () => {
 
   it("shows a recorded blocker as a concrete statement, not a count", async () => {
     const html = renderToStaticMarkup(await WorkroomsPage());
-    expect(html).toContain("Blocked: waiting on reviewer");
+    // The room is named alongside its blocker: measured at scale, rooms
+    // sharing one generic liveness reason rendered as identical lines.
+    expect(html).toContain("blocked: waiting on reviewer");
+    expect(html).toMatch(/[^<>]+ · blocked: waiting on reviewer/);
   });
 
   it("opens each room in one click from its activity line", async () => {

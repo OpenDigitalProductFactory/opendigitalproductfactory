@@ -26,6 +26,10 @@ export type BranchRowView = BranchRow & { label: string };
  * Three interaction rules the design is explicit about, and each is easy to get
  * wrong:
  *
+ * Expansion discloses. Opening a branch replaces its three-line summary with
+ * the rooms it carries, bounded by the projection so a thousand-room portfolio
+ * stays readable and says what it is not showing.
+ *
  * Expansion and selection are independent. The chevron discloses a branch's
  * rooms; it does not change what the inspector is showing. Selecting an activity
  * does not collapse or reorder anything. Conflating them makes an operator lose
@@ -101,11 +105,19 @@ function ActivityLine({
 export function PortfolioActivityTree({
   rows,
   partial,
+  roomReadBounded = false,
   selectedRoomId = null,
 }: {
   rows: readonly BranchRowView[];
   /** True when more branches exist than this page carries. */
   partial: boolean;
+  /**
+   * True when the underlying room read hit its limit, so a branch count is a
+   * count of the rooms read — not of the rooms the portfolio holds. Measured at
+   * 1,001 rooms against a 200-room read, "51 rooms" read as a portfolio total
+   * and was off by a factor of five. A count that cannot be the whole says so.
+   */
+  roomReadBounded?: boolean;
   selectedRoomId?: string | null;
 }) {
   // Expansion is view state and deliberately separate from selection.
@@ -145,12 +157,20 @@ export function PortfolioActivityTree({
                 {/* A count supplements the statements below; it never replaces them. */}
                 <span className="text-xs text-[var(--dpf-muted)]">
                   {row.roomCount} room{row.roomCount === 1 ? "" : "s"}
+                  {roomReadBounded ? " read" : ""}
                   {row.attentionCount > 0 ? ` · ${row.attentionCount} need attention` : ""}
                 </span>
               </div>
 
+              {/*
+                Collapsed, a branch shows its representative activities. Open,
+                it shows the rooms it discloses. The chevron must actually
+                change what is on the page — a control that only rewrites its
+                own glyph and `aria-expanded` claims a disclosure it never
+                performs, and an operator learns to distrust it.
+              */}
               <ul className="ml-11 mt-1">
-                {row.representative.map((activity) => (
+                {(isOpen ? row.disclosed : row.representative).map((activity) => (
                   <ActivityLine
                     key={activity.roomId}
                     activity={activity}
@@ -158,11 +178,23 @@ export function PortfolioActivityTree({
                   />
                 ))}
               </ul>
+              {isOpen && row.disclosedTruncated ? (
+                <p className="ml-11 mt-1 text-xs text-[var(--dpf-muted)]">
+                  {row.undisclosedCount} more room{row.undisclosedCount === 1 ? "" : "s"} in this
+                  portfolio are not listed here.
+                </p>
+              ) : null}
 
             </li>
           );
         })}
       </ul>
+      {roomReadBounded ? (
+        <p className="mt-3 text-xs text-[var(--dpf-muted)]">
+          Counts cover the most recently updated Workrooms this page read, not every Workroom in
+          the portfolio.
+        </p>
+      ) : null}
       {partial ? (
         <p className="mt-3 text-xs text-[var(--dpf-muted)]">Partial read: more branches exist.</p>
       ) : null}

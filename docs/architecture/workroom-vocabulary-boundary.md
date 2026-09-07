@@ -329,3 +329,32 @@ old word free to come back, which is exactly how this one survived.
 - [Claim a workroom before you work](../founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md)
 - [Workroom participation and channel continuity](work-room-participation-and-channel-continuity.md)
 - Plan: `docs/superpowers/plans/2026-08-15-workroom-canonical-rename.md`
+
+## A disclosure control discloses
+
+Expanding a branch of the portfolio activity tree replaces its summary with the
+rooms it carries. This is stated because the first implementation did not do it:
+the chevron flipped `aria-expanded`, swapped its own glyph, and left the list
+below unchanged, so the control announced a disclosure it never performed. A
+control that changes only its own appearance is worse than no control, because
+an operator reads the absence of new rows as "this branch has nothing more".
+
+Disclosure is bounded. A portfolio holding a thousand rooms discloses the first
+`DEFAULT_DISCLOSURE_LIMIT` of them in the order it was already summarising, then
+says how many it is not listing. Opening a branch never empties a portfolio into
+the page, and never reshuffles the rows the operator was reading.
+
+## A count says what it counted
+
+A branch count describes the rooms the page read, not the rooms that exist. The
+page reads a bounded number of Workrooms; when that read hits its limit the tree
+renders "N rooms read" and states the bound. Measured against 1,001 rooms and a
+200-room read, an unqualified "51 rooms" understated the portfolio five-fold
+while looking exactly like a total.
+
+## A statement names its room
+
+Every activity line carries its room's title alongside the action or blocker.
+Blockers are frequently generic and shared: at scale, several rooms blocked on
+one liveness reason rendered as identical lines with no way to tell which room
+each described, or that they were different rooms at all.
