@@ -130,6 +130,8 @@ case "$*" in
       "$service" "\${DPF_STATE_DIR-<unset>}" "\${DPF_PROMOTER_STATE_DIR-<unset>}" "$effective_state_dir" "$effective_state_dir" >> "$DOCKER_LOG"
     ;;
   *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;
+  "ps -a --format "*) [ -n "\${DPF_TEST_IMAGES_IN_USE:-}" ] && printf '%s\n' "$DPF_TEST_IMAGES_IN_USE" ;;
+  *"images --filter reference=ghcr.io/"*"/dpf-portal:v* --format "*) [ -n "\${DPF_TEST_PORTAL_VERSION_TAGS:-}" ] && printf '%s\n' "$DPF_TEST_PORTAL_VERSION_TAGS" ;;
 esac
 exit 0
 `,
@@ -158,6 +160,11 @@ function runPromote(opts: {
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   principalResolveFails?: boolean;
   principalVerifyFails?: boolean;
+  /** Newest-first `repo:tag` list the shim returns for the dpf-portal version-tag query. */
+  portalVersionTags?: string[];
+  /** `repo:tag` refs the shim reports as referenced by a container (`docker ps -a`). */
+  imagesInUse?: string[];
+  imageKeep?: number;
   release?: {
     tag: string; owner: string; channelDigest?: string; platformManifestDigest?: string;
     configDigest?: string; engineImageId?: string; platformOs?: string; frozenStrata?: boolean; repoImageId?: string; registryConfigDigest?: string; duplicatePlatform?: boolean;
@@ -218,6 +225,9 @@ function runPromote(opts: {
       ? [`export PROMOTE_COMPOSE_ENV_FILE=${shellQuote(toBashPath(opts.composeEnvFile))}`]
       : []),
     ...(opts.dockerLog ? [`export DOCKER_LOG=${shellQuote(toBashPath(opts.dockerLog))}`] : []),
+    ...(opts.portalVersionTags ? [`export DPF_TEST_PORTAL_VERSION_TAGS=${shellQuote(opts.portalVersionTags.join("\n"))}`] : []),
+    ...(opts.imagesInUse ? [`export DPF_TEST_IMAGES_IN_USE=${shellQuote(opts.imagesInUse.join("\n"))}`] : []),
+    ...(opts.imageKeep !== undefined ? [`export PROMOTE_IMAGE_KEEP=${opts.imageKeep}`] : []),
     ...(opts.release ? [
       "export DPF_PROMOTION_MODE=release",
       `export DPF_RELEASE_TAG=${shellQuote(opts.release.tag)}`,
@@ -413,6 +423,41 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       expect(dockerCalls).toContain("images --filter reference=dpf-*-build-test");
       expect(dockerCalls).toContain("images --filter reference=dpf-*-build-compare");
       expect(dockerCalls).toContain("images --filter reference=dpf-*:verify");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("bounds superseded version tags per self-upgrade image: keeps in-use + PROMOTE_IMAGE_KEEP newest, removes the rest by tag", () => {
+    // Every upgrade tags a fresh portal/postgres/promoter/sandbox and the tag
+    // keeps it out of dangling-prune, so a dev install piled up 92 portal tags
+    // (388 GB reclaimable) in 16 days. The shim answers the portal query
+    // newest-first; the running tag sits in the middle to prove in-use wins
+    // over recency and never counts against the keep budget.
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    const repo = "ghcr.io/opendigitalproductfactory/dpf-portal";
+    const tags = ["v2026.09.06-e.1", "v2026.09.06-d.1", "v2026.09.05-running.1", "v2026.09.04-c.1", "v2026.09.03-b.1", "v2026.09.02-a.1"]
+      .map((tag) => `${repo}:${tag}`);
+    try {
+      const r = runPromote({
+        source, backup, targetSha: head, fakeBin, dockerLog,
+        portalVersionTags: tags,
+        imagesInUse: [`${repo}:v2026.09.05-running.1`, "ghcr.io/opendigitalproductfactory/dpf-sandbox:v2026.09.05-running.1"],
+        imageKeep: 2,
+      });
+      expect(r.status).toBe(0);
+      const dockerCalls = readFileSync(dockerLog, "utf8").split("\n");
+      const removed = dockerCalls.filter((line) => line.startsWith("rmi ") && line.includes("dpf-portal:v"));
+      // Newest two survive as rollback margin, the in-use one survives regardless of age.
+      expect(removed).toEqual([`rmi ${repo}:v2026.09.04-c.1`, `rmi ${repo}:v2026.09.03-b.1`, `rmi ${repo}:v2026.09.02-a.1`]);
+      expect(dockerCalls).not.toContain(`rmi ${repo}:v2026.09.05-running.1`);
+      // Every self-upgrade repo is swept, and by version-tag reference only.
+      for (const name of ["dpf-portal", "dpf-postgres", "dpf-promoter", "dpf-sandbox"]) {
+        expect(dockerCalls).toContain(`images --filter reference=ghcr.io/opendigitalproductfactory/${name}:v* --format {{.Repository}}:{{.Tag}}`);
+      }
+      // Untag by reference, never force-remove by id: a layer shared with a kept tag must survive.
+      expect(removed.every((line) => !line.includes(" -f "))).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
