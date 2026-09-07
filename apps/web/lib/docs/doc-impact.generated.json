@@ -1430,6 +1430,9 @@
     "packages/db/src/provider-compliance-source-registry.ts": [
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
     ],
+    "packages/db/src/reference-model-applicability.ts": [
+      "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md"
+    ],
     "packages/db/src/regulation-applicability.ts": [
       "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
       "docs/maintenance/staleness-report.md",
@@ -2543,6 +2546,7 @@
     ],
     "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md": [
       "packages/db/scripts/generate-taxonomy-v3-json.ts",
+      "packages/db/src/reference-model-applicability.ts",
       "packages/db/src/seed-ea-reference-models.ts"
     ],
     "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md": [
