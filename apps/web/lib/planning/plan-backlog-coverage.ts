@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 
 import { resolveRepositoryArtifact, type InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness";
+import { deriveAuthoritativeReadinessProfile } from "@/lib/backlog/initiative-readiness/profiles";
 import { projectMissingBaselineRecovery } from "./plan-coverage-recovery";
 
 export {
@@ -215,6 +216,11 @@ function isCanonicalPlanPath(value: string): boolean {
     && !value.split("/").some((segment) => segment === "." || segment === "..");
 }
 
+function isCanonicalFixDesignPath(value: string): boolean {
+  return /^docs\/superpowers\/specs\/[A-Za-z0-9][A-Za-z0-9._/-]*\.md$/.test(value)
+    && !value.split("/").some((segment) => segment === "." || segment === "..");
+}
+
 export type PlanTraceabilityContext = {
   planText: string;
   baselineId: string;
@@ -266,6 +272,7 @@ export function validatePlanBacklogCoverageReceipt(args: {
   requireGovernedImplementation: boolean;
   currentPlanDigest: string;
   traceabilityContext?: PlanTraceabilityContext;
+  allowFixDesignArtifact?: boolean;
 }): PlanBacklogCoverageReceiptValidation {
   const schemaVersion = args.receipt.schemaVersion ?? 1;
   if (args.requireGovernedImplementation && schemaVersion !== 2) {
@@ -275,7 +282,9 @@ export function validatePlanBacklogCoverageReceipt(args: {
     const locator = args.receipt.planArtifactRef;
     if (!locator || locator.kind !== "repo-blob-at-commit"
       || !locator.repositoryFullName || !locator.commitSha || !locator.path || !locator.providerBlobId
-      || !isCanonicalPlanPath(args.receipt.planPath) || locator.path !== args.receipt.planPath
+      || !(isCanonicalPlanPath(args.receipt.planPath)
+        || (args.allowFixDesignArtifact === true && isCanonicalFixDesignPath(args.receipt.planPath)))
+      || locator.path !== args.receipt.planPath
       || !args.receipt.planArtifactDigest
       || args.receipt.planArtifactDigest !== args.currentPlanDigest) {
       return { ok: false, code: "stale-plan-artifact", error: "Plan coverage is not bound to the current immutable plan artifact." };
@@ -642,8 +651,10 @@ export async function recordPlanBacklogCoverage(args: {
       error: `BacklogItem ${args.itemId} was not found.`,
     };
   }
-  if (!isCanonicalPlanPath(args.planPath) || args.planArtifactRef.path !== args.planPath) {
-    return { ok: false, code: "plan-artifact-invalid", error: "Plan artifact must be a canonical docs/superpowers/plans/*.md path." };
+  const parentProfile = deriveAuthoritativeReadinessProfile(parent);
+  const acceptsFixDesign = parentProfile === "fix" && isCanonicalFixDesignPath(args.planPath);
+  if ((!isCanonicalPlanPath(args.planPath) && !acceptsFixDesign) || args.planArtifactRef.path !== args.planPath) {
+    return { ok: false, code: "plan-artifact-invalid", error: "Plan artifact must be a canonical docs/superpowers/plans/*.md path, or the item's canonical ordered fix design for profile=fix." };
   }
   if (!db.$transaction) {
     return { ok: false, code: "plan-artifact-invalid", error: "Serializable plan coverage persistence is unavailable." };
@@ -754,6 +765,7 @@ export async function recordPlanBacklogCoverage(args: {
         objectiveIds: baseline.objectiveIds,
         acceptanceIds: baseline.acceptanceIds,
       },
+      allowFixDesignArtifact: parentProfile === "fix",
     });
     if (!validation.ok) return validation;
 

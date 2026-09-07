@@ -671,8 +671,8 @@ describe("recordPlanBacklogCoverage", () => {
     expect(activityCreate).not.toHaveBeenCalled();
   });
 
-  it("does not misrepresent a fix design document as a canonical plan receipt", async () => {
-    const { db } = fakeDb();
+  it("accepts an ordered immutable fix design as the fix profile's atomic coverage artifact", async () => {
+    const { db, activityCreate } = fakeDb();
     db.backlogItem.findUnique = vi.fn(async () => ({
       id: "parent-row",
       itemId: "BI-PARENT",
@@ -696,7 +696,13 @@ describe("recordPlanBacklogCoverage", () => {
       resolveArtifact: resolvePlan,
     });
 
-    expect(result).toMatchObject({ ok: false, code: "plan-artifact-invalid" });
+    expect(result).toMatchObject({ ok: true, decision: "atomic" });
+    expect(activityCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        kind: "plan_backlog_coverage",
+        payload: expect.objectContaining({ planPath: fixRef.path, decision: "atomic" }),
+      }),
+    }));
   });
 
   it("does not write a receipt when a mapped BI does not exist", async () => {
