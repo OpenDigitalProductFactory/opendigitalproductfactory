@@ -1,4 +1,5 @@
 import { INITIATIVE_CORRECTABLE_ERRORS, INITIATIVE_DISPOSITION_GUIDANCE, INITIATIVE_WRITER_CORRECTION_LIMIT } from "../backlog/initiative-readiness/disposition-contract";
+import { sourcePageEndLine, sourcePageNextLine } from "../source-page-lines";
 
 export type TerminalToolPolicy = {
   writerToolName: string;
@@ -243,6 +244,7 @@ export function summarizeTerminalToolProgress(
   let expectedTotalLines: number | null = null;
   let evidenceComplete = false;
   let paginationInvalid = false;
+  const seenCursors = new Set<string>();
 
   for (const record of readerRecords) {
     if (record.name !== "read_source_at_version" || !record.result.success) continue;
@@ -257,6 +259,8 @@ export function summarizeTerminalToolProgress(
     const totalLines = data?.["totalLines"];
     const hasMore = data?.["hasMore"];
     const nextCursor = data?.["nextCursor"];
+    const content = data?.["content"];
+    const hasContent = typeof content === "string";
     const validPage = validIdentity
       && boundedInteger(startLine, 1, Number.MAX_SAFE_INTEGER)
       && boundedInteger(endLine, 1, Number.MAX_SAFE_INTEGER)
@@ -264,7 +268,9 @@ export function summarizeTerminalToolProgress(
       && endLine >= startLine
       && endLine <= totalLines
       && typeof hasMore === "boolean"
-      && (hasMore ? endLine < totalLines : endLine === totalLines)
+      && (hasMore ? (endLine < totalLines || (hasContent && !content.endsWith("\n"))) : endLine === totalLines)
+      && (!hasContent || (content.length > 0
+        && sourcePageEndLine(startLine, content) === endLine))
       && (hasMore ? typeof nextCursor === "string" && nextCursor.length > 0 : nextCursor === null);
     if (!validPage) {
       attemptActive = false;
@@ -285,6 +291,7 @@ export function summarizeTerminalToolProgress(
       attemptActive = true;
       expectedTotalLines = totalLines;
       paginationInvalid = false;
+      seenCursors.clear();
     } else if (!attemptActive
       || typeof suppliedCursor !== "string"
       || suppliedCursor !== expectedCursor
@@ -300,8 +307,16 @@ export function summarizeTerminalToolProgress(
     }
 
     if (hasMore) {
+      if (seenCursors.has(nextCursor as string)) {
+        attemptActive = false;
+        expectedCursor = null;
+        evidenceComplete = false;
+        paginationInvalid = true;
+        continue;
+      }
+      seenCursors.add(nextCursor as string);
       expectedCursor = nextCursor as string;
-      expectedStartLine = endLine + 1;
+      expectedStartLine = hasContent ? sourcePageNextLine(endLine, content) : endLine + 1;
       evidenceComplete = false;
     } else {
       expectedCursor = null;

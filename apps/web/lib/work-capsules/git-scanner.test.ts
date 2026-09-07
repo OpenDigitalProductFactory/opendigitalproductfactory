@@ -9,6 +9,7 @@ import {
   parsePrUrlFromText,
   parseWorktreeList,
   shouldSurfaceAdoptableBranch,
+  trunkHasMergedPullRequest,
   trunkRefExists,
 } from "./git-scanner";
 
@@ -94,5 +95,21 @@ describe("delivered-signal git helpers (procedural, local)", () => {
     expect(await isReachableFromTrunk(repoRoot, "origin/main")).toBe(true);
     // A well-formed but nonexistent sha is indeterminate → null, never a false merged.
     expect(await isReachableFromTrunk(repoRoot, "0000000000000000000000000000000000000000")).toBeNull();
+  });
+});
+
+describe("trunkHasMergedPullRequest (BI-AFE8BB73)", () => {
+  it("is null for an invalid number or a non-repo path, never a false merged", async () => {
+    expect(await trunkHasMergedPullRequest(process.cwd(), null)).toBeNull();
+    expect(await trunkHasMergedPullRequest(process.cwd(), 0)).toBeNull();
+    expect(await trunkHasMergedPullRequest(tmpdir(), 5119)).toBeNull();
+  });
+
+  it("finds a merged PR's squash commit on a present local trunk and not a never-merged number", async () => {
+    const repoRoot = process.cwd();
+    if (!(await trunkRefExists(repoRoot))) return; // no local trunk here → skip
+    // #5119 landed on main on 2026-09-06 (fix(readiness): child inherits parent scope).
+    expect(await trunkHasMergedPullRequest(repoRoot, 5119)).toBe(true);
+    expect(await trunkHasMergedPullRequest(repoRoot, 99999999)).toBe(false);
   });
 });

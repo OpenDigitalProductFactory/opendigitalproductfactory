@@ -1,3 +1,4 @@
+import { sourcePageEndLine, sourcePageNextLine } from "./source-page-lines";
 import {
   normalizeTerminalToolArguments,
   type TerminalToolPolicy,
@@ -106,11 +107,6 @@ function parseHydrationPage(
   return page as HydrationPage;
 }
 
-function pageEndLine(page: HydrationPage): number {
-  const newlineCount = page.content.split("\n").length - 1;
-  return page.startLine + newlineCount - (page.content.endsWith("\n") ? 1 : 0);
-}
-
 function assessPageSet(
   evidence: readonly HydrationPageEvidence[],
 ): ActionSuccess<{ complete: boolean; totalChars: number }> | TerminalWriterContextFailure {
@@ -130,7 +126,7 @@ function assessPageSet(
         "The immutable source exceeds the bounded terminal-writer context budget.",
       );
     }
-    if (pageEndLine(page) !== page.endLine) {
+    if (sourcePageEndLine(page.startLine, page.content) !== page.endLine) {
       return hydrationFailure(
         "terminal_writer_context_page_sequence_invalid",
         "Immutable source pages are not a contiguous, non-overlapping sequence with stable line bounds.",
@@ -142,9 +138,7 @@ function assessPageSet(
         && requestArguments["cursor"] === undefined
         && (requestArguments["startLine"] === undefined || requestArguments["startLine"] === 1);
     } else {
-      const expectedStartLine = prior.content.endsWith("\n")
-        ? prior.endLine + 1
-        : prior.endLine;
+      const expectedStartLine = sourcePageNextLine(prior.endLine, prior.content);
       if (
         !prior.hasMore
         || page.startLine !== expectedStartLine

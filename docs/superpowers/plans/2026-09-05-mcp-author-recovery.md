@@ -47,11 +47,43 @@ Refactor duplicate ARTIFACT_AUTHOR_REQUIRED advice into one existing recovery pr
 
 Make coverage remediation profile-aware. If the selected parent cannot create the required baseline through the suggested route, return a precise parent-binding requirement and the supported correction instead of promising nonexistent reviewerRoutes. Preserve baseline enforcement and provenance; do not silently reclassify documentation or widen author grants. Resolve the actual supported parent-binding rule against existing governance before implementation; revise the design if a policy change is required.
 
+AC-MCP-RECOVERY-7 implementation is isolated in `planning/plan-coverage-recovery.ts`. The coverage writer reads the authoritative parent and mapped-child work types, delegates profile selection to the existing readiness policy, and returns either `scope-baseline-review-required` for feature-class work or `implementation-parent-binding-required` for documentation/fix work. The latter includes mapped implementation child candidates when present. The writer still requires an immutable canonical plan and current baseline before persisting any receipt; no baseline exemption or automatic reclassification is introduced.
+
 ## 3. Carry the contract through all readers
 
 Project prerequisite blockers separately from reviewer execution. Reuse reviewerRoutes and TaskRun lifecycle; cite real pending dispatch ids, expose terminal outcomes and distinguish unknown availability from confirmed reviewer absence. Apply the same projection to readiness, get_workroom and Workroom listing. Keep new fields additive and test legacy consumers. Do not create a status ledger or a duplicate listing tool.
 
 Clarify supported authoring/implementation parent binding in the existing planning instructions and skill. Include the objective/acceptance manifest prerequisite identified during this review so authors validate it before dispatch. Use the existing manifest parser instead of a second format checker. Hook label/discovery ranking improvements remain separate work.
+
+### Implementation checkpoint, 2026-09-06
+
+The identity-repair projection is now shared by transition recovery and the
+read-side Workroom inventory. `list_work_capsules` and `get_workroom` expose the
+same additive `recovery` shape: prerequisite identity repair is separate from
+the linked reviewer TaskRun, terminal TaskRuns are never projected as pending,
+and missing `baseSha` retains a valid `headSha` in an executable
+`adopt_worktree` packet. The transition path enriches that same packet with its
+write-only claim metadata rather than maintaining a second diagnosis. This
+removes the duplicated identity-repair construction while preserving existing
+response fields and authorization boundaries.
+
+Focused coverage exercises missing-base preservation, terminal reviewer state,
+the transition packet, schema/handler scope parity, and the existing negative
+grant cases. Source-local capacity gates remain evidence, not authority: an
+unavailable or nonperforming lane may be recorded as inconclusive under the
+operator instruction, while DCO and every protected pull-request and merge-group
+check remain mandatory. This checkpoint does not infer a scope baseline,
+coverage receipt, or independent reviewer PASS.
+
+Public `load_tools` acceptance then exposed one remaining AC-MCP-RECOVERY-5
+adapter gap: an unknown exact writer name and the real reviewer-only writer both
+collapsed to the same empty-success prose. The transport now derives a bounded
+structured `noMatch` reason from the authoritative platform and granted sets.
+Unknown names stop exact-name retries; reviewer-only initiative writers direct
+the author to `get_backlog_item` and its server-issued `reviewerRoutes` packet,
+without granting or invoking the writer. Intent misses, absent input, and known
+but ungranted tools remain distinct finite outcomes. Existing registry and
+reachability conformance tests continue to enforce descriptor/handler parity.
 
 ## 4. Verify and deliver
 

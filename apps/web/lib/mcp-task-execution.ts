@@ -30,7 +30,11 @@ import type {
 } from "./mcp-task-submit";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 import {
+  TERMINAL_WRITER_REJECTED_WAIT_REASON,
   createTerminalWriterEscalation,
+  lastTerminalWriterRejection,
+  terminalWriterRejectionMessage,
+  terminalWriterRejectionStructuredContent,
   terminalWriterEscalationMessage,
   terminalWriterEscalationStructuredContent,
   terminalWriterEscalationWaitReason,
@@ -366,11 +370,20 @@ export async function executeRemoteTaskAttempt(input: {
       && terminalToolPolicy
     ) {
       const terminalWriterAttempt = input.terminalWriterAttempt ?? 1;
-      const terminalWriterFailureMessage = result.failure?.kind === "terminal-writer-missing"
+      // BI-A57B6185: a writer that ran and REFUSED is a packet problem. Surface
+      // its error verbatim, never count it as an omitted attempt, and never
+      // advise switching reviewer: the next reviewer hits the same rejection.
+      const writerRejection = lastTerminalWriterRejection(
+        terminalToolPolicy.writerToolName,
+        terminalWriterExecutions,
+      );
+      const terminalWriterFailureMessage = writerRejection
+        ? terminalWriterRejectionMessage(terminalToolPolicy.writerToolName, writerRejection)
+        : result.failure?.kind === "terminal-writer-missing"
         ? result.failure.message
         : writerResult && receiptExpected && !persistedOutcome ? result.content
         : describeTerminalWriterFailure(terminalToolPolicy, terminalWriterExecutions);
-      const escalation = terminalWriterRetryIsExhausted(terminalWriterAttempt)
+      const escalation = !writerRejection && terminalWriterRetryIsExhausted(terminalWriterAttempt)
         ? createTerminalWriterEscalation({
             writerToolName: terminalToolPolicy.writerToolName,
             attempt: terminalWriterAttempt,
@@ -396,6 +409,7 @@ export async function executeRemoteTaskAttempt(input: {
               ...(terminalWriterFailureMessage.includes("did not honor the required writer tool-call contract")
                 ? { noncompliance: "prose-without-required-writer" }
                 : {}),
+              ...(writerRejection ? { writerRejection } : {}),
             },
             ...(escalation ? { terminalWriterEscalation: escalation } : {}),
           },
@@ -412,12 +426,22 @@ export async function executeRemoteTaskAttempt(input: {
           resumable: escalation ? false : true,
           waitReason: escalation
             ? terminalWriterEscalationWaitReason(escalation)
+            : writerRejection
+            ? TERMINAL_WRITER_REJECTED_WAIT_REASON
             : "missing-terminal-writer",
           content: remoteTaskContent(
             escalation ? terminalWriterEscalationMessage(escalation) : terminalWriterFailureMessage,
           ),
           ...(escalation
             ? { structuredContent: terminalWriterEscalationStructuredContent(escalation) }
+            : writerRejection
+            ? {
+                structuredContent: terminalWriterRejectionStructuredContent(
+                  terminalToolPolicy.writerToolName,
+                  terminalWriterAttempt,
+                  writerRejection,
+                ),
+              }
             : {}),
           executedToolCount: result.executedTools?.length ?? 0,
           isError: false,

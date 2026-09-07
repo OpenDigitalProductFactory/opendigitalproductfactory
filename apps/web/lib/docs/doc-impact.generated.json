@@ -564,7 +564,8 @@
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
-      "docs/architecture/backlog-and-planning-runbook.md"
+      "docs/architecture/backlog-and-planning-runbook.md",
+      "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1158,6 +1159,9 @@
     "apps/web/lib/work-management/coworker-engagement-case-projection.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/lib/work-management/delivery-shapes.ts": [
+      "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -1282,6 +1286,10 @@
     ],
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
+    ],
+    "dpf-reinstall.ps1": [
+      "docs/install/windows.md",
+      "docs/operations/disaster-recovery.md"
     ],
     "dpf-start.ps1": [
       "docs/runbooks/bet5-windows-self-upgrade.md"
@@ -1740,6 +1748,7 @@
     ],
     "scripts/fresh-install.ps1": [
       "docs/install/scratch-install-rehearsal.md",
+      "docs/operations/disaster-recovery.md",
       "docs/testing/archetype-audit-plan.md"
     ],
     "scripts/gate-worktree.mjs": [
@@ -2707,6 +2716,10 @@
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
     ],
+    "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
+      "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
+      "apps/web/lib/work-management/delivery-shapes.ts"
+    ],
     "docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md": [
       "scripts/check-no-native-dialogs.mjs"
     ],
@@ -2778,6 +2791,9 @@
       "apps/web/scripts/issue-edge-bootstrap-token.ts",
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
+    "docs/install/windows.md": [
+      "dpf-reinstall.ps1"
+    ],
     "docs/install/worktree-janitor-schedule.md": [
       "scripts/install-worktree-janitor-schedule.sh",
       "scripts/worktree-janitor.mjs"
@@ -2820,8 +2836,10 @@
     "docs/operations/disaster-recovery.md": [
       "docker-compose.dev-against-live-db.yml",
       "docker-compose.yml",
+      "dpf-reinstall.ps1",
       "packages/db/src/seed-platform-backup.ts",
       "scripts/backup-postgres.sh",
+      "scripts/fresh-install.ps1",
       "scripts/restore-postgres.sh"
     ],
     "docs/operations/install.md": [

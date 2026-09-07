@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "show the rolling-week break-fix share as a sub-label on the existing Governance card and flag it above 20%, instead of a new card, section or page",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/WorkforceNowShell.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/platform/ai/right-now": {
+        "defaultVisibleWords": 172,
+        "leadBandWords": 0,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  },
+  "notes": {
+    "routeMeasurement": "/platform/ai/right-now has no row in route-budget-baseline.json, so the rendered sweep has never adjudicated it. Numbers come from rendering WorkforceNowShell with the fixture in apps/web/components/platform/WorkforceNowShell.uxbudget.test.tsx (nine items closed this week, three declared break-fix, so the share reads 33% and the flag is on) and measuring with lib/ux-budget's measureUxBudget plus axe-core. Reading grade measured 2.6. Four more words than the 2026-09-02 measurement of the same shell, all in the one sub-label.",
+    "fit": "Design 2026-09-02 §4: the share of break-fix among merged work is a Right Now / governance signal; above 20% in a rolling week it is a finding, not a number. The Governance card already carries the two governance gaps (quiet coworkers, coworkers without an owner) as value + sub-label + warning flag; the share joins that sub-label only when at least one item closed in the week, and the card's existing flag turns on above the threshold. No new navigation, form, control, or primary action.",
+    "failureState": "With nothing closed in the week the sub-label is unchanged, so an empty week reads as an empty week rather than 0% break-fix.",
+    "theme": "No new styles; the Kpi primitive's existing flag treatment (--dpf-warning) is reused."
+  }
+}

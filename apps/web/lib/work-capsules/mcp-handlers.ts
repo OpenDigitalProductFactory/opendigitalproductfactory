@@ -206,7 +206,6 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
-
   const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     include: {
@@ -214,6 +213,7 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
         orderBy: { recordedAt: "desc" },
         take: 25,
       },
+      taskRun: { select: { taskRunId: true, status: true } },
     },
   });
 
@@ -224,12 +224,12 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
       message: `Work Capsule ${capsuleId} not found.`,
     };
   }
-
+  const { projectWorkroomRecovery } = await import("./workroom-recovery-projection");
   return {
     success: true,
     entityId: capsule.capsuleId,
     message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule },
+    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule) } },
   };
 }
 

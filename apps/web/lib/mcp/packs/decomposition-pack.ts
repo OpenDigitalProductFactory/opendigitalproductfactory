@@ -129,12 +129,12 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "record_plan_backlog_coverage",
-    description: "Write plan-coverage v2 after validating that every independently shippable deliverable maps to a live BacklogItem, has four-way traceability, and is bound to one provider-verified immutable plan blob whose digest the server derives. Missing mappings, stale artifacts, incomplete traceability, dependency cycles, and invalid atomic claims fail without writing a receipt.",
+    description: "Write plan-coverage v2 after validating that every independently shippable deliverable maps to a live BacklogItem, has four-way traceability, and is bound to one provider-verified immutable plan blob whose digest the server derives. For profile=fix, the immutable ordered fix design under docs/superpowers/specs may serve as the atomic coverage artifact. The server derives the authoritative profile and validates the path; missing mappings, stale artifacts, incomplete traceability, dependency cycles, and invalid atomic claims fail without writing a receipt.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "Umbrella BacklogItem ID (BI-*)." },
-        planPath: { type: "string", description: "Repository-relative implementation plan path." },
+        planPath: { type: "string", description: "Repository-relative implementation plan path, or the canonical ordered fix design path when the server-authoritative profile is fix." },
         planArtifactRef: {
           type: "object",
           description: "Immutable repository plan locator. The server resolves and stores its digest.",
@@ -180,7 +180,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         itemId: { type: "string", description: "Umbrella BacklogItem ID (BI-*)." },
-        planPath: { type: "string", description: "Repository-relative implementation plan path." },
+        planPath: { type: "string", description: "Repository-relative implementation plan path, or the canonical ordered fix design path used by an existing fix-profile receipt." },
         receiptId: { type: "string", description: "BacklogItemActivity receipt returned when coverage was recorded." },
       },
       required: ["itemId", "planPath", "receiptId"],
@@ -303,9 +303,7 @@ async function checkPlanBacklogCoverageTool(params: Record<string, unknown>): Pr
   if (!itemId.startsWith("BI-")) {
     return { success: false, error: "invalid_itemId", message: "itemId must use the BI-* format." };
   }
-  if (!planPath.startsWith("docs/superpowers/plans/") || !planPath.endsWith(".md")) {
-    return { success: false, error: "invalid_plan_path", message: "planPath must name a Markdown plan under docs/superpowers/plans/." };
-  }
+  if (!planPath) return { success: false, error: "invalid_plan_path", message: "planPath is required." };
   if (!receiptId) {
     return { success: false, error: "invalid_receipt", message: "receiptId is required." };
   }
@@ -383,13 +381,7 @@ async function recordPlanBacklogCoverageTool(
   if (!itemId.startsWith("BI-")) {
     return { success: false, error: "invalid_itemId", message: "itemId must use the BI-* format." };
   }
-  if (!planPath.startsWith("docs/superpowers/plans/") || !planPath.endsWith(".md")) {
-    return {
-      success: false,
-      error: "invalid_plan_path",
-      message: "planPath must name a Markdown plan under docs/superpowers/plans/.",
-    };
-  }
+  if (!planPath) return { success: false, error: "invalid_plan_path", message: "planPath is required." };
   if (decision !== "decomposed" && decision !== "atomic") {
     return { success: false, error: "invalid_decision", message: "decision must be decomposed or atomic." };
   }

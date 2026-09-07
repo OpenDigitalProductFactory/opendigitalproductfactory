@@ -14,6 +14,7 @@ import {
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
+import { isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
 
 export const WORKROOM_SHAPE_CONFORMANCE_DEVIATIONS = [
   "unresolved_work_shape",
@@ -338,7 +339,9 @@ export function evaluateWorkroomShapeConformance(
     input.proposedStageKey &&
     input.currentStageKey &&
     proposedIndex === currentIndex &&
-    input.receipts.some((receipt) => receipt.stageKey === input.currentStageKey)
+    input.receipts.some((receipt) =>
+      isCompletingWorkroomDriveReceipt(receipt, input.currentStageKey!),
+    )
   ) {
     deviations.push({
       code: "out_of_order_stage",
@@ -357,7 +360,9 @@ export function evaluateWorkroomShapeConformance(
 
   if (proposedIndex > 0) {
     const prior = input.definition.stages[proposedIndex - 1];
-    const hasReceipt = input.receipts.some((receipt) => receipt.stageKey === prior.key);
+    const hasReceipt = input.receipts.some((receipt) =>
+      isCompletingWorkroomDriveReceipt(receipt, prior.key),
+    );
     if (!hasReceipt) {
       deviations.push({
         code: "missing_prerequisite_receipt",

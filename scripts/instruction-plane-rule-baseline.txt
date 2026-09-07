@@ -13,6 +13,7 @@ docs/founder-kernel/wiki/principles/db-fallback-explicit.md	DB fallback must be 
 docs/founder-kernel/wiki/principles/dco-sign-off-required.md	An enforcement refusal stops work unless a checked-in override records operator 
 docs/founder-kernel/wiki/principles/decisions-belong-to-their-scope.md	WWMD vs WWWD — which decision surface governs.
 docs/founder-kernel/wiki/principles/design-research-required.md	Every new feature spec must include a "Research & Benchmarking" section before f
+docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md	Declare the delivery shape at the claim; gates are proportional to it.
 docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md	Governance must earn its cost.
 docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md	The canonical runtime is the only source of runtime truth.
 docs/founder-kernel/wiki/principles/keep-root-clone-as-merge-worktree.md	Keep the root clone as the merge/release worktree

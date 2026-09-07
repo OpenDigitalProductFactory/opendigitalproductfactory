@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildBacklogRecoveryBundle,
+  buildWorkroomCaptureRecord,
   parseBacklogRecoveryBundle,
   type BacklogCaptureEpicRow,
   type BacklogCaptureItemRow,
+  type WorkroomCaptureRecord,
+  type WorkroomCaptureRow,
 } from "../src/backlog-recovery-bundle";
 
 const CAPTURED_AT = "2026-08-22T10:00:00.000Z";
@@ -236,5 +239,72 @@ describe("payload sanitisation", () => {
     });
     const payload = result.bundle?.items[0]?.activities[0]?.payload;
     expect(payload).toEqual({ note: "kept", nested: { detail: "also kept" } });
+  });
+});
+
+describe("buildWorkroomCaptureRecord", () => {
+  function room(overrides: Partial<WorkroomCaptureRow> = {}): WorkroomCaptureRow {
+    return {
+      capsuleId: "WC-00000001",
+      title: "Work on BI-TEST0001",
+      objective: "Claim-at-start binding for BI-TEST0001",
+      status: "working",
+      source: "external-adoption",
+      executorKind: "claude-desktop",
+      executorRef: "worktree:D:/DPF-worktrees/test",
+      backlogItemId: "BI-TEST0001",
+      epicId: "EP-TEST0001",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      baseBranch: "main",
+      baseSha: null,
+      headBranch: "fix/test",
+      headSha: "abc123",
+      worktreePath: "D:/DPF-worktrees/test",
+      pullRequestUrl: null,
+      pullRequestNumber: null,
+      contributionMode: "private",
+      branchTaxonomy: "fix",
+      idempotencyKey: null,
+      scopeClaims: [],
+      workspaceState: {},
+      verificationState: {},
+      leaseHolderPrincipalId: "principal-1",
+      createdAt: new Date("2026-09-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-09-02T00:00:00.000Z"),
+      lastSyncedAt: null,
+      archivedAt: null,
+      activities: [],
+      ...overrides,
+    };
+  }
+
+  it("keeps every Workroom, counts the branch-bound and open ones, and sorts deterministically", () => {
+    const record = buildWorkroomCaptureRecord(
+      [
+        room({ capsuleId: "WC-B", status: "abandoned", headBranch: null }),
+        room({
+          capsuleId: "WC-A",
+          activities: [
+            { id: "act-2", kind: "evidence", summary: "later", payload: {}, recordedAt: new Date("2026-09-02T00:00:00.000Z") },
+            { id: "act-1", kind: "claim", summary: "earlier", payload: { branch: "fix/test" }, recordedAt: new Date("2026-09-01T00:00:00.000Z") },
+          ],
+        }),
+      ],
+      CAPTURED_AT,
+    );
+
+    expect(record.schemaVersion).toBe(1);
+    expect(record.capturedAt).toBe(CAPTURED_AT);
+    expect(record.workroomCount).toBe(2);
+    expect(record.boundBranchCount).toBe(1);
+    expect(record.openCount).toBe(1);
+    expect(record.workrooms.map((r) => r.capsuleId)).toEqual(["WC-A", "WC-B"]);
+    expect(record.workrooms[0]?.activities.map((a) => a.id)).toEqual(["act-1", "act-2"]);
+    expect(record.workrooms[0]?.createdAt).toBe("2026-09-01T00:00:00.000Z");
+    expect(record.workrooms[1]?.headBranch).toBeNull();
+    // A JSON round-trip loses nothing the rebind slice will need.
+    const parsed = JSON.parse(JSON.stringify(record)) as WorkroomCaptureRecord;
+    expect(parsed.workrooms[0]?.worktreePath).toBe("D:/DPF-worktrees/test");
+    expect(parsed.workrooms[0]?.activities[0]?.payload).toEqual({ branch: "fix/test" });
   });
 });

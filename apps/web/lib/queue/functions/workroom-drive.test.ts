@@ -154,6 +154,33 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     expect(fx.persist.mock.calls[0]?.[0]?.activityKind).toBe("workroom-drive-attention");
   });
 
+  it("does not re-dispatch the same agent stage when the prior tick produced no completing receipt", async () => {
+    const fx = effects();
+    const now = new Date("2026-09-01T00:00:00.000Z");
+    const first = await runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
+    expect(first.dispatched).toBe(1);
+    const snapshot = fx.persist.mock.calls[0]?.[0]?.snapshot as Record<string, unknown>;
+    expect(snapshot.action).toBe("dispatch_agent");
+    const second = await runWorkroomDriveJob(now, {
+      listRooms: async () => [room({
+        workspaceState: { workroomDrive: snapshot },
+        currentStageKey: typeof snapshot.stageKey === "string" ? snapshot.stageKey : "sweep",
+      })],
+      effects: fx,
+    });
+    expect(second.dispatched).toBe(0);
+    expect(second.skipped).toBe(1);
+    expect(fx.upsertAgentTask).toHaveBeenCalledTimes(1);
+    const secondSnapshot = fx.persist.mock.calls.at(-1)?.[0]?.snapshot as Record<string, unknown>;
+    expect(secondSnapshot).toMatchObject({
+      action: "pause",
+      reason: "executor_writeback_unavailable",
+    });
+    expect(secondSnapshot.receipts).toEqual(
+      expect.arrayContaining([{ stageKey: snapshot.stageKey, kind: "blocked" }]),
+    );
+  });
+
   it("contains delivery notification reconciliation failure after preserving the drive result", async () => {
     const fx = effects();
     const reconcileNotifications = vi.fn().mockRejectedValue(new Error("notification unavailable"));

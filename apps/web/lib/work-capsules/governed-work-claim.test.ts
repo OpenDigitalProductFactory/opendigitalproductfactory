@@ -199,6 +199,53 @@ describe("claimGovernedBacklogWorkspace", () => {
     expect(result.data.recovery.reviewerRoutes).toEqual([]);
     expect(JSON.stringify(result.data.recovery)).toContain("baseSha");
     expect(JSON.stringify(result.data.recovery)).toContain("adopt_worktree(headBranch, baseSha, headSha)");
+    expect(result.data.recovery.identityRepair).toEqual({
+      toolName: "adopt_worktree",
+      missingFields: ["baseSha"],
+      retainedFields: {
+        repositoryFullName: input.repositoryFullName,
+        headBranch: input.headBranch,
+        worktreePath: input.worktreePath,
+        headSha: "1111111111111111111111111111111111111111",
+      },
+      packet: expect.objectContaining({
+        repositoryFullName: input.repositoryFullName,
+        headBranch: input.headBranch,
+        worktreePath: input.worktreePath,
+        backlogItemId: input.backlogItemId,
+        baseBranch: "main",
+        headSha: "1111111111111111111111111111111111111111",
+      }),
+    });
+  });
+
+  it("repairs a missing head while preserving the valid base and branch identity", async () => {
+    const db = database();
+    const discover = vi.fn();
+    (db as unknown as { workroom: { findMany: ReturnType<typeof vi.fn> } }).workroom.findMany
+      .mockResolvedValueOnce([{
+        capsuleId: "WC-ENTRY",
+        repositoryFullName: input.repositoryFullName,
+        headBranch: input.headBranch,
+        headSha: null,
+        baseSha: "3333333333333333333333333333333333333333",
+        backlogItemId: "BI-ENTRY",
+      }]);
+    const result = await claimGovernedBacklogWorkspace({
+      db, input, actor, workIntent: null,
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact: discover },
+    });
+    expect(result.ok).toBe(false);
+    expect(discover).not.toHaveBeenCalled();
+    if (result.ok) throw new Error("Incomplete identity must not permit implementation");
+    expect(result.data.recovery.identityRepair).toMatchObject({
+      toolName: "adopt_worktree",
+      missingFields: ["headSha"],
+      retainedFields: { baseSha: "3333333333333333333333333333333333333333" },
+      packet: { baseSha: "3333333333333333333333333333333333333333" },
+    });
+    expect(result.data.recovery.identityRepair?.packet).not.toHaveProperty("headSha");
   });
 
   it("prefers a room bound to this item over one merely sharing its branch", async () => {

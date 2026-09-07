@@ -9,6 +9,61 @@ export type TerminalWriterEscalation = {
   observedAt: string;
 };
 
+/**
+ * BI-A57B6185: the governed writer WAS called and refused the packet. This is
+ * not a missing writer. The packet is wrong (stale head, malformed objective
+ * link, ...) and the writer's own error names the fix. It must never count as
+ * an "omitted" attempt, never escalate to select-different-reviewer, and must
+ * reach the caller verbatim.
+ */
+export type TerminalWriterRejection = {
+  schemaVersion: 1;
+  error: string;
+  message: string;
+  observedAt: string;
+};
+
+export const TERMINAL_WRITER_REJECTED_WAIT_REASON = "terminal-writer-rejected";
+
+type WriterExecutionRecord = {
+  name: string;
+  result: { success: boolean; error?: string; message?: string };
+};
+
+/** Last failed call of the writer, as a rejection, or null when the writer never ran or succeeded. */
+export function lastTerminalWriterRejection(
+  writerToolName: string,
+  records: readonly WriterExecutionRecord[],
+  observedAt = new Date().toISOString(),
+): TerminalWriterRejection | null {
+  const last = records.filter((record) => record.name === writerToolName).at(-1);
+  if (!last || last.result.success) return null;
+  return {
+    schemaVersion: 1,
+    error: nonEmptyString(last.result.error) ?? "writer-rejected",
+    message: nonEmptyString(last.result.message) ?? "The writer returned no message.",
+    observedAt,
+  };
+}
+
+export function terminalWriterRejectionMessage(writerToolName: string, rejection: TerminalWriterRejection): string {
+  return `${writerToolName} was called and rejected the packet: ${rejection.error}: ${rejection.message} Fix the packet and resume the same TaskRun; switching reviewer will not help.`;
+}
+
+export function terminalWriterRejectionStructuredContent(
+  writerToolName: string,
+  attempt: number,
+  rejection: TerminalWriterRejection,
+) {
+  return {
+    error: "terminal_writer_rejected",
+    attempt,
+    writerToolName,
+    writerRejection: { error: rejection.error, message: rejection.message },
+    action: "fix-packet-and-resume",
+  };
+}
+
 function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -63,6 +118,10 @@ export function recoverTerminalWriterEscalation(value: unknown): TerminalWriterE
   const wait = progress["terminalWriterWait"];
   if (!wait || typeof wait !== "object" || Array.isArray(wait)) return null;
   const waitRecord = wait as Record<string, unknown>;
+  // A recorded rejection is a packet problem, not an omitted writer: never
+  // manufacture a retry-exhausted escalation from it on replay (BI-A57B6185).
+  const rejection = waitRecord["writerRejection"];
+  if (rejection && typeof rejection === "object" && !Array.isArray(rejection)) return null;
   const writerToolName = nonEmptyString(waitRecord["writerToolName"]);
   const attempt = Number(waitRecord["attempt"]);
   if (

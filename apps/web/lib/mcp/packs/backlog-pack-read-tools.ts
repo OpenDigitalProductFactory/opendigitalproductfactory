@@ -7,6 +7,7 @@ const INITIATIVE_READINESS_ACTIVITY_KINDS = [
   "initiative_scope_baseline",
   "plan_backlog_coverage",
   "initiative_readiness_decision",
+  "break_fix_declared",
 ];
 
 function addDeferralFilters(where: Record<string, unknown>, params: Record<string, unknown>): ToolResult | null {
@@ -463,6 +464,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
     data: {
       itemId: item.itemId,
+      workShape: boundWorkShape,
       title: item.title,
       status: item.status,
       type: item.type,
