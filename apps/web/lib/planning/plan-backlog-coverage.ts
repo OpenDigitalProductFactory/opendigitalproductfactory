@@ -523,7 +523,7 @@ export async function checkPlanBacklogCoverage(args: {
   };
   const parent = await db.backlogItem.findUnique({
     where: { itemId: args.itemId },
-    select: { id: true, itemId: true, effortSize: true },
+    select: { id: true, itemId: true, effortSize: true, workType: true },
   });
   if (!parent) {
     return { ok: false, valid: false, code: "backlog-item-not-found", error: `BacklogItem ${args.itemId} was not found.` };
@@ -603,6 +603,7 @@ export async function checkPlanBacklogCoverage(args: {
         objectiveIds: baseline.objectiveIds,
         acceptanceIds: baseline.acceptanceIds,
       } : undefined,
+      allowFixDesignArtifact: deriveAuthoritativeReadinessProfile(parent) === "fix",
     });
     if (!governed.ok) return { ok: false, valid: false, code: "receipt-invalid", error: governed.error };
     return { ok: true, valid: true, decision: governed.decision, mappedItemIds: governed.mappedItemIds };
