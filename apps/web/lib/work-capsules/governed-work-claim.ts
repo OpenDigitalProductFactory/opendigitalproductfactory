@@ -129,6 +129,7 @@ async function resolveRecoveryOutsideTransaction(args: {
   actor: WorkCapsuleActor;
   pending: PendingRecovery;
   discover: DiscoverCanonicalArtifact;
+  input: ClaimInput;
 }): Promise<InitiativeReviewerRecovery> {
   const { pending } = args;
   const canonicalArtifact: InitiativeRecoveryCanonicalArtifact = pending.dispatchContext && pending.baseSha
@@ -142,7 +143,7 @@ async function resolveRecoveryOutsideTransaction(args: {
       nextAction: `The workroom lacks ${!pending.baseSha ? "baseSha" : "a valid reviewer dispatch identity (including headSha)"}, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, baseSha, headSha), supplying full immutable commit SHAs for both fields and preserving any valid recorded identity, then retry.`,
     };
 
-  return resolveInitiativeReviewerRecovery({
+  const recovery = await resolveInitiativeReviewerRecovery({
     decision: pending.decision,
     currentAgentId: args.actor.agentId,
     db: args.db,
@@ -155,6 +156,36 @@ async function resolveRecoveryOutsideTransaction(args: {
       : { resolved: false, nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review." },
     expectedCurrentBaselineId: pending.baselineId,
   });
+  if (!pending.baseSha || !pending.dispatchContext?.headSha) {
+    const missingFields = [
+      ...(!pending.baseSha ? ["baseSha" as const] : []),
+      ...(!pending.dispatchContext?.headSha ? ["headSha" as const] : []),
+    ];
+    recovery.identityRepair = {
+      toolName: "adopt_worktree",
+      missingFields,
+      retainedFields: {
+        repositoryFullName: args.input.repositoryFullName,
+        headBranch: args.input.headBranch,
+        worktreePath: args.input.worktreePath,
+        ...(pending.dispatchContext?.headSha ? { headSha: pending.dispatchContext.headSha } : {}),
+      },
+      packet: {
+        title: args.input.title ?? `Work on ${args.input.backlogItemId}`,
+        objective: args.input.objective ?? `Claim-at-start binding for ${args.input.backlogItemId}`,
+        repositoryFullName: args.input.repositoryFullName,
+        headBranch: args.input.headBranch,
+        worktreePath: args.input.worktreePath,
+        backlogItemId: args.input.backlogItemId,
+        baseBranch: args.input.baseBranch ?? "main",
+        ...(pending.baseSha ? { baseSha: pending.baseSha } : {}),
+        ...(pending.dispatchContext?.headSha ? { headSha: pending.dispatchContext.headSha } : {}),
+        ...(args.input.executorKind ? { executorKind: args.input.executorKind } : {}),
+        ...(args.input.executorRef ? { sessionRef: args.input.executorRef } : {}),
+      },
+    };
+  }
+  return recovery;
 }
 
 class CapsuleIdentityMismatch extends Error {
@@ -516,6 +547,7 @@ export async function claimGovernedBacklogWorkspace(args: {
           actor: args.actor,
           pending: pendingRecovery,
           discover: args.dependencies?.discoverCanonicalArtifact ?? discoverCanonicalArtifactFromProvider,
+          input: args.input,
         }),
       },
     };

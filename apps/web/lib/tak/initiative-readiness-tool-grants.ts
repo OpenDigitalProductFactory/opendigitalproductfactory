@@ -84,6 +84,12 @@ export type InitiativeReviewBindingPacket = {
 };
 
 export type InitiativeReviewerRecovery = {
+  identityRepair?: {
+    toolName: "adopt_worktree";
+    missingFields: Array<"baseSha" | "headSha">;
+    retainedFields: Record<string, string>;
+    packet: Record<string, string>;
+  };
   reviewerRoutes: Array<{
     accountableRole: string;
     toolName: string;

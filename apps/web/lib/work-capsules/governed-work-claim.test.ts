@@ -199,6 +199,24 @@ describe("claimGovernedBacklogWorkspace", () => {
     expect(result.data.recovery.reviewerRoutes).toEqual([]);
     expect(JSON.stringify(result.data.recovery)).toContain("baseSha");
     expect(JSON.stringify(result.data.recovery)).toContain("adopt_worktree(headBranch, baseSha, headSha)");
+    expect(result.data.recovery.identityRepair).toEqual({
+      toolName: "adopt_worktree",
+      missingFields: ["baseSha"],
+      retainedFields: {
+        repositoryFullName: input.repositoryFullName,
+        headBranch: input.headBranch,
+        worktreePath: input.worktreePath,
+        headSha: "1111111111111111111111111111111111111111",
+      },
+      packet: expect.objectContaining({
+        repositoryFullName: input.repositoryFullName,
+        headBranch: input.headBranch,
+        worktreePath: input.worktreePath,
+        backlogItemId: input.backlogItemId,
+        baseBranch: "main",
+        headSha: "1111111111111111111111111111111111111111",
+      }),
+    });
   });
 
   it("prefers a room bound to this item over one merely sharing its branch", async () => {
