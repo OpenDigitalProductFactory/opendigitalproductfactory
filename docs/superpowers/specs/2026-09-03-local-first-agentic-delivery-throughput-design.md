@@ -347,6 +347,179 @@ notation and [OMG SysML 2.0](https://www.omg.org/spec/SysML/2.0) for systems
 traceability, checked 2026-09-05. Reuse the existing DPF notation/EA stack and its
 benchmarking; this amendment adopts no external modeling tool or workflow engine.
 
+### 8.4 Execution-engine decision and evidence boundary
+
+**Decision:** harden the existing DPF engine on Inngest for this slice.
+`DI-515AD614CCF6` selected this option on 2026-09-06: composite 12.333,
+margin 2.158, high confidence, strong structured coverage, no commandment
+conflict, and `autonomyEligible=true`. Temporal scored 10.175; Camunda 8
+scored 8.844. The inputs are engineering estimates for this bounded change,
+not vendor performance measurements. Research and Use Standards (+0.882),
+Ship Real Functionality (+0.819), and Single Source of Truth (+0.689) support
+the selected option. The canonical ledger owns the scores and contribution audit.
+
+This extends the existing Inngest migration plan and sections 8.1–8.3; it does
+not implement a second scheduler. Reconsider if the restart, duplicate-delivery,
+or durable-wait acceptance cases cannot be met on the pinned deployment without
+building a competing execution engine. A successful consultation is not runtime
+verification. The decision can be revisited without changing Workroom identity.
+
+#### Research & Benchmarking
+
+Reviewed 2026-09-06 against vendor documentation; installed DPF source inspected
+at `729c017e7d6`. These are required mechanisms, not a claim that every DPF path
+already uses them correctly.
+
+| Concern | Harden DPF / existing Inngest | Temporal behind DPF adapter | Camunda 8 behind DPF adapter |
+| --- | --- | --- | --- |
+| Restart recovery | Existing journaled steps plus persisted TaskRun/AsyncInferenceOp reconciliation; repair gaps between them | Event-history replay and activity retries; move orchestration into deterministic workflows | Persisted process instances and reactivated jobs; translate recovery flow to executable BPMN |
+| Durable timers | Existing scheduled reconciliation and persisted next-wake timestamps; no client timer owns work | Persisted workflow timers survive worker/service outage [T1] | BPMN timer events; DPF still owns deadline/authority policy |
+| Concurrency and duplicate delivery | Atomic DB claims/fences at effect boundaries; do not rely on separate function concurrency limits | Task queues and workflow identity; activities can execute more than once [T2] | Job timeout can cause concurrent redelivery; workers must be idempotent [C1] |
+| External effects | Stable request identity; attach/read existing effect; ambiguous start becomes reconciliation, never blind retry | Same DPF effect adapter still required [T2] | Same DPF effect adapter still required [C1] |
+| Human approvals | Existing action envelopes and independent receipt writers; wait releases inference | Signals/updates wake workflow; DPF authorizes and records approval | BPMN user tasks; DPF approval authority must remain authoritative |
+| Bounded retries | Preserve three missing-writer attempts; persist aggregate successor budget and deadline | Explicit activity retry/timeouts plus aggregate workflow budget | Job retries/backoff and incidents plus aggregate process budget |
+| Cancellation | Persist intent; fence late results; reconcile provider cancellation acknowledgement | Workflow/activity cancellation must propagate into DPF effect adapters | Cancel instance/jobs; in-flight external effects still require reconciliation |
+| Version migration | Resolve exact key/version; preserve v1; deliberate migration only | Worker versioning and replay compatibility add deployment obligations [T3] | Deployed process versions and explicit instance mappings; unsupported migrations reject [C2] |
+| Observability | Join authoritative events/receipts through existing portal, EA and ShapeGraph | Temporal history is useful evidence; still needs DPF projection and freshness | Operate/process view useful; still needs DPF EA, authority and evidence joins |
+| Deployment burden | Existing services; harden established install/release contract | Additional service and worker lifecycle, persistence, backup and routing | Additional orchestration stack, deployment operations and commercial production entitlement [C3] |
+| Licensing | Retain current pinned dependencies; no new engine entitlement | Server MIT license; hosted service terms are separate [T4] | Current production license required; do not assume old Zeebe community terms [C3] |
+| Migration cost | Lowest estimated change reach: repair existing writers/readers | Drain or explicitly transfer Inngest recovery instances; maintain correlation during migration | Translate/version process definitions, integrate workers and approvals, drain old instances |
+
+[T1]: https://docs.temporal.io/workflow-execution/timers-delays
+[T2]: https://docs.temporal.io/activity-definition
+[T3]: https://docs.temporal.io/production-deployment/worker-deployments/worker-versioning
+[T4]: https://github.com/temporalio/temporal/blob/main/LICENSE
+[C1]: https://docs.camunda.io/docs/components/concepts/job-workers/
+[C2]: https://docs.camunda.io/docs/components/concepts/process-instance-migration/
+[C3]: https://docs.camunda.io/docs/reference/licenses/
+
+Inngest's [execution model](https://www.inngest.com/docs/learn/how-functions-are-executed)
+supports step memoization and retries. DPF adopts that existing mechanism;
+neither its documentation nor an engine swap guarantees idempotent external effects.
+No new engine is installed for visualization.
+
+If an external-engine successor is later selected, DPF remains the execution
+authority for admission, grants, independent review, approvals and closeout.
+The engine owns scheduling/history only. Correlate installation + Workroom +
+cycle + shape version + immutable review digest to workflow/process instance;
+correlate TaskRun and AsyncInferenceOp to individual attempts. Replace the
+selected Inngest recovery function and its retry/timer logic, never run both as
+writers. Drain existing runs or transfer a sealed checkpoint under an atomic
+ownership fence. Reconcile engine success against DPF receipts before advancing;
+receipt committed but engine acknowledgement lost resumes from the receipt.
+Unknown external effect outcome blocks for reconciliation rather than resubmission.
+
+### 8.5 Trace baseline and connected model
+
+The real room `WC-4D4BB6EC` was read through MCP on 2026-09-06. It is an
+external-adoption room for `BI-DC0F14E0`, branch `doc/wwmd-decision-value`,
+head `67f368470b1321fbd20596728c9b3f68b92af39c`. Its recorded review first waited
+on local-CI capacity, later recorded independent semantic review, and its
+activities cite protected PR #5081 merge at `bb94b132` and subsequent release
+verification. Those are recorded evidence claims; this slice has not replayed
+that delivery. The room itself remains `ready`, with empty `scopeClaims`, null
+TaskRun/build/PR links and an expired lease. Thus verified merge evidence and
+current coordination state disagree. Do not infer automatic recovery or closeout.
+
+Source findings at the inspected main:
+
+- `adopt-worktree-handler.ts` omits `workShape`; adoption create omits shape
+  claims; reuse ignores scope. Ordinary `createWorkCapsule` already writes claims.
+- `claimCapsuleScope`/`releaseCapsuleScope` serialize only parsed ownership
+  claims, discarding collaboration/activity/posture entries.
+- `workroom-drive.ts` selects shaped rooms and filters unresolved versions out.
+  Its live lease checks expiry before an unconditional write; scheduled and
+  run-now functions have separate concurrency configurations.
+- `mcp-task-terminal-writer-escalation.ts` defines three attempts and a typed
+  request to select another reviewer/provider. That message is not successor
+  dispatch evidence. AsyncInferenceOp already supplies immutable request identity,
+  checkpoints, start fences and cancellation state; extend that contract.
+- `build-pr-delivery-reconcile.ts` requires FeatureBuild and PR linkage; it
+  cannot settle this external room as currently recorded.
+- EA `reconcile-process.ts` registers envelope and backlog state machines only.
+  `process-extract.ts` uses states as nodes; it does not establish executable
+  BPMN conformance. MCP's EA mirror reported 21 Workroom-related elements and a
+  last reconcile at 2026-09-05T03:02:23.117Z; absence after that cutoff is unknown.
+
+Keep definition, occurrence and evidence identities separate. Enterprise links
+reuse EA elements, value-stream teams, capabilities/services and outcome anchors.
+Coordination reuses WorkroomRelation and participant assignments. Execution uses
+the resolved version, cycle, TaskRun, provider operation and gate receipts.
+Evidence links retain source IDs, revision/digest, observed time and source status.
+Projection records carry their extractor version and source revision; missing
+joins and stale facts appear explicitly and feed existing EaConformanceIssue.
+
+### 8.6 Enterprise-to-evidence interaction and archetype semantics
+
+Extend the EA canvas, `WorkroomShape`, process graph and shared UI primitives.
+Enterprise shows outcomes, value streams, capabilities, services and observed
+health. Selecting an operation opens coordination: stable grouped Workrooms,
+owners, dependencies, queues and bottlenecks. Selecting a room opens execution;
+selecting a step opens evidence with the following six answers: where are we,
+why are we here, what is permitted next, who owns it, which evidence supports
+it, and which related work is affected. Missing answers say unknown and identify
+the missing source; intended stages cannot masquerade as observed execution.
+
+Use owner swimlanes, stable keys/layout, restrained status icons and theme tokens.
+Search/filter state and selection live in navigation context with breadcrumbs;
+back navigation restores the previous selection. Provide a keyboard-operable
+list using the same projection, visible focus, readable text, reduced motion and
+responsive layout. No decorative progress animation or estimated percentages.
+Show source freshness and loading/partial/failure states. Simulation is an
+explicitly labeled separate mode and cannot write runtime or acceptance evidence.
+
+Conway's law is addressed by the existing
+[coordinated Workrooms design](2026-09-03-coordinated-workrooms-design.md): expose
+the actual ownership/delegation structure, not an invented organizational chart.
+Reuse `contains` for structural nesting, `spawned-from` for provenance and
+`depends-on`/`blocks` for scheduling constraints. Containment never grants authority,
+implies sequential execution, or marks a parent complete when a child finishes.
+Each child retains its outcome, owner, evidence and independent approval duties.
+Show parent/child breadcrumb, blocked dependencies and escalation destination;
+detect cycles and paginate large trees without silently omitting children.
+
+Use the platform/archetype/instance split from that design. Platform owns execution
+invariants; archetypes own applicable standing rooms, specialist roster, evidence
+and policy requirements; instances bind actual people, thresholds and authority.
+Source-delivery reviewer recovery is a platform operation even on the current
+Pet Rescue development install. Do not reclassify that organization to software
+development or make rescue, veterinary, farm/ranch and manufacturing operations
+inherit PR gates. Inspect their existing profiles and requirements before asserting
+coverage; label unsupported archetype mappings rather than claiming universal fit.
+
+BPMN represents prescribed tasks, explicit gateways, waits, messages and ownership
+lanes. [CMMN 1.1](https://www.omg.org/spec/CMMN/1.1/) informs adaptive case work:
+discretionary activities and milestones remain outcome-constrained, not a forced
+sequence of agent thoughts. DMN semantics apply to explicit decision tables, with
+rule/version/input/result evidence; WWMD scoring is not automatically a DMN model.
+SysML requirements, allocations, interfaces and verification links reuse EA stable
+source keys. Supported extraction must be documented per construct. Arbitrary
+BPMN XML execution, compensation/event subprocesses, CMMN execution, DMN execution
+and SysML textual round-trip remain unsupported until separately implemented and
+verified. A graph using familiar symbols establishes none of those claims.
+
+### 8.7 Reviewer slice objectives and acceptance contract
+
+**OBJ-EXEC-01:** Persist and read back exact activity/collaboration shapes without losing scope or ownership.
+
+**OBJ-EXEC-02:** Complete independent reviewer recovery through durable server-owned execution with bounded effects.
+
+**OBJ-EXEC-03:** Navigate enterprise, nested coordination, actual execution and evidence with truthful state.
+
+**OBJ-EXEC-04:** Preserve archetype requirements, versioned definitions and architecture/execution traceability.
+
+| Acceptance | Objective | Verifiable outcome |
+| --- | --- | --- |
+| AC-EXEC-01 | OBJ-EXEC-01 | Creation, update, unchanged replay, claim/release and explicit version migration preserve exact shapes and unrelated claims; concurrent ownership and late writers are fenced. |
+| AC-EXEC-02 | OBJ-EXEC-02 | Normal reviewer completion records the exact-revision receipt before readiness advances; TaskRun completion alone never approves a gate. |
+| AC-EXEC-03 | OBJ-EXEC-02 | Provider failure selects an eligible bounded retry/successor without a client; revoked authority or ambiguous external effect produces owned reconciliation. |
+| AC-EXEC-04 | OBJ-EXEC-02 | Restart during execution and duplicate delivery reuse durable identity and completed receipts without duplicate side effects. |
+| AC-EXEC-05 | OBJ-EXEC-02 | Approval wait consumes no inference; authorized resumption advances once; exhausted recovery stops with owner and next action. |
+| AC-EXEC-06 | OBJ-EXEC-03 | Running nonproduction portal demonstrates enterprise-to-evidence navigation and all six selected-step answers for normal, failed, waiting, exhausted and stale states. |
+| AC-EXEC-07 | OBJ-EXEC-03 | Keyboard/list, search/filter/back navigation, responsive themes and reduced motion pass; simulation and unknown/stale projections are explicit. |
+| AC-EXEC-08 | OBJ-EXEC-04 | Nested rooms preserve independent owners/outcomes/authority; applicable archetype requirements and unsupported BPMN/CMMN/DMN/SysML mappings are explicit. |
+| AC-EXEC-09 | OBJ-EXEC-04 | Versioned extractors link source, execution and evidence identities and report drift through existing conformance mechanisms. |
+
 ## 9. Delivery outcome scorecard
 
 The unit is a verified delivery slice and campaign, not an output token or commit. Preserve raw events and derive a versioned `DeliveryOutcomeObservation` projection.

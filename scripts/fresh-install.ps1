@@ -474,6 +474,10 @@ if (Test-Path $bootstrapScript) {
     Write-Warn "Agent toolchain bootstrap script missing at $bootstrapScript"
 }
 
+# Worktree hygiene (BI-5F4F0146): schedule the reaper + Defender exclusion, via the
+# shared helper every install surface calls. Best-effort; never fails the install.
+try { & (Join-Path $PSScriptRoot 'setup-worktree-hygiene.ps1') -RepoRoot $InstallRoot } catch { Write-Host "  Worktree hygiene step encountered an issue (non-fatal): $_" }
+
 Write-Host "========================================================"
 
 Write-Host ""

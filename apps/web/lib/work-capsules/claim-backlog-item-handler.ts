@@ -1,3 +1,4 @@
+import { adoptionScopePatch, scopeWriteWhere } from "./scope-input";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
 import { WORK_INTENTS, type WorkIntent } from "@/lib/work-capsules";
@@ -81,10 +82,13 @@ async function resolveClaimShape(args: {
 async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolution: DeliveryShapeResolution | null): Promise<void> {
   if (!resolution || (resolution.kind !== "declared" && resolution.kind !== "derived")) return;
   if (!db.workroom?.findUnique) return;
-  const row = await db.workroom.findUnique({ where: { capsuleId }, select: { scopeClaims: true } }) as { scopeClaims?: unknown } | null;
-  const existing = Array.isArray(row?.scopeClaims) ? row!.scopeClaims as unknown[] : [];
-  const preserved = existing.filter((entry) => !(entry && typeof entry === "object" && "workShape" in (entry as Record<string, unknown>)));
-  await db.workroom.update({ where: { capsuleId }, data: { scopeClaims: [...preserved, buildDeliveryShapeClaim(resolution)] } });
+  const row = await db.workroom.findUnique({ where: { capsuleId }, select: { scopeClaims: true, updatedAt: true } });
+  if (!row) throw new Error(`Work Capsule ${capsuleId} not found while binding its execution shape`);
+  const patch = adoptionScopePatch(row, { workShape: resolution.ref }, new Date());
+  if (!Array.isArray(patch.scopeClaims)) return;
+  const scopeClaims = patch.scopeClaims.map((entry: unknown) => entry && typeof entry === "object" && "workShape" in entry
+    ? { ...entry, ...buildDeliveryShapeClaim(resolution) } : entry);
+  await db.workroom.update({ where: scopeWriteWhere({ ...row, capsuleId }), data: { scopeClaims } });
 }
 
 export async function claimBacklogItemForWork(args: {

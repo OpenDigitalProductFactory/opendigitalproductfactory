@@ -589,6 +589,16 @@ describe("workspace Work Case loader", () => {
             recordedAt: new Date("2026-06-28T10:20:00.000Z"),
             recordedByAgentId: "AGT-BUILD",
           },
+          {
+            id: "ACT-REVIEW", workCapsuleId: "cap-row", kind: "evidence-recorded",
+            summary: "Review inconclusive: provider unavailable",
+            recordedAt: new Date("2026-06-28T10:21:00.000Z"), recordedByAgentId: "AGT-REVIEW",
+            payload: { kind: "verification", result: { decision: "inconclusive" } },
+          },
+          ...Array.from({ length: 19 }, (_, index) => ({
+            id: `ACT-LEASE-${index}`, workCapsuleId: "cap-row", kind: "lease-renewed",
+            summary: "Lease renewed", recordedAt: new Date("2026-06-28T10:19:00.000Z"),
+          })),
         ],
       },
     };
@@ -604,5 +614,12 @@ describe("workspace Work Case loader", () => {
     const entry = detail?.room?.activity.find((a) => a.summary === "Build started on the coding carrier");
     expect(entry?.sourceRef).toMatchObject({ kind: "work-capsule", id: "WC-7" });
     expect(entry?.actorRef?.actorKind).toBe("agent");
+    expect(detail?.room?.receipts).toContainEqual(expect.objectContaining({
+      summary: "Review inconclusive: provider unavailable", status: "observed",
+      rawRef: { table: "WorkroomActivity", id: "ACT-REVIEW" },
+      sourceRef: expect.objectContaining({ kind: "work-capsule", id: "WC-7" }),
+      actorRef: { actorKind: "agent", actorId: "AGT-REVIEW" },
+    }));
+    expect(detail?.room?.projection.sourceHealth).toBe("partial");
   });
 });

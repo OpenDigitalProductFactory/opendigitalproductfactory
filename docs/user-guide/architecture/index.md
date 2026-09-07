@@ -47,6 +47,16 @@ Use the AI Workforce area for everyday coworker discovery and work assignment.
 
 ## Following a Concern Across Views
 
+On **Workrooms**, expand **Coordination** to open an actual room. A plan's linked
+room count includes completed work; the coordination list shows open rooms from
+a bounded database read and reports when more exist. Missing value-stream links
+are shown explicitly. Select a plan's room link to narrow the operation first.
+
+Inside the room, select a process step to inspect its reason, next action, owner
+and evidence. **Operation** returns to the same architecture selection. Intended
+process and observed records remain separate: a graph alone does not establish
+BPMN execution or SysML conformance.
+
 Select an element on an architecture canvas and open **Architecture context** in
 the inspector. **Related viewpoints** lists the nearest views that explain the
 same element or a directly linked concern. Each link names the notation, target
