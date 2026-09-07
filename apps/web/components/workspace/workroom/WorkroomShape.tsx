@@ -72,16 +72,19 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
     </div>
     {graph.process ? <div className="text-[var(--dpf-muted)]">
       <p>Projection checked: {graph.process.readAt ?? "Freshness unknown"} · Latest evidence: {graph.process.lastEvidenceAt ?? "Unknown"}</p>
-      {graph.process.gaps.length ? <details open className="mt-2 rounded border border-[var(--dpf-border)] p-3">
+      {graph.process.gaps.length ? <details className="mt-2 rounded border border-[var(--dpf-border)] p-3">
         <summary className="cursor-pointer">Projection gaps ({graph.process.gaps.length})</summary>
         <ul className="mt-2 list-disc space-y-1 pl-5">{graph.process.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul>
       </details> : null}
     </div> : null}
     <div className="space-y-2"><h3 className="font-medium">Intended process</h3>
-      <FilterBar mode="client" value={filters} onChange={(next) => navigate(selected, layout, next)}
+      <details open={Boolean(filters.processQuery || filters.processState)}>
+        <summary className="min-h-11 cursor-pointer py-3">Search and filter steps</summary>
+        <FilterBar mode="client" value={filters} onChange={(next) => navigate(selected, layout, next)}
         className="[&_input]:min-h-11 [&_select]:min-h-11 [&_input]:text-sm [&_select]:text-sm"
         facets={[{ kind: "search", key: "processQuery", placeholder: "Search steps" },
           { kind: "select", key: "processState", label: "State", options: [{ value: "", label: "All states" }, ...Object.entries(STATE_LABEL).map(([value, label]) => ({ value, label }))] }]} />
+      </details>
       {!visibleStages.length ? <p>No matching steps</p> : null}
       <div className="overflow-x-auto pb-2">
         <ul ref={stepsRef} aria-label="Process steps" className={layout === "list" ? "space-y-2" : "flex min-w-max gap-3"}>
@@ -89,7 +92,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
             <Button variant="secondary" aria-pressed={selected === item.key} aria-controls={`${titleId}-inspection`} data-step-key={item.key}
               className={`min-h-20 w-full flex-col items-start text-left ${selected === item.key ? "outline-2 outline-[var(--dpf-accent)]" : ""}`}
               onClick={() => navigate(item.key)} onKeyDown={(event) => {
-                let target = index;
+                let target: number;
                 if (event.key === "ArrowRight" || event.key === "ArrowDown") target = Math.min(index + 1, visibleStages.length - 1);
                 else if (event.key === "ArrowLeft" || event.key === "ArrowUp") target = Math.max(index - 1, 0);
                 else if (event.key === "Home") target = 0;

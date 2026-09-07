@@ -60,6 +60,7 @@ describe("Workroom process inspection", () => {
 
   it("filters steps without losing selection or navigation context", () => {
     render(<WorkroomShape graph={graph} />);
+    fireEvent.click(screen.getByText("Search and filter steps"));
     fireEvent.click(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ }));
     fireEvent.change(screen.getByRole("searchbox", { name: "Search steps" }), { target: { value: "Prepare" } });
     expect(screen.queryByRole("button", { name: /2\.\s*Review.*Not verified/ })).not.toBeInTheDocument();
