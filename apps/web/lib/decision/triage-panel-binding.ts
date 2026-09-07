@@ -92,6 +92,32 @@ export function buildPanelBrief(input: {
  * run could not be convened at all — the conductor reports that as
  * panel-unavailable and writes nothing.
  */
+/** How long one panel may hold a sweep pass before it yields to the next. */
+const OUTCOME_WAIT_MS = 240_000;
+const OUTCOME_POLL_MS = 3_000;
+
+type OutcomeRow = { mergedRecommendation: string | null; consensusState: string | null } | null;
+
+/**
+ * Poll for the deliberation outcome rather than assuming it is already there.
+ * Returns null on timeout — an unfinished panel is not a silent empty verdict.
+ */
+async function awaitOutcome(
+  db: { deliberationOutcome: { findUnique: (args: never) => Promise<OutcomeRow> } },
+  deliberationRunId: string,
+): Promise<OutcomeRow> {
+  const deadline = Date.now() + OUTCOME_WAIT_MS;
+  for (;;) {
+    const found = await db.deliberationOutcome.findUnique({
+      where: { deliberationRunId },
+      select: { mergedRecommendation: true, consensusState: true },
+    } as never);
+    if (found) return found;
+    if (Date.now() >= deadline) return null;
+    await new Promise((resolve) => setTimeout(resolve, OUTCOME_POLL_MS));
+  }
+}
+
 export async function runGovernanceTriagePanel(input: {
   subject: TriageSubject;
   plan: StaffingPlan;
@@ -103,6 +129,7 @@ export async function runGovernanceTriagePanel(input: {
   const { orchestrateDeliberation } = await import("@/lib/deliberation/orchestrator");
 
   let deliberationRunId: string;
+  let panelTaskRunId: string;
   let consensusState: string | null = null;
 
   try {
@@ -121,6 +148,7 @@ export async function runGovernanceTriagePanel(input: {
       maxBranches: 5,
     });
     deliberationRunId = run.deliberationRunId;
+    panelTaskRunId = run.taskRunId;
     consensusState = run.consensusDecision?.decision ?? null;
   } catch {
     // No provider, no budget, a wedged runner — all the same to the caller:
@@ -128,10 +156,36 @@ export async function runGovernanceTriagePanel(input: {
     return null;
   }
 
-  const outcome = await prisma.deliberationOutcome.findUnique({
-    where: { deliberationRunId },
-    select: { mergedRecommendation: true, consensusState: true },
-  });
+  // Orchestration only PERSISTS the graph; the runner executes it. Without
+  // this event the run sits at `pending` with queued nodes forever — which is
+  // exactly what happened on the live install: ten governance-triage runs
+  // created, zero completed, zero drafts. The same send is what
+  // `lib/actions/deliberation.ts` does after orchestrating.
+  try {
+    const { inngest } = await import("@/lib/queue/inngest-client");
+    await inngest.send({
+      name: "deliberation/run.start",
+      data: {
+        deliberationRunId,
+        taskRunId: panelTaskRunId,
+        threadId: null,
+        userId: input.userId,
+      },
+    });
+  } catch {
+    // The graph exists but nothing will execute it. Say the panel did not
+    // happen rather than leaving a half-started run to look like a draft.
+    return null;
+  }
+
+  // Deliberation is asynchronous, so the outcome does not exist the moment the
+  // graph does. Wait for it, bounded: a pass that hangs on one panel starves
+  // every other decision behind it. On timeout the caller records "not
+  // drafted" and the next pass retries — nothing partial is written.
+  const outcome = await awaitOutcome(
+    prisma as unknown as Parameters<typeof awaitOutcome>[0],
+    deliberationRunId,
+  );
 
   // Bind the decision to the run that considered it, so the record can show
   // who weighed in even if the verdict itself is refused.
