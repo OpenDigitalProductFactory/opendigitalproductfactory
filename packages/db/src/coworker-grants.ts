@@ -267,17 +267,20 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   "external-claude-code": ["work_room_read", "work_room_write", "registry_read"],
   "external-codex": ["work_room_read", "work_room_write", "registry_read"],
   "external-grok": ["work_room_read", "work_room_write", "registry_read"],
-  // Value-stream orchestrators (LIFE-001). Coordination is READ plus ROUTE:
-  // they survey a stream and hand work to a specialist, so they need to see
-  // backlog and registry state and nothing that executes. The stream's
-  // direction is a governed decision taken by its human owner.
-  "evaluate-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "explore-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "integrate-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "deploy-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "release-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "consume-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "operate-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "governance-orchestrator": ["backlog_read", "registry_read", "backlog_write"],
-  "finance-agent": ["registry_read", "portfolio_read"],
+  // Value-stream orchestrators and the cross-cutting finance specialist
+  // (LIFE-001). These lists are RECONCILED with config_profile.tool_grants in
+  // agent_registry.json rather than hand-picked: the registry entry was authored
+  // alongside each persona and is the considered per-role set, and the
+  // grant-source consistency guard (BI-17ACD329) requires the two sources to
+  // agree. A narrower activity surface is expressed by the shape's own `grants`,
+  // which bounds what one cycle may use — not by starving the identity.
+  "evaluate-orchestrator": ["registry_read", "backlog_read", "decision_record_create", "agent_control_read", "role_registry_read", "investment_proposal_create", "gap_analysis_read", "spec_plan_read", "thread_write"],
+  "explore-orchestrator": ["registry_read", "backlog_read", "decision_record_create", "agent_control_read", "role_registry_read", "backlog_write", "backlog_triage", "build_promote", "work_capsule_read", "roadmap_create", "architecture_read", "spec_plan_read", "thread_write"],
+  "integrate-orchestrator": ["registry_read", "backlog_read", "decision_record_create", "agent_control_read", "role_registry_read", "sbom_read", "release_gate_create", "build_plan_write", "build_promote", "work_capsule_read", "backlog_write", "backlog_triage", "spec_plan_read", "thread_write"],
+  "deploy-orchestrator": ["registry_read", "backlog_read", "decision_record_create", "agent_control_read", "role_registry_read", "iac_execute", "deployment_plan_create", "resource_reservation_read", "spec_plan_read", "thread_write"],
+  "release-orchestrator": ["registry_read", "backlog_read", "decision_record_create", "agent_control_read", "role_registry_read", "service_offer_read", "catalog_publish", "subscription_read", "spec_plan_read", "thread_write"],
+  "consume-orchestrator": ["registry_read", "backlog_read", "decision_record_create", "agent_control_read", "role_registry_read", "consumer_onboard", "order_create", "incident_read", "spec_plan_read", "thread_write"],
+  "operate-orchestrator": ["registry_read", "backlog_read", "decision_record_create", "agent_control_read", "role_registry_read", "telemetry_read", "incident_create", "incident_read", "change_event_emit", "spec_plan_read", "thread_write"],
+  "governance-orchestrator": ["registry_read", "backlog_read", "decision_record_create", "agent_control_read", "role_registry_read", "constraint_validate", "architecture_guardrail_read", "evidence_chain_read", "spec_plan_read", "thread_write"],
+  "finance-agent": ["registry_read", "backlog_read", "browser_drive", "budget_read", "chargeback_write", "financial_report_create", "spec_plan_read", "web_search"],
 };
