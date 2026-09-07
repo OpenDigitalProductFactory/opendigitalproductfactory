@@ -86,7 +86,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
       <div className="overflow-x-auto pb-2">
         <ul ref={stepsRef} aria-label="Process steps" className={layout === "list" ? "space-y-2" : "flex min-w-max gap-3"}>
           {visibleStages.map((item, index) => <li key={item.key} className={layout === "list" ? "" : "w-64 shrink-0"}>
-            <Button variant="secondary" aria-pressed={selected === item.key} data-step-key={item.key}
+            <Button variant="secondary" aria-pressed={selected === item.key} aria-controls={`${titleId}-inspection`} data-step-key={item.key}
               className={`min-h-20 w-full flex-col items-start text-left ${selected === item.key ? "outline-2 outline-[var(--dpf-accent)]" : ""}`}
               onClick={() => navigate(item.key)} onKeyDown={(event) => {
                 let target = index;
@@ -106,7 +106,10 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
         </ul>
       </div>
     </div>
-    {stage ? <aside aria-label={`${stage.label} inspection`} className="rounded-lg border border-[var(--dpf-border)] p-4">
+    <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+      {stage ? `${stage.label}. ${STATE_LABEL[stage.state]}. ${inspection?.reason ?? ""}` : ""}
+    </p>
+    {stage ? <aside id={`${titleId}-inspection`} aria-label={`${stage.label} inspection`} className="rounded-lg border border-[var(--dpf-border)] p-4">
       <h3 className="mb-3 text-base font-semibold">{stage.label}</h3>
       <dl className="grid gap-4 sm:grid-cols-2">
         <div><dt className="font-medium">Where are we?</dt><dd>{inspection?.position ?? `${stage.label}: ${STATE_LABEL[stage.state]}`}</dd></div>

@@ -42,6 +42,10 @@ describe("Workroom process inspection", () => {
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowRight" });
     expect(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ })).toHaveFocus();
+    expect(screen.getByRole("status")).toHaveTextContent("Review. Not verified. Approval is pending");
+    expect(screen.getByRole("button", { name: /2\.\s*Review.*Not verified/ })).toHaveAttribute(
+      "aria-controls", screen.getByRole("complementary", { name: "Review inspection" }).id,
+    );
     expect(replace).toHaveBeenCalledWith(expect.stringContaining("operation=reviewer-recovery"), { scroll: false });
     expect(replace).toHaveBeenCalledWith(expect.stringContaining("processStep=review"), { scroll: false });
   });
