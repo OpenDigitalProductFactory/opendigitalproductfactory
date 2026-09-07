@@ -58,6 +58,7 @@
     "./sovereignty-assessment": "./src/sovereignty-assessment.ts",
     "./cada-readiness": "./src/cada-readiness.ts",
     "./regulation-applicability": "./src/regulation-applicability.ts",
+    "./reference-model-applicability": "./src/reference-model-applicability.ts",
     "./seed-deliberation": "./src/seed-deliberation.ts",
     "./edge-node-types": "./src/edge-node-types.ts",
     "./wiki-taxonomy": "./src/wiki-taxonomy.ts",

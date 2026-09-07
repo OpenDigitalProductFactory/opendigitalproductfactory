@@ -13,6 +13,7 @@
 
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -23,7 +24,11 @@ import {
   type RoomStallRow,
 } from "./workroom-stall";
 
-const APP_ROOT = new URL("../../../app", import.meta.url).pathname;
+// `URL.pathname` yields "/D:/..." on Windows, which readdirSync cannot open, so
+// the walk below caught the error and reported every route as missing. That made
+// this test red on every Windows host while passing in CI. fileURLToPath is the
+// platform-correct conversion.
+const APP_ROOT = fileURLToPath(new URL("../../../app", import.meta.url));
 
 // Walk the App Router tree the way Next.js does: route groups "(shell)" are
 // transparent, and a "[param]" directory matches any single segment. Returns
