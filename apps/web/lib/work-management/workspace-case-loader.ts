@@ -146,6 +146,8 @@ export type WorkspaceCasePrismaClient = {
   };
   workroom: {
     findMany(args: unknown): Promise<WorkspaceWorkCapsuleRecord[]>;
+    /** Optional so existing fakes keep compiling (BI-EBEB77E2). */
+    findFirst?(args: unknown): Promise<WorkspaceWorkCapsuleRecord | null>;
   };
   workroomActivity: {
     findMany(args: unknown): Promise<WorkspaceWorkroomActivityRecord[]>;
