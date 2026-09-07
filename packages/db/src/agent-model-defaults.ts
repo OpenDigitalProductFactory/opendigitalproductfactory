@@ -26,6 +26,19 @@ export type AgentModelDefaultUpdate = {
 };
 
 export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
+  // Value-stream orchestrators (LIFE-005). An orchestrator reads a whole
+  // stream and routes it, so it needs real tool fidelity and room to hold the
+  // survey — a weak local model would route confidently and wrongly. 32k is
+  // the floor, not the target.
+  { agentId: "evaluate-orchestrator", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "explore-orchestrator", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "integrate-orchestrator", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "deploy-orchestrator", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "release-orchestrator", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "consume-orchestrator", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "operate-orchestrator", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "governance-orchestrator", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "finance-agent", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "build-specialist", minimumTier: "strong", budgetClass: "quality_first", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "change-reviewer", minimumTier: "strong", budgetClass: "quality_first", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "coo", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },

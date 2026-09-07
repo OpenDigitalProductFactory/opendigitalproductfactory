@@ -296,6 +296,7 @@ The shape registry spans three modules, merged into `ALL_SHAPES` at runtime:
 | `standing-operations-shapes.ts` | the standing operations a BUSINESS runs |
 | `coworker-standing-shapes.ts` | the standing work the platform's own coworkers run |
 | `delivery-shapes.ts` | the five delivery shapes: size and what each owes before it is done (BI-B90F7CBB) |
+| `orchestration-shapes.ts` | one cycle per IT4IT value stream, for the value-stream orchestrators |
 
 A static reader must consult all four. The capability measure read only the first
 for a period and reported seven fully-bounded agents as having no declared work
@@ -308,6 +309,16 @@ it.
 Every shape in the coworker module ends in a `governed-decision` taken by a human
 `role:`, never by the coworker that prepared the work. A shape whose advances are
 all `status-change` declares an unbounded coworker in the shape of a bounded one.
+
+
+The same one-file assumption has now broken this scanner four times — shapes,
+self-tasks, skills, and the coworker grants map. Each time a registry moved to a
+second module and the static reader kept reading the first. Every source list it
+depends on is therefore explicit and guarded: `SHAPE_SOURCE_FILES`,
+`SELF_TASK_SOURCES`, `GRANTS_SOURCE_FILES`, and the skill-pack namespace. The
+grants case was the worst-reading: a re-export carries no entries, so slicing the
+seed file alone reported a live coworker as "holds no grants at all — no tool
+surface is authorised".
 
 ## What is actually enforced today
 
