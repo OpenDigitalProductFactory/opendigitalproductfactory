@@ -7,7 +7,7 @@ export function projectMissingBaselineRecovery(args: {
   mappedItems: readonly CoverageChild[];
 }) {
   const profile = deriveAuthoritativeReadinessProfile(args.item) ?? "feature";
-  if (["feature", "cross-domain", "archetype"].includes(profile)) {
+  if (["fix", "feature", "cross-domain", "archetype"].includes(profile)) {
     return {
       recovery: {
         kind: "scope-baseline-review-required" as const,

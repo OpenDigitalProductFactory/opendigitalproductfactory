@@ -5,7 +5,7 @@ import { projectMissingBaselineRecovery } from "./plan-coverage-recovery";
 describe("projectMissingBaselineRecovery", () => {
   it.each([
     ["feature", "scope-baseline-review-required"],
-    ["bug", "implementation-parent-binding-required"],
+    ["bug", "scope-baseline-review-required"],
     ["doc", "implementation-parent-binding-required"],
   ])("returns an executable recovery for %s work", (workType, recoveryKind) => {
     const result = projectMissingBaselineRecovery({
@@ -14,8 +14,8 @@ describe("projectMissingBaselineRecovery", () => {
     });
 
     expect(result.recovery).toMatchObject({ kind: recoveryKind });
-    if (workType === "feature") expect(result.instruction).toContain("spec-approval `request_coworker`");
-    else expect(result.instruction).not.toContain("reviewer route verbatim");
+    if (workType === "doc") expect(result.instruction).not.toContain("reviewer route verbatim");
+    else expect(result.instruction).toContain("spec-approval `request_coworker`");
   });
 
   it("points a documentation parent at its mapped feature child", () => {
