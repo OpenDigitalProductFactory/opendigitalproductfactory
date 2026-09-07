@@ -10,6 +10,8 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 
 ## Workroom Inventory
 
+**Work** in the main navigation opens this same page — there is one entry for work activity, not a separate dashboard beside it. It is distinct from the coworker directory under **Workforce**: the Workforce portfolio groups business work, including supporting activities such as hiring and finance, while the coworker directory is a people-and-agent view across all four portfolios.
+
 Open **Operations > Workrooms** (`/ops/workrooms`) for one operational inventory across business work, coworker activity, and development. **Live now** requires current execution evidence such as a valid lease, an open pull request, or recent activity. **History and cleanup** retains terminal, expired, stalled, and cleanup-eligible records without counting them as active. Select a Workroom to open its canonical activity case; open **Architecture > Workrooms** when you need the reusable definition instead of the instance history.
 
 ## Key Concepts
