@@ -203,11 +203,24 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
       import("@/lib/self-upgrade/run-store"),
     ]);
   const config = await getSelfUpgradeConfig();
-  const [batch, latestRun] = await Promise.all([
+  const { getLastCheckedAt } = await import("@/lib/self-upgrade/last-check");
+  const { declineIsCurrent, nextScheduledCheckAt } = await import("@/lib/self-upgrade/scheduled-gate");
+  const { getScheduledDecline } = await import("@/lib/self-upgrade/scheduled-gate");
+  const [batch, latestRun, lastCheckedAt, decline] = await Promise.all([
     resolveReleaseBatchStatus({ fresh: true, config }),
     getLatestRun(),
+    getLastCheckedAt(),
+    getScheduledDecline(),
   ]);
   const support = batch.support;
+  // BI-3CA18934: the unattended path is throttled by checkIntervalHours and
+  // gated by window/cooldown/blackout, none of which this status consulted. It
+  // reported routineUpgradeEligible:true while the next unattended check was 22
+  // hours away, so a merged fix looked imminent and never arrived. Report the
+  // schedule, and never call the routine path eligible while it would decline.
+  const nextScheduledCheck = nextScheduledCheckAt(lastCheckedAt, config.checkIntervalHours, new Date());
+  const scheduledGate = declineIsCurrent(decline, lastCheckedAt) ? decline : null;
+  const releaseBatchEligible = support.enabled && batch.eligible;
   return {
     success: true,
     message: support.message ?? batch.summary,
@@ -218,7 +231,12 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
       targetKind: support.targetKind,
       sourceMode: config.sourceMode,
       batchingApplicable: support.supported && batch.applicable,
-      routineUpgradeEligible: support.enabled && batch.eligible,
+      releaseBatchEligible,
+      routineUpgradeEligible: releaseBatchEligible && nextScheduledCheck === null,
+      lastCheckedAt: lastCheckedAt?.toISOString() ?? null,
+      checkIntervalHours: config.checkIntervalHours,
+      nextScheduledCheckAt: nextScheduledCheck?.toISOString() ?? null,
+      scheduledGate: scheduledGate ? { reason: scheduledGate.reason, at: scheduledGate.at } : null,
       reason: support.supported ? batch.reason : support.reason,
       pendingPrCount: batch.pendingCount,
       batchMinPendingPrs: batch.minPendingPrs,
