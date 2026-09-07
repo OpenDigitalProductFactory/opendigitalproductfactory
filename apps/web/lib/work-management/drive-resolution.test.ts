@@ -322,4 +322,83 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
     expect(plan.taskId).toBeNull();
     expect(plan.ledger.join(" ")).toMatch(/raised nothing/i);
   });
+
+  it("dispatches an agent stage on the first tick when no prior drive snapshot exists", () => {
+    const plan = resolveDrivePlan(baseInput({
+      currentStageKey: "scan",
+      receipts: [],
+      priorDrive: null,
+    }));
+    expect(plan.action).toBe("dispatch_agent");
+    expect(plan.stageKey).toBe("scan");
+    expect(plan.taskId).not.toBeNull();
+  });
+
+  it("pauses instead of re-dispatching when the prior tick dispatched the same stage and no completing receipt arrived", () => {
+    const plan = resolveDrivePlan(baseInput({
+      currentStageKey: "scan",
+      receipts: [],
+      priorDrive: { action: "dispatch_agent", reason: "agent_stage", stageKey: "scan" },
+    }));
+    expect(plan.action).toBe("pause");
+    expect(plan.reason).toBe("executor_writeback_unavailable");
+    expect(plan.stageKey).toBe("scan");
+    expect(plan.taskId).toBeNull();
+    expect(plan.agentId).toBeNull();
+    expect(plan.ledger.join(" ")).toMatch(/writeback|receipt/i);
+  });
+
+  it("keeps the pause on later ticks until a completing receipt appears", () => {
+    const plan = resolveDrivePlan(baseInput({
+      currentStageKey: "scan",
+      receipts: [{ stageKey: "scan", kind: "blocked" }],
+      priorDrive: {
+        action: "pause",
+        reason: "executor_writeback_unavailable",
+        stageKey: "scan",
+      },
+    }));
+    expect(plan.action).toBe("pause");
+    expect(plan.reason).toBe("executor_writeback_unavailable");
+    expect(plan.taskId).toBeNull();
+  });
+
+  it("does not treat a blocked receipt as completing, so the stage does not advance", () => {
+    const plan = resolveDrivePlan(baseInput({
+      currentStageKey: "scan",
+      receipts: [{ stageKey: "scan", kind: "blocked" }],
+    }));
+    expect(plan.stageKey).toBe("scan");
+    expect(plan.action).toBe("pause");
+    expect(plan.reason).toBe("executor_writeback_unavailable");
+  });
+
+  it("resumes dispatch of the next agent stage once a completing receipt lands", () => {
+    const twoAgent: WorkShapeDefinitionContract = {
+      ...definition,
+      stages: [
+        definition.stages[0],
+        {
+          key: "raise",
+          title: "Raise",
+          accountablePrincipalRef: "agent:watcher",
+          advance: { kind: "status-change", condition: "raised" },
+          evidence: ["assurance-finding"],
+        },
+      ],
+    };
+    const plan = resolveDrivePlan(baseInput({
+      definition: twoAgent,
+      currentStageKey: "scan",
+      receipts: [{ stageKey: "scan", kind: "findings" }],
+      priorDrive: {
+        action: "pause",
+        reason: "executor_writeback_unavailable",
+        stageKey: "scan",
+      },
+    }));
+    expect(plan.action).toBe("dispatch_agent");
+    expect(plan.stageKey).toBe("raise");
+    expect(plan.reason).toBe("agent_stage");
+  });
 });

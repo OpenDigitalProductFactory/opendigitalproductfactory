@@ -18,6 +18,8 @@ describe("readStoredWorkroomDriveState", () => {
       budgetUsage: [{ kind: "findings-per-run", used: 4 }],
       stopConditionHits: ["substrate-failed"],
       reviewDue: true,
+      lastAction: null,
+      lastReason: null,
     });
   });
 
@@ -28,6 +30,23 @@ describe("readStoredWorkroomDriveState", () => {
       budgetUsage: [],
       stopConditionHits: [],
       reviewDue: false,
+      lastAction: null,
+      lastReason: null,
+    });
+  });
+
+  it("projects the last drive action so the next tick can fail closed", () => {
+    expect(readStoredWorkroomDriveState({
+      workroomDrive: {
+        action: "dispatch_agent",
+        reason: "agent_stage",
+        stageKey: "scan",
+        receipts: [],
+      },
+    })).toMatchObject({
+      currentStageKey: "scan",
+      lastAction: "dispatch_agent",
+      lastReason: "agent_stage",
     });
   });
 });
