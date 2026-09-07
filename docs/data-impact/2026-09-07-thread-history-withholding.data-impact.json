@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "Coworker dispatch payload composition (recency window, rolling checkpoint, semantic recall)"
+  ],
+  "migration": {
+    "name": "20260907030000_agent_thread_history_withholding",
+    "backfill": "None. Adds a nullable AgentThread.historyWithheldBefore timestamp, null for every existing thread, so the column is a strict no-op until an owner explicitly sets it. ADD COLUMN IF NOT EXISTS; applies cleanly against any existing data state."
+  },
+  "tests": [
+    "apps/web/lib/tak/thread-history-withholding.test.ts",
+    "apps/web/lib/inference/thread-sensitivity-notice.test.ts",
+    "apps/web/lib/inference/data-screening/residual-pin-regression.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:agent-thread",
+      "prismaModel": "AgentThread",
+      "lifecycleDisposition": "Per-thread dispatch boundary, retained for the life of the thread on the existing AgentThread cadence. It creates no new retention obligation and stores no conversation content.",
+      "fields": [
+        {
+          "fieldId": "data:agent-thread#historyWithheldBefore",
+          "resolution": "inherited",
+          "reason": "A timestamp bounding what is SENT to a model. It narrows egress only and can never widen it: messages before it stop being dispatched via all three reintroduction paths (recency window, rolling checkpoint, semantic recall). Nothing is deleted, nothing is hidden from the owner's own view, and no sensitivity verdict is overridden — the screen simply re-scores a smaller payload. Carries no personal or governed value itself.",
+          "provenance": "BI-706530B2; kernel DI-B60AD9E7746F, operator-ratified 2026-09-07; apps/web/lib/tak/thread-history-withholding.ts",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

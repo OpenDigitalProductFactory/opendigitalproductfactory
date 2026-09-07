@@ -6,26 +6,27 @@
 // deliberately avoids the governance vocabulary (`restricted`, `local-only`,
 // data-class slugs) — the reader is an operator, not a policy administrator.
 //
-// The action appears only when `deriveThreadSensitivityNotice` says a fresh
-// conversation would actually clear the pin. Rendering it in the other cases
-// would trade the owner's whole thread for no change.
+// The action appears only when `deriveThreadSensitivityNotice` says withholding
+// the earlier history would actually clear the pin. It keeps the thread and its
+// visible record intact and narrows only what is DISPATCHED, so taking it can
+// never send more than before — which is why it needs no confirm step.
 
 import { useEffect, useState } from "react";
 import { getThreadSensitivityNotice } from "@/lib/actions/thread-sensitivity";
+import { withholdEarlierThreadHistory } from "@/lib/actions/thread-history-withholding-action";
 import type { ThreadSensitivityNotice as Notice } from "@/lib/inference/thread-sensitivity-notice";
 
 export function ThreadSensitivityNotice({
   threadId,
   messageCount,
-  onStartFresh,
 }: {
   threadId: string | null;
   /** Re-checked when the turn count changes: routing can change per turn. */
   messageCount: number;
-  onStartFresh?: () => void;
 }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -67,10 +68,17 @@ export function ThreadSensitivityNotice({
       <div style={{ flex: "1 1 auto" }}>
         <div style={{ fontWeight: 600 }}>{notice.headline}</div>
         <div style={{ color: "var(--dpf-muted)", marginTop: 2 }}>{notice.detail}</div>
-        {notice.action && onStartFresh && (
+        {notice.action && (
           <button
             type="button"
-            onClick={onStartFresh}
+            disabled={applying}
+            onClick={() => {
+              if (!threadId) return;
+              setApplying(true);
+              withholdEarlierThreadHistory({ threadId })
+                .then(() => setNotice(null))
+                .catch(() => setApplying(false));
+            }}
             style={{
               marginTop: 6,
               padding: "3px 8px",
@@ -82,7 +90,7 @@ export function ThreadSensitivityNotice({
               border: "1px solid color-mix(in srgb, var(--dpf-accent) 45%, transparent)",
             }}
           >
-            {notice.action.label}
+            {applying ? "Setting aside…" : notice.action.label}
           </button>
         )}
       </div>

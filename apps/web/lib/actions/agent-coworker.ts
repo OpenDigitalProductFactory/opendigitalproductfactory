@@ -14,6 +14,8 @@ import {
 import { NoEligibleEndpointsError } from "@/lib/routed-inference";
 import { logTokenUsage, type ChatMessage } from "@/lib/ai-inference";
 import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
+import { resolveWithheldHistory } from "@/lib/tak/thread-history-withholding";
+import { getKnowledgePointersForRoute } from "@/lib/actions/route-knowledge-pointers";
 import {
   buildFormAssistInstruction,
   extractFormAssistResult,
@@ -556,8 +558,15 @@ export async function sendMessage(input: {
   // Conversation phases use a shorter window to prevent context poisoning.
   const isBuildPhase = input.routeContext === "/build";
   const RECENT_WINDOW = isBuildPhase ? 20 : 8;
+  // BI-706530B2: withhold earlier history from DISPATCH (never from the owner's
+  // view) at all three doors. See lib/tak/thread-history-withholding.ts.
+  const withheld = await resolveWithheldHistory(prisma, input.threadId);
   const recentMessages = await prisma.agentMessage.findMany({
-    where: { threadId: input.threadId, role: { in: ["user", "assistant"] } },
+    where: {
+      threadId: input.threadId,
+      role: { in: ["user", "assistant"] },
+      ...withheld.windowWhere,
+    },
     orderBy: { createdAt: "desc" },
     take: RECENT_WINDOW,
     select: { id: true, role: true, content: true },
@@ -575,6 +584,7 @@ export async function sendMessage(input: {
     historyTokens += msgTokens;
   }
   const windowMessageIds = new Set(trimmedMessages.map((m) => m.id));
+  const withheldRecallExclusions = withheld.recallExclusions(windowMessageIds);
   let chatHistory: ChatMessage[] = trimmedMessages.map((m) => ({
     role: m.role as ChatMessage["role"],
     content: m.content,
@@ -598,7 +608,9 @@ export async function sendMessage(input: {
   // no-op until a checkpoint exists; non-fatal on any error.
   try {
     const { loadThreadCheckpointMessage } = await import("@/lib/tak/thread-checkpoint-runner");
-    const checkpointMessage = await loadThreadCheckpointMessage(input.threadId);
+    const checkpointMessage = withheld.checkpointAllowed
+      ? await loadThreadCheckpointMessage(input.threadId)
+      : null;
     if (checkpointMessage) {
       labelled = prependLabelled(labelled, checkpointMessage, "thread-checkpoint");
     }
@@ -767,7 +779,7 @@ export async function sendMessage(input: {
       query: input.content,
       currentThreadId: input.threadId,
       limit: 8,
-      excludeMessageIds: windowMessageIds,
+      excludeMessageIds: withheldRecallExclusions,
     });
     const factsContext = governedMemory.factsContext;
     const factsCompressed = governedMemory.factsCompressed;
@@ -2630,73 +2642,6 @@ export async function clearConversation(input: {
  * Costs ~45 tokens instead of ~150 for full summaries.
  * The agent uses search_knowledge_base to pull full content when needed.
  */
-async function getKnowledgePointersForRoute(routeContext: string): Promise<string> {
-  const productMatch = routeContext.match(/\/portfolio\/product\/([^/]+)/);
-  const portfolioMatch = !productMatch && routeContext.match(/\/portfolio\/([^/]+)/);
-
-  if (!productMatch && !portfolioMatch) return "";
-
-  const { searchKnowledgeArticles } = await import("@/lib/semantic-memory");
-
-  if (productMatch) {
-    const productId = productMatch[1];
-    const product = await prisma.digitalProduct.findUnique({
-      where: { id: productId },
-      select: { name: true },
-    });
-    if (!product) return "";
-
-    const articles = await searchKnowledgeArticles({
-      query: product.name,
-      productId,
-      limit: 3,
-    });
-    if (articles.length === 0) return "";
-
-    // Enrich with utility-generated abstracts from DB when available
-    const abstracts = await prisma.knowledgeArticle.findMany({
-      where: { articleId: { in: articles.map((a) => a.articleId) } },
-      select: { articleId: true, abstract: true },
-    });
-    const abstractMap = new Map(abstracts.map((a) => [a.articleId, a.abstract]));
-
-    const lines = articles.map((a) => {
-      const abs = abstractMap.get(a.articleId);
-      return abs ? `- ${a.articleId}: "${a.title}" (${a.category}) — ${abs}` : `- ${a.articleId}: "${a.title}" (${a.category})`;
-    });
-    return `KNOWLEDGE: ${articles.length} articles for ${product.name} — use search_knowledge_base for details.\n${lines.join("\n")}`;
-  }
-
-  if (portfolioMatch) {
-    const portfolioSlug = portfolioMatch[1];
-    const portfolio = await prisma.portfolio.findUnique({
-      where: { slug: portfolioSlug },
-      select: { id: true, name: true },
-    });
-    if (!portfolio) return "";
-
-    const articles = await searchKnowledgeArticles({
-      query: portfolio.name,
-      portfolioId: portfolio.id,
-      limit: 3,
-    });
-    if (articles.length === 0) return "";
-
-    const abstracts = await prisma.knowledgeArticle.findMany({
-      where: { articleId: { in: articles.map((a) => a.articleId) } },
-      select: { articleId: true, abstract: true },
-    });
-    const abstractMap = new Map(abstracts.map((a) => [a.articleId, a.abstract]));
-
-    const lines = articles.map((a) => {
-      const abs = abstractMap.get(a.articleId);
-      return abs ? `- ${a.articleId}: "${a.title}" (${a.category}) — ${abs}` : `- ${a.articleId}: "${a.title}" (${a.category})`;
-    });
-    return `KNOWLEDGE: ${articles.length} articles for ${portfolio.name} portfolio — use search_knowledge_base for details.\n${lines.join("\n")}`;
-  }
-
-  return "";
-}
 
 // ─── Marketing Skill Rules ─────────────────────────────────────────────
 

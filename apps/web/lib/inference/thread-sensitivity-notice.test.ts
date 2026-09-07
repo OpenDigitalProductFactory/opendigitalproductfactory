@@ -44,22 +44,22 @@ describe("thread sensitivity notice", () => {
     expect(notice(undefined, 2)).toBeNull();
   });
 
-  it("offers a fresh conversation when the cause is entirely in history", () => {
+  it("offers to withhold the earlier history when the cause is entirely there", () => {
     const result = notice([turnMatch(0), turnMatch(1)], 4);
     expect(result?.pin).toBe("history");
-    expect(result?.action?.kind).toBe("continue-in-new-thread");
+    expect(result?.action?.kind).toBe("withhold-earlier-history");
     expect(result?.messageIndices).toEqual([0, 1]);
   });
 
-  it("does NOT offer a fresh conversation when the current turn also triggers", () => {
-    // Mixed: a new thread re-triggers on the first message. Offering it would
-    // trade the owner's context for nothing.
+  it("does NOT offer the remedy when the current turn also triggers", () => {
+    // Mixed: withholding the past changes nothing — the live subject re-triggers
+    // on the very next message. Offering it would be a lie.
     const result = notice([turnMatch(0), turnMatch(5)], 4);
     expect(result?.pin).toBe("mixed");
     expect(result?.action).toBeNull();
   });
 
-  it("does NOT offer a fresh conversation when only the current turn triggers", () => {
+  it("does NOT offer the remedy when only the current turn triggers", () => {
     const result = notice([turnMatch(4), turnMatch(5)], 4);
     expect(result?.pin).toBe("current-turn");
     expect(result?.action).toBeNull();
@@ -96,7 +96,9 @@ describe("thread sensitivity notice", () => {
     );
     expect(result?.pin).toBe("outside-conversation");
     expect(result?.action).toBeNull();
-    expect(result?.detail).toContain("a new");
+    // The substantive claim, not the phrasing: the owner cannot write their way
+    // out of this one, so the notice must not imply that they can.
+    expect(result?.detail).toContain("Nothing you write changes that");
   });
 
   it("never carries message content — only indices", () => {
