@@ -150,6 +150,35 @@ The organization's recorded owner is not yet persisted on this schema. Until it
 is, rooms with no explicit assignment resolve to that setup state, which is the
 intended behaviour rather than a defect. Recording it is a schema change with
 its own migration acceptance.
+## What an activity symbol is allowed to claim
+
+A count is not an answer. "12 rooms" tells an operator nothing they can act on,
+so a collapsed branch carries a bounded set of concrete statements — what is
+being done, or what is waiting — chosen attention-first, not a bare number.
+
+A symbol must be earned. Motion means fresh evidence of execution right now. A
+held lease, a claimed shape, a successful tool call and a completed task are not
+that. `deriveActivitySignal` in
+[`apps/web/lib/work-management/portfolio-activity-projection.ts`](../../apps/web/lib/work-management/portfolio-activity-projection.ts)
+resolves one of seven states — executing, waiting on a person, queued, blocked,
+completed, stale, unknown — and only `executing` animates.
+
+Three distinctions carry the intent. A verified receipt and a blocker are
+statements about the work and hold regardless of how recently anything was
+observed, so neither is overridden by a fresh heartbeat. No evidence at all is
+`unknown`, which is not the same as old evidence, which is `stale`; a
+disconnected client ages into stale rather than spinning indefinitely. And every
+representative statement carries the canonical destination of the room it
+describes, so a summary is always one click from the thing it summarises.
+
+Reads are bounded and ordered deterministically. Rooms are deduplicated by
+identity before counting, so a room reachable through two links is counted once,
+and rooms needing attention are counted separately from the branch total. A page
+that does not cover the estate reports itself as partial and hands back a cursor,
+rather than presenting its own size as a total.
+
+Authorization happens before projection, never after: filtering a rendered list
+would let hidden work leak through a count or a representative summary.
 
 ## An executor is a teammate, not a surface
 

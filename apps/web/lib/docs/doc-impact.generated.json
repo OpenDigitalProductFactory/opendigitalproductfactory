@@ -1165,6 +1165,9 @@
     "apps/web/lib/work-management/human-accountability.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
+    "apps/web/lib/work-management/portfolio-activity-projection.ts": [
+      "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -2662,6 +2665,7 @@
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
       "apps/web/lib/work-management/human-accountability.ts",
+      "apps/web/lib/work-management/portfolio-activity-projection.ts",
       "apps/web/lib/work-management/worker-rollup.ts",
       "scripts/check-prose-lint.ts"
     ],
