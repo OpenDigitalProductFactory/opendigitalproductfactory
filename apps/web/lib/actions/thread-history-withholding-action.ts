@@ -12,17 +12,18 @@
 
 import { prisma } from "@dpf/db";
 import { requireUser } from "./shared/guards";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 export async function withholdEarlierThreadHistory(input: {
   threadId: string;
-}): Promise<{ ok: boolean; boundary: string | null }> {
+}): Promise<ActionResult<{ boundary: string }>> {
   const user = await requireUser();
 
   const thread = await prisma.agentThread.findFirst({
     where: { id: input.threadId, userId: user.id },
     select: { id: true },
   });
-  if (!thread) return { ok: false, boundary: null };
+  if (!thread) return err("That conversation is not available.");
 
   // The boundary is the newest message at the moment the owner asks, so the
   // exchange they are in the middle of is preserved and everything before it
@@ -39,5 +40,5 @@ export async function withholdEarlierThreadHistory(input: {
     data: { historyWithheldBefore: boundary },
   });
 
-  return { ok: true, boundary: boundary.toISOString() };
+  return ok({ boundary: boundary.toISOString() });
 }

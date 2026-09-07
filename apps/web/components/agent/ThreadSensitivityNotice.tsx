@@ -76,7 +76,7 @@ export function ThreadSensitivityNotice({
               if (!threadId) return;
               setApplying(true);
               withholdEarlierThreadHistory({ threadId })
-                .then(() => setNotice(null))
+                .then((result) => (result.ok ? setNotice(null) : setApplying(false)))
                 .catch(() => setApplying(false));
             }}
             style={{
