@@ -254,3 +254,11 @@ limitation are recorded in WC-4A72DC95 and the UX-fit manifest.
 Remaining: authoritative receipt-to-step correlation, recovery scenario execution,
 enterprise navigation, nested contribution closure, archetype-specific coverage,
 served viewport/accessibility checks and screenshots. None is certified by DOM tests.
+
+The next increment connects the existing EA Workrooms page to bounded, directly
+observed open rooms. Operation filtering happens before the row limit; truncation
+and missing value-stream placement are explicit. The existing count is relabeled
+as linked rooms, because it includes terminal rooms and cannot establish liveness.
+Returning from the process inspector restores the selected operation and disclosure.
+The expanded focused suite passes 42 tests across six files. Broader EA canvas,
+operational-health and accountability projections still require implementation.

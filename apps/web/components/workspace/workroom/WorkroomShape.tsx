@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { FilterBar } from "@/components/ui/report-kit/FilterBar";
 import type { ShapeGraph, ShapeNodeState, ShapeRow } from "@/lib/work-management/shape-projection";
@@ -34,6 +34,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams().toString();
+  const operation = new URLSearchParams(params).get("operation");
   const [selected, setSelected] = useState(() => new URLSearchParams(params).get("processStep") ?? graph.process?.currentStageKey ?? "");
   const [layout, setLayout] = useState(() => new URLSearchParams(params).get("processLayout") ?? "map");
   const [filters, setFilters] = useState<Record<string, string>>(() => ({ processQuery: new URLSearchParams(params).get("processQuery") ?? "", processState: new URLSearchParams(params).get("processState") ?? "" }));
@@ -65,6 +66,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
       <div><h2 id={titleId} className="text-base font-semibold">{graph.process?.title ?? "Process"}</h2>
         <p className="text-[var(--dpf-muted)]">{graph.process?.definitionRef ?? "Definition unavailable"}</p></div>
       <div aria-label="Process layout" className="flex gap-2">
+        {operation ? <ButtonLink variant="ghost" href={`/ea/workrooms?operation=${encodeURIComponent(operation)}#coordination`}>Operation</ButtonLink> : null}
         {(["map", "list"] as const).map((value) => <Button key={value} variant="secondary" className="min-h-11" aria-pressed={layout === value} onClick={() => navigate(selected, value)}>{value === "map" ? "Map" : "List"}</Button>)}
       </div>
     </div>

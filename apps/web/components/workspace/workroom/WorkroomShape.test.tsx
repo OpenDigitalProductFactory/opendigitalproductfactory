@@ -33,6 +33,7 @@ describe("Workroom process inspection", () => {
     expect(screen.getByText("Approval is pending")).toBeInTheDocument();
     expect(screen.getByText("Provider evidence is unavailable")).toBeInTheDocument();
     expect(screen.queryByText(/stages passed/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Operation" })).toHaveAttribute("href", "/ea/workrooms?operation=reviewer-recovery#coordination");
   });
 
   it("supports keyboard selection and preserves operation context in the URL", () => {

@@ -3,10 +3,45 @@ import {
   type WorkCapsulePortfolioRole,
 } from "@/lib/work-capsules";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
+import { TERMINAL_CAPSULE_STATUSES } from "@/lib/work-capsules/work-capsule-branch-identity";
+import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import type { PrismaClient } from "@dpf/db";
 
 type ArchitectureDb = {
   valueStreamTeam: { findMany(args: unknown): Promise<any[]> };
 };
+
+/** A bounded observation of actual rooms; assignment never implies accountability. */
+export async function loadWorkroomCoordination(
+  db: { workroom: Pick<PrismaClient["workroom"], "findMany"> },
+  now = new Date(),
+  filter: { teamId?: string | null } = {},
+) {
+  const rows = await db.workroom.findMany({
+    where: { archivedAt: null, status: { notIn: TERMINAL_CAPSULE_STATUSES },
+      ...(filter.teamId === undefined ? {} : filter.teamId === null
+        ? { OR: [{ workItem: { is: null } }, { workItem: { is: { teamId: null } } }] }
+        : { workItem: { is: { teamId: filter.teamId } } }),
+    },
+    orderBy: { capsuleId: "asc" }, take: 201,
+    select: { capsuleId: true, title: true, status: true,
+      workItem: { select: { teamId: true, parentItemId: true, assignedToUserId: true, assignedToAgentId: true } },
+    },
+  });
+  return {
+    readAt: now.toISOString(), truncated: rows.length > 200,
+    rooms: rows.slice(0, 200).map((row) => {
+      const teamId = row.workItem?.teamId ?? null;
+      const caseKey = encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: row.capsuleId });
+      return {
+        roomId: row.capsuleId, title: row.title, status: row.status, teamId,
+        parentItemId: row.workItem?.parentItemId ?? null,
+        assignedActorRef: row.workItem?.assignedToUserId ?? row.workItem?.assignedToAgentId ?? null,
+        href: `/workspace/cases/${caseKey}?operation=${encodeURIComponent(teamId ?? "unmapped")}`,
+      };
+    }),
+  };
+}
 
 export type WorkroomDefinition = {
   id: string;

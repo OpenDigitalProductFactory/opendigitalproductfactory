@@ -4,7 +4,7 @@ import { prisma } from "@dpf/db";
 import { EaTabNav } from "@/components/ea/EaTabNav";
 import { Surface } from "@/components/ui/Surface";
 import { EmptyState, StatCard, StatusBadge } from "@/components/ui/report-kit";
-import { loadWorkroomArchitecture } from "@/lib/ea/workroom-architecture";
+import { loadWorkroomArchitecture, loadWorkroomCoordination } from "@/lib/ea/workroom-architecture";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +22,9 @@ function HumanGateList({ triggers }: { triggers: Array<{ triggerPoint: string; r
   );
 }
 
-export default async function WorkroomArchitecturePage() {
-  const bands = await loadWorkroomArchitecture(prisma);
+export default async function WorkroomArchitecturePage({ searchParams }: { searchParams?: Promise<{ operation?: string }> } = {}) {
+  const operation = (await searchParams)?.operation;
+  const [bands, coordination] = await Promise.all([loadWorkroomArchitecture(prisma), loadWorkroomCoordination(prisma, new Date(), { teamId: operation === "unmapped" ? null : operation })]);
   const definitions = bands.flatMap((band) => band.definitions);
   const instanceCount = definitions.reduce((total, definition) => total + definition.instanceCount, 0);
 
@@ -32,7 +33,7 @@ export default async function WorkroomArchitecturePage() {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Enterprise Architecture</h1>
         <p className="mt-0.5 max-w-3xl text-sm text-[var(--dpf-muted)]">
-          Plan how teams work in each portfolio. Set the room shape, people, queues, checks, and links to live work.
+          Connect team plans to actual work.
         </p>
       </div>
       <EaTabNav />
@@ -43,7 +44,6 @@ export default async function WorkroomArchitecturePage() {
             ? "No Workroom plans are set yet."
             : `${definitions.length} Workroom plan${definitions.length === 1 ? "" : "s"} guide work in ${bands.filter((band) => band.definitions.length > 0).length} portfolios.`}
         </p>
-        <p className="mt-1 text-xs text-[var(--dpf-muted)]">Plans show how teams work. Operations shows each live room.</p>
         <Link data-owner-first-next-action href={definitions.length > 0 ? `#portfolio-${bands.find((band) => band.definitions.length > 0)?.role ?? "foundational"}` : "/ea/value-streams"} className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
           {definitions.length > 0 ? "Review Workroom plans" : "Review value streams"}
         </Link>
@@ -51,9 +51,27 @@ export default async function WorkroomArchitecturePage() {
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <StatCard label="Workroom plans" value={definitions.length} hint="Active value stream teams" />
-        <StatCard label="Live links" value={instanceCount} href="/ops/workrooms" hint="Open live work" />
+        <StatCard label="Linked rooms" value={instanceCount} href="#coordination" hint="Includes completed work" />
         <StatCard label="Portfolios" value={`${bands.filter((band) => band.definitions.length > 0).length} / 4`} hint="All four stay in view" />
       </div>
+
+      <Surface id="coordination" className="mb-6" rounded="xl">
+        <details open={Boolean(operation)}>
+          <summary className="min-h-11 cursor-pointer text-base font-semibold text-[var(--dpf-text)]">Coordination · {coordination.rooms.length}{coordination.truncated ? "+" : ""} open</summary>
+          <p className="my-2 text-xs text-[var(--dpf-muted)]">Observed: {coordination.readAt}</p>
+          {operation ? <Link href="/ea/workrooms#coordination" className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)]">All operations</Link> : null}
+          {coordination.truncated ? <p className="text-sm text-[var(--dpf-muted)]">More rooms exist</p> : null}
+          <ul className="divide-y divide-[var(--dpf-border)]">
+            {coordination.rooms.map((room) => <li key={room.roomId} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <Link href={room.href} className="inline-flex min-h-11 items-center text-sm font-medium text-[var(--dpf-accent)] hover:underline">{room.title}</Link>
+                <p className="text-xs text-[var(--dpf-muted)]">{definitions.find((definition) => definition.id === room.teamId)?.name ?? "No value stream linked"}</p>
+              </div>
+              <StatusBadge domain="workroom" status={room.status} size="md" uppercase={false} />
+            </li>)}
+          </ul>
+        </details>
+      </Surface>
 
       <div className="space-y-8">
         {bands.map((band) => (
@@ -100,7 +118,7 @@ export default async function WorkroomArchitecturePage() {
                     </div>
 
                     <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
-                      <Link href="/ops/workrooms" className="font-medium text-[var(--dpf-accent)] hover:underline">{definition.instanceCount} live room{definition.instanceCount === 1 ? "" : "s"}</Link>
+                      <Link href={`/ea/workrooms?operation=${encodeURIComponent(definition.id)}#coordination`} className="font-medium text-[var(--dpf-accent)] hover:underline">{definition.instanceCount} linked room{definition.instanceCount === 1 ? "" : "s"}</Link>
                       {definition.eaViewId ? <Link href={`/ea/views/${definition.eaViewId}`} className="font-medium text-[var(--dpf-accent)] hover:underline">Open process view</Link> : <span className="text-[var(--dpf-muted)]">No process view linked</span>}
                       {definition.eaProcessId ? <span className="font-mono text-dpf-caption text-[var(--dpf-muted)]">{definition.eaProcessId}</span> : null}
                     </div>
