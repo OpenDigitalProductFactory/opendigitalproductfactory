@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { loadWorkroomArchitecture, loadWorkroomCoordination, resolvePortfolioPlacement } from "./workroom-architecture";
+import { loadRoomInventory, loadWorkroomArchitecture, loadWorkroomCoordination, resolvePortfolioPlacement } from "./workroom-architecture";
 
 describe("loadWorkroomArchitecture", () => {
   it("links actual rooms and reports missing architecture placement without guessing", async () => {
@@ -142,3 +142,45 @@ const TEAM_UNRESOLVED = {
         portfolioId: "p", portfolio: { slug: "mystery-stream", name: "Mystery" }, isActive: true,
         roles: [], hitlGates: [], queues: [], workItems: [{ _count: { capsules: 1 } }],
       };
+
+
+// The page led with a plan count that is zero on every install while hundreds of
+// rooms were running, so an owner read "we have no rooms" (BI-0EB855CC). The
+// inventory is the TOTAL, distinct from the bounded coordination sample, and it
+// reports unplaced rooms rather than folding them into a portfolio — the rule
+// PR #5189 set for teams, applied to rooms.
+describe("loadRoomInventory", () => {
+  it("counts open rooms by portfolio and reports the unclassified rather than defaulting them", async () => {
+    const db = { workroom: { groupBy: vi.fn().mockResolvedValue([
+      { portfolioRole: "foundational", _count: { _all: 71 } },
+      { portfolioRole: "manufactureAndDeliver", _count: { _all: 13 } },
+      { portfolioRole: null, _count: { _all: 367 } },
+    ]) } };
+
+    const inventory = await loadRoomInventory(db);
+
+    expect(inventory.openTotal).toBe(451);
+    expect(inventory.unclassified).toBe(367);
+    expect(inventory.byRole.foundational).toBe(71);
+    expect(inventory.byRole.manufactureAndDeliver).toBe(13);
+    // A portfolio with no rooms reads zero, not absent.
+    expect(inventory.byRole.forEmployees).toBe(0);
+  });
+
+  it("excludes completed and archived rooms, so the count matches what is open", async () => {
+    const db = { workroom: { groupBy: vi.fn().mockResolvedValue([]) } };
+    await loadRoomInventory(db);
+    expect(db.workroom.groupBy).toHaveBeenCalledWith(expect.objectContaining({
+      where: { archivedAt: null, status: { notIn: ["complete", "abandoned", "archived"] } },
+    }));
+  });
+
+  it("does not fold an unrecognised portfolio value into a real portfolio", async () => {
+    const db = { workroom: { groupBy: vi.fn().mockResolvedValue([
+      { portfolioRole: "somethingElse", _count: { _all: 5 } },
+    ]) } };
+    const inventory = await loadRoomInventory(db);
+    expect(inventory.unclassified).toBe(5);
+    expect(inventory.byRole.foundational).toBe(0);
+  });
+});

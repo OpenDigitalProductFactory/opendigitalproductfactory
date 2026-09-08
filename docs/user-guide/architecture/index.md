@@ -28,11 +28,11 @@ If you change the archetype your install declares, the next seed imports the cri
 
 ## Workroom Definitions
 
-Open **Architecture > Workrooms** (`/ea/workrooms`) to review collaboration from the definition perspective. The page keeps all four portfolios visible, groups each Value Stream Team under its owning portfolio, and links the reusable shape to its process view and operational instances.
+Open **Architecture > Workrooms** (`/ea/workrooms`) to see the rooms that are actually running and how they sit across the four portfolios. The page leads with a true count of open rooms — completed and archived rooms are excluded — and says plainly how many have no portfolio recorded. Those are reported as unclassified, never quietly filed under a portfolio nobody assigned. Where team plans exist, each is grouped under its owning portfolio with its shape, participants, queues, triggers and process view.
 
 A team is placed in a portfolio from what the platform actually records: an explicit portfolio role on the team wins, and its portfolio slug or name are used only as weaker fallbacks. When none of those decides the question, the team is listed under **Not placed in a portfolio** with the reason, instead of being shown inside a portfolio nobody assigned it to. Those teams are counted separately, so a portfolio's total only ever counts teams that genuinely belong to it. Correct a placement by setting the team's portfolio role or linking it to the right portfolio.
 
-The page reads a bounded page of teams rather than the whole estate. When more exist than it shows, it says **Partial read**, so the counts above are never mistaken for an estate-wide total. Define or refine the underlying Value Stream Team when participants, queues, or approval triggers need to change; use **Operations > Workrooms** to inspect activity created from those definitions.
+The room count is a real total. The plan list and the Coordination list are each a bounded read; when more exist than are shown the page says so (**Partial read**, **More rooms exist**), so a bounded list is never mistaken for the whole estate. If no team plans are configured on your install, the page says exactly that rather than implying you forgot to set one up — there is currently no in-product way to create one, so an install with none is normal.
 
 ## What You Can Do
 
@@ -59,10 +59,9 @@ Use the AI Workforce area for everyday coworker discovery and work assignment.
 
 ## Following a Concern Across Views
 
-On **Workrooms**, expand **Coordination** to open an actual room. A plan's linked
-room count includes completed work; the coordination list shows open rooms from
-a bounded database read and reports when more exist. Missing value-stream links
-are shown explicitly. Select a plan's room link to narrow the operation first.
+On **Workrooms**, expand **Coordination** to open an actual room. It shows open rooms from a bounded database read and
+reports when more exist. A room with no team plan behind it says so explicitly.
+Select a plan's room link to narrow the list to that operation first.
 
 Inside the room, select a process step to inspect its reason, next action, owner
 and evidence. **Operation** returns to the same architecture selection. Intended
