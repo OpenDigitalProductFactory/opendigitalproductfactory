@@ -718,15 +718,15 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - link\n  - link\n    - paragraph\n      - text\n    - text"
     },
     "/ea/workrooms": {
-      "defaultVisibleWords": 222,
-      "leadBandWords": 9,
+      "defaultVisibleWords": 237,
+      "leadBandWords": 22,
       "primaryActions": 1,
       "visibleFields": 0,
       "maxChoicesPerControl": 0,
       "subLegibleControls": 0,
       "buriedPrimaryAction": 0,
       "axeViolations": 2,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n    - paragraph\n      - text\n  - paragraph\n    - text\n  - group\n    - button\n    - paragraph\n      - text\n    - list\n      - listitem\n        - link\n        - paragraph\n          - text\n        - text\n  - region\n    - paragraph\n      - text\n    - heading [level=2]\n    - text"
+      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - link\n    - paragraph\n      - text\n  - paragraph\n    - text\n  - group\n    - button\n    - paragraph\n      - text\n    - list\n      - listitem\n        - link\n        - paragraph\n          - text\n        - text\n  - region\n    - paragraph\n      - text\n    - heading [level=2]\n    - text"
     },
     "/employee": {
       "defaultVisibleWords": 306,
