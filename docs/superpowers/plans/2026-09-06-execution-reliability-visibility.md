@@ -548,3 +548,14 @@ unavailable or truncated sources explicitly. Share recorded-state classification
 with recovery and the heartbeat threshold with the worker; use canonical JSON guards.
 These changes plus the boundary regression pass 104 affected source tests. Live
 navigation and scenario acceptance still depend on canonical deployment.
+
+The Pet Rescue closure trace adds an exact historical reviewer format to the
+same recovery work (BI-06AE6833, downstream BI-7A38F667). Preserve TaskRun
+`993C47DEE56A` unchanged and use the existing deterministic successor contract.
+The old whole objective uses `at <head>` and `at that commit`; the current
+producer requires `at Workroom head <head>` and explicit finite evidence. Freeze
+the exact fixture and identity/authority mismatch cases, share current objective
+formatting with the producer, and recognize only the complete prior template.
+Verify key evolution, producer, terminal recovery, repository admission and
+external-task idempotency before protected publication. A canonical live receipt
+and product closure are separate required acceptance, not implied by these tests.
