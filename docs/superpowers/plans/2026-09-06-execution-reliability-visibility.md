@@ -525,3 +525,10 @@ unresolved. Capture the existing bounded failure screenshot during confirmation
 of a budget regression, while the measured page is still open; the existing CI
 failure artifact publishes it. Keep the baseline and blocking verdict unchanged.
 This adds diagnostic evidence, not portal acceptance or permission to merge.
+
+Completion readback must include the stored initiative readiness decision in the
+existing bounded subject activity query. Its omission made the existing allowed
+decision reuse path unreachable. The test double now applies that real query
+filter: the regression fails before the repair, and 36 affected tests pass after
+it. Reuse still requires matching evidence and the existing authorization checks.
+No missing verdict is manufactured, and unfinished outcomes remain unfinished.

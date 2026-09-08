@@ -68,7 +68,9 @@ function fakeDb(options: {
       findMany: vi.fn(async () => options.evidence === false ? [] : [{ id: "WE-1", kind: "evidence-recorded", recordedAt: new Date(), payload: { kind: "verification", result: { verdict: "passed" } } }]),
       create: vi.fn(async (args: unknown) => args),
     },
-    backlogItem: { findFirst: vi.fn(async () => item) },
+    backlogItem: { findFirst: vi.fn(async (query: { select: { activities: { where: { kind: { in: string[] } } } } }) => ({
+      ...item, activities: item.activities.filter((activity) => query.select.activities.where.kind.in.includes(String(activity.kind))),
+    })) },
     featureBuild: { findUnique: vi.fn(async () => null) },
     backlogItemActivity: { create: vi.fn(async (args: unknown) => args) },
     authorizationDecisionLog: { create: vi.fn(async (args: unknown) => args) },
