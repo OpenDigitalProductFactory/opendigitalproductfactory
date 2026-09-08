@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # September 8 dependency advisory repair
 
 Implementation parent and coverage owner: **BI-7762A411**. This is a fix under
@@ -77,5 +81,8 @@ Atomic deliverable: the supported-version batch belongs to BI-7762A411. Its
 intermediate package edits cannot individually satisfy the whole-tree security
 gate. Requirements OBJ-1 through OBJ-3, contracts and verification AC-1 through
 AC-5, and the Ordered fix sequence all map to that implementation parent.
-Live immutable coverage must be recorded before implementation. The decoder
+Live coverage receipt: `cmttak9ws2ims01o98cseuhi5`, bound to this design at
+`4d147876202b5cab4c44e5cf46bc00977843976b` and baseline
+`baseline-d4637af0-25ab-4c38-b570-1bf72df61672`; recorded before implementation.
+The decoder
 repair remains independently tracked under BI-830FC282 and is not reimplemented.
