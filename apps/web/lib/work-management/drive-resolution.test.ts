@@ -343,7 +343,7 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
     expect(plan.action).toBe("pause");
     expect(plan.reason).toBe("executor_writeback_unavailable");
     expect(plan.stageKey).toBe("scan");
-    expect(plan.taskId).toBeNull();
+    expect(plan.taskId).toBe("workroom-WC-TEST-obligation-assurance-watch");
     expect(plan.agentId).toBeNull();
     expect(plan.ledger.join(" ")).toMatch(/writeback|receipt/i);
   });
@@ -360,7 +360,7 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
     }));
     expect(plan.action).toBe("pause");
     expect(plan.reason).toBe("executor_writeback_unavailable");
-    expect(plan.taskId).toBeNull();
+    expect(plan.taskId).toBe("workroom-WC-TEST-obligation-assurance-watch");
   });
 
   it("does not treat a blocked receipt as completing, so the stage does not advance", () => {

@@ -49,6 +49,10 @@ export async function recordWorkroomDriveReceipt(args: {
         : "stageKey and kind are required.",
     );
   }
+  if (drive.action !== "dispatch_agent"
+    && !(drive.action === "pause" && drive.reason === "executor_writeback_unavailable")) {
+    return err("Only a dispatched agent stage accepts this receipt; human decisions use their governed approval path.");
+  }
   const coordinator = args.actor.principalId
     ? await args.db.workroomParticipant.findFirst({
       where: { workroomId: capsule.id, principalId: args.actor.principalId,
@@ -59,10 +63,11 @@ export async function recordWorkroomDriveReceipt(args: {
     ? await args.db.scheduledAgentTask.findUnique({
       where: { taskId: drive.taskId }, select: { agentId: true },
     }) : null;
+  if (!dispatched) return err("No dispatched task is bound to this stage.");
   if (!coordinator && (!args.actor.agentId || dispatched?.agentId !== args.actor.agentId)) {
     return err("Only the dispatched worker or explicit Process Overseer can complete this stage.");
   }
-  if (capsule.archivedAt || ["complete", "cancelled", "failed"].includes(capsule.status)) {
+  if (capsule.archivedAt || ["complete", "abandoned", "archived"].includes(capsule.status)) {
     return err("A terminal Workroom cannot accept a stage receipt.");
   }
   const updated = await args.db.workroom.update({

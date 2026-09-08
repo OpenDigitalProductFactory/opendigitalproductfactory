@@ -48,7 +48,7 @@ import {
   priorDriveFromStored,
   readStoredWorkroomDriveState,
 } from "@/lib/work-management/workroom-drive-state";
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { appendCompletingWorkroomDriveReceipt, WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
 
 export type WorkroomDriveRoom = {
   id: string;
@@ -633,6 +633,17 @@ export function createWorkroomDriveEffects(
             select: { workspaceState: true, updatedAt: true },
           });
           if (!current) return null;
+          const currentDrive = asRecord(asRecord(current.workspaceState)?.workroomDrive);
+          let snapshot = input.snapshot;
+          if (currentDrive && currentDrive.lastCycleKey === input.snapshot.lastCycleKey) {
+            let receipts = readStoredWorkroomDriveState({ workroomDrive: snapshot }).receipts;
+            for (const receipt of readStoredWorkroomDriveState(current.workspaceState).receipts) {
+              if (receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) continue;
+              const merged = appendCompletingWorkroomDriveReceipt(receipts, receipt);
+              if (merged.ok) receipts = merged.data;
+            }
+            snapshot = { ...snapshot, receipts };
+          }
           const updated = await tx.workroom.updateMany({
             where: {
               id: input.roomId, updatedAt: current.updatedAt, archivedAt: null, status: { notIn: [...TERMINAL] },
@@ -641,7 +652,7 @@ export function createWorkroomDriveEffects(
                 AND: [{ leaseExpiresAt: { gt: clock() } }],
               } : {}),
             },
-            data: { workspaceState: { ...asRecord(current.workspaceState), workroomDrive: input.snapshot } as object },
+            data: { workspaceState: { ...asRecord(current.workspaceState), workroomDrive: snapshot } as object },
           });
           if (updated.count !== 1) return null;
         }

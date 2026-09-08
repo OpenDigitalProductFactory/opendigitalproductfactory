@@ -305,6 +305,20 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
   });
 
+  it("refuses an overseer receipt for a human-attention stage", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
+      id: "row-pay", capsuleId: "WC-B02C8BFA", status: "working",
+      workspaceState: { workroomDrive: { action: "attention", reason: "governed_decision", stageKey: "approve", receipts: [] } },
+    });
+    mockPrisma.workroomParticipant.findFirst.mockResolvedValue({ id: "overseer" });
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("record_workroom_stage_receipt", {
+      capsuleId: "WC-B02C8BFA", stageKey: "approve", kind: "approved",
+    }, "user-1", { agentId: "finance-controller" });
+    expect(result.success).toBe(false);
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+  });
+
   it("record_workroom_stage_receipt refuses blocked as a completing kind", async () => {
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-pay",

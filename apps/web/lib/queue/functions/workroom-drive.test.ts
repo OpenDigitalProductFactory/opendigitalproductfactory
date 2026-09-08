@@ -176,6 +176,7 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     expect(secondSnapshot).toMatchObject({
       action: "pause",
       reason: "executor_writeback_unavailable",
+      taskId: snapshot.taskId,
     });
     expect(secondSnapshot.receipts).toEqual(
       expect.arrayContaining([{ stageKey: snapshot.stageKey, kind: "blocked" }]),
@@ -268,6 +269,22 @@ describe("applyDrivePlan lease expiry", () => {
     });
     expect(workspace.concurrent).toBe(true);
     expect(driveDb.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("preserves a completing receipt written after planning but before persistence", async () => {
+    persistedLease();
+    driveDb.workroom.findUnique.mockResolvedValue({
+      workspaceState: { workroomDrive: { lastCycleKey: "cycle-1", receipts: [{ stageKey: "sweep", kind: "findings" }] } },
+      updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+    });
+    driveDb.workroom.updateMany.mockResolvedValue({ count: 1 });
+    await createWorkroomDriveEffects(async () => driveDb as never).persist({
+      roomId: "row-1", snapshot: { lastCycleKey: "cycle-1", stageKey: "sweep", receipts: [{ stageKey: "sweep", kind: "blocked" }] },
+      activityKind: "verification", summary: "Stage observed", payload: {},
+    });
+    expect(driveDb.workroom.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: { workspaceState: { workroomDrive: expect.objectContaining({ receipts: [{ stageKey: "sweep", kind: "findings" }] }) } },
+    }));
   });
 
   it("does not publish a dispatch snapshot after the lease holder changes", async () => {
