@@ -404,7 +404,10 @@ export const workCapsulesPack: ToolPack = {
     update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
     release_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
     record_workroom_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
-    record_workroom_stage_receipt: (params, userId, context) => HANDLERS().then((m) => m.recordWorkroomDriveReceiptTool(params, userId, context)),
+    record_workroom_stage_receipt: (params, userId, context) =>
+      import("@/lib/work-capsules/record-workroom-drive-receipt").then((m) =>
+        m.recordWorkroomDriveReceiptTool(params, userId, context)
+      ),
     reassign_workroom_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
     record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),

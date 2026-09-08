@@ -41,9 +41,6 @@ import {
 } from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
-import { isRecord } from "@/lib/shared/coerce";
-import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
-import { appendCompletingWorkroomDriveReceipt } from "@/lib/work-management/workroom-drive-receipts";
 import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
 import {
   assertBacklogWorkroomClaimAvailable,
@@ -710,75 +707,6 @@ export async function recordWorkCapsuleEvidence(args: {
     payload: args.evidence,
     actor: args.actor,
   });
-}
-
-export async function recordWorkroomDriveReceipt(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  stageKey: string;
-  kind: string;
-  summary?: string;
-  actor: WorkCapsuleActor;
-}): Promise<
-  | { ok: true; capsule: { id: string; capsuleId: string } }
-  | { ok: false; error: string; message: string }
-> {
-  const capsule = await args.db.workroom.findUnique({
-    where: { capsuleId: args.capsuleId },
-  });
-  if (!capsule) {
-    return { ok: false, error: "not_found", message: `Workroom ${args.capsuleId} was not found.` };
-  }
-  const existingState = isRecord(capsule.workspaceState) ? capsule.workspaceState : {};
-  const drive = isRecord(existingState.workroomDrive) ? existingState.workroomDrive : {};
-  const stored = readStoredWorkroomDriveState(capsule.workspaceState);
-  if (!stored.currentStageKey) {
-    return {
-      ok: false,
-      error: "no_current_stage",
-      message: "This Workroom has no current drive stage to complete.",
-    };
-  }
-  if (args.stageKey !== stored.currentStageKey) {
-    return {
-      ok: false,
-      error: "stage_mismatch",
-      message: `Stage ${args.stageKey} is not the current drive stage (${stored.currentStageKey}).`,
-    };
-  }
-  const appended = appendCompletingWorkroomDriveReceipt(stored.receipts, {
-    stageKey: args.stageKey,
-    kind: args.kind,
-  });
-  if (!appended.ok) {
-    return {
-      ok: false,
-      error: appended.error,
-      message: appended.error === "blocked_kind_not_completing"
-        ? "A blocked receipt does not complete a stage. Use a completing kind."
-        : "stageKey and kind are required.",
-    };
-  }
-  const updated = await args.db.workroom.update({
-    where: { capsuleId: args.capsuleId },
-    data: {
-      workspaceState: {
-        ...existingState,
-        workroomDrive: {
-          ...drive,
-          receipts: appended.receipts,
-        },
-      },
-    },
-  });
-  await recordActivity(args.db, {
-    workCapsuleId: capsule.id,
-    kind: "evidence-recorded",
-    summary: args.summary?.trim() || `Recorded completing receipt ${args.kind} for stage ${args.stageKey}`,
-    payload: { stageKey: args.stageKey, kind: args.kind, receipts: appended.receipts },
-    actor: args.actor,
-  });
-  return { ok: true, capsule: { id: updated.id, capsuleId: updated.capsuleId } };
 }
 
 /**

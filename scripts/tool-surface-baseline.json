@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 411,
-      "reason": "declare_break_fix and record_initiative_post_implementation_review (BI-F2FEC1EB, design 2026-09-02 s4 / s5 rulings 1-2). A break-fix is the one lane that skips pre-authorisation, so it must be declared by a person on a live Workroom, capped at WIP 1, and audited by a 48-hour post-implementation review recorded by someone other than the declarer. Neither can ride an existing tool: claim_backlog_item_for_work binds a shape at the claim and cannot be re-run on a claimed item, and the design/architecture/plan review lanes each carry their own gate key, while the PIR gate needs an independent lane on the Change Reviewer grant. Both earn a permanent place because every install runs the expedite lane, and an unaudited expedite is exactly the hole the taxonomy closes.",
-      "recordedAt": "2026-09-06"
+      "value": 412,
+      "reason": "Completing a dispatched Workroom stage needs a governed receipt writer. Existing evidence tools append timeline activities but cannot update the drive receipt contract; TaskRun completion cannot prove stage delivery. This tool records the current stage outcome without executing or advancing stages.",
+      "recordedAt": "2026-09-08"
     },
     "registry.packFiles": {
       "value": 101,

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPrisma = {
+  workroomParticipant: { findFirst: vi.fn() },
+  scheduledAgentTask: { findUnique: vi.fn() },
   workroom: {
     create: vi.fn(),
     findFirst: vi.fn(),
@@ -250,6 +252,7 @@ describe("work capsule MCP tools", () => {
   });
 
   it("record_workroom_stage_receipt writes a completing receipt onto the drive snapshot", async () => {
+    mockPrisma.scheduledAgentTask.findUnique.mockResolvedValue({ agentId: "finance-controller" });
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-pay",
       capsuleId: "WC-B02C8BFA",
@@ -258,6 +261,7 @@ describe("work capsule MCP tools", () => {
           action: "pause",
           reason: "executor_writeback_unavailable",
           stageKey: "read",
+          taskId: "scheduled-read",
           receipts: [{ stageKey: "read", kind: "blocked" }],
         },
       },
@@ -284,6 +288,21 @@ describe("work capsule MCP tools", () => {
         }),
       }),
     }));
+  });
+
+  it("refuses a completing receipt from a worker not dispatched to the room", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
+      id: "row-pay", capsuleId: "WC-B02C8BFA", status: "working",
+      workspaceState: { workroomDrive: { stageKey: "read", taskId: "scheduled-read", receipts: [] } },
+    });
+    mockPrisma.workroomParticipant.findFirst.mockResolvedValue(null);
+    mockPrisma.scheduledAgentTask.findUnique.mockResolvedValue({ agentId: "finance-controller" });
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("record_workroom_stage_receipt", {
+      capsuleId: "WC-B02C8BFA", stageKey: "read", kind: "findings",
+    }, "user-1", { agentId: "unrelated-worker" });
+    expect(result.success).toBe(false);
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
   });
 
   it("record_workroom_stage_receipt refuses blocked as a completing kind", async () => {

@@ -41,7 +41,6 @@ import {
   planCapsuleWorkspace,
   releaseWorkCapsuleScope,
   recordWorkCapsuleEvidence,
-  recordWorkroomDriveReceipt,
   recordAgentActivity,
   updateWorkCapsuleStatus,
   WorkCapsuleCompletionDeniedError,
@@ -694,62 +693,6 @@ export async function recordCapsuleEvidenceTool(
     message: `Recorded evidence for ${renewedCapsule.capsuleId}.`,
     data: { capsule: renewedCapsule },
   };
-}
-
-export async function recordWorkroomDriveReceiptTool(
-  params: Record<string, unknown>,
-  userId: string,
-  context: ToolContext,
-): Promise<ToolResult> {
-  const capsuleId = stringParam(params, "capsuleId");
-  const stageKey = stringParam(params, "stageKey");
-  const kind = stringParam(params, "kind");
-  if (!capsuleId || !stageKey || !kind) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message: "capsuleId, stageKey, and kind are required.",
-    };
-  }
-  const summary = stringParam(params, "summary") ?? undefined;
-  try {
-    const renewedCapsule = await runAutoRenewedCapsuleWrite({
-      capsuleId,
-      userId,
-      context,
-      write: async (currentActor) => {
-        const result = await recordWorkroomDriveReceipt({
-          db: workCapsuleDb(),
-          capsuleId,
-          stageKey,
-          kind,
-          summary,
-          actor: currentActor,
-        });
-        if (!result.ok) {
-          const error = new Error(result.message) as Error & { code: string };
-          error.code = result.error;
-          throw error;
-        }
-        return result.capsule;
-      },
-    });
-    return {
-      success: true,
-      entityId: renewedCapsule.capsuleId,
-      message: `Recorded completing receipt ${kind} for ${capsuleId} stage ${stageKey}.`,
-      data: { capsule: renewedCapsule },
-    };
-  } catch (error) {
-    const code = typeof error === "object" && error && "code" in error
-      ? String((error as { code: unknown }).code)
-      : "receipt_failed";
-    return {
-      success: false,
-      error: code,
-      message: getErrorMessage(error),
-    };
-  }
 }
 
 export async function startExternalWorkTool(
