@@ -21,6 +21,7 @@
     "scripts/reconcile-backlog-bundle.ts",
     "scripts/reconcile-catalog-capabilities.ts",
     "scripts/reconcile-catalog-capabilities.test.ts",
+    "scripts/restore-workrooms.ts",
     "generated"
   ]
 }
