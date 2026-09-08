@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 
+import { evaluateScopeMechanism } from "./seed-fit-mechanism.mjs";
+
 const config = JSON.parse(
   readFileSync(new URL("../../config/seed-content-paths.json", import.meta.url), "utf8"),
 );
@@ -55,7 +57,7 @@ function collectDecisionTokens(prBody, labels) {
   return [...bodyMatches, ...labelMatches];
 }
 
-export function evaluateSeedFitGate({ changedFiles, prBody = "", labels = [] }) {
+export function evaluateSeedFitGate({ changedFiles, prBody = "", labels = [], readFile } = {}) {
   const seedPaths = findCanonicalSeedContentPaths(changedFiles);
   if (seedPaths.length === 0) {
     return { ok: true, reason: "no-seed-content", seedPaths, decision: null };
@@ -80,5 +82,20 @@ export function evaluateSeedFitGate({ changedFiles, prBody = "", labels = [] }) 
     return { ok: false, reason: "decision-not-merge-eligible", seedPaths, decision };
   }
 
-  return { ok: true, reason: "eligible-decision", seedPaths, decision };
+  // A decision that CLAIMS a limited scope must name how that scope is enforced,
+  // and the named rule must actually appear in the diff. Without this a change
+  // could truthfully answer "archetype-scoped" and ship globally, because nothing
+  // downstream read the answer — the BI-C44EAEE6 shape, where the seed half
+  // shipped and the read half did not (BI-B507DBD1, kernel DI-D17CAA32468F).
+  const mechanism = evaluateScopeMechanism({
+    decision,
+    prBody,
+    changedFiles,
+    readFile: readFile ?? ((file) => readFileSync(file, "utf8")),
+  });
+  if (!mechanism.ok) {
+    return { ok: false, reason: "scope-mechanism-unproven", seedPaths, decision, mechanism };
+  }
+
+  return { ok: true, reason: "eligible-decision", seedPaths, decision, mechanism };
 }

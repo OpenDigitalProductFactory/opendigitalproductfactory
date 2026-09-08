@@ -42,11 +42,49 @@ describe("seed-fit PR gate", () => {
   });
 
   it("passes an eligible decision from a label", () => {
+    // A label carries the DECISION but cannot carry the evidence, so an unscoped
+    // decision is complete on its own.
     assert.deepEqual(evaluateSeedFitGate({
       changedFiles: ["packages/db/src/seed-skills.ts"],
       prBody: "",
-      labels: ["seed-fit:vertical-scoped"],
+      labels: ["seed-fit:global-default"],
     }).ok, true);
+  });
+
+  // BI-B507DBD1. A scoped claim owes the mechanism that enforces it, however the
+  // decision arrived. Without this a change could answer "vertical-scoped" and
+  // ship globally, because nothing downstream read the answer.
+  it("fails a scoped decision that names no enforcement mechanism", () => {
+    const result = evaluateSeedFitGate({
+      changedFiles: ["packages/db/src/seed-skills.ts"],
+      prBody: "",
+      labels: ["seed-fit:vertical-scoped"],
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "scope-mechanism-unproven");
+    assert.equal(result.mechanism.reason, "missing-mechanism");
+  });
+
+  it("passes a label-sourced scoped decision whose body names a wired mechanism", () => {
+    const result = evaluateSeedFitGate({
+      changedFiles: ["packages/db/src/seed-skills.ts"],
+      prBody: "Seed-Fit-Decision: vertical-scoped mechanism=seed-gate symbol=skillAppliesToInstall",
+      labels: ["seed-fit:vertical-scoped"],
+      readFile: () => "if (!skillAppliesToInstall(slug, install)) return;",
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.mechanism.reason, "mechanism-wired");
+  });
+
+  it("fails a scoped decision whose named rule appears in no changed file", () => {
+    const result = evaluateSeedFitGate({
+      changedFiles: ["packages/db/src/seed-skills.ts"],
+      prBody: "Seed-Fit-Decision: vertical-scoped mechanism=read-scope symbol=neverWired",
+      labels: [],
+      readFile: () => "export const SKILLS = [];",
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.mechanism.reason, "symbol-not-in-diff");
   });
 
   it("fails contradictory body and label decisions", () => {
