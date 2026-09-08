@@ -127,6 +127,15 @@ export const DERIVED_ARTIFACTS = [
     artifactPaths: ["docs/architecture/architecture-counts.generated.md"],
     generate: ["node", "scripts/gen-architecture-counts.mjs"],
     check: ["node", "scripts/gen-architecture-counts.mjs", "--check"],
+    // Derived from REPO-WIDE counts (migrations above all). Two PRs that each
+    // add a migration produce a merged tree neither could have generated, so
+    // whichever enters the merge queue second is stale through no fault of
+    // its author — and cannot push a regeneration into the queue. PR #5175
+    // was ejected six times over twelve hours this way with zero code
+    // failures. PR-head CI still checks this strictly against the author's
+    // own base; only merge-order drift is tolerated, in the queue only, and
+    // the next source-touching PR regenerates it via pre-commit.
+    mergeQueueRaceTolerant: true,
   },
   // ─── Route-derived registry chain (BI-34D69270) ────────────────────────────
   //
