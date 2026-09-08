@@ -23,6 +23,30 @@ models, their default marker, modalities, descriptions, and reasoning efforts.
 That is the existing adapter's true serving boundary; the ChatGPT/OpenAI HTTP
 catalog and DPF's known-model registry are not equivalent entitlement sources.
 
+The source baseline for this diagnosis is repository ref
+`9b434cd228002e326223ec6c3d7c07c445f73e28`:
+
+- `apps/web/lib/inference/ai-provider-internals.ts:1125-1161` documents and
+  implements the zero-result fallback from dynamic discovery to
+  `KNOWN_PROVIDER_MODELS`, including for Codex.
+- `apps/web/lib/inference/model-revalidation.ts:44-82` treats a resolved
+  `{ error }` result as a successful refresh because it does not inspect the
+  return value from `autoDiscoverAndProfile`.
+- `apps/web/lib/queue/functions/model-discovery-refresh.ts:47-58` consequently
+  records `ok` whenever the revalidation promise resolves.
+- `apps/web/app/(shell)/platform/ai/providers/page.tsx:149` projects the
+  provider-registry timestamp as catalog freshness.
+- `apps/web/lib/routing/codex-cli-adapter.ts:43-75` distinguishes auth and
+  rate-limit failures but has no unsupported-model classifier.
+
+The runtime observations were reproduced on deployed ref
+`3a98f9e879c20c14ab73b9aeb09cbab01982bc49`: the `ScheduledJob` row for
+`model-discovery-refresh` reported `ok`; Codex-discovered rows carried
+`rawMetadata.source=known_catalog`; `codex exec --model gpt-5.4` was rejected;
+and the same authenticated sandbox returned `gpt-6-astra`, `gpt-5.6-sol`,
+`gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, and
+`gpt-5.3-codex-spark` from `initialize` → `model/list`.
+
 ## Decision
 
 For the `codex` provider running through `codex-cli`, discovery SHALL query
@@ -94,14 +118,15 @@ the workforce.
 
 ## Research and benchmarking
 
-- **Codex CLI 0.153.4 app-server:** generated JSON schema and a live
+- **Codex CLI 0.153.4 app-server (chosen):** generated JSON schema and a live
   `initialize` → `model/list` exchange establish the current account-specific
   contract. Adopt as serving authority.
-- **OpenAI/ChatGPT HTTP catalogs:** already used by DPF for direct and ChatGPT
-  provider discovery, but rejected for Codex entitlement because the CLI
-  account surface demonstrably differs.
-- **DPF known-model catalog:** retain as bootstrap metadata for catalog-based
-  providers; reject as freshness evidence for a subscription CLI.
+- **OpenAI/ChatGPT HTTP catalogs (rejected):** already used by DPF for direct
+  and ChatGPT provider discovery, but rejected for Codex entitlement because
+  the CLI account surface demonstrably differs.
+- **DPF known-model catalog (rejected for Codex freshness):** retain as
+  bootstrap metadata for catalog-based providers; reject as freshness evidence
+  for a subscription CLI.
 
 ## Compatibility, risks, and rollback
 
