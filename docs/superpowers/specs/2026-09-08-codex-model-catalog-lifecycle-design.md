@@ -61,20 +61,14 @@ reconfirm the catalog.
 with the installed CLI/account while failing visibly when authoritative
 discovery is unavailable.
 
-- **AC-1:** `model/list` parsing admits current visible models such as
-  `gpt-6-astra`, preserves provider metadata, and excludes hidden entries.
-- **AC-2:** Codex discovery failure never falls back to `KNOWN_PROVIDER_MODELS`,
-  advances `lastSeenAt`, or records a successful scheduled refresh.
-- **AC-3:** authoritative absence uses the existing two-cycle retirement rule;
-  explicit unsupported-model stderr retires immediately as
-  `model_not_found`.
-- **AC-4:** stale Codex model pins clear only when an account-listed active
-  replacement exists; failure or an empty inventory leaves configuration
-  untouched.
-- **AC-5:** the Providers page reports the model-discovery job's real last run
-  and status.
-- **AC-6:** focused tests, graph-linked tests, production build, and a live
-  sandbox `model/list` probe pass.
+| Acceptance ID | Objective IDs | Acceptance statement |
+|---|---|---|
+| AC-1 | OBJ-CODEX-CATALOG-LIFECYCLE | `model/list` parsing admits current visible models such as `gpt-6-astra`, preserves provider metadata, and excludes hidden entries. |
+| AC-2 | OBJ-CODEX-CATALOG-LIFECYCLE | Codex discovery failure never falls back to `KNOWN_PROVIDER_MODELS`, advances `lastSeenAt`, or records a successful scheduled refresh. |
+| AC-3 | OBJ-CODEX-CATALOG-LIFECYCLE | Authoritative absence uses the existing two-cycle retirement rule; explicit unsupported-model stderr retires immediately as `model_not_found`. |
+| AC-4 | OBJ-CODEX-CATALOG-LIFECYCLE | Stale Codex model pins clear only when an account-listed active replacement exists; failure or an empty inventory leaves configuration untouched. |
+| AC-5 | OBJ-CODEX-CATALOG-LIFECYCLE | The Providers page reports the model-discovery job's real last run and status. |
+| AC-6 | OBJ-CODEX-CATALOG-LIFECYCLE | Focused tests, graph-linked tests, production build, and a live sandbox `model/list` probe pass. |
 
 ## Ordered implementation
 
