@@ -103,6 +103,34 @@ The profiles reflect execution substrate, not separate policy inventories:
 
 #### Re-evaluating a trailer or label without pushing
 
+### A scoped seed-fit answer names its mechanism
+
+`Seed-Fit-Decision: archetype-scoped` and `vertical-scoped` claim the content is
+limited to some installs. Since BI-B507DBD1 the claim must also say **how** that
+limit is enforced, and the named rule must appear in the diff:
+
+```
+Seed-Fit-Decision: archetype-scoped mechanism=seed-gate  symbol=referenceModelAppliesToInstall
+Seed-Fit-Decision: vertical-scoped  mechanism=read-scope symbol=regulationApplies
+```
+
+Two mechanisms exist, both correct, and the choice is yours:
+
+- **`seed-gate`** — do not put the content on installs it does not serve. The
+  seeder consults an applicability rule before writing.
+- **`read-scope`** — ship it everywhere on purpose and filter at consumption.
+  Each row declares applicability and the read path evaluates it.
+
+`global-default` claims no limit and owes no mechanism. A label can still carry
+the decision, but a scoped one needs the mechanism in the body, because a label
+cannot carry the evidence.
+
+This exists because in BI-C44EAEE6 a banking reference model was scoped at seed
+time and never on read, so a pet rescue advertised it as active. One half
+shipped, the other did not, and nothing looked at the pair. The gate now checks
+that the rule you name is actually referenced by a file you changed, so an
+unimplemented claim fails rather than reads well.
+
 Several `pull-request` guards — Seed Contribution Fit, UX Fit, Design Grounding,
 Docs Impact — tell you to add a trailer such as `Seed-Fit-Decision:` to the PR
 body, or to apply a label. **Editing the body alone used to do nothing.**

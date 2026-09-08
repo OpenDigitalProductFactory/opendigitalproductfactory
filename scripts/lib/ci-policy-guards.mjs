@@ -663,7 +663,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-docs-impact.mjs"),
     ]),
     guard("seed-fit-gate", "Seed Contribution Fit Gate", [
-      node("--test", "scripts/check-seed-fit-decision.test.mjs"),
+      node("--test", "scripts/check-seed-fit-decision.test.mjs", "scripts/lib/seed-fit-mechanism.test.mjs"),
       node("scripts/check-seed-fit-decision.mjs"),
     ]),
     guard("spec-plan-doc-gate", "Spec/Plan/Doc Gate", [

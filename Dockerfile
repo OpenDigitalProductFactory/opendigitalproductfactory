@@ -158,6 +158,7 @@ COPY scripts/lib/ci-evidence-plan.mjs ./scripts/lib/
 COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/
 COPY scripts/lib/gate-sensitivity.mjs ./scripts/lib/
 COPY scripts/lib/seed-fit-gate.mjs ./scripts/lib/
+COPY scripts/lib/seed-fit-mechanism.mjs ./scripts/lib/
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
 COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/

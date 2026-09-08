@@ -7,6 +7,7 @@ import {
   normalizeGithubLabels,
   SEED_FIT_DECISIONS,
 } from "./lib/seed-fit-gate.mjs";
+import { describeScopeMechanism } from "./lib/seed-fit-mechanism.mjs";
 import { requireChangedFiles } from "./lib/git-changed-files.mjs";
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
@@ -70,6 +71,16 @@ if (result.reason === "contradictory-decisions") {
 }
 if (result.reason === "invalid-decision") {
   console.error(`Invalid decisions: ${result.invalid.join(", ")}`);
+}
+if (result.reason === "scope-mechanism-unproven") {
+  console.error(`Decision ${result.decision} claims a limited scope, so it owes the mechanism that enforces it.`);
+  console.error(`  ${describeScopeMechanism(result.mechanism)}`);
+  console.error("");
+  console.error("  Seed-Fit-Decision: archetype-scoped mechanism=seed-gate symbol=referenceModelAppliesToInstall");
+  console.error("  Seed-Fit-Decision: vertical-scoped  mechanism=read-scope symbol=regulationApplies");
+  console.error("");
+  console.error("  seed-gate  = do not put the content on installs it does not serve.");
+  console.error("  read-scope = ship it everywhere and filter at consumption.");
 }
 if (result.reason === "decision-not-merge-eligible") {
   console.error(`Decision ${result.decision} requires revision or removal of the seed delta before merge.`);

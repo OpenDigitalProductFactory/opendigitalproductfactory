@@ -10737,6 +10737,7 @@
         "what-runs-in-ci",
         "policy-guard-profiles",
         "re-evaluating-a-trailer-or-label-without-pushing",
+        "a-scoped-seed-fit-answer-names-its-mechanism",
         "where-ci-runs-it",
         "run-locally-before-pushing",
         "the-pre-push-gate-pregate-default-on",
