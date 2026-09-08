@@ -20,6 +20,7 @@ import {
   runCandidatePreflight,
   loadInstallStateSigningContext,
   verifyMigrationHandoff,
+  refreshMigrationHandoffAfterDrain,
 } from "@/lib/self-upgrade/preflight";
 import { evaluateHostMemoryGuard } from "@/lib/self-upgrade/host-memory-preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
@@ -475,7 +476,10 @@ export async function runSelfUpgrade(
         platformManifestDigest: releaseTarget.platformManifestDigest, configDigest: releaseTarget.configDigest,
         platformOs: releaseTarget.platformOs, platformArchitecture: releaseTarget.platformArchitecture }
     : undefined;
-  const preflight = await runCandidatePreflight({
+  // Kept as a value so the post-drain handoff refresh can re-run the SAME
+  // readiness (identical candidate, target and identity) if the install-state
+  // moved while the portal drained.
+  const preflightParams: Parameters<typeof runCandidatePreflight>[0] = {
     dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,
     promoterImage: config.promoterImage, callerProtocolVersion: config.callerProtocolVersion,
     candidatePromoterReference: release
@@ -490,15 +494,16 @@ export async function runSelfUpgrade(
     runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun,
     emitFailure,
     hostIdentity, runtimeTransitionSecret,
-  });
+  };
+  const preflight = await runCandidatePreflight(preflightParams);
   if (!preflight.ok) {
     // Back off so a residual preflight failure (an OOM under the guard floor, or a
     // readiness refusal) doesn't re-attempt the heavy build every cron tick.
     await recordCooldown(now, cooldownMinutes);
     return { ok: false, status: "failed", runId: run.runId, reason: preflight.reason };
   }
-  const resolvedPromoterDigest = preflight.resolvedPromoterDigest;
-  const migrationHandoff = preflight.migrationHandoff;
+  let resolvedPromoterDigest = preflight.resolvedPromoterDigest;
+  let migrationHandoff = preflight.migrationHandoff;
   const handoff = await verifyMigrationHandoff({
     dryRun: params.dryRun, runId: run.runId, migrationHandoff, resolvedPromoterDigest,
     runtimeTransitionSecret, hostIdentity, failRun, emitFailure,
@@ -597,6 +602,25 @@ export async function runSelfUpgrade(
   if (quiescenceRunId) {
     await signalSwapStarting(quiescenceRunId);
   }
+
+  // The drain and recovery point above take minutes; the handoff was verified
+  // BEFORE them. Re-bind it to the bytes the promoter will actually migrate,
+  // re-running readiness if a host-side writer moved the state meanwhile
+  // (SUR-4758058F, BI-95DF1BFC). Fail-closed on anything that is not a
+  // legitimate state move or TTL expiry.
+  const refreshed = await refreshMigrationHandoffAfterDrain({
+    dryRun: params.dryRun, runId: run.runId, migrationHandoff, resolvedPromoterDigest,
+    runtimeTransitionSecret, hostIdentity, failRun, emitFailure,
+    rerunPreflight: () => runCandidatePreflight(preflightParams),
+  });
+  if (!refreshed.ok) {
+    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, refreshed.reason);
+    await recordCooldown(now, cooldownMinutes);
+    return { ok: false, status: "failed", runId: run.runId, quiescenceRunId, reason: "installer-state-repair-required", excerpt: refreshed.reason };
+  }
+  if (refreshed.refreshed) console.warn(`[self-upgrade] ${run.runId}: install-state handoff re-bound after the drain (${refreshed.code})`);
+  migrationHandoff = refreshed.migrationHandoff;
+  resolvedPromoterDigest = refreshed.resolvedPromoterDigest;
 
   let result: { exitCode: number; stdout: string; stderr: string };
   try {

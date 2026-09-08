@@ -206,8 +206,11 @@ export async function loadInstallStateSigningContext(params: {
 
 /**
  * Re-verify the signed migration handoff against the CURRENT install-state hash
- * immediately before the swap (the state may have moved since preflight signed
- * it). On failure it records the run failed and returns a repair reason.
+ * before the quiescence drain begins (the state may have moved since preflight
+ * signed it). On failure it records the run failed and returns a repair reason.
+ *
+ * This runs BEFORE the drain, so it cannot see a write that lands during it —
+ * that window is closed by `refreshMigrationHandoffAfterDrain` below.
  */
 export async function verifyMigrationHandoff(params: {
   dryRun?: boolean;
@@ -236,4 +239,75 @@ export async function verifyMigrationHandoff(params: {
     await params.emitFailure(params.runId);
     return { ok: false, reason };
   }
+}
+
+/** Envelope refusals a fresh readiness projection legitimately repairs. Anything else is fail-closed. */
+const HANDOFF_REFRESHABLE_CODES = new Set(["install_state_envelope_state_changed", "install_state_envelope_expired"]);
+
+export type MigrationHandoffRefresh =
+  | { ok: true; migrationHandoff?: InstallStateMigrationHandoff; resolvedPromoterDigest?: string; refreshed: false }
+  | { ok: true; migrationHandoff?: InstallStateMigrationHandoff; resolvedPromoterDigest?: string; refreshed: true; code: string }
+  | { ok: false; reason: string };
+
+/**
+ * Re-bind the signed handoff to the install-state bytes the promoter will
+ * ACTUALLY migrate, immediately before it launches — after the quiescence
+ * drain and recovery point, which take minutes.
+ *
+ * `verifyMigrationHandoff` runs before the drain, so a host-side writer that
+ * touches /dpf-state/install-state.json during it reaches promote.sh with a
+ * stale envelope and the run dies at install-state-migrate with
+ * `install_state_envelope_state_changed` (SUR-4758058F: the agent-toolchain
+ * bootstrap rewrote the file 3 minutes into the drain, BI-95DF1BFC). The same
+ * shape hits a drain longer than the envelope TTL (`..._expired`).
+ *
+ * Neither is tampering — the signature still verifies — so instead of failing
+ * the run, re-run candidate readiness (non-mutating, seconds) and carry the
+ * fresh envelope into the promoter. Every OTHER refusal (tampered, wrong run,
+ * wrong digest, wrong identity) stays fail-closed: those are not repaired by
+ * re-projecting, they are the attack the envelope exists to detect.
+ */
+export async function refreshMigrationHandoffAfterDrain(params: {
+  dryRun?: boolean;
+  runId: string;
+  migrationHandoff?: InstallStateMigrationHandoff;
+  resolvedPromoterDigest?: string;
+  runtimeTransitionSecret?: string;
+  hostIdentity?: SelfUpgradeHostIdentity;
+  /** Re-runs candidate readiness with the run's ORIGINAL preflight parameters. */
+  rerunPreflight: () => Promise<CandidatePreflightResult>;
+  failRun: FailRun;
+  emitFailure: EmitFailure;
+}): Promise<MigrationHandoffRefresh> {
+  if (params.dryRun) return { ok: true, migrationHandoff: params.migrationHandoff, resolvedPromoterDigest: params.resolvedPromoterDigest, refreshed: false };
+  const verify = (handoff: InstallStateMigrationHandoff | undefined, digest: string | undefined, bytes: string) => {
+    if (!handoff || !digest || !params.runtimeTransitionSecret || !params.hostIdentity) throw new Error("install_state_migration_handoff_missing");
+    verifyInstallStateMigrationEnvelope(handoff.envelope, handoff.signature, params.runtimeTransitionSecret, {
+      runId: params.runId, promoterDigest: digest,
+      sourceHash: createHash("sha256").update(bytes).digest("hex"), hostIdentity: params.hostIdentity, now: Date.now(),
+    });
+  };
+  const fail = async (code: string) => {
+    const reason = `installer-state-repair-required: ${code}`;
+    await params.failRun(params.runId, reason);
+    await params.emitFailure(params.runId);
+    return { ok: false as const, reason };
+  };
+  let code: string;
+  try {
+    verify(params.migrationHandoff, params.resolvedPromoterDigest, await readFile("/dpf-state/install-state.json", "utf8"));
+    return { ok: true, migrationHandoff: params.migrationHandoff, resolvedPromoterDigest: params.resolvedPromoterDigest, refreshed: false };
+  } catch (error) {
+    code = error instanceof Error ? error.message : "install_state_migration_handoff_invalid";
+  }
+  if (!HANDOFF_REFRESHABLE_CODES.has(code)) return fail(code);
+  console.warn(`[self-upgrade] ${params.runId}: install-state handoff ${code} after the drain; re-running candidate readiness to re-bind it`);
+  const rerun = await params.rerunPreflight();
+  if (!rerun.ok) return { ok: false, reason: rerun.reason };
+  try {
+    verify(rerun.migrationHandoff, rerun.resolvedPromoterDigest, await readFile("/dpf-state/install-state.json", "utf8"));
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "install_state_migration_handoff_invalid");
+  }
+  return { ok: true, migrationHandoff: rerun.migrationHandoff, resolvedPromoterDigest: rerun.resolvedPromoterDigest, refreshed: true, code };
 }

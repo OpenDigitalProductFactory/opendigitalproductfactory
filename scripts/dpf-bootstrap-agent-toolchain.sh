@@ -16,7 +16,9 @@
 #      call; this script stubs the result).
 #   5. Run the kernel-principle smoke probe (Phase 5 implements; this script
 #      stubs to `skipped`).
-#   6. Materialize the agentToolchain state and persist via state.sh.
+#   6. Materialize the agentToolchain state and persist it to the
+#      agent-toolchain sidecar via state.sh - never into install-state.json,
+#      which the self-upgrade binds byte-for-byte (BI-95DF1BFC).
 #   7. Print a single readiness banner using the spec's readinessCopy() table.
 #
 # The banner contains NO substrate names (config.toml, installed_plugins.json,
@@ -796,7 +798,7 @@ JSON
 
 if [ "$DRY_RUN" -eq 0 ]; then
   dpf_state_init "agent-toolchain-bootstrap-phase-4" "$REPO_ROOT" || fail "Failed to initialize canonical install state."
-  dpf_state_write_json "agentToolchain" "$AGENT_TOOLCHAIN_JSON" || fail "Failed to persist agent toolchain readiness in canonical install state."
+  dpf_agent_toolchain_state_write "$AGENT_TOOLCHAIN_JSON" || fail "Failed to persist agent toolchain readiness to $(dpf_agent_toolchain_state_path)."
 fi
 
 # --- Readiness banner --------------------------------------------------------
@@ -827,7 +829,7 @@ if [ "$SHOW_SUBSTRATE" -eq 1 ]; then
   printf '    Codex plugin      : %s\n' "$([ $CODEX_WIRED  -eq 1 ] && echo true || echo false)"
   printf '    Memory seeded at  : %s\n' "${MEMORY_SEEDED_AT:-never}"
   printf '    DPF platform ver  : %s\n' "$EXPECTED_VERSION"
-  printf '    State file        : %s\n' "$(dpf_state_path)"
+  printf '    State file        : %s\n' "$(dpf_agent_toolchain_state_path)"
 fi
 
 seed_worktree_core "post-toolchain"

@@ -68,7 +68,8 @@ export type ReadinessState =
   | "failed_smoke";
 
 /**
- * The full `agentToolchain` block persisted into `~/.dpf/install-state.json`.
+ * The full agent-toolchain block persisted to `~/.dpf/agent-toolchain-state.json`
+ * (a sidecar, never a key inside `install-state.json` — BI-95DF1BFC).
  */
 export type AgentToolchainState = {
   appliedAt: string;
