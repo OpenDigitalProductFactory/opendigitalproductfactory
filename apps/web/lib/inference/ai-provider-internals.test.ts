@@ -14,8 +14,13 @@ const discoveredModelMock = vi.hoisted(() => ({
   createMany: vi.fn(),
 }));
 const modelProfileMock = vi.hoisted(() => ({
+  findMany: vi.fn(),
   updateMany: vi.fn<(args: Record<string, any>) => Promise<{ count: number }>>(async () => ({ count: 0 })),
 }));
+const modelProviderMock = vi.hoisted(() => ({ findUnique: vi.fn() }));
+const agentModelConfigMock = vi.hoisted(() => ({ updateMany: vi.fn() }));
+const seedKnownModelsMock = vi.hoisted(() => vi.fn());
+const discoverCodexCliModelsMock = vi.hoisted(() => vi.fn());
 vi.mock("@dpf/db", () => ({
   prisma: {
     credentialEntry: {
@@ -27,7 +32,13 @@ vi.mock("@dpf/db", () => ({
     },
     discoveredModel: discoveredModelMock,
     modelProfile: modelProfileMock,
+    modelProvider: modelProviderMock,
+    agentModelConfig: agentModelConfigMock,
   },
+}));
+vi.mock("@/lib/inference/known-model-seeding", () => ({ seedKnownModels: seedKnownModelsMock }));
+vi.mock("@/lib/routing/codex-cli-model-catalog", () => ({
+  discoverCodexCliModels: discoverCodexCliModelsMock,
 }));
 
 import {
@@ -39,7 +50,63 @@ import {
   upsertDiscoveredModels,
   reconcileDiscoveredModelPresence,
   PERMANENT_RETIRE_REASONS,
+  autoDiscoverAndProfile,
+  clearStaleCodexPins,
 } from "./ai-provider-internals";
+
+describe("Codex authoritative discovery", () => {
+  beforeEach(() => {
+    modelProviderMock.findUnique.mockReset();
+    seedKnownModelsMock.mockReset();
+    discoverCodexCliModelsMock.mockReset();
+    modelProviderMock.findUnique.mockResolvedValue({
+      providerId: "codex",
+      authMethod: "oauth2_authorization_code",
+      category: "agent",
+      cliEngine: "codex-cli",
+    });
+  });
+
+  it("does not seed the static catalog when the account-authoritative CLI list fails", async () => {
+    discoverCodexCliModelsMock.mockRejectedValue(new Error("app-server unavailable"));
+
+    await expect(autoDiscoverAndProfile("codex")).resolves.toMatchObject({
+      discovered: 0,
+      profiled: 0,
+      error: "app-server unavailable",
+    });
+    expect(seedKnownModelsMock).not.toHaveBeenCalled();
+    expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("clearStaleCodexPins", () => {
+  beforeEach(() => {
+    modelProfileMock.findMany.mockReset();
+    agentModelConfigMock.updateMany.mockReset();
+  });
+
+  it("clears stale Codex pins only after a freshly listed active replacement exists", async () => {
+    modelProfileMock.findMany.mockResolvedValue([{ modelId: "gpt-6-astra" }]);
+
+    await clearStaleCodexPins(["gpt-6-astra", "gpt-5.6-sol"]);
+
+    expect(agentModelConfigMock.updateMany).toHaveBeenCalledWith({
+      where: {
+        pinnedProviderId: "codex",
+        pinnedModelId: { notIn: ["gpt-6-astra"] },
+      },
+      data: { pinnedProviderId: null, pinnedModelId: null },
+    });
+  });
+
+  it("leaves pins untouched on failure, empty inventory, or no active replacement", async () => {
+    await clearStaleCodexPins([]);
+    modelProfileMock.findMany.mockResolvedValue([]);
+    await clearStaleCodexPins(["gpt-6-astra"]);
+    expect(agentModelConfigMock.updateMany).not.toHaveBeenCalled();
+  });
+});
 
 describe("extractTokenUsage", () => {
   it("reads OpenAI-compatible prompt and completion token fields", () => {
