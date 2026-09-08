@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import type { ReadinessOwner, VerifiedReleaseIdentity } from "./promoter";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
 import { verifyInstallStateMigrationEnvelope } from "../../../../scripts/lib/transition-signing.mjs";
@@ -244,10 +245,14 @@ export async function verifyMigrationHandoff(params: {
 /** Envelope refusals a fresh readiness projection legitimately repairs. Anything else is fail-closed. */
 const HANDOFF_REFRESHABLE_CODES = new Set(["install_state_envelope_state_changed", "install_state_envelope_expired"]);
 
-export type MigrationHandoffRefresh =
-  | { ok: true; migrationHandoff?: InstallStateMigrationHandoff; resolvedPromoterDigest?: string; refreshed: false }
-  | { ok: true; migrationHandoff?: InstallStateMigrationHandoff; resolvedPromoterDigest?: string; refreshed: true; code: string }
-  | { ok: false; reason: string };
+export type MigrationHandoffRefreshData = {
+  migrationHandoff?: InstallStateMigrationHandoff;
+  resolvedPromoterDigest?: string;
+  /** True when readiness was re-run and the handoff re-bound; `code` names why. */
+  refreshed: boolean;
+  code?: string;
+};
+export type MigrationHandoffRefresh = ActionSuccess<MigrationHandoffRefreshData> | { ok: false; reason: string };
 
 /**
  * Re-bind the signed handoff to the install-state bytes the promoter will
@@ -279,7 +284,7 @@ export async function refreshMigrationHandoffAfterDrain(params: {
   failRun: FailRun;
   emitFailure: EmitFailure;
 }): Promise<MigrationHandoffRefresh> {
-  if (params.dryRun) return { ok: true, migrationHandoff: params.migrationHandoff, resolvedPromoterDigest: params.resolvedPromoterDigest, refreshed: false };
+  if (params.dryRun) return ok({ migrationHandoff: params.migrationHandoff, resolvedPromoterDigest: params.resolvedPromoterDigest, refreshed: false });
   const verify = (handoff: InstallStateMigrationHandoff | undefined, digest: string | undefined, bytes: string) => {
     if (!handoff || !digest || !params.runtimeTransitionSecret || !params.hostIdentity) throw new Error("install_state_migration_handoff_missing");
     verifyInstallStateMigrationEnvelope(handoff.envelope, handoff.signature, params.runtimeTransitionSecret, {
@@ -296,7 +301,7 @@ export async function refreshMigrationHandoffAfterDrain(params: {
   let code: string;
   try {
     verify(params.migrationHandoff, params.resolvedPromoterDigest, await readFile("/dpf-state/install-state.json", "utf8"));
-    return { ok: true, migrationHandoff: params.migrationHandoff, resolvedPromoterDigest: params.resolvedPromoterDigest, refreshed: false };
+    return ok({ migrationHandoff: params.migrationHandoff, resolvedPromoterDigest: params.resolvedPromoterDigest, refreshed: false });
   } catch (error) {
     code = error instanceof Error ? error.message : "install_state_migration_handoff_invalid";
   }
@@ -309,5 +314,5 @@ export async function refreshMigrationHandoffAfterDrain(params: {
   } catch (error) {
     return fail(error instanceof Error ? error.message : "install_state_migration_handoff_invalid");
   }
-  return { ok: true, migrationHandoff: rerun.migrationHandoff, resolvedPromoterDigest: rerun.resolvedPromoterDigest, refreshed: true, code };
+  return ok({ migrationHandoff: rerun.migrationHandoff, resolvedPromoterDigest: rerun.resolvedPromoterDigest, refreshed: true, code });
 }

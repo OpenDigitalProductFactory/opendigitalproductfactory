@@ -618,9 +618,9 @@ export async function runSelfUpgrade(
     await recordCooldown(now, cooldownMinutes);
     return { ok: false, status: "failed", runId: run.runId, quiescenceRunId, reason: "installer-state-repair-required", excerpt: refreshed.reason };
   }
-  if (refreshed.refreshed) console.warn(`[self-upgrade] ${run.runId}: install-state handoff re-bound after the drain (${refreshed.code})`);
-  migrationHandoff = refreshed.migrationHandoff;
-  resolvedPromoterDigest = refreshed.resolvedPromoterDigest;
+  if (refreshed.data.refreshed) console.warn(`[self-upgrade] ${run.runId}: install-state handoff re-bound after the drain (${refreshed.data.code})`);
+  migrationHandoff = refreshed.data.migrationHandoff;
+  resolvedPromoterDigest = refreshed.data.resolvedPromoterDigest;
 
   let result: { exitCode: number; stdout: string; stderr: string };
   try {

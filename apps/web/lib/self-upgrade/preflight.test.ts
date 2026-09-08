@@ -75,7 +75,7 @@ describe("refreshMigrationHandoffAfterDrain (BI-95DF1BFC)", () => {
     const migrationHandoff = handoffFor(state);
     const rerunPreflight = vi.fn();
     const result = await refreshMigrationHandoffAfterDrain({ ...base(), migrationHandoff, rerunPreflight });
-    expect(result).toMatchObject({ ok: true, refreshed: false, migrationHandoff, resolvedPromoterDigest: digest });
+    expect(result).toMatchObject({ ok: true, data: { refreshed: false, migrationHandoff, resolvedPromoterDigest: digest } });
     expect(rerunPreflight).not.toHaveBeenCalled();
   });
 
@@ -90,7 +90,7 @@ describe("refreshMigrationHandoffAfterDrain (BI-95DF1BFC)", () => {
     const rerunPreflight = vi.fn(async () => ({ ok: true as const, resolvedPromoterDigest: digest, migrationHandoff: fresh }));
     const params = base();
     const result = await refreshMigrationHandoffAfterDrain({ ...params, migrationHandoff: stale, rerunPreflight });
-    expect(result).toMatchObject({ ok: true, refreshed: true, code: "install_state_envelope_state_changed", migrationHandoff: fresh });
+    expect(result).toMatchObject({ ok: true, data: { refreshed: true, code: "install_state_envelope_state_changed", migrationHandoff: fresh } });
     expect(rerunPreflight).toHaveBeenCalledTimes(1);
     expect(params.failRun).not.toHaveBeenCalled();
   });
@@ -104,7 +104,7 @@ describe("refreshMigrationHandoffAfterDrain (BI-95DF1BFC)", () => {
     const fresh = handoffFor(state);
     const rerunPreflight = vi.fn(async () => ({ ok: true as const, resolvedPromoterDigest: digest, migrationHandoff: fresh }));
     const result = await refreshMigrationHandoffAfterDrain({ ...base(), migrationHandoff: expired, rerunPreflight });
-    expect(result).toMatchObject({ ok: true, refreshed: true, code: "install_state_envelope_expired", migrationHandoff: fresh });
+    expect(result).toMatchObject({ ok: true, data: { refreshed: true, code: "install_state_envelope_expired", migrationHandoff: fresh } });
   });
 
   it("stays fail-closed on a tampered or wrong-run envelope instead of re-projecting over it", async () => {
