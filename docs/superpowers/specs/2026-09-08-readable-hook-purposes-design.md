@@ -25,8 +25,9 @@ replaces a hand-maintained external mapping with a reference shipped in the pack
 The ordinal is a lookup aid, not a stable ID; identify a hook by event and command.
 
 The generator must reject a missing purpose or an unsafe/unresolvable source
-link. Its check mode detects stale documentation without rewriting files. Use
-Node built-ins and the existing JSON definition; no service, database table,
+link. Its check mode detects stale documentation without rewriting files. Extend
+the dependency-free Python updater's existing `hook_roster` (BI-276EC984), moving
+its separate `HOOK_PURPOSES` dictionary into handler metadata; no service, database table,
 dependency, new execution wrapper or second hook catalog is needed. Adapter
 tests must prove metadata survives existing transformations. Trust decisions
 remain in the client and are never represented as static generated facts.
