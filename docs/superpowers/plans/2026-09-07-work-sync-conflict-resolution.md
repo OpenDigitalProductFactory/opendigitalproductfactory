@@ -22,6 +22,9 @@ epics), each a genuinely different record on the two installs under one id.
 
 - Decision: atomic
 - Parent: `BI-8CF5A51D`
+- Blocking condition at authoring time: no initiative scope baseline exists for
+  this item until independent spec approval mints one; the coverage receipt is
+  recorded against that baseline.
 - Rationale: the resolution primitive, the runner honouring the decision, the
   governed MCP surface, and the health-line change are one invariant — "a
   conflict is a decision someone takes, and the platform executes it". A
