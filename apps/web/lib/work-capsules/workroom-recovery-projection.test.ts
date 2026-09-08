@@ -24,15 +24,21 @@ describe("projectWorkroomRecovery", () => {
     },
   );
 
-  it.each(["submitted", "working", "input-required", "auth-required"])(
-    "keeps nonterminal TaskRun status %s queued",
-    (status) => {
+  it.each([
+    ["submitted", "queued", true], ["working", "working", true], ["active", "working", true],
+    ["input-required", "waiting", true], ["auth-required", "waiting", true],
+    ["stalled", "waiting", true], ["quiescing", "waiting", true],
+    ["paused-for-upgrade", "waiting", true], ["paused-for-upgrade-forced", "waiting", true],
+    ["future-status", "unknown", null],
+  ])(
+    "projects recorded status %s as %s without claiming queued execution",
+    (status, state, pending) => {
       expect(projectWorkroomRecovery({
         ...identity,
-        taskRun: { taskRunId: `TR-${status}`, status },
+        taskRun: { taskRunId: `TR-${status}`, status: String(status) },
       })).toMatchObject({
-        state: "queued",
-        reviewerExecution: { status, pending: true },
+        state,
+        reviewerExecution: { status, pending },
       });
     },
   );

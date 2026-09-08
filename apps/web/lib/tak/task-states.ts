@@ -35,6 +35,13 @@ export const TASK_STATES = [
 
 export type TaskState = (typeof TASK_STATES)[number];
 
+const TERMINAL_TASK_STATES = new Set<string>(["completed", "failed", "canceled", "rejected", "archived"] satisfies TaskState[]);
+
+/** Terminal outcomes are distinct from recoverable waits and upgrade pauses. */
+export function isTerminalTaskStatus(status: string): boolean {
+  return TERMINAL_TASK_STATES.has(status);
+}
+
 export const TASK_IN_FLIGHT_STATES = [
   "submitted",
   "working",

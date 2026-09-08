@@ -499,3 +499,11 @@ insertion order as equality. The failing source regression reproduces the
 refusal. Reuse the canonical JSON comparator for object scope and change evidence;
 retain ordered-array comparison and refusal for genuinely different scope.
 The same live retry must pass after release before this check is closed.
+
+The Workroom recovery projection also treated every nonterminal TaskRun as
+queued, including input/authorization waits, watchdog stalls and upgrade pauses.
+The regression now distinguishes queued, recorded-working, waiting and unknown
+states; an unrecognized status cannot establish pending execution. Terminal-state
+classification moves to the existing pure task-state module, preserving the MCP
+export while removing a runtime/database import from the projection. This does
+not infer fresh heartbeats or successful delivery from a stored task status.
