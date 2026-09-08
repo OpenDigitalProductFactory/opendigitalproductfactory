@@ -18,6 +18,25 @@ export function readGitDiffDigest(mergeBase, spawn = spawnSync, cwd) {
   return createHash("sha256").update(diff.stdout).digest("hex");
 }
 
+// Preserve failed-run diagnostics even when source identity cannot be resolved.
+// Null bindings cannot satisfy the server's failure-analysis evidence adapter.
+export function readFailureEvidenceBinding(sha, cwd, spawn = spawnSync) {
+  const resolve = args => {
+    const result = spawn("git", args, { cwd, encoding: "utf8" });
+    const value = result.stdout?.trim();
+    if (result.status !== 0 || !/^[a-f0-9]{40}$/.test(value ?? "")) throw new Error("Source identity is unavailable.");
+    return value;
+  };
+  try {
+    if (resolve(["rev-parse", "HEAD"]) !== sha) throw new Error("Candidate checkout changed before evidence binding.");
+    const headTreeHash = resolve(["rev-parse", `${sha}^{tree}`]);
+    const base = resolve(["merge-base", sha, "origin/main"]);
+    return { headTreeHash, diffDigest: readGitDiffDigest(base, spawn, cwd) };
+  } catch (error) {
+    return { headTreeHash: null, diffDigest: null, failureAnalysisBindingError: error.message };
+  }
+}
+
 const IDENTITY_FIELDS = [
   "branch",
   "sha",

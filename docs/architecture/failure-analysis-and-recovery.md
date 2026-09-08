@@ -12,6 +12,8 @@ Technical review failures require internal repair or review recovery. They do no
 
 ## Deployment and protection
 
+When a local run cannot resolve its source identity, its diagnostic report remains available with null verification bindings and an explicit binding error. Such a report cannot satisfy failure readiness. A checkout that moves before binding also requires fresh verification; the producer never substitutes the caller's checkout or invents a diff digest.
+
 The design reference uses `path@<40-character Git object hash>`, so the reviewer can inspect the recorded early analysis rather than a moving document. The gate checks the reference format; the independent reviewer checks its content and whether it predates implementation.
 
 Server Workroom readiness transitions and Build Studio assembled-change review enforce the contract without a client hook. The platform publishes `dpf/failure-readiness` on the exact source commit after resolving the recorded verdict. The `Failure Readiness` workflow verifies that status against the configured `DPF_REVIEW_STATUS_PUBLISHER` repository variable and rejects statuses older than one hour. For merge groups it reads the authoritative queue entries and verifies each included source PR, while existing CI verifies the merged code. This follows GitHub's [merge-queue event contract](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue).

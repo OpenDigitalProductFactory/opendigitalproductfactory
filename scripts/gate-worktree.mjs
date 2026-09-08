@@ -14,7 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
-import { readGitDiffDigest } from "./lib/semantic-review-gate.mjs";
+import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
 //
@@ -1978,8 +1978,7 @@ async function main() {
       content: contentMetadata,
       controlPlane: controlPlaneEvidence,
       gatePassed: outcome.gatePassed,
-      headTreeHash: gitOrEmpty(gitBin, ["rev-parse", `${sha}^{tree}`], worktreePath),
-      diffDigest: readGitDiffDigest(gitOrEmpty(gitBin, ["merge-base", sha, "origin/main"], worktreePath), spawnSync, worktreePath),
+      ...readFailureEvidenceBinding(sha, worktreePath),
       completedAt: new Date().toISOString(),
       freshness,
       commands: [commandLabel],
