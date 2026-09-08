@@ -901,7 +901,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 75
+    "textMass": 82
   },
   "apps/web/app/(shell)/docs/[[...slug]]/page.tsx": {
     "vocabulary": 0,

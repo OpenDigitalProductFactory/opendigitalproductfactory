@@ -195,3 +195,22 @@ describe("one name means one destination", () => {
     expect(identity).not.toBe(directory);
   });
 });
+
+describe("one answer to where work activity lives", () => {
+  // Registering the Work entry without a shellNav left /ops/workrooms reachable
+  // only through the ops tab strip — which was the gap the entry was added to
+  // close, so the consolidation was not actually delivered. The rail entry is
+  // the deliverable; this pins it.
+  it("offers Work in the shell navigation, not only in the model", () => {
+    const work = PORTAL_NAV_ROUTES.find((route) => route.path === "/ops/workrooms");
+    expect(work?.label).toBe("Work");
+    expect(work?.shellNav?.sectionKey).toBe("delivery");
+  });
+
+  it("keeps exactly one shell entry pointing at the activity destination", () => {
+    const pointing = PORTAL_NAV_ROUTES.filter(
+      (route) => route.shellNav && route.path === "/ops/workrooms",
+    );
+    expect(pointing).toHaveLength(1);
+  });
+});

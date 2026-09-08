@@ -413,10 +413,8 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "section-page",
     capabilityKey: "view_operations",
     primaryOrder: 55,
-    // Deliberately no shellNav: a global rail item renders on every route and
-    // measured +3 words on all 213, tipping 153 past their frozen budgets. The
-    // entry is registered and reachable; promoting it to the rail is a separate,
-    // deliberate re-baseline rather than a side effect of registering it.
+    // In the rail: a model-only entry stayed unreachable (BI-9DC43E17).
+    shellNav: { sectionKey: "delivery", description: "Work in motion across the four portfolios." },
   },
   {
     key: "backlog",
