@@ -2,7 +2,7 @@
   "version": "1",
   "decidedOption": "existing-inspector",
   "decisionInteractionId": "DI-09752865C36F",
-  "scope": { "files": ["apps/web/components/platform/AiOperationsMap.tsx", "apps/web/components/platform/StalledTaskRecoveryActions.tsx"] },
+  "scope": { "files": ["apps/web/components/platform/StalledTaskRecoveryActions.tsx"] },
   "evidence": {
     "kind": "propose-n-pick",
     "consideredOptions": ["existing-inspector", "separate-recovery-route"],
