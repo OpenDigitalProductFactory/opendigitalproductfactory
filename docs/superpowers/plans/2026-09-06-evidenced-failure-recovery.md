@@ -20,3 +20,7 @@ Rollback is a single PR revert through the protected queue. Persisted receipts a
 ## Backlog coverage
 
 One live owning item covers this atomic outcome. The immutable plan locator and coverage receipt are recorded through the configured MCP endpoint in its Workroom. No peer-owned record is changed.
+
+The atomic `shared-failure-readiness` deliverable implements OBJ-FAILURE-001, OBJ-FAILURE-002, OBJ-FAILURE-003 and OBJ-FAILURE-004 through the `shared-change-review` and `workroom-promotion` flows. Its contract is `docs/superpowers/specs/2026-07-27-shared-change-reviewer-control-design.md`.
+
+Verification covers AC-FAILURE-001, AC-FAILURE-002, AC-FAILURE-003, AC-FAILURE-004, AC-FAILURE-005, AC-FAILURE-006, AC-FAILURE-007 and AC-FAILURE-008. The regression suites exercise structured completeness, evidence currency, review reuse and recovery, both authoring surfaces and the server publication boundary. Source assertions do not substitute for deployment verification.
