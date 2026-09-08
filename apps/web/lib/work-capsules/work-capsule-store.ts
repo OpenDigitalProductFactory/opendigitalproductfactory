@@ -76,6 +76,9 @@ type CapsuleCreateInput = {
 type CapsuleEvidenceInput = {
   kind: WorkCapsuleEvidenceKind;
   summary: string;
+  /** The work-shape stage this evidence completes. The drive earns a completing
+   *  receipt from stage-scoped evidence only (BI-76B35820). */
+  stageKey?: string;
   command?: string;
   url?: string;
   targetId?: string;
