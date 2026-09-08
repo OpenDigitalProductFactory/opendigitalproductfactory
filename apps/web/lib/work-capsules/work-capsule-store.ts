@@ -954,6 +954,11 @@ export async function updateWorkCapsuleStatus(args: {
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
 
   const hasGovernedLink = Boolean(capsule.backlogItemId || capsule.featureBuildId || capsule.taskRunId);
+  if (capsule.repositoryFullName && ["ready-for-review", "ready-for-promotion", "complete"].includes(args.status)) {
+    const { checkWorkroomFailureReadiness } = await import("@/lib/change-review/failure-readiness-publication");
+    const readiness = await checkWorkroomFailureReadiness(args.capsuleId);
+    if (!readiness.mayPublish) throw new Error(readiness.reason);
+  }
   if (args.status === "complete" && hasGovernedLink) {
     return completeGovernedWorkCapsuleStatus({
       db: args.db,

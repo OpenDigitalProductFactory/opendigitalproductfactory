@@ -8,7 +8,7 @@
  */
 
 export const CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v2";
-export const CHANGE_REVIEW_POLICY_VERSION = "semantic-change-review-policy.v2";
+export const CHANGE_REVIEW_POLICY_VERSION = "semantic-change-review-policy.v3";
 export const CHANGE_REVIEWER_VERSION = "change-reviewer.v1";
 
 export type SemanticReviewSeverity = "critical" | "important" | "minor";
@@ -30,6 +30,7 @@ export interface SemanticReviewResult {
   parseError?: true;
   /** Infrastructure/protocol failure, deliberately separate from semantic findings. */
   inconclusiveReason?: string;
+  failureAnalysisReview?: { adequate: boolean; rationale: string };
 }
 
 export interface SemanticReviewIdentity {
@@ -40,9 +41,12 @@ export interface SemanticReviewIdentity {
   policyVersion: string;
   reviewerVersion: string;
   specialistIds: readonly string[];
+  failureAnalysisDigest?: string;
+  sourceHeadSha?: string;
 }
 
 export interface SemanticReviewReceipt extends Omit<SemanticReviewIdentity, "specialistIds"> {
+  failureAnalysis?: unknown;
   schemaVersion: typeof CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION;
   specialistIds: string[];
   disposition: SemanticReviewDisposition;
@@ -59,7 +63,8 @@ export type SemanticReviewStaleReason =
   | "diff-changed"
   | "policy-version-changed"
   | "reviewer-version-changed"
-  | "specialist-set-changed";
+  | "specialist-set-changed"
+  | "failure-analysis-changed";
 
 function normalizedSpecialistIds(ids: readonly string[]): string[] {
   return [...new Set(ids.map((id) => id.trim()).filter(Boolean))].sort();
@@ -109,7 +114,9 @@ export function assessSemanticReviewReceiptFreshness(
   if (receipt.capsuleId !== current.capsuleId) reasons.push("capsule-changed");
   if (receipt.baseTreeHash !== current.baseTreeHash) reasons.push("base-tree-changed");
   if (receipt.headTreeHash !== current.headTreeHash) reasons.push("head-tree-changed");
+  if (receipt.sourceHeadSha !== current.sourceHeadSha) reasons.push("head-tree-changed");
   if (receipt.diffDigest !== current.diffDigest) reasons.push("diff-changed");
+  if (receipt.failureAnalysisDigest !== current.failureAnalysisDigest) reasons.push("failure-analysis-changed");
   if (receipt.policyVersion !== current.policyVersion) reasons.push("policy-version-changed");
   if (receipt.reviewerVersion !== current.reviewerVersion) reasons.push("reviewer-version-changed");
   if (JSON.stringify(receipt.specialistIds) !== JSON.stringify(normalizedSpecialistIds(current.specialistIds))) {
@@ -250,6 +257,10 @@ export function parseSemanticReviewResponse(raw: string): SemanticReviewResult {
       decision: issues.some((issue) => issue.severity === "critical") ? "fail" : "pass",
       issues,
       summary,
+      ...(parsed.failureAnalysisReview && typeof parsed.failureAnalysisReview === "object"
+        && typeof (parsed.failureAnalysisReview as Record<string, unknown>).adequate === "boolean"
+        && typeof (parsed.failureAnalysisReview as Record<string, unknown>).rationale === "string"
+        ? { failureAnalysisReview: parsed.failureAnalysisReview as { adequate: boolean; rationale: string } } : {}),
     };
   } catch {
     return {

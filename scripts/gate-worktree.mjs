@@ -14,6 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { readGitDiffDigest } from "./lib/semantic-review-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
 //
@@ -912,10 +913,10 @@ async function main() {
   const gitBin = process.env.DPF_GATE_GIT_BIN || "git";
   const allowStub = process.env.DPF_ALLOW_LOCAL_CI_STUB === "1";
 
-  const branch = options.branch || gitOrEmpty(gitBin, ["rev-parse", "--abbrev-ref", "HEAD"]);
-  if (branch === "HEAD") die("cannot gate detached HEAD");
-  const sha = options.sha || gitOrEmpty(gitBin, ["rev-parse", "HEAD"]);
   const worktreePath = options.worktree || gitOrEmpty(gitBin, ["rev-parse", "--show-toplevel"]);
+  const branch = options.branch || gitOrEmpty(gitBin, ["rev-parse", "--abbrev-ref", "HEAD"], worktreePath);
+  if (branch === "HEAD") die("cannot gate detached HEAD");
+  const sha = options.sha || gitOrEmpty(gitBin, ["rev-parse", "HEAD"], worktreePath);
   // BI-3A34D7A9: resolve WHO is gating from the calling client's own
   // environment. The provider is NOT required here — a dry run records nothing,
   // and demanding attribution before any side effect would break every
@@ -1977,6 +1978,9 @@ async function main() {
       content: contentMetadata,
       controlPlane: controlPlaneEvidence,
       gatePassed: outcome.gatePassed,
+      headTreeHash: gitOrEmpty(gitBin, ["rev-parse", `${sha}^{tree}`], worktreePath),
+      diffDigest: readGitDiffDigest(gitOrEmpty(gitBin, ["merge-base", sha, "origin/main"], worktreePath), spawnSync, worktreePath),
+      completedAt: new Date().toISOString(),
       freshness,
       commands: [commandLabel],
       buildCommand: commandLabel,

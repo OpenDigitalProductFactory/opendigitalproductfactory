@@ -11,6 +11,8 @@ import { verifySemanticReviewAuthority } from "./semantic-review-authority";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
 import { runSemanticChangeReview } from "./semantic-change-review-operation";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
+import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
+import { validateFailureAnalysis } from "./failure-analysis";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
 const MAX_DISPATCH_ATTEMPTS = 3;
@@ -170,6 +172,12 @@ export async function executePersistedSemanticReview(taskRunId: string) {
   if (!(await verifySemanticReviewAuthority(packet, taskRunId))) {
     return settle(row, "auth-required", "submitting-authority-no-longer-valid");
   }
+  const reviewRoom = await prisma.workroom.findUnique({ where: { capsuleId: packet.input.identity.capsuleId }, select: { id: true } });
+  const currentEvidence = reviewRoom ? await resolveFailureAnalysisEvidence(packet.input.failureAnalysis, reviewRoom.id) : [];
+  const currentAnalysis = validateFailureAnalysis(packet.input.failureAnalysis, packet.input.identity, currentEvidence);
+  if (!currentAnalysis.valid || currentAnalysis.digest !== packet.input.identity.failureAnalysisDigest) {
+    return settle(row, "input-required", "failure-analysis-evidence-changed; internal author must refresh evidence and review");
+  }
   const generation = randomUUID();
   const owned = await reserveSubmittedTaskRunWorking({ taskRunId, updatedAt: row.updatedAt,
     progressPayload: progress(row, { state: "executing", generation }) });
@@ -222,6 +230,13 @@ export async function executePersistedSemanticReview(taskRunId: string) {
     }
     publishRecordedWorkCapsuleActivity(persisted.capsuleId, persisted.activityId);
     revalidatePortalContext();
+    const { publishFailureReadinessStatus } = await import("./failure-readiness-status");
+    try { await publishFailureReadinessStatus(packet.input.identity.capsuleId); }
+    catch (error) {
+      // Review is durable. Do not repeat inference because a GitHub response was lost.
+      return { taskRunId, status: persisted.status, evidenceRecordId: persisted.evidenceRecordId,
+        publicationPending: true, publicationReason: error instanceof Error ? error.message : "GitHub status unavailable" };
+    }
     return { taskRunId, status: persisted.status, evidenceRecordId: persisted.evidenceRecordId };
   });
 }

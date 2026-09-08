@@ -98,6 +98,7 @@ function makeTempWorktree() {
   writeFileSync(join(dir, "README.md"), "gate test\n");
   git(["add", "README.md"]);
   git(["commit", "-q", "-m", "init"]);
+  git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
   return dir;
 }
 
@@ -1376,7 +1377,7 @@ test("rolling upgrade observes the legacy conflict contract without failing", as
       "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.01",
-      "--lease-wait-seconds", "2",
+      "--lease-wait-seconds", "10",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
     ], {
@@ -1446,7 +1447,7 @@ test("transient admission transport reset retries the same durable claim", async
       "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.01",
-      "--lease-wait-seconds", "2",
+      "--lease-wait-seconds", "10",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
     ], {

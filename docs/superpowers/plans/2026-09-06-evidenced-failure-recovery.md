@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Evidenced failure analysis and recovery readiness
 
 Implements the failure-analysis amendment in [the shared change-review design](../specs/2026-07-27-shared-change-reviewer-control-design.md). This is one atomic delivery: a validator without producers or promotion enforcement would falsely imply protection. Local backlog bindings and review receipts belong in the live Workroom, not portable source.

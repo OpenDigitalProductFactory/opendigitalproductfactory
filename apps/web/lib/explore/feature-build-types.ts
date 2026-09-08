@@ -331,13 +331,8 @@ export type TaskResult = {
   commitSha?: string;
 };
 
-export type VerificationOutput = {
-  testsPassed: number;
-  testsFailed: number;
-  typecheckPassed: boolean;
-  fullOutput: string;
-  timestamp: string;
-};
+export type { VerificationOutput } from "@/lib/build/verification-output";
+import type { VerificationOutput } from "@/lib/build/verification-output";
 
 export type AcceptanceCriterion = {
   criterion: string;

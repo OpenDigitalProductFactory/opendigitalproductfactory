@@ -82,6 +82,12 @@ export async function recordLocalIntegrationResult(
   }
 
   const result = await recordExternalEvidence({
+    ...(typeof evidenceObject?.headTreeHash === "string" ? {
+      workCapsuleId: (await prisma.workroom.findFirst({ where: {
+        headBranch: input.candidateBranch, headSha: String(evidenceObject.sha ?? ""),
+        executorRef: input.externalSessionId, archivedAt: null,
+      }, select: { id: true } }))?.id,
+    } : {}),
     actorUserId: input.actorUserId,
     routeContext: input.routeContext,
     operationType: "local_integration_ci",

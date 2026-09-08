@@ -106,6 +106,7 @@ Do NOT announce that you're saving notes. Just do it silently after each meaning
 
 const PHASE_PROMPTS: Record<string, string> = {
   ideate: `You are helping a user design a new feature.
+Begin a failure analysis during design: identify affected people and workflows, invariants, authority/data boundaries, credible triggers and business effects, severity/exposure, elimination opportunities, and prevention, containment, detection and recovery. Keep this versioned in the design artifact and refine it against the final implementation. Use docs/architecture/failure-analysis-and-recovery.md; do not claim that every possible failure is eliminated.
 
 ${PROJECT_CONTEXT}
 
@@ -348,8 +349,8 @@ After ALL tasks complete:
 1. Run full verification (run_sandbox_tests + typecheck).
 2. Run run_sandbox_command with "git diff" to see all changes.
 3. Confirm documentation impact was handled: docs updated, or diff/notes include a concrete no-docs-needed reason; if docs are stale, update them or report that blocker before saying the build is ready.
-4. Save verification output via saveBuildEvidence field "verificationOut".
-5. If verification passes and docs impact is handled, tell the user the build is complete and ready for review.
+4. Save verification output via saveBuildEvidence field "verificationOut", retaining the versioned failureAnalysis begun in design. Refine its concrete business/user effects, eliminated opportunities, prevention, containment, detection, recovery and accountable residual risks against the final change. Reference the existing executed verification records; never replace missing evidence with a checkbox or a claim that every failure was eliminated. Follow docs/architecture/failure-analysis-and-recovery.md for the shared contract.
+5. Request the shared independent change review. Technical reviewer outages and exhausted retries go to internal engineering recovery, not to the business owner for reviewer selection or technical approval. Report complete only after the final-change evidence and required gates pass.
 
 FALLBACK: ONLY use propose_file_change if launch_sandbox explicitly returns "Docker unavailable" or "sandbox failed to start". Command errors inside the sandbox (failed migrations, compilation errors, test failures) are NORMAL build problems — fix them in the sandbox using sandbox_exec and run_sandbox_command. A command returning an error does NOT mean the sandbox is unavailable.
 
@@ -357,9 +358,9 @@ RULES:
 - For modifications: read FIRST, edit SURGICALLY, verify AFTER. Never guess at file contents.
 - For new code: check existing patterns first, then generate, then verify.
 - If tests fail, follow the WHEN TESTS FAIL recovery workflow above.
-- If 3+ fix attempts fail, tell the user and ask for guidance.
+- If 3+ technical fix attempts fail, retain the evidence and route recovery to the internal engineering coordinator. Tell the user the practical impact without asking them to select reviewers or approve technical details.
 - NEVER ask "want me to proceed?", "should I continue?", "ready to build X?" or any variation mid-build. You have approval to build everything in the plan. Just build it.
-- The ONLY time to pause and wait for user input: a genuine blocker (3+ failed fix attempts, a decision that changes scope, or explicit instructions to stop). Everything else: keep going.
+- Pause for user input only for a genuine authority or risk-acceptance decision, a decision that changes scope, or explicit instructions to stop. Technical retry exhaustion requires internal recovery, not business-owner approval.
 - If a blocker persists, requirements conflict, or correctness is uncertain, pause and surface the issue clearly instead of forcing progress.
 - Do NOT send status-only updates or list what's remaining. When you must surface a status (e.g. hitting a blocker), say what's done and what's stuck in one sentence, then stop.
 - Use tools SILENTLY — NEVER describe code for the user to copy-paste. NEVER narrate code.

@@ -4,9 +4,10 @@ import { spawnSync } from "node:child_process";
 export const LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION = "semantic-change-review-local-gate.v1";
 export const SEMANTIC_DIFF_MAX_BUFFER = 256 * 1024 * 1024;
 
-export function readGitDiffDigest(mergeBase, spawn = spawnSync) {
+export function readGitDiffDigest(mergeBase, spawn = spawnSync, cwd) {
   const diff = spawn("git", ["diff", "--binary", mergeBase, "HEAD"], {
     encoding: null,
+    ...(cwd ? { cwd } : {}),
     maxBuffer: SEMANTIC_DIFF_MAX_BUFFER,
   });
   if (diff.error?.code === "ENOBUFS") {

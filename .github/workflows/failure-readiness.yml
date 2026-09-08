@@ -1,0 +1,23 @@
+name: Failure Readiness
+on:
+  pull_request:
+  merge_group:
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: read
+jobs:
+  failure-readiness:
+    name: Failure Readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Verify platform failure evidence for every source change
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DPF_REVIEW_STATUS_PUBLISHER: ${{ vars.DPF_REVIEW_STATUS_PUBLISHER }}
+        run: node scripts/check-failure-readiness.mjs
