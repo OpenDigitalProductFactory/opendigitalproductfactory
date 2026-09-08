@@ -597,15 +597,11 @@ describe("loadOperationsMapData", () => {
     const data = await loadOperationsMapData({ window });
 
     const createdAtWindow = { createdAt: { gte: window.start, lte: window.end } };
-    expect(prisma.toolExecution.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: createdAtWindow, take: WINDOWED_SOURCE_LIMIT }),
-    );
-    expect(prisma.routeDecisionLog.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: createdAtWindow, take: WINDOWED_SOURCE_LIMIT }),
-    );
-    expect(prisma.tokenUsage.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: createdAtWindow, take: WINDOWED_SOURCE_LIMIT }),
-    );
+    for (const source of [prisma.toolExecution, prisma.routeDecisionLog, prisma.tokenUsage]) {
+      expect(source.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: createdAtWindow, take: WINDOWED_SOURCE_LIMIT }),
+      );
+    }
     expect(prisma.routeOutcome.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining(createdAtWindow),
@@ -623,7 +619,10 @@ describe("loadOperationsMapData", () => {
     );
     expect(prisma.taskRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { archivedAt: null, status: "stalled" },
+        where: { archivedAt: null, OR: [
+          { status: "stalled" },
+          { status: "input-required", a2aMetadata: { path: ["gateKind"], equals: "semantic-review" } },
+        ] },
       }),
     );
     expect(data.queriedWindow).toEqual({

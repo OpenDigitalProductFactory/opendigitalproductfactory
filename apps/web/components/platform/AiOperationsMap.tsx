@@ -559,9 +559,6 @@ function ProjectionInspector({ projection }: { projection: OperationsMapProjecti
     projection.links.backlogHref ? { href: projection.links.backlogHref, label: "Open backlog item" } : null,
     projection.links.coworkerHref ? { href: projection.links.coworkerHref, label: "Open coworker" } : null,
   ].filter((item): item is { href: string; label: string } => item !== null);
-  const stalled = projection.source === "task-run"
-    && projection.refs.taskRunId != null
-    && projection.summary.includes("(stalled)");
   return (
     <div className="mt-4 space-y-3">
       <h4 className="font-semibold text-[var(--dpf-text)]">{projection.label}</h4>
@@ -570,7 +567,7 @@ function ProjectionInspector({ projection }: { projection: OperationsMapProjecti
         <InspectorFact label="Source" value={SOURCE_LABEL[projection.source]} />
         <InspectorFact label="Severity" value={projection.severity} />
       </dl>
-      {stalled && projection.refs.taskRunId ? <StalledTaskRecoveryActions taskRunId={projection.refs.taskRunId} phase={null} /> : null}
+      {projection.recovery && projection.refs.taskRunId ? <StalledTaskRecoveryActions taskRunId={projection.refs.taskRunId} phase={null} nativeReview={projection.recovery === "semantic-review"} /> : null}
       <div className="flex flex-wrap gap-2">
         {links.map((item) => <Link key={item.href} href={item.href} className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] hover:underline">{item.label}</Link>)}
       </div>

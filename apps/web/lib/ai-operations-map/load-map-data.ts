@@ -197,7 +197,10 @@ export async function loadOperationsMapData(
     prisma.taskRun.findMany({
       where: {
         archivedAt: null,
-        status: "stalled",
+        OR: [
+          { status: "stalled" },
+          { status: "input-required", a2aMetadata: { path: ["gateKind"], equals: "semantic-review" } },
+        ],
       },
       orderBy: { startedAt: "desc" },
       take: STALLED_TASK_RUN_LIMIT,

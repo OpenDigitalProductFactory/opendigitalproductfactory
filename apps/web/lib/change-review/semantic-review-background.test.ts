@@ -16,8 +16,10 @@ vi.mock("@/lib/work-capsules/activity-events", () => ({ publishRecordedWorkCapsu
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
 vi.mock("./semantic-review-authority", () => ({ verifySemanticReviewAuthority: mocks.authority }));
 vi.mock("./routed-semantic-review", () => ({ dispatchRoutedSemanticReview: mocks.dispatch }));
+vi.mock("@/lib/self-upgrade/quiescence", () => ({ getQuiescenceLevel: vi.fn(async () => "normal") }));
 import { createSemanticReviewRequest } from "./semantic-review-request";
-import { executePersistedSemanticReview, enqueueSemanticReview, reconcileSemanticReviews } from "./semantic-review-background";
+import { getQuiescenceLevel } from "@/lib/self-upgrade/quiescence";
+import { executePersistedSemanticReview, enqueueSemanticReview, reconcileSemanticReviews, retryPersistedSemanticReview } from "./semantic-review-background";
 
 const result = { decision: "pass", issues: [], summary: "Exact diff reviewed." };
 let row: Record<string, unknown>;
@@ -26,6 +28,7 @@ let providerCalls: number;
 let transactionCommitted: boolean;
 beforeEach(() => {
   vi.clearAllMocks(); providerCalls = 0; transactionCommitted = false;
+  vi.mocked(getQuiescenceLevel).mockResolvedValue("normal");
   packet = createSemanticReviewRequest({ surface: "external", authorSurface: "codex", artifactType: "code-change",
     title: "Review", artifact: "diff", changedFiles: ["a.ts"], verificationEvidence: "Tests passed",
     identity: { capsuleId: "WC-1", baseTreeHash: "a".repeat(40), headTreeHash: "b".repeat(40),
@@ -57,6 +60,7 @@ beforeEach(() => {
   mocks.authority.mockResolvedValue(true);
   mocks.db.taskNode.findUnique.mockResolvedValue(null);
   mocks.db.taskNode.findFirst.mockResolvedValue(null);
+  mocks.db.taskNode.create.mockResolvedValue({ id: "node-new" });
   mocks.db.workroom.findUnique.mockResolvedValue({ id: "room-1" });
   mocks.evidence.mockResolvedValue({ id: "evidence-1" });
   mocks.activity.mockResolvedValue({ id: "activity-1" });
@@ -67,6 +71,84 @@ beforeEach(() => {
 });
 
 describe("durable semantic review worker", () => {
+  it("requires the original requester and explicit uncertain-inference confirmation", async () => {
+    row.status = "input-required";
+    await expect(retryPersistedSemanticReview("TR-1", "other-user", true)).rejects.toThrow("authority");
+    await expect(retryPersistedSemanticReview("TR-1", "user-1", false)).rejects.toThrow("confirmation");
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+  it("resumes an authorized wait on the same task and persists recovery before enqueue", async () => {
+    row.status = "input-required";
+    expect(await retryPersistedSemanticReview("TR-1", "user-1", true)).toMatchObject({ newTaskRunId: "TR-1" });
+    expect(row.status).toBe("submitted");
+    expect(row.progressPayload).toMatchObject({ semanticReview: { recoveryAttempt: 1, generation: null } });
+    expect(mocks.activity).toHaveBeenCalledOnce();
+    expect(mocks.send).toHaveBeenCalledOnce();
+  });
+  it("refuses exhausted recovery and revoked authority without emitting work", async () => {
+    row.status = "input-required";
+    (row.progressPayload as any).semanticReview.recoveryAttempt = 3;
+    await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("exhausted");
+    (row.progressPayload as any).semanticReview.recoveryAttempt = 0;
+    mocks.authority.mockResolvedValue(false);
+    await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("authority");
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+  it("does not create two recovery events for concurrent operator requests", async () => {
+    row.status = "input-required";
+    const outcomes = await Promise.allSettled([
+      retryPersistedSemanticReview("TR-1", "user-1", true),
+      retryPersistedSemanticReview("TR-1", "user-1", true),
+    ]);
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(mocks.send).toHaveBeenCalledOnce();
+  });
+  it("preserves the original deadline when recovery is requested", async () => {
+    row.status = "input-required";
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse(packet.deadlineAt) + 1);
+    try {
+      await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("deadline-exhausted");
+      expect(mocks.send).not.toHaveBeenCalled();
+    } finally { clock.mockRestore(); }
+  });
+  it("refuses recovery while the runtime is quiescing", async () => {
+    row.status = "input-required";
+    vi.mocked(getQuiescenceLevel).mockResolvedValue("draining");
+    await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("quiescing");
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+  it("uses a distinct queue identity for authorized recovery", async () => {
+    await enqueueSemanticReview("TR-1");
+    const original = mocks.send.mock.calls[0]![1];
+    row.status = "input-required";
+    await retryPersistedSemanticReview("TR-1", "user-1", true);
+    expect(mocks.send.mock.calls[1]![1]).not.toBe(original);
+    expect(mocks.send.mock.calls[1]![1]).toBe("semantic-review:TR-1:recovery-1:1");
+  });
+  it("reuses a completed checkpoint from the original attempt after recovery", async () => {
+    (row.progressPayload as any).semanticReview.recoveryAttempt = 1;
+    mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) =>
+      where.taskNodeId.endsWith(":recovery-1") ? null : { status: "completed", outputSnapshot: { requestDigest: packet.digest, result } });
+    await executePersistedSemanticReview("TR-1");
+    expect(providerCalls).toBe(0);
+    expect(row.status).toBe("completed");
+  });
+  it("retains uncertain attempt evidence when a replacement runs", async () => {
+    (row.progressPayload as any).semanticReview.recoveryAttempt = 1;
+    mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) =>
+      where.taskNodeId.endsWith(":recovery-1") ? null : { taskNodeId: where.taskNodeId, status: "running", outputSnapshot: { diagnostic: "connection lost" } });
+    await executePersistedSemanticReview("TR-1");
+    expect(providerCalls).toBe(1);
+    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      status: "superseded", supersededByNodeId: "node-new", outputSnapshot: expect.objectContaining({ diagnostic: "connection lost", providerOutcome: "unknown" }),
+    }) }));
+    expect(row.status).toBe("completed");
+  });
+  it.each(["1", -1, 0.5, 4])("refuses malformed recovery counter %s before delivery", async (counter) => {
+    (row.progressPayload as any).semanticReview.recoveryAttempt = counter;
+    expect(await enqueueSemanticReview("TR-1")).toBe(false);
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
   it("reserves one executor for duplicate delivery and writes one canonical receipt", async () => {
     await Promise.all([executePersistedSemanticReview("TR-1"), executePersistedSemanticReview("TR-1")]);
     expect(providerCalls).toBe(1);

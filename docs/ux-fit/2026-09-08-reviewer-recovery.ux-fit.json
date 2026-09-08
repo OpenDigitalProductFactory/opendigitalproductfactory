@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "existing-inspector",
+  "decisionInteractionId": "DI-09752865C36F",
+  "scope": { "files": ["apps/web/components/platform/AiOperationsMap.tsx", "apps/web/components/platform/StalledTaskRecoveryActions.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["existing-inspector", "separate-recovery-route"],
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "Platform",
+    "routeFamily": "/platform/ai",
+    "primaryPersona": "operator resuming an uncertain reviewer execution",
+    "navigationLayer": "contextual action",
+    "reuseConvergence": "Existing projection inspector and recovery action; canonical Button replaces three inline button styles. Typed TaskRun facts replace summary-text status detection.",
+    "sourceTruth": "TaskRun status and semantic-review family metadata; the server rechecks requester, authority, immutable request, deadline, recovery count and generation.",
+    "aiBoundary": "Resume review previews completed-check reuse and possible repeated inference charges before explicit confirmation. It never implies the previous provider outcome is known.",
+    "verification": "107 focused reviewer and map tests plus 18 loader/merge tests pass. Source typecheck passes. Live route, keyboard, theme and recovery acceptance remain required after canonical deployment.",
+    "decisionQuality": "High confidence, autonomy eligible, margin 2.291. An earlier cost-only consult was incomplete and its ledger write failed; DI-09752865C36F records the complete feature comparison."
+  }
+}

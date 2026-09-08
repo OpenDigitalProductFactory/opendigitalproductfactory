@@ -507,3 +507,13 @@ states; an unrecognized status cannot establish pending execution. Terminal-stat
 classification moves to the existing pure task-state module, preserving the MCP
 export while removing a runtime/database import from the projection. This does
 not infer fresh heartbeats or successful delivery from a stored task status.
+
+Authorized native recovery extends the existing operator TaskRun retry action.
+The original requester must explicitly confirm replacing an uncertain, tool-free
+inference attempt; provider charges may recur, but the old generation cannot
+write a receipt. Keep the original immutable packet, deadline and three-recovery
+ceiling. Reuse completed reviewer checkpoints, retain superseded attempt evidence,
+and enqueue the same TaskRun through its existing durable outbox. Expired requests,
+revoked authority and exhausted recovery are refused, with no new deadline or
+implicit grant. This is recovery of read-only inference, not replay permission
+for an arbitrary external effect or a claim of provider-side exactly-once execution.

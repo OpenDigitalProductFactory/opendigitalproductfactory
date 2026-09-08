@@ -30,6 +30,12 @@ import type {
 } from "./types";
 
 describe("AI operations map projection", () => {
+  it("offers native recovery only for a recorded reviewer wait", () => {
+    expect(projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" } })).recovery).toBe("semantic-review");
+    expect(projectTaskRun(makeTaskRun({ status: "input-required" })).recovery).toBeUndefined();
+    expect(projectTaskRun(makeTaskRun({ status: "completed", title: "Review (stalled)" })).recovery).toBeUndefined();
+    expect(projectTaskRun(makeTaskRun({ status: "stalled" })).recovery).toBe("stalled");
+  });
   it("ships a valid software-platform template with stable stations", () => {
     expect(SOFTWARE_PLATFORM_MAP_TEMPLATE.id).toBe("software-platform");
     expect(SOFTWARE_PLATFORM_MAP_TEMPLATE.stations.map((station) => station.id)).toEqual([
