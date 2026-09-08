@@ -716,6 +716,12 @@ advance; a worker cannot advance itself, only leave evidence the drive reads.
 Evidence must name the stage, be of a kind the stage declared, and post-date the
 dispatch; anything short of that re-dispatches.
 
+The dispatch timestamp comes from the recorded agent dispatch for the room's
+current stage and cycle. Without that dispatch, evidence cannot complete the
+stage. Fresh evidence replaces a blocked receipt, and the earned receipt is
+persisted with the drive snapshot so subsequent ticks retain the completed
+stage. Concurrent completing receipts in the same cycle are preserved.
+
 `record_workroom_evidence` therefore takes an optional `stageKey`, and a
 schema/handler parity guard protects it — the same seam already shipped broken
 once when `workShape` was advertised and silently dropped.

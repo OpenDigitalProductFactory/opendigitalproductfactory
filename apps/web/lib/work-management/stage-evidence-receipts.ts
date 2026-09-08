@@ -20,6 +20,8 @@
 //
 // Pure resolution over supplied rows.
 
+import { appendCompletingWorkroomDriveReceipt, isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
+
 export type RecordedEvidence = {
   /** Stage the evidence was recorded against. Evidence with no stage cannot
    *  advance one — it is a note on the room, not a stage outcome. */
@@ -53,7 +55,7 @@ export type StageEvidenceInput = {
  * is the correct, visible, non-fabricating outcome.
  */
 export function stageHasCompletingEvidence(input: StageEvidenceInput): boolean {
-  if (!input.stageKey) return false;
+  if (!input.stageKey || !input.dispatchedAt || !Number.isFinite(input.dispatchedAt.getTime())) return false;
   const declared = new Set(input.declaredKinds.filter((kind) => kind.trim().length > 0));
   return input.evidence.some((row) => {
     if (row.stageKey !== input.stageKey) return false;
@@ -79,7 +81,8 @@ export function earnEvidenceReceipts(input: StageEvidenceInput & {
   existing: readonly StageReceipt[];
 }): readonly StageReceipt[] {
   if (!input.stageKey) return input.existing;
-  if (input.existing.some((receipt) => receipt.stageKey === input.stageKey)) return input.existing;
+  if (input.existing.some((receipt) => isCompletingWorkroomDriveReceipt(receipt, input.stageKey!))) return input.existing;
   if (!stageHasCompletingEvidence(input)) return input.existing;
-  return [...input.existing, { stageKey: input.stageKey, kind: STAGE_EVIDENCE_RECEIPT_KIND }];
+  const result = appendCompletingWorkroomDriveReceipt(input.existing, { stageKey: input.stageKey, kind: STAGE_EVIDENCE_RECEIPT_KIND });
+  return result.ok ? result.data : input.existing;
 }

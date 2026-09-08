@@ -26,6 +26,9 @@ const evidence = (over: Partial<RecordedEvidence> = {}): RecordedEvidence => ({
 const base = { stageKey: "sweep", declaredKinds: ["assurance-run"], dispatchedAt };
 
 describe("stageHasCompletingEvidence", () => {
+  it("rejects evidence without a recorded dispatch", () => {
+    expect(stageHasCompletingEvidence({ ...base, dispatchedAt: null, evidence: [evidence()] })).toBe(false);
+  });
   it("accepts governed evidence for this stage, of the declared kind, after dispatch", () => {
     expect(stageHasCompletingEvidence({ ...base, evidence: [evidence()] })).toBe(true);
   });
@@ -75,6 +78,11 @@ describe("stageHasCompletingEvidence", () => {
 });
 
 describe("earnEvidenceReceipts", () => {
+  it("replaces a blocked receipt when fresh matching evidence arrives", () => {
+    expect(earnEvidenceReceipts({ ...base, evidence: [evidence()], existing: [{ stageKey: "sweep", kind: "blocked" }] })).toEqual([
+      { stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND },
+    ]);
+  });
   it("records the receipt that lets the drive advance", () => {
     expect(earnEvidenceReceipts({ ...base, evidence: [evidence()], existing: [] })).toEqual([
       { stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND },
