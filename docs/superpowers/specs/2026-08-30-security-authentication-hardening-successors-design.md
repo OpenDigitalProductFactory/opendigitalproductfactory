@@ -156,41 +156,6 @@ The seven slices strengthen this architecture at distinct seams. None introduces
 
 ## 8. BI-E22C3D75 — Principal-gated customer and social sign-in
 
-### Problem and boundary
-
-Workforce password login verifies its credential and then calls
-`authorizePrincipalForSession`; customer password and Google/Apple paths
-currently return a `CustomerContact`-rooted session without the same Principal
-decision. Signup also creates the account/contact first and runs
-`syncCustomerPrincipal` as best-effort afterward. The defect is
-authorization-before-identity asymmetry at the session boundary, not a missing
-identity model.
-
-DPF keeps one Principal spine. `CustomerContact` remains the customer-domain
-credential/profile holder and account-scoping record, `SocialIdentity` remains
-the provider assertion link, and `PrincipalAlias` binds those records to the
-authority root. This design adds no identity table or session authorization
-cache.
-
-### Research and benchmarking
-
-- [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html#ClaimStability)
-  makes issuer plus `sub` the stable end-user identifier and warns that claims
-  such as email must not be used as unique identifiers. DPF adopts provider plus
-  provider-account id as the social identity key and rejects email-only identity
-  selection.
-- [Keycloak identity brokering](https://www.keycloak.org/docs/latest/server_admin/#_identity_broker)
-  links an external provider identity to a local realm identity before issuing
-  the application-facing token and supports explicit first-login/linking flows.
-  DPF adopts that local-identity-before-session ordering, while rejecting
-  Keycloak as a second identity or authorization system because Principal
-  already owns that role.
-- [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
-  requires session management to bind authentication to access control. DPF
-  applies that binding at the Auth.js issuance boundary: a verified credential
-  or assertion remains insufficient until the Principal authority decision
-  passes.
-
 ### Objectives
 
 **OBJ-PRI-001:** Resolve or materialize the canonical Principal and alias before customer password or social session issuance.
@@ -201,46 +166,12 @@ cache.
 
 ### Design
 
-- Introduce one population-aware, credential-neutral sign-in authorization seam.
-  Password comparison and provider assertion validation remain at their existing
-  boundaries; the seam then resolves or materializes exactly one Principal,
-  checks active/contact/account/conflict state, and returns the canonical
-  Principal id with the existing customer scope projection or a stable refusal.
+- Introduce one sign-in authorization seam that accepts a verified credential/assertion and returns an authorized Principal-rooted session subject or a stable refusal.
 - CustomerContact remains the customer-domain credential/profile holder and account-scoping record; `PrincipalAlias` binds it to authority.
-- Resolve customer and partner contacts through their canonical
-  `customer_contact` or `partner_contact` alias. Materialization delegates to
-  the existing shared linker; it never creates a second identity path.
-- Key social identities by provider plus immutable provider subject. A verified
-  email may enter the existing guarded linking flow, but cannot select an
-  identity by itself. Ambiguous or conflicting aliases refuse rather than
-  choose.
-- Onboarding creates the contact, Principal, aliases, and social link
-  transactionally before session issuance or any continuation capable of
-  becoming a session.
-- Deactivation makes the credential holder and Principal authorization outcome
-  consistent in the same transaction/invariant.
+- Auto-linking requires verified provider identifiers and the existing guarded linking rules. Ambiguous or conflicting aliases refuse rather than choose.
+- Onboarding creates the contact, Principal, and alias transactionally before session issuance.
+- Deactivation makes the credential holder and Principal authorization outcome consistent in the same transaction/invariant.
 - Effective auth loads by canonical principal identity and derives customer/account scope; it does not materialize another identity cache.
-
-### Data architecture, scale, and blast radius
-
-The normalized homes remain `Principal` for authority, `PrincipalAlias` for
-identity bindings, `CustomerContact` for customer scope/profile/credential
-state, `SocialIdentity` for provider subject linkage, and effective-auth context
-for request authorization. No denormalized authority state is copied into JWT
-claims beyond the canonical Principal identifier needed to reload current
-authority.
-
-Sign-in performs indexed point lookups by contact id or provider identity and
-then by alias. The only whole-population work is the one-time set-based migration
-and a bounded invariant report. Higher-volume identity reconciliation remains
-owned by EP-24741BBF.
-
-The blast radius is limited to the shared identity authentication/linker
-modules, customer and social Auth.js callbacks, customer/social onboarding and
-linking actions, session projection, customer-contact lifecycle writes that can
-create a session-capable credential, and one additive forward migration.
-Workforce credential verification, role/capability policy, LDAP, PKI, and
-social-provider secret custody do not change.
 
 ### Acceptance contract
 
@@ -250,15 +181,6 @@ social-provider secret custody do not change.
 | AC-PRI-002 | OBJ-PRI-002 | Inactive, unresolved, and conflicted principals fail consistently across all sign-in/link paths. |
 | AC-PRI-003 | OBJ-PRI-002 | Onboarding and deactivation cannot leave a session-capable split state. |
 | AC-PRI-004 | OBJ-PRI-003 | Existing customer account/contact scoping is preserved and derived from the Principal-rooted context. |
-
-### Failure and rollback
-
-Missing or ambiguous aliases, an inactive contact/account/Principal, and
-authority conflict fail closed with stable internal refusal codes and generic
-user-facing authentication failure. Rollback removes the issuance gate while
-leaving additive Principal and alias rows intact; ambiguous identities must be
-repaired before the gate is re-enabled. A rollback must not reactivate a
-Principal or restore a stale session.
 
 ## 9. BI-DD3BBD02 — social-provider secrets in the credential kernel
 
