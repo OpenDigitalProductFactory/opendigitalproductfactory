@@ -6,7 +6,6 @@ import {
   buildCapsuleSlug,
   buildCapsuleWorktreePath,
   isRootClonePath,
-  isWorkCapsuleEvidenceKind,
   isAgentActivityKind,
   type AgentActivityKind,
   capsuleRepositoryFullName,
@@ -17,7 +16,6 @@ import {
   parseScopeClaims,
   type ScopeClaim,
   type WorkCapsuleBranchTaxonomy,
-  type WorkCapsuleEvidenceKind,
   type WorkCapsuleExecutorKind,
   type WorkCapsuleScopeInput,
   type WorkCapsuleSource,
@@ -51,6 +49,7 @@ import {
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
 export { WorkCapsuleCompletionDeniedError } from "./work-capsule-terminal-status";
+export { recordWorkCapsuleEvidence } from "./work-capsule-activity-store";
 export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 
 type CapsuleCreateInput = {
@@ -73,19 +72,6 @@ type CapsuleCreateInput = {
   requestedByPrincipalId?: string | null;
 };
 
-type CapsuleEvidenceInput = {
-  kind: WorkCapsuleEvidenceKind;
-  summary: string;
-  /** The work-shape stage this evidence completes. The drive earns a completing
-   *  receipt from stage-scoped evidence only (BI-76B35820). */
-  stageKey?: string;
-  command?: string;
-  url?: string;
-  targetId?: string;
-  runtimeTargetId?: string;
-  verificationId?: string;
-  result?: unknown;
-};
 
 type ScopeClaimInput = Pick<ScopeClaim, "kind" | "value" | "intent">;
 type ScopeReleaseInput = Pick<ScopeClaim, "kind" | "value">;
@@ -688,29 +674,6 @@ export async function reassignWorkCapsuleExecutor(args: {
   });
 }
 
-export async function recordWorkCapsuleEvidence(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  evidence: CapsuleEvidenceInput;
-  actor: WorkCapsuleActor;
-}) {
-  if (!isWorkCapsuleEvidenceKind(args.evidence.kind)) {
-    throw new Error("Invalid evidence kind");
-  }
-
-  const capsule = await args.db.workroom.findUnique({
-    where: { capsuleId: args.capsuleId },
-  });
-  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
-  return recordActivity(args.db, {
-    workCapsuleId: capsule.id,
-    kind: "evidence-recorded",
-    summary: args.evidence.summary,
-    payload: args.evidence,
-    actor: args.actor,
-  });
-}
 
 /**
  * Emit a human-legible agent-session activity (thought / action / question /

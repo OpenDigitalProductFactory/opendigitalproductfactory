@@ -12,6 +12,7 @@ import {
   findUnreachablePaths,
   isLinkContext,
   resolveRouteDirs,
+  normalizeRoomGuardPath,
 } from "./lib/room-addressing-detect.mjs";
 
 // A tiny App Router tree: /workspace/cases/[caseKey] exists behind a route
@@ -27,6 +28,15 @@ const TREE = {
   "/app/(shell)/ea": ["workrooms"],
   "/app/(shell)/ea/workrooms": [],
 };
+
+test("Windows filesystem paths retain the same route and baseline identity", () => {
+  const windowsTree = Object.fromEntries(Object.entries(TREE).map(([path, children]) =>
+    [normalizeRoomGuardPath(`D:${path.replaceAll("/", "\\")}`), children]));
+  const hits = findUnreachablePaths('const a = { href: `/ea/workrooms/${id}` };',
+    windowsTree, normalizeRoomGuardPath("D:\\app"));
+  assert.equal(hits.length, 1);
+  assert.equal(normalizeRoomGuardPath("apps\\web\\lib\\room.ts"), "apps/web/lib/room.ts");
+});
 
 test("a route group is transparent when resolving a path prefix", () => {
   assert.deepEqual(resolveRouteDirs(TREE, ROOT, ["workspace", "cases"]), [
