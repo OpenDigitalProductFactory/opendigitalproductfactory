@@ -267,6 +267,22 @@ resolve an owner. Record delivery + acceptance evidence on `BI-4B5E3443`, close
 
 ## Traceability
 
+Four-way trace per deliverable, in the coverage record's own vocabulary:
+requirement = design objective, contract = design section, flow = plan phase,
+verification = design acceptance criterion.
+
+| Deliverable | Requirement | Contract | Flow | Verification |
+|---|---|---|---|---|
+| role-inventory (`BI-1D6F5AE4`) | OBJ-ONB-ROLES-DERIVED | spec:3.1 | plan:phase-1 | AC-ONB-DERIVED-INVENTORY |
+| role-bindings (`BI-8FDC274A`) | OBJ-ONB-BIND-AT-SETUP, OBJ-ONB-OWNER-FROM-DAY-ZERO | spec:3.2, spec:3.3 | plan:phase-2 | AC-ONB-FIRST-ROOM-EXECUTES |
+| born-owned (`BI-36FC2981`) | OBJ-ONB-OWNER-FROM-DAY-ZERO | spec:3.2 | plan:phase-3 | AC-ONB-FIRST-ROOM-EXECUTES |
+| setup-step (`BI-0F44A284`) | OBJ-ONB-BIND-AT-SETUP, OBJ-ONB-READY-REFUSES | spec:3.2, spec:4, spec:5 | plan:phase-4 | AC-ONB-SETUP-STEP, AC-ONB-UNBOUND-VISIBLE |
+| assisted-proposals (`BI-40751F49`) | OBJ-ONB-IMPORT-ASSISTED | spec:3.4, spec:6 | plan:phase-5 | AC-ONB-SPREADSHEET, AC-ONB-PUBLIC-SOURCE |
+| readiness-refuses (`BI-CB525EC6`) | OBJ-ONB-READY-REFUSES | spec:3.5 | plan:phase-6 | AC-ONB-READINESS-REFUSAL, AC-ONB-UNBOUND-VISIBLE |
+| live-acceptance (`BI-71F441A4`) | OBJ-ONB-OWNER-FROM-DAY-ZERO | spec:7 | plan:phase-7 | AC-ONB-FIRST-ROOM-EXECUTES |
+
+Evidence per acceptance criterion:
+
 | AC | Phase | Evidence |
 |---|---|---|
 | AC-ONB-DERIVED-INVENTORY | 1 | `role-inventory.test.ts` synthetic-shape case |
