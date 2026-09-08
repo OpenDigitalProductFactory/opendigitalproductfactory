@@ -4,7 +4,7 @@ status: active
 
 # Workroom terminal coherence design
 
-**Backlog item:** `BI-AAA13210`  
+**Backlog items:** `BI-AAA13210`, follow-up `BI-A4EF1792`  
 **Observed predecessor:** `BI-199F71B6` / `WC-0C842917`  
 **Parent contract:** `2026-09-01-completion-readiness-recovery-design.md`
 
@@ -23,6 +23,19 @@ immediately following `WC-0C842917` transition returned
 `RESEARCH_REQUIRED`, `ACCEPTANCE_EVIDENCE_REQUIRED`, and
 `OBJECTIVE_RECONCILIATION_REQUIRED`. Adding Workroom-local test, build, and
 verification evidence cleared only `DELIVERY_EVIDENCE_REQUIRED`.
+
+Canonical live verification of the first implementation reproduced the same
+split on `BI-AAA13210` / `WC-AEA7F633`. The item completed under allowed
+decision `IRD-F7463ADB5577`, but Workroom completion recomputed readiness and
+refused under `IRD-B5A9C23A1F48` even after renewing the exact Workroom lease.
+The follow-up is tracked by `BI-A4EF1792`.
+
+The carrier defect is in `resolveSubject()`: its Prisma selection includes gate
+receipts, baselines, plan coverage, objective mappings, and timeline evidence,
+but omits `initiative_readiness_decision`. As a result,
+`persistedTerminalCompletionDecision()` receives no terminal-decision
+candidate in production. The original unit test injected the activity directly
+and therefore did not exercise the repository selection boundary.
 
 ## Objectives
 
@@ -49,6 +62,11 @@ transition and replace its capsule-identity and delivery requirement entries
 with the current Workroom evidence. If any prerequisite is absent, retain the
 existing full readiness projection and refusal behavior.
 
+The subject query must include `initiative_readiness_decision` in the same
+bounded activity read. The regression test must model the query's `where.kind`
+filter and prove that the terminal decision survives repository selection;
+injecting an unfiltered activity array is insufficient evidence.
+
 No status, receipt, table, migration, bypass, or alternate policy engine is
 added. Backlog-item completion remains unchanged.
 
@@ -63,6 +81,9 @@ added. Backlog-item completion remains unchanged.
   through the current projection and remains fail-closed.
 - **AC-WC-COHERENCE-004:** Missing Workroom-local delivery evidence or failed
   lease identity cannot reuse the item decision.
+- **AC-WC-COHERENCE-005:** The repository query selects
+  `initiative_readiness_decision`; a query-aware regression fails when that
+  kind is omitted and passes when it is present.
 
 ## Verification and compatibility
 
