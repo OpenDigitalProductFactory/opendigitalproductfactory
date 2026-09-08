@@ -153,6 +153,44 @@ export type WorkroomArchitectureProjection = {
 
 const ARCHITECTURE_PAGE_SIZE = 200;
 
+/** A COUNT of the rooms that actually exist, by portfolio placement.
+ *
+ *  The coordination list is a bounded sample (201 rows) and must never be read
+ *  as a total. This is the total, and it reports rooms with no recorded
+ *  placement as `unclassified` rather than folding them into a portfolio —
+ *  the same rule PR #5189 established for teams: a reader must be able to tell
+ *  a room genuinely in a portfolio from one nobody has classified (BI-0EB855CC).
+ */
+export async function loadRoomInventory(
+  db: { workroom: { groupBy(args: unknown): Promise<Array<{ portfolioRole: string | null; _count: { _all: number } }>> } },
+): Promise<{
+  openTotal: number;
+  unclassified: number;
+  byRole: Record<WorkCapsulePortfolioRole, number>;
+}> {
+  const rows = await db.workroom.groupBy({
+    by: ["portfolioRole"],
+    where: { archivedAt: null, status: { notIn: TERMINAL_CAPSULE_STATUSES } },
+    _count: { _all: true },
+  });
+
+  const byRole = Object.fromEntries(
+    WORK_CAPSULE_PORTFOLIO_ROLES.map((role) => [role, 0]),
+  ) as Record<WorkCapsulePortfolioRole, number>;
+  let unclassified = 0;
+  let openTotal = 0;
+
+  for (const row of rows) {
+    const count = row._count?._all ?? 0;
+    openTotal += count;
+    const role = row.portfolioRole as WorkCapsulePortfolioRole | null;
+    if (role && role in byRole) byRole[role] += count;
+    else unclassified += count;
+  }
+
+  return { openTotal, unclassified, byRole };
+}
+
 export async function loadWorkroomArchitecture(db: ArchitectureDb): Promise<WorkroomArchitectureProjection> {
   const teams = await db.valueStreamTeam.findMany({
     where: { isActive: true },

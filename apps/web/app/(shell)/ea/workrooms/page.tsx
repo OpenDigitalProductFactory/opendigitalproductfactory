@@ -4,7 +4,7 @@ import { prisma } from "@dpf/db";
 import { EaTabNav } from "@/components/ea/EaTabNav";
 import { Surface } from "@/components/ui/Surface";
 import { EmptyState, StatCard, StatusBadge } from "@/components/ui/report-kit";
-import { loadWorkroomArchitecture, loadWorkroomCoordination } from "@/lib/ea/workroom-architecture";
+import { loadRoomInventory, loadWorkroomArchitecture, loadWorkroomCoordination } from "@/lib/ea/workroom-architecture";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,11 @@ function HumanGateList({ triggers }: { triggers: Array<{ triggerPoint: string; r
 
 export default async function WorkroomArchitecturePage({ searchParams }: { searchParams?: Promise<{ operation?: string }> } = {}) {
   const operation = (await searchParams)?.operation;
-  const [architecture, coordination] = await Promise.all([loadWorkroomArchitecture(prisma), loadWorkroomCoordination(prisma, new Date(), { teamId: operation === "unmapped" ? null : operation })]);
+  const [architecture, coordination, inventory] = await Promise.all([
+    loadWorkroomArchitecture(prisma),
+    loadWorkroomCoordination(prisma, new Date(), { teamId: operation === "unmapped" ? null : operation }),
+    loadRoomInventory(prisma),
+  ]);
   const { bands, unplaced, truncated: architectureTruncated } = architecture;
   const definitions = bands.flatMap((band) => band.definitions);
   const instanceCount = definitions.reduce((total, definition) => total + definition.instanceCount, 0);
@@ -40,21 +44,33 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
       <EaTabNav />
 
       <Surface data-dpf-lead className="my-6" rounded="xl">
+        {/* Lead with the rooms that EXIST. The plan count is a different
+            question, and it is zero on every install because nothing can create
+            a team plan — leading with it read as "you have no rooms" while
+            hundreds were running (BI-0EB855CC, decision DI-66AC55277576). */}
         <p className="text-sm font-medium text-[var(--dpf-text)]">
+          {inventory.openTotal === 0
+            ? "No rooms are open."
+            : `${inventory.openTotal} room${inventory.openTotal === 1 ? " is" : "s are"} open.`}
+        </p>
+        <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+          {inventory.unclassified > 0
+            ? `${inventory.unclassified} of them ${inventory.unclassified === 1 ? "has" : "have"} no portfolio recorded. `
+            : ""}
           {definitions.length === 0
-            ? "No Workroom plans are set yet."
-            : `${definitions.length} Workroom plan${definitions.length === 1 ? "" : "s"} guide work in ${bands.filter((band) => band.definitions.length > 0).length} portfolios.`}
+            ? "No team plans are configured on this install."
+            : `${definitions.length} team plan${definitions.length === 1 ? "" : "s"} guide work here.`}
         </p>
 
-        <Link data-owner-first-next-action href={definitions.length > 0 ? `#portfolio-${bands.find((band) => band.definitions.length > 0)?.role ?? "foundational"}` : "/ea/value-streams"} className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
-          {definitions.length > 0 ? "Review Workroom plans" : "Review value streams"}
+        <Link data-owner-first-next-action href="#coordination" className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
+          Review open rooms
         </Link>
       </Surface>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <StatCard label="Workroom plans" value={definitions.length} hint="Active value stream teams" />
-        <StatCard label="Linked rooms" value={instanceCount} href="#coordination" hint="Includes completed work" />
-        <StatCard label="Portfolios" value={`${bands.filter((band) => band.definitions.length > 0).length} / 4`} hint="All four stay in view" />
+        <StatCard label="Open rooms" value={inventory.openTotal} href="#coordination" hint="Open only" />
+        <StatCard label="No portfolio recorded" value={inventory.unclassified} hint="Never defaulted" />
+        <StatCard label="Team plans" value={definitions.length} hint={definitions.length === 0 ? "Not configured on this install" : "Active value stream teams"} />
       </div>
 
       {architectureTruncated ? (
@@ -104,10 +120,16 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
                 <p className="text-dpf-caption uppercase tracking-[0.16em] text-[var(--dpf-muted)]">Portfolio</p>
                 <h2 id={`portfolio-${band.role}`} className="text-lg font-semibold text-[var(--dpf-text)]">{band.label}</h2>
               </div>
-              <StatusBadge intent={band.definitions.length > 0 ? "success" : "neutral"} label={`${band.definitions.length} definition${band.definitions.length === 1 ? "" : "s"}`} uppercase={false} />
+              <StatusBadge intent={inventory.byRole[band.role] > 0 ? "success" : "neutral"} label={`${inventory.byRole[band.role]} open room${inventory.byRole[band.role] === 1 ? "" : "s"}`} uppercase={false} />
             </div>
             {band.definitions.length === 0 ? (
-              <EmptyState size="sm" title={`No ${band.label} Workroom plans yet`} description="Set up a value stream team to show its room here." />
+              <EmptyState
+                size="sm"
+                title={inventory.byRole[band.role] > 0
+                  ? `${inventory.byRole[band.role]} open room${inventory.byRole[band.role] === 1 ? "" : "s"} here, none linked to a team plan`
+                  : `No open rooms in ${band.label}`}
+                description="Team plans are not configured here. Rooms are listed under Coordination."
+              />
             ) : (
               <div className="grid gap-4 xl:grid-cols-2">
                 {band.definitions.map((definition) => (
