@@ -82,3 +82,38 @@ describe("a declared boundary reaches the room's gap list", () => {
     expect(boundaryFor(cleared).gaps).toContain("outcome");
   });
 });
+
+describe("the room's own objective answers the outcome gap", () => {
+  function withObjective(claimSource: unknown, objective: string | null) {
+    return buildWorkroomBoundary({
+      detail,
+      boundary: projectDeclaredBoundary({
+        claim: readWorkroomBoundaryClaim(claimSource),
+        fallbackPurpose: null,
+        fallbackOutcome: objective,
+        sourceRefs: [],
+      }),
+      participants: [],
+      context: { refs: [], digest: null, sensitivityCeiling: null },
+      contextProvided: false,
+    });
+  }
+
+  it("stops asking a question the room's creator already answered", () => {
+    // Workroom.objective is a required column whose creation prompt is
+    // "Outcome this workroom coordinates". Reporting "Outcome not defined"
+    // against a room that has one was the gap list asking twice.
+    const view = withObjective(null, "Every supplier invoice is approved within five days");
+    expect(view.gaps).not.toContain("outcome");
+    expect(view.outcome).toBe("Every supplier invoice is approved within five days");
+  });
+
+  it("an explicit claim still wins over the objective", () => {
+    const claims = withWorkroomBoundaryClaim([], { outcome: "The corrected outcome" });
+    expect(withObjective(claims, "The original objective").outcome).toBe("The corrected outcome");
+  });
+
+  it("a room with no objective still reports the gap honestly", () => {
+    expect(withObjective(null, null).gaps).toContain("outcome");
+  });
+});

@@ -110,17 +110,25 @@ export function buildWorkroomBoundary(input: {
  * A declared boundary wins, exactly as a declared shape does. Nothing is
  * INFERRED: an unstated outcome stays null, because the gap list exists to tell
  * a room nobody has bounded from one somebody has.
+ *
+ * The two fallbacks are not inferences. `fallbackPurpose` is the work item's own
+ * description, and `fallbackOutcome` is Workroom.objective — a required column
+ * whose creation prompt is literally "Outcome this workroom coordinates". Every
+ * room on every install carries one, so reporting "Outcome not defined" while
+ * the creator had already answered that exact question was the gap list asking
+ * twice. An explicit claim still overrides both.
  */
 export function projectDeclaredBoundary(input: {
   claim: WorkroomBoundaryClaim | null;
   fallbackPurpose?: string | null;
+  fallbackOutcome?: string | null;
   dueAt?: string | null;
   sourceRefs: WorkroomBoundaryInput["sourceRefs"];
 }): WorkroomBoundaryInput {
   const claim = input.claim;
   return {
     purpose: claim?.purpose ?? input.fallbackPurpose ?? null,
-    outcome: claim?.outcome ?? null,
+    outcome: claim?.outcome ?? input.fallbackOutcome ?? null,
     scopeIncluded: [...(claim?.scopeIncluded ?? [])],
     scopeExcluded: [...(claim?.scopeExcluded ?? [])],
     accountablePrincipalRef: claim?.accountablePrincipalRef ?? null,

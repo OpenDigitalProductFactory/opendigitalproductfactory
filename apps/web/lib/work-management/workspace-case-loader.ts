@@ -120,6 +120,10 @@ export type WorkspaceWorkCapsuleRecord = {
   activityKind?: string | null;
   decisionScope?: string | null;
   workspaceState?: unknown;
+  /** What the room was created to achieve. Required on the row, and supplied by
+   *  whoever opened the room ("Outcome this workroom coordinates"), so it is a
+   *  DECLARATION and not an inference — see the boundary fallback below. */
+  objective?: string | null;
 };
 
 /** A capsule-activity row (WorkroomActivity, physical table WorkCapsuleActivity) —
@@ -621,6 +625,7 @@ export async function loadWorkspaceWorkCaseDetail({
         capsuleId: true,
         status: true,
         title: true,
+        objective: true,
         scopeClaims: true,
         activityKind: true,
         decisionScope: true,
@@ -755,6 +760,7 @@ export async function loadWorkspaceWorkCaseDetail({
     boundary: projectDeclaredBoundary({
       claim: boundaryClaim,
       fallbackPurpose: item.description,
+      fallbackOutcome: anchoredCapsule?.objective ?? null,
       dueAt: iso(item.dueAt),
       sourceRefs,
     }),
