@@ -8,7 +8,7 @@ status: review-ready
 
 **Epic:** EP-413F2602
 
-**Design:** `docs/superpowers/specs/2026-08-30-security-authentication-hardening-successors-design.md` §8
+**Design:** `docs/superpowers/specs/2026-09-04-customer-social-principal-gated-sign-in-design.md`
 
 **Workroom:** WC-1BB2A6D1 · `feat/principal-gated-customer-auth` · `/Users/markbodman/dpf-worktrees/principal-gated-customer-auth-recovery`
 
