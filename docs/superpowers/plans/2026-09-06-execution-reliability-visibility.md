@@ -517,3 +517,11 @@ and enqueue the same TaskRun through its existing durable outbox. Expired reques
 revoked authority and exhausted recovery are refused, with no new deadline or
 implicit grant. This is recovery of read-only inference, not replay permission
 for an arbitrary external effect or a claim of provider-side exactly-once execution.
+
+PR #5222 passed source build, typecheck and affected tests, but its protected UX
+sweep twice reported 397 arrival words against the Workroom route's 390-word
+baseline. The second run did not reproduce the inventory regression. Cause is
+unresolved. Capture the existing bounded failure screenshot during confirmation
+of a budget regression, while the measured page is still open; the existing CI
+failure artifact publishes it. Keep the baseline and blocking verdict unchanged.
+This adds diagnostic evidence, not portal acceptance or permission to merge.
