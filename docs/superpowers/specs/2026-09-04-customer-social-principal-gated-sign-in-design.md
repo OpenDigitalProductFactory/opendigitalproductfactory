@@ -10,6 +10,28 @@ status: review-ready
 
 This BI-scoped artifact supersedes the umbrella's §8 as the review and implementation baseline. The umbrella remains the portfolio index for the six independent successor BIs; its other objectives and acceptance criteria remain owned by their named backlog items.
 
+## Supersession disposition
+
+The scope reduction moves only `OBJ-PRI-001` through `OBJ-PRI-003` and
+`AC-PRI-001` through `AC-PRI-004` into this BI baseline. Every other umbrella
+statement is retained unchanged under its named BI:
+
+- BI-32935E47 retains `OBJ-KEY-001` through `OBJ-KEY-003` and `AC-KEY-001`
+  through `AC-KEY-005`.
+- BI-80E4A139 retains `OBJ-OPS-001` through `OBJ-OPS-003` and `AC-OPS-001`
+  through `AC-OPS-005`.
+- BI-C9656270 retains `OBJ-MFA-001` through `OBJ-MFA-003` and `AC-MFA-001`
+  through `AC-MFA-005`.
+- BI-DD3BBD02 retains `OBJ-SOC-001` through `OBJ-SOC-003` and `AC-SOC-001`
+  through `AC-SOC-004`.
+- BI-FE678DA3 retains `OBJ-REC-001` through `OBJ-REC-004` and `AC-REC-001`
+  through `AC-REC-005`.
+- BI-8B7B2FE9 retains `OBJ-MCP-AUTH-001` through `OBJ-MCP-AUTH-003` and
+  `AC-MCP-AUTH-001` through `AC-MCP-AUTH-006`.
+
+For the governed supersession receipt, each of those 49 retained statement ids
+uses the compact reason: `Retained under its named umbrella BI.`
+
 ## Problem and boundary
 
 Workforce password login verifies its credential and then calls `authorizePrincipalForSession`; customer password and Google/Apple paths currently return a `CustomerContact`-rooted session without the same Principal decision. Signup also creates the account/contact first and runs `syncCustomerPrincipal` as best-effort afterward. The defect is authorization-before-identity asymmetry at the session boundary, not a missing identity model.
