@@ -89,6 +89,17 @@ shape; every merge, deploy, acceptance and authority-changing advance is a `gove
 and the author never holds the receipt writer. `small | medium | large | xlarge` are
 `BacklogEffortSize`; `break-fix` is the expedite lane on a small fix (post-hoc review, WIP 1).
 
+That `claim` vs `cadence` split is load-bearing, not decorative. A shape's own
+declared triggers decide whether the room it drives RECURS: every standing shape
+declares `cadence`, every finite delivery shape declares `claim`, and
+`isStandingWorkShape` reads that rather than a hand-kept list. The source-registry
+entry supplies a room's default projection mode; the room's declared shape
+overrides it, one way only — a declared standing shape widens a finite source to
+standing, never the reverse, and an absent or unknown shape leaves the source's
+policy untouched. A new standing shape is therefore standing the day it is
+declared, with nothing else to remember to update
+(BI-97B24FB5, kernel decision DI-5F69035EC6B9).
+
 A delivery room gets its shape at the claim (`claim_backlog_item_for_work`, BI-02470C7E, design §3.3): declared by the caller as `workShape`, or derived from the item's `effortSize` and work type when every classification rule in design §3.4 agrees (`derive-delivery-shape.ts`, recorded with `source: derived` and the signals used). An implementation claim with no derivable shape is refused with `work_shape_required` and the five-shape pick list; an unattended caller gets `attentionRequired` on the refusal; `delivery-xlarge` is refused for implementation because it only ever decomposes. The shape persists as the room's `workShape` scope claim, read back by `readWorkShapeClaim` / `resolveWorkShapeClaim` like any activity shape.
 
 **This claim is what makes a room wake.** The standing-Workroom drive
@@ -665,6 +676,49 @@ Completed branches can be reused after restart; an interrupted synchronous provi
 call remains a reconciliation wait. It must not be replayed merely because the
 client disconnected or a queue event arrived again. A resumable provider handle and
 authorized recovery are still required to close that part of the execution contract.
+
+## The brief, and what advances a stage
+
+Once the twelve standing rooms began dispatching, they produced **337 completed
+task runs with `executedToolCount: 0`** and no summary. Every one. The runs were
+real — quiescence was held by a live `coworker.reasoning-loop` for
+`Workroom WC-C9320161 / assemble` — so dispatch reached a coworker and a model
+ran. It had nothing to act on.
+
+This was the entire brief a coworker received:
+
+    Execute Workroom WC-A69BCABB stage sweep for shape
+    dependency-advisory-watch@1.0.0. Stay inside the declared grants. Do not skip
+    stages, widen authority, or invent occupants.
+
+An opaque stage key and three prohibitions. Meanwhile the shape already carried
+the stage's title, its `advance.condition` — which IS the definition of done —
+the `evidence` kinds it must leave behind, the activity's description including
+its prohibitions ("It never applies a patch"), and the room's objective. None of
+it was sent. A model handed that will reasonably answer in prose that it did the
+work, which is what 337 runs did.
+
+**The dispatcher now briefs from the shape.** Objective, activity description,
+stage title, definition of done, stop conditions, the evidence to record, and an
+explicit statement that claiming completion advances nothing.
+
+**And a stage advances on recorded evidence, never on a claim.** A completed
+`TaskRun` is the executor's claim about ITSELF — provenance, not evidence. PR
+#5168 proposed earning the completing receipt from `TaskRun.status` and was
+correctly refused: it would have converted those 337 fabrications into stage
+advancement and undone the fail-closed pause from #5166. A visible loop is
+strictly better than silent false progress.
+
+The receipt is earned instead from a governed write the worker had to make
+through MCP — `record_workroom_evidence`, a sanctioned mutator requiring
+`work_capsule_write` — carrying the stage it belongs to. The drive still owns the
+advance; a worker cannot advance itself, only leave evidence the drive reads.
+Evidence must name the stage, be of a kind the stage declared, and post-date the
+dispatch; anything short of that re-dispatches.
+
+`record_workroom_evidence` therefore takes an optional `stageKey`, and a
+schema/handler parity guard protects it — the same seam already shipped broken
+once when `workShape` was advertised and silently dropped.
 
 ## Related references
 

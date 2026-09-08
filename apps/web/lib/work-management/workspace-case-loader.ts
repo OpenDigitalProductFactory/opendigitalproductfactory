@@ -10,6 +10,8 @@ import {
   buildWorkCaseSummary,
   type WorkCaseReadModelEvidenceInput,
 } from "./case-read-model";
+import { projectDeclaredBoundary } from "./room-boundary";
+import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
 import {
   buildWorkroomView,
   type WorkroomActivityInput,
@@ -19,10 +21,7 @@ import {
   projectWorkItemCycleCarriers,
   WORKROOM_OUTCOME_MESSAGE_TYPE,
 } from "./room-cycle-adapter";
-import {
-  selectCompletedWorkroomCycles,
-  selectCurrentWorkroomCycle,
-} from "./room-cycle";
+import { projectRoomCycles } from "./room-cycle-projection";
 import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureContext } from "./room-posture";
 import { readWorkroomShapeClaim } from "./workroom-shape-claim";
@@ -122,6 +121,10 @@ export type WorkspaceWorkCapsuleRecord = {
   activityKind?: string | null;
   decisionScope?: string | null;
   workspaceState?: unknown;
+  /** What the room was created to achieve. Required on the row, and supplied by
+   *  whoever opened the room ("Outcome this workroom coordinates"), so it is a
+   *  DECLARATION and not an inference — see the boundary fallback below. */
+  objective?: string | null;
 };
 
 /** A capsule-activity row (WorkroomActivity, physical table WorkCapsuleActivity) —
@@ -138,6 +141,8 @@ export type WorkspaceCasePrismaClient = {
   };
   workroom: {
     findMany(args: unknown): Promise<WorkspaceWorkCapsuleRecord[]>;
+    /** Optional so existing fakes keep compiling (BI-EBEB77E2). */
+    findFirst?(args: unknown): Promise<WorkspaceWorkCapsuleRecord | null>;
   };
   workroomActivity: {
     findMany(args: unknown): Promise<WorkspaceWorkroomActivityRecord[]>;
@@ -581,6 +586,7 @@ export async function loadWorkspaceWorkCaseDetail({
         capsuleId: true,
         status: true,
         title: true,
+        objective: true,
         scopeClaims: true,
         activityKind: true,
         decisionScope: true,
@@ -647,12 +653,13 @@ export async function loadWorkspaceWorkCaseDetail({
     openedAt: item.createdAt,
   });
   const sourceEntry = getWorkCaseSourceEntry(item.sourceType);
-  const currentCycle = sourceEntry
-    ? selectCurrentWorkroomCycle(item.sourceType, cycleCandidates)
-    : null;
-  const completedCycles = sourceEntry
-    ? selectCompletedWorkroomCycles(item.sourceType, cycleCandidates)
-    : [];
+  const { currentCycle, completedCycles, cycleProjectionError } = projectRoomCycles({
+    sourceKey: item.sourceType,
+    sourceId: decoded.sourceId,
+    candidates: cycleCandidates,
+    scopeClaims: capsules[0]?.scopeClaims,
+    registered: Boolean(sourceEntry),
+  });
   const storedPackets = projectStoredWorkroomOutcomePackets(messages);
   const structure = structureLoader
     ? await structureLoader({ sourceType: source.sourceType, sourceId: source.sourceId })
@@ -678,6 +685,8 @@ export async function loadWorkspaceWorkCaseDetail({
         hasDeclaration: readWorkroomPostureClaim(anchoredCapsule.scopeClaims) !== null,
       }
     : null;
+  const boundaryClaim = readWorkroomBoundaryClaim(anchoredCapsule?.scopeClaims);
+
   const room = buildWorkroomView({
     caseKey: resolvedCaseKey,
     sourceHealth: capsuleActivityRows.length > 20 ? "partial" : undefined,
@@ -707,30 +716,23 @@ export async function loadWorkspaceWorkCaseDetail({
       stopConditionHits: storedDrive.stopConditionHits,
       reviewDue: storedDrive.reviewDue,
     },
-    boundary: {
-      purpose: item.description,
-      outcome: null,
-      scopeIncluded: [],
-      scopeExcluded: [],
-      accountablePrincipalRef: null,
-      admittedRoleSummary: [],
-      authoritySummary: [],
-      sensitivityCeiling: null,
-      measures: [],
-      timeBoundary: {
-        dueAt: iso(item.dueAt),
-        reviewAt: null,
-        stopConditionSummary: null,
-      },
-      closureRuleSummary: null,
+    // A declared boundary wins, exactly as a declared shape does; the
+    // projection and its reasoning live in room-boundary.ts beside the rest of
+    // the boundary assembly.
+    boundary: projectDeclaredBoundary({
+      claim: boundaryClaim,
+      fallbackPurpose: item.description,
+      fallbackOutcome: anchoredCapsule?.objective ?? null,
+      dueAt: iso(item.dueAt),
       sourceRefs,
-    },
+    }),
     activities: [
       ...roomActivitiesFromMessages(item, messages),
       ...roomActivitiesFromCapsuleActivity(capsuleActivityRows, capsuleIdByRowId),
     ].sort((a, b) => new Date(b.occurredAt ?? 0).getTime() - new Date(a.occurredAt ?? 0).getTime()),
     currentCycle,
     completedCycles,
+    cycleProjectionError,
     outcomePacket: storedPackets[0] ?? null,
     receipts: [
       ...roomReceiptsFromMessages(item, messages),

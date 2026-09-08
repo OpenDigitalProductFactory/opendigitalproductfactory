@@ -765,6 +765,14 @@ model AgentThread {
   messages    AgentMessage[]
   user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // BI-706530B2: dispatch boundary. Messages older than this are withheld from
+  // what is SENT to a model — not deleted, and still shown to the owner. Set
+  // when an owner clears a thread pinned to local-only by something in its
+  // history: the screen returns to normal because the governed text genuinely
+  // is no longer dispatched, never because evidence was aged out from under it.
+  // Null on every thread until an owner asks. See lib/tak/thread-history-withholding.ts.
+  historyWithheldBefore DateTime?
+
   // Coworker execution adapter substrate (Phase A3) — per-thread CLI session
   // pinning. Null means no active CLI session; CliSessionService writes these
   // when issuing a session and a sweeper expires stale rows via the

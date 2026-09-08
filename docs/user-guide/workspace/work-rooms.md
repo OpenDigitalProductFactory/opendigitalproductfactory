@@ -23,7 +23,7 @@ relatedCode:
 
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
-From **Platform > Workrooms**, select a room ID to open this same canonical Workroom. Rooms tied to backlog work open that backlog case; rooms without a backlog item open their Work Capsule case, so the inventory never leads to a dead route.
+From **Platform > Workrooms**, select a room ID to open this same canonical Workroom. A room has one case, never two: a room tied to backlog work resolves to that backlog case even when you arrive by its room ID, and a room without a backlog item opens its own Work Capsule case. Either way the inventory never leads to a dead route, and a link you saved or shared by room ID keeps working.
 
 Coworker service engagements can also appear as Work Cases. When a requested coworker service needs approval, is accepted, or is in progress, the room opens around the engagement itself: the requested outcome is the room boundary, the provider coworker appears as a contributor, and approval context or audit references stay attached as evidence. These rooms do not show the WorkItem comment box until a WorkItem exists, because there is no task message thread to post into yet.
 
@@ -128,7 +128,45 @@ Completion produces an Outcome Packet from governed decisions, artifacts, action
 
 In a standing room, the **Current cycle** panel shows the objective, trigger, review point, measure of done, and stop conditions before the general activity stream. When no cycle is active, the room says that it is healthy and idle rather than implying that recurring work is complete.
 
+If a room's cycle cannot be worked out, the cycle section says so instead of
+reporting the room as idle — an idle room and a room whose cycle failed are not
+the same thing, and only one of them is fine to leave alone. Everything else on
+the page stays accurate and safe to act on; the reason is recorded for your
+platform team rather than shown to you.
+
 **Completed cycles** are ordered by completion time. Open a completed cycle to read its Outcome Packet, durable-record count, verification state, and unresolved work. Each unresolved item has an explicit disposition: carry it into the next cycle, open a separate case, defer it, or accept it. Retrying carry-over does not create duplicate work.
+
+## Defining the Room
+
+A room shows a yellow **"This room needs a clearer boundary"** panel when it has
+not been told what it is for. The panel lists what is missing — most often the
+intended outcome and who answers for it — and, underneath, a **Define this
+room** button.
+
+You are asked two questions first, because those two are what the panel says
+must be settled before consequential work continues:
+
+- **What does finished look like?** One sentence describing what is true when
+  the room is done.
+- **Who answers for it?** One person or role — someone a question can be put to,
+  not a team.
+
+Answering those two clears the blocking part of the notice. Everything else —
+what is in scope, what is explicitly *not*, what the room may decide without
+escalating, the most sensitive material allowed, how anyone would know it
+worked, and when it stops — sits behind **Add scope, authority, measures and
+closure**. Fill those in when they matter; a room with an outcome and an owner
+is already bounded enough to work in.
+
+Leaving a field blank clears it. A room where every field is blank goes back to
+reporting that nobody has defined it, which is deliberate: "nobody bounded this
+room" and "somebody bounded it to nothing" are different states and the panel
+should not confuse them.
+
+**Who can do this.** The same people who can change a room's pace — defining a
+room sets shared state that governs what every participant may do, so it is not
+a personal preference. If you cannot see the button, the case has no room
+behind it yet.
 
 ## Pace and Priority
 
@@ -242,3 +280,36 @@ any room where pace or verification actually matters.
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.
 
 If you do not have access, the internal room title, participants, source references, and sensitivity details are not shown. External customer case pages remain customer-safe case summaries; they do not expose internal Workroom controls or participants.
+
+## Who Is Accountable, and Who Is Working
+
+Each room states the person accountable for it — the human answerable for the work — and where
+that answer came from: recorded on this room, inherited from a room further up, or inherited from
+the organization's recorded owner. Knowing which one it is matters, because it tells you where to
+go to change it.
+
+If nobody is recorded, the room says setup is required rather than naming whoever happens to be
+handy. The install's first administrator, the person who created the room and whoever holds the
+lease are all available, and all of them would be a guess presented as a decision.
+
+Accountability is answerability for the work. It is deliberately separate from who coordinates
+the room and from what any AI coworker is permitted to do — a coworker doing the work does not
+become accountable for it.
+
+Beneath that, the room lists the workers in it. An AI coworker reached through several tools is
+one worker, not one row per tool, and any subagents it delegated appear grouped beneath it. Where
+delegation was never recorded, the room says so instead of placing workers under a likely parent.
+Where the platform holds no observation of what a worker is doing, the room says the state is not
+recorded rather than reporting it as idle. With many workers the list is bounded and tells you how
+many of the total it is showing.
+## Opening a Workroom That Has No Work Item
+
+Most Workrooms are attached to a work item, and opening one takes you to that
+item's case. Some Workrooms are not attached to anything — they are the piece of
+work themselves. Those now open as their own case rather than reporting that the
+page could not be found.
+
+A room like that shows what it holds and states what it does not. If no
+objective was recorded, it says so rather than repeating the room's title as
+though that were the objective, and urgency, effort and assignment read as not
+recorded rather than showing a value nobody set.

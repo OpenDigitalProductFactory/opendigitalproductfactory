@@ -7,6 +7,7 @@ import {
   loadWorkspaceWorkCaseLens,
   type WorkspaceCasePrismaClient,
 } from "./workspace-case-loader";
+import { resolveCanonicalWorkCaseKey } from "./canonical-case-key";
 
 type WorkItemFixture = Awaited<ReturnType<WorkspaceCasePrismaClient["workItem"]["findMany"]>>[number];
 type CoworkerEngagementFixture =
@@ -638,5 +639,78 @@ describe("workspace Work Case loader", () => {
       actorRef: { actorKind: "agent", actorId: "AGT-REVIEW" },
     }));
     expect(detail?.room?.projection.sourceHealth).toBe("partial");
+  });
+});
+
+// A room anchored only by its FK must still be reachable (BI-EBEB77E2).
+//
+// BI-650994D7 made Workroom.workItemId the canonical anchor between a room and
+// its WorkItem. The detail loader never adopted it: it resolved a work-capsule
+// case by matching WorkItem.sourceType/sourceId against the capsule id — a
+// naming convention, not the anchor. Rooms linked only by the FK fell through
+// to notFound(): 405 of 462 active rooms on the live install, 117 of them
+// holding a perfectly valid workItemId.
+//
+// The fix is NOT to render a second case under the capsule key. Every one of
+// those 117 rooms anchors to a `backlog-item` WorkItem, and that item owns one
+// case key; minting a parallel capsule-keyed case would break the one-case-per-
+// unit-of-work invariant the anchor exists to enforce (room-read-model.ts
+// asserts it). The capsule key instead RESOLVES to the anchored item's case.
+describe("a work-capsule case key resolves to its anchored canonical case", () => {
+  const anchored: WorkItemFixture = {
+    ...baseItem,
+    id: "wi-row-9",
+    itemId: "WI-9",
+    sourceType: "backlog-item",
+    sourceId: "BI-UNRELATED",
+    title: "Adopter health",
+  };
+
+  function prismaWithFkOnly(room: { workItemId: string | null } | null): WorkspaceCasePrismaClient {
+    return {
+      workItem: {
+        findMany: async () => [anchored],
+        findFirst: async (args: unknown) => {
+          const where = (args as { where?: Record<string, unknown> })?.where ?? {};
+          return where.id === "wi-row-9" ? anchored : null;
+        },
+      },
+      workItemMessage: { findMany: async () => [] },
+      workroom: {
+        findMany: async () => [],
+        findFirst: async () => (room === null ? null : ({
+          id: "cap-row-9",
+          capsuleId: "WC-0A92C30D",
+          workItemId: room.workItemId,
+          status: "open",
+          title: "Adopter health",
+        } as never)),
+      },
+      workroomActivity: { findMany: async () => [] },
+    };
+  }
+
+  it("resolves a capsule key to the case key of the WorkItem it anchors to", async () => {
+    const canonical = await resolveCanonicalWorkCaseKey(
+      prismaWithFkOnly({ workItemId: "wi-row-9" }),
+      encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: "WC-0A92C30D" }),
+    );
+    expect(canonical).toBe(encodeWorkCaseKey({ sourceType: "backlog-item", sourceId: "BI-UNRELATED" }));
+  });
+
+  it("leaves a room with no anchored WorkItem where it is", async () => {
+    const canonical = await resolveCanonicalWorkCaseKey(
+      prismaWithFkOnly({ workItemId: null }),
+      encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: "WC-0A92C30D" }),
+    );
+    expect(canonical).toBeNull();
+  });
+
+  it("does not redirect a non-capsule case key", async () => {
+    const canonical = await resolveCanonicalWorkCaseKey(
+      prismaWithFkOnly({ workItemId: "wi-row-9" }),
+      encodeWorkCaseKey({ sourceType: "booking", sourceId: "BK-1" }),
+    );
+    expect(canonical).toBeNull();
   });
 });

@@ -57,6 +57,7 @@ import {
   failQuiescenceSwap,
 } from "@/lib/self-upgrade/quiescence";
 import { rejectDuplicateSelfUpgradeDelivery } from "@/lib/self-upgrade/delivery-admission";
+import { evaluateScheduledGate, recordScheduledDecline } from "@/lib/self-upgrade/scheduled-gate";
 import {
   SELF_UPGRADE_CRON,
   SELF_UPGRADE_EVENT,
@@ -97,6 +98,11 @@ export async function runSelfUpgrade(
     extra: Record<string, unknown> = {},
   ): Promise<Record<string, unknown>> {
     if (params.runId) await skipRun(params.runId, persistedReason);
+    // BI-3CA18934: the scheduled cron carries no runId, so without this a
+    // declined unattended tick left NO trace at all — no row, no reason — and
+    // the only evidence was the absence of a run, which reads like a broken
+    // scheduler. Record it where the status tool can retrieve it.
+    else if (params.scheduled) await recordScheduledDecline(persistedReason, now);
     return {
       skipped: true,
       reason,
@@ -151,49 +157,12 @@ export async function runSelfUpgrade(
   // timezone can't be scheduled safely (any local hour could be peak), so it skips
   // with a distinct reason and the Upgrade Center prompts for a timezone — a clean
   // no-op (no drain, no cooldown), never a silent never-runs.
+  // Every unattended gate — blackout, window, interval — now lives in
+  // scheduled-gate.ts beside the status that reports it (BI-3CA18934).
   if (params.scheduled && !params.force) {
-    // Operator blackout gate (BI-59591B14): a declared no-change period pauses the
-    // unattended upgrade. A self-upgrade is a disruptive (standard) change, so it
-    // respects the same blackouts that gate other changes — unless the blackout
-    // excepts self-upgrade. Manual / force bypass. Clean no-op skip (no drain, no
-    // cooldown); it resumes automatically once the blackout ends. This is the
-    // proactive guard quiescence can't provide (a blackout may be declared ahead
-    // of time with nothing yet running).
-    const blackout = await getActiveSelfUpgradeBlackout(now);
-    if (blackout) {
-      return await skipAttempt(
-        "blackout-period",
-        `blackout-period: ${blackout.name} until ${blackout.endAt.toISOString()}`,
-        { blackoutUntil: blackout.endAt.toISOString() },
-      );
-    }
-    const { schedule, timezone, timezoneKnown, lowTrafficWindows } =
-      await resolveOperatingScheduleForSystem();
-    const auto =
-      config.maintenanceWindows.length > 0
-        ? null
-        : resolveAutoUpgradeWindow({ schedule, timeZone: timezone, timezoneKnown, lowTrafficWindows });
-    if (auto?.kind === "needs-timezone") {
-      return await skipAttempt("no-window-needs-timezone");
-    }
-    const explicitWindows =
-      config.maintenanceWindows.length > 0
-        ? config.maintenanceWindows
-        : auto?.kind === "auto-overnight"
-          ? auto.windows
-          : undefined;
-    const allowed = isUpgradeWindowOpen({ explicitWindows, schedule, timeZone: timezone });
-    if (!allowed) return await skipAttempt("outside-window");
-  }
-
-  // checkIntervalHours throttle: only the scheduled cron is rate-limited, so the
-  // hourly tick polls no more often than the operator configured. Manual/forced
-  // runs are never throttled (the operator is asking now) but still reset the
-  // clock below.
-  if (params.scheduled && !params.dryRun && !params.force) {
-    const lastCheckedAt = await getLastCheckedAt();
-    if (!isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, now)) {
-      return await skipAttempt("interval-not-elapsed");
+    const decline = await evaluateScheduledGate({ config, now, dryRun: params.dryRun });
+    if (decline) {
+      return await skipAttempt(decline.reason, decline.persistedReason ?? decline.reason, decline.extra ?? {});
     }
   }
 

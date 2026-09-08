@@ -42,6 +42,13 @@ export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+/** Park a `docker images` fixture on disk so the shim can `cat` it. */
+function writeTagFixture(backupDir: string, tags: string[]): string {
+  const path = join(backupDir, "portal-version-tags.txt");
+  writeFileSync(path, tags.length > 0 ? `${tags.join("\n")}\n` : "");
+  return path;
+}
+
 export function gitInit(dir: string): string {
   const env = {
     ...process.env,
@@ -132,7 +139,7 @@ case "$*" in
     ;;
   *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;
   "ps -a --format "*) [ -n "\${DPF_TEST_IMAGES_IN_USE:-}" ] && printf '%s\n' "$DPF_TEST_IMAGES_IN_USE" ;;
-  *"images --filter reference=ghcr.io/"*"/dpf-portal:v* --format "*) [ -n "\${DPF_TEST_PORTAL_VERSION_TAGS:-}" ] && printf '%s\n' "$DPF_TEST_PORTAL_VERSION_TAGS" ;;
+  *"images --filter reference=ghcr.io/"*"/dpf-portal:v* --format "*) [ -n "\${DPF_TEST_PORTAL_VERSION_TAGS_FILE:-}" ] && cat "$DPF_TEST_PORTAL_VERSION_TAGS_FILE" ;;
 esac
 exit 0
 `,
@@ -225,7 +232,11 @@ export function runPromote(opts: {
       ? [`export PROMOTE_COMPOSE_ENV_FILE=${shellQuote(toBashPath(opts.composeEnvFile))}`]
       : []),
     ...(opts.dockerLog ? [`export DOCKER_LOG=${shellQuote(toBashPath(opts.dockerLog))}`] : []),
-    ...(opts.portalVersionTags ? [`export DPF_TEST_PORTAL_VERSION_TAGS=${shellQuote(opts.portalVersionTags.join("\n"))}`] : []),
+    // Through a file, not the environment: a backlog-sized list is thousands of
+    // characters and the `bash -lc` payload truncates mid-quote well before the
+    // sweep runs (BI-A5FFE7A7). A file also matches how the real `docker images`
+    // output reaches the loop — a stream of lines.
+    ...(opts.portalVersionTags ? [`export DPF_TEST_PORTAL_VERSION_TAGS_FILE=${shellQuote(toBashPath(writeTagFixture(opts.backup, opts.portalVersionTags)))}`] : []),
     ...(opts.imagesInUse ? [`export DPF_TEST_IMAGES_IN_USE=${shellQuote(opts.imagesInUse.join("\n"))}`] : []),
     ...(opts.imageKeep !== undefined ? [`export PROMOTE_IMAGE_KEEP=${opts.imageKeep}`] : []),
     ...(opts.release ? [

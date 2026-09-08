@@ -56,8 +56,15 @@ export default async function ReferenceModelPage({ params }: Props) {
           </div>
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">{detail.name}</h1>
           <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-            {detail.version} · {detail.authorityType} · {detail.status}
+            {detail.version} · {detail.authorityType} ·{" "}
+            {detail.applies ? detail.status : "not this archetype"}
           </p>
+          {!detail.applies && (
+            <p className="mt-2 max-w-3xl text-sm text-[var(--dpf-muted)]">
+              {detail.applicabilityReason} Its criteria are not imported here, so the counts
+              below are empty by design rather than incomplete.
+            </p>
+          )}
           {detail.description && (
             <p className="mt-2 max-w-3xl text-sm text-[var(--dpf-muted)]">
               {detail.description}

@@ -1113,18 +1113,34 @@ if [[ $_dry_run -eq 0 ]]; then
   # PROMOTE_IMAGE_KEEP most recent others as a rollback margin, remove the rest
   # by repo:tag (untagging, never by id, so a shared layer stays if another tag
   # needs it). `docker images` lists newest first. Best-effort, volumes untouched.
+  #
+  # BI-A5FFE7A7: the candidates are removed in CHUNKS, not one `docker rmi` per
+  # tag. The first sweep on an install that predates this fix clears its whole
+  # backlog at once — reclaiming one such backlog by hand took ~13 minutes for
+  # 223 tags serially, and that time would be spent inside this step on every
+  # install the release reaches. `docker rmi` takes many references per call, so
+  # one call per chunk collapses that to seconds. A chunk that partially fails
+  # still removes its other references and never stops the sweep.
   _keep="${PROMOTE_IMAGE_KEEP:-3}"
   [[ "$_keep" =~ ^[0-9]+$ ]] || _keep=3
   _in_use="$(docker ps -a --format '{{.Image}}' 2>/dev/null | sort -u)"
   for _repo in dpf-portal dpf-postgres dpf-promoter dpf-sandbox; do
     _ref="ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/${_repo}"
     _kept=0
+    _chunk=()
     while IFS= read -r _tagged; do
       [[ -n "$_tagged" && "$_tagged" != *'<none>'* ]] || continue
       if grep -qxF -- "$_tagged" <<<"$_in_use"; then continue; fi
       if (( _kept < _keep )); then _kept=$((_kept + 1)); continue; fi
-      docker rmi "$_tagged" >/dev/null 2>&1 || true
+      _chunk+=("$_tagged")
+      if (( ${#_chunk[@]} >= 50 )); then
+        docker rmi "${_chunk[@]}" >/dev/null 2>&1 || true
+        _chunk=()
+      fi
     done < <(docker images --filter "reference=${_ref}:v*" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)
+    if (( ${#_chunk[@]} > 0 )); then
+      docker rmi "${_chunk[@]}" >/dev/null 2>&1 || true
+    fi
   done
 fi
 

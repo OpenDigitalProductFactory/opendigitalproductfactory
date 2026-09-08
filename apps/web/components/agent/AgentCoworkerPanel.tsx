@@ -933,11 +933,7 @@ export function AgentCoworkerPanel({
 
       {/* BI-706530B2: name the local-model pin instead of letting the owner
           experience it as an unexplained loss of capability. */}
-      <ThreadSensitivityNotice
-        threadId={threadId}
-        messageCount={messages.length}
-        onStartFresh={handleOpenClearConfirm}
-      />
+      <ThreadSensitivityNotice threadId={threadId} messageCount={messages.length} />
 
       {/* Voice activity indicator — shown when voice synthesis is active */}
       {voiceSynth.available && (voiceSynth.isSynthesizing || voiceSynth.isPlaying) && (

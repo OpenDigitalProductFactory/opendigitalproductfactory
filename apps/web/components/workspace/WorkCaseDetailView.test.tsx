@@ -64,6 +64,7 @@ const room: WorkroomView = {
     sourceRefs: [{ kind: "source", id: "BK-1", sourceType: "booking" }],
   },
   currentCycle: null,
+  cycleProjectionError: null,
   completedCycles: [],
   participants: [
     {

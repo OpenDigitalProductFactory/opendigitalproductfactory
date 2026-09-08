@@ -105,6 +105,10 @@ export type WorkShapeDefinitionContract = Pick<
   WorkShapeDefinition,
   | "key"
   | "version"
+  // The activity's own words. The dispatcher briefs the coworker from these;
+  // without them the brief is a bare stage key (BI-4A394B21).
+  | "title"
+  | "description"
   | "triggers"
   | "stages"
   | "stopConditions"
@@ -120,6 +124,8 @@ export function readWorkShapeDefinitionContract(
   return {
     key: shape.key,
     version: shape.version,
+    title: shape.title,
+    description: shape.description,
     triggers: shape.triggers,
     stages: shape.stages,
     stopConditions: shape.stopConditions,
@@ -227,6 +233,35 @@ export function listWorkShapes(): WorkShapeDefinition[] {
 
 export function getWorkShape(key: string): WorkShapeDefinition | null {
   return ALL_SHAPES[key] ?? null;
+}
+
+/** Does this shape describe work that RECURS rather than finishing?
+ *
+ *  Read from the shape's own declared triggers, not a hand-kept list: every
+ *  standing operations shape declares `cadence`, every finite delivery shape
+ *  declares `claim`. A new standing shape is therefore standing the day it is
+ *  declared, with nothing else to remember to update (BI-97B24FB5).
+ */
+/** The work-shape key a room declares on its scope claims, e.g. from
+ *  "adopter-health-watch@1.0.0" -> "adopter-health-watch".
+ *
+ *  scopeClaims is an untyped JSON array written by several writers, so read it
+ *  defensively. Shared rather than re-implemented per caller: the room's
+ *  declared shape now decides its projection, so every reader must agree on
+ *  what the room declared (BI-97B24FB5).
+ */
+export function readDeclaredWorkShapeKey(scopeClaims: unknown): string | null {
+  if (!Array.isArray(scopeClaims)) return null;
+  for (const claim of scopeClaims) {
+    if (!claim || typeof claim !== "object") continue;
+    const ref = (claim as Record<string, unknown>).workShape;
+    if (typeof ref === "string" && ref.length > 0) return ref.split("@")[0] ?? null;
+  }
+  return null;
+}
+
+export function isStandingWorkShape(key: string): boolean {
+  return getWorkShape(key)?.triggers.includes("cadence") ?? false;
 }
 
 /** Agent ids that a declared shape names as accountable for at least one stage. */

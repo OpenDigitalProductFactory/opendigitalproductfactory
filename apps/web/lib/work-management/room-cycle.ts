@@ -9,7 +9,8 @@ import {
   type WorkCasePolicyInput,
 } from "./policy-envelope";
 import { dedupeRoomSourceRefs, roomText } from "./room-projection-utils";
-import { getWorkCaseSourceEntry } from "./source-registry";
+import { getWorkCaseSourceEntry, STANDING_ROOM_PROJECTION } from "./source-registry";
+import { isStandingWorkShape } from "./work-shapes";
 import type { WorkroomCycleView, WorkroomOutcomePacket } from "./room-types";
 import {
   evaluateWorkroomLifecycleConformance,
@@ -101,16 +102,53 @@ export function buildWorkroomCycle(candidate: WorkroomCycleCarrierCandidate): Wo
   };
 }
 
-export function selectCurrentWorkroomCycle(
-  sourceKey: string,
-  candidates: readonly WorkroomCycleCarrierCandidate[],
-): WorkroomCycleView | null {
+/** How a room may override the projection its source registers.
+ *
+ *  A room declares its work shape on its scope claims; the source entry only
+ *  supplies the default. A declared STANDING shape widens a finite source to
+ *  standing, because a room that recurs by declaration cannot be finite in fact
+ *  (BI-97B24FB5, kernel decision DI-5F69035EC6B9).
+ *
+ *  The widening is one-way on purpose. A declared shape never narrows a standing
+ *  source to finite, and an absent or unknown shape leaves the source's own
+ *  policy untouched — so no already-correct room changes meaning.
+ */
+export type WorkroomProjectionOptions = { declaredShapeKey?: string | null };
+
+function resolveRoomProjection(sourceKey: string, options?: WorkroomProjectionOptions) {
   const source = getWorkCaseSourceEntry(sourceKey);
   if (!source) {
     throw new WorkroomCycleError("unknown_source", `Work Room source '${sourceKey}' is not registered.`);
   }
+  const declared = options?.declaredShapeKey;
+  const widens = source.roomProjection.mode === "finite" && !!declared && isStandingWorkShape(declared);
+  return { source, projection: widens ? STANDING_ROOM_PROJECTION : source.roomProjection };
+}
+
+/** The projection mode a room actually runs at, after its declared shape is
+ *  considered. Every surface that renders a room must ask this, not the source
+ *  entry alone, or the room's mode and its cycle disagree (BI-97B24FB5). */
+export function resolveRoomProjectionMode(
+  sourceKey: string,
+  declaredShapeKey?: string | null,
+): "finite" | "standing" {
+  const source = getWorkCaseSourceEntry(sourceKey);
+  if (!source) return "finite";
+  return source.roomProjection.mode === "finite"
+      && !!declaredShapeKey
+      && isStandingWorkShape(declaredShapeKey)
+    ? "standing"
+    : source.roomProjection.mode;
+}
+
+export function selectCurrentWorkroomCycle(
+  sourceKey: string,
+  candidates: readonly WorkroomCycleCarrierCandidate[],
+  options?: WorkroomProjectionOptions,
+): WorkroomCycleView | null {
+  const { source, projection } = resolveRoomProjection(sourceKey, options);
   const active = candidates.filter((candidate) => candidate.status === "open" || candidate.status === "verifying");
-  if (source.roomProjection.mode === "finite") {
+  if (projection.mode === "finite") {
     if (active.length > 0) {
       throw new WorkroomCycleError("finite_room_has_cycle", `${source.displayLabel} is finite and cannot project a recurring cycle.`);
     }
@@ -122,7 +160,7 @@ export function selectCurrentWorkroomCycle(
   }
   if (active.length === 0) return null;
 
-  const precedence = source.roomProjection.cycleCarrierPrecedence;
+  const precedence = projection.cycleCarrierPrecedence;
   const selected = [...active].sort((left, right) => {
     const rank = precedence.indexOf(left.carrierKind) - precedence.indexOf(right.carrierKind);
     return rank || left.carrierId.localeCompare(right.carrierId);
@@ -136,13 +174,11 @@ export function selectCurrentWorkroomCycle(
 export function selectCompletedWorkroomCycles(
   sourceKey: string,
   candidates: readonly WorkroomCycleCarrierCandidate[],
+  options?: WorkroomProjectionOptions,
 ): WorkroomCycleView[] {
-  const source = getWorkCaseSourceEntry(sourceKey);
-  if (!source) {
-    throw new WorkroomCycleError("unknown_source", `Work Room source '${sourceKey}' is not registered.`);
-  }
+  const { projection } = resolveRoomProjection(sourceKey, options);
 
-  const precedence = source.roomProjection.cycleCarrierPrecedence;
+  const precedence = projection.cycleCarrierPrecedence;
   const completed = candidates.filter(
     (candidate) => candidate.status === "closed" || candidate.status === "carried-over",
   );

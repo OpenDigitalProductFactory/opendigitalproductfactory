@@ -10,6 +10,7 @@ import {
   planRegenerate,
   evaluatePushExemption,
   evaluateCheckAll,
+  isMergeQueueContext,
   resolveDerivedArtifactInvocation,
 } from "./derived-artifacts-gate.mjs";
 
@@ -28,6 +29,15 @@ const DIAGRAMS = {
   generate: ["node", "scripts/render-doc-diagrams.mjs"],
   check: ["node", "scripts/render-doc-diagrams.mjs", "--check"],
   requiresBinary: "mmdc",
+};
+
+const COUNTS = {
+  id: "architecture-counts",
+  sourceGlobs: ["packages/db/prisma/migrations/**"],
+  artifactPaths: ["docs/architecture/architecture-counts.generated.md"],
+  generate: ["node", "scripts/gen-architecture-counts.mjs"],
+  check: ["node", "scripts/gen-architecture-counts.mjs", "--check"],
+  mergeQueueRaceTolerant: true,
 };
 
 const SBOM = {
@@ -164,4 +174,57 @@ test("evaluateCheckAll reports every entry's check result", () => {
       ["sbom-baseline", false],
     ],
   );
+});
+
+// ── merge-queue race tolerance ───────────────────────────────────────────────
+//
+// PR #5175 was ejected from the merge queue six times over twelve hours with
+// zero code failures: it added a migration, so did main, and the generated
+// migration COUNT in the merged tree matched neither. The author cannot fix
+// that from the queue. Tolerance is narrow on purpose: the flagged entry only,
+// the queue only, and never a substitute for the PR-head check.
+
+test("a race-tolerant entry that is stale in the MERGE QUEUE is tolerated, not failed", () => {
+  const results = evaluateCheckAll([COUNTS], () => false, { mergeQueue: true });
+  assert.deepEqual(results.map((r) => [r.entry.id, r.ok, r.tolerated]), [
+    ["architecture-counts", false, true],
+  ]);
+});
+
+test("the same stale entry on a PR head (not the queue) still FAILS — author error stays caught", () => {
+  const results = evaluateCheckAll([COUNTS], () => false, { mergeQueue: false });
+  assert.deepEqual(results.map((r) => [r.entry.id, r.ok, r.tolerated]), [
+    ["architecture-counts", false, false],
+  ]);
+});
+
+test("an entry WITHOUT the flag is never tolerated, even in the merge queue", () => {
+  const results = evaluateCheckAll([DOC_INDEX, COUNTS], () => false, { mergeQueue: true });
+  assert.deepEqual(results.map((r) => [r.entry.id, r.tolerated]), [
+    ["doc-index", false],
+    ["architecture-counts", true],
+  ]);
+});
+
+test("a fresh race-tolerant entry is simply fresh — tolerance never fires on ok", () => {
+  const [result] = evaluateCheckAll([COUNTS], () => true, { mergeQueue: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.tolerated, false);
+});
+
+test("evaluateCheckAll default (no options) is the strict pre-existing behaviour", () => {
+  const [result] = evaluateCheckAll([COUNTS], () => false);
+  assert.equal(result.ok, false);
+  assert.equal(result.tolerated, false);
+});
+
+test("isMergeQueueContext recognises the merge_group event and the readonly-queue ref, nothing else", () => {
+  assert.equal(isMergeQueueContext({ GITHUB_EVENT_NAME: "merge_group" }), true);
+  assert.equal(
+    isMergeQueueContext({ GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/gh-readonly-queue/main/pr-5175-9afc62cf" }),
+    true,
+  );
+  assert.equal(isMergeQueueContext({ GITHUB_EVENT_NAME: "pull_request", GITHUB_REF: "refs/pull/5175/merge" }), false);
+  assert.equal(isMergeQueueContext({ GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/main" }), false);
+  assert.equal(isMergeQueueContext({}), false);
 });

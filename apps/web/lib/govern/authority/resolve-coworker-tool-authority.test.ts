@@ -4,6 +4,7 @@ import {
   deriveAllowedRouteContexts,
   deriveCoworkerApprovalPolicy,
   deriveCoworkerAuthoritySubject,
+  resolveBoundInitiativeReviewBinding,
   resolveBoundInitiativeReviewItem,
   resolveInitiativeAuthorityContext,
 } from "./resolve-coworker-tool-authority";
@@ -156,6 +157,8 @@ describe("resolveBoundInitiativeReviewItem", () => {
   it("accepts only the exact writer and exact persisted item/tool scope", () => {
     expect(resolveBoundInitiativeReviewItem(task, "record_initiative_evidence"))
       .toBe("BI-47ACE2C7");
+    expect(resolveBoundInitiativeReviewBinding(task, "record_initiative_evidence"))
+      .toMatchObject({ itemId: "BI-47ACE2C7", artifactRef });
   });
 
   // Observed 2026-09-06. summon_coworker persists the initiativeReviewBinding key
@@ -249,28 +252,33 @@ describe("deriveCoworkerApprovalPolicy", () => {
     expect(deriveCoworkerApprovalPolicy(input)).toBe(expected);
   });
 
-  it("does not add a second human approval to an exact server-bound initiative review", () => {
+  it("routes an exact server-bound initiative review through action-specific policy authority", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 2,
       hitlPolicy: "side-effects",
       serverBoundInitiativeReview: true,
-    })).toBe("none");
+    })).toBe("side-effects");
+    expect(deriveCoworkerApprovalPolicy({
+      hitlTierDefault: 3,
+      hitlPolicy: "none",
+      serverBoundInitiativeReview: true,
+    })).toBe("side-effects");
   });
 
-  it("does not ask the business owner to approve an exact bound research receipt", () => {
+  it("does not let a tier-1 reviewer identity bypass the action-specific authority seam", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 1,
       hitlPolicy: "side-effects",
       serverBoundInitiativeReview: true,
-    })).toBe("none");
+    })).toBe("all");
   });
 
-  it("treats the exact server-bound review as the approval even for a tier-1 reviewer", () => {
+  it("keeps a bound review subject to the reviewer's configured side-effect policy", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 1,
       hitlPolicy: "side-effects",
       serverBoundInitiativeReview: true,
-    })).toBe("none");
+    })).toBe("all");
   });
 
   it("keeps ordinary side effects behind the coworker's configured approval policy", () => {

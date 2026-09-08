@@ -402,6 +402,21 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     },
   },
   {
+    // One operator entry for work activity (PWA-08), onto the canonical
+    // destination. Distinct from the coworker directory at `/workforce`.
+    key: "work_activity",
+    label: "Work",
+    path: "/ops/workrooms",
+    parentPath: "/ops",
+    domain: "delivery",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_operations",
+    primaryOrder: 55,
+    // In the rail: a model-only entry stayed unreachable (BI-9DC43E17).
+    shellNav: { sectionKey: "delivery", description: "Work in motion across the four portfolios." },
+  },
+  {
     key: "backlog",
     label: "Backlog",
     path: "/ops",
@@ -602,7 +617,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "platform-identity-agents",
-    label: "AI Coworkers",
+    label: "Coworker Identity",
     path: "/platform/identity/agents",
     parentPath: "/platform/identity",
     domain: "platform",
@@ -786,7 +801,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "platform-audit-operations",
-    label: "Operations",
+    label: "Jobs",
     path: "/platform/audit/operations",
     parentPath: "/platform/audit",
     domain: "platform",

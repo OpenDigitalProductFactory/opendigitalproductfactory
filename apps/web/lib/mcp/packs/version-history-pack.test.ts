@@ -291,6 +291,7 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({
       ok: true,
       data: Buffer.from("remote immutable bytes\n", "utf8"),
+      blobId: "b".repeat(40),
     });
     const res = await versionHistoryPack.handlers.read_source_at_version({
       repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
@@ -318,7 +319,36 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     expect(gitUtils.gitShow).not.toHaveBeenCalled();
   });
 
-  it("fails closed instead of falling back without a complete immutable provider identity", async () => {
+  it("reads a provider blob by commit and path when no blob id is supplied, and returns the provider's blob id", async () => {
+    // A reviewer dispatched over native MCP sees the reader's ordinary schema and
+    // knows the commit and path but not the blob id (the bound schema that
+    // carries it never reaches a native tools/list). Commit + path is already
+    // immutable, so the provider serves it and names the blob it returned.
+    gitUtils.gitBlobId.mockResolvedValue({ error: "unknown revision" });
+    repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({
+      ok: true,
+      data: Buffer.from("remote immutable bytes\n", "utf8"),
+      blobId: "c".repeat(40),
+    });
+    const res = await versionHistoryPack.handlers.read_source_at_version({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      path: "docs/spec.md",
+      version: "a".repeat(40),
+    }, "u1");
+
+    expect(res).toMatchObject({
+      success: true,
+      data: { blobId: "c".repeat(40), content: "remote immutable bytes\n", version: "a".repeat(40) },
+    });
+    expect(repositoryArtifact.readRepositoryProviderBlob).toHaveBeenCalledWith({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      commitSha: "a".repeat(40),
+      path: "docs/spec.md",
+      expectedBlobId: null,
+    });
+  });
+
+  it("fails closed without falling back when the repository is not named, and says what is missing", async () => {
     gitUtils.gitBlobId.mockResolvedValue({ error: "unknown revision" });
     const res = await versionHistoryPack.handlers.read_source_at_version({
       path: "docs/spec.md",
@@ -327,7 +357,34 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     }, "u1");
 
     expect(res).toMatchObject({ success: false, error: "unknown revision" });
+    expect(res.message).toContain("repositoryFullName");
+    expect(res.message).not.toMatch(/not available|unavailable/i);
     expect(repositoryArtifact.readRepositoryProviderBlob).not.toHaveBeenCalled();
+  });
+
+  it("fails closed without falling back when the version is not a commit sha, and says what is missing", async () => {
+    gitUtils.gitBlobId.mockResolvedValue({ error: "unknown revision" });
+    const res = await versionHistoryPack.handlers.read_source_at_version({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      path: "docs/spec.md",
+      version: "main",
+    }, "u1");
+
+    expect(res).toMatchObject({ success: false });
+    expect(res.message).toMatch(/40-character commit/);
+    expect(repositoryArtifact.readRepositoryProviderBlob).not.toHaveBeenCalled();
+  });
+
+  it("names the missing provider inputs instead of claiming git is unavailable when there is no local git", async () => {
+    gitUtils.isGitAvailable.mockResolvedValue(false);
+    const res = await versionHistoryPack.handlers.read_source_at_version({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      path: "docs/spec.md",
+      version: "main",
+    }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.message).toMatch(/40-character commit/);
+    expect(res.message).not.toMatch(/Git history is not available/);
   });
 
   it("read_source_at_version surfaces a git error", async () => {
@@ -342,7 +399,8 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     for (const t of ["read_source_at_version", "search_source_at_version", "list_source_directory", "compare_versions"]) {
       const res = await versionHistoryPack.handlers[t]({ path: "x", query: "x", from: "a" }, "u1");
       expect(res.success, t).toBe(false);
-      expect(res.message, t).toBe("Git not available.");
+      if (t === "read_source_at_version") expect(res.message, t).toContain("repositoryFullName");
+      else expect(res.message, t).toBe("Git not available.");
     }
   });
 

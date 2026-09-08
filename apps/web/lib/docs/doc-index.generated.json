@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 698,
+  "pageCount": 699,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2463,6 +2463,7 @@
         "nesting-has-to-be-written-not-just-declared",
         "who-may-coordinate-authority-and-a-gate-with-no-key",
         "concurrent-execution-and-recorded-state",
+        "the-brief-and-what-advances-a-stage",
         "related-references"
       ]
     },
@@ -2493,11 +2494,20 @@
         "definition-and-instance-are-an-orthogonal-axis",
         "implemented-projection-seam",
         "composition-duration-and-evidence",
+        "human-accountability-is-not-coordination-execution-or-access",
+        "what-an-activity-symbol-is-allowed-to-claim",
+        "an-executor-is-a-teammate-not-a-surface",
+        "expansion-is-not-selection",
         "naming-rules",
         "a-known-tension-accepted-deliberately",
         "what-is-deliberately-not-renamed-yet",
         "what-a-human-reads-is-renamed-and-now-guarded",
-        "related"
+        "related",
+        "a-disclosure-control-discloses",
+        "a-count-says-what-it-counted",
+        "a-statement-names-its-room",
+        "the-room-inspector-renders-what-the-projections-resolve",
+        "a-room-with-no-workitem-is-its-own-case"
       ]
     },
     "docs/business-types/_readability-report.md": {
@@ -3396,6 +3406,17 @@
         "what39s-still-missing",
         "how-to-navigate",
         "status-of-this-index-page"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md": {
+      "publicHref": "/founder-kernel/wiki/principles/a-room-is-reachable-by-construction/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-rule",
+        "why",
+        "how-it-is-enforced"
       ]
     },
     "docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md": {
@@ -10731,6 +10752,7 @@
         "live-blocker-references-guard",
         "agent-principal-convergence-guard",
         "label-association-guard-ratchet",
+        "room-addressing-guard",
         "what-this-gate-is-not"
       ]
     },
@@ -11222,6 +11244,7 @@
       "anchors": [
         "overview",
         "key-concepts",
+        "reference-models-and-your-archetype",
         "workroom-definitions",
         "what-you-can-do",
         "ai-coworker-identity",
@@ -12353,11 +12376,14 @@
         "inspecting-the-process",
         "access-and-other-channels",
         "finite-and-standing-rooms",
+        "defining-the-room",
         "pace-and-priority",
         "changing-it",
         "setting-a-default-for-every-room",
         "giving-a-room-its-shape",
-        "incomplete-or-unavailable-rooms"
+        "incomplete-or-unavailable-rooms",
+        "who-is-accountable-and-who-is-working",
+        "opening-a-workroom-that-has-no-work-item"
       ]
     },
     "docs/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding.md": {

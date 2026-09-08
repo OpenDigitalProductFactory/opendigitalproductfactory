@@ -20,6 +20,7 @@ permissions:
   contents: write # push the re-pin branch
   pull-requests: write # open the re-pin PR + arm auto-merge
   actions: write # dispatch ci.yml / release-gates.yml onto the branch
+  issues: write # raise the hand-off when PR creation is refused (BI-8CEBDD09)
 
 concurrency:
   group: stt-digest-watch
@@ -90,14 +91,77 @@ jobs:
             -m "Process-Spine-Decision: mechanical dependency re-pin, no doc surface changed."
           git push -f origin "$BRANCH"
 
-          gh pr create \
+          # BI-8CEBDD09: `gh pr create` is refused outright when the repository
+          # has "Allow GitHub Actions to create and approve pull requests" off:
+          #   GraphQL: GitHub Actions is not permitted to create or approve pull requests
+          # That is a repository SETTING, not a token scope — this workflow already
+          # asks for pull-requests: write. Under `bash -e` the refusal killed the
+          # step, so the dispatch and auto-merge below never ran and the pushed
+          # branch was stranded with nothing but a red log to find it by. The pin
+          # then rotted in place: every release failed E2E install verification at
+          # the digest-pinned manifest check, so no release verified and no install
+          # could receive ANY merged work (measured 2026-09-07: three merged fixes
+          # undeliverable). Never let PR creation abort the hand-off.
+          set +e
+          pr_error=$(gh pr create \
             --title "fix(release): re-pin hwdsl2/whisper-server to current registry digest (auto)" \
             --body "Automated re-pin by the **STT Digest Watch** (BI-A9EAEE2C). The registry owner re-pushed \`:latest\`, rotating the index digest; without this re-pin the Release Contract Guards + Release Image Manifest Guard go red on every PR (see BI-4439CDF1 / PR #2615 for the manual precedent). Verified inside the workflow before commit: contract tests + \`verify-compose-image-manifests.mjs --only digest-pinned\` against the live registry. Required CI is dispatched onto this branch by the watch (GITHUB_TOKEN-created PRs do not trigger checks); auto-merge is armed. If checks have not appeared, dispatch \`ci.yml\` on this branch or push an empty commit." \
-            --head "$BRANCH" --base main
+            --head "$BRANCH" --base main 2>&1)
+          pr_code=$?
+          set -e
+          echo "$pr_error"
 
           # PRs created with GITHUB_TOKEN never trigger pull_request workflows;
-          # dispatch the required check workflows onto the branch explicitly.
+          # dispatch the required check workflows onto the branch explicitly. This
+          # runs whether or not the PR exists yet, so a hand-opened PR finds its
+          # checks already running rather than waiting on a second dispatch.
           gh workflow run ci.yml --ref "$BRANCH" || echo "ci.yml dispatch failed; dispatch manually"
           gh workflow run release-gates.yml --ref "$BRANCH" || echo "release-gates dispatch failed; dispatch manually"
 
-          gh pr merge "$BRANCH" --auto || echo "auto-merge not armed; arm manually after checks pass"
+          if [ "$pr_code" = "0" ]; then
+            gh pr merge "$BRANCH" --auto || echo "auto-merge not armed; arm manually after checks pass"
+            exit 0
+          fi
+
+          # Refused. The re-pin is pushed and verified; what is missing is one
+          # click. Leave something a human will actually see: a job summary and,
+          # for the permission refusal specifically, an open issue carrying the
+          # exact link. One issue at a time — this watch runs daily.
+          compare_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$BRANCH?expand=1"
+          {
+            echo "## STT digest re-pin needs one click"
+            echo ""
+            echo "The re-pin is committed, pushed and verified on \`$BRANCH\`, but opening the PR failed:"
+            echo ""
+            echo "> $pr_error"
+            echo ""
+            echo "Open it: $compare_url"
+            echo ""
+            echo "To close this loop permanently, enable Settings > Actions > General > Allow GitHub Actions to create and approve pull requests."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "$pr_error" in
+            *"not permitted to create or approve pull requests"*)
+              title="STT digest re-pin is blocked: GitHub Actions may not open pull requests"
+              existing=$(gh issue list --state open --search "$title in:title" --json number -q '.[0].number // empty')
+              if [ -z "$existing" ]; then
+                body_file="${RUNNER_TEMP:-/tmp}/stt-repin-handoff.md"
+                {
+                  echo "The STT Digest Watch re-pinned hwdsl2/whisper-server on `$BRANCH` and verified it, but could not open the PR:"
+                  echo ""
+                  echo "> $pr_error"
+                  echo ""
+                  echo "**Open the PR:** $compare_url"
+                  echo ""
+                  echo "**Why this matters:** while the pin is stale, verify-compose-image-manifests.mjs --only digest-pinned fails, which fails E2E install verification on every release. No release verifies, so no install can receive any merged work."
+                  echo ""
+                  echo "**Permanent fix:** enable Settings > Actions > General > Allow GitHub Actions to create and approve pull requests, or give this workflow a token that may open PRs. Tracked as BI-8CEBDD09."
+                } > "$body_file"
+                gh issue create --title "$title" --body-file "$body_file" || echo "issue creation failed; the job summary still carries the hand-off"
+              else
+                echo "hand-off issue #$existing is already open"
+              fi
+              ;;
+          esac
+          # Still a real failure: the loop did not close on its own.
+          exit "$pr_code"
