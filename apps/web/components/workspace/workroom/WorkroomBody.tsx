@@ -27,6 +27,7 @@ import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
 import { WorkroomPosture } from "./WorkroomPosture";
 import { WorkroomProcessOverseer } from "./WorkroomProcessOverseer";
+import { WorkroomBoundaryControl } from "./WorkroomBoundaryControl";
 import {
   useWorkroomViewMode,
   type WorkroomViewMode,
@@ -85,12 +86,34 @@ function BoundaryNotice({ room }: { room: WorkroomView }) {
     ? "Define the intended outcome and accountable owner before consequential work continues."
     : `Complete the room boundary before consequential work continues: ${gaps.join(", ")}.`;
 
+  // The control belongs HERE, next to the sentence that names what is missing —
+  // not on a settings page the notice does not mention. Rendered only when the
+  // room is actually editable: a case with no anchoring capsule is not a room
+  // anyone can bound, and an inert button would restate the defect this fixes.
+  const editable = room.posture?.editable ?? null;
+
   return (
     <Notice variant="warn" title="This room needs a clearer boundary">
       <p>{repair}</p>
       <ul className="mt-2 list-disc space-y-1 pl-5">
         {gaps.map((gap) => <li key={gap}>{gap}</li>)}
       </ul>
+      {editable ? (
+        <WorkroomBoundaryControl
+          caseKey={editable.caseKey}
+          roomRowId={editable.roomRowId}
+          current={{
+            outcome: room.boundary.outcome,
+            accountablePrincipalRef: room.boundary.accountablePrincipalRef,
+            scopeIncluded: room.boundary.scopeIncluded,
+            scopeExcluded: room.boundary.scopeExcluded,
+            authoritySummary: room.boundary.authoritySummary,
+            sensitivityCeiling: room.boundary.sensitivityCeiling,
+            measures: room.boundary.measures,
+            closureRuleSummary: room.boundary.closureRuleSummary,
+          }}
+        />
+      ) : null}
     </Notice>
   );
 }

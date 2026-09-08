@@ -10,6 +10,7 @@ import type {
   WorkroomContextView,
   WorkroomParticipantView,
 } from "./room-types";
+import type { WorkroomBoundaryClaim } from "./workroom-boundary-claim";
 
 export type WorkroomBoundaryInput = Omit<WorkroomBoundaryView, "gaps">;
 
@@ -94,5 +95,45 @@ export function buildWorkroomBoundary(input: {
   return {
     ...boundary,
     gaps: BOUNDARY_GAP_ORDER.filter((gap) => missing.has(gap)),
+  };
+}
+
+/**
+ * Project a room's DECLARED boundary claim into the boundary input this module
+ * assembles from.
+ *
+ * Spec: 2026-07-26-work-rooms-collaboration-design.md §7 — the eleven-part
+ * boundary, and §7.2 boundary repair. Before the claim existed every field here
+ * was hardcoded null in workspace-case-loader.ts, so the gap list could never be
+ * satisfied on any install.
+ *
+ * A declared boundary wins, exactly as a declared shape does. Nothing is
+ * INFERRED: an unstated outcome stays null, because the gap list exists to tell
+ * a room nobody has bounded from one somebody has.
+ */
+export function projectDeclaredBoundary(input: {
+  claim: WorkroomBoundaryClaim | null;
+  fallbackPurpose?: string | null;
+  dueAt?: string | null;
+  sourceRefs: WorkroomBoundaryInput["sourceRefs"];
+}): WorkroomBoundaryInput {
+  const claim = input.claim;
+  return {
+    purpose: claim?.purpose ?? input.fallbackPurpose ?? null,
+    outcome: claim?.outcome ?? null,
+    scopeIncluded: [...(claim?.scopeIncluded ?? [])],
+    scopeExcluded: [...(claim?.scopeExcluded ?? [])],
+    accountablePrincipalRef: claim?.accountablePrincipalRef ?? null,
+    admittedRoleSummary: [],
+    authoritySummary: [...(claim?.authoritySummary ?? [])],
+    sensitivityCeiling: claim?.sensitivityCeiling ?? null,
+    measures: [...(claim?.measures ?? [])],
+    timeBoundary: {
+      dueAt: input.dueAt ?? null,
+      reviewAt: null,
+      stopConditionSummary: claim?.closureRuleSummary ?? null,
+    },
+    closureRuleSummary: claim?.closureRuleSummary ?? null,
+    sourceRefs: input.sourceRefs,
   };
 }

@@ -10,6 +10,8 @@ import {
   buildWorkCaseSummary,
   type WorkCaseReadModelEvidenceInput,
 } from "./case-read-model";
+import { projectDeclaredBoundary } from "./room-boundary";
+import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
 import {
   buildWorkroomView,
   type WorkroomActivityInput,
@@ -716,6 +718,8 @@ export async function loadWorkspaceWorkCaseDetail({
         hasDeclaration: readWorkroomPostureClaim(anchoredCapsule.scopeClaims) !== null,
       }
     : null;
+  const boundaryClaim = readWorkroomBoundaryClaim(anchoredCapsule?.scopeClaims);
+
   const room = buildWorkroomView({
     caseKey,
     sourceHealth: capsuleActivityRows.length > 20 ? "partial" : undefined,
@@ -745,24 +749,15 @@ export async function loadWorkspaceWorkCaseDetail({
       stopConditionHits: storedDrive.stopConditionHits,
       reviewDue: storedDrive.reviewDue,
     },
-    boundary: {
-      purpose: item.description,
-      outcome: null,
-      scopeIncluded: [],
-      scopeExcluded: [],
-      accountablePrincipalRef: null,
-      admittedRoleSummary: [],
-      authoritySummary: [],
-      sensitivityCeiling: null,
-      measures: [],
-      timeBoundary: {
-        dueAt: iso(item.dueAt),
-        reviewAt: null,
-        stopConditionSummary: null,
-      },
-      closureRuleSummary: null,
+    // A declared boundary wins, exactly as a declared shape does; the
+    // projection and its reasoning live in room-boundary.ts beside the rest of
+    // the boundary assembly.
+    boundary: projectDeclaredBoundary({
+      claim: boundaryClaim,
+      fallbackPurpose: item.description,
+      dueAt: iso(item.dueAt),
       sourceRefs,
-    },
+    }),
     activities: [
       ...roomActivitiesFromMessages(item, messages),
       ...roomActivitiesFromCapsuleActivity(capsuleActivityRows, capsuleIdByRowId),
