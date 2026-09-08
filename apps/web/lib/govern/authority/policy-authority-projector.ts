@@ -111,6 +111,7 @@ export type PolicyAuthorityProjection =
       artifactFingerprint: string;
       approvalBindingFingerprint: string;
       auditEvidenceDigest: string;
+      contributionLedger: unknown[];
       issuedAt: Date;
       expiresAt: Date;
       maxUses: 1;
@@ -345,6 +346,7 @@ export function projectPolicyAuthority(
     artifactFingerprint: binding.artifactFingerprint,
     approvalBindingFingerprint,
     auditEvidenceDigest,
+    contributionLedger: judgment.contributionLedger,
     issuedAt: now,
     expiresAt,
     maxUses: 1,
@@ -428,6 +430,7 @@ export async function persistPolicyAuthorityProjection(input: {
           artifactFingerprint: input.projection.artifactFingerprint,
           approvalBindingFingerprint: input.projection.approvalBindingFingerprint,
           auditEvidenceDigest: input.projection.auditEvidenceDigest,
+          contributionLedger: input.projection.contributionLedger,
           issuedAt: input.projection.issuedAt.toISOString(),
           expiresAt: input.projection.expiresAt.toISOString(),
           maxUses: input.projection.maxUses,
@@ -451,6 +454,7 @@ export async function persistPolicyAuthorityProjection(input: {
             interactionId: input.projection.interactionId,
             profileVersionId: input.projection.profileVersionId,
             auditEvidenceDigest: input.projection.auditEvidenceDigest,
+            contributionLedger: input.projection.contributionLedger,
             maxUses: input.projection.maxUses,
           },
         },
