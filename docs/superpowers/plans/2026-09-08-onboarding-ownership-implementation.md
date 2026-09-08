@@ -295,19 +295,8 @@ Evidence per acceptance criterion:
 
 ## Backlog coverage
 
-Recorded with `record_plan_backlog_coverage`, decision `decomposed`, against the
-plan blob at commit `3cd40ee68128` (receipt `cmtta2qii2g3d01o9exv6j6qj`,
-2026-09-08). Scope baseline `baseline-6d81c867-035a-4b5b-bd64-fb4d49a8202e`
-(spec-approval receipt `initiative-e0f86daa-eb92-4f39-b263-9d354e940f48`). The
-receipt is re-recorded whenever this file changes; the live receipt id is on the
-parent item.
-
-| Deliverable key | Backlog item | Depends on |
-|---|---|---|
-| role-inventory | `BI-1D6F5AE4` | — |
-| role-bindings | `BI-8FDC274A` | role-inventory |
-| born-owned | `BI-36FC2981` | role-bindings |
-| setup-step | `BI-0F44A284` | role-inventory, role-bindings |
-| assisted-proposals | `BI-40751F49` | — |
-| readiness-refuses | `BI-CB525EC6` | role-inventory, role-bindings |
-| live-acceptance | `BI-71F441A4` | born-owned, setup-step, readiness-refuses |
+- Decision: decomposed
+- Parent: `BI-4B5E3443`
+- Receipt: cmtta43fh2g6901o9ivrhvxof (recorded 2026-09-08 against the plan blob at commit 7a6e88c79ab0; scope baseline baseline-6d81c867-035a-4b5b-bd64-fb4d49a8202e minted by spec-approval receipt initiative-e0f86daa-eb92-4f39-b263-9d354e940f48; re-recorded whenever this file changes, and the live receipt id is on the parent item)
+- Rationale: each child is one clean revert with its own tests; the inventory and the binding substrate go first because every other slice reads them.
+- Dependencies: role-inventory -> `BI-1D6F5AE4` (none); role-bindings -> `BI-8FDC274A` (BI-1D6F5AE4); born-owned -> `BI-36FC2981` (BI-8FDC274A); setup-step -> `BI-0F44A284` (BI-1D6F5AE4, BI-8FDC274A); assisted-proposals -> `BI-40751F49` (none); readiness-refuses -> `BI-CB525EC6` (BI-1D6F5AE4, BI-8FDC274A); live-acceptance -> `BI-71F441A4` (BI-36FC2981, BI-0F44A284, BI-CB525EC6)
