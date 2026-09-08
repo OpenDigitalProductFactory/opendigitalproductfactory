@@ -74,10 +74,32 @@ const readBaseline = () => {
 };
 
 const tree = buildRouteTree(APP_ROOT);
+
+// A guard that scans nothing must not report that nothing is wrong. Both walks
+// above swallow a missing directory, so running from the wrong working
+// directory — or against a tree that has not finished checking out — produced
+// "Room addressing OK (0 route dirs scanned)". Worse, the empty result then
+// made every baseline entry look stale, and the remedy the guard printed
+// (`--update`) rewrote the file with zero entries, deleting four grandfathered
+// exemptions that were never judged. Silence is not a pass (BI-AB8FD9B9).
+if (Object.keys(tree).length === 0) {
+  console.error(`Room addressing — cannot run: no App Router tree under ${APP_ROOT}.`);
+  console.error("Run this guard from the repository root; it resolves its scan roots from the");
+  console.error("working directory. An empty scan cannot tell 'nothing to check' from 'nothing wrong'.");
+  process.exit(2);
+}
+
 const violations = [];
+let filesScanned = 0;
 
 for (const scanRoot of SCAN_ROOTS) {
-  for (const file of sourceFiles(join(REPO, scanRoot))) {
+  const files = sourceFiles(join(REPO, scanRoot));
+  if (files.length === 0) {
+    console.error(`Room addressing — cannot run: scan root ${scanRoot} holds no source files.`);
+    process.exit(2);
+  }
+  filesScanned += files.length;
+  for (const file of files) {
     const source = readFileSync(file, "utf8");
     if (!source.includes("${")) continue;
     for (const hit of [
@@ -94,6 +116,19 @@ const keyOf = (v) => `${v.file}::${v.prefix}`;
 
 if (UPDATE) {
   const keys = [...new Set(violations.filter((v) => v.kind === "unreachable-path").map(keyOf))].sort();
+  // Shrink-only is the rule, but "shrink to nothing" is almost always a broken
+  // scan rather than four links fixed at once. Dropping every entry silently
+  // discards exemptions that each still owe a judgement, so it must be asked
+  // for twice (BI-AB8FD9B9).
+  const existing = readBaseline();
+  if (keys.length === 0 && existing.size > 0 && !process.argv.includes("--allow-empty")) {
+    console.error(`Room addressing — refusing to write an EMPTY baseline over ${existing.size} recorded entr(ies).`);
+    console.error("Every recorded link would be dropped, and each is a grandfathered exemption that");
+    console.error("still owes its own judgement. This is what a scan that found nothing looks like,");
+    console.error("so check the working directory first. If they really are all fixed, say so:");
+    console.error("  node scripts/check-no-unreachable-room-links.mjs --update --allow-empty");
+    process.exit(2);
+  }
   const previous = (() => {
     try {
       return JSON.parse(readFileSync(BASELINE_PATH, "utf8"));
@@ -145,4 +180,4 @@ if (remaining.length > 0) {
   process.exit(1);
 }
 
-console.log(`Room addressing OK — no hand-built work-case paths, no provably-unreachable room links (${Object.keys(tree).length} route dirs scanned). guard passed`);
+console.log(`Room addressing OK — no hand-built work-case paths, no provably-unreachable room links (${Object.keys(tree).length} route dirs, ${filesScanned} source files scanned). guard passed`);
