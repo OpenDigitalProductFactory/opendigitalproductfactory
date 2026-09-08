@@ -312,6 +312,11 @@ recorded rather than reporting it as idle. With many workers the list is bounded
 many of the total it is showing.
 ## Opening a Workroom That Has No Work Item
 
+Opening a Workroom from an operation keeps that operation and any selected
+process step in the address when the room resolves to its case. In step
+inspection, linked records appear as a short list; expand it to read every
+identity. A link alone does not establish that the step affects that record.
+
 Most Workrooms are attached to a work item, and opening one takes you to that
 item's case. Some Workrooms are not attached to anything — they are the piece of
 work themselves. Those now open as their own case rather than reporting that the
