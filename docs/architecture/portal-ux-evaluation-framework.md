@@ -217,6 +217,93 @@ explicit review evidence. This documentation revision does **not** implement new
 automatic enforcement. Any later automation extends those existing contracts
 under a scoped BI; it must fail visibly when it cannot measure.
 
+### Every-PR review and convergence of existing UX
+
+Every PR receives a UX-impact disposition against this framework, including
+backend, schema, dependency, prompt and workflow changes that can alter what a
+person sees or can accomplish. A concrete source-backed no-impact reason takes
+the lightweight path; it does not require booting a portal for an unrelated
+documentation change. Unknown impact requires investigation, not an automatic
+N/A. The same criteria govern new designs and refactoring of existing surfaces.
+
+For affected UX, map the change to the ten criteria above and link the relevant
+scorecard evidence. Identify affected routes, shared-component consumers, personas,
+archetypes, default item details and external dependency handoffs. Use the existing
+navigation model and source graph to select coverage, with source/graph/served
+versions recorded; a graph is not evidence of rendered task success. Render
+representative primary and adverse states, expand coverage when a shared failure
+is found, and retain the existing broad route-sweep checks where applicable.
+
+The PR review distinguishes three outcomes:
+
+- New or worsened violations: correct them before acceptance. Missing required
+  evidence remains unmeasured or inconclusive, never a pass.
+- Existing debt touched by the change: record before/after harm and retire the
+  relevant duplication or unnecessary detail within the bounded slice. If it
+  cannot fit safely, link its existing BI, accountable owner and review trigger.
+- Unrelated existing debt: retain its evidence and backlog linkage without
+  misattributing it to this PR or expanding every PR into a portal rewrite.
+
+An unchanged baseline is not proof of good design. Refactoring slices declare
+which criteria they will improve and prove the improvement while preserving task
+outcomes and permissions. Do not silently rebaseline regressions. Track the
+80% refactoring / at most 20% justified net-new allocation across the program;
+individual PRs remain cohesive and need not artificially mix both work types.
+
+The author supplies impact and evidence; the PR reviewer records the criterion
+verdict and remaining debt. Re-evaluate affected evidence after material changes
+to the reviewed diff, and reconcile delivered results to the served version.
+Emit one maintained review result per PR rather than repeated audit commentary.
+Broader release review samples untouched families to detect drift beyond changed
+routes. Navigation changes update the canonical source and existing projection
+pipeline, not a separately maintained audit graph.
+
+This is the required ongoing review contract. Automated all-PR classification,
+evidence validation and review publication must extend the existing PR/UX gates
+under governed implementation coverage. They are not activated by this document
+and must operate independently of a particular desktop task or AI client.
+
+### September 8 delivery reconciliation
+
+Recent merged work already delivers parts of this direction. The following is
+PR/source evidence reviewed on 2026-09-08, not a new live-install verification.
+
+| Merged change | Criteria advanced | Remaining acceptance work |
+| --- | --- | --- |
+| [#5207](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5207), distinct navigation labels with a uniqueness test | Navigation, cognitive load | Renaming did not consolidate the three directories. The PR reports 3,439 arrival words on coworker identity; unchanged is not acceptable design merely because the ratchet passes. |
+| [#5208](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5208), one Work rail entry and corrected Delivery cross-link | Canonical home, time to action | Verify affected personas and return paths on the served version. The PR measured the shared rail cost and limited baseline changes to attributed effects. |
+| [#5198](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5198) and [#5203](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5203), portfolio activity and repaired disclosure at scale | Disclosure, state truth, workroom relevance | The latter PR reports a residual inventory table contributing about 844 words at a 200-room read. Review whether tree and table serve distinct tasks; consolidate redundant default content. |
+| [#5212](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5212), architecture Workrooms leads with actual rooms | Outcome orientation, state quality, model leakage | Preserve the distinction between actual work and team definitions. Do not add plan-creation capability merely to fill a zero card. |
+| [#5204](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5204), canonical room addressing and CI guard | Navigation, meaningful task completion | Reuse this guard; its documented baseline retains four legacy link candidates requiring individual verification. |
+
+The existing UX-fit script detects new routes, controls and visible copy in TSX
+diffs and validates changed manifests against route budgets. That is useful
+enforcement, but it does not establish the full every-PR impact assessment above:
+indirect read-model, permission, prompt, workflow and dependency changes can alter
+UX without matching those additions. Its option-decision evidence also does not
+prove task completion. Extend this contract and its shared sensitivity logic;
+do not create another scanner or claim that a PR-description assertion is proof.
+
+Delivery sequence:
+
+1. Publish this framework and scorecard as documentation, reconciled with the
+   merged work above. Keep historical observations and their versions intact.
+2. Under governed implementation coverage, extend existing impact/manifest and
+   review machinery to require every-PR classification, affected-criterion
+   evidence, and explicit regression versus legacy-debt disposition. Exercise
+   positive and negative fixtures, including a backend-only UX change, unrelated
+   docs, shared-component consumers, and stale/missing evidence.
+3. Apply the extended review to a bounded consolidation slice: the Work page's
+   tree/inventory overlap is the first candidate; coworker directory duplication
+   follows its existing BI-2DBC4D2D scope. Re-measure current served behavior before
+   choosing the final slice, then prove reduced default detail with preserved
+   room discovery, selection, direct links and permissions at ordinary and large
+   data volumes.
+
+Completion means the documentation is merged, the review executes on PRs with
+traceable evidence, and a refactoring PR demonstrates criterion improvement.
+This reconciliation does not claim those outstanding outcomes are delivered.
+
 ## 6. Architecture decision and research
 
 The subsequent operator-directed 80/20 allocation is authoritative for this

@@ -7,6 +7,10 @@ Do not put proposed values in observed columns.
 
 ## Identity and purpose
 
+- PR / reviewed base and head SHA / reviewer:
+- UX impact: affected / no impact with source-backed reason / unknown:
+- Criterion-to-change mapping / affected shared consumers / coverage selection:
+- New regression / touched existing debt / unrelated existing debt:
 - Audit ID / date / reviewer / BI / Workroom:
 - Source SHA / served SHA / install and readiness evidence:
 - Route or flow / canonical home / owning area:

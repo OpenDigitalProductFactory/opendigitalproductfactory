@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 699,
+  "pageCount": 701,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2093,6 +2093,8 @@
         "4-workroom-centered-disclosure",
         "archetype-sentinels-without-ia-forks",
         "5-standing-ux-design-and-fit-gate",
+        "every-pr-review-and-convergence-of-existing-ux",
+        "september-8-delivery-reconciliation",
         "6-architecture-decision-and-research",
         "consolidation-and-dependency-review"
       ]
