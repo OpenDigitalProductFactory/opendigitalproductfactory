@@ -109,6 +109,14 @@ bootstrap runs with the system interpreter.
 
 ---
 
+## Room route guard on Windows
+
+The room-addressing guard normalizes filesystem paths to forward slashes before
+walking the route tree and comparing baseline identities. Windows backslashes
+previously made existing route directories invisible and reported four valid
+baseline entries as stale. The Windows-path fixture and live-tree guard test
+cover this behavior; keep filesystem spelling out of portable route identities.
+
 ## Recurring meta-pattern
 
 Most entries above share one root: **a Windows-first assumption baked into a

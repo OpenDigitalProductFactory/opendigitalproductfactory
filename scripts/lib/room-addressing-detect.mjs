@@ -24,6 +24,8 @@
 const isRouteGroup = (name) => name.startsWith("(") && name.endsWith(")");
 const isDynamic = (name) => name.startsWith("[") && name.endsWith("]");
 
+export const normalizeRoomGuardPath = (path) => path.replaceAll("\\", "/");
+
 /**
  * Walk an App Router tree description to the directory a static path prefix
  * names. `tree` is a map of dirPath -> child directory names, so the caller

@@ -5242,6 +5242,7 @@
         "2-shell-scripts-bsd-vs-gnu-coreutils",
         "3-docker-compose",
         "4-git-repo-hygiene",
+        "room-route-guard-on-windows",
         "recurring-meta-pattern"
       ]
     },
