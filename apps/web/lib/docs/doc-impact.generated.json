@@ -1732,6 +1732,7 @@
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
     ],
     "scripts/check-ux-fit-decision.mjs": [
+      "docs/architecture/portal-ux-evaluation-framework.md",
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/design/golden-triangle-design.md"
     ],
@@ -2625,6 +2626,9 @@
       "scripts/platform-substrate-baseline.json",
       "scripts/platform-substrate-manifest.json",
       "scripts/platform-substrate-runtime-baseline.json"
+    ],
+    "docs/architecture/portal-ux-evaluation-framework.md": [
+      "scripts/check-ux-fit-decision.mjs"
     ],
     "docs/architecture/section-navigation.md": [
       "apps/web/components/shell/SectionNav.tsx",
