@@ -677,6 +677,13 @@ describe("recovery packets are executable by the real consumer", () => {
         parseInitiativeReviewBinding(route.requestCoworker.initiativeReviewBinding),
         `parseInitiativeReviewBinding rejected the packet for ${route.toolName}`,
       ).not.toBeNull();
+      expect(route.requestCoworker.initiativeReviewBinding.workroomRef).toEqual({
+        kind: "workroom-head",
+        workroomId: dispatchContext.workroomId,
+        repositoryFullName: dispatchContext.repositoryFullName,
+        branchName: dispatchContext.branchName,
+        headSha: dispatchContext.headSha,
+      });
     }
   });
 

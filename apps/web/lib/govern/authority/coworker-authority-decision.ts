@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
+import type { ToolConsequence } from "@/lib/mcp-tools";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 
 import {
   canAccessAuthoritySubject,
@@ -73,6 +75,9 @@ export type CoworkerAuthorityInput = {
     routeContext: string | null;
     allowedRouteContexts?: readonly string[];
     approvalPolicy: CoworkerApprovalPolicy;
+    /** False when an explicit operator policy forbids policy projection. */
+    policyProjectionAllowed?: boolean;
+    consequence?: ToolConsequence | null;
     requiresDelegationChain?: boolean;
   };
   subject?: CoworkerAuthoritySubject | null;
@@ -97,6 +102,8 @@ export type CoworkerAuthorityInput = {
   task?: {
     taskRunId: string;
     parentTaskRunId?: string | null;
+    /** Immutable server-validated review scope; never sourced from tool args. */
+    initiativeReviewBinding?: InitiativeReviewBinding;
   } | null;
   rawParams: Record<string, unknown>;
   approval?: {
