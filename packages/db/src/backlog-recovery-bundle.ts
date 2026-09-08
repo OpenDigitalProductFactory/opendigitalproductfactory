@@ -789,3 +789,112 @@ export function buildWorkroomCaptureRecord(
     workrooms,
   };
 }
+
+// ── Workroom restore ─────────────────────────────────────────────────────────
+//
+// The counterpart to `buildWorkroomCaptureRecord` (BI-E2507972). Slice 1
+// (BI-F9939341) made the rows SURVIVE a reinstall: the install scripts dump the
+// database before destroying it, and the backlog bundle carries workrooms.json.
+// Nothing put them back. A fresh install seeds from scratch and knows nothing
+// about the rooms, while the worktrees they point at are still on disk — which
+// is the orphaned-work state the whole exercise exists to prevent.
+//
+// This planner is PURE and decides nothing it cannot justify:
+//   - a room already present is left alone, so a re-run is a no-op rather than a
+//     second copy or an overwrite of work done since the capture;
+//   - a room whose worktree is gone is still restored, as `archived` with the
+//     reason recorded, because "we destroyed the evidence" is not the same claim
+//     as "this work never existed";
+//   - every captured room lands in exactly one bucket, so the caller can assert
+//     restored + archived + skipped == workroomCount and know nothing was lost.
+//
+// Whether a worktree exists is injected rather than read here: the caller owns
+// the filesystem, and a pure planner is what makes the arithmetic testable.
+
+/** What the restore should do with one captured room. */
+export type WorkroomRestoreAction = {
+  capsuleId: string;
+  /** The captured row, ready for the caller to write. */
+  room: WorkroomCaptureRecord["workrooms"][number];
+  /** Status to restore it under — the captured status, or `archived` when its worktree is gone. */
+  status: string;
+  /** Present only when the restore changed the status; recorded on the room. */
+  archivedReason?: string;
+};
+
+export type WorkroomRestoreSkip = {
+  capsuleId: string;
+  reason: "already-present";
+};
+
+export type WorkroomRestorePlan = {
+  /** Rooms to recreate under their captured status. */
+  restore: WorkroomRestoreAction[];
+  /** Rooms to recreate as `archived` because their worktree no longer exists. */
+  archiveMissingWorktree: WorkroomRestoreAction[];
+  /** Rooms this install already has; left untouched. */
+  skipped: WorkroomRestoreSkip[];
+  /** From the record, so the caller can assert the buckets account for all of it. */
+  capturedCount: number;
+};
+
+/**
+ * Decide what a Workroom restore should do, without doing any of it.
+ *
+ * `worktreeExists` is asked only for a room that names a worktree path. A room
+ * with no path (a Build Studio room, for example) is restored under its captured
+ * status: there is no worktree for its absence to mean anything about.
+ */
+export function planWorkroomRestore(input: {
+  record: WorkroomCaptureRecord;
+  /** capsuleIds this install already has, in any status. */
+  existingCapsuleIds: Iterable<string>;
+  worktreeExists: (worktreePath: string) => boolean;
+}): WorkroomRestorePlan {
+  const existing = new Set(input.existingCapsuleIds);
+  const restore: WorkroomRestoreAction[] = [];
+  const archiveMissingWorktree: WorkroomRestoreAction[] = [];
+  const skipped: WorkroomRestoreSkip[] = [];
+
+  for (const room of [...input.record.workrooms].sort((a, b) =>
+    a.capsuleId.localeCompare(b.capsuleId),
+  )) {
+    if (existing.has(room.capsuleId)) {
+      skipped.push({ capsuleId: room.capsuleId, reason: "already-present" });
+      continue;
+    }
+    const path = room.worktreePath?.trim() ? room.worktreePath : null;
+    if (path && !input.worktreeExists(path)) {
+      archiveMissingWorktree.push({
+        capsuleId: room.capsuleId,
+        room,
+        status: "archived",
+        archivedReason:
+          `Restored from a capture taken ${input.record.capturedAt}, but its worktree ${path} no longer exists on this install. ` +
+          `The room and its history are preserved; the working tree is not.`,
+      });
+      continue;
+    }
+    restore.push({ capsuleId: room.capsuleId, room, status: room.status });
+  }
+
+  return {
+    restore,
+    archiveMissingWorktree,
+    skipped,
+    capturedCount: input.record.workroomCount,
+  };
+}
+
+/**
+ * Does the plan account for every captured room?
+ *
+ * A restore that quietly drops rooms is the failure this whole path exists to
+ * prevent, so the arithmetic is checkable rather than assumed.
+ */
+export function workroomRestorePlanBalances(plan: WorkroomRestorePlan): boolean {
+  return (
+    plan.restore.length + plan.archiveMissingWorktree.length + plan.skipped.length ===
+    plan.capturedCount
+  );
+}

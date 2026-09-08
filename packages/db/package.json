@@ -94,6 +94,7 @@
     "seed": "tsx src/seed.ts",
     "backlog:capture": "tsx scripts/capture-backlog-bundle.ts",
     "backlog:reconcile": "tsx scripts/reconcile-backlog-bundle.ts",
+    "workrooms:restore": "tsx scripts/restore-workrooms.ts",
     "graph:rebuild-doc-impact": "tsx src/rebuild-doc-impact-graph.ts",
     "graph:rebuild-knowledge-and-portfolio": "tsx src/rebuild-knowledge-and-portfolio-graph.ts",
     "graph:rebuild-projections": "pnpm run graph:rebuild-doc-impact && pnpm run graph:rebuild-knowledge-and-portfolio",
