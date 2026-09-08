@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { workCapsulesPack } from "@/lib/mcp/packs/work-capsules-pack";
 import { normalizeWorkCapsuleScopeInput } from "@/lib/work-capsules";
 import { __testing__ } from "./mcp-handlers";
-import { adoptionScopePatch, replaceOwnershipClaims } from "./scope-input";
+import { adoptionScopePatch, assertScopeReadback, replaceOwnershipClaims } from "./scope-input";
 
 /** Scope keys the create_workroom tool schema advertises to callers. */
 function advertisedScopeKeys(): string[] {
@@ -40,6 +40,19 @@ function advertisedScopeKeys(): string[] {
 }
 
 describe("the scope block the schema advertises is the scope block the handler carries", () => {
+  it("accepts a creation replay after PostgreSQL reorders outcome-anchor keys", () => {
+    const scope = { workShape: "delivery-small@1.0.0", workroomShape: "change-consequential",
+      outcomeAnchor: { kind: "work-case", id: "BI-06AE6833", label: "Execution reliability" } };
+    const existing = { capsuleId: "WC-9CECAF46", scopeClaims: [
+      { workroomShape: scope.workroomShape, recordedAt: "original" },
+      { workShape: scope.workShape, recordedAt: "original" },
+      { kind: "path", value: "retained", intent: "read" },
+    ], outcomeAnchor: { id: "BI-06AE6833", kind: "work-case", label: "Execution reliability" } };
+    expect(adoptionScopePatch(existing, scope, new Date())).toEqual({});
+    expect(() => assertScopeReadback(existing, scope)).not.toThrow();
+    expect(() => assertScopeReadback(existing, { outcomeAnchor: { ...scope.outcomeAnchor, id: "different" } })).toThrow("different persisted scope");
+    expect(existing.scopeClaims).toHaveLength(3);
+  });
   it("releases an ownership claim without erasing a shape in the same legacy record", () => {
     expect(replaceOwnershipClaims({ kind: "path", value: "apps/web", intent: "edit", recordedByPrincipalId: "owner", recordedAt: "2026-09-01T00:00:00.000Z", workShape: "delivery-small@1.0.0" }, [])).toEqual([
       { recordedAt: "2026-09-01T00:00:00.000Z", workShape: "delivery-small@1.0.0" },

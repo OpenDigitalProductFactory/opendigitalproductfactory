@@ -489,3 +489,13 @@ available for smaller pages of the same immutable artifact, within its existing
 attempt budget. Full traversal restores writer eligibility. The repair does not
 raise global caps or equate a recorded PASS with factual correctness. Re-release,
 an independent grounded review and runtime acceptance remain required.
+
+The September 8 creation check produced `WC-9CECAF46` on the canonical
+nonproduction portal with `delivery-small@1.0.0`, `change-consequential`, WWMD,
+the served persona and outcome anchor intact in an independent MCP readback.
+Retrying that exact idempotency key was incorrectly refused: PostgreSQL JSONB
+changed the outcome-anchor key order, and the scope comparator used serialized
+insertion order as equality. The failing source regression reproduces the
+refusal. Reuse the canonical JSON comparator for object scope and change evidence;
+retain ordered-array comparison and refusal for genuinely different scope.
+The same live retry must pass after release before this check is closed.

@@ -1,5 +1,6 @@
 import { normalizeWorkCapsuleScopeInput, parseScopeClaims, type ScopeClaim, type WorkCapsuleScopeInput } from "@/lib/work-capsules";
 import { readWorkShapeClaim, readWorkroomShapeClaim, resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { canonicalJson } from "@/lib/shared/canonical-json";
 
 /** Persistence accepts only an executable, exact definition version. */
 export function normalizePersistedScope(input?: WorkCapsuleScopeInput | null) {
@@ -99,7 +100,10 @@ export function adoptionScopePatch(existing: Record<string, unknown>, input: Wor
       patch.scopeClaims = claims;
     } else {
       const stored = key === "outcomeAnchor" ? value ?? {} : value;
-      if (JSON.stringify(existing[key]) !== JSON.stringify(stored)) patch[key] = stored;
+      // PostgreSQL jsonb reorders object keys. A readback is about values,
+      // not the insertion order of the caller's outcome anchor.
+      const serialize = key === "outcomeAnchor" ? canonicalJson : JSON.stringify;
+      if (serialize(existing[key]) !== serialize(stored)) patch[key] = stored;
     }
   }
   return patch;
@@ -119,6 +123,6 @@ export function scopeChangeEvidence(before: Record<string, unknown>, after: Reco
   const previous = view(before) as Record<string, unknown>;
   const next = view(after) as Record<string, unknown>;
   return Object.fromEntries(Object.keys(normalizeWorkCapsuleScopeInput()).filter((key) =>
-    JSON.stringify(previous[key]) !== JSON.stringify(next[key]),
+    canonicalJson(previous[key]) !== canonicalJson(next[key]),
   ).map((key) => [key, { before: previous[key] ?? null, after: next[key] ?? null }]));
 }
