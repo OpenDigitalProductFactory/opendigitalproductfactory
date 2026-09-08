@@ -326,6 +326,13 @@ export async function runWorkroomDriveJob(
       jsiSchemePresent(prisma as unknown as Record<string, unknown>),
     ];
     rooms = await loadStandingRooms(bindings, schemePresent);
+    // Stage-scoped evidence is the ONLY thing a completing receipt is earned
+    // from, so a room that arrives without it can never advance.
+    const evidenceByRoom = await loadRecordedEvidence(rooms.map((room) => room.capsuleId));
+    rooms = rooms.map((room) => ({
+      ...room,
+      recordedEvidence: evidenceByRoom.get(room.capsuleId) ?? [],
+    }));
   }
   const effects = deps?.effects ?? createWorkroomDriveEffects();
   const plans: WorkroomDriveResult["plans"] = [];
