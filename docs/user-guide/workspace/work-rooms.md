@@ -138,6 +138,38 @@ platform team rather than shown to you.
 
 **Completed cycles** are ordered by completion time. Open a completed cycle to read its Outcome Packet, durable-record count, verification state, and unresolved work. Each unresolved item has an explicit disposition: carry it into the next cycle, open a separate case, defer it, or accept it. Retrying carry-over does not create duplicate work.
 
+## Defining the Room
+
+A room shows a yellow **"This room needs a clearer boundary"** panel when it has
+not been told what it is for. The panel lists what is missing — most often the
+intended outcome and who answers for it — and, underneath, a **Define this
+room** button.
+
+You are asked two questions first, because those two are what the panel says
+must be settled before consequential work continues:
+
+- **What does finished look like?** One sentence describing what is true when
+  the room is done.
+- **Who answers for it?** One person or role — someone a question can be put to,
+  not a team.
+
+Answering those two clears the blocking part of the notice. Everything else —
+what is in scope, what is explicitly *not*, what the room may decide without
+escalating, the most sensitive material allowed, how anyone would know it
+worked, and when it stops — sits behind **Add scope, authority, measures and
+closure**. Fill those in when they matter; a room with an outcome and an owner
+is already bounded enough to work in.
+
+Leaving a field blank clears it. A room where every field is blank goes back to
+reporting that nobody has defined it, which is deliberate: "nobody bounded this
+room" and "somebody bounded it to nothing" are different states and the panel
+should not confuse them.
+
+**Who can do this.** The same people who can change a room's pace — defining a
+room sets shared state that governs what every participant may do, so it is not
+a personal preference. If you cannot see the button, the case has no room
+behind it yet.
+
 ## Pace and Priority
 
 Every room shows the pace it is working at, in a **Pace and priority** section that stays

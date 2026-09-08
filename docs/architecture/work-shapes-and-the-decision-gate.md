@@ -669,6 +669,49 @@ reservation from normal replay. Unknown waits, rejected writers, approvals and
 exhausted recovery stay outside this automatic path. This does not make the separate
 inline semantic-review operation restartable or resume an interrupted provider call.
 
+## The brief, and what advances a stage
+
+Once the twelve standing rooms began dispatching, they produced **337 completed
+task runs with `executedToolCount: 0`** and no summary. Every one. The runs were
+real — quiescence was held by a live `coworker.reasoning-loop` for
+`Workroom WC-C9320161 / assemble` — so dispatch reached a coworker and a model
+ran. It had nothing to act on.
+
+This was the entire brief a coworker received:
+
+    Execute Workroom WC-A69BCABB stage sweep for shape
+    dependency-advisory-watch@1.0.0. Stay inside the declared grants. Do not skip
+    stages, widen authority, or invent occupants.
+
+An opaque stage key and three prohibitions. Meanwhile the shape already carried
+the stage's title, its `advance.condition` — which IS the definition of done —
+the `evidence` kinds it must leave behind, the activity's description including
+its prohibitions ("It never applies a patch"), and the room's objective. None of
+it was sent. A model handed that will reasonably answer in prose that it did the
+work, which is what 337 runs did.
+
+**The dispatcher now briefs from the shape.** Objective, activity description,
+stage title, definition of done, stop conditions, the evidence to record, and an
+explicit statement that claiming completion advances nothing.
+
+**And a stage advances on recorded evidence, never on a claim.** A completed
+`TaskRun` is the executor's claim about ITSELF — provenance, not evidence. PR
+#5168 proposed earning the completing receipt from `TaskRun.status` and was
+correctly refused: it would have converted those 337 fabrications into stage
+advancement and undone the fail-closed pause from #5166. A visible loop is
+strictly better than silent false progress.
+
+The receipt is earned instead from a governed write the worker had to make
+through MCP — `record_workroom_evidence`, a sanctioned mutator requiring
+`work_capsule_write` — carrying the stage it belongs to. The drive still owns the
+advance; a worker cannot advance itself, only leave evidence the drive reads.
+Evidence must name the stage, be of a kind the stage declared, and post-date the
+dispatch; anything short of that re-dispatches.
+
+`record_workroom_evidence` therefore takes an optional `stageKey`, and a
+schema/handler parity guard protects it — the same seam already shipped broken
+once when `workShape` was advertised and silently dropped.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer

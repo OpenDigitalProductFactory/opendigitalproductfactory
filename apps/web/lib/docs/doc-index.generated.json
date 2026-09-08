@@ -2463,6 +2463,7 @@
         "nesting-has-to-be-written-not-just-declared",
         "who-may-coordinate-authority-and-a-gate-with-no-key",
         "concurrent-execution-and-recorded-state",
+        "the-brief-and-what-advances-a-stage",
         "related-references"
       ]
     },
@@ -12375,6 +12376,7 @@
         "inspecting-the-process",
         "access-and-other-channels",
         "finite-and-standing-rooms",
+        "defining-the-room",
         "pace-and-priority",
         "changing-it",
         "setting-a-default-for-every-room",

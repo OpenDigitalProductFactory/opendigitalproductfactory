@@ -105,6 +105,10 @@ export type WorkShapeDefinitionContract = Pick<
   WorkShapeDefinition,
   | "key"
   | "version"
+  // The activity's own words. The dispatcher briefs the coworker from these;
+  // without them the brief is a bare stage key (BI-4A394B21).
+  | "title"
+  | "description"
   | "triggers"
   | "stages"
   | "stopConditions"
@@ -120,6 +124,8 @@ export function readWorkShapeDefinitionContract(
   return {
     key: shape.key,
     version: shape.version,
+    title: shape.title,
+    description: shape.description,
     triggers: shape.triggers,
     stages: shape.stages,
     stopConditions: shape.stopConditions,

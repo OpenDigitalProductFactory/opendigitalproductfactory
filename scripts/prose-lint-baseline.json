@@ -9399,6 +9399,14 @@
     "longSentences": 0,
     "textMass": 27
   },
+  "apps/web/components/workspace/workroom/WorkroomBoundaryControl.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
   "apps/web/components/workspace/workroom/WorkroomCycles.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
