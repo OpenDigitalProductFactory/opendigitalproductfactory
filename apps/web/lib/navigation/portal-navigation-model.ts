@@ -619,7 +619,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "platform-identity-agents",
-    label: "AI Coworkers",
+    label: "Coworker Identity",
     path: "/platform/identity/agents",
     parentPath: "/platform/identity",
     domain: "platform",
@@ -803,7 +803,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "platform-audit-operations",
-    label: "Operations",
+    label: "Jobs",
     path: "/platform/audit/operations",
     parentPath: "/platform/audit",
     domain: "platform",
