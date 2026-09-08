@@ -295,5 +295,19 @@ Evidence per acceptance criterion:
 
 ## Backlog coverage
 
-Recorded with `record_plan_backlog_coverage` (decision: decomposed); receipt and
-mappings are appended below once the plan commit exists.
+Recorded with `record_plan_backlog_coverage`, decision `decomposed`, against the
+plan blob at commit `3cd40ee68128` (receipt `cmtta2qii2g3d01o9exv6j6qj`,
+2026-09-08). Scope baseline `baseline-6d81c867-035a-4b5b-bd64-fb4d49a8202e`
+(spec-approval receipt `initiative-e0f86daa-eb92-4f39-b263-9d354e940f48`). The
+receipt is re-recorded whenever this file changes; the live receipt id is on the
+parent item.
+
+| Deliverable key | Backlog item | Depends on |
+|---|---|---|
+| role-inventory | `BI-1D6F5AE4` | — |
+| role-bindings | `BI-8FDC274A` | role-inventory |
+| born-owned | `BI-36FC2981` | role-bindings |
+| setup-step | `BI-0F44A284` | role-inventory, role-bindings |
+| assisted-proposals | `BI-40751F49` | — |
+| readiness-refuses | `BI-CB525EC6` | role-inventory, role-bindings |
+| live-acceptance | `BI-71F441A4` | born-owned, setup-step, readiness-refuses |
