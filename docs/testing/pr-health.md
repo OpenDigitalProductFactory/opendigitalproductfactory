@@ -11,6 +11,8 @@ Exit `0` = **READY**, `1` = **NOT READY** (blockers enumerated), `2` = usage/IO 
 
 ## Why it exists
 
+The canonical required-context policy includes **Failure Readiness**. It checks the trusted platform verdict for the final source commit and, in a merge group, every included source PR. Missing or expired evidence is a blocker. See [failure-analysis rollout and recovery](../architecture/failure-analysis-and-recovery.md) for producer deployment, publisher configuration and same-review status retry. A source PR alone does not activate this protection on a running installation.
+
 Reporting a PR "green / mergeable / queued" while a real blocker was still in place was a recurring failure — because only a curated subset of signals was inspected. Three distinct blocker classes were each missed in practice, and each actually blocked merge:
 
 1. **Non-"required" guards that still block.** Filtering to an assumed required set (Typecheck / Production Build / Unit Tests / DCO) and treating the rest as advisory is **wrong**. `Module Size Guard`, `CodeQL` (a real HIGH-severity ReDoS once slipped through this way), and the `UX-Fit Gate` all fail-and-block. There is no safe "only these N block" filter — treat **every** non-passing check as a blocker.

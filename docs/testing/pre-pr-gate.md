@@ -14,6 +14,8 @@ wins and this doc is the bug — fix it.
 
 ## The contract (read this first)
 
+Begin [failure analysis](../architecture/failure-analysis-and-recovery.md) in design, refine it during implementation, and give the independent reviewer executed evidence for the final change. Local integration reports now bind their output to the owning Workroom, source tree and diff. An empty checklist, stale report or skipped run cannot satisfy that requirement. Technical review outages follow internal recovery; they are not business-owner approval requests.
+
 Cross-session drift happens when each session reconstructs the workflow from
 prose. Don't. Before you open a PR, in order:
 
