@@ -387,3 +387,24 @@ so a worker's state reads as not recorded rather than being derived from a row's
 `updatedAt` — which changes on any edit and is not evidence that anyone is
 working. Unrecorded delegation reads as unknown parentage, never as a plausible
 parent.
+## A room with no WorkItem is its own case
+
+`a-room-is-reachable-by-construction` says the read model resolves a room
+through the foreign key that anchors it, and that a room which exists can be
+opened. Both held only for anchored rooms. Measured on a live install: 464
+Workrooms, 290 of them — 62% — carry no `workItemId`, and every one served the
+not-found boundary when opened from the portfolio activity tree.
+
+The tree composed those links correctly. The failure was one layer down: the
+canonical resolver needs an anchor to redirect to and returns null without one,
+and the case loader then looks for a WorkItem whose source type is
+`work-capsule`, which nothing is.
+
+A room with no WorkItem is not a broken anchor — it is a room that is its own
+unit of work, so it is its own case. An anchored room still resolves to its
+item's case and never reaches this path, so one unit of work keeps one case.
+
+Such a case states what the room does not carry. Where no objective was
+recorded the boundary says so instead of restating the title as though it were
+intent, and urgency, effort and assignment read as not recorded rather than
+being given a plausible default.

@@ -13,6 +13,7 @@ import { decodeWorkCaseKey } from "@/lib/work-management/case-key";
 import { resolveCanonicalWorkCaseKey } from "@/lib/work-management/canonical-case-key";
 import { loadRoomWorkforce } from "@/lib/work-management/room-workforce.server";
 import { loadWorkspaceWorkCaseDetail } from "@/lib/work-management/workspace-case-loader";
+import { loadWorkroomOnlyCaseDetail } from "@/lib/work-management/workroom-only-case-projection";
 
 type Props = {
   params: Promise<{ caseKey: string }>;
@@ -52,14 +53,21 @@ export default async function WorkspaceCaseDetailPage({ params }: Props) {
     structureLoader: resolveWorkroomStructureForCase,
     postureContextLoader: loadWorkroomPostureContext,
   });
-  if (!detail) notFound();
+  // A room that anchors no WorkItem has no WorkItem case to resolve to, and the
+  // loader keys on WorkItem source types — so 62% of the rooms on this install
+  // 404'd when opened from the activity tree (BI-2C31C399). Such a room is its
+  // own unit of work, so it is its own case. Composed here rather than inside
+  // the loader, which is at its module-size ceiling and should not grow.
+  const detailOrRoom =
+    detail ??
+    (await loadRoomOnlyCase(caseKey));
+  if (!detailOrRoom) notFound();
 
-  // The room's accountable human and its named workers. Loaded here rather than
-  // inside the detail loader so the panel stays independent of that projection,
-  // and skipped entirely for a case that anchors no Workroom.
-  // A case is addressed either by its capsule id — which is how the portfolio
-  // activity tree links a room — or through the WorkItem it anchors to. Resolve
-  // both, capsule first, so a room reached from the tree finds its own row.
+  // The room's accountable human and its named workers, loaded here rather than
+  // inside the detail loader so the panel stays independent of that projection.
+  // A case is addressed either by its capsule id — how the portfolio activity
+  // tree links a room — or through the WorkItem it anchors to. Resolve both,
+  // capsule first, so a room reached from the tree finds its own row.
   const ref = decodeWorkCaseKey(caseKey);
   const anchoredRoom =
     ref?.sourceType === "work-capsule"
@@ -67,9 +75,9 @@ export default async function WorkspaceCaseDetailPage({ params }: Props) {
           where: { capsuleId: ref.sourceId },
           select: { id: true },
         })
-      : detail.workItemId
+      : detailOrRoom.workItemId
         ? await prisma.workroom.findFirst({
-            where: { workItemId: detail.workItemId },
+            where: { workItemId: detailOrRoom.workItemId },
             select: { id: true },
             orderBy: { createdAt: "asc" },
           })
@@ -80,7 +88,7 @@ export default async function WorkspaceCaseDetailPage({ params }: Props) {
 
   return (
     <>
-      <WorkCaseDetailView detail={detail} />
+      <WorkCaseDetailView detail={detailOrRoom} />
       {workforce ? (
         <div className="mt-4">
           <RoomWorkforcePanel
@@ -94,4 +102,16 @@ export default async function WorkspaceCaseDetailPage({ params }: Props) {
       ) : null}
     </>
   );
+}
+
+/** The case for a Workroom addressed by capsule id that anchors no WorkItem. */
+async function loadRoomOnlyCase(caseKey: string) {
+  const ref = decodeWorkCaseKey(caseKey);
+  if (ref?.sourceType !== "work-capsule") return null;
+  return loadWorkroomOnlyCaseDetail({
+    prismaClient: prisma as never,
+    sourceId: ref.sourceId,
+    caseKey,
+    now: new Date(),
+  });
 }

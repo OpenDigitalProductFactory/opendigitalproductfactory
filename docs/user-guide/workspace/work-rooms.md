@@ -270,3 +270,14 @@ delegation was never recorded, the room says so instead of placing workers under
 Where the platform holds no observation of what a worker is doing, the room says the state is not
 recorded rather than reporting it as idle. With many workers the list is bounded and tells you how
 many of the total it is showing.
+## Opening a Workroom That Has No Work Item
+
+Most Workrooms are attached to a work item, and opening one takes you to that
+item's case. Some Workrooms are not attached to anything — they are the piece of
+work themselves. Those now open as their own case rather than reporting that the
+page could not be found.
+
+A room like that shows what it holds and states what it does not. If no
+objective was recorded, it says so rather than repeating the room's title as
+though that were the objective, and urgency, effort and assignment read as not
+recorded rather than showing a value nobody set.
