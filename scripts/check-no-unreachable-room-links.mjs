@@ -12,6 +12,7 @@ import process from "node:process";
 import {
   findHandBuiltCaseKeys,
   findUnreachablePaths,
+  normalizeRoomGuardPath,
 } from "./lib/room-addressing-detect.mjs";
 
 const REPO = process.cwd();
@@ -29,7 +30,7 @@ function buildRouteTree(root) {
       return;
     }
     const children = entries.filter((e) => e.isDirectory()).map((e) => e.name);
-    tree[dir] = children;
+    tree[normalizeRoomGuardPath(dir)] = children;
     for (const child of children) walk(join(dir, child));
   };
   walk(root);
@@ -81,9 +82,9 @@ for (const scanRoot of SCAN_ROOTS) {
     if (!source.includes("${")) continue;
     for (const hit of [
       ...findHandBuiltCaseKeys(source),
-      ...findUnreachablePaths(source, tree, APP_ROOT),
+      ...findUnreachablePaths(source, tree, normalizeRoomGuardPath(APP_ROOT)),
     ]) {
-      violations.push({ file: relative(REPO, file), ...hit });
+      violations.push({ file: normalizeRoomGuardPath(relative(REPO, file)), ...hit });
     }
   }
 }
