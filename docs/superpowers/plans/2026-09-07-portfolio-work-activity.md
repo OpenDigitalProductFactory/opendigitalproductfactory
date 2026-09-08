@@ -14,6 +14,28 @@ Delivery shape: decomposed, xlarge. This PR publishes the accepted visual direct
 
 Requirements, contracts, flows and verification IDs below are sections in the canonical design. Existing items retain their broader scope and status. Dependencies are delivery keys, not copied workrooms.
 
+**Formal coverage receipt: blocked, and this table stands in its place.** A
+`record_plan_backlog_coverage` receipt was attempted against this plan at its
+immutable blob and was refused, correctly:
+
+> no initiative scope baseline exists for this initiative
+
+A scope baseline is minted only by a passing `spec-approval` receipt from an
+independent reviewer. On this install every reviewer dispatch is intercepted by
+the generic coworker approval envelope and expires unapproved, so no receipt of
+any kind can be written — the condition recorded as BI-F2E199B1. The refusal
+tool's own guidance for this state is to record the coverage table in the plan
+and state the blocking condition rather than cite a backlog id that goes stale,
+which is what this note does.
+
+The route the refusal offers — claiming this xlarge initiative with
+`workIntent: implementation` to obtain the reviewer packet — is deliberately not
+taken. The operator direction on this work is explicit: do not bypass that
+refusal and do not reclassify the initiative. Delivery has proceeded through
+appropriately shaped items instead, each with its own scoped PR, tests, gate
+evidence and recorded execution evidence. The table above is the coverage; what
+is missing is the receipt, not the mapping.
+
 | Key | Deliverable / live backlog | Depends on | Requirements | Contracts | Flows | Verification |
 | --- | --- | --- | --- | --- | --- | --- |
 | D1 | Portfolio placement derivation and reconciliation — BI-FB6389E0 (existing) | — | PWA-01 | C1 | F1 | V1 |
