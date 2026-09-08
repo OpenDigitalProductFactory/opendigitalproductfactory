@@ -714,3 +714,19 @@ describe("a work-capsule case key resolves to its anchored canonical case", () =
     expect(canonical).toBeNull();
   });
 });
+
+it("shows native reviewer waits before a final Workroom activity receipt exists", async () => {
+  const client = prismaFor([baseItem]);
+  client.workroom.findMany = async () => [{ id: "room-1", capsuleId: "WC-1", status: "working", title: "Review room" }];
+  Object.assign(client, { taskRun: { findMany: async () => [{
+    id: "task-row-1", taskRunId: "TR-REVIEW", userId: "user-1", status: "input-required",
+    updatedAt: new Date("2026-06-28T10:30:00Z"), lastHeartbeatAt: null,
+    progressPayload: { semanticReview: { reason: "provider-outcome-uncertain-after-restart" } }, nodes: [],
+  }] } });
+  const detail = await loadWorkspaceWorkCaseDetail({ prismaClient: client, caseKey: "booking%3ABK-1", userId: "user-1" });
+  expect(detail?.room?.receipts).toContainEqual(expect.objectContaining({ receiptKind: "reviewer-state-snapshot", status: "observed" }));
+  expect(detail?.room?.sourceRefs).toContainEqual(expect.objectContaining({ kind: "task-run", id: "TR-REVIEW" }));
+  expect(detail?.room?.work.attentionReason).toContain("TR-REVIEW");
+  expect(detail?.room?.work.nextAction).toContain("Observed execution");
+  expect(detail?.room?.identity.instance.occurrenceTrace.executionRefs).toContainEqual(expect.objectContaining({ kind: "task-run", id: "TR-REVIEW" }));
+});

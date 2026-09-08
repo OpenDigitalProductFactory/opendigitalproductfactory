@@ -1,5 +1,5 @@
 import type { InitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
-import { isLiveStatus, isTerminalTaskStatus, TASK_STATES } from "@/lib/tak/task-states";
+import { projectRecordedTaskState } from "@/lib/tak/task-states";
 
 type WorkroomIdentity = {
   repositoryFullName: string | null;
@@ -46,11 +46,7 @@ export function projectWorkroomRecovery(room: WorkroomIdentity & { taskRun?: Lin
   const identityRepair = projectWorkroomIdentityRepair(room);
   // These are recorded states, not proof of a current heartbeat. In particular,
   // waiting for input or recovery must never look like queued execution.
-  const executionState = !room.taskRun ? null
-    : isTerminalTaskStatus(room.taskRun.status) ? "terminal"
-      : room.taskRun.status === "submitted" ? "queued"
-        : isLiveStatus(room.taskRun.status) ? "working"
-          : (TASK_STATES as readonly string[]).includes(room.taskRun.status) ? "waiting" : "unknown";
+  const executionState = room.taskRun ? projectRecordedTaskState(room.taskRun.status) : null;
   const reviewerExecution = room.taskRun
     ? {
       taskRunId: room.taskRun.taskRunId,

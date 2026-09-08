@@ -113,7 +113,7 @@ function BoundaryNotice({ room }: { room: WorkroomView }) {
   const gaps = room.boundary.gaps.map((gap) => BOUNDARY_GAP_LABEL[gap]);
   const repair = room.boundary.gaps.includes("outcome") && room.boundary.gaps.includes("accountable")
     ? "Define the intended outcome and accountable owner before consequential work continues."
-    : `Complete the room boundary before consequential work continues: ${gaps.join(", ")}.`;
+    : "Complete the room boundary before consequential work continues.";
 
   // The repair belongs HERE, next to the sentence that names what is missing —
   // not on a settings page the notice does not mention (spec 2026-07-26 §7.2:

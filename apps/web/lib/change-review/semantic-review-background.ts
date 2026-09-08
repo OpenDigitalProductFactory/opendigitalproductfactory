@@ -12,7 +12,7 @@ import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
 import { runSemanticChangeReview } from "./semantic-change-review-operation";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
 
-const STALE_MS = 3 * 60_000;
+import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
 const MAX_DISPATCH_ATTEMPTS = 3;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function object(value: unknown): Record<string, unknown> {

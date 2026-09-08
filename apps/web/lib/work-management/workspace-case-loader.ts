@@ -5,6 +5,7 @@ import type {
   WorkCaseTimelineEvent,
 } from "./case-types";
 import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
+import { loadSemanticReviewRoomProjection, type ReviewerRoomClient } from "./semantic-review-room-projection";
 import {
   buildWorkCaseDetail,
   buildWorkCaseSummary,
@@ -147,7 +148,7 @@ export type WorkspaceCasePrismaClient = {
   workroomActivity: {
     findMany(args: unknown): Promise<WorkspaceWorkroomActivityRecord[]>;
   };
-} & CoworkerEngagementCasePrismaClient;
+} & CoworkerEngagementCasePrismaClient & ReviewerRoomClient;
 
 export type WorkspaceRoomAuthContext = {
   principalId: string | null;
@@ -645,6 +646,8 @@ export async function loadWorkspaceWorkCaseDetail({
     evidence,
   });
   const sourceRefs = detail.summary.sourceRefs;
+  const reviewerRuns = await loadSemanticReviewRoomProjection(prismaClient, capsules.map((capsule) => capsule.capsuleId), now);
+  sourceRefs.push(...reviewerRuns.sourceRefs);
   const cycleCandidates = projectWorkItemCycleCarriers({
     items: item.childItems ?? [],
     messages,
@@ -689,7 +692,7 @@ export async function loadWorkspaceWorkCaseDetail({
 
   const room = buildWorkroomView({
     caseKey: resolvedCaseKey,
-    sourceHealth: capsuleActivityRows.length > 20 ? "partial" : undefined,
+    sourceHealth: capsuleActivityRows.length > 20 || reviewerRuns.partial ? "partial" : undefined,
     detail,
     structure,
     postureContext: postureContext ? { ...postureContext, editable: editablePosture } : null,
@@ -735,6 +738,7 @@ export async function loadWorkspaceWorkCaseDetail({
     cycleProjectionError,
     outcomePacket: storedPackets[0] ?? null,
     receipts: [
+      ...reviewerRuns.receipts,
       ...roomReceiptsFromMessages(item, messages),
       ...capsuleActivityRows.filter((row) => ["evidence-recorded", "verification", "receipt"].includes(row.kind))
         .map((row) => fromWorkCapsuleActivity(row, { capsuleId: capsuleIdByRowId.get(row.workCapsuleId) })),
@@ -747,6 +751,11 @@ export async function loadWorkspaceWorkCaseDetail({
     },
   });
 
+  if (reviewerRuns.attentionReason) {
+    room.work.attentionRequired = true;
+    room.work.attentionReason = [reviewerRuns.attentionReason, room.work.attentionReason].filter(Boolean).join(" · ");
+    room.work.nextAction = "Inspect Observed execution for the reviewer status and required action.";
+  }
   return {
     // Same derivation as the list (BI-2310EEE1) — feed the capsules this loader
     // already fetched so the room's headline state matches the list's instead of

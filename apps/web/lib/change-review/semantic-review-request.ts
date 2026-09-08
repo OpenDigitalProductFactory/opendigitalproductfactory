@@ -8,6 +8,7 @@ export const REVIEW_ARTIFACT_TYPES = ["spec", "plan", "code-change", "architectu
 export const REVIEW_RISKS = ["low", "medium", "high", "critical"] as const;
 export const REVIEW_PROFILES = ["economy", "balanced", "high-assurance", "document-authority"] as const;
 export const SEMANTIC_REVIEW_DEADLINE_MS = 30 * 60 * 1_000;
+export const SEMANTIC_REVIEW_HEARTBEAT_STALE_MS = 3 * 60 * 1_000;
 export const SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION = "routed-semantic-review.v1";
 const MAX_PACKET_BYTES = 2 * 1024 * 1024;
 const ref = z.string().min(1).max(256);

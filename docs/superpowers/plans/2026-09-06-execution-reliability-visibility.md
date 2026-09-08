@@ -532,3 +532,19 @@ decision reuse path unreachable. The test double now applies that real query
 filter: the regression fails before the repair, and 36 affected tests pass after
 it. Reuse still requires matching evidence and the existing authorization checks.
 No missing verdict is manufactured, and unfinished outcomes remain unfinished.
+
+The confirmed CI screenshot exposes the boundary notice repeating every missing
+field in both prose and a list. Keep the direction, full list and existing repair
+control; remove the repeated enumeration. This is a demonstrated UI duplication,
+not a diagnosis of the original seven-word measurement difference. The baseline
+and protected sweep remain unchanged.
+
+The Workroom loader previously missed native reviewer TaskRuns until final journal
+evidence arrived. Read only native runs correlated by capsule identity, with bounded
+run and checkpoint history, into the existing observed-evidence projection. Preserve
+requester/reviewer identity, timestamps, last recorded reason and source references.
+Do not infer permitted transitions or verified completion from task status. Report
+unavailable or truncated sources explicitly. Share recorded-state classification
+with recovery and the heartbeat threshold with the worker; use canonical JSON guards.
+These changes plus the boundary regression pass 104 affected source tests. Live
+navigation and scenario acceptance still depend on canonical deployment.
