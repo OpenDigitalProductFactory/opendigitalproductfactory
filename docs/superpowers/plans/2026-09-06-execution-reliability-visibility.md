@@ -467,3 +467,25 @@ task states, reviewer branch dispatch, transactional external-evidence writer,
 and deferred activity publication. The broader goal still requires the versioned
 reviewer flow, actual nesting and accountable coordination, archetype-specific
 model bindings, and the complete enterprise-to-evidence runtime demonstration.
+
+## September 8 reviewer evidence continuity
+
+On served `a2b81dbadb5182c0d758586ad857e59abff7bc5f`, reviewer task
+`TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-A16253D3AB7B` read the correct
+176-line immutable pagination design, then recorded a PASS rationale describing
+client-side enumeration. The 10,825-character artifact instead proposes bounded
+server-side snapshots. Receipt `initiative-14488665-0fb5-4941-8a86-9d7bd7e5b22a`
+does not establish substantive acceptance. Its history remains intact.
+
+Source reproduction identifies a second compaction pass: even with a 1,048,576
+token model window, it reduces each tool message to about 1,500 characters. The
+options begin after character 3,500. The regression fails before the repair and
+passes when governed reader messages retain the existing model-facing budget.
+This proves evidence loss; it does not prove every cause of the model's rationale.
+
+The loop records model-facing truncation separately from successful tool execution.
+A truncated source page cannot authorize a terminal writer. The reader remains
+available for smaller pages of the same immutable artifact, within its existing
+attempt budget. Full traversal restores writer eligibility. The repair does not
+raise global caps or equate a recorded PASS with factual correctness. Re-release,
+an independent grounded review and runtime acceptance remain required.

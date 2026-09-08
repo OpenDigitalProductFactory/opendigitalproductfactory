@@ -79,6 +79,13 @@ const writer = (success = true): TerminalToolRecord => ({
 });
 
 describe("terminal tool policy", () => {
+  it("does not authorize a receipt when transport withheld part of a complete source page", () => {
+    const withheld = { ...read(), modelEvidenceTruncated: true };
+    expect(summarizeTerminalToolProgress(policy, [withheld]).evidenceAvailable).toBe(false);
+    expect(resolveTerminalToolCall(policy, [withheld], policy.writerToolName).kind).toBe("refuse");
+    // A later complete bounded traversal can recover without changing identity.
+    expect(summarizeTerminalToolProgress(policy, [withheld, read()]).evidenceAvailable).toBe(true);
+  });
   it("bounds malformed correction and never retries success, approval, or authority failure", () => {
     const malformed = { name: policy.writerToolName, result: { success: false, error: "malformed-receipt" } };
     expect(resolveTerminalToolCall(policy, [read(), malformed, malformed, malformed], policy.writerToolName).kind).toBe("refuse");
@@ -458,6 +465,37 @@ describe("agent loop terminal writer integration", () => {
           message: "Immutable evidence page.",
           ...(toolName === "read_source_at_version" ? { data: completePage } : {}),
         });
+  });
+
+  it("retains the bounded immutable design in the writer's actual input", async () => {
+    const content = ("Research context. ".repeat(30) + "\n").repeat(19)
+      + "DESIGN: bounded server-side snapshots; no client-side enumeration.\n";
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true, message: "Complete immutable page",
+      data: { ...completePage, content },
+    });
+    vi.mocked(routeAndCall).mockResolvedValueOnce({
+      ...response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]),
+      resolvedMaxContextTokens: 1_048_576,
+    } as never).mockRejectedValueOnce(new Error("End test after observing writer input"));
+    await runAgenticLoop(params);
+    const evidence = vi.mocked(routeAndCall).mock.calls[1]![0].find((message) => message.role === "tool");
+    expect(evidence?.content).toContain("DESIGN: bounded server-side snapshots; no client-side enumeration.");
+    expect(evidence?.content).not.toContain("[truncated");
+  });
+
+  it("refuses a provider's writer call after the model-facing budget truncated its read", async () => {
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true,
+      message: "Complete immutable page", data: { ...completePage, content: ("x".repeat(500) + "\n").repeat(20) },
+    });
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("", [{ id: "write", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValue(response("Cannot assess the unseen source.") as never);
+    const result = await runAgenticLoop(params);
+    expect(result.executedTools[0]).toMatchObject({ modelEvidenceTruncated: true, result: { success: true } });
+    expect(vi.mocked(governedExecuteTool).mock.calls.some(([call]) => call.toolName === policy.writerToolName)).toBe(false);
+    const nextTools = (vi.mocked(routeAndCall).mock.calls[1]![3] as { tools: typeof providerTools }).tools;
+    expect(nextTools.some((tool) => tool.function.name === policy.writerToolName)).toBe(false);
   });
 
   it("traverses six contiguous pages before exposing exactly the writer", async () => {
