@@ -59,12 +59,29 @@ function declaration(payload: unknown): BreakFixDeclaration | null {
   return row as unknown as BreakFixDeclaration;
 }
 
+/**
+ * The post-implementation-review gate has two spellings and they are not
+ * interchangeable (found by live acceptance on v2026.09.07-work-shape-taxonomy.1).
+ * `InitiativeGateKey` declares the member as `post_implementation_review` and
+ * `@map`s it to the hyphenated database value, so a Prisma `where` clause must
+ * use the underscore member — the hyphenated string is rejected outright — while
+ * receipts, tool grants and readiness codes carry the hyphenated wire key.
+ * Rows read back through Prisma come out as the underscore member, so every
+ * comparison normalises first, the same way the readiness entry adapter does.
+ */
+export const PIR_GATE_WIRE_KEY = "post-implementation-review";
+const PIR_GATE_PRISMA_KEY = "post_implementation_review";
+
+function normalizeGateKey(value: string | null | undefined): string | null {
+  return value?.replaceAll("_", "-") ?? null;
+}
+
 /** Pure: has the declarer an earlier break-fix whose PIR window closed without a receipt? */
 export function findMissedPir(
   rows: ReadonlyArray<{ backlogItemId: string; kind: string; gateKey?: string | null; recordedAt: Date; payload: unknown; [extra: string]: unknown }>,
   now: Date,
 ): { backlogItemId: string; pirDueAt: string } | null {
-  const reviewed = new Set(rows.filter((row) => row.kind === "initiative_gate_receipt" && row.gateKey === "post-implementation-review").map((row) => row.backlogItemId));
+  const reviewed = new Set(rows.filter((row) => row.kind === "initiative_gate_receipt" && normalizeGateKey(row.gateKey) === PIR_GATE_WIRE_KEY).map((row) => row.backlogItemId));
   for (const row of rows) {
     if (row.kind !== BREAK_FIX_DECLARED_KIND) continue;
     const declared = declaration(row.payload);
@@ -120,7 +137,7 @@ export async function declareBreakFix(args: {
   const history = await args.db.backlogItemActivity.findMany({
     where: { OR: [
       { kind: BREAK_FIX_DECLARED_KIND, payload: { path: ["declaredByUserId"], equals: args.actor.userId } },
-      { kind: "initiative_gate_receipt", gateKey: "post-implementation-review" },
+      { kind: "initiative_gate_receipt", gateKey: PIR_GATE_PRISMA_KEY },
     ] },
     select: { id: true, backlogItemId: true, kind: true, gateKey: true, recordedAt: true, payload: true },
     take: 500,

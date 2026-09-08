@@ -38,12 +38,14 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
   const [selected, setSelected] = useState(() => new URLSearchParams(params).get("processStep") ?? graph.process?.currentStageKey ?? "");
   const [layout, setLayout] = useState(() => new URLSearchParams(params).get("processLayout") ?? "map");
   const [filters, setFilters] = useState<Record<string, string>>(() => ({ processQuery: new URLSearchParams(params).get("processQuery") ?? "", processState: new URLSearchParams(params).get("processState") ?? "" }));
+  const [filtersExpanded, setFiltersExpanded] = useState(() => Boolean(filters.processQuery || filters.processState));
   const stepsRef = useRef<HTMLUListElement>(null);
   useEffect(() => {
     const search = new URLSearchParams(params);
     setSelected(search.get("processStep") ?? graph.process?.currentStageKey ?? "");
     setLayout(search.get("processLayout") ?? "map");
     setFilters({ processQuery: search.get("processQuery") ?? "", processState: search.get("processState") ?? "" });
+    if (search.get("processQuery") || search.get("processState")) setFiltersExpanded(true);
   }, [params, graph.process?.currentStageKey]);
   function navigate(step: string, nextLayout = layout, nextFilters = filters) {
     setSelected(step);
@@ -78,7 +80,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
       </details> : null}
     </div> : null}
     <div className="space-y-2"><h3 className="font-medium">Intended process</h3>
-      <details open={Boolean(filters.processQuery || filters.processState)}>
+      <details open={filtersExpanded} onToggle={(event) => setFiltersExpanded(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer py-3">Search and filter steps</summary>
         <FilterBar mode="client" value={filters} onChange={(next) => navigate(selected, layout, next)}
         className="[&_input]:min-h-11 [&_select]:min-h-11 [&_input]:text-sm [&_select]:text-sm"
@@ -89,7 +91,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
       <div className="overflow-x-auto pb-2">
         <ul ref={stepsRef} aria-label="Process steps" className={layout === "list" ? "space-y-2" : "flex min-w-max gap-3"}>
           {visibleStages.map((item, index) => <li key={item.key} className={layout === "list" ? "" : "w-64 shrink-0"}>
-            <Button variant="secondary" aria-pressed={selected === item.key} aria-controls={`${titleId}-inspection`} data-step-key={item.key}
+            <Button variant="secondary" aria-pressed={selected === item.key} aria-controls={stage ? `${titleId}-inspection` : undefined} data-step-key={item.key}
               className={`min-h-20 w-full flex-col items-start text-left ${selected === item.key ? "outline-2 outline-[var(--dpf-accent)]" : ""}`}
               onClick={() => navigate(item.key)} onKeyDown={(event) => {
                 let target: number;

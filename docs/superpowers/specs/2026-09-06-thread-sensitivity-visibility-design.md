@@ -103,3 +103,78 @@ panel's module-size ratchet rather than loosening it.
 User-visible behaviour change (a new notice in the coworker panel) with no
 change to routing, permissions or install. Recorded here; no runbook or install
 doc is made stale by it.
+
+---
+
+## Addendum, 2026-09-07 — the structural half, ratified
+
+The third shape is settled. Kernel `DI-B60AD9E7746F` (stakes: high, 49
+principles):
+
+| option | composite |
+|---|---|
+| keep-full-history-evidence | 11.938 |
+| redact-the-span-from-the-payload | 11.839 |
+| age-the-evidence-recency-window | **3.042** |
+
+**Struck outright: the recency window.** Scoring sensitivity over only the last
+N turns while still transmitting the older history lost by a factor of four,
+penalised hardest on data privacy, least-privilege, "outbound and irreversible
+actions require explicit go", and blast radius. It would knowingly dispatch
+governed content to a cloud provider that the screen had decided to stop
+looking at. That is not a fix, it is a hole, and it is removed from the item.
+
+**The top two tied** (margin 0.099 < 0.2, confidence low, `autonomyEligible:
+false`). Per the tool's own advisory the choice was ratified by the operator on
+2026-09-07 rather than auto-executed: **redact the span from the payload**.
+
+### The principle
+
+Do not age the *evidence*. Age the *payload*. A thread pinned by old history
+recovers by no longer **sending** that history — never by deciding to stop
+looking at it. The screen keeps scoring the whole payload exactly as before;
+the payload simply becomes smaller. What is screened stays what is dispatched.
+
+### The load-bearing detail
+
+A coworker thread reintroduces its own past through **three independent doors**,
+and a boundary honoured by only some of them is worse than none — it would
+report normal routing while the withheld text still travelled:
+
+1. **the raw recency window** — bounded by `createdAt >= boundary`;
+2. **the rolling checkpoint** — a persisted summary of turns older than the
+   window, i.e. precisely the withheld span, rewritten. A summary of governed
+   text is still governed text, so it is suppressed wholesale rather than
+   regenerated (regenerating it would mean dispatching the withheld turns to do
+   it);
+3. **semantic recall** — vector lookup over the thread's own messages, which
+   already excludes the live window and would therefore treat withheld turns as
+   the rows it is *most* free to return.
+
+`lib/tak/thread-history-withholding.ts` owns all three so a fourth door has one
+obvious place to be wired, and `thread-history-withholding.test.ts` tests them
+door by door.
+
+### Deliverables
+
+1. `AgentThread.historyWithheldBefore` (nullable) + migration
+   `20260907030000_agent_thread_history_withholding`. Null everywhere until an
+   owner asks.
+2. `resolveWithheldHistory` — one call site, three door-specific answers.
+3. `withholdEarlierThreadHistory` server action. Owner-scoped. It can only ever
+   shrink the payload, so it needs no approval beyond owning the thread; there
+   is deliberately no un-withhold, because reversing it *would* widen egress.
+4. The notice's existing control changes meaning: "Continue without the earlier
+   messages" instead of "Start a fresh conversation". The thread and its visible
+   record survive; only dispatch narrows.
+
+`getKnowledgePointersForRoute` moved to `lib/actions/route-knowledge-pointers.ts`
+to stay inside `agent-coworker.ts`'s size ratchet rather than loosening it.
+
+### Acceptance, restated
+
+| BI acceptance | Status |
+|---|---|
+| A thread pinned by an early false positive returns to normal routing without the owner abandoning it | **Met.** The thread survives; the pin clears because the text is no longer sent. |
+| A thread carrying a genuine governed value keeps routing restricted while that value is still sent | **Held.** Untouched — and still true after withholding, because withholding removes the value from the payload rather than from the scoring. |
+| The owner can see that a thread is restricted, and has an action | **Met** (shipped in PR #5114). |

@@ -1,4 +1,5 @@
 import type { InitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+import { isTerminalTaskStatus } from "@/lib/mcp/tasks-lifecycle";
 
 type WorkroomIdentity = {
   repositoryFullName: string | null;
@@ -9,8 +10,6 @@ type WorkroomIdentity = {
 };
 
 type LinkedTaskRun = { taskRunId: string; status: string } | null;
-
-const TERMINAL_TASK_STATUSES = new Set(["completed", "failed", "cancelled", "stalled"]);
 
 export function projectWorkroomIdentityRepair(
   room: WorkroomIdentity,
@@ -49,7 +48,7 @@ export function projectWorkroomRecovery(room: WorkroomIdentity & { taskRun?: Lin
     ? {
       taskRunId: room.taskRun.taskRunId,
       status: room.taskRun.status,
-      pending: !TERMINAL_TASK_STATUSES.has(room.taskRun.status),
+      pending: !isTerminalTaskStatus(room.taskRun.status),
     }
     : null;
   return {

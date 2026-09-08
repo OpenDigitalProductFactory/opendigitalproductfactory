@@ -1867,6 +1867,14 @@ telecommunications, GS1 in supply chains, or jurisdiction-specific law and profe
 Selection **MUST** be based on applicability, version, license, and actual implementation evidence.
 A category label alone is not proof that a standard applies to every leaf or WorkUnitDefinition.
 
+Applicability is enforced on both halves of the lifecycle, not one. `packages/db/src/reference-model-applicability.ts`
+holds the single rule naming which archetypes an industry model serves; the seed consults it before
+importing a model's element hierarchy, and every read path consults it before presenting the model.
+A profile catalogue entry is kept on every install so an operator can see the standard exists, so the
+read is what makes an inapplicable profile honest: it reports **not this archetype** with the reason
+rather than a lifecycle status beside empty counts. Scoping only the seed is insufficient and was the
+defect in BI-C44EAEE6, where an install outside banking still advertised the BIAN profile as active.
+
 ## 14. Conformance model
 
 ### 14.1 Profiles

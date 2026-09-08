@@ -13,7 +13,9 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 const WORKFLOW_PATH = ".github/workflows/stt-digest-watch.yml";
@@ -79,6 +81,89 @@ describe("STT Digest Watch — apply step", () => {
     const { reached, status } = survivesExitCode(applyScript, 2);
     assert.equal(reached, false, "exit 2 (API/usage failure) must stop the step");
     assert.equal(status, 2, "the step should surface the script's own exit code");
+  });
+});
+
+/**
+ * BI-8CEBDD09. Run the tail of the apply step — everything from `gh pr create`
+ * on — with `gh` replaced by a stub, and report what the step did. The refusal
+ * text is the real one GitHub returns when "Allow GitHub Actions to create and
+ * approve pull requests" is off.
+ */
+function runPrHandoff({ prCreateFails, issueAlreadyOpen = false }) {
+  const tail = applyScript.slice(applyScript.indexOf("# BI-8CEBDD09"));
+  const dir = mkdtempSync(join(tmpdir(), "stt-watch-"));
+  const log = join(dir, "gh.log");
+  const refusal = "GraphQL: GitHub Actions is not permitted to create or approve pull requests (createPullRequest)";
+  // A stub `gh` that records every call and fails only `pr create`.
+  const stub = [
+    "#!/usr/bin/env bash",
+    `echo "$@" >> ${JSON.stringify(log)}`,
+    'if [ "$1" = "pr" ] && [ "$2" = "create" ]; then',
+    prCreateFails ? `  echo ${JSON.stringify(refusal)}; exit 1` : "  echo created; exit 0",
+    "fi",
+    'if [ "$1" = "issue" ] && [ "$2" = "list" ]; then',
+    issueAlreadyOpen ? "  echo 4242; exit 0" : "  exit 0",
+    "fi",
+    "exit 0",
+  ].join("\n");
+  const ghPath = join(dir, "gh");
+  writeFileSync(ghPath, stub, { mode: 0o755 });
+  const summary = join(dir, "summary.md");
+  const result = spawnSync("bash", ["-e", "-c", tail], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${dir}:${process.env.PATH}`,
+      BRANCH: "bot/stt-digest-repin",
+      GITHUB_STEP_SUMMARY: summary,
+      GITHUB_SERVER_URL: "https://github.com",
+      GITHUB_REPOSITORY: "o/r",
+      RUNNER_TEMP: dir,
+    },
+  });
+  const calls = existsSync(log) ? readFileSync(log, "utf8") : "";
+  return {
+    status: result.status,
+    calls,
+    summary: existsSync(summary) ? readFileSync(summary, "utf8") : "",
+    dispatchedCi: calls.includes("workflow run ci.yml"),
+    dispatchedGates: calls.includes("workflow run release-gates.yml"),
+    createdIssue: calls.includes("issue create"),
+    armedAutoMerge: calls.includes("pr merge"),
+  };
+}
+
+describe("STT Digest Watch — PR hand-off when Actions may not open PRs (BI-8CEBDD09)", () => {
+  it("still dispatches the required checks onto the pushed branch", () => {
+    // The refusal used to abort the step under `bash -e`, so the branch was
+    // pushed and then abandoned: no checks, no auto-merge, no PR.
+    const r = runPrHandoff({ prCreateFails: true });
+    assert.equal(r.dispatchedCi, true, "ci.yml was not dispatched after the refusal");
+    assert.equal(r.dispatchedGates, true, "release-gates.yml was not dispatched after the refusal");
+  });
+
+  it("raises one hand-off issue carrying the compare link", () => {
+    const r = runPrHandoff({ prCreateFails: true });
+    assert.equal(r.createdIssue, true, "no issue was raised, so the stranded branch is invisible");
+    assert.match(r.summary, /compare\/main\.\.\.bot\/stt-digest-repin/);
+    assert.match(r.summary, /Allow GitHub Actions to create and approve pull requests/);
+  });
+
+  it("does not pile up an issue per daily run", () => {
+    const r = runPrHandoff({ prCreateFails: true, issueAlreadyOpen: true });
+    assert.equal(r.createdIssue, false, "a second issue was opened while one was already waiting");
+  });
+
+  it("still reports failure, because the loop did not close on its own", () => {
+    assert.notEqual(runPrHandoff({ prCreateFails: true }).status, 0);
+  });
+
+  it("arms auto-merge and succeeds on the happy path", () => {
+    const r = runPrHandoff({ prCreateFails: false });
+    assert.equal(r.armedAutoMerge, true, "auto-merge was not armed after a successful PR creation");
+    assert.equal(r.createdIssue, false, "an issue was raised even though the PR opened");
+    assert.equal(r.status, 0);
   });
 });
 

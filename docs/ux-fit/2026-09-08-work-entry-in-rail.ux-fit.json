@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "one-canonical-work-entry",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/delivery/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "rebaselined",
+    "measured": {
+      "/delivery": {
+        "defaultVisibleWords": 174,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  }
+}

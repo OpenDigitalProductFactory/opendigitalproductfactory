@@ -89,6 +89,17 @@ shape; every merge, deploy, acceptance and authority-changing advance is a `gove
 and the author never holds the receipt writer. `small | medium | large | xlarge` are
 `BacklogEffortSize`; `break-fix` is the expedite lane on a small fix (post-hoc review, WIP 1).
 
+That `claim` vs `cadence` split is load-bearing, not decorative. A shape's own
+declared triggers decide whether the room it drives RECURS: every standing shape
+declares `cadence`, every finite delivery shape declares `claim`, and
+`isStandingWorkShape` reads that rather than a hand-kept list. The source-registry
+entry supplies a room's default projection mode; the room's declared shape
+overrides it, one way only — a declared standing shape widens a finite source to
+standing, never the reverse, and an absent or unknown shape leaves the source's
+policy untouched. A new standing shape is therefore standing the day it is
+declared, with nothing else to remember to update
+(BI-97B24FB5, kernel decision DI-5F69035EC6B9).
+
 A delivery room gets its shape at the claim (`claim_backlog_item_for_work`, BI-02470C7E, design §3.3): declared by the caller as `workShape`, or derived from the item's `effortSize` and work type when every classification rule in design §3.4 agrees (`derive-delivery-shape.ts`, recorded with `source: derived` and the signals used). An implementation claim with no derivable shape is refused with `work_shape_required` and the five-shape pick list; an unattended caller gets `attentionRequired` on the refusal; `delivery-xlarge` is refused for implementation because it only ever decomposes. The shape persists as the room's `workShape` scope claim, read back by `readWorkShapeClaim` / `resolveWorkShapeClaim` like any activity shape.
 
 **This claim is what makes a room wake.** The standing-Workroom drive
@@ -296,6 +307,7 @@ The shape registry spans three modules, merged into `ALL_SHAPES` at runtime:
 | `standing-operations-shapes.ts` | the standing operations a BUSINESS runs |
 | `coworker-standing-shapes.ts` | the standing work the platform's own coworkers run |
 | `delivery-shapes.ts` | the five delivery shapes: size and what each owes before it is done (BI-B90F7CBB) |
+| `orchestration-shapes.ts` | one cycle per IT4IT value stream, for the value-stream orchestrators |
 
 A static reader must consult all four. The capability measure read only the first
 for a period and reported seven fully-bounded agents as having no declared work
@@ -308,6 +320,16 @@ it.
 Every shape in the coworker module ends in a `governed-decision` taken by a human
 `role:`, never by the coworker that prepared the work. A shape whose advances are
 all `status-change` declares an unbounded coworker in the shape of a bounded one.
+
+
+The same one-file assumption has now broken this scanner four times — shapes,
+self-tasks, skills, and the coworker grants map. Each time a registry moved to a
+second module and the static reader kept reading the first. Every source list it
+depends on is therefore explicit and guarded: `SHAPE_SOURCE_FILES`,
+`SELF_TASK_SOURCES`, `GRANTS_SOURCE_FILES`, and the skill-pack namespace. The
+grants case was the worst-reading: a re-export carries no entries, so slicing the
+seed file alone reported a live coworker as "holds no grants at all — no tool
+surface is authorised".
 
 ## What is actually enforced today
 
