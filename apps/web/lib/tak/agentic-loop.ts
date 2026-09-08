@@ -48,13 +48,12 @@ import {
   planProgress,
 } from "./execution-plan";
 import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store";
-import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
+import { estimateContextTokens, classifyContextPressure, compactAgenticMessages } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
 import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
 import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
-import { summarizeDroppedMessages } from "./compaction-digest";
 import {
   detectToolRefusedDespiteAvailability,
   appendToolRefusedRecoveryMessages,
@@ -88,9 +87,6 @@ const MAX_DURATION_BUILD_MS = 600_000;    // 10 min — sandbox code gen
 const MAX_DURATION_PLAN_MS = 600_000;     // 10 min — ideate/plan (heavy research)
 const MAX_DURATION_REVIEW_MS = 300_000;   // 5 min — review
 const MAX_DURATION_SHIP_MS = 300_000;     // 5 min — ship
-const MAX_AGENTIC_HISTORY_MESSAGES = 24;
-const MAX_TOOL_RESULT_CHARS = 1_500;
-const MAX_TEXT_MESSAGE_CHARS = 4_000;
 
 // ─── Extracted for testability ──────────────────────────────────────────────
 
@@ -507,7 +503,7 @@ function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): strin
   });
 }
 
-type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult };
+type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult; modelEvidenceTruncated?: boolean };
 
 function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
   const counts = new Map<string, number>();
@@ -939,73 +935,7 @@ export function buildToolSessionHintMessage(
   );
 }
 
-function truncateMessageContent(content: string, maxChars: number, label: string): string {
-  if (content.length <= maxChars) return content;
-  const omitted = content.length - maxChars;
-  const suffix = `\n...[truncated ${omitted} chars of earlier ${label}]`;
-  return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
-}
 
-function compactAgenticMessages(
-  messages: ChatMessage[],
-  maxContextTokens?: number | null,
-  zone?: import("./context-pressure").ContextPressureZone,
-): ChatMessage[] {
-  // BI-9679EB1A: size the caps from the real model window when known, never
-  // below today's floor. Unknown window (incl. iteration 0) -> floor exactly,
-  // so the unknown-window path is byte-for-byte identical to before.
-  // BI-3C8220ED: a live overload `zone` tightens the trim (never below floor).
-  const caps = deriveCompactionCaps(maxContextTokens, {
-    maxHistory: MAX_AGENTIC_HISTORY_MESSAGES,
-    toolCap: MAX_TOOL_RESULT_CHARS,
-    textCap: MAX_TEXT_MESSAGE_CHARS,
-  }, zone);
-  let scopedMessages: ChatMessage[];
-  if (messages.length <= caps.maxHistory) {
-    scopedMessages = messages;
-  } else {
-    // R9a (P11): the middle of a long turn is dropped entirely. Before
-    // discarding it, distill its TOOL ACTIVITY into a one-line digest — zero
-    // inference, because the local-first single-GPU path can't afford a
-    // summarization call — and re-insert it right after message[0] so "what was
-    // already tried / what failed" survives compaction instead of being silently
-    // lost (which lets the model repeat completed work or re-hit a known fail).
-    const dropped = messages.slice(1, messages.length - (caps.maxHistory - 1));
-    const digest = summarizeDroppedMessages(dropped);
-    const tail = messages.slice(-(caps.maxHistory - 1));
-    scopedMessages = digest
-      ? [messages[0]!, { role: "assistant" as const, content: `[System notice] ${digest}` }, ...tail]
-      : [messages[0]!, ...tail];
-  }
-
-  const retainedToolCallIds = new Set(
-    scopedMessages.flatMap((message) =>
-      message.role === "assistant" && message.toolCalls
-        ? message.toolCalls.map((toolCall) => toolCall.id)
-        : [],
-    ),
-  );
-
-  return scopedMessages
-    .filter((message) =>
-      message.role !== "tool" ||
-      !message.toolCallId ||
-      retainedToolCallIds.has(message.toolCallId),
-    )
-    .map((message) => {
-      if (typeof message.content !== "string") return message;
-      if (message.role === "tool") {
-        return {
-          ...message,
-          content: truncateMessageContent(message.content, caps.toolCap, "tool output"),
-        };
-      }
-      return {
-        ...message,
-        content: truncateMessageContent(message.content, caps.textCap, "message context"),
-      };
-    });
-}
 
 export type RunAgenticLoopParams = {
 
@@ -1610,7 +1540,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       resolvedMaxContextTokens,
     ).zone;
     const assembledMessages = withPlanReminder(
-      compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone),
+      compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone, params.terminalToolPolicy?.readerToolNames),
     );
     const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt), resolvedMaxContextTokens);
     if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
@@ -2567,7 +2497,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         forbiddenGrantStreak = 0;
       }
 
-      executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
+      const modelEvidenceTruncated = params.terminalToolPolicy?.readerToolNames.includes(tc.name)
+        ? clampToolResultForModel(toolResult, { maxChars: resolveToolResultCharCap(resolvedMaxContextTokens) }).truncated
+        : undefined;
+      executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult, modelEvidenceTruncated });
       if (toolResult.success && params.terminalToolPolicy?.readerToolNames.includes(tc.name)) {
         terminalToolSurfaceOverride = null; terminalToolNudges = 0;
       }

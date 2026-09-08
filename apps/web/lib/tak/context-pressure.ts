@@ -1,6 +1,10 @@
+import type { ChatMessage } from "../ai-inference";
+import { summarizeDroppedMessages } from "./compaction-digest";
+import { resolveToolResultCharCap } from "./tool-result-budget";
+
 // apps/web/lib/tak/context-pressure.ts
 //
-// Observability-only "dumb zone" gauge for the agentic loop.
+// Context pressure and bounded history assembly for the agentic loop.
 //
 // Large models degrade once their context fills past a model-specific band (the
 // "dumb zone") — but the loop never measured how full the assembled prompt was,
@@ -8,17 +12,14 @@
 // token load (~chars/4, matching the codebase's other estimators) and bands it
 // into a heuristic pressure zone for per-dispatch logging.
 //
-// IMPORTANT: nothing here changes what is sent to the model. The loop's
-// compaction (compactAgenticMessages) already bounds the history; this only
-// makes the resulting fill visible so a regression (a ballooning system prompt,
-// a bumped history cap) is observable instead of silent. The loop is
+// The pressure gauge reports estimated fill; compactAgenticMessages applies
+// the existing history limits and retains bounded governed evidence. The loop is
 // model-agnostic at its layer — the routing pipeline resolves the concrete
 // model + context window below it — so the thresholds are heuristic,
 // model-agnostic hints, NOT hard limits. A follow-up can thread the resolved
 // model's real maxContextTokens for a precise ratio-of-window signal.
 //
-// Pure module — no imports, no I/O — so it is unit-tested directly without the
-// loop's heavy dependency graph.
+// No I/O; the assembly and gauge are tested without invoking inference.
 //
 // From the 2026-06-19 agent-architecture review (dumb-zone observability).
 
@@ -158,4 +159,84 @@ export function deriveCompactionCaps(
   const textCap = Math.max(floor.textCap, perMsgChars);
   const toolCap = Math.max(floor.toolCap, Math.floor(perMsgChars / 2));
   return { maxHistory, toolCap, textCap };
+}
+
+const MAX_AGENTIC_HISTORY_MESSAGES = 24;
+const MAX_TOOL_RESULT_CHARS = 1_500;
+const MAX_TEXT_MESSAGE_CHARS = 4_000;
+
+function truncateMessageContent(content: string, maxChars: number, label: string): string {
+  if (content.length <= maxChars) return content;
+  const omitted = content.length - maxChars;
+  const suffix = `\n...[truncated ${omitted} chars of earlier ${label}]`;
+  return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
+}
+
+export function compactAgenticMessages(
+  messages: ChatMessage[],
+  maxContextTokens?: number | null,
+  zone?: import("./context-pressure").ContextPressureZone,
+  evidenceReaderNames: readonly string[] = [],
+): ChatMessage[] {
+  // BI-9679EB1A: size the caps from the real model window when known, never
+  // below today's floor. Unknown window (incl. iteration 0) -> floor exactly,
+  // so the unknown-window path is byte-for-byte identical to before.
+  // BI-3C8220ED: a live overload `zone` tightens the trim (never below floor).
+  const caps = deriveCompactionCaps(maxContextTokens, {
+    maxHistory: MAX_AGENTIC_HISTORY_MESSAGES,
+    toolCap: MAX_TOOL_RESULT_CHARS,
+    textCap: MAX_TEXT_MESSAGE_CHARS,
+  }, zone);
+  let scopedMessages: ChatMessage[];
+  if (messages.length <= caps.maxHistory) {
+    scopedMessages = messages;
+  } else {
+    // R9a (P11): the middle of a long turn is dropped entirely. Before
+    // discarding it, distill its TOOL ACTIVITY into a one-line digest — zero
+    // inference, because the local-first single-GPU path can't afford a
+    // summarization call — and re-insert it right after message[0] so "what was
+    // already tried / what failed" survives compaction instead of being silently
+    // lost (which lets the model repeat completed work or re-hit a known fail).
+    const dropped = messages.slice(1, messages.length - (caps.maxHistory - 1));
+    const digest = summarizeDroppedMessages(dropped);
+    const tail = messages.slice(-(caps.maxHistory - 1));
+    scopedMessages = digest
+      ? [messages[0]!, { role: "assistant" as const, content: `[System notice] ${digest}` }, ...tail]
+      : [messages[0]!, ...tail];
+  }
+
+  const retainedToolCallIds = new Set(
+    scopedMessages.flatMap((message) =>
+      message.role === "assistant" && message.toolCalls
+        ? message.toolCalls.map((toolCall) => toolCall.id)
+        : [],
+    ),
+  );
+  const evidenceCallIds = new Set(scopedMessages.flatMap((message) =>
+    (message.toolCalls ?? []).filter((call) => evidenceReaderNames.includes(call.name)).map((call) => call.id)));
+
+  return scopedMessages
+    .filter((message) =>
+      message.role !== "tool" ||
+      !message.toolCallId ||
+      retainedToolCallIds.has(message.toolCallId),
+    )
+    .map((message) => {
+      if (typeof message.content !== "string") return message;
+      if (message.role === "tool") {
+        return {
+          ...message,
+          // A governed reviewer must judge the bounded page it just read, not
+          // a second 1,500-character prefix. Reuse the model-facing budget;
+          // the terminal policy independently bounds the number of reads.
+          content: truncateMessageContent(message.content,
+            evidenceCallIds.has(message.toolCallId ?? "") ? resolveToolResultCharCap(maxContextTokens) : caps.toolCap,
+            "tool output"),
+        };
+      }
+      return {
+        ...message,
+        content: truncateMessageContent(message.content, caps.textCap, "message context"),
+      };
+    });
 }

@@ -47,6 +47,8 @@ type ImmutableReaderArtifactRef = {
 
 export type TerminalToolRecord = {
   name: string;
+  /** The reader ran, but a model-facing cap withheld part of its evidence. */
+  modelEvidenceTruncated?: boolean;
   args?: Record<string, unknown>;
   result: { success: boolean; error?: string; message?: string; data?: Record<string, unknown> };
 };
@@ -261,7 +263,7 @@ export function summarizeTerminalToolProgress(
     const nextCursor = data?.["nextCursor"];
     const content = data?.["content"];
     const hasContent = typeof content === "string";
-    const validPage = validIdentity
+    const validPage = validIdentity && record.modelEvidenceTruncated !== true
       && boundedInteger(startLine, 1, Number.MAX_SAFE_INTEGER)
       && boundedInteger(endLine, 1, Number.MAX_SAFE_INTEGER)
       && boundedInteger(totalLines, 1, Number.MAX_SAFE_INTEGER)
@@ -481,6 +483,9 @@ export function applyTerminalToolSurface(
   }
   if (progress.evidenceAvailable) return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
   if (progress.readerBudgetExhausted) return [];
+  if (records.some((record) => record.modelEvidenceTruncated)) {
+    return selectTerminalToolSurface(providerTools, policy.readerToolNames);
+  }
   if (progress.partialEvidence) return selectTerminalToolSurface(providerTools, ["read_source_at_version"]);
   return [...providerTools];
 }
@@ -499,6 +504,9 @@ export function buildTerminalToolReminder(
   }
   if (progress.evidenceAvailable) return `Call ${policy.writerToolName} now; complete immutable evidence is available.`;
   if (progress.readerBudgetExhausted) return "Immutable traversal is incomplete and the bounded reader budget is exhausted; do not record a disposition.";
+  if (records.some((record) => record.modelEvidenceTruncated)) {
+    return "Part of the source was withheld by the model context budget. Restart the same immutable traversal with smaller maxChars pages; do not record a disposition until every page is visible.";
+  }
   if (progress.partialEvidence) return `Continue read_source_at_version with cursor ${progress.continuationCursor}; the writer remains unavailable until traversal completes.`;
   const remaining = policy.maximumReaderCalls - progress.readerAttempts;
   return `Use the immutable evidence readers before ${policy.writerToolName}. ${remaining} bounded evidence calls remain; reserve the terminal step for the governed writer.`;
