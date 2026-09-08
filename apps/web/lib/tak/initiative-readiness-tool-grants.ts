@@ -524,16 +524,16 @@ function requestCoworkerPacket(args: {
     itemId: args.decision.subject.id,
     gate: args.gate,
     expectedCurrentBaselineId: args.expectedCurrentBaselineId,
+    workroomRef: {
+      kind: "workroom-head" as const,
+      workroomId: args.dispatch.workroomId,
+      repositoryFullName: args.dispatch.repositoryFullName,
+      branchName: args.dispatch.branchName,
+      headSha: args.dispatch.headSha,
+    },
     ...(args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
       ? {
         eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
-        workroomRef: {
-          kind: "workroom-head" as const,
-          workroomId: args.dispatch.workroomId,
-          repositoryFullName: args.dispatch.repositoryFullName,
-          branchName: args.dispatch.branchName,
-          headSha: args.dispatch.headSha,
-        },
       }
       : {}),
     artifactRef: {

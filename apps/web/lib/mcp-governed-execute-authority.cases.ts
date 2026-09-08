@@ -230,6 +230,44 @@ export function registerCoworkerAuthorityCases(
     });
   });
 
+  it("puts the unresolved WWMD residue on the human decision card", async () => {
+    const pending = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "side-effects",
+      },
+    });
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => pending,
+      policyAuthorityProjectionAttempt: async () => ({
+        outcome: "not-authorized" as const,
+        explanation: "Human decision required: commandment conflict.",
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "bounded exception" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100", taskRunId: "TASK-EXCEPTION" },
+      source: "agentic-loop",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "approval_required",
+      message: expect.stringContaining("Human decision required: commandment conflict."),
+    });
+    expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledWith(expect.objectContaining({
+      explanation: "Human decision required: commandment conflict.",
+    }));
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+  });
+
   it("consumes a server-projected exact-call policy authorization before execution", async () => {
     const pending = harness.authorityInput({
       organizationId: "org-canonical",
