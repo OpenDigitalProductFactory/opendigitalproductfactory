@@ -86,6 +86,9 @@ export type DrivePlan = {
   roomId: string;
   shapeKey: string | null;
   shapeVersion: string | null;
+  /** The shape being driven, so the dispatcher can brief the coworker from it
+   *  rather than sending a bare stage key (BI-4A394B21). */
+  definition: WorkShapeDefinitionContract | null;
   stageKey: string | null;
   accountablePrincipalRef: string | null;
   agentId: string | null;
@@ -121,6 +124,7 @@ function emptyPlan(
     reason,
     roomId: input.roomId,
     shapeKey: input.definition?.key ?? null,
+    definition: input.definition ?? null,
     shapeVersion: input.definition?.version ?? null,
     stageKey: null,
     accountablePrincipalRef: null,
@@ -289,6 +293,7 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
       reason,
       roomId: input.roomId,
       shapeKey: input.definition.key,
+      definition: input.definition ?? null,
       shapeVersion: input.definition.version,
       stageKey: stage.key,
       accountablePrincipalRef: stage.accountablePrincipalRef,
@@ -338,6 +343,7 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
       reason: EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
       roomId: input.roomId,
       shapeKey: input.definition.key,
+      definition: input.definition ?? null,
       shapeVersion: input.definition.version,
       stageKey: stage.key,
       accountablePrincipalRef: stage.accountablePrincipalRef,
@@ -358,6 +364,7 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
     reason: "agent_stage",
     roomId: input.roomId,
     shapeKey: input.definition.key,
+    definition: input.definition ?? null,
     shapeVersion: input.definition.version,
     stageKey: stage.key,
     accountablePrincipalRef: stage.accountablePrincipalRef,

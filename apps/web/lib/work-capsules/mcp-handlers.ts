@@ -652,6 +652,9 @@ export async function recordCapsuleEvidenceTool(
   const evidence: {
     kind: WorkCapsuleEvidenceKind;
     summary: string;
+    // The stage this evidence completes. Without it the drive cannot tell a
+    // stage outcome from a room-level note, and the stage never advances.
+    stageKey?: string;
     command?: string;
     url?: string;
     targetId?: string;
@@ -662,6 +665,8 @@ export async function recordCapsuleEvidenceTool(
     kind: rawKind,
     summary,
   };
+  const stageKey = stringParam(params, "stageKey");
+  if (stageKey) evidence.stageKey = stageKey;
   const command = stringParam(params, "command");
   const url = stringParam(params, "url");
   const targetId = stringParam(params, "targetId");

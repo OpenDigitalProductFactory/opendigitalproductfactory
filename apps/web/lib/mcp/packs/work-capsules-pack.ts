@@ -293,6 +293,13 @@ const definitions: ToolDefinition[] = [
       properties: {
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         kind: { type: "string", enum: ENUMS.evidenceKinds, description: "Evidence kind." },
+        stageKey: {
+          type: "string",
+          description:
+            "The work-shape stage this evidence completes. REQUIRED for a Workroom stage to "
+            + "advance: the drive earns a completing receipt from stage-scoped evidence and "
+            + "never from a run's self-reported status (BI-76B35820).",
+        },
         summary: { type: "string", description: "Evidence summary." },
         command: { type: "string", description: "Optional command that produced the evidence." },
         url: { type: "string", description: "Optional URL for PRs, CI runs, screenshots, or external evidence." },
