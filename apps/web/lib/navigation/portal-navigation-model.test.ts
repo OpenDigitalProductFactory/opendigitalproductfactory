@@ -164,3 +164,34 @@ describe("portal navigation model", () => {
     expect(activityish).toHaveLength(1);
   });
 });
+
+describe("one name means one destination", () => {
+  // An operator reported being unable to remember the difference between two
+  // areas. The cause was literal: two entries carried the byte-identical label
+  // "AI Coworkers" for different destinations (/workforce and
+  // /platform/identity/agents), so the portal offered the same words twice and
+  // neither name said which was which. A duplicate label is not a style
+  // preference — it makes the navigation unusable by name.
+  it("gives no two nav entries the same label", () => {
+    const byLabel = new Map<string, string[]>();
+    for (const route of PORTAL_NAV_ROUTES) {
+      const paths = byLabel.get(route.label) ?? [];
+      paths.push(route.path);
+      byLabel.set(route.label, paths);
+    }
+    const collisions = [...byLabel.entries()]
+      .filter(([, paths]) => new Set(paths).size > 1)
+      .map(([label, paths]) => `${label} -> ${[...new Set(paths)].sort().join(" , ")}`);
+    expect(collisions).toEqual([]);
+  });
+
+  it("keeps the coworker directory and the identity surface distinctly named", () => {
+    const label = (path: string) =>
+      PORTAL_NAV_ROUTES.find((route) => route.path === path)?.label;
+    const directory = label("/workforce");
+    const identity = label("/platform/identity/agents");
+    expect(directory).toBeTruthy();
+    expect(identity).toBeTruthy();
+    expect(identity).not.toBe(directory);
+  });
+});
