@@ -159,6 +159,7 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     const now = new Date("2026-09-01T00:00:00.000Z");
     const first = await runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
     expect(first.dispatched).toBe(1);
+    expect(String(fx.upsertAgentTask.mock.calls[0]?.[0]?.prompt)).toMatch(/record_workroom_evidence/);
     const snapshot = fx.persist.mock.calls[0]?.[0]?.snapshot as Record<string, unknown>;
     expect(snapshot.action).toBe("dispatch_agent");
     const second = await runWorkroomDriveJob(now, {
@@ -179,6 +180,20 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     expect(secondSnapshot.receipts).toEqual(
       expect.arrayContaining([{ stageKey: snapshot.stageKey, kind: "blocked" }]),
     );
+  });
+
+  it("persists earned evidence so the following tick retains prerequisite receipts", async () => {
+    const fx = effects();
+    const current = room({ currentStageKey: "sweep", receipts: [{ stageKey: "sweep", kind: "blocked" }],
+      stageDispatchedAt: new Date("2026-09-01T00:00:00Z"),
+      recordedEvidence: [{ stageKey: "sweep", kind: "assurance-run", recordedAt: new Date("2026-09-01T00:01:00Z") }],
+    });
+    await runWorkroomDriveJob(new Date("2026-09-01T00:02:00Z"), { listRooms: async () => [current], effects: fx });
+    const snapshot = fx.persist.mock.calls.at(-1)?.[0]?.snapshot as Record<string, unknown>;
+    expect(snapshot.receipts).toEqual([{ stageKey: "sweep", kind: "stage-evidence-recorded" }]);
+    expect(snapshot.stageKey).toBe("raise");
+    await runWorkroomDriveJob(new Date("2026-09-01T00:03:00Z"), { listRooms: async () => [room({ workspaceState: { workroomDrive: snapshot } })], effects: fx });
+    expect(fx.persist.mock.calls.at(-1)?.[0]?.snapshot.receipts).toEqual(expect.arrayContaining([{ stageKey: "sweep", kind: "stage-evidence-recorded" }]));
   });
 
   it("contains delivery notification reconciliation failure after preserving the drive result", async () => {
@@ -267,6 +282,22 @@ describe("applyDrivePlan lease expiry", () => {
     });
     expect(workspace.concurrent).toBe(true);
     expect(driveDb.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("preserves a completing receipt written after planning but before persistence", async () => {
+    persistedLease();
+    driveDb.workroom.findUnique.mockResolvedValue({
+      workspaceState: { workroomDrive: { lastCycleKey: "cycle-1", receipts: [{ stageKey: "sweep", kind: "findings" }] } },
+      updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+    });
+    driveDb.workroom.updateMany.mockResolvedValue({ count: 1 });
+    await createWorkroomDriveEffects(async () => driveDb as never).persist({
+      roomId: "row-1", snapshot: { lastCycleKey: "cycle-1", stageKey: "sweep", receipts: [{ stageKey: "sweep", kind: "blocked" }] },
+      activityKind: "verification", summary: "Stage observed", payload: {},
+    });
+    expect(driveDb.workroom.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: { workspaceState: { workroomDrive: expect.objectContaining({ receipts: [{ stageKey: "sweep", kind: "findings" }] }) } },
+    }));
   });
 
   it("does not publish a dispatch snapshot after the lease holder changes", async () => {

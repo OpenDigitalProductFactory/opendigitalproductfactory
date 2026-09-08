@@ -356,6 +356,14 @@ PAAW/Four-Portfolio; the earlier “PAAS” wording is not treated as a separate
 
 ## 12. Delivery slices and acceptance
 
+**OBJ-COVERAGE:** Apply a common review contract with explicit, deterministic domain and archetype extensions to every eligible workroom, without claiming unexercised coverage.
+
+**OBJ-RECOVERY:** Preserve fresh evidence and safe continuation across executor loss, interrupted publication, missing workspaces and missed review cycles without relying on conversation memory.
+
+**OBJ-LEARNING:** Turn correctly attributed cross-workroom observations into independently assessed, governed improvements whose effects are verified on comparable subsequent work.
+
+**OBJ-OPERATION:** Make the review and recovery process understandable to its owner and bounded in resource use, with honest coverage, remaining work and one actionable next step.
+
 Reserve 20% of implementation effort for consolidating identity projection, event deduplication,
 lifecycle/recovery classification and shared UI projection. Track refactoring within each slice;
 do not use the allowance for unrelated cleanup.
@@ -369,20 +377,20 @@ do not use the allowance for unrelated cleanup.
 4. Archetype verification and native execution: qualify applicable profiles and assessor, exercise
    real domain paths in nonproduction, then activate existing standing execution where justified.
 
-| Acceptance | Observable proof |
-| --- | --- |
-| AC-01 Default coverage | Every registered source definition is resolved, explicitly unsupported or not exercised; aliases cannot double-count |
-| AC-02 Profile inheritance | Common + facets + category + leaf + org constraints resolve deterministically; conflicting/removing obligations are surfaced |
-| AC-03 Domain fit | Development, bookkeeping/standing operations, pet rescue and campground examples use their own evidence and critical-failure criteria |
-| AC-04 Fresh context survives | Kill executor and reviewer with conversation unavailable; replacement reconstructs exact safe next step from durable artifacts |
-| AC-05 Recovery safety | Missing/dirty paths, competing claims, crash around publication and terminal-parent/stalled-child fixtures preserve evidence and prevent blind replay |
-| AC-06 Honest trends | Retry replay, late events, denominator changes, sparse cohorts and a 5,000-record cap produce correct recurrence/coverage labels |
-| AC-07 Independence | Change author cannot supply its own passing assessment; held-out evidence and role boundaries remain enforced |
-| AC-08 Verified application | One common and one scoped change show exact deployed versions and later comparable outcomes; insufficient evidence stays inconclusive |
-| AC-09 UX | Owners can locate next action, scope, evidence and recovery state without interpreting raw transport logs; keyboard and theme checks pass |
-| AC-10 Bounded operation | Pilot-scale delta/load test meets declared budgets, resumes cursor after interruption and exposes remaining backlog without starvation |
-| AC-11 Authority | Read-only reviewer cannot repair, publish, expand grants, inspect another tenant or treat transcript instructions as authority |
-| AC-12 Reviewer continuity | Missed cadence and reviewer failure produce visible due work; replacing executor does not start duplicate cycles |
+| Acceptance | Objectives | Observable proof |
+| --- | --- | --- |
+| AC-01 | OBJ-COVERAGE | Default coverage: every registered source definition is resolved, explicitly unsupported or not exercised; aliases cannot double-count |
+| AC-02 | OBJ-COVERAGE | Profile inheritance: common + facets + category + leaf + org constraints resolve deterministically; conflicting/removing obligations are surfaced |
+| AC-03 | OBJ-COVERAGE | Domain fit: development, bookkeeping/standing operations, pet rescue and campground examples use their own evidence and critical-failure criteria |
+| AC-04 | OBJ-RECOVERY | Fresh context survives: kill executor and reviewer with conversation unavailable; replacement reconstructs exact safe next step from durable artifacts |
+| AC-05 | OBJ-RECOVERY | Recovery safety: missing/dirty paths, competing claims, crash around publication and terminal-parent/stalled-child fixtures preserve evidence and prevent blind replay |
+| AC-06 | OBJ-LEARNING | Honest trends: retry replay, late events, denominator changes, sparse cohorts and a 5,000-record cap produce correct recurrence/coverage labels |
+| AC-07 | OBJ-LEARNING | Independence: change author cannot supply its own passing assessment; held-out evidence and role boundaries remain enforced |
+| AC-08 | OBJ-LEARNING | Verified application: one common and one scoped change show exact deployed versions and later comparable outcomes; insufficient evidence stays inconclusive |
+| AC-09 | OBJ-OPERATION | UX: owners can locate next action, scope, evidence and recovery state without interpreting raw transport logs; keyboard and theme checks pass |
+| AC-10 | OBJ-OPERATION | Bounded operation: pilot-scale delta/load test meets declared budgets, resumes cursor after interruption and exposes remaining backlog without starvation |
+| AC-11 | OBJ-LEARNING | Authority: read-only reviewer cannot repair, publish, expand grants, inspect another tenant or treat transcript instructions as authority |
+| AC-12 | OBJ-RECOVERY | Reviewer continuity: missed cadence and reviewer failure produce visible due work; replacing executor does not start duplicate cycles |
 
 Acceptance fixtures may prove mechanics; synthetic data does not prove business efficacy.
 The existing 135 stalled child runs remain operational demand and are not closed by this design.
