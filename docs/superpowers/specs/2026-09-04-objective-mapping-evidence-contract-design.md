@@ -160,6 +160,33 @@ evidence set may advance only after the prior request is terminal and has no
 successful authoritative writer or receipt. Any other invariant drift or
 unbounded/ambiguous history produces a typed no-route result.
 
+### September 8 legacy objective text compatibility (BI-06AE6833)
+
+The live Pet Rescue request ending `993C47DEE56A` uses the original producer
+text `at <head>` and `Read <path> at that commit`. The current producer uses
+`at Workroom head <head>`, explicit reader arguments, and a finite eligible
+evidence list. Exact prose equality therefore rejects a legitimate historical
+packet before the existing deterministic-successor checks can run.
+
+Recognize only the complete original producer template, reconstructed from the
+current server-owned Workroom identity and the retained artifact binding. Require
+the complete current producer template too; share its formatter with admission
+so a second prompt implementation cannot silently diverge. Retain exact item,
+reviewer, writer, tools, summary, coarse historical key, baseline and artifact
+checks, current signed-key validation, and active-authority refusal. A textual
+near-match, added instruction or changed identity remains a conflict. The legacy
+`at that commit` form is eligible only when artifact commit equals Workroom head.
+
+Preserve the historical TaskRun and text unchanged. Use the existing server-issued
+deterministic successor contract, never mutate its request digest or accept a
+caller-selected suffix. This amendment does not grant a successful receipt.
+
+Ordered repair: reproduce the exact live text in a first-failing test; consolidate
+the producer formatter; add bounded legacy recognition and mismatch regressions;
+verify the request-key, producer, terminal-recovery and external-admission suites;
+publish through protected CI; then obtain a genuine receipt on the canonical
+install before closing the product item. Runtime verification remains outstanding.
+
 ### Provider-proven impossible historical locators
 
 A historical TaskRun can carry an internally coherent but provider-impossible

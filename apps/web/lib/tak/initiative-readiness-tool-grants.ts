@@ -9,6 +9,7 @@ import type {
 } from "@/lib/backlog/initiative-readiness";
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { formatInitiativeReviewObjective, IMMUTABLE_REVIEW_READER_TOOL as IMMUTABLE_READER_TOOL } from "./initiative-review-objective";
 
 export type InitiativeReadinessLane = {
   capability: NonNullable<ToolDefinition["requiredCapability"]>;
@@ -473,7 +474,6 @@ function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadine
  * `search_source_at_version`; a route binds one exact blob, so the point read is
  * the whole need and the broader search grant is not issued.
  */
-const IMMUTABLE_READER_TOOL = "read_source_at_version";
 const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
 
 function normalizeEligibleEvidenceActivityIds(value: readonly string[] | undefined): string[] | null {
@@ -495,18 +495,11 @@ function requestCoworkerPacket(args: {
   expectedCurrentBaselineId: string | null;
   eligibleEvidenceActivityIds: string[] | null;
 }) {
-  const reviewConstraint = args.independent ? "independently " : "";
   const reviewSha = args.artifact?.commitSha ?? args.dispatch.headSha;
-  const mappingInstruction = args.gate === "objective-mapping"
-    ? ` Map every current OBJ-* and AC-* statement to post-baseline evidence using only these eligible activity IDs: ${args.eligibleEvidenceActivityIds?.join(", ")}. Submit the proposal with record_initiative_evidence(operation='objective-mapping').`
-    : "";
-  const objective = `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at Workroom head ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
-    args.artifact
-      // A reviewer reached over native MCP never sees the bound schema, so the
-      // objective itself carries every locator input the reader needs.
-      ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_READER_TOOL} (repositoryFullName ${args.dispatch.repositoryFullName}, version ${reviewSha}, expectedBlobId ${args.artifact.providerBlobId}),`
-      : ""
-  } record a governed receipt only when the gate passes.${mappingInstruction}`;
+  const objective = formatInitiativeReviewObjective({ ...args.dispatch,
+    itemId: args.decision.subject.id, gate: args.gate, toolName: args.toolName,
+    independent: args.independent, artifact: args.artifact,
+    eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds });
   const questionPacketSummary = `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`;
   const base = {
     targetAgent: args.targetAgentId,
