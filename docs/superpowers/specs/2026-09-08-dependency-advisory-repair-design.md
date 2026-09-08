@@ -29,14 +29,19 @@ Their GitHub dismissals are not claims that those upstream versions are patched.
 
 ## Objectives and acceptance
 
-- OBJ-1: Remove all applicable vulnerable versions from committed lockfiles.
-- OBJ-2: Preserve web, mobile and tooling consumer behavior.
-- OBJ-3: Recover the dependency PRs through protected delivery with reproducible evidence.
-- AC-1: Every applicable advisory has a patched resolved version and consumer verification.
-- AC-2: Fresh-store regeneration is scoped and stable; provenance and SBOM guards pass.
-- AC-3: Existing dependency PRs merge or are superseded by equivalent landed fixes.
-- AC-4: Required runtime, test, typecheck and production-build checks pass on the candidate.
-- AC-5: Re-read GitHub after merge; no applicable open findings remain.
+**OBJ-1:** Remove all applicable vulnerable versions from committed lockfiles.
+
+**OBJ-2:** Preserve web, mobile and tooling consumer behavior.
+
+**OBJ-3:** Recover the dependency PRs through protected delivery with reproducible evidence.
+
+| Acceptance | Objective | Required result | Verification |
+| --- | --- | --- | --- |
+| AC-1 | OBJ-1 | Every applicable advisory has a patched resolved version and consumer verification. | Lockfile audit and consumer checks |
+| AC-2 | OBJ-3 | Fresh-store regeneration is scoped and stable; provenance and SBOM guards pass. | Regeneration and guard receipts |
+| AC-3 | OBJ-3 | Existing dependency PRs merge or are superseded by equivalent landed fixes. | GitHub merge state |
+| AC-4 | OBJ-2 | Required runtime, test, typecheck and production-build checks pass on the candidate. | Local and cloud CI evidence |
+| AC-5 | OBJ-1 | Re-read GitHub after merge; no applicable open findings remain. | GitHub security API |
 
 ## Ordered fix sequence
 
