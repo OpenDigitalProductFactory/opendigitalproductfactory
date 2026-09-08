@@ -160,7 +160,6 @@ export const PUBLIC_SCOPE_TO_GRANTS: Record<PublicScope, readonly string[]> = {
     "work_capsule_adopt",
     "work_capsule_write",
     "work_engagement_transition",
-    "workroom_drive_write",
     "work_engagement_write",
     "work_room_write",
     "workbook_write",

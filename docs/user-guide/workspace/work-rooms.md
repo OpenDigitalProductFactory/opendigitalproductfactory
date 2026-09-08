@@ -19,8 +19,6 @@ relatedCode:
 
 ## Overview
 
-Standing Workrooms advance after the assigned worker or explicit Process Overseer records the current stage's outcome. A chat message saying work is complete does not advance the room. A blocked outcome keeps the stage open. The platform checks the recorded outcome on its next drive cycle and applies the next stage's existing approval requirements.
-
 **My Work** is the Workspace view of active company work available to you. Each item opens a **Workroom**: a focused place where authorized people and AI coworkers coordinate toward a named outcome.
 
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.

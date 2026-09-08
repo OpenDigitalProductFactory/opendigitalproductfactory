@@ -349,7 +349,7 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
       accountablePrincipalRef: stage.accountablePrincipalRef,
       agentId: null,
       attentionPrincipalRef: null,
-      taskId: workroomDriveTaskId(input.roomId, input.definition.key),
+      taskId: null,
       conformance,
       cycle,
       deviations: [],

@@ -6,6 +6,7 @@
 // over.
 
 import { planCoordinationBindings } from "@/lib/authority/coordination-bindings";
+import type { PrismaClient } from "@dpf/db";
 import {
   COORDINATION_RESOURCE_TYPE,
   COORDINATION_SCOPE_TYPE,
@@ -108,12 +109,33 @@ export async function reconcileCoordinationBindings(): Promise<number> {
 }
 
 /**
- * Stage-scoped evidence recorded through record_workroom_evidence, plus when
- * each room's current stage was last dispatched.
- *
- * This is the ONLY input a completing receipt is earned from. Executor status is
- * never consulted: 337 runs reported `completed` with zero tools executed, and
- * PR #5168 was correctly refused for proposing to trust exactly that.
+ * Read the actual agent dispatch for the room's current stage and cycle.
+ * Missing dispatch is not permission to accept historical evidence.
+ */
+export async function loadStageDispatchTimes(
+  capsuleIds: readonly string[],
+  db?: Pick<PrismaClient, "$queryRaw">,
+): Promise<Map<string, Date>> {
+  if (capsuleIds.length === 0) return new Map();
+  const source = db ?? (await import("@dpf/db")).prisma;
+  const rows = await source.$queryRaw<Array<{ capsuleId: string; dispatchedAt: Date }>>`
+    SELECT DISTINCT ON (w."capsuleId") w."capsuleId", a."recordedAt" AS "dispatchedAt"
+    FROM "WorkCapsuleActivity" a
+    JOIN "WorkCapsule" w ON w."id" = a."workCapsuleId"
+    WHERE w."capsuleId" = ANY(${[...capsuleIds]}::text[])
+      AND a."kind" = 'workroom-drive'
+      AND a."payload" ->> 'action' = 'dispatch_agent'
+      AND a."payload" ->> 'reason' = 'agent_stage'
+      AND a."payload" ->> 'stageKey' = w."workspaceState" #>> '{workroomDrive,stageKey}'
+      AND a."payload" ->> 'lastCycleKey' = w."workspaceState" #>> '{workroomDrive,lastCycleKey}'
+    ORDER BY w."capsuleId", a."recordedAt" DESC
+  `;
+  return new Map(rows.map((row) => [row.capsuleId, row.dispatchedAt]));
+}
+
+/**
+ * Stage-scoped evidence recorded through record_workroom_evidence. Executor
+ * completion status is not evidence of a stage outcome.
  */
 export async function loadRecordedEvidence(
   capsuleIds: readonly string[],

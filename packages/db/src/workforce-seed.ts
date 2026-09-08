@@ -556,6 +556,7 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
 // the split is a file boundary, not a contract change.
 export { HARDCODED_COWORKER_GRANTS } from "./coworker-grants";
 
+
 /**
  * Seed-time lifecycle policy. Creation may start a newly defined coworker in
  * draft; updates deliberately carry no lifecycle field so certification and

@@ -134,10 +134,6 @@ function loadToolToGrants(): Record<string, string[]> {
       path: "apps/web/lib/tak/banking-tool-grants.ts",
       pattern: /BANKING_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
-    {
-      path: "apps/web/lib/tak/work-capsule-tool-grants.ts",
-      pattern: /WORK_CAPSULE_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
-    },
   ];
 
   for (const source of sources) {

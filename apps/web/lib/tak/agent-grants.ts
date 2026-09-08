@@ -4,7 +4,6 @@ import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surfac
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
-import { WORK_CAPSULE_TOOL_GRANTS } from "./work-capsule-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -39,7 +38,7 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // EP-WORKROOM-COMMS (BI-4402DABB): a coworker that can write a work capsule (the
   // executors that claim/work rooms, incl. the external CLIs) may post to the room
   // it is admitted to. One-way — work_room_write never implies capsule write.
-  work_capsule_write: ["work_room_write", "workroom_drive_write"],
+  work_capsule_write: ["work_room_write"],
   // CRM drafting (crm_write) implies CRM inspection (crm_read): a coworker that
   // can draft an opportunity or quote can always read the accounts/pipeline it
   // is drafting against. One-way — crm_read alone never implies crm_write.
@@ -211,9 +210,35 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
   get_coworker_room_engagement: ["work_room_read"],
-  // Workroom/capsule tools (incl. legacy alias names) live in
-  // work-capsule-tool-grants.ts so this file stays under the module-size ceiling.
-  ...WORK_CAPSULE_TOOL_GRANTS,
+  create_workroom: ["work_capsule_write"],
+  plan_workroom_worktree: ["work_capsule_write"],
+  adopt_worktree: ["work_capsule_adopt"],
+  claim_backlog_item_for_work: ["work_capsule_adopt"],
+  start_external_work: ["work_capsule_adopt"],
+  claim_workroom_scope: ["work_capsule_write"],
+  declare_break_fix: ["work_capsule_write"],
+  record_workroom_evidence: ["work_capsule_write"],
+  record_agent_activity: ["work_capsule_write"],
+  heartbeat_workroom: ["work_capsule_write"],
+  update_workroom_status: ["work_capsule_write"],
+  release_workroom_scope: ["work_capsule_write"],
+  reassign_workroom_executor: ["work_capsule_write"],
+  get_runtime_coordination_map: ["work_capsule_read"],
+  // Legacy capsule tool names, callable during the Workroom alias window
+  // (BI-0702869B). Listed STATICALLY on purpose: the Coworker Tool-Grant Audit
+  // reads this object literal without executing it, so a row derived at runtime
+  // is invisible to it and reads as a catalog tool missing from TOOL_TO_GRANTS.
+  // WORKROOM_TOOL_ALIASES below pins each of these to its canonical row in test.
+  list_work_capsules: ["work_capsule_read"],
+  get_work_capsule: ["work_capsule_read"],
+  create_work_capsule: ["work_capsule_write"],
+  plan_capsule_worktree: ["work_capsule_write"],
+  claim_capsule_scope: ["work_capsule_write"],
+  heartbeat_capsule: ["work_capsule_write"],
+  update_work_capsule_status: ["work_capsule_write"],
+  release_capsule_scope: ["work_capsule_write"],
+  record_capsule_evidence: ["work_capsule_write"],
+  reassign_capsule_executor: ["work_capsule_write"],
   // Queue-awareness reads (EP-3516E23D): platform-coordination visibility over
   // the shared queue flow-telemetry — same read grant as the sibling ops-read
   // tool above.

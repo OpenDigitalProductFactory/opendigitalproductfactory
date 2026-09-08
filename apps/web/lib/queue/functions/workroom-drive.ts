@@ -21,6 +21,7 @@ import { buildStageBrief, stageEvidenceKinds } from "@/lib/work-management/stage
 import {
   loadCoordinationBindings,
   loadRecordedEvidence,
+  loadStageDispatchTimes,
   reconcileCoordinationBindings,
   reconcileStandingRoomNesting,
 } from "./workroom-drive-data";
@@ -329,9 +330,11 @@ export async function runWorkroomDriveJob(
     // Stage-scoped evidence is the ONLY thing a completing receipt is earned
     // from, so a room that arrives without it can never advance.
     const evidenceByRoom = await loadRecordedEvidence(rooms.map((room) => room.capsuleId));
+    const dispatchByRoom = await loadStageDispatchTimes(rooms.map((room) => room.capsuleId));
     rooms = rooms.map((room) => ({
       ...room,
       recordedEvidence: evidenceByRoom.get(room.capsuleId) ?? [],
+      stageDispatchedAt: dispatchByRoom.get(room.capsuleId) ?? null,
     }));
   }
   const effects = deps?.effects ?? createWorkroomDriveEffects();
@@ -344,6 +347,13 @@ export async function runWorkroomDriveJob(
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
     const stored = readStoredWorkroomDriveState(room.workspaceState);
+    const receipts = earnEvidenceReceipts({
+      stageKey: room.currentStageKey ?? stored.currentStageKey,
+      declaredKinds: stageEvidenceKinds(shape ? readWorkShapeDefinitionContract(shape) : null, room.currentStageKey ?? stored.currentStageKey),
+      evidence: room.recordedEvidence ?? [],
+      dispatchedAt: room.stageDispatchedAt ?? null,
+      existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
+    }) as { stageKey: string; kind: string }[];
     const plan = resolveDrivePlan({
       roomId: room.capsuleId,
       definition: shape ? readWorkShapeDefinitionContract(shape) : null,
@@ -356,16 +366,7 @@ export async function runWorkroomDriveJob(
       currentStageKey: room.currentStageKey ?? stored.currentStageKey,
       // Earned from governed, stage-scoped evidence only — never from a run's
       // self-reported completion (BI-76B35820).
-      receipts: earnEvidenceReceipts({
-        stageKey: room.currentStageKey ?? stored.currentStageKey,
-        declaredKinds: stageEvidenceKinds(
-          shape ? readWorkShapeDefinitionContract(shape) : null,
-          room.currentStageKey ?? stored.currentStageKey,
-        ),
-        evidence: room.recordedEvidence ?? [],
-        dispatchedAt: room.stageDispatchedAt ?? null,
-        existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
-      }) as { stageKey: string; kind: string }[],
+      receipts,
       budgetUsage: room.budgetUsage.length > 0 ? room.budgetUsage : stored.budgetUsage,
       stopConditionHits: room.stopConditionHits.length > 0 ? room.stopConditionHits : stored.stopConditionHits,
       reviewDue: room.reviewDue || stored.reviewDue,
@@ -381,7 +382,7 @@ export async function runWorkroomDriveJob(
       reason: plan.reason,
       taskId: plan.taskId,
     });
-    const outcome = await applyDrivePlan({ room, plan, now, effects });
+    const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects });
     if (outcome === "dispatched") dispatched += 1;
     else if (outcome === "attention") attention += 1;
     else if (outcome === "stopped") stopped += 1;

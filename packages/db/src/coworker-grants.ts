@@ -15,7 +15,7 @@
 // individually defensible.
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
-"portfolio-advisor": ["portfolio_read", "registry_read", "backlog_read", "workroom_drive_write", ],
+  "portfolio-advisor": ["portfolio_read", "registry_read", "backlog_read"],
   "external-catalog-scout": ["backlog_read", "backlog_write", "registry_read"],
   // The Digital Product Estate Specialist stewards the product estate (discovery
   // triage, portfolio quality) via registry_read/registry_write + backlog. It does
@@ -69,7 +69,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // grants resolve from THIS map (the slug agent row the coworker queries by
   // agentId "customer-advisor"), not from agent_registry.json — so the CRM
   // grants must live here to actually reach the coworker's tool surface.
-"customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "workroom_drive_write", ],
+  "customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search"],
   // The Data Steward owns master-data quality: it runs the dedup/staleness
   // sweep, merges duplicates, and proposes enrichment. crm_write reaches the
   // mdm-stewardship pack tools (run_mdm_steward_sweep, merge_customer_*,
@@ -93,8 +93,8 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // issues it detects. Its runtime grants resolve from THIS map (not
   // agent_registry.json, which already intends backlog access), so backlog_read/
   // backlog_write must live here to reach its tool surface (BI-CAP-CBC41758).
-"platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read", "backlog_read", "backlog_write", "tool_script_exec", "workroom_drive_write", ],
-"build-specialist": [
+  "platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read", "backlog_read", "backlog_write", "tool_script_exec"],
+  "build-specialist": [
     "file_read",
     "code_graph_read",
     "backlog_read",
@@ -113,11 +113,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // Already sandbox-native (sandbox_execute); code_graph/file reads are the
     // canonical read-heavy filtering case (EP-27FD96BC BI-9893614D).
     "tool_script_exec",
-  "workroom_drive_write", ],
+  ],
   // Read-only by construction. The reviewer may inspect the change and its
   // governed context, but cannot edit code, advance a build, waive findings,
   // or publish a release.
-"change-reviewer": [
+  "change-reviewer": [
     "file_read",
     "code_graph_read",
     "architecture_read",
@@ -128,7 +128,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // boot, so both sources must carry these or the grants revert on restart.
     "initiative_design_review",
     "initiative_domain_review",
-  "workroom_drive_write", ],
+  ],
   "data-architect": ["file_read", "sandbox_execute", "architecture_read", "registry_read", "tool_script_exec"],
   "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
   coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config", "thread_write"],
@@ -160,7 +160,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "registry_read",
   ],
   "legal-operations-counsel": ["file_read", "document_read", "document_write", "registry_read"],
-"finance-controller": ["registry_read", "backlog_read", "portfolio_read", "workroom_drive_write", ],
+  "finance-controller": ["registry_read", "backlog_read", "portfolio_read"],
   // Bookkeeper (S-BK): the day-to-day books loop. banking_read/banking_write drive
   // the governed banking tools (S-FIN); enrichment_write resolves vendor→supplier
   // (BI-B2497DFB); crm_read/write for counterparties; document_read for
@@ -230,7 +230,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // Security Engineer — must match the establish_coworker factory-door grants
   // exactly (BI-CC44E74F). Files findings as backlog items (backlog_write);
   // holds no merge-blocking or release-gate authority by design.
-"security-engineer": [
+  "security-engineer": [
     "file_read",
     "architecture_read",
     "backlog_read",
@@ -241,7 +241,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // and principle_decide. Its `security` profession family carries 8 corpus
     // pages that were unreachable without it (BI-728FD7F2).
     "registry_read",
-  "workroom_drive_write", ],
+  ],
   // MCP & Integration Engineer — must match the establish_coworker factory-door
   // grants exactly (BI-CC44E74F). registry_read reaches the WSID craft-decision
   // path; tool_script_exec supports programmatic review of the tool surface.
