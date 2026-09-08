@@ -93,14 +93,14 @@ export function StalledTaskRecoveryActions({
         {nativeReview ? "Review awaiting recovery" : "Stalled — operator recovery"}
       </p>
       <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" size="sm"
+        <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onRetry}
           disabled={pending}
         >
           {nativeReview ? "Resume review" : "Retry"}
         </Button>
-        {!nativeReview && <Button variant="secondary" size="sm"
+        {!nativeReview && <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onAbandon}
           disabled={pending}
@@ -108,7 +108,7 @@ export function StalledTaskRecoveryActions({
         >
           Abandon
         </Button>}
-        {!nativeReview && <Button variant="secondary" size="sm"
+        {!nativeReview && <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onEscalate}
           disabled={pending}
