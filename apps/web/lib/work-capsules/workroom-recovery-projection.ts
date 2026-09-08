@@ -1,5 +1,5 @@
 import type { InitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
-import { isTerminalTaskStatus } from "@/lib/mcp/tasks-lifecycle";
+import { projectRecordedTaskState } from "@/lib/tak/task-states";
 
 type WorkroomIdentity = {
   repositoryFullName: string | null;
@@ -44,21 +44,20 @@ export function projectWorkroomIdentityRepair(
 
 export function projectWorkroomRecovery(room: WorkroomIdentity & { taskRun?: LinkedTaskRun }) {
   const identityRepair = projectWorkroomIdentityRepair(room);
+  // These are recorded states, not proof of a current heartbeat. In particular,
+  // waiting for input or recovery must never look like queued execution.
+  const executionState = room.taskRun ? projectRecordedTaskState(room.taskRun.status) : null;
   const reviewerExecution = room.taskRun
     ? {
       taskRunId: room.taskRun.taskRunId,
       status: room.taskRun.status,
-      pending: !isTerminalTaskStatus(room.taskRun.status),
+      pending: executionState === "unknown" ? null : executionState !== "terminal",
     }
     : null;
   return {
     state: identityRepair
       ? "blocked" as const
-      : reviewerExecution?.pending
-        ? "queued" as const
-        : reviewerExecution
-          ? "terminal" as const
-          : "actionable" as const,
+      : executionState ?? "actionable" as const,
     prerequisite: identityRepair
       ? {
         accountableRole: "artifact-resolver" as const,

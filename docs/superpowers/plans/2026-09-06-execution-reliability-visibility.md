@@ -499,3 +499,52 @@ insertion order as equality. The failing source regression reproduces the
 refusal. Reuse the canonical JSON comparator for object scope and change evidence;
 retain ordered-array comparison and refusal for genuinely different scope.
 The same live retry must pass after release before this check is closed.
+
+The Workroom recovery projection also treated every nonterminal TaskRun as
+queued, including input/authorization waits, watchdog stalls and upgrade pauses.
+The regression now distinguishes queued, recorded-working, waiting and unknown
+states; an unrecognized status cannot establish pending execution. Terminal-state
+classification moves to the existing pure task-state module, preserving the MCP
+export while removing a runtime/database import from the projection. This does
+not infer fresh heartbeats or successful delivery from a stored task status.
+
+Authorized native recovery extends the existing operator TaskRun retry action.
+The original requester must explicitly confirm replacing an uncertain, tool-free
+inference attempt; provider charges may recur, but the old generation cannot
+write a receipt. Keep the original immutable packet, deadline and three-recovery
+ceiling. Reuse completed reviewer checkpoints, retain superseded attempt evidence,
+and enqueue the same TaskRun through its existing durable outbox. Expired requests,
+revoked authority and exhausted recovery are refused, with no new deadline or
+implicit grant. This is recovery of read-only inference, not replay permission
+for an arbitrary external effect or a claim of provider-side exactly-once execution.
+
+PR #5222 passed source build, typecheck and affected tests, but its protected UX
+sweep twice reported 397 arrival words against the Workroom route's 390-word
+baseline. The second run did not reproduce the inventory regression. Cause is
+unresolved. Capture the existing bounded failure screenshot during confirmation
+of a budget regression, while the measured page is still open; the existing CI
+failure artifact publishes it. Keep the baseline and blocking verdict unchanged.
+This adds diagnostic evidence, not portal acceptance or permission to merge.
+
+Completion readback must include the stored initiative readiness decision in the
+existing bounded subject activity query. Its omission made the existing allowed
+decision reuse path unreachable. The test double now applies that real query
+filter: the regression fails before the repair, and 36 affected tests pass after
+it. Reuse still requires matching evidence and the existing authorization checks.
+No missing verdict is manufactured, and unfinished outcomes remain unfinished.
+
+The confirmed CI screenshot exposes the boundary notice repeating every missing
+field in both prose and a list. Keep the direction, full list and existing repair
+control; remove the repeated enumeration. This is a demonstrated UI duplication,
+not a diagnosis of the original seven-word measurement difference. The baseline
+and protected sweep remain unchanged.
+
+The Workroom loader previously missed native reviewer TaskRuns until final journal
+evidence arrived. Read only native runs correlated by capsule identity, with bounded
+run and checkpoint history, into the existing observed-evidence projection. Preserve
+requester/reviewer identity, timestamps, last recorded reason and source references.
+Do not infer permitted transitions or verified completion from task status. Report
+unavailable or truncated sources explicitly. Share recorded-state classification
+with recovery and the heartbeat threshold with the worker; use canonical JSON guards.
+These changes plus the boundary regression pass 104 affected source tests. Live
+navigation and scenario acceptance still depend on canonical deployment.

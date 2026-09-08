@@ -216,9 +216,13 @@ export function projectTaskRun(
 ): OperationsMapProjection {
   const stationId = resolveTaskRunStationId(row, template);
   const label = row.source === "proactive" ? "Scheduled task run" : "Task run";
+  const nativeReview = row.a2aMetadata !== null && typeof row.a2aMetadata === "object"
+    && "gateKind" in row.a2aMetadata && row.a2aMetadata.gateKind === "semantic-review";
 
   return {
     id: `task-run:${row.id}`,
+    recovery: nativeReview && ["input-required", "stalled"].includes(row.status)
+      ? "semantic-review" : row.status === "stalled" ? "stalled" : undefined,
     occurredAt: row.startedAt.toISOString(),
     actorAgentId: row.currentAgentId,
     source: "task-run",

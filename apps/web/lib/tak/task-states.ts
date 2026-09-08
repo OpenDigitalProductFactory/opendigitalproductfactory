@@ -35,6 +35,21 @@ export const TASK_STATES = [
 
 export type TaskState = (typeof TASK_STATES)[number];
 
+const TERMINAL_TASK_STATES = new Set<string>(["completed", "failed", "canceled", "rejected", "archived"] satisfies TaskState[]);
+
+/** Terminal outcomes are distinct from recoverable waits and upgrade pauses. */
+export function isTerminalTaskStatus(status: string): boolean {
+  return TERMINAL_TASK_STATES.has(status);
+}
+
+/** Recorded state only; this classification does not establish a fresh heartbeat. */
+export function projectRecordedTaskState(status: string) {
+  return isTerminalTaskStatus(status) ? "terminal" as const
+    : status === "submitted" ? "queued" as const
+      : isLiveStatus(status) ? "working" as const
+        : (TASK_STATES as readonly string[]).includes(status) ? "waiting" as const : "unknown" as const;
+}
+
 export const TASK_IN_FLIGHT_STATES = [
   "submitted",
   "working",

@@ -67,6 +67,14 @@ exists without a verified completion verdict. **Cancelled** is distinct from
 success. The projection check time and latest evidence time are separate; an
 unknown timestamp does not imply a fresh observation.
 
+Native reviewer runs also appear under **Observed execution** while queued or
+waiting, before a final receipt exists. Expand a run or checkpoint for its recorded
+state, requester or reviewer, last recorded reason, and source reference. Heartbeat
+time is separate from the time the page read the record. A stale or unknown heartbeat
+does not establish current activity. Missing sources and truncated history are
+reported as incomplete. A completed reviewer task still needs its completion receipt;
+it does not prove that the Workroom outcome is complete.
+
 The **Activity** stream distinguishes messages, asks, coworker handoffs, work changes, decisions, artifacts, governed actions, verification, receipts, and cycle transitions. A message is an update; it is not proof that the outcome was achieved.
 
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:

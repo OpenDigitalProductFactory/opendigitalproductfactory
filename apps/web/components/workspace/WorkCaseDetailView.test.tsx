@@ -342,6 +342,17 @@ describe("WorkCaseDetailView", () => {
     expect(html).toContain("Accountable owner not assigned");
   });
 
+  it("lists each missing boundary fact once instead of repeating the list in prose", () => {
+    const incompleteRoom: WorkroomView = { ...room,
+      boundary: { ...room.boundary, gaps: ["scope", "measures"] },
+      projection: { ...room.projection, incompleteBoundary: true },
+    };
+    const html = renderToStaticMarkup(<WorkCaseDetailView detail={{ ...detail, room: incompleteRoom }} />);
+    expect(html.match(/Scope not defined/g)).toHaveLength(1);
+    expect(html.match(/Measures not defined/g)).toHaveLength(1);
+    expect(html).toContain("before consequential work continues");
+  });
+
   it("shows one recovery direction when the room source is unavailable", () => {
     const unavailableDetail = {
       ...detail,

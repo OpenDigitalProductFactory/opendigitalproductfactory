@@ -223,6 +223,7 @@ export function buildWorkroomView(
   const currentCycleRef = cycleRef(currentCycle);
   const executionRefs = dedupeRoomSourceRefs([
     ...activeCapsuleRefs,
+    ...sourceRefs.filter((ref) => ref.kind === "task-run"),
     ...(currentCycle?.sourceRefs ?? []).filter(
       (ref) =>
         ref.kind === "work-item"

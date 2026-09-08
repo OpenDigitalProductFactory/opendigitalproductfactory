@@ -18,6 +18,8 @@
 import { createHash } from "node:crypto";
 
 import { prisma } from "@dpf/db";
+import { isTerminalTaskStatus } from "@/lib/tak/task-states";
+export { isTerminalTaskStatus } from "@/lib/tak/task-states";
 import {
   readPrismaAuthorizedAsyncOperation,
   requestPrismaAuthorizedAsyncOperationCancellation,
@@ -74,7 +76,6 @@ const DPF_TO_MCP_STATE: Record<string, string> = {
   archived: "completed",
 };
 
-const TERMINAL_DPF_STATES = new Set(["completed", "failed", "canceled", "rejected", "archived"]);
 const DURABLE_RESULT_TEXT_JSON_BUDGET = Math.floor(MCP_ROUTE_TOOL_RESULT_CHAR_CAP / 3);
 
 function boundedDurableResultText(value: string | null): {
@@ -111,11 +112,6 @@ function boundedDurableResultText(value: string | null): {
 /** Map a DPF/A2A TaskRun.status to the MCP-spec wire state. Pure. */
 export function mcpTaskStateForWire(dpfStatus: string): string {
   return DPF_TO_MCP_STATE[dpfStatus] ?? "working";
-}
-
-/** True when a DPF task status is terminal (no further transitions). Pure. */
-export function isTerminalTaskStatus(dpfStatus: string): boolean {
-  return TERMINAL_DPF_STATES.has(dpfStatus);
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 2_000;
