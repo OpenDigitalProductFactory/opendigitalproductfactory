@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 702,
+  "pageCount": 703,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1831,6 +1831,23 @@
         "core-assertion-set",
         "evidence-publication-guidance",
         "use-in-dpf"
+      ]
+    },
+    "docs/architecture/initiative-readiness-runbook.md": {
+      "publicHref": "/architecture/initiative-readiness-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "initiative-readiness-runbook-who-does-what-when-through-the-gates",
+        "0-two-shapes-do-not-conflate-them",
+        "1-the-lifecycle-sequence",
+        "2-the-gates-role-actor-evidence-feature-profile",
+        "3-how-a-gate-is-handed-to-the-right-coworker-the-recovery-packet",
+        "4-the-reviewer-roster-who-holds-which-grant",
+        "5-drive-to-completion-checklist",
+        "6-known-limitation-reviewer-dispatch-can-complete-without-writing-a-receipt",
+        "anti-patterns-observed"
       ]
     },
     "docs/architecture/job-specific-intelligence.md": {
