@@ -1270,6 +1270,9 @@
     "apps/web/scripts/offload-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "apps/web/scripts/seed-model-metadata-tags.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "config/merge-readiness-policy.json": [
       "docs/testing/pr-health.md"
     ],
@@ -1378,6 +1381,9 @@
     "packages/db/prisma/schema/work-coordination.prisma": [
       "docs/architecture/dpf-patterns.md"
     ],
+    "packages/db/scripts/apply-model-metadata-comments.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "packages/db/scripts/check-cada-readiness.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
@@ -1457,6 +1463,9 @@
     "packages/db/src/migrations/exact-key-repair.ts": [
       "docs/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong.md",
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
+    ],
+    "packages/db/src/model-metadata.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "packages/db/src/performer-allocation.ts": [
       "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md"
@@ -1710,6 +1719,9 @@
     "scripts/check-mobile-jest-pin.mjs": [
       "docs/security/2026-05-24-shift-left-rollout.md",
       "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/check-model-metadata-tags.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-module-size.mjs": [
       "docs/architecture/mcp-tool-packs.md",
@@ -1966,6 +1978,9 @@
     ],
     "scripts/platform-substrate-runtime-baseline.json": [
       "docs/architecture/platform-substrate-boundaries.md"
+    ],
+    "scripts/portal-migrate-boot.sh": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/pr-health.mjs": [
       "docs/maintenance/staleness-report.md",
@@ -2545,10 +2560,15 @@
       "apps/web/lib/shared/coerce.ts",
       "apps/web/lib/shared/org-address.ts",
       "apps/web/scripts/offload-evidence-output.ts",
+      "apps/web/scripts/seed-model-metadata-tags.ts",
       "packages/db/prisma/schema/resource-scheduling.prisma",
+      "packages/db/scripts/apply-model-metadata-comments.ts",
+      "packages/db/src/model-metadata.ts",
+      "scripts/check-model-metadata-tags.mjs",
       "scripts/check-no-local-isrecord.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
-      "scripts/check-no-new-notactive-conventions.mjs"
+      "scripts/check-no-new-notactive-conventions.mjs",
+      "scripts/portal-migrate-boot.sh"
     ],
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
