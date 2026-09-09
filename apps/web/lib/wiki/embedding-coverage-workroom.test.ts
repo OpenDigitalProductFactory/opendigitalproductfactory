@@ -64,10 +64,10 @@ describe("coverage runs land in the corpus-health Workroom (BI-ED117C82)", () =>
     expect(activity.data.payload).toMatchObject({ covered: 5, scanned: 5, repaired: 1 });
   });
 
-  it("opens the room with a source the closed Workroom source set admits (BI-F62EDE84)", async () => {
-    // The database mirrors WORK_CAPSULE_SOURCES in a CHECK constraint; an
-    // unregistered literal ("platform-maintenance") failed every upsert with
-    // 23514 and the corpus-health room was never written.
+  it("opens the room with a source the closed Workroom source set admits (BI-A5EEB5D1)", async () => {
+    // The database mirrors WORK_CAPSULE_SOURCES in a CHECK constraint; before
+    // "platform-maintenance" was registered, every upsert failed with 23514 and
+    // the corpus-health room was never written. This pins the writer to the set.
     const client = db();
     await recordCoverageRun({ db: client, result: { scanned: 1, missing: 0, embedded: 0, failed: [] } });
 
