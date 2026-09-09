@@ -2421,7 +2421,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 154
+    "textMass": 171
   },
   "apps/web/app/(shell)/workspace/page.tsx": {
     "vocabulary": 0,

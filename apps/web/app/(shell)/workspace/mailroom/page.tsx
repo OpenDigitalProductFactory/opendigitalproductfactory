@@ -11,6 +11,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { MAILBOX_PROVIDER_KEY } from "@dpf/db/mailroom-enums";
 
+import { STEP_ROUTES } from "@/lib/actions/setup-constants";
 import { auth } from "@/lib/auth";
 import { OWNER_FIRST_NEXT_ACTION_ATTR } from "@/lib/owner-first/ux-audit";
 import { resolveMailroomOrganizationId, resolveOrganizationMailroomProfile } from "@/lib/mailroom/runtime.server";
@@ -52,6 +53,12 @@ export default async function MailroomPage({ searchParams }: Props) {
     return (
       <main className="mx-auto max-w-5xl space-y-6 p-6">
         <h1 className="text-2xl font-semibold text-[var(--dpf-text)]">Mailroom</h1>
+        <Surface data-dpf-lead padding="md" className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-[var(--dpf-text)]">No business is set up yet, so there is no mail to read.</p>
+          <ButtonLink href={STEP_ROUTES["business-context"]} size="sm" {...{ [OWNER_FIRST_NEXT_ACTION_ATTR]: "finish-business-setup" }}>
+            Set up the business
+          </ButtonLink>
+        </Surface>
         <Notice variant="info" title="Finish setup first">The Mailroom needs the business to exist before it can read its mail.</Notice>
       </main>
     );
