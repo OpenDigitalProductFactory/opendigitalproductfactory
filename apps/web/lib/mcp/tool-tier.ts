@@ -114,6 +114,9 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   // discovery / read
   "search_knowledge",
   "search_code_graph",
+  // Pairs with search_code_graph: finds a route/tool/model's implementation
+  // files and its tests, which is how a session learns a surface is untested.
+  "trace_code_surface",
   "search_project_files",
   "search_specs_and_plans",
   "read_project_file",
@@ -133,6 +136,15 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "size_backlog_item",
   "list_epics",
   "link_backlog_item_to_epic",
+  // Completing work, not only planning it. The lean surface could create,
+  // triage, size and update an item but not record that it finished or attach
+  // the evidence proving it, while AGENTS.md §5 requires exactly that on
+  // completion. Every delivering session had to load these two before it could
+  // close anything, which is the kind of friction that gets the whole tier
+  // switched off with `?tier=full` — paying the full ~400-tool tax to recover
+  // two names.
+  "update_backlog_item_status",
+  "record_execution_evidence",
   // work / coworker / build visibility
   "get_my_coworker_profile",
   "find_coworker",
@@ -146,6 +158,11 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "request_self_upgrade",
   "repair_promoter_image",
   "record_runtime_verification",
+  // The shared-singleton lease. Claim and release travel together on purpose:
+  // a session that can take a shared lock but cannot give it back leaks it and
+  // blocks every other worktree and the CI gate that share it.
+  "claim_nonprod_environment_lease",
+  "release_nonprod_environment_lease",
 ]);
 
 /**
