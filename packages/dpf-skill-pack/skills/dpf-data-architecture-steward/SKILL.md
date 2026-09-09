@@ -48,3 +48,18 @@ Use this skill when someone — in Build Studio **or on-demand in chat** — ask
 - **Never mutate mirror-owned facts.** The deterministic mirror owns structure (elements/relationships/`properties.sourceKey`). Your enrichment — domain grouping, relationship naming — goes in coworker-owned annotation fields (`EaViewElement.proposedProperties`), never by editing mirror rows.
 - **Material structural changes** (a model removed, a cardinality flipped) route through the decision kernel (`principle_decide`) and are recorded — they are not silently applied.
 - **Structural ≠ functional**: confirm a finding against the live mirror/snapshot before reporting it as real.
+
+## Lifecycle & growth (EP-A33A5C61)
+
+The steward owns more than structure. Every night the same run also:
+
+1. **Samples growth** — `TableGrowthSample` rows per table (heap / index / TOAST, live + dead tuples, rows in the last 24 h on the model's declared time axis).
+2. **Detects** `growth-without-disposition` (a growing table with no `/// @dpf` declaration, or one whose disposition never removes rows) and `payload-anatomy` (TOAST dominates the relation — blobs living in a JSON column). Findings land in `EaConformanceIssue` beside the structural ones; a finding open for three consecutive nights files one fingerprinted backlog item (source `data-growth`).
+3. **Reads the declarations, never a registry.** Lifecycle class, retention disposition, sensitivity, categories, regulated scope, owner and steward are declared ONCE as a `/// @dpf` tag above each Prisma model and converged into the Postgres catalog as `COMMENT ON TABLE` at every portal boot (`packages/db/src/model-metadata.ts`, `packages/db/scripts/apply-model-metadata-comments.ts`). The retention sweep builds its policies from those comments (`apps/web/lib/operate/retention/declarations.ts`).
+
+### How to answer
+
+- **"Which tables are growing without a disposition?"** → open `EaConformanceIssue` rows of type `growth-without-disposition`; cite table, rows/day and the 12-month projection from `detailsJson`.
+- **"What is the retention for model X?"** → `SELECT obj_description('"X"'::regclass, 'pg_class')` on the install, or the `/// @dpf` line above the model. Never quote a TypeScript list.
+- **"A new model was added — what does it need?"** → a `/// @dpf lifecycle=… retention=…` line before the migration. `scripts/check-model-metadata-tags.mjs` fails CI otherwise; the untagged baseline only shrinks.
+- **Coverage wave** — pick the untagged models with the highest growth or sensitivity signal from the samples, propose tags as a PR, and run `--update` on the baseline once they merge.
