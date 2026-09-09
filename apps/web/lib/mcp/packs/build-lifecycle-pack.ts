@@ -150,6 +150,7 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
     consequence: "outward",
+    consequenceScope: "platform",
     buildPhases: ["ship"],
   },
   {

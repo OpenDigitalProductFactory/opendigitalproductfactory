@@ -86,6 +86,9 @@ export const TOOL_CONSEQUENCES: readonly ToolConsequence[] = [
   "authority",
 ] as const;
 
+/** See `ToolDefinition.consequenceScope`. Closed set. */
+export type ToolConsequenceScope = "business" | "platform";
+
 export type ToolDefinition = {
   name: string;
   description: string;
@@ -124,6 +127,22 @@ export type ToolDefinition = {
    * enumerated). See apps/web/lib/tak/consequential-tool-coverage.ts.
    */
   consequence?: ToolConsequence;
+  /**
+   * WHOSE stance governs an `outward` effect (BI-63B14D4B). DECLARED with the
+   * consequence, never inferred from the pack or the name.
+   *
+   * `business` (default) = the effect leaves the organization's business —
+   * a campaign, an ad, a customer email — so the org's WWWD stance is the
+   * authority and the call is alignment-gated against it.
+   * `platform` = the effect leaves the INSTALL but is platform development or
+   * operations — a pull request, a hive contribution, a discovery sweep, a
+   * sign-in handshake. The founder kernel (WWMD) owns that judgement; asking
+   * the customer's business stance "what should the business do?" about a
+   * pull request routes a decision to a scope that has no authority over it
+   * (decisions-belong-to-their-scope). Still consequential: receipted and
+   * outward-reviewed, just not WWWD-alignment-gated.
+   */
+  consequenceScope?: ToolConsequenceScope;
   /**
    * Tool captures the coworker's own recommendation or work product as a
    * structured artifact (e.g. save_marketing_review). Persistence-only; no

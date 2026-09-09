@@ -29,6 +29,8 @@ live in three places:
 surfaces `mcp-tools.ts` consumes (the combined definition list + a `name -> handler`
 lookup) and throws on a duplicate tool name across packs.
 
+A definition also declares its reach. `sideEffect` plus `consequence` (`outward` | `irreversible` | `authority`) is what puts a tool behind the consult-before-consequential-act gate, and an `outward` tool additionally names whose stance governs it with `consequenceScope`: `business` (default, WWWD-alignment-gated) or `platform` (platform development or operations that leave the install, such as `create_portal_pr` or `contribute_to_hive`; receipted and outward-reviewed, never scored against the customer business stance). Declare both on the tool; never infer them from the pack name (BI-63B14D4B).
+
 ## Migration discipline (parity first)
 
 Extraction is incremental and **parity-preserving** — never a behavior change:

@@ -198,6 +198,8 @@ governed call. A consequential tool also carries the collaboration shape its use
 which is how a tool reaching outward pulls `outward-review` into the picture even when
 nobody named it.
 
+Reaching outward is not the same as reaching the business. A tool whose outward effect is platform development or operations (opening a pull request, contributing to the hive, running a discovery sweep) declares a platform consequence scope: it is still consequential, receipted and outward-reviewed, but the business-stance alignment check is not applied, because the founder kernel owns that judgement and the business owner should never be asked what the business would do about a pull request.
+
 Two independent checks then apply, and both must pass:
 
 - **The authority intersection.** A tool is unavailable unless the coworker's grant *and*
