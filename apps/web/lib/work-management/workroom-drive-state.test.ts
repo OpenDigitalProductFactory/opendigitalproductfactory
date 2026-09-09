@@ -20,6 +20,7 @@ describe("readStoredWorkroomDriveState", () => {
       reviewDue: true,
       lastAction: null,
       lastReason: null,
+      lastCycleKey: null,
     });
   });
 
@@ -32,6 +33,7 @@ describe("readStoredWorkroomDriveState", () => {
       reviewDue: false,
       lastAction: null,
       lastReason: null,
+      lastCycleKey: null,
     });
   });
 
@@ -47,6 +49,7 @@ describe("readStoredWorkroomDriveState", () => {
       currentStageKey: "scan",
       lastAction: "dispatch_agent",
       lastReason: "agent_stage",
+      lastCycleKey: null,
     });
   });
 });

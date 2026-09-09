@@ -11,6 +11,9 @@ export type PriorWorkroomDrive = {
   action: string;
   reason: string;
   stageKey: string | null;
+  /** The cycle the prior tick belonged to; bounds the writeback latch so a
+   *  fail-closed pause is retried next cycle rather than held forever. */
+  cycleKey: string | null;
 };
 
 export function isCompletingWorkroomDriveReceipt(

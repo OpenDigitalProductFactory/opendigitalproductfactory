@@ -2484,6 +2484,7 @@
         "who-may-coordinate-authority-and-a-gate-with-no-key",
         "concurrent-execution-and-recorded-state",
         "the-brief-and-what-advances-a-stage",
+        "failing-closed-is-not-the-same-as-locking",
         "related-references"
       ]
     },

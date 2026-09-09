@@ -726,6 +726,41 @@ stage. Concurrent completing receipts in the same cycle are preserved.
 schema/handler parity guard protects it — the same seam already shipped broken
 once when `workShape` was advertised and silently dropped.
 
+## Failing closed is not the same as locking
+
+`#5166` stopped a real defect: a stage that produced no completing receipt was
+re-dispatched every fifteen minutes, burning model capacity on work that never
+completed. Pausing instead of re-dispatching was correct.
+
+The latch it introduced was self-sustaining, though — the pause reason is itself
+one of the conditions that produces the pause:
+
+    alreadyTriedWriteback = ... || prior.reason === EXECUTOR_WRITEBACK_UNAVAILABLE
+
+so a room that entered the state never left it. The only exit is a completing
+receipt, and a room that never dispatches can never produce one. On this install
+that locked **12 of 24 rooms**, and they stayed locked after the defect causing
+the empty writeback was fixed and deployed. **A fix cannot reach a room that will
+not try again.**
+
+The latch is now bounded rather than permanent: it holds **within** a cycle and
+releases on the next, giving one attempt per cycle — daily for these shapes —
+instead of the 96 per day the guard was built to stop. The capacity protection is
+kept almost entirely (a 96x reduction); the deadlock is not.
+
+Two cases deliberately still hold unconditionally:
+
+- **A recorded `blocked` receipt.** That is a durable statement about the stage,
+  not an inference from the previous tick, and a cycle rollover should not erase
+  it.
+- **An unknown cycle key on either side.** Reading "unknown" as "a new cycle"
+  would silently re-open the every-tick loop.
+
+The general lesson is worth stating plainly, because it applies to any
+fail-closed guard: a guard whose own output re-triggers its input has no
+recovery path, and the estate it protects can only degrade. Bound the latch to
+something that changes on its own.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer

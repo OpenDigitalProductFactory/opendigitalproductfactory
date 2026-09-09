@@ -9,6 +9,9 @@ export type StoredWorkroomDriveState = {
   reviewDue: boolean;
   lastAction: string | null;
   lastReason: string | null;
+  /** The cycle the last tick belonged to. The writeback latch is bounded by it,
+   *  so a room can retry once per cycle instead of locking forever. */
+  lastCycleKey: string | null;
 };
 
 /** Read only verifier-relevant observations from the persisted runner snapshot. */
@@ -41,6 +44,7 @@ export function readStoredWorkroomDriveState(workspaceState: unknown): StoredWor
     reviewDue: drive?.reviewDue === true,
     lastAction: typeof drive?.action === "string" ? drive.action : null,
     lastReason: typeof drive?.reason === "string" ? drive.reason : null,
+    lastCycleKey: typeof drive?.lastCycleKey === "string" ? drive.lastCycleKey : null,
   };
 }
 
@@ -50,5 +54,6 @@ export function priorDriveFromStored(stored: StoredWorkroomDriveState): PriorWor
     action: stored.lastAction,
     reason: stored.lastReason ?? "",
     stageKey: stored.currentStageKey,
+    cycleKey: stored.lastCycleKey,
   };
 }
