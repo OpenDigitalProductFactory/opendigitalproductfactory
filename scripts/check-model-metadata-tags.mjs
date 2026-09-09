@@ -82,6 +82,8 @@ async function main() {
   if (update) {
     const keep = parsed.untagged.map((u) => u.model).filter((m) => baseline.has(m) || baseline.size === 0);
     const body =
+      "# owner: platform-architecture\n" +
+      "# expiry: 2026-12-01\n" +
       "# scripts/model-metadata-baseline.txt — models that carry NO /// @dpf tag yet (BI-D9F158AF).\n" +
       "# Shrink-only ratchet: a model leaves this file when it gains a tag; a new model can never enter it.\n" +
       "# Regenerate with: node scripts/check-model-metadata-tags.mjs --update\n" +

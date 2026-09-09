@@ -24,6 +24,8 @@ import {
 } from "@dpf/db/model-metadata";
 import { listCanonicalPrismaSchemaFiles } from "@dpf/db/schema-source";
 
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+
 import {
   RETENTION_OVERRIDES,
   type PurgePolicy,
@@ -83,7 +85,7 @@ export async function loadModelDeclarations(db: CatalogReader, log: (m: string) 
     if (fromCatalog.length > 0) return fromCatalog;
     log("catalog carries no dpf: comments yet — falling back to the schema files");
   } catch (err) {
-    log(`catalog read failed (${err instanceof Error ? err.message : String(err)}) — falling back to the schema files`);
+    log(`catalog read failed (${getErrorMessage(err)}) — falling back to the schema files`);
   }
   return readDeclarationsFromSchemaFiles();
 }
