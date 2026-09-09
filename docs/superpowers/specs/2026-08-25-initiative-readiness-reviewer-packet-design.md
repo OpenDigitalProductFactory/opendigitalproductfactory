@@ -81,6 +81,36 @@ No existing helper reads the GitHub compare endpoint.
 
 ## 5. Canonical artifact discovery
 
+### Existing design reuse — BI-7272643A
+
+A successor Workroom may reuse a design already merged into its base. Requiring
+a new spec diff to issue its research route forces an unrelated document edit.
+The governed claim therefore supplies the live backlog body to discovery. If it
+references one distinct repository-relative Markdown file under
+`docs/superpowers/specs/`, discovery verifies that exact regular file through
+`GET /contents/<path>?ref=<headSha>` and takes the blob id from the provider.
+Repeated links or section anchors to the same file count as one reference.
+
+Ambiguous references, traversal paths, missing files, mismatched returned paths,
+non-file objects and invalid blob ids do not produce a binding. A broken explicit
+reference never falls back to a different changed design. With no explicit
+reference, the compare-range discovery below remains unchanged.
+
+This is artifact selection, not a research verdict or approval. The existing
+writer re-verifies the immutable locator and authorship; the reviewer still
+assesses sufficiency. No grant, receipt schema, readiness rule, database model or
+customer configuration changes. General item-body research snapshots and
+shape-aware plan coverage are outside this repair.
+
+Acceptance: a medium Phase D claim referencing the existing coordinated-workrooms
+design returns an executable research route at its recorded head without a new
+design commit. Tests cover discovery and the claim-to-discovery seam, plus the
+failure cases above. Live acceptance follows governed deployment; a green unit
+test alone does not close the repair. Rollback reverts selection and claim wiring
+together; existing receipts retain their immutable identities.
+
+### Changed design discovery
+
 New module `apps/web/lib/backlog/initiative-readiness/canonical-artifact-discovery.ts`.
 
 ```
