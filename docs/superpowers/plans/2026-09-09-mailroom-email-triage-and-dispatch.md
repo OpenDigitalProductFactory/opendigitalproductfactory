@@ -308,21 +308,21 @@ never-ingested-twice guarantee is total.
 
 - Decision: decomposed
 - Parent: `BI-4F7BB48B`
-- Receipt: blocked-by: the coverage receipt is minted after the design's spec-approval baseline exists on this branch's pushed head; recorded once the reviewer routes have run and re-recorded whenever this file changes
+- Receipt: cmtttko640fiw01pce25j9a1a (recorded at 6670fd9d5463; re-recorded whenever this file changes)
 - Rationale: each child is one clean revert with its own tests; the registry and data slices go first because every other slice reads them, and the loop (intake, triage, chase) ships value before the surfaces.
 - Dependencies: profile-registry -> `BI-E64B3730` (none); data-model -> `BI-1DDFC3D1` (none); provider-adapters -> `BI-13919D7E` (BI-1DDFC3D1); intake-job -> `BI-9C362E23` (BI-1DDFC3D1, BI-13919D7E); triage-dispatch -> `BI-9BD223B1` (BI-E64B3730, BI-1DDFC3D1); chase -> `BI-12B0AE91` (BI-1DDFC3D1); reply -> `BI-DFEFAE1C` (BI-1DDFC3D1, BI-9BD223B1); mailroom-surface -> `BI-727D5FD9` (BI-1DDFC3D1, BI-13919D7E, BI-9C362E23); setup-step -> `BI-A670CDF8` (BI-E64B3730, BI-727D5FD9); mailroom-coworker -> `BI-0426D15B` (BI-9BD223B1); postmark-branch -> `BI-DD24A293` (BI-9C362E23); live-acceptance -> `BI-E6BAF90F` (BI-9C362E23, BI-9BD223B1, BI-12B0AE91, BI-DFEFAE1C, BI-727D5FD9, BI-A670CDF8)
 
-| Key | Requirement refs | Contract refs | Flow refs | Verification refs |
+| Key | Requirement refs (objectives) | Contract refs | Flow refs | Verification refs (acceptance ids) |
 | --- | --- | --- | --- | --- |
-| profile-registry | OBJ-MAIL-DECLARED-MAILBOXES, AC-MAIL-PURPOSE-REGISTRY | spec:4.2 | plan:phase-1 | package tests |
-| data-model | OBJ-MAIL-NEAR-HOURLY-INTAKE, AC-MAIL-IDEMPOTENT | spec:4.3 | plan:phase-1 | migration apply, db tests |
-| provider-adapters | OBJ-MAIL-NEAR-HOURLY-INTAKE, AC-MAIL-PROVIDERS | spec:4.4 | plan:phase-1 | unit tests, live probe |
-| intake-job | OBJ-MAIL-NEAR-HOURLY-INTAKE, AC-MAIL-POLL-SCHEDULE, AC-MAIL-IDEMPOTENT | spec:4.4 | plan:phase-2 | unit tests, scheduled-jobs surface |
-| triage-dispatch | OBJ-MAIL-TYPED-TRIAGE, OBJ-MAIL-ROUTED-TO-OWNER, AC-MAIL-TYPED-REASON, AC-MAIL-NOISE-FIRST, AC-MAIL-UNTRUSTED, AC-MAIL-QUEUE-ROOM, AC-MAIL-KNOWN-SENDER, AC-MAIL-OWNER-NOTIFIED, AC-MAIL-ACK-WINDOW | spec:4.5, spec:4.6 | plan:phase-2 | unit tests, live message |
-| chase | OBJ-MAIL-CHASED, AC-MAIL-NEEDS-YOU | spec:4.7 | plan:phase-2 | unit tests, Needs you card |
-| reply | OBJ-MAIL-REPLY-INSIDE, AC-MAIL-DRAFT-REPLY, AC-MAIL-APPROVED-SEND, AC-MAIL-NO-SMTP-HONEST | spec:4.8 | plan:phase-3 | unit tests, threaded receipt |
-| mailroom-surface | OBJ-MAIL-DECLARED-MAILBOXES, OBJ-MAIL-EDUCATES-WHEN-EMPTY, AC-MAIL-CONNECT-LATER, AC-MAIL-EMPTY-STATE | spec:4.9, spec:6 | plan:phase-3 | unit tests, UX verification, ux-fit review |
-| setup-step | OBJ-MAIL-DECLARED-MAILBOXES, OBJ-MAIL-EDUCATES-WHEN-EMPTY, AC-MAIL-SETUP-STEP, AC-MAIL-SKIP-EDUCATES | spec:4.9 | plan:phase-3 | unit tests, fresh setup run |
-| mailroom-coworker | OBJ-MAIL-TYPED-TRIAGE, OBJ-MAIL-REPLY-INSIDE | spec:4.10 | plan:phase-4 | unit tests |
-| postmark-branch | OBJ-MAIL-NEAR-HOURLY-INTAKE, AC-MAIL-PROVIDERS | spec:4.4 | plan:phase-4 | unit tests |
-| live-acceptance | all objectives | spec:9 | plan:phase-5 | execution evidence, outcome observation |
+| profile-registry | OBJ-MAIL-DECLARED-MAILBOXES | spec:4.2 | plan:phase-1 | AC-MAIL-PURPOSE-REGISTRY |
+| data-model | OBJ-MAIL-NEAR-HOURLY-INTAKE | spec:4.3 | plan:phase-1 | AC-MAIL-IDEMPOTENT |
+| provider-adapters | OBJ-MAIL-NEAR-HOURLY-INTAKE | spec:4.4 | plan:phase-1 | AC-MAIL-PROVIDERS |
+| intake-job | OBJ-MAIL-NEAR-HOURLY-INTAKE | spec:4.4 | plan:phase-2 | AC-MAIL-POLL-SCHEDULE, AC-MAIL-IDEMPOTENT |
+| triage-dispatch | OBJ-MAIL-TYPED-TRIAGE, OBJ-MAIL-ROUTED-TO-OWNER | spec:4.5, spec:4.6 | plan:phase-2 | AC-MAIL-TYPED-REASON, AC-MAIL-NOISE-FIRST, AC-MAIL-UNTRUSTED, AC-MAIL-QUEUE-ROOM, AC-MAIL-KNOWN-SENDER, AC-MAIL-OWNER-NOTIFIED, AC-MAIL-ACK-WINDOW |
+| chase | OBJ-MAIL-CHASED | spec:4.7 | plan:phase-2 | AC-MAIL-NEEDS-YOU |
+| reply | OBJ-MAIL-REPLY-INSIDE | spec:4.8 | plan:phase-3 | AC-MAIL-DRAFT-REPLY, AC-MAIL-APPROVED-SEND, AC-MAIL-NO-SMTP-HONEST |
+| mailroom-surface | OBJ-MAIL-DECLARED-MAILBOXES, OBJ-MAIL-EDUCATES-WHEN-EMPTY | spec:4.9, spec:6 | plan:phase-3 | AC-MAIL-CONNECT-LATER, AC-MAIL-EMPTY-STATE |
+| setup-step | OBJ-MAIL-DECLARED-MAILBOXES, OBJ-MAIL-EDUCATES-WHEN-EMPTY | spec:4.9 | plan:phase-3 | AC-MAIL-SETUP-STEP, AC-MAIL-SKIP-EDUCATES |
+| mailroom-coworker | OBJ-MAIL-TYPED-TRIAGE, OBJ-MAIL-REPLY-INSIDE | spec:4.10 | plan:phase-4 | AC-MAIL-TYPED-REASON, AC-MAIL-DRAFT-REPLY |
+| postmark-branch | OBJ-MAIL-NEAR-HOURLY-INTAKE | spec:4.4 | plan:phase-4 | AC-MAIL-PROVIDERS |
+| live-acceptance | OBJ-MAIL-DECLARED-MAILBOXES, OBJ-MAIL-NEAR-HOURLY-INTAKE, OBJ-MAIL-TYPED-TRIAGE, OBJ-MAIL-ROUTED-TO-OWNER, OBJ-MAIL-CHASED, OBJ-MAIL-REPLY-INSIDE, OBJ-MAIL-EDUCATES-WHEN-EMPTY | spec:9 | plan:phase-5 | AC-MAIL-SETUP-STEP, AC-MAIL-PURPOSE-REGISTRY, AC-MAIL-CONNECT-LATER, AC-MAIL-POLL-SCHEDULE, AC-MAIL-IDEMPOTENT, AC-MAIL-PROVIDERS, AC-MAIL-TYPED-REASON, AC-MAIL-NOISE-FIRST, AC-MAIL-UNTRUSTED, AC-MAIL-QUEUE-ROOM, AC-MAIL-KNOWN-SENDER, AC-MAIL-OWNER-NOTIFIED, AC-MAIL-ACK-WINDOW, AC-MAIL-NEEDS-YOU, AC-MAIL-DRAFT-REPLY, AC-MAIL-APPROVED-SEND, AC-MAIL-NO-SMTP-HONEST, AC-MAIL-SKIP-EDUCATES, AC-MAIL-EMPTY-STATE |
