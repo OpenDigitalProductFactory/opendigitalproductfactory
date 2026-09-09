@@ -14,7 +14,7 @@ const t1 = new Date("2026-09-07T00:00:00.000Z");
 
 describe("loadBaselineSource (BI-2515F779)", () => {
   it("returns the item's own baseline rows when it minted any", async () => {
-    const own = [{ recordedAt: t0, payload: { baselineId: "baseline-own", supersedesBaselineId: null } }];
+    const own = [{ id: "b-own", kind: "initiative_scope_baseline", backlogItemId: "row-item", recordedAt: t0, payload: { baselineId: "baseline-own", supersedesBaselineId: null } }];
     const findMany = vi.fn().mockResolvedValueOnce(own);
     const db = {
       backlogItem: { findFirst: vi.fn().mockResolvedValue({ id: "row-item", itemId: "BI-ITEM" }) },

@@ -353,6 +353,43 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
+  it("BI-2515F779: accepts a decomposed child mapped against the baseline it inherits from its parent", async () => {
+    const parentBaseline = baselineActivity();
+    parentBaseline.backlogItemId = "row-parent";
+    parentBaseline.payload.subject.id = "BI-PARENT";
+    const coverage = {
+      id: "cov-1",
+      backlogItemId: "row-parent",
+      payload: {
+        schemaVersion: 2,
+        decision: "decomposed",
+        planPath: "docs/superpowers/plans/plan.md",
+        deliverables: [{ key: "slice", backlogItemId: "BI-PLATFORM" }],
+      },
+    };
+    const db = transactionDb();
+    const findMany = vi.fn(async (query: { where?: { kind?: string | { in?: string[] }; backlogItemId?: unknown } }) => {
+      const kind = query.where?.kind;
+      if (kind === "evidence") return db.backlogItemActivity.findMany({ where: { kind: "evidence" } });
+      if (kind === "initiative_objective_mapping") return [];
+      if (kind === "initiative_scope_baseline") return []; // the child minted none
+      if (kind === "plan_backlog_coverage") return [coverage];
+      if (typeof kind === "object" && kind?.in?.includes("initiative_scope_baseline")) return [parentBaseline];
+      return [];
+    });
+    const tx = {
+      ...db,
+      backlogItem: { findFirst: vi.fn().mockResolvedValue({ itemId: "BI-PARENT" }) },
+      backlogItemActivity: { ...db.backlogItemActivity, findMany },
+    };
+    mocks.transaction.mockImplementation(async (work) => work(tx));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({ ok: true });
+    expect(mocks.create).toHaveBeenCalled();
+    // The coverage lookup names the child; the parent's chain supplied the baseline.
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ kind: "plan_backlog_coverage" }) }));
+  });
+
   it("rejects when the TaskRun baseline is no longer the current chain head", async () => {
     const original = baselineActivity();
     const successor = baselineActivity({

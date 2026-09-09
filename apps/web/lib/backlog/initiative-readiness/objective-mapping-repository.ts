@@ -20,6 +20,7 @@ import {
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
+import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   reconcileInitiativeObjectives,
@@ -304,11 +305,11 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
       eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
     });
     if (!taskAuthority.ok) return taskAuthority;
-    const rows = await tx.backlogItemActivity.findMany({
-      where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
-      orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-      select: { id: true, backlogItemId: true, kind: true, recordedAt: true, payload: true },
-    });
+    // BI-2515F779: the baseline a decomposed child is mapped against may be
+    // its parent's; the resolver returns own rows when present, else inherited.
+    const baselineSource = await loadBaselineSourceForItem(tx as unknown as BaselineSourceDb, { id: item.id, itemId: item.itemId });
+    const rows = baselineSource?.baselineRows ?? [];
+    const baselineSubjectIds = new Set([item.itemId, ...(baselineSource?.inheritedFromItemId ? [baselineSource.inheritedFromItemId] : [])]);
     const baselines = rows.map((row) => parseBaseline(row.payload));
     if (baselines.some((baseline) => !baseline)) {
       return { ok: false, code: "OBJECTIVE_BASELINE_CONFLICT", error: "The initiative baseline chain contains malformed evidence." };
@@ -318,7 +319,7 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
     if (!chain.ok) return { ok: false, code: "OBJECTIVE_BASELINE_CONFLICT", error: chain.error };
     const baseline = parsed.find((entry) => entry.baselineId === args.baselineId);
     if (!baseline) return { ok: false, code: "OBJECTIVE_BASELINE_REQUIRED", error: "The current objective baseline was not found." };
-    if (baseline.subject.id !== item.itemId
+    if (!baselineSubjectIds.has(baseline.subject.id)
       || !baseline.artifactRef
       || !exactArtifactRef(baseline.artifactRef, taskAuthority.data.binding.artifactRef)) {
       const error = "The current objective baseline does not match the executing TaskRun artifact binding.";
