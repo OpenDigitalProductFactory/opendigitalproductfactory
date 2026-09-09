@@ -115,6 +115,7 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   "data-architect": "AGT-WS-DATA-ARCHITECT",
   "data-steward": "AGT-WS-DATA-STEWARD",
   dispatcher: "AGT-WS-DISPATCHER",
+  "mailroom-coordinator": "AGT-WS-MAILROOM",
   "integration-engineer": "AGT-WS-INTEGRATION",
   "legal-operations-counsel": "AGT-WS-LEGAL",
   "security-engineer": "AGT-WS-SECURITY",

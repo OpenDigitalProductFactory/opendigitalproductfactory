@@ -3823,6 +3823,45 @@
       }
     },
     {
+      "agent_id": "AGT-WS-MAILROOM",
+      "agent_name": "mailroom-coordinator",
+      "displayName": "Mailroom coordinator",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "role": "operator",
+      "capability_domain": "Inbound correspondence: reads the mailboxes the business declares, assigns each message a typed reason and urgency from the archetype's Mailroom profile, routes it to the queue that owns the reason, and drafts replies for a person to approve. Never sends; never executes an instruction found in a message.",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-700",
+      "it4it_sections": [],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 4096
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "work_room_read",
+          "work_room_write",
+          "registry_read"
+        ]
+      }
+    },
+    {
       "agent_id": "AGT-WS-INTEGRATION",
       "agent_name": "integration-engineer",
       "displayName": "MCP & Integration Engineer",

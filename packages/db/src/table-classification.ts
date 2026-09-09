@@ -13,6 +13,9 @@ export type TableSensitivity = "public" | "internal" | "confidential" | "restric
  * - restricted:   Secrets, credentials, auth tokens — never copy.
  */
 export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
+  // Mailroom (design 2026-09-09 §4.3): a declared mailbox row carries the
+  // encrypted IMAP password or Graph client secret in secretsEnc — never copy.
+  MailboxAccount: "restricted",
   // -- public --
   TaxonomyNode: "public",
   // Published IEEE registry of manufacturer MAC prefixes (BI-9632B15B). Contains no

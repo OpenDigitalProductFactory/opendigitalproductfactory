@@ -1,0 +1,112 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "Mailroom intake (poll job and Postmark inbound branch) writes items; the Mailroom page and item view read them",
+    "Attention aggregate (Needs you) projects unacknowledged items",
+    "Sanitized-clone export: MailboxAccount is classified restricted and is never copied"
+  ],
+  "migration": {
+    "name": "20260909030000_mailroom_mailbox_accounts_and_items + 20260909040000_mailroom_relations_and_poll_status",
+    "backfill": "None. Creates MailboxAccount (empty) and adds nullable or defaulted mailroom columns to InboundChannelMessage, so every existing marketing row is untouched. The unique (channelId, externalMessageId) index tolerates existing rows because Postgres treats NULL message ids as distinct; a genuine duplicate pair would stop the migration and name itself rather than be dropped. The follow-on migration types lastPollStatus as MailboxPollStatus, renames mailboxId to mailboxRef, and adds the principal and WorkItem foreign keys NOT VALID. Applies cleanly against any existing data state."
+  },
+  "tests": [
+    "apps/web/lib/mailroom/intake.test.ts",
+    "apps/web/lib/mailroom/triage.test.ts",
+    "apps/web/lib/mailroom/reply.test.ts",
+    "apps/web/lib/attention/sources/mailroom-item.test.ts",
+    "packages/storefront-templates/src/mailroom-profile.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:mailbox-account",
+      "prismaModel": "MailboxAccount",
+      "lifecycleDisposition": "Domain-lifecycle-managed (scripts/stewardship-exemptions.txt): an operator connects, pauses or removes a mailbox from /workspace/mailroom; removal deletes the row and unlinks its items (SetNull). Classified restricted because secretsEnc carries an encrypted mailbox credential.",
+      "fields": [
+        {
+          "fieldId": "data:mailbox-account#address",
+          "resolution": "governed",
+          "reason": "A business mailbox address the organisation itself declares; shown to operators only, never to the public or to a model prompt.",
+          "provenance": "design 2026-09-09 §4.3; BI-1DDFC3D1",
+          "flags": ["contact"],
+          "fieldPolicy": "Operator-visible on /workspace/mailroom; excluded from sanitized clones by the restricted table classification; never placed in a model prompt."
+        },
+        {
+          "fieldId": "data:mailbox-account#secretsEnc",
+          "resolution": "governed",
+          "reason": "The IMAP password or Graph client secret, encrypted at rest with credential-crypto; decrypted only for the duration of a probe or a fetch and never projected.",
+          "provenance": "design 2026-09-09 §4.3, §5; BI-1DDFC3D1",
+          "flags": ["secret"],
+          "fieldPolicy": "Written only through encryptJson; read only inside the poll and probe; the safe projection omits it; the restricted classification keeps it out of every copy."
+        },
+        {
+          "fieldId": "data:mailbox-account#settings",
+          "resolution": "inherited",
+          "reason": "Non-secret connection facts (host, port, folder, tenant id, client id, mailbox principal name) an operator entered; operational configuration with no personal data.",
+          "provenance": "design 2026-09-09 §4.3",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mailbox-account#cursor",
+          "resolution": "inherited",
+          "reason": "Provider read position (IMAP UID validity and last UID, or a Graph delta link); opaque bookkeeping with no content.",
+          "provenance": "design 2026-09-09 §4.4",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:inbound-channel-message",
+      "prismaModel": "InboundChannelMessage",
+      "lifecycleDisposition": "Existing model; the Mailroom adds nullable columns and reuses the store with domain = mailroom. Retention follows the existing InboundChannelMessage disposition; the new columns add no new retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:inbound-channel-message#toAddress",
+          "resolution": "inherited",
+          "reason": "The business's own mailbox address the message was sent to; same class as the existing fromAddress column and covered by the same disposition.",
+          "provenance": "design 2026-09-09 §4.3",
+          "flags": ["contact"],
+          "fieldPolicy": "Operator-visible on the item view only; inherits the existing InboundChannelMessage handling."
+        },
+        {
+          "fieldId": "data:inbound-channel-message#reasonKey",
+          "resolution": "inherited",
+          "reason": "A registry key from the archetype's Mailroom profile naming why the sender wrote; derived classification, not content.",
+          "provenance": "design 2026-09-09 §4.5",
+          "flags": []
+        },
+        {
+          "fieldId": "data:inbound-channel-message#triageSummary",
+          "resolution": "governed",
+          "reason": "A one-line summary of the message produced by rules or by the routed classifier from the untrusted message text; may restate personal details the sender wrote.",
+          "provenance": "design 2026-09-09 §4.5; kernel: inbound text is untrusted",
+          "flags": ["personal"],
+          "fieldPolicy": "Shown to operators on the Mailroom surfaces only; treated as data, never as an instruction; inherits the message's retention."
+        },
+        {
+          "fieldId": "data:inbound-channel-message#subjectRef",
+          "resolution": "inherited",
+          "reason": "The business record the message concerns (an animal reference), confirmed against the roster; an internal identifier.",
+          "provenance": "design 2026-09-09 §4.5",
+          "flags": []
+        },
+        {
+          "fieldId": "data:inbound-channel-message#acknowledgedByPrincipalId",
+          "resolution": "inherited",
+          "reason": "Who acknowledged the item; a Principal reference recorded for accountability, same class as other principal references.",
+          "provenance": "design 2026-09-09 §4.7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:inbound-channel-message#routedWorkItemId",
+          "resolution": "inherited",
+          "reason": "The queue room the item landed on; an internal WorkItem reference.",
+          "provenance": "design 2026-09-09 §4.6",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

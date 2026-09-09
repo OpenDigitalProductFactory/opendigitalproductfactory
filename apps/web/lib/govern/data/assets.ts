@@ -43,6 +43,7 @@ import { WORKROOM_PARTICIPANT_ASSETS } from "./workroom-participant-assets";
 import { WORKROOM_RELATION_ASSETS } from "./workroom-relation-assets";
 import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
+import { MAILROOM_ASSETS } from "./mailroom-assets";
 import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
 import { EXTERNAL_CHANNEL_ASSETS } from "./external-channel-assets";
 import { ANIMAL_WELFARE_ASSETS } from "./animal-welfare-assets";
@@ -728,6 +729,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...WORKROOM_RELATION_ASSETS,
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,
+  ...MAILROOM_ASSETS,
   ...EXTERNAL_CHANNEL_ASSETS,
   ...ANIMAL_WELFARE_ASSETS,
    {

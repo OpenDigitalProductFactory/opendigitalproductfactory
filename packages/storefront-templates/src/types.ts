@@ -758,6 +758,8 @@ export interface ArchetypeDefinition {
    * the vocabulary of the business it is actually running.
    */
   workforceProfile?: WorkforceProfile;
+  /** Optional Mailroom profile (see mailroom-profile-types.ts, design 2026-09-09 §4.2). */
+  mailroomProfile?: import("./mailroom-profile-types").MailroomProfile;
 }
 
 /** A worker class this archetype's day requires. `classification` is the legal
@@ -794,3 +796,4 @@ export interface WorkforceProfile {
   employmentTypes?: ArchetypeEmploymentType[];
   workLocations?: ArchetypeWorkLocation[];
 }
+

@@ -776,6 +776,7 @@ model WorkItem {
   messages                      WorkItemMessage[]
   presence                      WorkItemPresence[]
   capsules                      Workroom[]             @relation("WorkCapsuleWorkItem")
+  mailroomItems                 InboundChannelMessage[] @relation("MailroomRoutedWorkItem")
   governedDataControlOperations DataControlOperation[] @relation("DataControlOperationGovernedCase")
   routingDecision               Json?
   // Generic retry scheduling owned by the canonical queue. Domain mirrors keep

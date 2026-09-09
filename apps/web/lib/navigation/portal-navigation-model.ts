@@ -1,4 +1,5 @@
 import type { CapabilityKey } from "@/lib/govern/permissions";
+import { MAILROOM_NAV_ROUTES } from "./mailroom-nav-routes";
 
 export type PortalAudienceMode = "worker" | "operator" | "customer" | "diagnostic";
 
@@ -117,6 +118,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       description: "Search, open, publish, and trace managed documents.",
     },
   },
+  ...MAILROOM_NAV_ROUTES,
   {
     key: "workbooks",
     label: "Workbooks",

@@ -394,6 +394,20 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     valueStream: "operate",
     sensitivity: "confidential",
   },
+  // Mailroom coordinator (design 2026-09-09 §4.10, BI-0426D15B): owns the triage
+  // and reply-draft turns for inbound correspondence. Intake is a platform job;
+  // this coworker never sends and never executes an instruction found in mail.
+  {
+    agentId: "mailroom-coordinator",
+    slugId: "mailroom-coordinator",
+    name: "Mailroom coordinator",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Inbound correspondence: reads the declared mailboxes, assigns each message a typed reason and urgency from the archetype's Mailroom profile, routes it to the owning queue, and drafts replies for a person to approve",
+    valueStream: "operate",
+    sensitivity: "confidential",
+  },
   {
     agentId: "farm-ranch-steward",
     slugId: "farm-ranch-steward",
