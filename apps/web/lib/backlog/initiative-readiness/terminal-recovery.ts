@@ -15,6 +15,7 @@ import {
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
+import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
 import { discoverCanonicalDesignArtifact } from "./canonical-artifact-discovery";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
@@ -204,34 +205,22 @@ async function defaultLoadLiveRooms(args: {
 }
 
 async function defaultLoadBaselinePayloads(itemId: string): Promise<unknown[]> {
-  const item = await prisma.backlogItem.findFirst({
-    where: { OR: [{ itemId }, { id: itemId }] },
-    select: { id: true },
-  });
-  if (!item) return [];
-  const rows = await prisma.backlogItemActivity.findMany({
-    where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
-    orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-    select: { payload: true },
-  });
-  return rows.map((row) => row.payload);
+  // BI-2515F779: a decomposed child inherits its parent's scope baseline for
+  // routing exactly as the projection already does for OBJECTIVE_BASELINE_REQUIRED.
+  const source = await loadBaselineSource(prisma as unknown as BaselineSourceDb, itemId);
+  return source ? source.baselineRows.map((row) => row.payload) : [];
 }
 
 async function defaultLoadEligibleEvidenceActivityIds(args: {
   itemId: string;
   baselineId: string;
 }): Promise<ActionResult<{ activityIds: string[] }>> {
-  const item = await prisma.backlogItem.findFirst({
-    where: { OR: [{ itemId: args.itemId }, { id: args.itemId }] },
-    select: { id: true, itemId: true },
-  });
-  if (!item) return err("baseline-row-unavailable");
-  const baselines = await prisma.backlogItemActivity.findMany({
-    where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
-    orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-    select: { recordedAt: true, payload: true },
-  });
-  const matchingBaselines = baselines.filter((row) => {
+  const source = await loadBaselineSource(prisma as unknown as BaselineSourceDb, args.itemId);
+  if (!source) return err("baseline-row-unavailable");
+  const item = { id: source.itemRowId, itemId: source.itemId };
+  // The window opens at the baseline the route bound — own or inherited — and
+  // the evidence inside it is always the subject's own (BI-2515F779).
+  const matchingBaselines = source.baselineRows.filter((row) => {
     if (!row.payload || typeof row.payload !== "object" || Array.isArray(row.payload)) return false;
     return (row.payload as Record<string, unknown>).baselineId === args.baselineId;
   });
