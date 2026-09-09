@@ -976,6 +976,20 @@ qualification model, or action-permission engine.
 
 ## 10. Performer and work-allocation model
 
+> **Implementation status.** The two closed vocabularies below — performer kinds
+> (§10.1) and allocation patterns (§10.3) — plus the §10.2 eligibility gates are
+> declared in code at [`packages/db/src/performer-allocation.ts`](../../packages/db/src/performer-allocation.ts),
+> exported from `@dpf/db`. A conformance test parses this section and fails in
+> both directions, so a term added here and not there (or the reverse) breaks the
+> build: the standard stays the source of truth and the code stays its only
+> spelling. Consume the exported constants; never retype these strings.
+>
+> Not yet implemented: the allocation RECORD itself (which performer executes a
+> given activity under which pattern) and runtime evaluation of the §10.2 gates.
+> Tracked as `BI-40B36B94`, which carries the remaining slices and the open
+> design questions. Until those land, this section constrains vocabulary, not
+> behaviour.
+
 ### 10.1 Performer kinds
 
 An implementation **MUST** distinguish at least:
