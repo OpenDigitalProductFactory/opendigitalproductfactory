@@ -1,0 +1,18 @@
+{
+  "$comment": "Test program for apps/web: everything tsconfig.json excludes (tests, e2e, test-support, vitest setup) plus the production sources they import. Run with `pnpm --filter web typecheck:tests`; CI job Typecheck (web tests). Plan 2026-09-08 M11, BI-0A3B155F.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./tsconfig.test.tsbuildinfo"
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "scripts"
+  ]
+}
