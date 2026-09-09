@@ -1,6 +1,9 @@
 import { normalizePersistedScope, parseScopeInput } from "./scope-input";
 import { prisma } from "@dpf/db";
-import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule-workitem-anchor.server";
+import {
+  anchorCapsuleByIdNonFatal,
+  ensureCapsuleWorkItemAnchorNonFatal,
+} from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -723,6 +726,11 @@ export async function startExternalWorkTool(
     repositoryFullName: stringParam(params, "repositoryFullName"),
     baseBranch: stringParam(params, "baseBranch"),
   });
+  // Both branches of ensureExternalSessionCapsule create the room without its
+  // WorkItem anchor — the dominant producer of the 289 unreachable rooms
+  // measured on the live install (BI-A5EEB5D1). Anchor it here, the way the
+  // adopt handler does.
+  await anchorCapsuleByIdNonFatal(capsuleId, "started");
 
   return {
     success: true,
