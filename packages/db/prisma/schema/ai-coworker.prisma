@@ -203,6 +203,7 @@ model WorkEngagement {
 
 // Append-only activity timeline for a WorkEngagement. `seq` is monotonic per
 // engagement for strict ordering under concurrency (timestamps alone are unsafe).
+/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=recordedAt
 model WorkEngagementActivity {
   id                String   @id @default(cuid())
   workEngagementId  String
@@ -653,6 +654,7 @@ model AdapterCapabilityProfile {
 // quota pool, status, refusal/error class, tool-call validity, capability
 // usage, and schema-drift detection. Supports single/shadow/race execution
 // modes via raceCohortId grouping. Feeds nightly outcome scoring (§6.4).
+/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=startedAt
 model AdapterRunTelemetry {
   id             String  @id @default(cuid())
   traceId        String? // W3C Trace Context-compatible request correlation id
@@ -709,6 +711,7 @@ model AdapterRunTelemetry {
 // EP-COST Phase 2 prerequisite — one row per budget event so the
 // budget gate in callProvider can enforce per-agent and per-build spend limits.
 // Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §3 Phase 2
+/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
 model AgentBudgetEvent {
   id          String   @id @default(cuid())
   agentId     String
@@ -734,6 +737,7 @@ model AgentBudgetEvent {
 // or (b) materially rewrote the raw transcript (Levenshtein ratio > 0.3).
 // Per spec §9, no-op cleanups are NOT logged to avoid bloating the table
 // — quality regression is detected from the rows we do write.
+/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
 model TranscriptCleanupAudit {
   id                  String   @id @default(cuid())
   threadId            String?
@@ -754,6 +758,7 @@ model TranscriptCleanupAudit {
   @@index([threadId, createdAt])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=545d sensitivity=confidential timeAxis=updatedAt
 model AgentThread {
   id          String                @id @default(cuid())
   userId      String
@@ -995,6 +1000,7 @@ model ToolEvaluation {
   @@index([reEvaluateAfter])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
 model AdminActivity {
   id         String   @id @default(cuid())
   userId     String
@@ -1011,6 +1017,7 @@ model AdminActivity {
   @@index([toolName])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
 model ToolExecution {
   id                      String                   @id @default(cuid())
   threadId                String
@@ -1120,6 +1127,7 @@ model CoworkerActionEnvelope {
   @@index([expiresAt])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
 model ToolExecutionReceipt {
   id               String                 @id @default(cuid())
   toolExecutionId  String                 @unique
@@ -1327,6 +1335,7 @@ model SkillAssignment {
   @@index([agentId])
 }
 
+/// @dpf lifecycle=business-record retention=domain
 model SkillMetric {
   id              String   @id @default(cuid())
   skillId         String // Business id; see SkillAssignment.skillId comment
@@ -1346,6 +1355,7 @@ model SkillMetric {
   @@index([skillId])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
 model SkillUsageEvent {
   id              String   @id @default(cuid())
   eventId         String   @unique
@@ -1461,6 +1471,7 @@ model PromptRevision {
   @@index([templateId])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
 model CoworkerTurnMetric {
   id                           String   @id @default(cuid())
   threadId                     String

@@ -203,6 +203,7 @@ model ModelCapabilityChangeLog {
   @@index([modelId, changedAt])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=180d sensitivity=restricted timeAxis=createdAt
 model TokenUsage {
   id           String   @id @default(cuid())
   traceId      String?
@@ -247,6 +248,7 @@ model EndpointTaskPerformance {
   @@unique([endpointId, taskType])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=restricted timeAxis=createdAt
 model TaskEvaluation {
   id              String   @id @default(cuid())
   threadId        String
@@ -266,6 +268,7 @@ model TaskEvaluation {
   @@index([createdAt])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=restricted timeAxis=startedAt
 model EndpointTestRun {
   id              String    @id @default(cuid())
   runId           String    @unique
@@ -379,6 +382,7 @@ model PolicyRule {
   createdBy      User?     @relation("PolicyRuleCreator", fields: [createdById], references: [id])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=confidential timeAxis=createdAt
 model RouteDecisionLog {
   id                         String   @id @default(cuid())
   traceId                    String?
@@ -498,6 +502,7 @@ model AsyncInferenceOp {
   @@unique([authorityScopeKey, requestKey])
 }
 
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=operational,security-audit owner=platform-owner steward=data-steward
 model AsyncInferenceOperationTransition {
   id               String   @id @default(cuid())
   operationId      String

@@ -313,6 +313,7 @@ enum CareRecordKind {
 
 /// Longitudinal, subject-agnostic care fact. Corrections append a new record and
 /// link the prior fact instead of overwriting clinical or welfare history.
+/// @dpf lifecycle=legal-evidence retention=domain sensitivity=confidential categories=operational,content owner=business-operator steward=data-steward
 model CareRecord {
   id                 String          @id @default(cuid())
   careRecordId       String          @unique
@@ -399,6 +400,7 @@ model CareAppointmentResource {
 
 /// Append-only lifecycle evidence. appointmentVersion is the optimistic version
 /// after the transition and is unique within the appointment.
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=restricted basis=HIPAA-adjacent_clinical_scheduling_record_retention
 model CareAppointmentStatusEvent {
   id                 String          @id @default(cuid())
   eventId            String          @unique
@@ -419,6 +421,7 @@ model CareAppointmentStatusEvent {
 
 /// Append-only storefront ↔ care synchronization outbox and reconciliation
 /// evidence. Conflicts remain visible for human resolution.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=restricted timeAxis=occurredAt
 model AppointmentSyncEvent {
   id                  String          @id @default(cuid())
   syncEventId         String          @unique
@@ -682,6 +685,7 @@ model CareIntakeException {
 }
 
 /// Append-only packet lifecycle evidence.
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=restricted basis=HIPAA-adjacent_clinical_intake_record_retention
 model CareIntakeStatusEvent {
   id               String           @id @default(cuid())
   eventId          String           @unique

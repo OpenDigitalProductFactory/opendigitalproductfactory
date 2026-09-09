@@ -514,6 +514,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("singleton-safety-guard", "Singleton Safety Guard", [
       node("scripts/sbom/check-singleton-safety.mjs"),
     ]),
+    guard("model-metadata-tags", "Model Metadata Tags", [
+      node("--test", "scripts/check-model-metadata-tags.test.mjs"),
+      node("scripts/check-model-metadata-tags.mjs"),
+    ]),
     guard("doc-reference-integrity", "Doc Reference Integrity", [
       node("--test", "scripts/check-doc-reference-integrity.test.mjs"),
       node("scripts/check-doc-reference-integrity.mjs"),

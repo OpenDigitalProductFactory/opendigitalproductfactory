@@ -9,6 +9,7 @@ model BrandingConfig {
   organization   Organization? @relation(fields: [organizationId], references: [id])
 }
 
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model PlatformCapability {
   id           String   @id @default(cuid())
   capabilityId String   @unique
@@ -53,6 +54,7 @@ model RuntimeCapabilityTransition {
 }
 
 /// Append-only governance audit for every terminal runtime transition outcome.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=security-audit owner=platform-owner steward=data-steward timeAxis=createdAt
 model RuntimeCapabilityTransitionEvent {
   id           String                      @id @default(cuid())
   transitionId String
@@ -183,6 +185,7 @@ model RuntimeAdvisory {
   generatedAt DateTime @default(now())
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal timeAxis=createdAt
 model Notification {
   id        String   @id @default(cuid())
   userId    String
@@ -503,6 +506,7 @@ enum PerformanceMetricUnit {
 /// Tenant-scoped, definition-versioned historical metric read model. Source
 /// systems remain authoritative; this table exists so owner/manager reads never
 /// run historical aggregation on the operational hot path.
+/// @dpf lifecycle=business-record retention=projection sensitivity=internal categories=derived-analytic,operational,financial owner=founder-business-owner steward=data-steward
 model BusinessMetricRollup {
   id                String                     @id @default(cuid())
   organizationId    String

@@ -928,6 +928,7 @@ model ReleaseBundle {
   @@index([status])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal timeAxis=createdAt
 model BuildActivity {
   id        String       @id @default(cuid())
   buildId   String
@@ -940,6 +941,7 @@ model BuildActivity {
   @@index([createdAt])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=startedAt
 model BuildDispatchAttempt {
   id               String       @id @default(cuid())
   buildId          String
@@ -1102,6 +1104,7 @@ model TaskRun {
 // thresholds in effect) and the resulting operator outcome (retry,
 // abandon, escalate). Used by the Build Studio phase panel history
 // strip and as candidate WWMD profile material in v2.
+/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=createdAt
 model StallEvent {
   id                  String    @id @default(cuid())
   taskRunId           String
@@ -1148,6 +1151,7 @@ model StallEvent {
 // substrate (e.g., SelfUpgradeRun.runId).
 //
 // Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.1
+/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=startedAt
 model QuiescenceRun {
   id           String  @id @default(cuid())
   // Public/human-readable id (e.g., "QR-2026-05-24-abc123"). Used in event
@@ -1353,6 +1357,7 @@ enum SelfUpgradeDispatchStatus {
   dispatch_failed
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=internal timeAxis=createdAt
 model SelfUpgradeRun {
   id                    String    @id @default(cuid())
   runId                 String    @unique
