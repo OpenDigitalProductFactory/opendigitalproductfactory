@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Every-PR UX review: L4 implementation extension
 
 Parent design: [Holistic UX system](2026-07-22-holistic-ux-system-and-agent-codification-design.md), L4. This focused extension owns only BI-D543F934; the parent remains authoritative for the wider system.
