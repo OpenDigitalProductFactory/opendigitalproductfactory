@@ -291,7 +291,7 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     tier: 2,
     type: "coworker",
     description:
-      "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization. Validates all Prisma schema changes before migration.",
+      "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization; owns data lifecycle — every model's /// @dpf declaration (lifecycle class, retention, sensitivity), the nightly table-growth review, and the backlog items its findings raise. Validates all Prisma schema changes",
     valueStream: "integrate",
     sensitivity: "internal",
   },
