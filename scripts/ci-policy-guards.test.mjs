@@ -57,6 +57,7 @@ const EXPECTED_LEGACY_JOBS = [
   "n-minus-one-caller-honesty",
   "new-dependency-gate",
   "no-unreachable-room-links",
+  "no-url-pathname-fs-guard",
   "override-provenance-guard",
   "package-boundary-guard",
   "platform-composition-single-home",
