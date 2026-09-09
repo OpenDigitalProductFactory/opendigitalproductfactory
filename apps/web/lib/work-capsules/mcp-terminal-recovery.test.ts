@@ -6,7 +6,16 @@ const mocks = vi.hoisted(() => {
       super(result.code);
     }
   }
-  return { updateStatus: vi.fn(), resolveRecovery: vi.fn(), Denied };
+  class Refused extends Error {
+    readonly code: string;
+    readonly reason: string;
+    constructor(input: { code: string; reason: string }) {
+      super(input.reason);
+      this.code = input.code;
+      this.reason = input.reason;
+    }
+  }
+  return { updateStatus: vi.fn(), resolveRecovery: vi.fn(), Denied, Refused };
 });
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
@@ -18,6 +27,7 @@ vi.mock("./work-capsule-store", () => ({
   updateWorkCapsuleStatus: mocks.updateStatus,
   heartbeatWorkCapsule: vi.fn(),
   WorkCapsuleCompletionDeniedError: mocks.Denied,
+  WorkCapsulePublicationRefusedError: mocks.Refused,
   ScopeOverlapError: class ScopeOverlapError extends Error {},
   adoptWorktreeCapsule: vi.fn(),
   claimWorkCapsuleScope: vi.fn(),
@@ -63,5 +73,61 @@ describe("workroom terminal MCP recovery projection", () => {
       error: "initiative_not_ready",
       data: { readiness: decision, recovery: { reviewerRoutes: [{ gate: "objective-mapping" }] } },
     });
+  });
+
+  // BI-023EF164: a claim-created room has no immutable head yet. The publication
+  // boundary refuses ready-for-review; that refusal must reach the caller as a
+  // structured answer with the repair step, not as "tool_threw".
+  it("answers an incomplete source identity with the adopt_worktree repair step instead of throwing", async () => {
+    mocks.updateStatus.mockRejectedValue(new mocks.Refused({
+      code: "workroom_identity_incomplete",
+      reason: "Workroom source identity is missing: headSha not set. Re-sync the Workroom with adopt_worktree (repositoryFullName, headBranch, worktreePath, baseSha, headSha), then retry.",
+    }));
+
+    const result = await updateWorkCapsuleStatusTool(
+      { capsuleId: "WC-ONE", status: "ready-for-review", reason: "PR open." },
+      "USR-ONE",
+      { agentId: "AGT-ONE" },
+    );
+
+    expect(mocks.resolveRecovery).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      success: false,
+      error: "workroom_identity_incomplete",
+      message: expect.stringContaining("headSha not set"),
+      data: {
+        capsuleId: "WC-ONE",
+        requestedStatus: "ready-for-review",
+        nextAction: expect.stringContaining("adopt_worktree"),
+      },
+    });
+  });
+
+  it("answers a missing failure review with the reviewer step", async () => {
+    mocks.updateStatus.mockRejectedValue(new mocks.Refused({
+      code: "failure_review_required",
+      reason: "No failure-analysis review exists for this final change.",
+    }));
+
+    const result = await updateWorkCapsuleStatusTool(
+      { capsuleId: "WC-ONE", status: "ready-for-promotion", reason: "Reviewed." },
+      "USR-ONE",
+      { agentId: "AGT-ONE" },
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "failure_review_required",
+      data: { nextAction: expect.stringContaining("review_semantic_change") },
+    });
+  });
+
+  it("still surfaces unknown failures as thrown errors", async () => {
+    mocks.updateStatus.mockRejectedValue(new Error("database gone"));
+    await expect(updateWorkCapsuleStatusTool(
+      { capsuleId: "WC-ONE", status: "working", reason: "x" },
+      "USR-ONE",
+      { agentId: "AGT-ONE" },
+    )).rejects.toThrow("database gone");
   });
 });

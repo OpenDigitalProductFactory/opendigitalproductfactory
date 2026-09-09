@@ -47,11 +47,13 @@ import {
   recordAgentActivity,
   updateWorkCapsuleStatus,
   WorkCapsuleCompletionDeniedError,
+  WorkCapsulePublicationRefusedError,
   ScopeOverlapError,
   type CapsuleDb,
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
+import { publicationRefusedToolResult } from "./publication-refusal";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
@@ -355,6 +357,9 @@ export async function updateWorkCapsuleStatusTool(
         message: `Work Capsule completion is blocked by ${error.result.code}.`,
         data: { code: error.result.code, readiness: error.result.decision, recovery },
       };
+    }
+    if (error instanceof WorkCapsulePublicationRefusedError) {
+      return publicationRefusedToolResult(error, { capsuleId, status });
     }
     throw error;
   }

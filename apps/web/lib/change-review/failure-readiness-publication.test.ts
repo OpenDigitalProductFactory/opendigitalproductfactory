@@ -28,6 +28,18 @@ describe("server publication boundary", () => {
     mocks.room.mockResolvedValue(null);
     expect((await checkWorkroomFailureReadiness("room")).mayPublish).toBe(false);
   });
+  it("names the missing identity fields and the repair tool so the executor can fix it (BI-023EF164)", async () => {
+    mocks.room.mockResolvedValue({ id: "room-row", headSha: null, repositoryFullName: "owner/repo" });
+    const result = await checkWorkroomFailureReadiness("room");
+    expect(result).toMatchObject({ mayPublish: false, code: "workroom_identity_incomplete" });
+    expect(result.reason).toContain("headSha not set");
+    expect(result.reason).not.toContain("repositoryFullName not set");
+    expect(result.reason).toContain("adopt_worktree");
+  });
+  it("classifies a missing review as failure_review_required, distinct from identity", async () => {
+    mocks.rows.mockResolvedValue([]);
+    expect(await checkWorkroomFailureReadiness("room")).toMatchObject({ mayPublish: false, code: "failure_review_required" });
+  });
   it.each([null, { ...receipt, sourceHeadSha: "d".repeat(40) }, { ...receipt, policyVersion: "legacy" },
     { ...receipt, disposition: "auto-pass" }, { ...receipt, result: { decision: "inconclusive" } },
     { ...receipt, result: { decision: "pass" } },
