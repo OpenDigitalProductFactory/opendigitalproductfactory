@@ -94,7 +94,9 @@ its missing obligations. Do not assign development gates to generic business roo
 
 The kernel call returned **no usable recommendation** because options lacked scoreable features;
 it did not ratify an option. The recommendation follows the user's accepted hybrid direction and
-the existing client-independent platform contract. Formal design review remains outstanding.
+the existing client-independent platform contract. Formal scope approval is the review requested
+for this artifact, not an additional deliverable that must assert its own approval. Persisted
+independent receipts determine readiness.
 
 | Primary reference, consulted 2026-09-06 | Adopt | Reject / limit |
 | --- | --- | --- |
@@ -340,15 +342,16 @@ regression checks on materially different profiles. An organization choice remai
 belongs in WSID; platform behavior belongs in WWMD. The analyst may propose doctrine, never
 silently rewrite it. Standards Steward review batches durable lessons weekly.
 
-Proposed amendments, kept as pointers to this application design until independently reviewed:
+The exact informative application text is maintained in the following canonical homes. These
+paragraphs are the reviewable reference amendments for this delivery, not placeholders for an
+unspecified future rewrite. They add no normative standard version or qualification claim.
+Normative adoption remains a separate Standards Steward decision under BI-636638A6.
 
 | Canonical home | Amendment |
 | --- | --- |
-| PAAW/Four-Portfolio standard §9.6 | Reference this cross-occurrence surveillance profile, inheritance, cycle continuity and verified-application trace |
-| JSI §8.2 | Learning records identify effective profile, method versions and evidence scope |
-| JSI §8.3 | Cross-room analyst and assessor competence includes denominator selection, uncertainty, gate interpretation and recovery; independence remains explicit |
-| JSI §11.5 and §13 | Protect evaluation integrity; domain transfer and reviewer/profile changes trigger applicable revalidation |
-| Profile catalog composition and applicability sections | Require common review baseline, scoped deltas, measurable domain outcomes and not-exercised coverage |
+| [PAAW/Four-Portfolio standard §9.6](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md) | Informative application: inherited obligations, durable continuity, cadence and trace through independent subsequent assessment |
+| [JSI application note following §8.3](../../architecture/job-specific-intelligence.md) | Effective profile/method attribution; analyst and assessor competence; precommitted population and opportunity window; independence and target-profile transfer under §§8.2, 11.5 and 13 |
+| [Profile catalog §2 application note](../../architecture/four-portfolio-archetype-standard-profile-catalog.md) | Concrete profile fields, conflict handling, development/bookkeeping/pet-rescue/campground evidence, and separate definition/occurrence coverage |
 | Existing DPF skills and instruction owners | Add compact capture/recovery and triage procedures at their existing boundaries; avoid global prompt duplication |
 
 Use IP-953EE / BI-636638A6 for standards publication. This source calls the operating standard
@@ -393,11 +396,17 @@ do not use the allowance for unrelated cleanup.
 | AC-12 | OBJ-RECOVERY | Reviewer continuity: missed cadence and reviewer failure produce visible due work; replacing executor does not start duplicate cycles |
 
 Acceptance fixtures may prove mechanics; synthetic data does not prove business efficacy.
-The existing 135 stalled child runs remain operational demand and are not closed by this design.
+The September 8 operational cleanup cancelled 149 stalled children of terminal builds through
+governed MCP and verified none remained in that cohort. This supersedes the older 135-child
+snapshot; it does not establish prevention or resolve unrelated recovery candidates. The
+September 9 requested sweep observed 429 persisted rooms and 24 nonterminal rooms linked to done
+backlog items. Preserve their evidence and reconcile current activity before any disposition.
 
 ## 13. Readiness and next action
 
-This draft is ready for independent design review, not implementation. The next executor should
+This draft is submitted for independent scope review, not implementation. A declaration that
+scope review is pending describes the current gate; it cannot substitute for a reviewer finding
+about the artifact's content. The next executor should
 read this exact artifact and its linked baseline, confirm current backlog ownership, review the
 common/profile contract and persistence choices, then decompose delivery under BI-IMP-9DA35549.
 No operator decision is needed merely to repeat already-authorized read-only analysis.
