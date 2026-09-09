@@ -145,7 +145,8 @@ model DocumentAccessGrant {
   @@index([createdByPrincipalId])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
+/// Document state-transition audit trail. One year; the Document row carries the current state and cascades its events on delete.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit timeAxis=createdAt
 model DocumentLifecycleEvent {
   id               String         @id @default(cuid())
   documentId       String
@@ -489,7 +490,8 @@ model WikiPageSource {
   @@index([sourceId]) // FK-leading (join table): source-side lookups; @@id only covers pageId
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=createdAt
+/// Knowledge-base ingest audit. Operational; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=content,telemetry timeAxis=createdAt
 model WikiIngestEvent {
   id             String        @id @default(cuid())
   organizationId String?

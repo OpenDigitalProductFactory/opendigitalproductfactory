@@ -407,10 +407,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     // BI-873F3C48: every growth-shaped (event/log/telemetry) model must be
     // retention-enrolled (purge or retained) or deliberately allowlisted.
-    guard("retention-enrollment-guard", "Retention Enrollment Guard", [
-      node("--test", "scripts/check-retention-enrollment.test.mjs"),
-      node("scripts/check-retention-enrollment.mjs"),
-    ], { inputs: ["code"] }),
     // Diff-scoped by design: repo-wide, the pattern matches 255 fixtures across 125
     // files, nearly all legitimate (far-future sentinels, deliberately-expired rows).
     // Gating on that would need a 125-file baseline — the silent allowlist this is

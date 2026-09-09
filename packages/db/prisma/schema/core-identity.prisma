@@ -341,7 +341,8 @@ model AuthorityBindingGrant {
   @@index([grantKey])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=restricted timeAxis=createdAt
+/// Every authorization decision (actor, grant, outcome). Security-audit trail; one year baseline, longer for regulated industries.
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=restricted categories=security-audit,authorization timeAxis=createdAt
 model AuthorizationDecisionLog {
   id                        String                   @id @default(cuid())
   decisionId                String                   @unique
@@ -811,6 +812,7 @@ model OAuthClient {
 /// A single-use authorization code. Short-lived, consumed on first exchange;
 /// a second presentation is a replay and is refused. The PKCE challenge is
 /// stored, never the verifier.
+/// Single-use OAuth codes that expire in minutes (BI-E4DFDCB0). A row is dead the moment it is exchanged or expires; the exchange itself is recorded in AuthorizationDecisionLog, so nothing of record is lost. Purged on the shortest available window purely to stop the table growing.
 /// @dpf lifecycle=operational retention=90d sensitivity=restricted categories=credential-secret owner=platform-owner steward=data-steward timeAxis=createdAt
 model OAuthAuthorizationCode {
   id                  String    @id @default(cuid())
@@ -839,6 +841,7 @@ model OAuthAuthorizationCode {
 /// issues a successor. A replayed refresh token is therefore detectable — its
 /// successor already exists — and the whole chain is revoked, per OAuth 2.1
 /// refresh-token-rotation guidance.
+/// Rotating refresh tokens for MCP clients (BI-E4DFDCB0). Retained past their own expiry on purpose: the rotation chain is what makes a replayed token detectable, so a purge window shorter than the refresh TTL would erase the evidence of a stolen token. One year comfortably exceeds the 30-day default TTL.
 /// @dpf lifecycle=operational retention=365d sensitivity=restricted categories=credential-secret owner=platform-owner steward=data-steward timeAxis=createdAt
 model OAuthRefreshToken {
   id            String    @id @default(cuid())

@@ -14,6 +14,7 @@ import { isJobEnabled } from "@/lib/operate/scheduled-jobs/core";
 import { runRetentionSweep, type RetentionSweepReport } from "./execute";
 import type { RetentionPrismaClient } from "./policies";
 import { resolveOrgIndustryKey } from "./industry-floors";
+import { buildPurgePolicies, buildRetainedDatasets, loadModelDeclarations } from "./declarations";
 import {
   DATA_RETENTION_JOB_ID,
   nextRetentionRunAt,
@@ -86,11 +87,16 @@ export async function executeScheduledRetentionSweep(opts: {
 
   const industryKey = await resolveOrgIndustryKey(prisma);
 
+  // EP-A33A5C61 slice 4d: the policies come from the Postgres catalog (the
+  // schema's /// @dpf tags), not from a TypeScript list.
+  const declarations = await loadModelDeclarations(prisma, (m) => console.warn(`[retention] ${m}`));
   const report = await runRetentionSweep({
     prisma: retentionPrisma,
     now,
     dryRun,
     industryKey,
+    policies: buildPurgePolicies(declarations),
+    retainedDatasetCount: buildRetainedDatasets(declarations).length,
   });
 
   if (!dryRun) {

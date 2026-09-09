@@ -203,7 +203,8 @@ model WorkEngagement {
 
 // Append-only activity timeline for a WorkEngagement. `seq` is monotonic per
 // engagement for strict ordering under concurrency (timestamps alone are unsafe).
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=recordedAt
+/// Per-engagement activity rows (kind/summary/payload). Operational coordination trail; 6 months covers post-hoc investigation.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=recordedAt
 model WorkEngagementActivity {
   id                String   @id @default(cuid())
   workEngagementId  String
@@ -654,7 +655,8 @@ model AdapterCapabilityProfile {
 // quota pool, status, refusal/error class, tool-call validity, capability
 // usage, and schema-drift detection. Supports single/shadow/race execution
 // modes via raceCohortId grouping. Feeds nightly outcome scoring (§6.4).
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=startedAt
+/// One row per LLM inference (probes, evals, coworker reasoning, builds). Cost/quality telemetry; running aggregates live elsewhere, so raw rows are disposable past 6 months.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=startedAt
 model AdapterRunTelemetry {
   id             String  @id @default(cuid())
   traceId        String? // W3C Trace Context-compatible request correlation id
@@ -711,7 +713,8 @@ model AdapterRunTelemetry {
 // EP-COST Phase 2 prerequisite — one row per budget event so the
 // budget gate in callProvider can enforce per-agent and per-build spend limits.
 // Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §3 Phase 2
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
+/// Per-inference/tool-call cost rows (mirrors tokenUsage). Kept 6 months for cost reconciliation; aggregates live elsewhere.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=createdAt
 model AgentBudgetEvent {
   id          String   @id @default(cuid())
   agentId     String
@@ -737,7 +740,8 @@ model AgentBudgetEvent {
 // or (b) materially rewrote the raw transcript (Levenshtein ratio > 0.3).
 // Per spec §9, no-op cleanups are NOT logged to avoid bloating the table
 // — quality regression is detected from the rows we do write.
-/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
+/// Raw-vs-cleaned transcript records incl. injection-suspicion indicators. One-year security-audit window (holds raw text — purging is also data-minimization).
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit,authorization timeAxis=createdAt
 model TranscriptCleanupAudit {
   id                  String   @id @default(cuid())
   threadId            String?
@@ -758,7 +762,8 @@ model TranscriptCleanupAudit {
   @@index([threadId, createdAt])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=545d sensitivity=confidential timeAxis=updatedAt
+/// Coworker conversations with no activity for ~18 months, cascading their messages + attachments. Conservative default; regulated industries lengthen via floors. Selection by last activity so active threads are never swept.
+/// @dpf lifecycle=telemetry-bounded retention=545d sensitivity=confidential categories=content timeAxis=updatedAt
 model AgentThread {
   id          String                @id @default(cuid())
   userId      String
@@ -1000,7 +1005,8 @@ model ToolEvaluation {
   @@index([reEvaluateAfter])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
+/// Admin tool invocations (tiered, incl. blocked/denied). One-year security-audit baseline; regulated industries lengthen via floors.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit,authorization timeAxis=createdAt
 model AdminActivity {
   id         String   @id @default(cuid())
   userId     String
@@ -1017,7 +1023,8 @@ model AdminActivity {
   @@index([toolName])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
+/// Side-effecting / authority-trail invocations (the /platform/ai/authority audit trail) plus any row whose class was never set. One year of operational audit; regulated industries lengthen via floors.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit timeAxis=createdAt
 model ToolExecution {
   id                      String                   @id @default(cuid())
   threadId                String
@@ -1127,7 +1134,8 @@ model CoworkerActionEnvelope {
   @@index([expiresAt])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
+/// Verification receipts for tool executions. Matches the parent toolExecution window (365d); receipts also cascade when the parent purges.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit timeAxis=createdAt
 model ToolExecutionReceipt {
   id               String                 @id @default(cuid())
   toolExecutionId  String                 @unique
@@ -1355,7 +1363,8 @@ model SkillMetric {
   @@index([skillId])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
+/// Per skill invocation. Feeds the daily skill-metrics aggregator; raw rows disposable afterwards.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=createdAt
 model SkillUsageEvent {
   id              String   @id @default(cuid())
   eventId         String   @unique
@@ -1471,7 +1480,8 @@ model PromptRevision {
   @@index([templateId])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
+/// Per-turn latency/dispatch/tool counts. Quality telemetry; disposable past 6 months.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=createdAt
 model CoworkerTurnMetric {
   id                           String   @id @default(cuid())
   threadId                     String

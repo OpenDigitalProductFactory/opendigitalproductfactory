@@ -102,6 +102,8 @@ export type ModelMetadata = {
   timeAxis?: string;
   /** Statutory / regulatory basis for a retained record (cited, not invented). */
   basis?: string;
+  /** Minimum years a retained record must be kept; "permanent" never ages out. */
+  minYears?: number | "permanent";
 };
 
 export const MODEL_METADATA_KEYS = [
@@ -114,6 +116,7 @@ export const MODEL_METADATA_KEYS = [
   "steward",
   "timeAxis",
   "basis",
+  "minYears",
 ] as const;
 type MetadataKey = (typeof MODEL_METADATA_KEYS)[number];
 
@@ -210,6 +213,14 @@ export function validateModelMetadata(
   if (timeAxis && !COLUMN_RE.test(timeAxis)) push(`timeAxis "${timeAxis}" is not a column identifier`);
   if (retention?.kind === "purge" && !timeAxis) push(`retention=${retentionRaw} needs timeAxis=<column>`);
   if (retention?.kind === "retained" && !bag.get("basis")) push(`retention=retained needs basis=<statutory_basis>`);
+  const minYearsRaw = bag.get("minYears");
+  let minYears: number | "permanent" | undefined;
+  if (minYearsRaw) {
+    if (retention?.kind !== "retained") push(`minYears only applies to retention=retained`);
+    if (minYearsRaw === "permanent") minYears = "permanent";
+    else if (/^\d{1,3}$/.test(minYearsRaw) && Number(minYearsRaw) > 0) minYears = Number(minYearsRaw);
+    else push(`minYears "${minYearsRaw}" must be a positive integer or "permanent"`);
+  }
   // Consistency between the class and the disposition: a class the lifecycle
   // algebra marks non-purgeable can never carry a purge window.
   if (retention?.kind === "purge" && lifecycle && !["telemetry-bounded", "ephemeral", "operational"].includes(lifecycle))
@@ -223,6 +234,7 @@ export function validateModelMetadata(
   if (bag.get("steward")) metadata.steward = bag.get("steward");
   if (timeAxis) metadata.timeAxis = timeAxis;
   if (bag.get("basis")) metadata.basis = bag.get("basis")!.replace(/_/g, " ");
+  if (minYears !== undefined) metadata.minYears = minYears;
   return { metadata, issues };
 }
 
@@ -236,6 +248,7 @@ export function formatModelMetadataTag(m: ModelMetadata): string {
   if (m.steward) parts.push(`steward=${m.steward}`);
   if (m.timeAxis) parts.push(`timeAxis=${m.timeAxis}`);
   if (m.basis) parts.push(`basis=${m.basis.replace(/\s+/g, "_")}`);
+  if (m.minYears !== undefined) parts.push(`minYears=${m.minYears}`);
   return `/// ${MODEL_METADATA_TAG} ${parts.join(" ")}`;
 }
 
@@ -340,6 +353,7 @@ export function toCatalogComment(m: ModelMetadata, model?: string): string {
   if (m.steward) ordered.steward = m.steward;
   if (m.timeAxis) ordered.timeAxis = m.timeAxis;
   if (m.basis) ordered.basis = m.basis;
+  if (m.minYears !== undefined) ordered.minYears = m.minYears;
   return `${MODEL_METADATA_COMMENT_PREFIX}${JSON.stringify(ordered)}`;
 }
 
@@ -364,6 +378,7 @@ export function parseCatalogCommentWithModel(
   for (const [k, v] of Object.entries(raw)) {
     if (k === "model") continue;
     if (Array.isArray(v)) pairs.push([k, v.join(",")]);
+    else if (typeof v === "number") pairs.push([k, String(v)]);
     else if (typeof v === "string") pairs.push([k, k === "basis" ? v.replace(/\s+/g, "_") : v]);
   }
   const { metadata } = validateModelMetadata(pairs, { file: "<catalog>", line: 0, model: model ?? "<catalog>" });

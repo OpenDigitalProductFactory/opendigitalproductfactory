@@ -203,7 +203,8 @@ model ModelCapabilityChangeLog {
   @@index([modelId, changedAt])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=180d sensitivity=restricted timeAxis=createdAt
+/// Per-inference token/cost rows. Kept long enough for billing reconciliation; superseded by aggregates afterwards.
+/// @dpf lifecycle=telemetry-bounded retention=180d sensitivity=restricted categories=telemetry timeAxis=createdAt
 model TokenUsage {
   id           String   @id @default(cuid())
   traceId      String?
@@ -248,7 +249,8 @@ model EndpointTaskPerformance {
   @@unique([endpointId, taskType])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=restricted timeAxis=createdAt
+/// Per-eval rows. Spec 2026-03-16 confirms EndpointTaskPerformance running averages are the source of truth; raw rows >90d are archivable.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=restricted categories=telemetry timeAxis=createdAt
 model TaskEvaluation {
   id              String   @id @default(cuid())
   threadId        String
@@ -268,7 +270,8 @@ model TaskEvaluation {
   @@index([createdAt])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=restricted timeAxis=startedAt
+/// Probe/scenario test-run summaries. Trending value is short-lived; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=restricted categories=telemetry timeAxis=startedAt
 model EndpointTestRun {
   id              String    @id @default(cuid())
   runId           String    @unique
@@ -382,7 +385,8 @@ model PolicyRule {
   createdBy      User?     @relation("PolicyRuleCreator", fields: [createdById], references: [id])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=confidential timeAxis=createdAt
+/// Endpoint-selection reasoning per coworker/task call. Debugging value decays fast; 90 days is ample.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=confidential categories=telemetry timeAxis=createdAt
 model RouteDecisionLog {
   id                         String   @id @default(cuid())
   traceId                    String?

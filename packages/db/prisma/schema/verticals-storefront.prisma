@@ -333,7 +333,7 @@ model BookingHold {
   @@index([expiresAt])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Sales/financial_record_retention
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Sales/financial_record_retention minYears=7
 model StorefrontOrder {
   id                String                    @id @default(cuid())
   orderRef          String                    @unique
@@ -429,7 +429,7 @@ model RentableUnit {
   @@index([catalogSkuId])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained basis=Contract_/_financial_record_retention
+/// @dpf lifecycle=regulated-record retention=retained basis=Contract_/_financial_record_retention minYears=7
 model RentalAgreement {
   id                   String    @id @default(cuid())
   agreementRef         String    @unique
@@ -825,7 +825,7 @@ model StorefrontInquiry {
   @@index([customerEmail])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Nonprofit_financial_record_retention
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Nonprofit_financial_record_retention minYears=7
 model StorefrontDonation {
   id                String           @id @default(cuid())
   donationRef       String           @unique

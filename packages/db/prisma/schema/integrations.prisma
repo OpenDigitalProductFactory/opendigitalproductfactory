@@ -165,7 +165,8 @@ model BrowserSessionBinding {
 // Distinct from ComplianceAuditLog (entity-diff focused) and AgentActionProposal
 // (write-proposal focused). Reusable across ADP, QuickBooks, Plaid, Workday.
 // argsHash is sha256 of canonicalized args — raw args are never stored.
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=calledAt
+/// Per-call connector telemetry (durations, error codes, arg hashes). Efficiency analysis uses recent windows; 6 months.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=calledAt
 model IntegrationToolCallLog {
   id           String   @id @default(cuid())
   calledAt     DateTime @default(now())
@@ -189,7 +190,8 @@ model IntegrationToolCallLog {
 // Idempotency and recovery state for at-least-once connector callbacks.
 // requestHash and acknowledgment are safe, adapter-redacted projections; raw
 // callback payloads, signatures, and credentials must never be stored here.
-/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=createdAt
+/// Webhook/callback dedup receipts. Only needed within a provider's replay window; 90 days is generous.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=createdAt
 model IntegrationCallbackReceipt {
   id                     String    @id @default(cuid())
   connectorId            String
@@ -339,7 +341,8 @@ model CommunicationChannelSession {
   @@index([workItemId])
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=createdAt
+/// Per-channel delivery attempt rows. Delivery troubleshooting value decays in days; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=createdAt
 model CommunicationDeliveryAttempt {
   id                String                       @id @default(cuid())
   attemptId         String                       @unique @default(cuid())

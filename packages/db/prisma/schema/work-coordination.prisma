@@ -275,7 +275,8 @@ model DemandEvidenceLink {
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
 // the entity-scoped view used by get_backlog_item and the UI.
-/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=recordedAt
+/// Per-BI activity/gate trail. One year of work-history audit; the BacklogItem row itself (status, links) is the durable record.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit timeAxis=recordedAt
 model BacklogItemActivity {
   id                String                          @id @default(cuid())
   backlogItemId     String
@@ -296,7 +297,7 @@ model BacklogItemActivity {
   @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
-/// @dpf lifecycle=legal-evidence retention=retained sensitivity=confidential categories=security-audit,content owner=platform-owner steward=data-steward basis=Approved_initiative-governance_baseline_evidence_is_permanent_until_a_separately_governed,_hold-aware_exceptional_disposition
+/// @dpf lifecycle=legal-evidence retention=retained sensitivity=confidential categories=security-audit,content owner=platform-owner steward=data-steward basis=Approved_initiative-governance_baseline_evidence_is_permanent_until_a_separately_governed,_hold-aware_exceptional_disposition minYears=permanent
 model InitiativeArtifactRetentionPin {
   id                      String                       @id @default(cuid())
   baselineActivityId      String                       @unique
@@ -436,7 +437,8 @@ model Workroom {
   @@map("WorkCapsule")
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=recordedAt
+/// Per-workroom activity rows. Workrooms are reaped when idle; their activity trail is operational, 6 months.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=recordedAt
 model WorkroomActivity {
   id                String   @id @default(cuid())
   workCapsuleId     String
@@ -867,7 +869,8 @@ model WorkSchedule {
 // queues) emits into. QueueTelemetryEvent is the append-only per-item stream;
 // QueueMetricSnapshot is the periodic rollup (per queueKey × period) the human
 // tiles and the coworker MCP pack both read from — same numbers, one source.
-/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=createdAt
+/// Queue transition telemetry feeding flow metrics. Aggregated dashboards are the durable output; 90 days of raw rows.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=createdAt
 model QueueTelemetryEvent {
   id         String   @id @default(cuid())
   queueKey   String // stable queue identifier, e.g. "cwq:triage-default" | "compute:sandbox-pool"

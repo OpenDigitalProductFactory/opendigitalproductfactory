@@ -10,7 +10,6 @@
 #   2. exactly one of: a PURGE_POLICIES entry, a RETAINED_DATASETS entry (with
 #      a cited regulatory basis), or a line in scripts/stewardship-exemptions.txt.
 AccountInvite
-Activity
 AdapterCapabilityProfile
 AdapterRunTelemetry
 Address
@@ -73,7 +72,6 @@ BusinessModel
 BusinessModelRole
 BusinessModelRoleAssignment
 BusinessProfile
-CalendarEvent
 CalendarSync
 CapabilityMaturityAssessment
 CapabilityMaturityDependency
