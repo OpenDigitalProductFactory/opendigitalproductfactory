@@ -12,7 +12,9 @@ import { prisma } from "@dpf/db";
 import { MAILBOX_PROVIDER_KEY } from "@dpf/db/mailroom-enums";
 
 import { auth } from "@/lib/auth";
+import { OWNER_FIRST_NEXT_ACTION_ATTR } from "@/lib/owner-first/ux-audit";
 import { resolveMailroomOrganizationId, resolveOrganizationMailroomProfile } from "@/lib/mailroom/runtime.server";
+import { ButtonLink } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import { EmptyState } from "@/components/ui/report-kit/EmptyState";
 import { Notice } from "@/components/ui/report-kit/Notice";
@@ -84,6 +86,24 @@ export default async function MailroomPage({ searchParams }: Props) {
     : [[], []];
 
   const educate = mailboxes.length === 0;
+  const oldest = waiting[0] ?? null;
+  const oldestPast = oldest ? agePast(now, oldest.acknowledgeBy) : null;
+  const failing = mailboxes.filter((m) => m.status === "error").length;
+  const lead = educate
+    ? { text: "No mailbox is connected yet. Nothing is being read until one is.", href: "#connect-mailbox", label: "Connect a mailbox", actionKey: "connect-mailbox" }
+    : oldest
+      ? {
+          text: `${waiting.length} message${waiting.length === 1 ? "" : "s"} waiting for someone${oldestPast ? `; the oldest is ${oldestPast}` : ""}.${failing ? ` ${failing} mailbox${failing === 1 ? "" : "es"} failed its last read.` : ""}`,
+          href: `/workspace/mailroom/items/${oldest.inboundId}`,
+          label: "Open the oldest",
+          actionKey: "open-oldest-waiting",
+        }
+      : {
+          text: `Nothing is waiting. ${mailboxes.length} mailbox${mailboxes.length === 1 ? "" : "es"} read on schedule.${failing ? ` ${failing} failed its last read.` : ""}`,
+          href: "#all-items",
+          label: "See handled mail",
+          actionKey: "see-handled",
+        };
 
   return (
     <main className="mx-auto max-w-5xl space-y-8 p-6">
@@ -93,6 +113,13 @@ export default async function MailroomPage({ searchParams }: Props) {
           The mailboxes the business reads, what arrived, and who has acknowledged it.
         </p>
       </header>
+
+      <Surface data-dpf-lead padding="md" className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-[var(--dpf-text)]">{lead.text}</p>
+        <ButtonLink href={lead.href} size="sm" {...{ [OWNER_FIRST_NEXT_ACTION_ATTR]: lead.actionKey }}>
+          {lead.label}
+        </ButtonLink>
+      </Surface>
 
       {educate ? (
         <section aria-labelledby="mailroom-education" data-evidence-key="education-notice" className="space-y-4">
@@ -147,7 +174,7 @@ export default async function MailroomPage({ searchParams }: Props) {
         </section>
       )}
 
-      <details data-evidence-key="connect-mailbox" open={educate} className="rounded-lg border border-[var(--dpf-border)] p-4">
+      <details id="connect-mailbox" data-evidence-key="connect-mailbox" open={educate} className="rounded-lg border border-[var(--dpf-border)] p-4">
         <summary className="cursor-pointer text-sm font-medium text-[var(--dpf-text)]">Connect a mailbox</summary>
         <div className="mt-4">
           <MailboxConnectForm purposes={profile.expectedMailboxes} />
@@ -203,7 +230,7 @@ export default async function MailroomPage({ searchParams }: Props) {
             )}
           </section>
 
-          <details data-evidence-key="all-items" className="rounded-lg border border-[var(--dpf-border)] p-4">
+          <details id="all-items" data-evidence-key="all-items" className="rounded-lg border border-[var(--dpf-border)] p-4">
             <summary className="cursor-pointer text-sm font-medium text-[var(--dpf-text)]">
               {params.all ? "All items" : "Handled items"} ({recent.length}) {params.all ? null : <Link href="?all=1" className="ml-2 text-xs underline">show everything, including noise</Link>}
             </summary>
