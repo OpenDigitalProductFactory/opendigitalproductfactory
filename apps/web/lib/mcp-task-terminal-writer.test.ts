@@ -569,6 +569,9 @@ describe("terminal writer resumption", () => {
     });
     autonomous.execute.mockResolvedValue({
       content: "The provider did not honor the required writer tool-call contract. No receipt was created.",
+      // BI-C35576A9: the provider that ran is a CLI subscription; the recorded
+      // contract must say receipt-verified, not the old hard-coded claim.
+      providerId: "codex",
       executedTools: [],
       failure: {
         kind: "terminal-writer-missing",
@@ -623,7 +626,7 @@ describe("terminal writer resumption", () => {
         progressPayload: expect.objectContaining({
           terminalWriterWait: expect.objectContaining({
             attempt: 3,
-            dispatchContract: "required-tool-call",
+            dispatchContract: "receipt-verified",
             noncompliance: "prose-without-required-writer",
           }),
           terminalWriterEscalation: expect.objectContaining({

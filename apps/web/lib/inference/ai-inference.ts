@@ -26,9 +26,9 @@ import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
 import {
   parseExecutionAdapterSelector,
-  requiredToolChoiceExclusionReason,
   type ExecutionAdapterSelector,
 } from "../routing/execution-adapter-types";
+import { applyRequiredToolChoiceGuard } from "./terminal-writer-dispatch-guard";
 import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
 import { getCliPoolStatus } from "../routing/cli-pool-status";
 import {
@@ -471,7 +471,7 @@ export async function callProvider(
   // Resolve adapter enforceability before capacity or budget accounting. A
   // plan/adapter capability miss is not a provider request and must not consume
   // budget, wait on host capacity, or mutate provider health through fallback.
-  const effectivePlan: RoutedExecutionPlan = plan ?? {
+  let effectivePlan: RoutedExecutionPlan = plan ?? {
     providerId,
     modelId,
     recipeId: null,
@@ -492,22 +492,18 @@ export async function callProvider(
   }
   const isCliAdapter = selector !== null
     && (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
-  const toolChoiceExclusion = requiredToolChoiceExclusionReason(selector);
-  if (effectivePlan.toolPolicy.toolChoice === "required" && toolChoiceExclusion) {
-    const soleToolFunction = tools?.length === 1 ? tools[0]?.["function"] : undefined;
-    const soleToolName = soleToolFunction && typeof soleToolFunction === "object" && !Array.isArray(soleToolFunction)
-      ? (soleToolFunction as Record<string, unknown>)["name"]
-      : undefined;
-    const requiredTerminalWriter = typeof soleToolName === "string"
-      && effectivePlan.responsePolicy.terminalWriterToolName === soleToolName;
-    throw new InferenceError(
-      requiredTerminalWriter
-        ? `required-terminal-writer-not-enforceable: ${toolChoiceExclusion}`
-        : toolChoiceExclusion,
-      requiredTerminalWriter ? "required_terminal_writer_not_enforceable" : "provider_error",
-      providerId,
-    );
-  }
+  // Required tool choice on an adapter that cannot force it: refuse, or — for a
+  // bound terminal writer reachable through a governed MCP session — dispatch
+  // under the receipt-verified contract (BI-C35576A9). See the guard module.
+  const guard = applyRequiredToolChoiceGuard({
+    plan: effectivePlan,
+    selector,
+    tools,
+    providerId,
+    hasGovernedMcpSession: Boolean(mcpSession),
+  });
+  if (guard.kind === "refuse") throw new InferenceError(guard.message, guard.code, providerId);
+  effectivePlan = guard.plan;
 
   // Host capacity is a dispatch constraint, not a routing hint. Enforce it at
   // the shared adapter boundary so direct, agentic, evaluation and fallback
