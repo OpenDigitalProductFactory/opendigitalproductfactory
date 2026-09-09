@@ -1,3 +1,5 @@
+# owner: platform-architecture
+# expiry: 2026-12-01
 # scripts/model-metadata-baseline.txt — models that carry NO /// @dpf tag yet (BI-D9F158AF).
 # Shrink-only ratchet: a model leaves this file when it gains a tag; a new model can never enter it.
 # Regenerate with: node scripts/check-model-metadata-tags.mjs --update
