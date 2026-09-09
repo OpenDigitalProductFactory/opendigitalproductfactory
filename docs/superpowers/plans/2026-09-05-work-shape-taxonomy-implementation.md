@@ -109,6 +109,39 @@ GREEN: key the requirement tables by shape; make `OBJECTIVE_BASELINE_REQUIRED`
 satisfiable by an item-body acceptance baseline for small/medium; scope
 `OBJECTIVE_RECONCILIATION_REQUIRED` to large/xlarge; bump the policy version.
 
+### Phase 3 continuation — baseline/coverage integration
+
+BI-B269FC72 remains open after PR #5153. Workroom WC-4DFEE6C8 owns the
+remaining integration on `fix/shape-aware-baseline-coverage`; canonical design
+§4.1 and decision DI-291C137B2E68 govern it. This is internal sequencing of the
+existing Phase 3 deliverable, not a new independent backlog item.
+
+1. Reconcile the exact item-body baseline schema and governed capture boundary
+   with the existing activity ledger and shape resolver. Record research and
+   readiness before production edits. Coverage is currently blocked by the
+   missing compatible baseline; no successful receipt is claimed here.
+2. RED: reproduce small/medium coverage rejection despite valid body criteria;
+   include missing criteria, body revision drift, concurrent writes, malformed
+   shape and large/high-sensitivity controls. Confirm the intended failure.
+3. GREEN: reuse the body parser, persist the content-bound baseline through the
+   governed write path, and teach coverage/recovery to consume its provenance.
+   Do not manufacture objective or acceptance mappings or weaken plan checks.
+4. Run affected item-body, entry-adapter, coverage/recovery, MCP and terminal
+   suites, source-local typecheck/guards, blast-radius analysis, independent
+   semantic review and the exact-tree pre-push gate. Publish with DCO and design
+   grounding, verify PR health, then merge through the queue.
+5. Verify the canonical upgraded runtime can record BI-D1298AB0 coverage using
+   the correct body baseline while refusing stale and large-shape controls.
+   Record delivery/acceptance and pass the completion gate before closing.
+
+Expected source owners are the existing item-body baseline, baseline ledger,
+governed backlog writers and planning coverage/recovery modules; resolve exact
+impact claims and related tests before RED. The current documentation impact
+contract requires the doc-index obligations and source preflight. User/coworker
+guidance must describe the actual recovery route before final delivery.
+Rollback is the protected PR revert; historical evidence remains immutable and
+must never be rewritten to make an older gate appear passed.
+
 ## Phase 4 — delivery evidence is the trunk (`BI-AFE8BB73`)
 
 Touched files: `apps/web/lib/backlog/backlog-terminal-transition.ts`

@@ -175,6 +175,44 @@ Principles encoded in the table:
 - **Raising is monotonic; lowering is a recorded override.** Sensitivity raises. An operator may lower a shape only with a reason, and the override is visible on the item and in the gate decision.
 - **No artifact is produced solely to satisfy a gate.** If a shape's gate table asks for something the work did not naturally produce, the table is wrong, not the work. This is the direct answer to the after-the-fact plan pressure in BI-28E8CB88.
 
+### 4.1 Item-body baseline integration repair (BI-B269FC72)
+
+PR #5153 introduced the shape policy and recognition of acceptance criteria in
+the item body. It did not make that baseline consumable by plan coverage:
+`entry-adapter.ts` accepts `itemBodyBaselineState`, while
+`plan-backlog-coverage.ts` requires an `initiative_scope_baseline` activity and
+its missing-baseline recovery still prescribes spec approval for small work.
+Live evidence `cmttdyf0v0kz701tc00x75jny` records this mismatch for BI-D1298AB0.
+
+Decision `DI-291C137B2E68` selects **persist-body-baseline**, with high confidence
+and autonomous continuation allowed. Extend the existing baseline activity
+contract at the governed item-body/triage write boundary; do not create a second
+baseline store. The snapshot identifies the exact item, source revision,
+acceptance criteria and content digest, and is explicitly item-body provenance,
+never an independent spec-approval receipt. Reuse `parseItemBodyAcceptance` and
+the authoritative effective-shape policy. Existing items need an idempotent
+governed capture path, not a direct database backfill or a pretend review.
+
+Coverage reads the same current baseline, retains immutable plan provenance and
+four-way traceability, and rejects stale criteria bindings. Changing acceptance
+criteria supersedes the body baseline; it cannot silently retarget an old
+coverage receipt. Large, sensitivity-raised and pre-taxonomy work retain their
+existing review obligations. Unknown/malformed classification must not enter the
+item-body lane. Small work still does not owe a plan: this repair makes an
+explicitly requested coverage record possible without inventing a spec gate.
+
+This is one item-scoped transaction over the existing activity ledger, not an
+installation-wide scan or a new table. Bound criterion parsing and concurrent
+write checks must fail explicitly rather than truncate. EP-129D11FD owns any
+future scale expansion. No migration, new tool, route or coworker is intended.
+Research-artifact discovery and terminal-writer execution are separate repairs;
+this section does not authorize altering reviewer grants or synthesizing packets.
+
+Acceptance for this remaining integration: small and medium coverage bind the
+correct current body baseline; changed or missing criteria and concurrent edits
+fail closed; large/high-sensitivity controls still demand approved spec evidence;
+and the live BI-D1298AB0 coverage route no longer asks for an unreachable review.
+
 ## 5. Decisions — kernel rulings (2026-09-03)
 
 Per founder direction, the five open questions were put to the kernel (`principle_decide`, stakes `high`, 56 principles in scope, structured coverage strong) instead of to the founder. Four returned an autonomy-eligible verdict; one is uncertain and stays with the founder. Two rulings overrode the spec author's recommendation and the spec now follows the kernel.
