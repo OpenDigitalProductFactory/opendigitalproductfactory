@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Data Lifecycle Stewardship — Convergence Review and Design
 
 **Date:** 2026-09-08
@@ -70,6 +74,12 @@ The founder asked where the metadata lives and how it enforces policy. It lives 
 | Compliance objects that can reference data (`DataProcessingActivity.assetIds/fieldIds/lifecycleClassIds`, `Policy.executablePolicyIds`, `DataPolicyException`, `DataControlOperation`) | `packages/db/prisma/schema/security-compliance.prisma` | referential integrity by convention and test, not FK |
 | Projection for humans | `apps/web/lib/ea/data-model-mirror.ts` writes a `governance` block onto every `data_object` element; `/ea/data-model` renders it nightly | `data-model-mirror-nightly`, owner AGT-BUILD-DA |
 
+Three clarifications the founder asked for after the first read:
+
+- **The "asset registry" is not more tables.** `DATA_ASSET_REGISTRY` is TypeScript, compiled into the app; no database table backs it. It is, however, a fourth *declaration home* describing the same 626 models as the Prisma schema, `table-classification.ts` and `policies.ts`. That redundancy is the thing to collapse, not extend.
+- **It is not asset management.** "Data asset" is catalog-vendor vocabulary for a governed dataset. DPF's asset management is the estate plane (`InventoryEntity`, `DiscoveredItem`, `CatalogIdentity`: devices, hosts, software). The name collision is real; this design retires the word and calls it **model metadata**, carried on the table itself.
+- **Yes, the metadata belongs in Postgres, next to the data.** See §5.1: one declaration in the Prisma schema, emitted into the database's own catalog, read by everything else. Postgres already has standard, tool-visible carriers for exactly this (`COMMENT ON` and `SECURITY LABEL`), and DPF ships its own Postgres image, so `pg_cron` and `pg_partman` are available for in-database execution.
+
 The "provider setup for routing" the founder remembers is the provider half of one decision: `ModelProvider.sensitivityClearance`, `TaskRequirement.residencyPolicy`, `ProviderClearanceOverride`. The data half of that same decision is a URL-prefix guess in `apps/web/lib/tak/agent-sensitivity.ts`; the payload screen is a parallel path. Neither consults the asset registry.
 
 ## 4. The disconnects
@@ -88,23 +98,32 @@ The "provider setup for routing" the founder remembers is the provider half of o
 
 ## 5. Design — converge, then automate
 
-### 5.1 Principle: policy drives disposition, tables inherit it
+### 5.1 Principle: declare once in the schema, carry it in the database, read it from the catalog
+
+Founder direction (2026-09-08): re-combine the technologies, put the metadata where the data is, and collapse layers rather than add a registry beside the schema. The design therefore has **one declaration, one carrier, many readers**:
 
 ```
+Prisma schema  (the ONLY declaration: /// @dpf lifecycle=… sensitivity=… categories=… scope=… owner=… steward=…)
+        ↓ emitted by the migration generator as
+Postgres catalog  (COMMENT ON TABLE / COLUMN with a dpf: JSON payload; SECURITY LABEL where an enforcing provider exists)
+        ↓ read via pg_catalog (obj_description / col_description / pg_class / pg_stat_user_tables) by
+  • the retention sweep       — window = f(lifecycle class, org obligations); eligible rows found by SQL, optionally pg_cron in-database
+  • the enrollment guard      — any relation with a time axis and no dpf:lifecycle comment fails; no name heuristic, no allowlist
+  • the growth detector       — pg_class sizes and TOAST split sampled nightly against the same catalog rows
+  • the ERD mirror            — governance block comes from the catalog, not from a TypeScript registry
+  • sanitized clone / export  — sensitivity read from the column comment
+  • external catalog tools    — Informatica, Collibra, OpenMetadata all ingest COMMENT ON natively; nothing DPF-specific to integrate
 Regulation / Obligation (archetype × jurisdiction × data class)
-        ↓ resolves per organisation at onboarding, re-resolved nightly
-Lifecycle class window table  (one place: minimum, maximum, hold, purge-eligible)
-        ↓ joined through
-Data-asset registry  (model → lifecycleClass, categories, regulated scope, owner, steward)
-        ↓ compiled into
-Retention registry  (PURGE_POLICIES / RETAINED_DATASETS as generated output)
-        ↓ executed by
-Nightly sweep  → per-run disposition evidence (digests) → EA governance projection
-        ↑ watched by
-Data Architect nightly review  (growth samples, anatomy detectors, coverage wave) → BIs
+        ↓ resolved per organisation, stored as the org's effective window table (one row per lifecycle class)
+        ↓ joined at sweep time — floors only lengthen, maxima honoured, holds exclude
+Data Architect nightly review  → findings → BIs
 ```
 
-Nothing above is a new concept. Every box exists; the arrows are what is being built.
+What this retires: `packages/db/src/table-classification.ts` (sensitivity moves into the schema declaration), the hand lists in `operate/retention/policies.ts` (derived from the catalog), `scripts/check-retention-enrollment.mjs` plus its allowlist and the name heuristic, and the `DATA_ASSET_REGISTRY` wave files as a parallel home. What stays app-side and why: cascade to non-Postgres stores (Qdrant vectors, Neo4j) needs the app to know the derived-copy contracts; per-row legal hold stays a column; the kill switch and backup-before-purge ordering stay on the ScheduledJob row. The Prisma declaration is the source; the Postgres catalog is the executable carrier; TypeScript reads, it no longer declares.
+
+Why `COMMENT ON` rather than a metadata table: it travels with the object (drop the table, the metadata goes), it is versioned by the same migration that creates the column, every catalog crawler on the market reads it, and it costs nothing at query time. Why not only `SECURITY LABEL`: it requires a label provider extension to be meaningful and is not read by generic tools; it is the right second carrier once row-level enforcement (e.g. `sepgsql`-style or a DPF provider) is wanted.
+
+Nothing above is a new concept in the platform; the change is the number of homes.
 
 ### 5.2 Slices
 
@@ -113,7 +132,7 @@ Nothing above is a new concept. Every box exists; the arrows are what is being b
 | 1 | BI-A55A651B | `toolExecution` split by `auditClass` via `extraWhere`: metrics_only 30d and payload nulled at write; journal 30d; ledger 365d + floors; edge heartbeats classified at the writer | smallest diff, largest immediate byte win, closes a doctrine contradiction |
 | 2 | BI-39AAE9B8 | inline-payload ceiling on the ledger writer; oversize evidence goes to the sha256 blob store once, ledger keeps digest + summary; ExternalEvidenceRecord enrolled; blob GC in the sweep; one-off backfill | removes 32% of the DB and the growth pattern behind it |
 | 3 | BI-BFFB9211 | DiscoveryRun purge (keep latest per connection); discovery and contributor-inventory write only on digest change; both tables registered `telemetry-bounded` | turns two re-snapshot logs into change logs |
-| 4 | BI-D9F158AF | retention derived from the asset registry; window table per lifecycle class with per-asset override; guard keys on lifecycle class; allowlist retired into registry declarations; absorbs 2026-06-14 slice 3, memory-note hard delete and the unscheduled capability-log prune | the single-source fix everything after depends on |
+| 4 | BI-D9F158AF | structured `/// @dpf` governance tags in the Prisma schema; migration generator emits `COMMENT ON` (and labels) into Postgres; retention, guard, mirror and clone read `pg_catalog`; `table-classification.ts`, the hand lists, the enrollment heuristic, the allowlist and the registry wave files are retired; absorbs 2026-06-14 slice 3, memory-note hard delete and the unscheduled capability-log prune | the single-source collapse everything after depends on |
 | 5 | BI-592F1E7E | nightly `TableGrowthSample`; steward issue types `growth-without-disposition`, `payload-anatomy`, `re-snapshot-pattern`; 12-month projection; persistent findings file one keyed BI; EA element card shows size, growth/day, disposition, last sweep digest (BI-F0F3887F) | makes this review a nightly machine job |
 | 6 | BI-69C29492 | `record-retention` obligation kind seeded from existing statutory sources; floors resolved from applicable obligations for archetype + jurisdiction; alias table deleted; maxima honoured; resolved matrix visible on `/compliance/obligations` | policies become the driver; absorbs BI-90A8D153 GAP 1 |
 | 7 | BI-FCDACC13 | AGT-BUILD-DA activated with governance grants; skill gains lifecycle and growth sections plus the §3 answer key; nightly job = mirror + steward + growth review + retention dry-run; monthly coverage wave proposes registry entries as PRs | the profession owns the loop |
@@ -154,8 +173,9 @@ No `/admin/data` console is built. The 2026-07-17 spec's "Admin → Data Managem
 
 ## 9. Decisions and open questions
 
-**Decided (this review):**
-- Converge on the asset registry as the single policy home; retention becomes derived output.
+**Decided (this review, founder direction 2026-09-08):**
+- One declaration home: the Prisma schema. One carrier: the Postgres catalog (`COMMENT ON`, later `SECURITY LABEL`). Everything else reads; nothing else declares. Retention, classification, growth and the ERD mirror are readers of the same catalog rows.
+- The word "asset" is retired for this concern to avoid collision with estate asset management; the concern is model metadata.
 - No new admin console; transparency through existing projections.
 - The Data Architect coworker owns the nightly loop and files its own findings.
 
