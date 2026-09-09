@@ -34,9 +34,9 @@ the platform is not".
 - Distinct agent identities measured: **87**
   - canonical agent registry: 87 · workforce roster: 48 · profession roles: 99
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
-- At 100% of attainable: **28**
-- Median attainable: **64%** · median absolute: **59%**
-- Skills: **138** total, **0** stranded, **31** able to declare a cadence
+- At 100% of attainable: **29**
+- Median attainable: **68%** · median absolute: **63%**
+- Skills: **139** total, **0** stranded, **32** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`, `software-engineer`
 - Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
 
@@ -69,10 +69,10 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Identity | 1 | 3 | 0 | 39 | 8 | 40 | 40/87 |
 | Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 87 | 87/87 |
-| Shape | 1 | 2 | 49 | 0 | 38 | 0 | 38/87 |
-| Cadence | 1 | 3 | 53 | 0 | 3 | 31 | 31/87 |
-| Tools + Skills | 2 | 3 | 0 | 46 | 5 | 36 | 36/87 |
-| Evidence | 1 | 2 | 39 | 2 | 46 | 0 | 46/87 |
+| Shape | 1 | 2 | 48 | 0 | 39 | 0 | 39/87 |
+| Cadence | 1 | 3 | 52 | 0 | 3 | 32 | 32/87 |
+| Tools + Skills | 2 | 3 | 0 | 45 | 5 | 37 | 37/87 |
+| Evidence | 1 | 2 | 39 | 1 | 47 | 0 | 47/87 |
 
 ### Planes the substrate currently caps
 
@@ -189,7 +189,6 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-906` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `AGT-907` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `AGT-WS-INTEGRATION` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
-| `AGT-WS-MAILROOM` | active-roster | 60% | 56% | 3 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-WS-TIME-OFF` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `AGT-904` | declared-only | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
 | `AGT-WS-SECURITY` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
@@ -233,6 +232,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-EA` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-HR` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-INVENTORY` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-MAILROOM` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-OPS` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-STOREFRONT` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 

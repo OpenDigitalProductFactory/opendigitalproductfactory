@@ -160,9 +160,9 @@
         "medianAttainablePct": 48
       }
     },
-    "atFullAttainable": 28,
-    "medianAttainablePct": 64,
-    "medianAbsolutePct": 59,
+    "atFullAttainable": 29,
+    "medianAttainablePct": 68,
+    "medianAbsolutePct": 63,
     "planeLevels": {
       "identity": {
         "label": "Identity",
@@ -209,12 +209,12 @@
         "ceiling": 2,
         "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands.",
         "distribution": {
-          "0": 49,
+          "0": 48,
           "1": 0,
-          "2": 38,
+          "2": 39,
           "3": 0
         },
-        "atCeiling": 38
+        "atCeiling": 39
       },
       "cadence": {
         "label": "Cadence",
@@ -222,12 +222,12 @@
         "ceiling": 3,
         "blocker": null,
         "distribution": {
-          "0": 53,
+          "0": 52,
           "1": 0,
           "2": 3,
-          "3": 31
+          "3": 32
         },
-        "atCeiling": 31
+        "atCeiling": 32
       },
       "toolsAndSkills": {
         "label": "Tools + Skills",
@@ -236,11 +236,11 @@
         "blocker": null,
         "distribution": {
           "0": 0,
-          "1": 46,
+          "1": 45,
           "2": 5,
-          "3": 36
+          "3": 37
         },
-        "atCeiling": 36
+        "atCeiling": 37
       },
       "evidence": {
         "label": "Evidence",
@@ -249,17 +249,17 @@
         "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger.",
         "distribution": {
           "0": 39,
-          "1": 2,
-          "2": 46,
+          "1": 1,
+          "2": 47,
           "3": 0
         },
-        "atCeiling": 46
+        "atCeiling": 47
       }
     },
     "skills": {
-      "total": 138,
+      "total": 139,
       "stranded": 0,
-      "cadenceCapable": 31,
+      "cadenceCapable": 32,
       "unresolvedAssignTargets": [
         "external-coding-agent",
         "software-engineer"
@@ -5985,134 +5985,6 @@
       ]
     },
     {
-      "key": "AGT-WS-MAILROOM",
-      "displayName": "Mailroom coordinator",
-      "identityClass": "active-roster",
-      "handles": [
-        "mailroom-coordinator"
-      ],
-      "registryStatus": "active",
-      "valueStream": "operate",
-      "tier": "specialist",
-      "score": {
-        "earned": 15,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 60,
-        "absolutePct": 56
-      },
-      "planes": {
-        "identity": {
-          "level": 3,
-          "detail": "bridged across registries and active",
-          "handles": [
-            "mailroom-coordinator"
-          ],
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "corpus": {
-          "level": 3,
-          "professionKey": "operations",
-          "corpusPages": 18,
-          "missingGrants": [],
-          "detail": "18 corpus pages, reachable",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "governance": {
-          "level": 3,
-          "missingGrants": [],
-          "escalatesTo": "AGT-ORCH-700",
-          "reachableSideEffectingTools": 26,
-          "reachableGatedTools": 5,
-          "ungatedConsequenceNote": null,
-          "detail": "principle_decide reachable; escalates to AGT-ORCH-700",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "shape": {
-          "level": 0,
-          "detail": "no declared work shape — nothing bounds what its standing work may do",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 1,
-          "directSkills": 0,
-          "wildcardSkills": 10,
-          "reachableTools": 40,
-          "heldGrants": [
-            "work_room_read",
-            "work_room_write",
-            "registry_read"
-          ],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 40 reachable tool(s)",
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 1,
-          "detail": "derivedReadProbe only — passes certification with zero domain capability",
-          "levelKey": "declared",
-          "ceiling": 2,
-          "atCeiling": false
-        }
-      },
-      "gaps": [
-        {
-          "plane": "shape",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "no declared work shape — nothing bounds what its standing work may do"
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 40 reachable tool(s)"
-        },
-        {
-          "plane": "evidence",
-          "level": 1,
-          "ceiling": 2,
-          "detail": "derivedReadProbe only — passes certification with zero domain capability"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
       "key": "AGT-WS-TIME-OFF",
       "displayName": "Time-off Advisor",
       "identityClass": "defined-roster",
@@ -10913,6 +10785,109 @@
           "services": 0,
           "unbackedSkillIds": [],
           "detail": "8 skill(s), 99 tool(s), all service backings resolve",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "evidence": {
+          "level": 2,
+          "detail": "curated golden journey exercising a domain act",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        }
+      },
+      "gaps": [],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-WS-MAILROOM",
+      "displayName": "Mailroom coordinator",
+      "identityClass": "active-roster",
+      "handles": [
+        "mailroom-coordinator"
+      ],
+      "registryStatus": "active",
+      "valueStream": "operate",
+      "tier": "specialist",
+      "score": {
+        "earned": 25,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 100,
+        "absolutePct": 93
+      },
+      "planes": {
+        "identity": {
+          "level": 3,
+          "detail": "bridged across registries and active",
+          "handles": [
+            "mailroom-coordinator"
+          ],
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "corpus": {
+          "level": 3,
+          "professionKey": "operations",
+          "corpusPages": 18,
+          "missingGrants": [],
+          "detail": "18 corpus pages, reachable",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "governance": {
+          "level": 3,
+          "missingGrants": [],
+          "escalatesTo": "AGT-ORCH-700",
+          "reachableSideEffectingTools": 26,
+          "reachableGatedTools": 5,
+          "ungatedConsequenceNote": null,
+          "detail": "principle_decide reachable; escalates to AGT-ORCH-700",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "shape": {
+          "level": 2,
+          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 3,
+          "detail": "self-task PLUS a cadence declared on skill \"mailroom-acknowledgement-sweep\" (24 7 * * 1-5)",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "toolsAndSkills": {
+          "level": 3,
+          "directSkills": 1,
+          "wildcardSkills": 10,
+          "reachableTools": 40,
+          "heldGrants": [
+            "work_room_read",
+            "work_room_write",
+            "registry_read"
+          ],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "1 skill(s), 40 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
