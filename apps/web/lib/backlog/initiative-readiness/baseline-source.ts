@@ -22,7 +22,7 @@ import {
   type InheritanceDb,
 } from "./parent-scope-inheritance";
 
-export type BaselineRow = { recordedAt: Date; payload: unknown };
+export type BaselineRow = { id: string; kind: string; recordedAt: Date; payload: unknown; backlogItemId?: string };
 
 export type BaselineSource = {
   /** Row id of the item whose evidence is being judged (always the subject). */
@@ -51,11 +51,18 @@ export async function loadBaselineSource(
     select: { id: true, itemId: true },
   }) as { id: string; itemId: string } | null;
   if (!item) return null;
+  return loadBaselineSourceForItem(db, item);
+}
 
+/** Same resolution for a caller that already holds the item row (no extra lookup). */
+export async function loadBaselineSourceForItem(
+  db: BaselineSourceDb,
+  item: { id: string; itemId: string },
+): Promise<BaselineSource> {
   const own = await db.backlogItemActivity.findMany({
     where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
     orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-    select: { recordedAt: true, payload: true },
+    select: { id: true, backlogItemId: true, kind: true, recordedAt: true, payload: true },
   }) as BaselineRow[];
   if (own.length > 0) {
     return { itemRowId: item.id, itemId: item.itemId, baselineRows: own, origin: "own", inheritedFromItemId: null };
@@ -67,7 +74,7 @@ export async function loadBaselineSource(
   }
   const rows = inherited.activities
     .filter((activity) => activity.kind === "initiative_scope_baseline")
-    .map((activity) => ({ recordedAt: activity.recordedAt, payload: activity.payload }))
+    .map((activity) => ({ id: activity.id, kind: activity.kind, recordedAt: activity.recordedAt, payload: activity.payload }))
     .sort((left, right) => left.recordedAt.getTime() - right.recordedAt.getTime());
   return {
     itemRowId: item.id,

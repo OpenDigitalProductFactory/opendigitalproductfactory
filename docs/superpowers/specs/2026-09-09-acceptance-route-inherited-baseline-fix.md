@@ -49,13 +49,20 @@ route from the same code path.
 2. `terminal-recovery.ts`: both default ports read through the resolver. The
    pure router and every existing test are untouched.
 3. Runbook line under "children inherit the parent's scope" names the resolver.
+4. (Second slice, found live on `v2026.09.09-acceptance-route-inherits-baseline.1`:
+   the route was issued but dispatch refused `baseline-conflict`.)
+   `objective-mapping-submission-admission.ts` and
+   `objective-mapping-repository.ts` read the same resolver through
+   `loadBaselineSourceForItem`, and the writer accepts a baseline whose subject
+   is the inheriting parent. Test: a decomposed child with no baseline of its
+   own is admitted and its mapping recorded against the parent's chain.
 
 ## 3. Acceptance
 
 | AC | Objective | Statement |
 | --- | --- | --- |
 | AC-ARB-OWN-WINS | OBJ-ARB-ROUTE-INHERITS | An item with its own baseline rows is routed against them; the parent is not read. |
-| AC-ARB-INHERITED-ROUTE | OBJ-ARB-ROUTE-INHERITS | A decomposed child with no baseline of its own is routed against its parent's baseline chain and its own post-baseline evidence, and receives a reviewer route instead of `baseline-not-found`. |
+| AC-ARB-INHERITED-ROUTE | OBJ-ARB-ROUTE-INHERITS | A decomposed child with no baseline of its own is routed, admitted and recorded against its parent's baseline chain and its own post-baseline evidence, and receives a reviewer route instead of `baseline-not-found` or `baseline-conflict`. |
 | AC-ARB-NONE-STAYS-CLOSED | OBJ-ARB-ROUTE-INHERITS | An item with neither its own nor an inherited baseline still escalates `baseline-not-found`. |
 
 Failing-to-passing proof: `baseline-source.test.ts` (4 cases) fails to compile
