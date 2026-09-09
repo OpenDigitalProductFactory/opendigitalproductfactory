@@ -1427,6 +1427,9 @@
       "docs/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong.md",
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
     ],
+    "packages/db/src/performer-allocation.ts": [
+      "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md"
+    ],
     "packages/db/src/pg-graph.ts": [
       "docs/architecture/platform-overview.md"
     ],
@@ -2585,6 +2588,7 @@
     ],
     "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md": [
       "packages/db/scripts/generate-taxonomy-v3-json.ts",
+      "packages/db/src/performer-allocation.ts",
       "packages/db/src/reference-model-applicability.ts",
       "packages/db/src/seed-ea-reference-models.ts"
     ],
