@@ -256,7 +256,11 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
     expect(authorizationCreate).toHaveBeenCalledTimes(1);
   });
 
-  it("produces one exact WWMD judgment when none exists, then reloads and projects it", async () => {
+  it.each([
+    { decision: "pass", findings: [] },
+    { decision: "fail", findings: [{ issue: "The measured default remains unspecified.", severity: "important",
+      evidence: { blobId: "blob-abc123", startLine: 79, endLine: 79, quote: "Default: TBD" } }] },
+  ])("produces and projects exact WWMD authority to record $decision evidence", async (assessment) => {
     const now = new Date("2026-08-31T17:00:00.000Z");
     const authorityInput: CoworkerAuthorityInput = {
       now,
@@ -300,7 +304,7 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
           },
         },
       },
-      rawParams: { decision: "pass", findings: [], resolvedFindingRefs: [] }, approval: null,
+      rawParams: { ...assessment, resolvedFindingRefs: [] }, approval: null,
     };
     const approvalBinding = buildCoworkerApprovalBinding(authorityInput);
     const exactRow = {
