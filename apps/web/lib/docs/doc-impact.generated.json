@@ -895,6 +895,9 @@
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
+    "apps/web/lib/operate/retention/declarations.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/operate/retention/policies.ts": [
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/enforced-ci-gates.md"
@@ -1268,9 +1271,6 @@
       "docs/install/verification-runbook.md"
     ],
     "apps/web/scripts/offload-evidence-output.ts": [
-      "docs/architecture/data-model-stewardship-runbook.md"
-    ],
-    "apps/web/scripts/seed-model-metadata-tags.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "config/merge-readiness-policy.json": [
@@ -2555,12 +2555,12 @@
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
       "apps/web/lib/evidence/bounded-output.ts",
+      "apps/web/lib/operate/retention/declarations.ts",
       "apps/web/lib/routes.ts",
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
       "apps/web/lib/shared/org-address.ts",
       "apps/web/scripts/offload-evidence-output.ts",
-      "apps/web/scripts/seed-model-metadata-tags.ts",
       "packages/db/prisma/schema/resource-scheduling.prisma",
       "packages/db/scripts/apply-model-metadata-comments.ts",
       "packages/db/src/model-metadata.ts",
