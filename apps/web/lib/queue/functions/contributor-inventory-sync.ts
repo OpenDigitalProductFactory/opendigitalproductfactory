@@ -220,7 +220,7 @@ export async function runContributorInventorySync(
     "github-pr": summarize(githubRes),
   };
 
-  const successful: { source: SyncSourceKey; res: Extract<SyncSourceResult, { ok: true }> }[] = [];
+  const successful: { source: SyncSourceKey; res: Extract<SyncSourceResult, { rows: SnapshotRowPayload[] }> }[] = [];
   if (worktreeRes.ok) successful.push({ source: "git-worktree", res: worktreeRes });
   if (branchRes.ok) successful.push({ source: "git-branch", res: branchRes });
   if (githubRes.ok) successful.push({ source: "github-pr", res: githubRes });
