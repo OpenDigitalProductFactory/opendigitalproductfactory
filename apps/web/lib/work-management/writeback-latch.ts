@@ -28,12 +28,20 @@ export type PriorDriveForLatch = {
 /**
  * Whether the writeback latch still holds for this stage.
  *
- * A recorded `blocked` receipt holds unconditionally: it is a durable statement
- * about this stage rather than an inference from the previous tick, and nothing
- * here should override it.
+ * A recorded `blocked` receipt records "this stage produced no writeback in THIS
+ * cycle" — not a finding that the stage is permanently unfit. It is therefore
+ * bounded by the cycle exactly like the prior-tick signal.
  *
- * An unknown cycle on either side holds too. Treating "unknown" as "a new cycle"
- * would silently re-open the every-tick loop the guard exists to prevent.
+ * ⟦An earlier version of this function returned true unconditionally on a
+ * blocked receipt, reasoning that a recorded receipt outranks a prior-tick
+ * inference. That preserved the very deadlock the bounded latch was written to
+ * remove, and preserved it precisely for the rooms already stuck: on this
+ * install the cycle rolled from 2026-09-08 to 2026-09-09 and all twelve stayed
+ * locked. A guard that cannot be re-entered by the fix for its own cause is not
+ * a guard.⟧
+ *
+ * An unknown cycle on either side still holds. Treating "unknown" as "a new
+ * cycle" would silently re-open the every-tick loop the guard exists to prevent.
  */
 export function writebackLatchHolds(input: {
   prior: PriorDriveForLatch | null;
@@ -41,13 +49,15 @@ export function writebackLatchHolds(input: {
   currentCycleKey: string | null;
   blocked: boolean;
 }): boolean {
-  if (input.blocked) return true;
   const prior = input.prior;
-  if (!prior) return false;
+  // A blocked receipt with no readable prior tick cannot be dated, so it holds.
+  if (!prior) return input.blocked;
   if (prior.stageKey !== input.stageKey) return false;
 
   const triedWriteback =
-    prior.action === "dispatch_agent" || prior.reason === EXECUTOR_WRITEBACK_UNAVAILABLE_REASON;
+    input.blocked
+    || prior.action === "dispatch_agent"
+    || prior.reason === EXECUTOR_WRITEBACK_UNAVAILABLE_REASON;
   if (!triedWriteback) return false;
 
   // Same cycle — or an unknown one — keeps the latch. A genuinely new cycle

@@ -748,11 +748,25 @@ releases on the next, giving one attempt per cycle — daily for these shapes �
 instead of the 96 per day the guard was built to stop. The capacity protection is
 kept almost entirely (a 96x reduction); the deadlock is not.
 
-Two cases deliberately still hold unconditionally:
+A **`blocked` receipt is bounded by its cycle too**. It records "this stage
+produced no writeback in THIS cycle" — not a finding that the stage is
+permanently unfit.
 
-- **A recorded `blocked` receipt.** That is a durable statement about the stage,
-  not an inference from the previous tick, and a cycle rollover should not erase
-  it.
+That correction was itself a live defect. The first bounded latch returned early
+and unconditionally on a blocked receipt, reasoning that a recorded receipt
+outranks a prior-tick inference. It preserved the exact deadlock the bounded
+latch existed to remove, and preserved it precisely for the rooms already stuck:
+the cycle rolled from 2026-09-08 to 2026-09-09 and all twelve stayed locked,
+because every one of them carried `[{"kind":"blocked","stageKey":"sweep"}]`.
+Every predicate test passed while the estate did not move.
+
+**A guard that cannot be re-entered by the fix for its own cause is not a
+guard.** The test that catches this reproduces a real room's stored state — its
+receipts, its `lastCycleKey`, its pause reason — and asserts it dispatches
+through the real resolver.
+
+One case still holds unconditionally:
+
 - **An unknown cycle key on either side.** Reading "unknown" as "a new cycle"
   would silently re-open the every-tick loop.
 
