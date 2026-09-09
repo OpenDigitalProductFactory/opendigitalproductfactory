@@ -1874,7 +1874,8 @@
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/lib/mermaid-renderer.mjs": [
-      "docs/architecture/dependency-reduction-routine.md"
+      "docs/architecture/dependency-reduction-routine.md",
+      "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/lib/published-doc-roots.mjs": [
       "docs/architecture/enforced-ci-gates.md"
@@ -2562,6 +2563,7 @@
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
+      "scripts/lib/mermaid-renderer.mjs",
       "scripts/lib/published-doc-roots.mjs"
     ],
     "docs/architecture/failure-analysis-and-recovery.md": [
