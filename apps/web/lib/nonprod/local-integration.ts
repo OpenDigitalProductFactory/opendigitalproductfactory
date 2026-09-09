@@ -34,6 +34,12 @@ type LocalIntegrationDependencies = {
     typeof prisma.nonProductionEnvironmentLease,
     "findUnique" | "updateMany"
   >;
+  /**
+   * BI-39AAE9B8: writes an oversized evidence.output to the content-addressed
+   * blob store. Defaults to the real writer; tests inject a fake. Small outputs
+   * never reach it.
+   */
+  writeEvidenceBlob?: import("@/lib/evidence/bounded-output").EvidenceBlobWriter;
 };
 
 export async function recordLocalIntegrationResult(
@@ -65,9 +71,17 @@ export async function recordLocalIntegrationResult(
       throw new Error("Local-CI gate evidence requires the canonical executor lease");
     }
   }
-  const evidenceObject = input.evidence && typeof input.evidence === "object"
-    && !Array.isArray(input.evidence)
-    ? input.evidence as Record<string, unknown>
+  // BI-39AAE9B8: the full console output leaves the JSON column. The record
+  // keeps a head+tail excerpt (still a string, so every existing reader works)
+  // plus {sha256, storageKey, sizeBytes}; the bytes live once in the
+  // content-addressed blob store, shared with the ToolExecution ledger copy.
+  const { offloadEvidenceOutput } = await import("@/lib/evidence/bounded-output");
+  const boundedEvidence = await offloadEvidenceOutput(input.evidence, {
+    ...(dependencies.writeEvidenceBlob ? { writeBlob: dependencies.writeEvidenceBlob } : {}),
+  });
+  const evidenceObject = boundedEvidence && typeof boundedEvidence === "object"
+    && !Array.isArray(boundedEvidence)
+    ? boundedEvidence as Record<string, unknown>
     : null;
 
   const circuitBreaker = await contractLocalCiPoolAfterGateResult({
@@ -108,7 +122,7 @@ export async function recordLocalIntegrationResult(
         }
         : {}),
       capacityCircuitBreaker: circuitBreaker.status,
-      evidence: input.evidence,
+      evidence: boundedEvidence,
     } as Prisma.InputJsonValue,
   });
   if (gateKey && leaseId) {

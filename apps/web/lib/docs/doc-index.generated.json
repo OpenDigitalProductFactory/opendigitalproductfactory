@@ -1325,7 +1325,8 @@
       "publishedPortal": false,
       "anchors": [
         "data-model-stewardship-runbook",
-        "record-lifecycle-convention"
+        "record-lifecycle-convention",
+        "evidence-payloads-never-live-inline"
       ]
     },
     "docs/architecture/decision-vectors-by-archetype.md": {
