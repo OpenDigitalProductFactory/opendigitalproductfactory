@@ -105,6 +105,34 @@ describe("offloadEvidenceOutput (evidence writer side)", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("offloads oversized leaves anywhere in the tree (the live shape: content.execution.vitest.output)", async () => {
+    const calls: string[] = [];
+    const NL = String.fromCharCode(10);
+    const vitestLog = `${big(70_000, "v")}${NL} Tests 7406 passed${NL}`;
+    const buildLog = `${big(70_000, "b")}${NL}build ok${NL}`;
+    const evidence = {
+      sha: "abc",
+      output: "gate passed",
+      content: { execution: { vitest: { exitCode: 0, output: vitestLog }, productionBuild: { output: buildLog }, typecheck: { output: "clean" } } },
+    };
+    const result = (await offloadEvidenceOutput(evidence, { ceilingBytes: 1024, writeBlob: fakeWriter(calls) })) as typeof evidence & {
+      content: { execution: { vitest: { output: string; outputBlob: OffloadedTextReference; outputTruncated: boolean }; productionBuild: { outputBlob: OffloadedTextReference }; typecheck: { output: string } } };
+    };
+    expect(calls.sort()).toEqual([buildLog, vitestLog].sort());
+    expect(result.output).toBe("gate passed");
+    expect(result.content.execution.vitest.outputTruncated).toBe(true);
+    expect(result.content.execution.vitest.outputBlob.sha256).toBe(sha256Hex(vitestLog));
+    expect(result.content.execution.vitest.output.endsWith(` Tests 7406 passed${NL}`)).toBe(true);
+    expect(result.content.execution.productionBuild.outputBlob.sha256).toBe(sha256Hex(buildLog));
+    expect(result.content.execution.typecheck.output).toBe("clean");
+    // Unchanged subtrees keep their identity.
+    expect(result.content.execution.typecheck).toBe(evidence.content.execution.typecheck);
+    // Re-applying under the production ceiling is a no-op: the excerpt (8 KB head
+    // + 24 KB tail) is below 64 KB by construction.
+    const again = await offloadEvidenceOutput(result, { writeBlob: fakeWriter(calls) });
+    expect(again).toBe(result);
+  });
+
   it("ignores non-object evidence and evidence without a string output", async () => {
     const calls: string[] = [];
     expect(await offloadEvidenceOutput("raw", { writeBlob: fakeWriter(calls) })).toBe("raw");

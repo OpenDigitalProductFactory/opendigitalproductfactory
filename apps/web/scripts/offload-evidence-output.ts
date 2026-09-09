@@ -17,6 +17,7 @@ import { prisma } from "@dpf/db";
 
 import {
   boundLargeStrings,
+  hasOversizedString,
   offloadEvidenceOutput,
   utf8ByteLength,
   EVIDENCE_INLINE_CEILING_BYTES,
@@ -49,8 +50,7 @@ async function offloadExternalEvidenceRecords(): Promise<{ scanned: number; rewr
       const details = row.details as Record<string, unknown> | null;
       const evidence = details?.evidence;
       if (!evidence || typeof evidence !== "object") continue;
-      const output = (evidence as Record<string, unknown>).output;
-      if (typeof output !== "string" || utf8ByteLength(output) <= EVIDENCE_INLINE_CEILING_BYTES) continue;
+      if (!hasOversizedString(evidence, EVIDENCE_INLINE_CEILING_BYTES)) continue;
       const before = jsonBytes(details);
       const bounded = await offloadEvidenceOutput(evidence);
       const nextDetails = { ...details, evidence: bounded };
