@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatModelMetadataTag,
   parseCatalogComment,
+  parseCatalogCommentWithModel,
   parseModelMetadataSource,
   parseModelMetadataSources,
   toCatalogComment,
@@ -109,9 +110,10 @@ describe("catalog carrier", () => {
   it("round-trips through the COMMENT ON payload and the canonical tag line", () => {
     const parsed = parseModelMetadataSource(schema, "x.prisma");
     for (const entry of parsed.entries) {
-      const comment = toCatalogComment(entry.metadata);
-      expect(comment.startsWith("dpf:{")).toBe(true);
+      const comment = toCatalogComment(entry.metadata, entry.model);
+      expect(comment.startsWith(`dpf:{"model":"${entry.model}"`)).toBe(true);
       expect(parseCatalogComment(comment)).toEqual(entry.metadata);
+      expect(parseCatalogCommentWithModel(comment)).toEqual({ model: entry.model, metadata: entry.metadata });
       const reparsed = parseModelMetadataSource(`${formatModelMetadataTag(entry.metadata)}\nmodel X { id String @id }\n`, "r.prisma");
       expect(reparsed.entries[0].metadata).toEqual(entry.metadata);
     }
