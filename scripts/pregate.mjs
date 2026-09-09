@@ -655,6 +655,10 @@ async function main() {
     process.stderr.write(`pregate: ${diskCheck.message}\n`);
     process.exit(1);
   }
+  // BI-E3B738A9: a floor that could not be measured must say so. The previous
+  // guard read a drive Docker never wrote to, passed every time, and looked
+  // exactly like a healthy check while protecting nothing.
+  if (diskCheck.warning) process.stderr.write(`pregate: ${diskCheck.warning}\n`);
 
   if (shouldRunPreflight(args)) {
     // BI-B1065D41: the guard-parity preflight is loud and, on a passing run,

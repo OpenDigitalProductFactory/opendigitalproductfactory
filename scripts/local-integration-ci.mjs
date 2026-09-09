@@ -76,6 +76,10 @@ if (!diskCheck.ok) {
   console.error(diskCheck.message);
   process.exit(1);
 }
+// BI-E3B738A9: a floor that could not be measured must say so. The previous
+// guard read a drive Docker never wrote to, passed every time, and looked
+// exactly like a healthy check while protecting nothing.
+if (diskCheck.warning) console.error(`local-integration-ci: ${diskCheck.warning}`);
 
 const startedAt = new Date().toISOString();
 const execution = executeLocalIntegrationPlan(plan);
