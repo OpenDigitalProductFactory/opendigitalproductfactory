@@ -47,9 +47,6 @@ const EXEMPT_PATTERNS = [
   /^expect$/,
   /^pretty-format$/,
   /^@testing-library\//,
-  /^mermaid$/,
-  /^@mermaid-js\//,
-  /^@zenuml\//,
   /^@floating-ui\//,
 ];
 

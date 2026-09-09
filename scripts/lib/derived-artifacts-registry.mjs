@@ -108,10 +108,10 @@ export const DERIVED_ARTIFACTS = [
     artifactPaths: ["docs/user-guide/assets/diagrams/**"],
     generate: ["node", "scripts/render-doc-diagrams.mjs"],
     check: ["node", "scripts/render-doc-diagrams.mjs", "--check"],
-    // Rendering shells out to mmdc (@mermaid-js/mermaid-cli), which is only
-    // installed in a compile-ready environment, not every source-only
-    // worktree. Pre-commit skips (loudly) rather than blocking when it's
-    // absent; CI (a compile-ready runner) is the backstop via --check.
+    // Rendering needs a Mermaid renderer (scripts/lib/mermaid-renderer.mjs:
+    // a local mermaid-cli, or the pinned tool image through Docker). Where
+    // neither exists pre-commit skips (loudly) rather than blocking; CI is the
+    // backstop via --check. "mmdc" is the renderer's probe name in the gate.
     requiresBinary: "mmdc",
   },
   {

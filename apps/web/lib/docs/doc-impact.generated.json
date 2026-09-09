@@ -1631,6 +1631,9 @@
     "scripts/check-design-grounding-decision.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/check-diagram-dependency-pins.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
+    ],
     "scripts/check-doc-links.mjs": [
       "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
       "docs/architecture/enforced-ci-gates.md"
@@ -1869,6 +1872,10 @@
     ],
     "scripts/lib/mcp-client.mjs": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "scripts/lib/mermaid-renderer.mjs": [
+      "docs/architecture/dependency-reduction-routine.md",
+      "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/lib/published-doc-roots.mjs": [
       "docs/architecture/enforced-ci-gates.md"
@@ -2520,6 +2527,8 @@
       ".github/dependabot.yml",
       "apps/web/lib/assurance/cyclonedx-generator.ts",
       "pnpm-lock.yaml",
+      "scripts/check-diagram-dependency-pins.mjs",
+      "scripts/lib/mermaid-renderer.mjs",
       "scripts/sbom/audit-provenance.mjs",
       "scripts/sbom/check-lockfile-release-age.mjs",
       "scripts/sbom/check-new-dependencies.mjs",
@@ -2554,6 +2563,7 @@
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
+      "scripts/lib/mermaid-renderer.mjs",
       "scripts/lib/published-doc-roots.mjs"
     ],
     "docs/architecture/failure-analysis-and-recovery.md": [

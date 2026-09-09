@@ -122,16 +122,13 @@
     "ignoredBuiltDependencies": [
       "@scarf/scarf",
       "protobufjs",
-      "puppeteer",
       "unrs-resolver"
     ]
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@mermaid-js/mermaid-cli": "11.16.0",
     "@playwright/test": "^1.62.0",
     "docx": "^9.7.1",
-    "puppeteer": "^25.7.0",
     "tsx": "^4.23.12"
   }
 }
