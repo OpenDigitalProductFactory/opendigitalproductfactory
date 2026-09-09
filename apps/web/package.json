@@ -8,6 +8,7 @@
     "build": "node scripts/next-build.mjs",
     "start": "next start",
     "typecheck": "next typegen && node ../../scripts/run-tsc.mjs --noEmit",
+    "typecheck:tests": "next typegen && node ../../scripts/run-tsc.mjs --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
