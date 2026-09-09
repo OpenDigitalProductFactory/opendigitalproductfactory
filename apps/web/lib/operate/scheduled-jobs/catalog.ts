@@ -624,6 +624,19 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "mailroom-mailbox-poll",
+    inngestId: "mailroom/mailbox-poll",
+    honorsEnabledGate: true,
+    name: "Mailroom mailbox poll",
+    purpose:
+      "Reads every connected mailbox whose per-mailbox interval (default sixty minutes) has elapsed, triages what arrived and routes it to the owning queue room. If it stops, no new correspondence enters the Mailroom and acknowledgement windows are never started.",
+    cron: "9,24,39,54 * * * *",
+    cadence: "Every 15 minutes (at :09)",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: "mailroom/mailbox-poll.requested",
+  },
+  {
     jobId: "postmark-callback-sweep",
     inngestId: "integrations/postmark-callback-sweep",
     ungatedReason:

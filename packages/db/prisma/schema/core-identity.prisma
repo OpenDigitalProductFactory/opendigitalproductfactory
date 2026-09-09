@@ -521,6 +521,7 @@ model Organization {
   billableRates                     BillableRate[]
   outboundDrafts                    OutboundDraft[]
   inboundChannelMessages            InboundChannelMessage[]
+  mailboxAccounts                   MailboxAccount[]
   marketingChannelSpendCeilings     MarketingChannelSpendCeiling[]
   scheduledOutboundActions          ScheduledOutboundAction[]
   outboundAutopilotPolicies         OutboundAutopilotPolicy[]
