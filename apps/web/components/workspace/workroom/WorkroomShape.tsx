@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { FilterBar } from "@/components/ui/report-kit/FilterBar";
+import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
 import type { ShapeGraph, ShapeNodeState, ShapeRow } from "@/lib/work-management/shape-projection";
 
 const STATE_LABEL: Record<ShapeNodeState, string> = {
@@ -125,7 +126,17 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
           <Evidence rows={stage.rows} />
           {inspection?.expectedEvidence.length ? <p>Required: {inspection.expectedEvidence.join(", ")}</p> : null}
         </dd></div>
-        <div><dt className="font-medium">What else is affected?</dt><dd className="break-words">{inspection?.affected.length ? inspection.affected.map((ref) => `${ref.kind}:${ref.id}`).join(", ") : "Dependencies unknown"}</dd></div>
+        <div><dt className="font-medium">What else is affected?</dt><dd className="space-y-2 break-words">
+          {inspection?.affected.length ? <>
+            <p>{inspection.affected.length} linked records; impact not established.</p>
+            <CollapsibleList key={stage.key} previewCount={3} className="[&_button]:min-h-11 [&_button]:text-sm">
+              {inspection.affected.map((ref) => <li key={`${ref.kind}:${ref.id}`}>
+                <span className="text-[var(--dpf-muted)]">{ref.kind.replaceAll("-", " ")}</span>
+                <span className="block">{ref.id}</span>
+              </li>)}
+            </CollapsibleList>
+          </> : "Dependencies unknown"}
+        </dd></div>
       </dl>
     </aside> : <p className="text-[var(--dpf-muted)]">Select a step to inspect its state and evidence.</p>}
     {graph.process ? <details className="rounded border border-[var(--dpf-border)] p-3">

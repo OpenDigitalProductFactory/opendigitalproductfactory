@@ -24,6 +24,17 @@ const graph: ShapeGraph = {
 };
 
 describe("Workroom process inspection", () => {
+  it("previews linked records without implying established impact and reveals every identity", () => {
+    const many = structuredClone(graph);
+    many.stages[0].inspection!.affected = Array.from({ length: 21 }, (_, index) => ({ kind: "task-run" as const, id: `review-${index}` }));
+    render(<WorkroomShape graph={many} />);
+    fireEvent.click(screen.getByRole("button", { name: /1\.\s*Prepare.*Not verified/ }));
+    expect(screen.getByText("21 linked records; impact not established.")).toBeInTheDocument();
+    expect(screen.queryByText("review-20")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show 18 more" }));
+    expect(screen.getByText("review-20")).toBeInTheDocument();
+  });
+
   it("keeps the filter disclosure open and focus intact when a filter is cleared", () => {
     render(<WorkroomShape graph={graph} />);
     const disclosure = screen.getByText("Search and filter steps").closest("details")!;
