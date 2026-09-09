@@ -23,6 +23,7 @@
  * `github-rest-reader.ts` in Phase 4.
  */
 
+import { createHash } from "node:crypto";
 import { cron } from "inngest";
 
 import {
@@ -110,7 +111,59 @@ export type PerSourceSummary = {
   state?: "ok" | "not-configured" | "error";
   /** The provider authenticated that its previously stored representation is current. */
   unchanged?: boolean;
+  /**
+   * The sync run whose ContributorInventorySnapshot rows hold this source's
+   * CURRENT representation. Equal to this run's own syncRunId when rows were
+   * written; equal to an earlier run's id when this run found the source
+   * unchanged (provider 304, or a content digest identical to the previous
+   * successful run) and therefore wrote nothing (BI-BFFB9211). Readers and
+   * the prune preserve-set follow this pointer, never the run id alone.
+   */
+  snapshotRunId?: string;
+  /** Content digest of the rows this source produced (sha256 over sorted sourceKey + payload, volatile observation stamps removed). */
+  digest?: string;
 };
+
+/**
+ * Digest the rows a source produced so an unchanged inventory is recognised
+ * without re-inserting it. `observedAt` is the reader's own wall-clock stamp
+ * (github-rest-reader.ts:parsePullRequest) and would defeat the comparison,
+ * so it is stripped at the top level of each payload before hashing.
+ */
+export function computeSnapshotDigest(rows: readonly SnapshotRowPayload[]): string {
+  const canonical = rows
+    .map((row) => {
+      const payload = row.payload;
+      const stripped =
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? Object.fromEntries(
+              Object.entries(payload as Record<string, unknown>)
+                .filter(([k]) => k !== "observedAt")
+                .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+            )
+          : payload;
+      return `${row.sourceKey} ${JSON.stringify(stripped)}`;
+    })
+    .sort();
+  return createHash("sha256").update(canonical.join("\n")).digest("hex");
+}
+
+type PriorSourceState = { syncRunId: string; summary: PerSourceSummary | null };
+
+/** Latest run that succeeded for `source`, with that source's recorded summary. */
+async function loadPriorSourceState(
+  prisma: Pick<typeof import("@dpf/db").prisma, "contributorInventorySyncRun">,
+  source: SyncSourceKey,
+): Promise<PriorSourceState | null> {
+  const row = (await prisma.contributorInventorySyncRun.findFirst({
+    where: { perSourceResult: { path: [source, "ok"], equals: true } },
+    orderBy: { startedAt: "desc" },
+    select: { syncRunId: true, perSourceResult: true },
+  })) as { syncRunId: string; perSourceResult?: unknown } | null | undefined;
+  if (!row?.syncRunId) return null;
+  const perSource = row.perSourceResult as Record<string, PerSourceSummary> | null | undefined;
+  return { syncRunId: row.syncRunId, summary: perSource?.[source] ?? null };
+}
 
 /**
  * Pure runner — no Inngest dependency, no shell-out unless the default
@@ -167,16 +220,43 @@ export async function runContributorInventorySync(
     "github-pr": summarize(githubRes),
   };
 
-  const successful: { source: SyncSourceKey; rows: SnapshotRowPayload[] }[] = [];
-  if (worktreeRes.ok) successful.push({ source: "git-worktree", rows: worktreeRes.rows });
-  if (branchRes.ok) successful.push({ source: "git-branch", rows: branchRes.rows });
-  if (githubRes.ok) successful.push({ source: "github-pr", rows: githubRes.rows });
+  const successful: { source: SyncSourceKey; res: Extract<SyncSourceResult, { rows: SnapshotRowPayload[] }> }[] = [];
+  if (worktreeRes.ok) successful.push({ source: "git-worktree", res: worktreeRes });
+  if (branchRes.ok) successful.push({ source: "git-branch", res: branchRes });
+  if (githubRes.ok) successful.push({ source: "github-pr", res: githubRes });
 
+  // Write-on-change (BI-BFFB9211). Before this, every 10-minute run re-inserted
+  // every unchanged branch and PR: 186k snapshot rows for 1,139 distinct keys on
+  // one install, 99% of them byte-identical to the previous run. A source whose
+  // rows digest to the same value as the previous successful run — or that the
+  // provider reported unchanged (304) — writes nothing and points its summary
+  // at the run that already holds the representation. The read model and the
+  // prune preserve-set follow `snapshotRunId`, so "unchanged" no longer means
+  // "an empty run becomes the latest successful one and the page goes blank".
   let insertedRows = 0;
   for (const bucket of successful) {
-    if (bucket.rows.length === 0) continue;
+    const summary = perSourceResult[bucket.source];
+    const prior = await loadPriorSourceState(prisma, bucket.source).catch(() => null);
+    const priorSnapshotRunId = prior?.summary?.snapshotRunId ?? prior?.syncRunId ?? null;
+
+    if (bucket.res.unchanged && priorSnapshotRunId) {
+      summary.snapshotRunId = priorSnapshotRunId;
+      summary.count = prior?.summary?.count ?? 0;
+      summary.digest = prior?.summary?.digest;
+      continue;
+    }
+    if (bucket.res.rows.length === 0) continue;
+
+    const digest = computeSnapshotDigest(bucket.res.rows);
+    summary.digest = digest;
+    if (priorSnapshotRunId && prior?.summary?.digest === digest) {
+      summary.snapshotRunId = priorSnapshotRunId;
+      summary.unchanged = true;
+      continue;
+    }
+
     const created = await prisma.contributorInventorySnapshot.createMany({
-      data: bucket.rows.map((row) => ({
+      data: bucket.res.rows.map((row) => ({
         source: bucket.source,
         sourceKey: row.sourceKey,
         payload: row.payload as never,
@@ -186,6 +266,7 @@ export async function runContributorInventorySync(
       skipDuplicates: true,
     });
     insertedRows += created.count;
+    summary.snapshotRunId = syncRunId;
   }
 
   const okCount = [worktreeRes, branchRes, githubRes].filter((r) => r.ok).length;
@@ -326,12 +407,12 @@ async function runRetentionSweep(now: Date): Promise<number> {
   const sources: SyncSourceKey[] = ["git-worktree", "git-branch", "github-pr"];
   const preserveSet = new Set<string>();
   for (const source of sources) {
-    const row = await prisma.contributorInventorySyncRun.findFirst({
-      where: { perSourceResult: { path: [source, "ok"], equals: true } },
-      orderBy: { startedAt: "desc" },
-      select: { syncRunId: true },
-    });
-    if (row) preserveSet.add(row.syncRunId);
+    const prior = await loadPriorSourceState(prisma, source);
+    if (!prior) continue;
+    preserveSet.add(prior.syncRunId);
+    // BI-BFFB9211: an unchanged run points at an older run's rows — that older
+    // run is the one holding the representation, so it must survive too.
+    if (prior.summary?.snapshotRunId) preserveSet.add(prior.summary.snapshotRunId);
   }
 
   const result = await prisma.contributorInventorySyncRun.deleteMany({

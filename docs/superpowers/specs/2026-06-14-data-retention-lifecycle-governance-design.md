@@ -104,6 +104,7 @@ catalog.ts (editable, run-now)   ·   ScheduledJob row (seed-platform-retention.
 | `ToolExecution` (auditClass ledger, or unclassified) | audit-log | createdAt | 365d | #1 growth driver; authority audit trail. The ledger branch is the complement of the short-lived classes so a NULL class never escapes (BI-A55A651B) |
 | `ToolExecution` (auditClass journal) | audit-log | createdAt | 30d | external reads / reasoning checkpoints — `lib/audit-classes.ts` "30 days rolling" |
 | `ToolExecution` (auditClass metrics_only) | audit-log | createdAt | 30d | read chatter / probes; payload already blanked at write, only the row remains |
+| `DiscoveryRun` (cascades `DiscoveredItem`, `DiscoveredRelationship`) | edge-telemetry | startedAt | 30d | raw per-sweep observation log, ~240 runs/day; in-flight runs and last-confirming runs excluded; deduplicated truth lives in `InventoryEntity` / `InventoryRelationship` (BI-BFFB9211) |
 | `AdapterRunTelemetry` | ai-telemetry | startedAt | 180d | per LLM inference; aggregates kept elsewhere |
 | `TokenUsage` | ai-telemetry | createdAt | 180d | billing reconciliation window |
 | `RouteDecisionLog` | routing-log | createdAt | 90d | routing reasoning; short debug value |
