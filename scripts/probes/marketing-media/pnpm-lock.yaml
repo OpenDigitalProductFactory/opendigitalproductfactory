@@ -13,8 +13,8 @@ importers:
   .:
     dependencies:
       '@puppeteer/browsers':
-        specifier: 3.2.1
-        version: 3.2.1
+        specifier: 3.2.2
+        version: 3.2.2
       ffmpeg-static:
         specifier: 5.3.0
         version: 5.3.0
@@ -25,8 +25,8 @@ importers:
         specifier: 3.15.0
         version: 3.15.0
       hyperframes:
-        specifier: 0.8.25
-        version: 0.8.25
+        specifier: 0.8.30
+        version: 0.8.30
 
 packages:
 
@@ -401,8 +401,8 @@ packages:
   '@protobufjs/utf8@1.1.2':
     resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
 
-  '@puppeteer/browsers@3.2.1':
-    resolution: {integrity: sha512-KDz+3qDRdBAlRlMjmKyj6dEs33YHTk/xRHEENSXq6TNnhgoU15ruSHtEBeVF6OZ9tBDY55Se4P0nFMNsipzU9A==}
+  '@puppeteer/browsers@3.2.2':
+    resolution: {integrity: sha512-q2BU4YfO9h/Wt7IcWPcggpOOqLk2Tbs1hDwolvKZrweRjy751OJBKMN9zO5bfD0pzU7X/tvKw/exQds4pM/LOg==}
     engines: {node: '>=22.12.0'}
     hasBin: true
     peerDependencies:
@@ -650,8 +650,8 @@ packages:
   has-property-descriptors@1.0.2:
     resolution: {integrity: sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==}
 
-  hono@4.13.5:
-    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
+  hono@4.13.7:
+    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
     engines: {node: '>=16.9.0'}
 
   http-response-object@3.0.2:
@@ -665,8 +665,8 @@ packages:
     resolution: {integrity: sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==}
     engines: {node: '>= 14'}
 
-  hyperframes@0.8.25:
-    resolution: {integrity: sha512-VZ2EalR+/ySguB+BegRGxlctpM/fPc/tlPABAIB/PURx9UNJA1/QybOL9QhmEZhfRwxM3PKV9hUOHeOKuLQRBg==}
+  hyperframes@0.8.30:
+    resolution: {integrity: sha512-SH+Cn0Ct0ZYSWqZ09QfBszQ93dOhBDxYXG5ARdjiFGGGNGhr2Rldyk8OFBKq85qhhiH/PdPspnNki39i6k6mEg==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -770,8 +770,8 @@ packages:
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
-  postcss@8.5.26:
-    resolution: {integrity: sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ==}
+  postcss@8.5.28:
+    resolution: {integrity: sha512-RRuzqDtt5Y9h3quz5hWhK+TPnsmVs6WwSU6LkJMeY4HstUEDuYTG8UJSdawMRzmzAtV+KEoG8N3Qg2qLy5vM/A==}
     engines: {node: ^10 || ^12 || >=14}
 
   prettier@3.9.6:
@@ -787,8 +787,8 @@ packages:
     resolution: {integrity: sha512-dYDWdjSl5RNb7SgPxGQcRU+GtvP7s2fpkrY0r432PcOIaZ0/rBcxEZnQN67iJhFuQiVw754JDoPruPCNdGsbjg==}
     engines: {node: '>=12.0.0'}
 
-  puppeteer-core@25.9.0:
-    resolution: {integrity: sha512-U61rCwSMha62CA/Opy6tCx2Fx+ck7ouiKnbpEApzSoLYMoEu9F71nuFpHL55vmIt33/GYm6eKZVhH2ev0nAIeg==}
+  puppeteer-core@25.10.0:
+    resolution: {integrity: sha512-Hy5eMQshOEMil4JUUx03h5pw1HYkYCso1RG/gcpPlFSd4cYPOcopxcXEAxpLPOkOPJb9LIJtwxuj66bSdvknFg==}
     engines: {node: '>=22.12.0'}
 
   readable-stream@3.6.2:
@@ -892,8 +892,8 @@ packages:
     resolution: {integrity: sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw==}
     engines: {node: '>= 8'}
 
-  webdriver-bidi-protocol@0.4.2:
-    resolution: {integrity: sha512-VSV+fzfChirL3e7jay2yUC7B4HQCGtEWEg/MSSQbK+qWbqeGlRLlXTzPpYr3XGUvbpDHumWZBJxgesg4N7dbtA==}
+  webdriver-bidi-protocol@0.4.3:
+    resolution: {integrity: sha512-uuN0goWfxP22B7J/uAgBpOYNPttC+XVseYE+rSY5+rQ+YBeVz/VORw8WbmLVcqW78zNg5A4qnjNXYUWR3il2ig==}
 
   wrap-ansi@9.0.2:
     resolution: {integrity: sha512-42AtmgqjV+X1VpdOfyTGOYRi0/zsoLqtXQckTmqTeybT+BDIbM/Guxo7x3pE2vtpr1ok6xRqM9OpBe+Jyoqyww==}
@@ -1038,9 +1038,9 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@hono/node-server@2.1.1(hono@4.13.5)':
+  '@hono/node-server@2.1.1(hono@4.13.7)':
     dependencies:
-      hono: 4.13.5
+      hono: 4.13.7
 
   '@img/colour@1.1.0': {}
 
@@ -1181,7 +1181,7 @@ snapshots:
   '@protobufjs/utf8@1.1.2':
     optional: true
 
-  '@puppeteer/browsers@3.2.1':
+  '@puppeteer/browsers@3.2.2':
     dependencies:
       modern-tar: 0.8.4
       yargs: 18.1.0
@@ -1448,7 +1448,7 @@ snapshots:
     dependencies:
       es-define-property: 1.0.1
 
-  hono@4.13.5: {}
+  hono@4.13.7: {}
 
   http-response-object@3.0.2:
     dependencies:
@@ -1469,10 +1469,10 @@ snapshots:
       - supports-color
     optional: true
 
-  hyperframes@0.8.25:
+  hyperframes@0.8.30:
     dependencies:
-      '@hono/node-server': 2.1.1(hono@4.13.5)
-      '@puppeteer/browsers': 3.2.1
+      '@hono/node-server': 2.1.1(hono@4.13.7)
+      '@puppeteer/browsers': 3.2.2
       adm-zip: 0.6.0
       citty: 0.2.2
       compare-versions: 6.1.1
@@ -1480,13 +1480,13 @@ snapshots:
       esbuild: 0.25.12
       fontkit: 2.0.4
       giget: 3.3.1
-      hono: 4.13.5
+      hono: 4.13.7
       ignore: 5.3.2
       onnxruntime-node: 1.21.1
       open: 10.2.0
-      postcss: 8.5.26
+      postcss: 8.5.28
       prettier: 3.9.6
-      puppeteer-core: 25.9.0
+      puppeteer-core: 25.10.0
       sharp: 0.35.4
     optionalDependencies:
       '@google/genai': 1.52.0
@@ -1593,7 +1593,7 @@ snapshots:
 
   picocolors@1.1.1: {}
 
-  postcss@8.5.26:
+  postcss@8.5.28:
     dependencies:
       nanoid: 3.3.18
       picocolors: 1.1.1
@@ -1618,13 +1618,13 @@ snapshots:
       long: 5.3.2
     optional: true
 
-  puppeteer-core@25.9.0:
+  puppeteer-core@25.10.0:
     dependencies:
-      '@puppeteer/browsers': 3.2.1
+      '@puppeteer/browsers': 3.2.2
       chromium-bidi: 17.0.2(devtools-protocol@0.0.1666840)
       devtools-protocol: 0.0.1666840
       typed-query-selector: 2.12.2
-      webdriver-bidi-protocol: 0.4.2
+      webdriver-bidi-protocol: 0.4.3
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
@@ -1755,7 +1755,7 @@ snapshots:
   web-streams-polyfill@3.3.3:
     optional: true
 
-  webdriver-bidi-protocol@0.4.2: {}
+  webdriver-bidi-protocol@0.4.3: {}
 
   wrap-ansi@9.0.2:
     dependencies:
