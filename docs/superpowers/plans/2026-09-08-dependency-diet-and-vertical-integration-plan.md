@@ -183,13 +183,13 @@ Independent of M2, M3, M4 and M6: floor `@types/node` to `^26` for `@types/net-s
 
 Run `pnpm audit:stale-overrides` with a `GITHUB_TOKEN` in the `dependency-scan.yml` schedule so the cross-check actually executes, and remove every floor whose parent range now resolves at or above it. The 42 Jest lines go with M6; the 8 diagram pins go with M2; the remaining CVE floors (about 18) are load-bearing until the audit says otherwise.
 
-### M9 · Sweep the retired-substrate residue · effort S · leverage M · no decision needed
+### M9 · Sweep the retired-substrate residue · effort M · leverage M · no decision needed
 
 Reduce the 97 `neo4j` / `qdrant` mentions to the guard, the deferral note in BI-A1E864A5 and nothing else; convert `check-retired-substrate.mjs` from ratchet to forbid once the count is zero. Backups `engine-specs.ts` and `operate/metrics.ts` are the bulk.
 
-### M10 · Gate the observability fleet by profile · effort S · leverage M · no decision needed (BET-14 already names it)
+### M10 · Gate the observability fleet by profile · **already done, retired**
 
-Prometheus, Grafana, Loki, Alloy, cAdvisor, node-exporter, postgres-exporter and redis-exporter are eight containers in the default compose file. Grafana is already profile-gated; put the rest behind the same profile, and retire `redis-exporter` outright with M3. Consumer installs boot with Postgres and the portal; operators opt in to the fleet.
+Retired 2026-09-08 (BI-A5B2A32F discarded). The evidence in §1 counted services in the compose file, not the default profile. On the live dev install `docker compose config --services` with no profile resolves to `inngest`, `portal`, `portal-init`, `postgres` and `redis` only: prometheus, grafana, loki, alloy and postgres-exporter sit behind the `runtime:deep-observability` capability profile, redis-exporter behind `runtime:durable-automation`, cadvisor and node-exporter behind `linux-monitoring` (`scripts/lib/resolve-capability-compose-profiles.mjs`). The redis-exporter retirement folds into M3.
 
 ### M11 · Cut typecheck and build time at the source · effort M · leverage H · no decision needed
 
@@ -204,7 +204,7 @@ Dependency work does not move this number (§1.6). What does:
 
 | Wave | Moves | Why this order |
 |---|---|---|
-| **A · packaging and hygiene** (no decisions) | M1, M2, M7, M8, M9, M10, M11 step 1 | Each is one PR, reversible, and lands the measurement baselines the later waves are judged by. M1 alone is most of the image win. |
+| **A · packaging and hygiene** (no decisions) | M1, M2, M7, M8, M9, M11 step 1 | Each is one PR, reversible, and lands the measurement baselines the later waves are judged by. M1 alone is most of the image win. |
 | **B · decisions** | M6 (founder), M3 and M4 and M5 (`principle_decide`) | Route the four decisions in parallel while Wave A ships; M6 is the biggest lockfile win and needs only a yes. |
 | **C · structural** | M3 build-out behind BET-11, M11 steps 2 to 4, M5 build-out | Migration-bearing work sequenced behind its read-model and scheduler substrate. |
 
@@ -217,7 +217,7 @@ Dependency work does not move this number (§1.6). What does:
 | Override entries | 78 | about 65 | under 25 |
 | Production closure | 825 | 825 | about 450 |
 | Portal image | 4.17 GB | under 2.5 GB | under 2 GB |
-| Always-on containers (default profile) | 16 | 8 | 5 |
+| Always-on containers (default profile) | 5 | 5 | 2 (M3 retires inngest, redis, redis-exporter) |
 | `apps/web` typecheck, local | 98 s | about 70 s | under 60 s with references |
 
 ## 6. Kernel decisions to route
@@ -234,7 +234,6 @@ Dependency work does not move this number (§1.6). What does:
 - `sbom/baseline.json` totals become budgets, ratcheted down per wave, not informational.
 - Typecheck line-count and check-time baseline (M11).
 - `check-retired-substrate.mjs` flips to forbid (M9).
-- Compose default-profile container count asserted by the existing compose-pin guard (M10).
 
 ## 8. Backlog coverage
 
@@ -250,7 +249,7 @@ Filed 2026-09-08 under `EP-8DC217EB` (they decompose BI-C0CEB377, BET-14):
 | M6 mobile workspace split (founder) | BI-2FD295F3 | medium | p2 |
 | M7 + M8 multi-version cleanup and override prune | BI-5265CAD0 | small | p2 |
 | M9 retired-substrate sweep | BI-B1977CEE | small | p2 |
-| M10 observability fleet profile gate | BI-A5B2A32F | small | p3 |
+| M10 observability fleet profile gate | BI-A5B2A32F | retired: already implemented | — |
 | M11 typecheck at the source | BI-0A3B155F | medium | p2 |
 
 ## 9. What this plan does not do
