@@ -4,7 +4,7 @@ status: active
 
 # WWMD Exact-Bound Platform Receipt Authority
 
-**Backlog item:** BI-B19AF1F3
+**Backlog item:** BI-B19AF1F3. Local negative-review successor: BI-E78DC21D / WC-8BD26708.
 
 **Workroom:** WC-60566397
 
@@ -55,7 +55,7 @@ All conditions are conjunctive:
 - immutable artifact repository and commit equal the Workroom repository and head;
 - writer and gate are paired by `INITIATIVE_READINESS_LANES`, the existing single registry;
 - tool is an immediate, ordinary internal side effect with no outward, irreversible, authority-changing, or external-integration consequence;
-- receipt decision is `pass`, `findings` is empty, and `resolvedFindingRefs` is empty;
+- receipt is either a `pass` with empty findings, or a `fail` recording at least one finding; `resolvedFindingRefs` is empty in both cases;
 - explicit operator policy permits policy projection.
 
 The resolver then asks WWMD one action-specific question bound to the existing approval fingerprint. Only a sealed, current, high-confidence, usable, stable, autonomy-eligible `proceed` without commandment conflict projects. The resulting existing envelope is single-use. Existing persistence records the WWMD interaction, policy version, contribution/audit digest, exact action fingerprint, and approval-binding fingerprint.
@@ -85,7 +85,7 @@ Every immutable initiative-review recovery packet carries its server-issued Work
   - **AC-WWMD-ROUTINE-PASS:** The BI-B3584737 receipt shape records and cites DI-3F125C09C368 or a fresh equivalent.
   - **AC-WWMD-AUDIT-BINDING:** Each automatic authorization persists the WWMD decision and exact binding fingerprints.
 - **OBJ-WWMD-EXCEPTION-RESIDUE:** Non-routine or uncertain actions remain under human control.
-  - **AC-WWMD-HUMAN-CARD:** Finding-bearing pass, fail/not-applicable, low confidence, unusable/unstable signal, commandment conflict, binding mismatch, cross-scope, destructive/outbound, customer-business, specialist-policy, and explicit-human-policy cases create a concise decision card stating the residue.
+  - **AC-WWMD-HUMAN-CARD:** Finding-bearing pass, finding resolution, fail without findings, not-applicable, low confidence, unusable/unstable signal, commandment conflict, binding mismatch, cross-scope, destructive/outbound, customer-business, specialist-policy, and explicit-human-policy cases create a concise decision card stating the residue.
 - **OBJ-WWMD-SINGLE-SOURCE:** Existing validation and authority stores remain canonical.
   - **AC-WWMD-NO-BYPASS:** No direct database bypass, parallel policy store, or weakened immutable receipt validation exists.
 
@@ -99,6 +99,14 @@ Every immutable initiative-review recovery packet carries its server-issued Work
 - Live acceptance: an independent reviewer reads the current blob and records a passing routine receipt without a human click; ToolExecution and authority evidence cite the WWMD interaction and fingerprints.
 
 ## Data, scale, rollback, and documentation
+
+### Negative-review correction (BI-E78DC21D)
+
+Live task `4A2FD0ADC2CA` read immutable blob `4696b93346e8cba6010a6aaae466fb9e13fbefae` and attempted a failed specification review with concrete budget and deployment findings. At served `9eff6a6b457c34d6e01c1e126aba20c7150f1204`, authority refused it as `non-pass-decision`. Requiring a human to permit an honest negative observation prevents the author from receiving a completed review and favors finding-free approvals.
+
+This successor extends the existing routine predicate to a failed review with nonempty findings and no resolved finding references. It still requires the same exact binding and an eligible action-specific WWMD decision. A negative receipt cannot mint an approved baseline, satisfy the reviewed gate, resolve prior findings, or authorize implementation. `not-applicable` remains a waiver requiring separate judgment. The receipt writer continues to validate findings, source evidence and reviewer independence after authority; this predicate does not replace that validation.
+
+Ordered delivery: reproduce the bound negative-review refusal in the authority test; consolidate outcome/array checks in the existing predicate; verify the authority resolver invokes its existing projector for a failed review; preserve tests for waivers, resolutions, explicit human policy and invalid bindings; deliver through protected CI and verify that a live negative receipt is recorded while readiness remains unmet. No schema, migration, grant, or new service is needed. Refactoring is concentrated in the shared outcome predicate, rather than adding special cases to each reviewer or client.
 
 No schema or migration is required. The hot path adds no unbounded collection: it performs constant-time checks over one parsed binding, then uses the existing bounded recent-decision lookup (25 candidates) and existing transactional projection. Broader role-derived coworker authority remains owned by EP-31815F97.
 
