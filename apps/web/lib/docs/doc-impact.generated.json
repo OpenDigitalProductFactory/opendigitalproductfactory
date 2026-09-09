@@ -1836,6 +1836,9 @@
     "scripts/lib/dco-signoff.mjs": [
       "docs/architecture/build-gate-runbook.md"
     ],
+    "scripts/lib/disk-space-preflight.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/lib/dockerfile-portal-build.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -2812,6 +2815,7 @@
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/lib/platform.sh",
+      "scripts/lib/disk-space-preflight.mjs",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
       "tests/release/pregate-node-gate-contract.test.mjs"
