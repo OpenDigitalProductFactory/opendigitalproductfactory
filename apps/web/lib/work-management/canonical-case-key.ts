@@ -1,6 +1,20 @@
 import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 import type { WorkspaceCasePrismaClient } from "./workspace-case-loader";
 
+/** Canonical identity changes must retain the caller's navigation context. */
+export function canonicalWorkCaseHref(
+  caseKey: string,
+  searchParams: Record<string, string | string[] | undefined>,
+): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (value === undefined) continue;
+    for (const entry of Array.isArray(value) ? value : [value]) query.append(key, entry);
+  }
+  const suffix = query.toString();
+  return `/workspace/cases/${caseKey}${suffix ? `?${suffix}` : ""}`;
+}
+
 /** Where a work-capsule case key should actually be read.
  *
  *  A Workroom is anchored to its WorkItem by Workroom.workItemId (BI-650994D7),

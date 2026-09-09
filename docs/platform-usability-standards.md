@@ -2,6 +2,13 @@
 
 Living reference for all UI development. All developers and AI agents must follow these standards when creating or reviewing UI code.
 
+For outcome-based route audits and redesign acceptance, use the
+[portal page and flow evaluation framework](architecture/portal-ux-evaluation-framework.md)
+and its [scorecard](testing/portal-ux-scorecard-template.md). It connects the
+existing page-purpose contracts and UX budgets below to persona tasks, workroom
+disclosure, navigation fit and evidence. Counts alone do not establish that a
+user can complete the job.
+
 ## Color System
 
 Every UI component uses CSS custom properties for all color roles. These properties are set by the branding system via `buildBrandingStyleTag()` and fall back to defaults in `globals.css`.

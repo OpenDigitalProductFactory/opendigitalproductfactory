@@ -3,6 +3,7 @@ status: draft
 Backlog: BI-4B5E3443
 Profile: feature
 Author: Mark Bodman
+Plan: docs/superpowers/plans/2026-09-08-onboarding-ownership-implementation.md
 Date: 2026-09-08
 ---
 
