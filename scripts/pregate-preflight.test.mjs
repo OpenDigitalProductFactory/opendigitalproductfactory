@@ -32,7 +32,7 @@ import { RUNNER_FAILURE_EXIT_CODE } from "./check-guards.mjs";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 import { shouldRunPreflight } from "./pregate.mjs";
 
-const repoRoot = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const preflightCli = join(repoRoot, "scripts", "pregate-preflight.mjs");
 const pregateCli = join(repoRoot, "scripts", "pregate.mjs");
 

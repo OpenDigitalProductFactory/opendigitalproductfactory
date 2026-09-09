@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
 import { parseStdinChanges } from "./gate-context.mjs";
@@ -24,7 +25,7 @@ import {
 import { decide as specPlanDocDecide } from "../packages/dpf-skill-pack/hooks/spec-plan-doc-precheck.mjs";
 import { decide as uxFitDecide } from "../packages/dpf-skill-pack/hooks/ux-fit-precheck.mjs";
 
-const repoRoot = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 const build = (changedFiles, extra = {}) =>
   buildGateContext({ changedFiles, repoRoot, ...extra });
