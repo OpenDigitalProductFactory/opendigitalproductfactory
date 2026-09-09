@@ -535,3 +535,27 @@ model BusinessMetricRollup {
   @@index([organizationId, periodStart, periodEnd])
   @@index([organizationId, metricKey, sourceWatermark])
 }
+
+/// Nightly size and growth sample per table, taken by the Data Architect steward from pg_class / pg_stat_user_tables (EP-A33A5C61 slice 5). Ninety days is enough to fit a 12-month projection and to tell a re-snapshot pattern from organic growth.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=telemetry owner=platform-architecture steward=data-steward timeAxis=sampledAt
+model TableGrowthSample {
+  id            String   @id @default(cuid())
+  /// Physical table name (pg_class.relname).
+  table         String
+  /// Prisma model name when the table carries a /// @dpf declaration, else null.
+  model         String?
+  sampledAt     DateTime @default(now())
+  totalBytes    BigInt
+  heapBytes     BigInt
+  indexBytes    BigInt
+  toastBytes    BigInt
+  liveRows      BigInt
+  deadRows      BigInt
+  /// Rows whose declared time axis falls in the 24 h before the sample; null when the table declares no time axis.
+  rowsLast24h   Int?
+  /// The retention disposition the schema declared at sample time (e.g. "365d", "retained", "reference") or null when untagged.
+  declaredRetention String?
+
+  @@index([table, sampledAt])
+  @@index([sampledAt])
+}

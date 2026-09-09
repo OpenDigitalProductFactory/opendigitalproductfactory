@@ -49,6 +49,15 @@ model ToolExecution { ... }
 - **What it replaced.** The tags were seeded once from `table-classification.ts`, the govern/data asset registry, the hand-typed lists in `operate/retention/policies.ts` and `scripts/stewardship-exemptions.txt`. The retention sweep now builds its policies from the catalog (`apps/web/lib/operate/retention/declarations.ts`); the hand lists, the name-suffix enrollment guard with its allowlist, and the exemptions file are gone. What remains in code is behaviour a table tag cannot express: partitions, extra predicates and cascade handlers in `RETENTION_OVERRIDES`, each of which must name a model the schema declares purgeable. Still to move in a later slice: sensitivity for the sanitized clone (`table-classification.ts`) and the ERD mirror's governance block.
 - **Adding a model?** Write the tag before the migration. A model whose disposition you cannot name is a design question, not a default.
 
+## The steward watches growth, not only structure
+
+**Nightly growth pass (BI-592F1E7E, EP-A33A5C61 slice 5).** After the structural drift detectors, the Data Architect steward samples every table from `pg_class` / `pg_stat_user_tables` into `TableGrowthSample` (heap, index, TOAST, live and dead tuples, rows in the last 24 h on the model's declared `timeAxis`) and runs two detectors ([`apps/web/lib/ea/table-growth.ts`](../../apps/web/lib/ea/table-growth.ts)):
+
+- **`growth-without-disposition`** (error) — a table adding ≥ 1,000 rows/day or ≥ 5 MB/day whose declaration is missing, or whose disposition (`reference`, `config`, `domain`, `projection`) never removes rows. Carries bytes/day and a 12-month projection.
+- **`payload-anatomy`** (warn) — TOAST is ≥ 50% of a relation of ≥ 50 MB: a JSON/text column is carrying blobs that belong in the content-addressed store.
+
+Findings reconcile into `EaConformanceIssue` beside the structural ones (visible on `/ea/data-model`). A finding that stays open for three consecutive nightly samples is filed once as a fingerprinted backlog item with source `data-growth` (`captureCorrectiveFailureBI`), owned by AGT-BUILD-DA, and re-observed nightly until it clears. The sample table is itself tagged `telemetry-bounded retention=90d`, so the steward's telemetry is governed by the mechanism it enforces.
+
 ## Evidence payloads never live inline
 
 **The ceiling (BI-39AAE9B8, EP-A33A5C61 slice 2).** A ledger row records *that* something happened and what it carried, by digest. Any string leaf above `EVIDENCE_INLINE_CEILING_BYTES` (64 KB, [`apps/web/lib/evidence/bounded-output.ts`](../../apps/web/lib/evidence/bounded-output.ts)) leaves the JSON column:
