@@ -15,6 +15,7 @@ import {
 import {
   admitDurableAsyncOperation,
   type AdmitDurableAsyncOperationInput,
+  type AsyncOperationRecord,
 } from "./async-operation-lifecycle";
 import {
   createDurableAsyncProviderDependencies,
@@ -258,16 +259,14 @@ export async function runPrismaAsyncOperationWake(input: {
 }) {
   const store = createStore();
   const operation = await store.loadForWorker(input.operationId);
-  if (operation?.contractFamily === DURABLE_INFERENCE_TASK_CONTRACT_FAMILY) {
-    if (!operation.taskRunId) throw new Error("DURABLE_INFERENCE_TASKRUN_BINDING_MISSING");
-    const taskRun = await prisma.taskRun.findUnique({
-      where: { id: operation.taskRunId },
-      select: { progressPayload: true },
-    });
-    if (!taskRun) throw new Error("DURABLE_INFERENCE_TASKRUN_BINDING_MISSING");
+  const binding = operation ? await resolveDurableTaskDispatchBinding(operation) : null;
+  // An unsatisfiable binding is NOT refused here. Throwing before the claim
+  // never leases or transitions the row, so bounded recovery re-enqueues it
+  // every tick forever; the fenced worker settles it as `failed` instead.
+  if (operation && binding?.kind === "bound") {
     const disposition = durableMcpTaskWakeDisposition({
       operationId: operation.id,
-      progressPayload: taskRun.progressPayload,
+      progressPayload: binding.progressPayload,
     });
     if (disposition === "wait") {
       return { status: operation.status, disposition: "busy" as const, nextWakeAt: null };
@@ -286,11 +285,56 @@ export async function runPrismaAsyncOperationWake(input: {
       store,
       now: () => new Date(),
       ...provider,
+      resolveDispatchBinding: async (candidate) => {
+        const resolved = await resolveDurableTaskDispatchBinding(candidate);
+        return resolved.kind === "unsatisfiable" ? resolved : { kind: "bound" };
+      },
     }),
     loadForWorker: (operationId) => store.loadForWorker(operationId),
     enqueue: enqueueWake,
     now: () => new Date(),
   });
+}
+
+export const DURABLE_INFERENCE_TASKRUN_BINDING_MISSING = "DURABLE_INFERENCE_TASKRUN_BINDING_MISSING";
+
+export type DurableTaskDispatchBinding =
+  | { kind: "not-durable-task" }
+  | { kind: "bound"; progressPayload: unknown }
+  | { kind: "unsatisfiable"; error: typeof DURABLE_INFERENCE_TASKRUN_BINDING_MISSING };
+
+interface DurableTaskBindingDatabase {
+  taskRun: {
+    findUnique(args: {
+      where: { id: string };
+      select: { progressPayload: true };
+    }): Promise<{ progressPayload: unknown } | null>;
+  };
+}
+
+/**
+ * Resolve the server-owned TaskRun a durable MCP inference operation dispatches
+ * under. The binding is written before the wake is enqueued (#5065), so a
+ * missing id or a vanished row cannot heal by waiting: it is unsatisfiable.
+ */
+export async function resolveDurableTaskDispatchBinding(
+  operation: Pick<AsyncOperationRecord, "contractFamily" | "taskRunId">,
+  db: DurableTaskBindingDatabase = prisma as unknown as DurableTaskBindingDatabase,
+): Promise<DurableTaskDispatchBinding> {
+  if (operation.contractFamily !== DURABLE_INFERENCE_TASK_CONTRACT_FAMILY) {
+    return { kind: "not-durable-task" };
+  }
+  if (!operation.taskRunId) {
+    return { kind: "unsatisfiable", error: DURABLE_INFERENCE_TASKRUN_BINDING_MISSING };
+  }
+  const taskRun = await db.taskRun.findUnique({
+    where: { id: operation.taskRunId },
+    select: { progressPayload: true },
+  });
+  if (!taskRun) {
+    return { kind: "unsatisfiable", error: DURABLE_INFERENCE_TASKRUN_BINDING_MISSING };
+  }
+  return { kind: "bound", progressPayload: taskRun.progressPayload };
 }
 
 export async function reconcilePrismaAsyncOperationWakes(input: { limit?: number }) {
