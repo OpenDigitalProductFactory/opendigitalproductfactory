@@ -461,7 +461,7 @@ export async function discoverModelsInternal(
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { discovered: 0, newCount: 0, error: "Provider not found" };
 
-  if (providerId === "codex" && provider.cliEngine === "codex-cli") {
+  if (providerId === "codex" && provider.cliEngine === "codex") {
     try {
       const { discoverCodexCliModels } = await import("@/lib/routing/codex-cli-model-catalog");
       const models = await discoverCodexCliModels(providerId);

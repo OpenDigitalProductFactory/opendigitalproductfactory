@@ -403,7 +403,7 @@ if (-not $DryRun.IsPresent) {
             if ($LASTEXITCODE -eq 0 -and $probeJson) {
                 $probeResult = $probeJson | ConvertFrom-Json
                 # ConvertFrom-Json returns PSCustomObject - re-serialize as
-                # nested hashtables so Set-DpfStateValue round-trips cleanly.
+                # nested hashtables so the sidecar JSON round-trips cleanly.
                 $mcpReadiness = $probeResult.mcpReadiness | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
                 $smokeResult  = $probeResult.smokeTest    | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
             } else {
@@ -434,7 +434,10 @@ if ($null -eq $smokeResult) {
     }
 }
 
-# 6. Materialize state and write to install-state.json.
+# 6. Materialize state and write to the agent-toolchain sidecar. NOT
+#    install-state.json: that file is bound byte-for-byte by the self-upgrade's
+#    signed handoff, and this bootstrap runs on every client session start -
+#    one landing mid-drain fenced SUR-4758058F (BI-95DF1BFC).
 $state = [ordered]@{
     appliedAt           = (Get-Date).ToUniversalTime().ToString("o")
     dpfPlatformVersion  = $expectedVersion
@@ -472,7 +475,7 @@ if (-not $claudeWired -and -not $codexWired -and -not $grokWired -and -not $agyW
 
 if (-not $DryRun.IsPresent) {
     Initialize-DpfState -InstallerVersion "agent-toolchain-bootstrap-phase-3" -InstallPath $RepoRoot
-    Set-DpfStateValue -Key "agentToolchain" -Value $state
+    Write-DpfAgentToolchainState -State $state | Out-Null
 }
 
 # --- Readiness banner ---------------------------------------------------------
@@ -510,7 +513,7 @@ if ($ShowSubstrate.IsPresent) {
     Write-Host "    Antigravity (agy) : $($state.antigravityWired)" -ForegroundColor DarkGray
     Write-Host "    Memory seeded at  : $($state.memorySeededAt)" -ForegroundColor DarkGray
     Write-Host "    DPF platform ver  : $($state.dpfPlatformVersion)" -ForegroundColor DarkGray
-    Write-Host "    State file        : $(Get-DpfStatePath)" -ForegroundColor DarkGray
+    Write-Host "    State file        : $(Get-DpfAgentToolchainStatePath)" -ForegroundColor DarkGray
 }
 
 Write-Host ""

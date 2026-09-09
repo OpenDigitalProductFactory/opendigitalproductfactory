@@ -93,7 +93,16 @@ test("installers persist canonical host identity and Compose passes it to the po
   assert.match(windowsInstaller, /DPF_HOST_ARCH=\$hostArch/);
 });
 
-test("agent toolchain bootstrap changes only its owned install-state property", async () => {
-  assert.match(await source("scripts/dpf-bootstrap-agent-toolchain.sh"), /dpf_state_write_json "agentToolchain"/);
-  assert.match(await source("scripts/dpf-bootstrap-agent-toolchain.ps1"), /Set-DpfStateValue -Key "agentToolchain"/);
+test("agent toolchain bootstrap writes its sidecar and never install-state.json (BI-95DF1BFC)", async () => {
+  // install-state.json is bound byte-for-byte by the self-upgrade's signed
+  // handoff. The bootstrap runs on every client session start; one landing
+  // during the drain fenced SUR-4758058F with install_state_envelope_state_changed.
+  const bash = await source("scripts/dpf-bootstrap-agent-toolchain.sh");
+  const windows = await source("scripts/dpf-bootstrap-agent-toolchain.ps1");
+  assert.match(bash, /dpf_agent_toolchain_state_write "\$AGENT_TOOLCHAIN_JSON"/);
+  assert.match(windows, /Write-DpfAgentToolchainState -State \$state/);
+  assert.doesNotMatch(bash, /dpf_state_write_json|dpf_state_write "/);
+  assert.doesNotMatch(windows, /Set-DpfStateValues? /);
+  assert.match(await source("scripts/installer/lib/state.sh"), /agent-toolchain-state\.json/);
+  assert.match(await source("scripts/installer/lib/state.ps1"), /agent-toolchain-state\.json/);
 });

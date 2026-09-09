@@ -24,6 +24,7 @@ import {
   type WorkroomShapeConformance,
   type WorkroomShapeConformanceDeviation,
 } from "./workroom-shape-conformance";
+import { writebackLatchHolds } from "./writeback-latch";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
@@ -323,20 +324,17 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
       receipt.stageKey === stage.key && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
   );
   const prior = input.priorDrive;
-  const alreadyTriedWriteback = Boolean(
-    !completing
-    && (
-      blocked
-      || (
-        prior
-        && prior.stageKey === stage.key
-        && (
-          prior.action === "dispatch_agent"
-          || prior.reason === EXECUTOR_WRITEBACK_UNAVAILABLE_REASON
-        )
-      )
-    ),
-  );
+  // Bounded, not permanent: the latch holds within a cycle and releases on the
+  // next, so a deployed fix can reach a room that previously failed closed.
+  // Without this the pause reason re-triggers the pause and the room is locked
+  // forever (12 of 24 rooms on this install were).
+  const alreadyTriedWriteback = !completing
+    && writebackLatchHolds({
+      prior: prior ?? null,
+      stageKey: stage.key,
+      currentCycleKey: cycle?.cycleKey ?? null,
+      blocked,
+    });
   if (alreadyTriedWriteback) {
     return {
       action: "pause",

@@ -63,7 +63,8 @@ describe("Codex authoritative discovery", () => {
       providerId: "codex",
       authMethod: "oauth2_authorization_code",
       category: "agent",
-      cliEngine: "codex-cli",
+      // Canonical providers-registry.json and live ModelProvider value.
+      cliEngine: "codex",
     });
   });
 

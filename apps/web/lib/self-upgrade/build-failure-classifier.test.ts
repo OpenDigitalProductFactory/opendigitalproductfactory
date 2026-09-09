@@ -212,6 +212,32 @@ describe("classifyBuildFailure", () => {
     expect(c.failingTrace).toContain("install_state_migration_handoff_missing");
   });
 
+  it("classifies a handoff whose install-state moved during the drain instead of leaving it unknown (BI-95DF1BFC)", () => {
+    // SUR-4758058F: readiness signed at 22:19, the agent-toolchain bootstrap
+    // rewrote install-state.json at 22:22, promote.sh refused at 22:24 and the
+    // wrapper reported "unknown (unclassified)".
+    const log = [
+      "[build-failure-class] unknown (unclassified)",
+      "--- stderr (tail) ---",
+      "install_state_envelope_state_changed",
+      "--- stdout (tail) ---",
+      "step=prepare target=9f176768d8ab step=backup target=9f176768d8ab step=install-state-migrate target=9f176768d8ab",
+    ].join("\n");
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("install-state-envelope-changed");
+    expect(c.summary).toContain("another host-side writer");
+    expect(c.summary).toContain("retry the upgrade");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.failingTrace).toContain("install_state_envelope_state_changed");
+  });
+
+  it("classifies an expired handoff as the same drain-window class with the TTL remedy", () => {
+    const c = classifyBuildFailure({ log: "--- stderr (tail) ---\nerror: install_state_envelope_expired\n" });
+    expect(c.class).toBe("install-state-envelope-changed");
+    expect(c.summary).toContain("EXPIRED");
+    expect(c.summary).toContain("QuiescenceRun");
+  });
+
   it("keeps an unrelated mounts-denied path out of the state-dir advice", () => {
     const log = "Error response from daemon: mounts denied: The path /some/other/vol is not shared from the host.";
     const c = classifyBuildFailure({ log });
