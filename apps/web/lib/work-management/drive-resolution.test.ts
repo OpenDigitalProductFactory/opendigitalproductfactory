@@ -340,7 +340,7 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
     const plan = resolveDrivePlan(baseInput({
       currentStageKey: "scan",
       receipts: [],
-      priorDrive: { action: "dispatch_agent", reason: "agent_stage", stageKey: "scan" },
+      priorDrive: { action: "dispatch_agent", reason: "agent_stage", stageKey: "scan", cycleKey: null },
     }));
     expect(plan.action).toBe("pause");
     expect(plan.reason).toBe("executor_writeback_unavailable");
@@ -357,7 +357,7 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
       priorDrive: {
         action: "pause",
         reason: "executor_writeback_unavailable",
-        stageKey: "scan",
+        stageKey: "scan", cycleKey: null,
       },
     }));
     expect(plan.action).toBe("pause");
@@ -396,7 +396,7 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
       priorDrive: {
         action: "pause",
         reason: "executor_writeback_unavailable",
-        stageKey: "scan",
+        stageKey: "scan", cycleKey: null,
       },
     }));
     expect(plan.action).toBe("dispatch_agent");
