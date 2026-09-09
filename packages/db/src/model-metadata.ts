@@ -326,8 +326,13 @@ export function parseModelMetadataSources(sources: ReadonlyArray<{ file: string;
 // ── Catalog carrier ─────────────────────────────────────────────────────────
 
 /** The exact string written by COMMENT ON TABLE. Stable key order → stable diff. */
-export function toCatalogComment(m: ModelMetadata): string {
-  const ordered: Record<string, unknown> = { lifecycle: m.lifecycle, retention: formatRetentionValue(m.retention) };
+export function toCatalogComment(m: ModelMetadata, model?: string): string {
+  const ordered: Record<string, unknown> = {};
+  // The Prisma model name travels with the comment so a catalog reader can
+  // address the Prisma delegate without re-parsing the schema.
+  if (model) ordered.model = model;
+  ordered.lifecycle = m.lifecycle;
+  ordered.retention = formatRetentionValue(m.retention);
   if (m.sensitivity) ordered.sensitivity = m.sensitivity;
   if (m.categories?.length) ordered.categories = m.categories;
   if (m.scope) ordered.scope = m.scope;
@@ -340,6 +345,13 @@ export function toCatalogComment(m: ModelMetadata): string {
 
 /** Read a catalog comment back. Returns null for a non-DPF or malformed comment. */
 export function parseCatalogComment(comment: string | null | undefined): ModelMetadata | null {
+  return parseCatalogCommentWithModel(comment)?.metadata ?? null;
+}
+
+/** Same as parseCatalogComment but also returns the Prisma model name when the comment carries one. */
+export function parseCatalogCommentWithModel(
+  comment: string | null | undefined,
+): { model: string | null; metadata: ModelMetadata } | null {
   if (!comment || !comment.startsWith(MODEL_METADATA_COMMENT_PREFIX)) return null;
   let raw: Record<string, unknown>;
   try {
@@ -348,10 +360,12 @@ export function parseCatalogComment(comment: string | null | undefined): ModelMe
     return null;
   }
   const pairs: Array<[string, string]> = [];
+  const model = typeof raw.model === "string" ? raw.model : null;
   for (const [k, v] of Object.entries(raw)) {
+    if (k === "model") continue;
     if (Array.isArray(v)) pairs.push([k, v.join(",")]);
     else if (typeof v === "string") pairs.push([k, k === "basis" ? v.replace(/\s+/g, "_") : v]);
   }
-  const { metadata } = validateModelMetadata(pairs, { file: "<catalog>", line: 0, model: "<catalog>" });
-  return metadata;
+  const { metadata } = validateModelMetadata(pairs, { file: "<catalog>", line: 0, model: model ?? "<catalog>" });
+  return metadata ? { model, metadata } : null;
 }

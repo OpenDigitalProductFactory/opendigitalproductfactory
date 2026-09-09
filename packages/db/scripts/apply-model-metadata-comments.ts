@@ -61,7 +61,7 @@ export async function applyModelMetadataComments(opts: { dryRun?: boolean } = {}
       missingTables.push(entry.table);
       continue;
     }
-    const want = toCatalogComment(entry.metadata);
+    const want = toCatalogComment(entry.metadata, entry.model);
     if (current.get(entry.table) === want) {
       unchanged += 1;
       continue;
