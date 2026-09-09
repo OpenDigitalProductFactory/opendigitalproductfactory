@@ -927,6 +927,21 @@ outcomes.
 
 ### 9.6 Proposed competence-evolution Workroom application profile
 
+**Informative cross-workroom application.** The
+[cross-workroom review design](../superpowers/specs/2026-09-06-cross-workroom-learning-review-design.md)
+applies this profile across occurrences. Its proposed common contract preserves event evidence,
+review cursors, effective profile versions, accountable ownership and the next safe action before
+an executor is replaced. Source, activity-shape, facet, category, leaf and organization overlays
+add their applicable obligations without silently removing common ones. An unexercised definition
+is reported separately from an observed successful occurrence.
+
+The proposed operating cadence captures evidence at consequential transitions, reviews daily
+deltas and assesses weekly trends; domain deadlines and seasonal opportunity windows refine it.
+Every accepted lesson links the original evidence, triage decision, existing delivery owner,
+changed method/profile version and independent subsequent assessment. A completed task, merged
+change or scheduled review alone does not establish benefit. This application note introduces no
+new normative requirement or adopted standard version; Section 19 remains the publication authority.
+
 The [PAAW competence-evolution Workroom
 design](../superpowers/specs/2026-08-30-paaw-competence-evolution-workroom-design.md) defines a
 candidate application profile for turning operational experience into governed knowledge, evaluated
