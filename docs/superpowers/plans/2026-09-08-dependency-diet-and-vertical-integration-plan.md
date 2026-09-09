@@ -74,7 +74,7 @@ Exclusive packages by workspace and kind: apps/web prod 301, root devDependencie
 | `tailwindcss` | 3.x and 4.x | the only first-party split in `sbom/baseline.json`: mobile on nativewind v4 |
 | `semver` 6, `lru-cache` 5, `glob` 7, `minimatch` 3 | old majors | Babel and `test-exclude` (Expo / coverage) |
 
-Every row except the Babel one disappears with a move in §3: mermaid-cli (M2), inngest (M3), Prism (M4), mobile toolchain (M10).
+Every row except the Babel one disappears with a move in §3: mermaid-cli (M2), inngest (M3), Prism (M4), mobile toolchain (M6).
 
 ### 1.3 What the image ships that the portal never executes
 
