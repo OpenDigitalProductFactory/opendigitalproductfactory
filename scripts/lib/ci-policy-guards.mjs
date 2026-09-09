@@ -418,6 +418,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
     ], { inputs: ["code"] }),
+    // BI-5CC4159D: `new URL(..., import.meta.url).pathname` is "/D:/..." on
+    // Windows, so every filesystem call built on it fails on every Windows host
+    // while Linux CI stays green. Third recurrence (#4736, workroom-stall,
+    // #5247); the last one failed the local-CI gate for every branch on the
+    // host. Repo-wide, no baseline: the fix branch took the count to zero.
+    guard("no-url-pathname-fs-guard", "URL Pathname Filesystem Guard", [
+      node("--test", "scripts/check-no-url-pathname-fs.test.mjs"),
+      node("scripts/check-no-url-pathname-fs.mjs"),
+    ], { inputs: ["code"] }),
     guard("work-unit-conformance-guard", "WorkUnit Conformance Guard", [
       node("--test", "scripts/check-work-unit-conformance.test.mjs"),
       node("scripts/check-work-unit-conformance.mjs"),

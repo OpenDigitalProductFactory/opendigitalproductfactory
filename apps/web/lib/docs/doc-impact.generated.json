@@ -1713,6 +1713,9 @@
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/check-no-url-pathname-fs.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/check-override-comments.mjs": [
       "docs/architecture/contributor-procedure-runbook.md"
     ],
@@ -2829,6 +2832,7 @@
       "docker-compose.linux.yml",
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
+      "scripts/check-no-url-pathname-fs.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
