@@ -270,6 +270,15 @@ deliberate:
   correspondence. IMAP has no such bound because its cursor starts at UID 1 of
   the configured folder, which for a purpose mailbox is the intended behaviour.
 
+Guard-driven adjustments while landing: the public id is `MailboxAccount.mailboxRef`
+(not `mailboxId`, which the FK-coverage ratchet reads as a bare foreign key); the
+last-poll outcome is the `MailboxPollStatus` enum rather than a string; the
+acknowledging principal, the creating principal and the routed WorkItem are real
+Prisma relations (NOT VALID foreign keys on the existing table); the Mailroom
+source-registry entry, its shared policies and the navigation records live in
+their own modules to respect the module-size ceilings; provider probe and poll
+outcomes use the shared `ActionResult` helpers.
+
 ## Completion gate (every slice)
 
 1. Focused vitest for the touched files, then the affected package suites.

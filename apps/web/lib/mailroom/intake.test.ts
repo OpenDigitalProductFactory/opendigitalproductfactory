@@ -4,6 +4,8 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { ok } from "@/lib/shared/action-result";
+
 import { ALL_ARCHETYPES, resolveMailroomProfile } from "@dpf/storefront-templates";
 
 import { ingestNormalizedMail, pollDueMailboxes, pollMailbox, type IntakeDb, type IntakeDeps, type MailboxRecord } from "./intake";
@@ -91,7 +93,7 @@ function fakeDb() {
 
 const mailbox: MailboxRecord = {
   id: "mbx-row",
-  mailboxId: "MBX-1",
+  mailboxRef: "MBX-1",
   organizationId: "org-1",
   address: "info@rescue.example",
   provider: "imap",
@@ -104,7 +106,7 @@ function deps(db: IntakeDb, imap: Partial<MailboxProviderAdapter<"imap">>, extra
   const base: MailboxProviderAdapter<"imap"> = {
     provider: "imap",
     pollable: true,
-    async probe() { return { ok: true, mailboxLabel: "x" }; },
+    async probe() { return ok({ mailboxLabel: "x" }); },
     async fetchNew() { return { messages: [], cursor: null }; },
     ...imap,
   };
@@ -204,7 +206,8 @@ describe("pollMailbox", () => {
     const fetchNew = vi.fn<MailboxProviderAdapter<"imap">["fetchNew"]>(async () => ({ messages: [mail(), mail({ providerMessageId: "u-2" })], cursor: { uidValidity: "1", lastUid: 2 } }));
     const d = deps(f.db, { fetchNew });
     const out = await pollMailbox(d, { ...mailbox, cursor: { uidValidity: "1", lastUid: 0 } });
-    expect(out).toEqual({ mailboxId: "MBX-1", ok: true, fetched: 2, ingested: 2, skipped: 0 });
+    expect(out.ok).toBe(true);
+    expect(out).toMatchObject({ mailboxRef: "MBX-1", data: { fetched: 2, ingested: 2, skipped: 0 } });
     expect(fetchNew.mock.calls[0][2]).toEqual({ uidValidity: "1", lastUid: 0 });
     const update = f.mailboxUpdates[0];
     expect(update.cursor).toEqual({ uidValidity: "1", lastUid: 2 });
@@ -223,10 +226,11 @@ describe("pollMailbox", () => {
         return { messages: [mail()], cursor: null };
       },
     });
-    const outcomes = await pollDueMailboxes(d, [mailbox, { ...mailbox, id: "mbx-2", mailboxId: "MBX-2", address: "adopt@rescue.example" }]);
+    const outcomes = await pollDueMailboxes(d, [mailbox, { ...mailbox, id: "mbx-2", mailboxRef: "MBX-2", address: "adopt@rescue.example" }]);
     expect(outcomes[0].ok).toBe(false);
     if (!outcomes[0].ok) expect(outcomes[0].error).not.toContain("zzz");
-    expect(outcomes[1]).toMatchObject({ ok: true, ingested: 1 });
+    expect(outcomes[1].ok).toBe(true);
+    expect(outcomes[1]).toMatchObject({ data: { ingested: 1 } });
     expect(f.mailboxUpdates[0].status).toBe("error");
     expect(f.mailboxUpdates[1].status).toBe("connected");
   });
@@ -235,7 +239,8 @@ describe("pollMailbox", () => {
     const f = fakeDb();
     const d = deps(f.db, {});
     const out = await pollMailbox(d, { ...mailbox, provider: "postmark-inbound", settings: { inboundAddress: "x@y" } });
-    expect(out).toEqual({ mailboxId: "MBX-1", ok: true, fetched: 0, ingested: 0, skipped: 0 });
+    expect(out.ok).toBe(true);
+    expect(out).toMatchObject({ mailboxRef: "MBX-1", data: { fetched: 0, ingested: 0, skipped: 0 } });
     expect(f.mailboxUpdates).toHaveLength(0);
   });
 });

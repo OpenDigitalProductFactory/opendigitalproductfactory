@@ -13,12 +13,8 @@
 // business — no address, person, credential or tuned threshold may appear here.
 // Those are instance facts on `MailboxAccount`.
 
-import type {
-  ArchetypeDefinition,
-  MailroomProfile,
-  MailroomReason,
-  MailroomUrgencyKey,
-} from "./types";
+import type { ArchetypeDefinition } from "./types";
+import type { MailroomProfile, MailroomReason, MailroomUrgencyKey } from "./mailroom-profile-types";
 
 export const MAILROOM_URGENCIES = ["immediate", "hours", "days", "weeks"] as const satisfies readonly MailroomUrgencyKey[];
 

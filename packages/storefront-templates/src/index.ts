@@ -10,6 +10,7 @@ export * from "./media-profile";
 export * from "./operational-value-stream";
 export * from "./standing-rooms";
 export * from "./mailroom-profile";
+export * from "./mailroom-profile-types";
 export * from "./public-process-projection";
 export * from "./twin-profile";
 export * from "./resource-capacity-profile";

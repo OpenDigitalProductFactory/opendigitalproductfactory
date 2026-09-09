@@ -347,8 +347,8 @@ model OutboundPublication {
 model InboundChannelMessage {
   inboundId          String       @id @default(cuid())
   organizationId     String
-  domain             String // "marketing" | "mailroom"
-  channelId          String // "email-postmark" | "mailroom-imap" | "mailroom-microsoft365" | ...
+  domain             String // "marketing" today
+  channelId          String // "email-postmark" | ...
   externalThreadId   String
   externalMessageId  String?
   fromAddress        String?
@@ -384,6 +384,8 @@ model InboundChannelMessage {
 
   organization   Organization    @relation(fields: [organizationId], references: [id])
   mailboxAccount MailboxAccount? @relation(fields: [mailboxAccountId], references: [id], onDelete: SetNull)
+  routedWorkItem WorkItem?       @relation("MailroomRoutedWorkItem", fields: [routedWorkItemId], references: [itemId], onDelete: SetNull)
+  acknowledgedBy Principal?      @relation("MailroomAcknowledgedBy", fields: [acknowledgedByPrincipalId], references: [principalId], onDelete: SetNull)
 
   // Idempotency as a database fact: a provider message id is ingested once per
   // channel. Postgres treats NULL message ids as distinct, so rows without one
@@ -394,6 +396,8 @@ model InboundChannelMessage {
   @@index([classification])
   @@index([mailboxAccountId, receivedAt])
   @@index([mailroomStatus, acknowledgeBy])
+  @@index([routedWorkItemId])
+  @@index([acknowledgedByPrincipalId])
 }
 
 // Phase 4: per-channel weekly spend ceiling. The hard backstop for paid

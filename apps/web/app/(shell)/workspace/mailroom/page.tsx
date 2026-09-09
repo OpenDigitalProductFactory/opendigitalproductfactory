@@ -138,7 +138,7 @@ export default async function MailroomPage({ searchParams }: Props) {
                       Last read {when(m.lastPolledAt)} · every {m.pollIntervalMinutes} min · next {when(m.nextPollAt)}
                     </div>
                     {m.status === "error" && m.lastError ? <Notice variant="warn" title="Last read failed">{m.lastError}</Notice> : null}
-                    <MailboxControls mailboxId={m.mailboxId} paused={paused} />
+                    <MailboxControls mailboxRef={m.mailboxRef} paused={paused} />
                   </Surface>
                 </li>
               );
@@ -160,15 +160,15 @@ export default async function MailroomPage({ searchParams }: Props) {
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 id="waiting-heading" className="text-lg font-medium text-[var(--dpf-text)]">Waiting for someone ({waiting.length})</h2>
               <form className="flex flex-wrap gap-2 text-xs" aria-label="Filter items">
-                <select name="reason" defaultValue={params.reason ?? ""} className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-[var(--dpf-text)]">
+                <select name="reason" defaultValue={params.reason ?? ""} className="rounded-md border border-[var(--dpf-border)] bg-transparent px-2 py-1 text-[var(--dpf-text)]">
                   <option value="">Any reason</option>
                   {profile.reasons.filter((r) => !r.noise).map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
                 </select>
-                <select name="urgency" defaultValue={params.urgency ?? ""} className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-[var(--dpf-text)]">
+                <select name="urgency" defaultValue={params.urgency ?? ""} className="rounded-md border border-[var(--dpf-border)] bg-transparent px-2 py-1 text-[var(--dpf-text)]">
                   <option value="">Any urgency</option>
                   {["immediate", "hours", "days", "weeks"].map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
-                <select name="queue" defaultValue={params.queue ?? ""} className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-[var(--dpf-text)]">
+                <select name="queue" defaultValue={params.queue ?? ""} className="rounded-md border border-[var(--dpf-border)] bg-transparent px-2 py-1 text-[var(--dpf-text)]">
                   <option value="">Any queue</option>
                   {profile.queues.map((q) => <option key={q.key} value={q.key}>{q.label}</option>)}
                 </select>

@@ -133,9 +133,9 @@ export async function draftMailroomReply(input: {
 }
 
 export type SendApprovedReplyResult =
-  | { ok: true; messageId: string }
-  | { ok: false; reason: "not-configured"; settingsRoute: string }
-  | { ok: false; reason: "no-recipient" | "draft-not-pending" | "draft-missing" };
+  | { status: "sent"; messageId: string }
+  | { status: "not-configured"; settingsRoute: string }
+  | { status: "no-recipient" | "draft-not-pending" | "draft-missing" };
 
 /** Approve a pending draft and send it. The approval is the person's; the send is the platform's. */
 export async function sendApprovedMailroomReply(input: {
@@ -150,11 +150,11 @@ export async function sendApprovedMailroomReply(input: {
 }): Promise<SendApprovedReplyResult> {
   const { db, item } = input;
   const draft = await db.outboundDraft.findFirst({ where: { draftId: input.draftId }, select: { draftId: true, status: true, body: true, metadata: true } });
-  if (!draft) return { ok: false, reason: "draft-missing" };
-  if (draft.status !== "pending-review" && draft.status !== "draft") return { ok: false, reason: "draft-not-pending" };
-  if (!item.fromAddress) return { ok: false, reason: "no-recipient" };
+  if (!draft) return { status: "draft-missing" };
+  if (draft.status !== "pending-review" && draft.status !== "draft") return { status: "draft-not-pending" };
+  if (!item.fromAddress) return { status: "no-recipient" };
   if (!(await input.isEmailConfigured())) {
-    return { ok: false, reason: "not-configured", settingsRoute: "/admin/settings" };
+    return { status: "not-configured", settingsRoute: "/admin/settings" };
   }
 
   const body = input.editedBody?.trim() || draft.body;
@@ -197,5 +197,5 @@ export async function sendApprovedMailroomReply(input: {
       });
     }
   }
-  return { ok: true, messageId: sent.messageId };
+  return { status: "sent", messageId: sent.messageId };
 }

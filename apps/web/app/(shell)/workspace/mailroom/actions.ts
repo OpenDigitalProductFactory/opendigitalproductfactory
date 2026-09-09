@@ -43,18 +43,18 @@ function newMailboxId(): string {
   return `MBX-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
-export type ConnectMailboxResult = ActionResult<{ mailboxId: string; mailboxLabel: string; firstRead: string }>;
+export type ConnectMailboxResult = ActionResult<{ mailboxRef: string; mailboxLabel: string; firstRead: string }>;
 
 /** Parse the connect form into provider settings + secrets. Exported for tests. */
-export function parseMailboxForm(formData: FormData):
-  | { ok: true; provider: MailboxProviderKey; address: string; purposeKey: string; displayName: string | null; pollIntervalMinutes: number; settings: unknown; secrets: unknown }
-  | { ok: false; error: string } {
+export type ParsedMailboxForm = { provider: MailboxProviderKey; address: string; purposeKey: string; displayName: string | null; pollIntervalMinutes: number; settings: unknown; secrets: unknown };
+
+export function parseMailboxForm(formData: FormData): ActionResult<ParsedMailboxForm> {
   const provider = field(formData, "provider") as MailboxProviderKey;
-  if (!MAILBOX_PROVIDERS.includes(provider)) return { ok: false, error: "Choose a mailbox provider." };
+  if (!MAILBOX_PROVIDERS.includes(provider)) return err("Choose a mailbox provider.");
   const address = field(formData, "address").toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return { ok: false, error: "Enter the mailbox address." };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return err("Enter the mailbox address.");
   const purposeKey = field(formData, "purposeKey");
-  if (!purposeKey) return { ok: false, error: "Choose what this mailbox is for." };
+  if (!purposeKey) return err("Choose what this mailbox is for.");
   const displayName = field(formData, "displayName") || null;
   const interval = Number(field(formData, "pollIntervalMinutes") || "60");
   const pollIntervalMinutes = Number.isFinite(interval) && interval >= 5 && interval <= 24 * 60 ? Math.round(interval) : 60;
@@ -64,46 +64,47 @@ export function parseMailboxForm(formData: FormData):
     const port = Number(field(formData, "port") || "993");
     const user = field(formData, "user") || address;
     const password = field(formData, "password");
-    if (!host) return { ok: false, error: "Enter the IMAP server." };
-    if (!password) return { ok: false, error: "Enter the mailbox password or app password." };
+    if (!host) return err("Enter the IMAP server.");
+    if (!password) return err("Enter the mailbox password or app password.");
     const settings: MailboxSettingsByProvider["imap"] = { host, port: Number.isFinite(port) ? port : 993, secure: port !== 143, user, folder: field(formData, "folder") || "INBOX" };
     const secrets: MailboxSecretsByProvider["imap"] = { password };
-    return { ok: true, provider, address, purposeKey, displayName, pollIntervalMinutes, settings, secrets };
+    return ok<ParsedMailboxForm>({ provider, address, purposeKey, displayName, pollIntervalMinutes, settings, secrets });
   }
   if (provider === "microsoft365") {
     const tenantId = field(formData, "tenantId");
     const clientId = field(formData, "clientId");
     const clientSecret = field(formData, "clientSecret");
-    if (!tenantId || !clientId || !clientSecret) return { ok: false, error: "Enter the Microsoft 365 tenant, application (client) id and client secret." };
+    if (!tenantId || !clientId || !clientSecret) return err("Enter the Microsoft 365 tenant, application (client) id and client secret.");
     const settings: MailboxSettingsByProvider["microsoft365"] = { tenantId, clientId, mailboxUserPrincipalName: address };
     const secrets: MailboxSecretsByProvider["microsoft365"] = { clientSecret };
-    return { ok: true, provider, address, purposeKey, displayName, pollIntervalMinutes, settings, secrets };
+    return ok<ParsedMailboxForm>({ provider, address, purposeKey, displayName, pollIntervalMinutes, settings, secrets });
   }
   const settings: MailboxSettingsByProvider["postmark-inbound"] = { inboundAddress: address };
-  return { ok: true, provider, address, purposeKey, displayName, pollIntervalMinutes, settings, secrets: {} };
+  return ok<ParsedMailboxForm>({ provider, address, purposeKey, displayName, pollIntervalMinutes, settings, secrets: {} });
 }
 
 export async function connectMailbox(_prev: ConnectMailboxResult | null, formData: FormData): Promise<ConnectMailboxResult> {
   const ctx = await operatorContext();
   if (!ctx) return err("You need an operator account to connect a mailbox.");
-  const parsed = parseMailboxForm(formData);
-  if (!parsed.ok) return err(parsed.error);
+  const parsedResult = parseMailboxForm(formData);
+  if (!parsedResult.ok) return err(parsedResult.error);
+  const parsed = parsedResult.data;
 
   const profile = await resolveOrganizationMailroomProfile(ctx.organizationId);
   if (!profile.expectedMailboxes.some((m) => m.purposeKey === parsed.purposeKey)) return err("That purpose is not one this business uses.");
 
   const adapters = createMailboxProviderAdapters();
-  const adapter = adapters[parsed.provider] as { probe: (s: unknown, x: unknown) => Promise<{ ok: true; mailboxLabel: string } | { ok: false; error: string }> };
+  const adapter = adapters[parsed.provider] as { probe: (s: unknown, x: unknown) => Promise<ActionResult<{ mailboxLabel: string }>> };
   const probe = await adapter.probe(parsed.settings, parsed.secrets);
   if (!probe.ok) return err(`Could not read that mailbox: ${probe.error}`);
 
   const principalId = await resolvePrincipalIdForUser(ctx.userId);
-  const mailboxId = newMailboxId();
+  const mailboxRef = newMailboxId();
   const hasSecrets = parsed.secrets && Object.keys(parsed.secrets as object).length > 0;
   await prisma.mailboxAccount.upsert({
     where: { organizationId_address: { organizationId: ctx.organizationId, address: parsed.address } },
     create: {
-      mailboxId,
+      mailboxRef,
       organizationId: ctx.organizationId,
       address: parsed.address,
       displayName: parsed.displayName,
@@ -128,36 +129,36 @@ export async function connectMailbox(_prev: ConnectMailboxResult | null, formDat
       nextPollAt: new Date(),
     },
   });
-  const saved = await prisma.mailboxAccount.findUniqueOrThrow({ where: { organizationId_address: { organizationId: ctx.organizationId, address: parsed.address } }, select: { mailboxId: true } });
+  const saved = await prisma.mailboxAccount.findUniqueOrThrow({ where: { organizationId_address: { organizationId: ctx.organizationId, address: parsed.address } }, select: { mailboxRef: true } });
 
   // Evidence-driven setup completion: a mailbox exists, so the step is done.
   const { completeSetupStepFromEvidence } = await import("@/lib/onboarding/setup-progress-service.server");
   await completeSetupStepFromEvidence(ctx.organizationId, "mailroom").catch(() => null);
 
-  const first = await pollMailboxNow(saved.mailboxId);
-  const firstRead = !first ? "Nothing to read yet." : first.ok ? `First read: ${first.ingested} new message${first.ingested === 1 ? "" : "s"}.` : `First read failed: ${first.error}`;
+  const first = await pollMailboxNow(saved.mailboxRef);
+  const firstRead = !first ? "Nothing to read yet." : first.ok ? `First read: ${first.data.ingested} new message${first.data.ingested === 1 ? "" : "s"}.` : `First read failed: ${first.error}`;
   revalidatePath(MAILROOM_PATH);
-  return ok({ mailboxId: saved.mailboxId, mailboxLabel: probe.mailboxLabel, firstRead });
+  return ok({ mailboxRef: saved.mailboxRef, mailboxLabel: probe.data.mailboxLabel, firstRead });
 }
 
-async function ownedMailbox(mailboxId: string, organizationId: string) {
-  return prisma.mailboxAccount.findFirst({ where: { mailboxId, organizationId } });
+async function ownedMailbox(mailboxRef: string, organizationId: string) {
+  return prisma.mailboxAccount.findFirst({ where: { mailboxRef, organizationId } });
 }
 
-export async function pauseMailbox(mailboxId: string): Promise<ActionResult> {
+export async function pauseMailbox(mailboxRef: string): Promise<ActionResult> {
   const ctx = await operatorContext();
   if (!ctx) return err("Operator account required.");
-  const row = await ownedMailbox(mailboxId, ctx.organizationId);
+  const row = await ownedMailbox(mailboxRef, ctx.organizationId);
   if (!row) return err("Mailbox not found.");
   await prisma.mailboxAccount.update({ where: { id: row.id }, data: { status: row.status === "paused" ? "connected" : "paused", nextPollAt: row.status === "paused" ? new Date() : null } });
   revalidatePath(MAILROOM_PATH);
   return ok();
 }
 
-export async function removeMailbox(mailboxId: string): Promise<ActionResult> {
+export async function removeMailbox(mailboxRef: string): Promise<ActionResult> {
   const ctx = await operatorContext();
   if (!ctx) return err("Operator account required.");
-  const row = await ownedMailbox(mailboxId, ctx.organizationId);
+  const row = await ownedMailbox(mailboxRef, ctx.organizationId);
   if (!row) return err("Mailbox not found.");
   // Items keep their history; the relation is SetNull.
   await prisma.mailboxAccount.delete({ where: { id: row.id } });
@@ -165,15 +166,15 @@ export async function removeMailbox(mailboxId: string): Promise<ActionResult> {
   return ok();
 }
 
-export async function checkMailboxNow(mailboxId: string): Promise<ActionResult<{ summary: string }>> {
+export async function checkMailboxNow(mailboxRef: string): Promise<ActionResult<{ summary: string }>> {
   const ctx = await operatorContext();
   if (!ctx) return err("Operator account required.");
-  const row = await ownedMailbox(mailboxId, ctx.organizationId);
+  const row = await ownedMailbox(mailboxRef, ctx.organizationId);
   if (!row) return err("Mailbox not found.");
-  const outcome = await pollMailboxNow(mailboxId);
+  const outcome = await pollMailboxNow(mailboxRef);
   revalidatePath(MAILROOM_PATH);
   if (!outcome) return err("This mailbox is paused.");
-  return outcome.ok ? ok({ summary: `${outcome.ingested} new, ${outcome.skipped} already seen.` }) : err(outcome.error);
+  return outcome.ok ? ok({ summary: `${outcome.data.ingested} new, ${outcome.data.skipped} already seen.` }) : err(outcome.error);
 }
 
 export async function acknowledgeMailroomItem(inboundId: string): Promise<ActionResult> {
@@ -232,8 +233,8 @@ export async function approveAndSendMailroomReply(_prev: ApproveReplyResult | nu
   });
   revalidatePath(`${MAILROOM_PATH}/items/${inboundId}`);
   revalidatePath(MAILROOM_PATH);
-  if (result.ok) return ok({ messageId: result.messageId });
-  if (result.reason === "not-configured") return err(`Outbound email is not configured yet, so nothing was sent. Set it up under Settings (${result.settingsRoute}) and approve again.`);
-  if (result.reason === "no-recipient") return err("The message has no sender address to reply to.");
+  if (result.status === "sent") return ok({ messageId: result.messageId });
+  if (result.status === "not-configured") return err(`Outbound email is not configured yet, so nothing was sent. Set it up under Settings (${result.settingsRoute}) and approve again.`);
+  if (result.status === "no-recipient") return err("The message has no sender address to reply to.");
   return err("This draft is no longer pending, so it was not sent.");
 }

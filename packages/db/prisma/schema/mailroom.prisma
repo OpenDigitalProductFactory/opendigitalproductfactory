@@ -24,6 +24,12 @@ enum MailboxStatus {
   paused
 }
 
+/// Outcome of the last poll.
+enum MailboxPollStatus {
+  ok
+  error
+}
+
 /// Platform-closed urgency ladder; each maps to an acknowledgement window
 /// (immediate 1h, hours 4h, days 2d, weeks 7d — design §4.1).
 enum MailroomUrgency {
@@ -46,8 +52,8 @@ enum MailroomItemStatus {
 
 model MailboxAccount {
   id                  String          @id @default(cuid())
-  /// Public id, `MBX-` prefixed.
-  mailboxId           String          @unique
+  /// Public reference, `MBX-` prefixed.
+  mailboxRef          String          @unique
   organizationId      String
   address             String
   displayName         String?
@@ -65,8 +71,7 @@ model MailboxAccount {
   pollIntervalMinutes Int             @default(60)
   lastPolledAt        DateTime?
   nextPollAt          DateTime?
-  /// ok | error — the outcome of the last poll.
-  lastPollStatus      String?
+  lastPollStatus      MailboxPollStatus?
   lastError           String?
   lastMessageAt       DateTime?
   createdByPrincipalId String?
@@ -74,9 +79,11 @@ model MailboxAccount {
   updatedAt           DateTime        @updatedAt
 
   organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    Principal?              @relation("MailboxAccountCreatedBy", fields: [createdByPrincipalId], references: [principalId], onDelete: SetNull)
   items        InboundChannelMessage[]
 
   @@unique([organizationId, address])
   @@index([organizationId, status])
   @@index([nextPollAt])
+  @@index([createdByPrincipalId])
 }

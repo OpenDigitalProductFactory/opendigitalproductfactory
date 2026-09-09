@@ -16,7 +16,7 @@ export type ExpectedMailboxOption = { purposeKey: string; label: string; example
 
 type Provider = "imap" | "microsoft365" | "postmark-inbound";
 
-const FIELD = "w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm text-[var(--dpf-text)]";
+const FIELD = "w-full rounded-md border border-[var(--dpf-border)] bg-transparent px-3 py-2 text-sm text-[var(--dpf-text)]";
 const LABEL = "block text-xs font-medium text-[var(--dpf-text-muted)] mb-1";
 
 export function MailboxConnectForm({ purposes, defaultPurposeKey }: { purposes: ExpectedMailboxOption[]; defaultPurposeKey?: string }) {

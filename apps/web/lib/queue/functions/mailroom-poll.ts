@@ -29,10 +29,10 @@ export const mailroomMailboxPoll = inngest.createFunction(
       const { pollDueMailboxesForInstall } = await import("@/lib/mailroom/runtime.server");
       const outcomes = await pollDueMailboxesForInstall();
       return {
-        ok: true,
+        status: "polled",
         mailboxes: outcomes.length,
-        ingested: outcomes.reduce((n, o) => n + (o.ok ? o.ingested : 0), 0),
-        errors: outcomes.filter((o) => !o.ok).map((o) => o.mailboxId),
+        ingested: outcomes.reduce((n, o) => n + (o.ok ? o.data.ingested : 0), 0),
+        errors: outcomes.filter((o) => !o.ok).map((o) => o.mailboxRef),
       };
     });
   },
@@ -41,12 +41,12 @@ export const mailroomMailboxPoll = inngest.createFunction(
 export const mailroomMailboxPollRequested = inngest.createFunction(
   { id: "mailroom/mailbox-poll-requested", retries: 1, triggers: [{ event: MAILROOM_POLL_REQUESTED_EVENT }] },
   async ({ event, step }) => {
-    const mailboxId = typeof event.data?.mailboxId === "string" ? event.data.mailboxId : null;
-    if (!mailboxId) return { ok: false, reason: "mailboxId required" };
+    const mailboxRef = typeof event.data?.mailboxRef === "string" ? event.data.mailboxRef : null;
+    if (!mailboxRef) return { status: "refused", reason: "mailboxRef required" };
     return step.run("poll-one-mailbox", async () => {
       const { pollMailboxNow } = await import("@/lib/mailroom/runtime.server");
-      const outcome = await pollMailboxNow(mailboxId);
-      return { ok: outcome?.ok ?? false, outcome };
+      const outcome = await pollMailboxNow(mailboxRef);
+      return { status: outcome ? (outcome.ok ? "polled" : "failed") : "skipped", outcome };
     });
   },
 );

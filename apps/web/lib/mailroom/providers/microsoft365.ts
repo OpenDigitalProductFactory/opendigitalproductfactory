@@ -20,6 +20,7 @@ import type {
   NormalizedInboundMail,
 } from "./types";
 import { safeProviderError } from "./types";
+import { err, ok } from "@/lib/shared/action-result";
 
 export type GraphMessage = {
   id: string;
@@ -132,9 +133,9 @@ export function createMicrosoft365Adapter(deps: Microsoft365AdapterDeps = {}): M
           `/v1.0/users/${upn}?$select=id,displayName,mail`,
           accessToken,
         );
-        return { ok: true, mailboxLabel: `${user.displayName ?? settings.mailboxUserPrincipalName} · ${user.mail ?? settings.mailboxUserPrincipalName}` };
+        return ok({ mailboxLabel: `${user.displayName ?? settings.mailboxUserPrincipalName} · ${user.mail ?? settings.mailboxUserPrincipalName}` });
       } catch (error) {
-        return { ok: false, error: safeProviderError(error) };
+        return err(safeProviderError(error));
       }
     },
 

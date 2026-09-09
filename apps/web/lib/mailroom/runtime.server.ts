@@ -58,7 +58,7 @@ async function lookupAnimalSubject(organizationId: string, candidate: string): P
 
 export function toMailboxRecord(row: {
   id: string;
-  mailboxId: string;
+  mailboxRef: string;
   organizationId: string;
   address: string;
   provider: "imap" | "microsoft365" | "postmark_inbound";
@@ -68,7 +68,7 @@ export function toMailboxRecord(row: {
 }): MailboxRecord {
   return {
     id: row.id,
-    mailboxId: row.mailboxId,
+    mailboxRef: row.mailboxRef,
     organizationId: row.organizationId,
     address: row.address,
     provider: MAILBOX_PROVIDER_KEY[row.provider],
@@ -127,8 +127,8 @@ export async function pollDueMailboxesForInstall(now: Date = new Date()): Promis
 }
 
 /** Poll one mailbox now (connect flow's first read; the "Check now" action). */
-export async function pollMailboxNow(mailboxId: string): Promise<PollOutcome | null> {
-  const row = await prisma.mailboxAccount.findUnique({ where: { mailboxId } });
+export async function pollMailboxNow(mailboxRef: string): Promise<PollOutcome | null> {
+  const row = await prisma.mailboxAccount.findUnique({ where: { mailboxRef } });
   if (!row || row.status === "paused") return null;
   const deps = (await buildMailroomIntakeDeps(row.organizationId)) as DepsWithRows;
   deps.__rows?.set(row.id, { secretsEnc: row.secretsEnc });

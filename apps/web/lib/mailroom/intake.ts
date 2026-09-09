@@ -17,6 +17,7 @@ import { dispatchMailroomItem, type DispatchDb, type DispatchTarget, type KnownS
 import type { MailboxProviderAdapters } from "./providers/registry";
 import type { MailboxCursorByProvider, MailboxSecretsByProvider, MailboxSettingsByProvider, NormalizedInboundMail } from "./providers/types";
 import { safeProviderError } from "./providers/types";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { triageInboundMail, type ClassifierPort, type SubjectLookupPort, type TriageResult } from "./triage";
 
 export const MAILROOM_DOMAIN = "mailroom";
@@ -27,7 +28,7 @@ export function mailroomChannelId(provider: MailboxProviderKey): string {
 
 export type MailboxRecord = {
   id: string;
-  mailboxId: string;
+  mailboxRef: string;
   organizationId: string;
   address: string;
   provider: MailboxProviderKey;
@@ -139,16 +140,15 @@ export async function ingestNormalizedMail(deps: IntakeDeps, mailbox: MailboxRec
   return { inboundId: created.inboundId, created: true, triage, target };
 }
 
-export type PollOutcome =
-  | { mailboxId: string; ok: true; fetched: number; ingested: number; skipped: number }
-  | { mailboxId: string; ok: false; error: string };
+export type PollCounts = { fetched: number; ingested: number; skipped: number };
+export type PollOutcome = { mailboxRef: string } & ActionResult<PollCounts>;
 
 /** Read one mailbox after its cursor and run the loop for each new message. */
 export async function pollMailbox(deps: IntakeDeps, mailbox: MailboxRecord, options?: { limit?: number }): Promise<PollOutcome> {
   const now = deps.now ?? (() => new Date());
   const adapter = deps.adapters[mailbox.provider];
   if (!adapter.pollable) {
-    return { mailboxId: mailbox.mailboxId, ok: true, fetched: 0, ingested: 0, skipped: 0 };
+    return { mailboxRef: mailbox.mailboxRef, ...ok<PollCounts>({ fetched: 0, ingested: 0, skipped: 0 }) };
   }
   const startedAt = now();
   try {
@@ -180,7 +180,7 @@ export async function pollMailbox(deps: IntakeDeps, mailbox: MailboxRecord, opti
         ...(lastMessageAt ? { lastMessageAt } : {}),
       },
     });
-    return { mailboxId: mailbox.mailboxId, ok: true, fetched: result.messages.length, ingested, skipped };
+    return { mailboxRef: mailbox.mailboxRef, ...ok<PollCounts>({ fetched: result.messages.length, ingested, skipped }) };
   } catch (error) {
     const message = safeProviderError(error);
     await deps.db.mailboxAccount.update({
@@ -194,7 +194,7 @@ export async function pollMailbox(deps: IntakeDeps, mailbox: MailboxRecord, opti
         lastError: message,
       },
     });
-    return { mailboxId: mailbox.mailboxId, ok: false, error: message };
+    return { mailboxRef: mailbox.mailboxRef, ...err(message) };
   }
 }
 

@@ -11,6 +11,9 @@
 
 import type { MailboxProviderKey } from "@dpf/db/mailroom-enums";
 
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+import type { ActionResult } from "@/lib/shared/action-result";
+
 /** Non-secret connection facts, stored on `MailboxAccount.settings`. */
 export type ImapMailboxSettings = {
   host: string;
@@ -90,9 +93,8 @@ export type NormalizedInboundMail = {
   attachments: MailAttachmentMeta[];
 };
 
-export type MailboxProbeResult =
-  | { ok: true; mailboxLabel: string }
-  | { ok: false; error: string };
+/** Probe outcome, in the shared ActionResult shape. */
+export type MailboxProbeResult = ActionResult<{ mailboxLabel: string }>;
 
 export type MailboxFetchResult<P extends MailboxProviderKey> = {
   messages: NormalizedInboundMail[];
@@ -116,6 +118,6 @@ export interface MailboxProviderAdapter<P extends MailboxProviderKey = MailboxPr
 
 /** Safe, operator-readable error text; never echoes credentials. */
 export function safeProviderError(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error);
+  const raw = getErrorMessage(error);
   return raw.replace(/(pass(word)?|secret|token)\s*[:=]\s*\S+/gi, "$1: [redacted]").slice(0, 300);
 }

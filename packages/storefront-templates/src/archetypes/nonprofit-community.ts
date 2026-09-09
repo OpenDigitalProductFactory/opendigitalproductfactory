@@ -1,4 +1,5 @@
-import type { ActivationProfile, ArchetypeDefinition, MailroomProfile } from "../types";
+import type { ActivationProfile, ArchetypeDefinition } from "../types";
+import type { MailroomProfile } from "../mailroom-profile-types";
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },

@@ -79,7 +79,7 @@ export function MailroomItemActions({
             name="body"
             defaultValue={draft.body}
             rows={8}
-            className="w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm text-[var(--dpf-text)]"
+            className="w-full rounded-md border border-[var(--dpf-border)] bg-transparent px-3 py-2 text-sm text-[var(--dpf-text)]"
           />
           {sendState && !sendState.ok ? <Notice variant="warn" title="Not sent">{sendState.error}</Notice> : null}
           {sendState && sendState.ok ? <Notice variant="success" title="Sent">Reply sent and threaded onto the sender&apos;s conversation.</Notice> : null}

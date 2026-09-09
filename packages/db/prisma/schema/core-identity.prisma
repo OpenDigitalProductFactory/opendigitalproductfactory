@@ -193,6 +193,8 @@ model Principal {
   accountableForOrganizations         Organization[]                      @relation("OrganizationTopAccountable")
   sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")
   communicationChannelBindings        CommunicationChannelBinding[]
+  mailboxAccountsCreated              MailboxAccount[]                    @relation("MailboxAccountCreatedBy")
+  mailroomAcknowledgements            InboundChannelMessage[]             @relation("MailroomAcknowledgedBy")
   communicationChannelSessions        CommunicationChannelSession[]
   // Per AGENTS.md §11 (Principal convergence, 2026-05-09): EdgeNode
   // identity lives on Principal + PrincipalAlias, with EdgeNode as a

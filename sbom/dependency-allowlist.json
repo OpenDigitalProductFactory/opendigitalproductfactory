@@ -329,6 +329,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "@types/mailparser": {
+      "added": "2026-09-09",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "Type definitions for mailparser (DefinitelyTyped, MIT); dev-only."
+    },
     "@types/net-snmp": {
       "added": "2026-06-21",
       "workspaces": [
@@ -680,6 +690,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "imapflow": {
+      "added": "2026-09-09",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "Mailroom IMAP adapter (design 2026-09-09 s3, BI-13919D7E). MIT; Postal Systems (Andris Reinman, the Nodemailer/EmailEngine maintainer); promise API, UID search, UIDVALIDITY handling; actively released; no known OSV advisories at adoption. Rejected node-imap (unmaintained since 2019, callback API) and imap-simple (wraps node-imap)."
+    },
     "inngest": {
       "added": "2026-06-21",
       "workspaces": [
@@ -759,6 +779,16 @@
         "prod"
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "mailparser": {
+      "added": "2026-09-09",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "Mailroom MIME parsing for polled IMAP messages (design 2026-09-09 s3). MIT; same maintainer as nodemailer; about 1M weekly downloads; actively released; no known OSV advisories at adoption. Attachment bytes are never written to disk (metadata only)."
     },
     "mammoth": {
       "added": "2026-06-21",

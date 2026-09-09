@@ -1,4 +1,5 @@
 import type { CapabilityKey } from "@/lib/govern/permissions";
+import { MAILROOM_NAV_ROUTES } from "./mailroom-nav-routes";
 
 export type PortalAudienceMode = "worker" | "operator" | "customer" | "diagnostic";
 
@@ -117,24 +118,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       description: "Search, open, publish, and trace managed documents.",
     },
   },
-  {
-    // Mailroom (design 2026-09-09 §4.9, BI-727D5FD9): the business's inbound
-    // correspondence — declared mailboxes, what arrived, who has acknowledged it.
-    // A workspace-section sibling beside Needs you and Documents.
-    key: "mailroom",
-    label: "Mailroom",
-    path: "/workspace/mailroom",
-    parentPath: "/workspace",
-    domain: "workspace",
-    audienceModes: ["operator"],
-    destinationKind: "section-page",
-    capabilityKey: null,
-    shellNav: {
-      sectionKey: "workspace",
-      description: "The mailboxes the business reads, what arrived, and who has acknowledged it.",
-    },
-  },
-  { key: "mailroom-item", label: "Mailroom item", path: "/workspace/mailroom/items/[inboundId]", parentPath: "/workspace/mailroom", domain: "workspace", audienceModes: ["operator"], destinationKind: "detail", capabilityKey: null },
+  ...MAILROOM_NAV_ROUTES,
   {
     key: "workbooks",
     label: "Workbooks",

@@ -183,7 +183,8 @@ describe("Microsoft 365 adapter", () => {
       },
     });
     const result = await adapter.probe(settings, { clientSecret: "s" });
-    expect(result).toEqual({ ok: false, error: "invalid Microsoft 365 credentials" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("invalid Microsoft 365 credentials");
   });
 });
 

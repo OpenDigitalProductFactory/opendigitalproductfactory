@@ -20,6 +20,7 @@ import type {
   NormalizedInboundMail,
 } from "./types";
 import { safeProviderError } from "./types";
+import { err, ok } from "@/lib/shared/action-result";
 
 /** The slice of imapflow's client this adapter uses. */
 export interface ImapClientPort {
@@ -173,13 +174,13 @@ export function createImapAdapter(deps: ImapAdapterDeps = {}): MailboxProviderAd
           try {
             const box = client.mailbox;
             const label = box ? `${settings.user} · ${settings.folder ?? DEFAULT_FOLDER} (${box.exists ?? 0} messages)` : settings.user;
-            return { ok: true as const, mailboxLabel: label };
+            return ok({ mailboxLabel: label });
           } finally {
             lock.release();
           }
         });
       } catch (error) {
-        return { ok: false, error: safeProviderError(error) };
+        return err(safeProviderError(error));
       }
     },
 

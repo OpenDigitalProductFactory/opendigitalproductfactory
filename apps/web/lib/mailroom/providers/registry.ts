@@ -9,15 +9,14 @@ import type { MailboxProviderKey } from "@dpf/db/mailroom-enums";
 import { createImapAdapter } from "./imap";
 import { createMicrosoft365Adapter } from "./microsoft365";
 import type { MailboxProviderAdapter } from "./types";
+import { err, ok } from "@/lib/shared/action-result";
 
 /** Postmark inbound streams arrive by webhook (BI-DD24A293); nothing to poll. */
 const postmarkInboundAdapter: MailboxProviderAdapter<"postmark-inbound"> = {
   provider: "postmark-inbound",
   pollable: false,
   async probe(settings) {
-    return settings.inboundAddress
-      ? { ok: true, mailboxLabel: `Postmark inbound → ${settings.inboundAddress}` }
-      : { ok: false, error: "inbound address required" };
+    return settings.inboundAddress ? ok({ mailboxLabel: `Postmark inbound → ${settings.inboundAddress}` }) : err("inbound address required");
   },
   async fetchNew() {
     return { messages: [], cursor: null };

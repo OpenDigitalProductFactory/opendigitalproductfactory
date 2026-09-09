@@ -100,7 +100,7 @@ describe("sendApprovedMailroomReply", () => {
       sendMail,
       now: new Date("2026-09-09T12:00:00Z"),
     });
-    expect(result).toEqual({ ok: true, messageId: "<sent@x>" });
+    expect(result).toEqual({ status: "sent", messageId: "<sent@x>" });
     const sent = sendMail.mock.calls[0][0];
     expect(sent.to).toBe("adopter@example.test");
     expect(sent.subject).toBe("Re: About Scout");
@@ -117,7 +117,7 @@ describe("sendApprovedMailroomReply", () => {
     const { draftId } = await draftMailroomReply({ db: f.db, profile: COMMON_MAILROOM_PROFILE, item, businessName: "B", agentId: "a" });
     const sendMail = vi.fn(async () => ({ messageId: "x" }));
     const result = await sendApprovedMailroomReply({ db: f.db, item, draftId, reviewerUserId: "u", isEmailConfigured: async () => false, sendMail });
-    expect(result).toEqual({ ok: false, reason: "not-configured", settingsRoute: "/admin/settings" });
+    expect(result).toEqual({ status: "not-configured", settingsRoute: "/admin/settings" });
     expect(sendMail).not.toHaveBeenCalled();
     expect(f.decisions).toHaveLength(0);
     expect(f.itemUpdates).toHaveLength(0);
@@ -129,6 +129,6 @@ describe("sendApprovedMailroomReply", () => {
     const { draftId } = await draftMailroomReply({ db: f.db, profile: COMMON_MAILROOM_PROFILE, item, businessName: "B", agentId: "a" });
     await f.db.outboundDraft.update({ where: { draftId }, data: { status: "rejected" } });
     const result = await sendApprovedMailroomReply({ db: f.db, item, draftId, reviewerUserId: "u", isEmailConfigured: async () => true, sendMail: async () => ({ messageId: "x" }) });
-    expect(result).toEqual({ ok: false, reason: "draft-not-pending" });
+    expect(result).toEqual({ status: "draft-not-pending" });
   });
 });

@@ -97,7 +97,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     },
   }).catch(() => null);
   if (mailroom) {
-    return NextResponse.json({ ok: true, inboundId: mailroom.inboundId, mailroom: true }, { status: 200 });
+    return NextResponse.json({ accepted: true, mailroom: true, inboundId: mailroom.inboundId }, { status: 200 });
   }
 
   const organization = await prisma.organization.findFirst({ select: { id: true }, orderBy: { createdAt: "asc" } });
