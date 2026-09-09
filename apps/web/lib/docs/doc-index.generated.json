@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 701,
+  "pageCount": 702,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1564,6 +1564,16 @@
         "worked-example-bad",
         "related-backlog",
         "change-control"
+      ]
+    },
+    "docs/architecture/failure-analysis-and-recovery.md": {
+      "publicHref": "/architecture/failure-analysis-and-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "failure-analysis-and-recovery-evidence",
+        "deployment-and-protection"
       ]
     },
     "docs/architecture/field-service-work-item.md": {

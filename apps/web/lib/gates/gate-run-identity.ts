@@ -35,6 +35,8 @@ export type SemanticReviewGateIdentityInput = {
     policyVersion: string;
     reviewerVersion: string;
     specialistIds: readonly string[];
+    failureAnalysisDigest?: string;
+    sourceHeadSha?: string;
   };
   risk: string;
   dispatchContractVersion: string;
@@ -194,6 +196,8 @@ export function deriveSemanticReviewGateIdentity(input: SemanticReviewGateIdenti
   gateKey: string;
 } {
   const reviewPlan = {
+    failureAnalysisDigest: input.identity.failureAnalysisDigest ?? null,
+    sourceHeadSha: input.identity.sourceHeadSha ?? null,
     capsuleId: nonEmpty(input.identity.capsuleId, "semantic-review capsule"),
     baseTreeHash: normalizeHex(input.identity.baseTreeHash, SHA1, "semantic-review base tree SHA"),
     diffDigest: normalizeHex(input.identity.diffDigest, SHA256, "semantic-review diff digest"),

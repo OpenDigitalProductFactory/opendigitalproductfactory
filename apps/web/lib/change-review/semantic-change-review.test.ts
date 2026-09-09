@@ -72,6 +72,24 @@ describe("semantic review evidence", () => {
 });
 
 describe("surface-neutral review compatibility", () => {
+  it.each([
+    {},
+    { decision: "approved", issues: [], summary: "Reviewed" },
+    { decision: "pass", issues: "none", summary: "Reviewed" },
+    { decision: "pass", issues: [], summary: " " },
+    { decision: "pass", issues: [{ severity: "blocking", description: "Boundary bypass" }], summary: "Reviewed" },
+    { decision: "pass", issues: [{ severity: "critical", description: " " }], summary: "Reviewed" },
+  ])("does not turn an invalid reviewer contract into approval: %j", (response) => {
+    expect(parseSemanticReviewResponse(JSON.stringify(response)).decision).toBe("inconclusive");
+  });
+
+  it("preserves an explicitly inconclusive reviewer result", () => {
+    const result = parseSemanticReviewResponse(JSON.stringify({ decision: "inconclusive", issues: [], summary: "Provider response was incomplete." }));
+    expect(result.decision).toBe("inconclusive");
+    expect(result.summary).toContain("incomplete");
+    expect(result.parseError).toBeUndefined();
+  });
+
   it("builds a surface-neutral code-review prompt contract", () => {
     const prompt = buildSemanticChangeReviewPrompt({
       title: "Add filter",
