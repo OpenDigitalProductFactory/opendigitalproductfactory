@@ -1,9 +1,9 @@
 // Prisma binding for workroom-anchor-converger.ts. See that module for why.
 import { prisma } from "@dpf/db";
 
-import { TERMINAL_CAPSULE_STATUSES } from "./work-capsule-branch-identity";
 import { prismaAnchorPorts } from "./capsule-workitem-anchor.server";
 import {
+  AnchorFailureBackoff,
   convergeWorkroomAnchors,
   type WorkroomAnchorConvergeResult,
   type WorkroomAnchorConvergerPorts,
@@ -20,7 +20,10 @@ export function prismaConvergerPorts(): WorkroomAnchorConvergerPorts {
     // rooms are still anchored — completed work is listed and must open too.
     listUnanchoredRooms: (limit) =>
       prisma.workroom.findMany({
-        where: { archivedAt: null, workItemId: null, status: { notIn: TERMINAL_CAPSULE_STATUSES } },
+        // Terminal rooms included: a completed room whose case page 404s is still a
+        // room that exists but cannot be opened (79 of the 91 left behind by the
+        // first pass were "complete"). Only archived rows are out of scope.
+        where: { archivedAt: null, workItemId: null },
         orderBy: { createdAt: "asc" },
         take: limit,
         select: { capsuleId: true, backlogItemId: true, title: true },
@@ -28,6 +31,9 @@ export function prismaConvergerPorts(): WorkroomAnchorConvergerPorts {
   };
 }
 
+/** Process-wide so a room that cannot be anchored is retried hourly, not per tick. */
+const backoff = new AnchorFailureBackoff();
+
 export async function convergeWorkroomAnchorsWithPrisma(): Promise<WorkroomAnchorConvergeResult> {
-  return convergeWorkroomAnchors({ ports: prismaConvergerPorts() });
+  return convergeWorkroomAnchors({ ports: prismaConvergerPorts(), backoff });
 }
