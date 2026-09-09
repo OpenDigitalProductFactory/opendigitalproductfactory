@@ -582,3 +582,11 @@ decision, theme tokens, six questions and unknown states. Verify redirect query
 round-trip, full reference disclosure, keyboard/list selection, protected route
 budgets and served navigation. Team bindings, actual nesting, step-linked runtime
 receipts and the seven live recovery scenarios remain outstanding.
+
+The protected sweep for PR #5235 measured all 213 eligible routes. Its only
+blocking result was the intentional paragraph/list structure added for linked
+records on the Workroom route; no numeric budget regressed. The reviewed failure
+screenshot and prescribed fresh measurement 34294055045 both show 369 arrival
+words. Update only that route's measured accessibility snapshot, retaining every
+numeric limit and every other route. The fresh measurement passed; the amended
+commit still requires independent review and protected CI.
