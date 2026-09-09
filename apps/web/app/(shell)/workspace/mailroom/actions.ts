@@ -10,14 +10,15 @@
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@dpf/db";
-import { MAILBOX_PROVIDER_MEMBER, MAILBOX_PROVIDERS, type MailboxProviderKey } from "@dpf/db/mailroom-enums";
+import { MAILBOX_PROVIDER_MEMBER } from "@dpf/db/mailroom-enums";
+
+import { parseMailboxForm, formField as field, type MailboxFormTypes } from "@/lib/mailroom/mailbox-form";
 
 import { auth } from "@/lib/auth";
 import { encryptJson } from "@/lib/govern/credential-crypto";
 import { resolvePrincipalIdForUser } from "@/lib/identity/principal-linking";
 import { MAILROOM_AGENT_ID } from "@/lib/mailroom/classifier";
 import { createMailboxProviderAdapters } from "@/lib/mailroom/providers/registry";
-import type { MailboxSecretsByProvider, MailboxSettingsByProvider } from "@/lib/mailroom/providers/types";
 import { draftMailroomReply, sendApprovedMailroomReply, type ReplyDb } from "@/lib/mailroom/reply";
 import { composeMailroomReply, pollMailboxNow, resolveMailroomOrganizationId, resolveOrganizationMailroomProfile } from "@/lib/mailroom/runtime.server";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
@@ -34,55 +35,13 @@ async function operatorContext() {
   return { userId: user.id, organizationId };
 }
 
-function field(formData: FormData, name: string): string {
-  const value = formData.get(name);
-  return typeof value === "string" ? value.trim() : "";
-}
-
 function newMailboxId(): string {
   return `MBX-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
-export type ConnectMailboxResult = ActionResult<{ mailboxRef: string; mailboxLabel: string; firstRead: string }>;
+type ConnectMailboxResult = MailboxFormTypes["ConnectMailboxResult"];
 
 /** Parse the connect form into provider settings + secrets. Exported for tests. */
-export type ParsedMailboxForm = { provider: MailboxProviderKey; address: string; purposeKey: string; displayName: string | null; pollIntervalMinutes: number; settings: unknown; secrets: unknown };
-
-export function parseMailboxForm(formData: FormData): ActionResult<ParsedMailboxForm> {
-  const provider = field(formData, "provider") as MailboxProviderKey;
-  if (!MAILBOX_PROVIDERS.includes(provider)) return err("Choose a mailbox provider.");
-  const address = field(formData, "address").toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return err("Enter the mailbox address.");
-  const purposeKey = field(formData, "purposeKey");
-  if (!purposeKey) return err("Choose what this mailbox is for.");
-  const displayName = field(formData, "displayName") || null;
-  const interval = Number(field(formData, "pollIntervalMinutes") || "60");
-  const pollIntervalMinutes = Number.isFinite(interval) && interval >= 5 && interval <= 24 * 60 ? Math.round(interval) : 60;
-
-  if (provider === "imap") {
-    const host = field(formData, "host");
-    const port = Number(field(formData, "port") || "993");
-    const user = field(formData, "user") || address;
-    const password = field(formData, "password");
-    if (!host) return err("Enter the IMAP server.");
-    if (!password) return err("Enter the mailbox password or app password.");
-    const settings: MailboxSettingsByProvider["imap"] = { host, port: Number.isFinite(port) ? port : 993, secure: port !== 143, user, folder: field(formData, "folder") || "INBOX" };
-    const secrets: MailboxSecretsByProvider["imap"] = { password };
-    return ok<ParsedMailboxForm>({ provider, address, purposeKey, displayName, pollIntervalMinutes, settings, secrets });
-  }
-  if (provider === "microsoft365") {
-    const tenantId = field(formData, "tenantId");
-    const clientId = field(formData, "clientId");
-    const clientSecret = field(formData, "clientSecret");
-    if (!tenantId || !clientId || !clientSecret) return err("Enter the Microsoft 365 tenant, application (client) id and client secret.");
-    const settings: MailboxSettingsByProvider["microsoft365"] = { tenantId, clientId, mailboxUserPrincipalName: address };
-    const secrets: MailboxSecretsByProvider["microsoft365"] = { clientSecret };
-    return ok<ParsedMailboxForm>({ provider, address, purposeKey, displayName, pollIntervalMinutes, settings, secrets });
-  }
-  const settings: MailboxSettingsByProvider["postmark-inbound"] = { inboundAddress: address };
-  return ok<ParsedMailboxForm>({ provider, address, purposeKey, displayName, pollIntervalMinutes, settings, secrets: {} });
-}
-
 export async function connectMailbox(_prev: ConnectMailboxResult | null, formData: FormData): Promise<ConnectMailboxResult> {
   const ctx = await operatorContext();
   if (!ctx) return err("You need an operator account to connect a mailbox.");
@@ -212,7 +171,7 @@ export async function draftMailroomReplyAction(inboundId: string): Promise<Actio
   return ok({ draftId: result.draftId });
 }
 
-export type ApproveReplyResult = ActionResult<{ messageId: string }>;
+type ApproveReplyResult = MailboxFormTypes["ApproveReplyResult"];
 
 export async function approveAndSendMailroomReply(_prev: ApproveReplyResult | null, formData: FormData): Promise<ApproveReplyResult> {
   const ctx = await operatorContext();

@@ -9,8 +9,8 @@ import {
   acknowledgeMailroomItem,
   approveAndSendMailroomReply,
   draftMailroomReplyAction,
-  type ApproveReplyResult,
 } from "@/app/(shell)/workspace/mailroom/actions";
+import type { ApproveReplyResult } from "@/lib/mailroom/mailbox-form";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/report-kit/Notice";
 

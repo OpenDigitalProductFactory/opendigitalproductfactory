@@ -7,7 +7,7 @@
 
 import { useActionState, useState } from "react";
 
-import type { ConnectMailboxResult } from "@/app/(shell)/workspace/mailroom/actions";
+import type { ConnectMailboxResult } from "@/lib/mailroom/mailbox-form";
 import { connectMailbox } from "@/app/(shell)/workspace/mailroom/actions";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/report-kit/Notice";
