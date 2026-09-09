@@ -27,6 +27,7 @@ import { GapAnswerForm } from "./gap-answer-form";
 import { WeightProposalForm } from "./weight-proposal-form";
 import { listOpenWeightAdjustmentProposals } from "@/lib/decision-perspective/weight-proposal-store";
 import { listHeldProfessionMaterial } from "@/lib/decision-perspective/held-material-store";
+import { CraftConsultDemandList } from "./craft-consult-demand-list";
 import { HeldMaterialList } from "./held-material-list";
 import { clusterDecisionReviewRowsSemantic } from "@/lib/decision/review-clustering";
 import {
@@ -41,6 +42,7 @@ export const metadata = {
   title: "Decision review",
 };
 
+import { listCraftConsultDemand } from "@/lib/decision-perspective/craft-consult-demand";
 import { ownerRulingQueueWhere } from "@/lib/decision-perspective/owner-ruling-queue";
 
 const UNRESOLVED = ["defer", "escalate"];
@@ -135,6 +137,7 @@ export default async function DecisionReviewPage({
     weightProposalRows,
     heldMaterialFamilies,
     openProposalRows,
+    craftConsultDemand,
   ] = await Promise.all([
       prisma.decisionInteraction.findMany({
         where: {
@@ -228,6 +231,10 @@ export default async function DecisionReviewPage({
           interaction: { select: { interactionId: true } },
         },
       }),
+      // Craft consults the specialist could not answer from its own corpus
+      // (BI-6BB728F1). Profession rows are excluded from the operator queue
+      // above by design; this is the one place their volume is shown.
+      listCraftConsultDemand(prisma),
     ]);
 
   // Re-score the canonical decisions against the current corpus and surface any
@@ -351,6 +358,8 @@ export default async function DecisionReviewPage({
       })()}
 
       <HeldMaterialList families={heldMaterialFamilies} />
+
+      <CraftConsultDemandList demand={craftConsultDemand} />
 
       <OrgDecisionCaptureList decisions={openOrgDecisions} />
 
