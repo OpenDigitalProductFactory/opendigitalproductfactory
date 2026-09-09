@@ -52,6 +52,34 @@ No new dependency, database model, service, tool name, or governance ledger is
 proposed. The existing ContributorInventorySnapshot is specific to repository
 assets and is not a general-purpose cache for Workroom reads.
 
+### Measured sizing, 2026-09-09
+
+A read-only query of the local installation measured 432 Workrooms, with a
+maximum title length of 863 codepoints. A candidate fixture using those actual
+IDs, titles and statuses, synthetic conservative liveness/recovery fields and
+a 512-character cursor measured:
+
+| Rows | UTF-8 bytes | UTF-16 units |
+| --- | ---: | ---: |
+| 1 | 1,466 | 1,466 |
+| 5 | 3,517 | 3,512 |
+| 10 | 6,099 | 6,094 |
+| 20 | 11,229 | 11,224 |
+| Minimal ID/detail page | 1,215 | 1,215 |
+
+The compact population was 163,342 UTF-8 bytes. These measurements support
+bounded observation storage at the current population and demonstrate why the
+native 4,000-character budget needs adaptive whole-row paging. They are fixture
+sizing, not served-handler acceptance or an adversarial Unicode bound. Keep the
+default and minimum budget provisional until the actual serializer is tested.
+Execution evidence is recorded on BI-3CE72645; the measurement artifact is
+`pagination-sizing-research.json` in the contributor's worktree parent.
+
+The installed Redis service belongs to Inngest. No existing application Redis
+client was found in the inspected web or package source; using it would require
+a new integration rather than reusing an established Workroom cache. Retain the
+explicit multi-worker/restart experiment before selecting storage conclusively.
+
 ## Options and decision status
 
 1. Candidate: bounded, expiring in-process snapshots of compact summary rows.

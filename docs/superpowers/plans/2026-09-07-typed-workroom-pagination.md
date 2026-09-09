@@ -11,8 +11,10 @@ is needed. This draft is not an implementation-readiness or plan-review receipt.
 
 ## 1. Resolve the bounded observation contract
 
-- Complete the independent architecture review of immutable design revision
-  793a074500a42a3f8c2a118a39a78d7af0961978. Address concrete findings and obtain
+- Complete the independent architecture review of the exact published design
+  revision bound to WC-15C18FED, including the measured-sizing amendment below.
+  The former 793a074 revision is superseded; do not reuse its review identity.
+  Address concrete findings and obtain
   applicable design/baseline evidence through the returned reviewer route.
 - Confirm deployment behavior: canonical Compose exposes one portal; Dockerfile
   runner executes `node apps/web/server.js`. Prove the actual continuation path
@@ -24,6 +26,9 @@ is needed. This draft is not an implementation-readiness or plan-review receipt.
 - Use serialized adversarial fixtures to select a default requested page size,
   minimum supported cap and per-row bound. Validate the proposed cache budgets
   against the actual Workroom population. Finalize these values before code.
+  The design now records 432 observed rooms and a 163,342-byte compact fixture;
+  five representative rows fit the native 4,000-character cap while ten do not.
+  This narrows sizing work but does not replace actual transport or Unicode tests.
 
 Evidence: design review, authority/deployment source references, fixed fixture
 sizes, live population count and revised design if needed. Covers AC-PAGE-4/5.
