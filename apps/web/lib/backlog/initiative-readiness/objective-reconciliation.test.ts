@@ -57,6 +57,47 @@ describe("reconcileInitiativeObjectives", () => {
     });
   });
 
+  it("BI-2515F779: a decomposed child reconciles against the baseline it inherits from its parent", () => {
+    const activities = [
+      activity("BASE-P", "initiative_scope_baseline", {
+        schemaVersion: 1,
+        baselineId: "BASE-P",
+        supersedesBaselineId: null,
+        artifactDigest: "sha256:design",
+        subject: { kind: "backlog-item", id: "BI-PARENT" },
+        objectiveStatements: [{ objectiveId: "OBJ-1" }],
+        acceptanceStatements: [{ acceptanceId: "AC-1" }],
+      }, 1),
+      activity("MAP-1", "initiative_objective_mapping", {
+        schemaVersion: 1,
+        proposalId: "MAP-1",
+        subject: { kind: "backlog-item", id: "BI-CHILD" },
+        baselineId: "BASE-P",
+        artifactDigest: "sha256:design",
+        mappings: [
+          { objectiveId: "OBJ-1", evidenceRefs: ["E-TEST"] },
+          { objectiveId: "AC-1", evidenceRefs: ["E-ACCEPT"] },
+        ],
+      }, 2),
+      activity("E-TEST", "evidence", { evidenceKind: "test_pass" }, 3),
+      activity("E-ACCEPT", "evidence", { evidenceKind: "manual_check" }, 4),
+    ];
+
+    // Without naming the parent, the parent's baseline is a foreign-subject row: malformed, never a pass.
+    expect(reconcileInitiativeObjectives({ itemId: "BI-CHILD", activities })).toMatchObject({ state: "malformed", baselineId: null });
+    // Naming the inheriting parent as an accepted subject reconciles the child's own mapping and evidence.
+    expect(reconcileInitiativeObjectives({
+      itemId: "BI-CHILD",
+      activities,
+      baselineSubjectIds: ["BI-CHILD", "BI-PARENT"],
+    })).toEqual({
+      state: "pass",
+      baselineId: "BASE-P",
+      evidenceRefs: ["E-ACCEPT", "E-TEST"],
+      requiredStatementIds: ["AC-1", "OBJ-1"],
+    });
+  });
+
   it("fails closed when an acceptance statement is not mapped", () => {
     const result = reconcileInitiativeObjectives({
       itemId: "BI-MISSING",

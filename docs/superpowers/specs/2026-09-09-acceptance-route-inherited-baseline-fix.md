@@ -56,13 +56,23 @@ route from the same code path.
    `loadBaselineSourceForItem`, and the writer accepts a baseline whose subject
    is the inheriting parent. Test: a decomposed child with no baseline of its
    own is admitted and its mapping recorded against the parent's chain.
+5. (Third slice, found live on `v2026.09.09-acceptance-route-inherits-baseline.2`:
+   the mapping was recorded but completion still reported
+   `ACCEPTANCE_EVIDENCE_REQUIRED`.) The item transition's reconciliation
+   (`backlog-terminal-transition.ts` → `reconcileInitiativeObjectives`) read only
+   the child's own baseline rows. The transition now loads the inherited scope
+   before reconciling and, when the child has no baseline of its own, adds the
+   parent's baseline rows and names the parent as an accepted baseline subject
+   (`baselineSubjectIds`). Own rows always win. Test: a child's mapping and
+   evidence reconcile to `pass` against the parent's baseline only when the
+   parent is named; a foreign baseline stays `missing`.
 
 ## 3. Acceptance
 
 | AC | Objective | Statement |
 | --- | --- | --- |
 | AC-ARB-OWN-WINS | OBJ-ARB-ROUTE-INHERITS | An item with its own baseline rows is routed against them; the parent is not read. |
-| AC-ARB-INHERITED-ROUTE | OBJ-ARB-ROUTE-INHERITS | A decomposed child with no baseline of its own is routed, admitted and recorded against its parent's baseline chain and its own post-baseline evidence, and receives a reviewer route instead of `baseline-not-found` or `baseline-conflict`. |
+| AC-ARB-INHERITED-ROUTE | OBJ-ARB-ROUTE-INHERITS | A decomposed child with no baseline of its own is routed, admitted, recorded and reconciled against its parent's baseline chain and its own post-baseline evidence, and closes through readiness v3 instead of stopping at `baseline-not-found`, `baseline-conflict` or a permanently missing acceptance. |
 | AC-ARB-NONE-STAYS-CLOSED | OBJ-ARB-ROUTE-INHERITS | An item with neither its own nor an inherited baseline still escalates `baseline-not-found`. |
 
 Failing-to-passing proof: `baseline-source.test.ts` (4 cases) fails to compile

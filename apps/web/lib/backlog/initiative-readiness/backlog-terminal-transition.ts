@@ -283,10 +283,28 @@ export async function completeBacklogItemTransition(args: {
         tx as unknown as CompletionEvidenceRuntimeDb,
         { itemId: lockedItem.itemId, rawManifest: args.completionEvidence, now: new Date(evaluatedAt) },
       );
+      // BI-2515F779: a decomposed child with no baseline of its own reconciles
+      // its mapping against the baseline it inherits from its mapping parent —
+      // the same scope the projection, the router, the admission and the writer
+      // already read. Own rows always win.
+      const inheritedScope = await loadInheritedInitiativeScope(
+        tx as unknown as InheritanceDb,
+        { childItemId: lockedItem.itemId, childRowId: lockedItem.id },
+      );
+      const lockedRowId = lockedItem.id;
+      const ownBaselineRows = activities.some((activity) => activity.kind === "initiative_scope_baseline");
+      const inheritedBaselineRows = !ownBaselineRows && inheritedScope
+        ? inheritedScope.activities
+          .filter((activity) => activity.kind === "initiative_scope_baseline")
+          .map((activity) => ({ id: activity.id, backlogItemId: lockedRowId, kind: activity.kind, gateKey: activity.gateKey, recordedAt: activity.recordedAt, payload: activity.payload }))
+        : [];
       const reconciliation = (args.dependencies?.reconcileObjectives ?? reconcileInitiativeObjectives)({
         itemId: lockedItem.itemId,
         itemRowId: lockedItem.id,
-        activities,
+        activities: [...activities, ...inheritedBaselineRows],
+        ...(inheritedBaselineRows.length > 0 && inheritedScope
+          ? { baselineSubjectIds: [lockedItem.itemId, inheritedScope.parentItemId] }
+          : {}),
       });
       const mergedThroughGates = await (args.dependencies?.resolveMergeDelivery ?? defaultResolveMergeDelivery)({
         itemRowId: lockedItem.id,
@@ -333,10 +351,6 @@ export async function completeBacklogItemTransition(args: {
       const objectiveReconciliationPass = reconciliation.state === "pass"
         || smallShapeAcceptance
         || (recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
-      const inheritedScope = await loadInheritedInitiativeScope(
-        tx as unknown as InheritanceDb,
-        { childItemId: lockedItem.itemId, childRowId: lockedItem.id },
-      );
       const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
         item: {
           ...lockedItem,
