@@ -563,12 +563,27 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/evaluate.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/types.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -811,6 +826,9 @@
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/mcp/external-coworker-task-adapter.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/mcp/load-tools.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -819,6 +837,9 @@
     ],
     "apps/web/lib/mcp/packs/compliance-scope-pack.ts": [
       "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
+    ],
+    "apps/web/lib/mcp/packs/coworker-pack.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -1113,6 +1134,9 @@
     "apps/web/lib/tak/escalation-ladder.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/tak/initiative-readiness-tool-grants.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/tak/prompt-assembler.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/platform-usability-standards.md"
@@ -1164,6 +1188,9 @@
     "apps/web/lib/work-capsules/delivery-task-hub.ts": [
       "docs/user-guide/build-studio/index.md"
     ],
+    "apps/web/lib/work-capsules/governed-work-claim.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
@@ -1197,6 +1224,7 @@
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-shapes.ts": [
+      "docs/architecture/initiative-readiness-runbook.md",
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
@@ -1324,6 +1352,9 @@
     "monitoring/prometheus/prometheus.yml": [
       "docs/architecture/platform-overview.md",
       "docs/operations/observability-coverage.md"
+    ],
+    "packages/db/data/agent_registry.json": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "packages/db/data/platform-runtime-capabilities.json": [
       "docs/architecture/capability-driven-runtime-profiles.md",
@@ -2590,6 +2621,19 @@
     ],
     "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md": [
       "packages/storefront-templates/src/archetypes/index.ts"
+    ],
+    "docs/architecture/initiative-readiness-runbook.md": [
+      "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
+      "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
+      "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
+      "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
+      "apps/web/lib/backlog/initiative-readiness/types.ts",
+      "apps/web/lib/mcp/external-coworker-task-adapter.ts",
+      "apps/web/lib/mcp/packs/coworker-pack.ts",
+      "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
+      "apps/web/lib/work-capsules/governed-work-claim.ts",
+      "apps/web/lib/work-management/room-shapes.ts",
+      "packages/db/data/agent_registry.json"
     ],
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
