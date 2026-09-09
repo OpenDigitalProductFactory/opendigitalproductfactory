@@ -1137,6 +1137,9 @@
       "docs/architecture/context-engineering-standards.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/tools/integration-settings-href.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "apps/web/lib/ux-budget/budgets.ts": [
       "docs/platform-usability-standards.md"
     ],
@@ -3106,6 +3109,7 @@
       ".github/workflows/policy-guards-recheck.yml",
       "apps/web/lib/testing/degenerate-env/index.ts",
       "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts",
+      "apps/web/lib/tools/integration-settings-href.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
       "scripts/check-agent-principal-convergence-wired.mjs",

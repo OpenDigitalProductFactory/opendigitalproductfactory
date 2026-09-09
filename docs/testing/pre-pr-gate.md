@@ -1090,7 +1090,15 @@ Two rules:
 - **Rule 2 — no provably-unreachable link.** An interpolated link whose route
   prefix names an App Router directory with no dynamic child can never resolve.
   Baselined (`scripts/room-addressing-baseline.json`, owned and expiring) so the
-  class cannot grow while each pre-existing entry is judged on its own.
+  class cannot grow while a pre-existing entry is judged on its own. The
+  baseline shipped with four entries and is now **empty** (BI-235E9F00):
+  judging them found that two claimant links had no page at all, three
+  integration links spelled a slug the filesystem did not have, and — once the
+  first four were gone — a fifth (`/build/<id>`) that had been hiding behind
+  them. Retightening a baseline is how you find the next instance; leaving it
+  is how you keep it. Integration pages are now addressed only through
+  `apps/web/lib/tools/integration-settings-href.ts`, which reads routability
+  from the generated route manifest rather than a catalog that drifts.
 
 Only link contexts are considered. `revalidatePath`, `fetch` and cache keys take
 the same shape but cannot 404 at a person; folding them in would make the guard
