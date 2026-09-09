@@ -7327,6 +7327,14 @@
     "longSentences": 0,
     "textMass": 137
   },
+  "apps/web/components/platform/ProviderClearanceOverridePanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 81
+  },
   "apps/web/components/platform/ProviderCostSourcePanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -7485,7 +7493,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 60
+    "textMass": 38
   },
   "apps/web/components/platform/TokenSpendPanel.tsx": {
     "vocabulary": 0,
