@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ToolPackHandler } from "@/lib/mcp/tool-pack";
 import type { KernelConsultPolicyProjection } from "@/lib/decision/kernel-consult-ledger";
+import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
 import type { PolicyAuthorityProjectionAttempt } from "./coworker-tool-authority-gate";
 
 type JudgmentInput = Parameters<PolicyAuthorityProjectionAttempt>[0];
@@ -16,6 +17,105 @@ export type PolicyActionJudgmentRequest = {
   context: Parameters<ToolPackHandler>[2];
   policyRecord: KernelConsultPolicyProjection;
 };
+
+export type RoutinePolicyActionIneligibility =
+  | "platform-scope-required"
+  | "backlog-subject-required"
+  | "immutable-review-binding-required"
+  | "review-binding-mismatch"
+  | "workroom-binding-required"
+  | "workroom-binding-mismatch"
+  | "gate-not-authorized"
+  | "internal-action-required"
+  | "immediate-action-required"
+  | "side-effect-required"
+  | "consequential-action-requires-human"
+  | "operator-policy-requires-approval"
+  | "non-pass-decision"
+  | "findings-present";
+
+export type RoutinePolicyActionEligibility =
+  | { eligible: true }
+  | { eligible: false; reason: RoutinePolicyActionIneligibility };
+
+/**
+ * Admit bounded evidence recording whose writer, backlog item,
+ * canonical blob and Workroom head are all fixed by server-validated TaskRun
+ * metadata. This is deliberately narrower than generic coworker authority.
+ */
+export function routinePolicyActionEligibility(
+  input: JudgmentInput["authorityInput"],
+): RoutinePolicyActionEligibility {
+  if (input.organizationId !== "platform") {
+    return { eligible: false, reason: "platform-scope-required" };
+  }
+  if (input.subject?.kind !== "backlog-item") {
+    return { eligible: false, reason: "backlog-subject-required" };
+  }
+  const binding = input.task?.initiativeReviewBinding;
+  if (!binding) {
+    return { eligible: false, reason: "immutable-review-binding-required" };
+  }
+  if (
+    binding.writerToolName !== input.action.toolName
+    || binding.itemId !== input.subject.id
+  ) {
+    return { eligible: false, reason: "review-binding-mismatch" };
+  }
+  const workroom = binding.workroomRef;
+  if (!workroom) {
+    return { eligible: false, reason: "workroom-binding-required" };
+  }
+  if (
+    binding.artifactRef.repositoryFullName !== workroom.repositoryFullName
+    || binding.artifactRef.commitSha !== workroom.headSha
+  ) {
+    return { eligible: false, reason: "workroom-binding-mismatch" };
+  }
+  const lane = INITIATIVE_READINESS_LANES[input.action.toolName];
+  if (!lane || !lane.gates.some((gate) => gate === binding.gate)) {
+    return { eligible: false, reason: "gate-not-authorized" };
+  }
+  if (
+    input.integration.required
+    || input.dataPolicy.sensitivity !== "internal"
+  ) {
+    return { eligible: false, reason: "internal-action-required" };
+  }
+  if (input.action.executionMode !== "immediate") {
+    return { eligible: false, reason: "immediate-action-required" };
+  }
+  if (!input.action.sideEffect) {
+    return { eligible: false, reason: "side-effect-required" };
+  }
+  if (input.action.consequence) {
+    return { eligible: false, reason: "consequential-action-requires-human" };
+  }
+  if (input.action.policyProjectionAllowed === false) {
+    return { eligible: false, reason: "operator-policy-requires-approval" };
+  }
+  const findings = input.rawParams.findings;
+  const resolved = input.rawParams.resolvedFindingRefs;
+  if (
+    !Array.isArray(findings)
+    || !Array.isArray(resolved)
+    || resolved.length > 0
+  ) {
+    return { eligible: false, reason: "findings-present" };
+  }
+  // Recording an unresolved failure produces evidence, not permission to
+  // proceed. The receipt writer validates the findings; readiness retains the
+  // failed gate. Waivers and finding resolutions never enter this class.
+  if (input.rawParams.decision === "fail" && findings.length > 0) {
+    return { eligible: true };
+  }
+  if (input.rawParams.decision !== "pass") {
+    return { eligible: false, reason: "non-pass-decision" };
+  }
+  return findings.length === 0
+    ? { eligible: true }
+    : { eligible: false, reason: "findings-present" };
+}
 
 /**
  * Build the one action-specific WWMD question from verified server context.
@@ -134,6 +234,10 @@ export async function producePolicyActionJudgment(
   input: JudgmentInput,
   overrides: { runPrincipleDecision?: PrincipleRunner } = {},
 ): Promise<void> {
+  const eligibility = routinePolicyActionEligibility(input.authorityInput);
+  if (!eligibility.eligible) {
+    throw new Error(`routine policy action is ineligible: ${eligibility.reason}`);
+  }
   const request = buildPolicyActionJudgmentRequest(input);
   const runPrincipleDecision = overrides.runPrincipleDecision
     ?? (await import("@/lib/mcp/packs/principle-decide-pack")).runPrincipleDecision;

@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
+import type { ToolConsequence } from "@/lib/mcp-tools";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 
 import {
   canAccessAuthoritySubject,
@@ -28,6 +30,7 @@ export type CoworkerAuthorityReasonCode =
   | "agent-identity-missing"
   | "human-capability-denied"
   | "agent-grant-denied"
+  | "room-authority-denied"
   | "delegation-inactive"
   | "delegation-origin-mismatch"
   | "delegation-agent-mismatch"
@@ -68,14 +71,30 @@ export type CoworkerAuthorityInput = {
     toolName: string;
     requiredCapability: string | null;
     agentGrantAllowed: boolean;
+    /**
+     * False when the Workroom the call runs in declares an activity shape whose
+     * authorized surface does not carry this tool (BI-F114354D). Undefined or
+     * true when the turn is unroomed or the room does not narrow the surface.
+     * A room may only NARROW the coworker's grants; it never widens them.
+     */
+    roomAuthorityAllowed?: boolean;
     sideEffect: boolean;
     executionMode: "proposal" | "immediate";
     routeContext: string | null;
     allowedRouteContexts?: readonly string[];
     approvalPolicy: CoworkerApprovalPolicy;
+    /** False when an explicit operator policy forbids policy projection. */
+    policyProjectionAllowed?: boolean;
+    consequence?: ToolConsequence | null;
     requiresDelegationChain?: boolean;
   };
   subject?: CoworkerAuthoritySubject | null;
+  /** The Workroom the call runs in, for the receipt; null when unroomed. */
+  room?: {
+    workroomId: string;
+    collaborationShape: string | null;
+    workShapeKey: string | null;
+  } | null;
   delegation?: {
     chainId: string;
     status: string;
@@ -97,6 +116,8 @@ export type CoworkerAuthorityInput = {
   task?: {
     taskRunId: string;
     parentTaskRunId?: string | null;
+    /** Immutable server-validated review scope; never sourced from tool args. */
+    initiativeReviewBinding?: InitiativeReviewBinding;
   } | null;
   rawParams: Record<string, unknown>;
   approval?: {
@@ -164,6 +185,8 @@ const EXPLANATIONS: Record<CoworkerAuthorityReasonCode, string> = {
     "You do not have authority for this action.",
   "agent-grant-denied":
     "This coworker is not assigned the tool authority required for this action.",
+  "room-authority-denied":
+    "This coworker's role in this Workroom does not authorize this action. The room's owner can widen the room's activity shape, or approve this action explicitly.",
   "delegation-inactive": "The delegated authority chain is no longer active.",
   "delegation-origin-mismatch":
     "The delegated action is not rooted in your authority.",
@@ -301,6 +324,12 @@ export function evaluateCoworkerAuthority(
 
   if (!input.action.agentGrantAllowed) {
     return deny("agent-grant-denied", "request-authority");
+  }
+  // EP-WORK-POSTURE §8.2: the room is a term in the TAK intersection. A chat
+  // message asking for the action is a request, not authority — only the room
+  // definition or an explicit approval can carry it.
+  if (input.action.roomAuthorityAllowed === false) {
+    return deny("room-authority-denied", "request-authority");
   }
 
   const delegation = input.delegation;

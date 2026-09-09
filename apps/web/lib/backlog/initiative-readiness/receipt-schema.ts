@@ -20,6 +20,7 @@ export const INITIATIVE_GATE_KEYS = [
   "dependency-disposition",
   "archetype-provisioning",
   "archetype-completeness",
+  "post-implementation-review",
 ] as const;
 
 export type InitiativeGateKey = (typeof INITIATIVE_GATE_KEYS)[number];

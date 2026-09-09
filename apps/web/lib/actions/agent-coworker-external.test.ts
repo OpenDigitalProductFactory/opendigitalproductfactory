@@ -46,6 +46,19 @@ vi.mock("@/lib/mcp-governed-execute", () => ({
   governedExecuteTool: vi.fn(),
 }));
 
+// Spec 8.2: hands-on and web access resolve server-side from the Workroom + grants.
+const roomAuthorityState = vi.hoisted(() => ({ web: false, handsOn: false }));
+vi.mock("@/lib/work-management/room-turn-authority.server", () => ({
+  loadRoomTurnAuthority: vi.fn(async () => ({
+    workroomId: null, collaborationShape: null, workShapeKey: null, authorizedGrants: null, actionBoundary: null,
+    externalAccess: { enabled: roomAuthorityState.web, reason: roomAuthorityState.web ? "web-search-grant" : "no-web-search-grant" },
+    handsOn: { enabled: roomAuthorityState.handsOn, reason: roomAuthorityState.handsOn ? "room-action-boundary" : "no-authority-declared" },
+    priority: null, prioritySource: null,
+  })),
+}));
+const setRoomAuthority = (next: { web?: boolean; handsOn?: boolean }) =>
+  Object.assign(roomAuthorityState, { web: Boolean(next.web), handsOn: Boolean(next.handsOn) });
+
 vi.mock("@/lib/feature-flags", () => ({
   isUnifiedCoworkerEnabled: vi.fn().mockResolvedValue(false),
 }));
@@ -226,6 +239,7 @@ const mockPrisma = prisma as any;
 
 describe("agent coworker external access", () => {
   beforeEach(() => {
+    setRoomAuthority({});
     vi.clearAllMocks();
     mockAuth.mockResolvedValue({
       user: {
@@ -335,11 +349,11 @@ describe("agent coworker external access", () => {
       routeDecision: {},
     });
 
+    setRoomAuthority({ web: true });
     await sendMessage({
       threadId: "thread-1",
       content: "Analyze this site",
       routeContext: "/admin",
-      externalAccessEnabled: true,
     });
 
     expect(mockGetAvailableTools).toHaveBeenCalledWith(
@@ -600,13 +614,12 @@ describe("agent coworker external access", () => {
       threadId: "thread-1",
       content: "Look up current sales tax authority guidance.",
       routeContext: "/finance",
-      externalAccessEnabled: false,
     });
 
-    expect(mockRouteAndCall.mock.calls[0][1]).toContain("EXTERNAL ACCESS DISABLED");
+    expect(mockRouteAndCall.mock.calls[0][1]).toContain("EXTERNAL ACCESS NOT AUTHORIZED");
     expect(mockRouteAndCall.mock.calls[0][1]).toContain("search_public_web");
-    expect(mockRouteAndCall.mock.calls[0][1]).toContain("Web access");
-    expect(mockRouteAndCall.mock.calls[0][1]).toContain("message box");
+    expect(mockRouteAndCall.mock.calls[0][1]).toContain("web_search grant");
+    expect(mockRouteAndCall.mock.calls[0][1]).not.toContain("message box");
     expect(mockPrisma.toolExecution.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -653,11 +666,11 @@ describe("agent coworker external access", () => {
       routeDecision: {},
     });
 
+    setRoomAuthority({ web: true });
     await sendMessage({
       threadId: "thread-1",
       content: "External Access is enabled. Continue the tax authority research.",
       routeContext: "/finance",
-      externalAccessEnabled: true,
     });
 
     expect(mockPrisma.toolExecution.create).toHaveBeenCalledWith(
@@ -738,12 +751,11 @@ describe("agent coworker external access", () => {
       },
     });
 
+    setRoomAuthority({ web: true, handsOn: true });
     const result = await sendMessage({
       threadId: "thread-1",
       content: "Analyze this site",
       routeContext: "/admin",
-      externalAccessEnabled: true,
-      elevatedFormFillEnabled: true,
       formAssistContext: {
         formId: "branding-configurator",
         formName: "Branding configurator",

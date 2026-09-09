@@ -86,6 +86,9 @@ export const TOOL_CONSEQUENCES: readonly ToolConsequence[] = [
   "authority",
 ] as const;
 
+/** See `ToolDefinition.consequenceScope`. Closed set. */
+export type ToolConsequenceScope = "business" | "platform";
+
 export type ToolDefinition = {
   name: string;
   description: string;
@@ -124,6 +127,22 @@ export type ToolDefinition = {
    * enumerated). See apps/web/lib/tak/consequential-tool-coverage.ts.
    */
   consequence?: ToolConsequence;
+  /**
+   * WHOSE stance governs an `outward` effect (BI-63B14D4B). DECLARED with the
+   * consequence, never inferred from the pack or the name.
+   *
+   * `business` (default) = the effect leaves the organization's business —
+   * a campaign, an ad, a customer email — so the org's WWWD stance is the
+   * authority and the call is alignment-gated against it.
+   * `platform` = the effect leaves the INSTALL but is platform development or
+   * operations — a pull request, a hive contribution, a discovery sweep, a
+   * sign-in handshake. The founder kernel (WWMD) owns that judgement; asking
+   * the customer's business stance "what should the business do?" about a
+   * pull request routes a decision to a scope that has no authority over it
+   * (decisions-belong-to-their-scope). Still consequential: receipted and
+   * outward-reviewed, just not WWWD-alignment-gated.
+   */
+  consequenceScope?: ToolConsequenceScope;
   /**
    * Tool captures the coworker's own recommendation or work product as a
    * structured artifact (e.g. save_marketing_review). Persistence-only; no
@@ -439,11 +458,22 @@ export async function getAvailableTools(
      * still bounds what the human operator may see.
      */
     additionalGrants?: readonly string[];
+    /**
+     * EP-WORK-POSTURE §8.2 (BI-F114354D): the tool surface the Workroom the
+     * turn runs in authorizes, in the agent-grant vocabulary. When present the
+     * attached surface is agent grants ∩ user capabilities ∩ this list. Null or
+     * undefined = the room does not narrow (or the turn is unroomed).
+     */
+    roomAuthorizedGrants?: readonly string[] | null;
   },
 ): Promise<ToolDefinition[]> {
+  // External-boundary tools are admitted only when the caller's SERVER-resolved
+  // external access says so (room + standing grant — BI-947780FE). The former
+  // unified-mode short-circuit that let every external tool through is gone:
+  // a session flag was never authority, and neither is a feature flag.
   let platformTools = PLATFORM_TOOLS.filter(
     (tool) =>
-      (options?.unifiedMode || !tool.requiresExternalAccess || options?.externalAccessEnabled === true)
+      (!tool.requiresExternalAccess || options?.externalAccessEnabled === true)
       && (tool.requiredCapability === null || can(userContext, tool.requiredCapability))
       && (options?.mode !== "advise" || !tool.sideEffect),
   );
@@ -464,8 +494,13 @@ export async function getAvailableTools(
     if (options.additionalGrants?.length) {
       agentGrants = Array.from(new Set([...agentGrants, ...options.additionalGrants]));
     }
-    if (agentGrants.length > 0) {
-      platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
+    // Deny by default (BI-F114354D). A coworker with no grants at all used to be
+    // left UNGATED here ("length-0 → no filtering"); it now gets exactly what an
+    // empty grant set admits — the identity-scoped tools and nothing else.
+    platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
+    if (options.roomAuthorizedGrants) {
+      const roomGrants = [...options.roomAuthorizedGrants];
+      platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, roomGrants));
     }
   }
 

@@ -151,6 +151,12 @@ applicable because it changes no schema.
   current baseline. A focused RED reproduced the unconstrained schema; the
   follow-up is GREEN with 34 tests across the binding, task submit, readiness
   registry, and terminal recovery suites.
-- Remaining: build and pregate the follow-up, merge and self-upgrade it, replay
-  the original completion with fresh delivery evidence, then close both BIs and
-  Workrooms.
+- Follow-up complete: PR `#5048` merged, exact-tree CI passed, and the canonical
+  runtime served `5888e6cb0355dd5a4e6be15d1c402bb36dd5626b`. The live replay
+  reached both governed writers and `BI-199F71B6` completed under allowed
+  readiness decision `IRD-8BB862382073` on 2026-09-06.
+- Terminal cleanup finding: the linked historical Workroom recomputed stale
+  item evidence after the BI was already `done`. Its scope was released and it
+  was retired honestly rather than force-marked complete. `BI-AAA13210` and
+  `docs/superpowers/specs/2026-09-06-workroom-terminal-coherence-design.md`
+  own the focused coherence repair and live closeout proof.

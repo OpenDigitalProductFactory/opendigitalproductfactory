@@ -7,8 +7,10 @@ import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
 import { getGrantedCapabilities } from "@/lib/permissions";
+import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
 import {
   parseInitiativeReviewBinding,
+  type InitiativeReviewBinding,
   validateInitiativeReviewAuthorityScope,
 } from "@/lib/mcp-task-review-contract";
 
@@ -101,10 +103,10 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
 /** Return the server-bound initiative only for a fully validated external MCP
  * review. Once binding metadata is present, every mismatch fails closed rather
  * than falling back to model-visible writer arguments. */
-export function resolveBoundInitiativeReviewItem(
+export function resolveBoundInitiativeReviewBinding(
   task: InitiativeReviewTask | null,
   executingToolName: string,
-): string | null {
+): InitiativeReviewBinding | null {
   if (!task) return null;
   const metadata = objectRecord(task.a2aMetadata);
   // `== null` catches BOTH an absent key and a persisted JSON null. It used to
@@ -149,7 +151,14 @@ export function resolveBoundInitiativeReviewItem(
       : `tool:${binding.writerToolName}`;
     throw new Error(`The external TaskRun is missing exact authority scope ${required}.`);
   }
-  return binding.itemId;
+  return binding;
+}
+
+export function resolveBoundInitiativeReviewItem(
+  task: InitiativeReviewTask | null,
+  executingToolName: string,
+): string | null {
+  return resolveBoundInitiativeReviewBinding(task, executingToolName)?.itemId ?? null;
 }
 
 /** Resolve initiative subject and organization from the canonical item. Caller
@@ -198,17 +207,14 @@ export function deriveCoworkerApprovalPolicy(input: {
   serverBoundInitiativeReview?: boolean;
 }): CoworkerApprovalPolicy {
   const policy = input.hitlPolicy?.trim().toLowerCase() ?? "";
-  // A server-issued initiative-review TaskRun is already constrained to one
-  // immutable artifact, one backlog item, one exact writer, and an eligible
-  // reviewer principal. Requiring the delegating employee to approve that
-  // writer again turns the technical review into a human proxy gate and makes
-  // the single-human installation path impossible to complete. Independence,
-  // when required by the lane, remains enforced by the receipt repository.
-  // `always` is an explicit operator policy and still wins. A numeric tier is
-  // only the coworker's generic default, so it must not re-wrap this already
-  // authorized initiative-review boundary in a second human approval.
+  // Immutable binding constrains the action but does not authorize it. Bound
+  // side effects always enter the action-specific policy seam, where routine
+  // platform receipts may receive exact WWMD authority and every exception
+  // falls back to the ordinary human decision envelope.
   if (policy === "always") return "all";
-  if (input.serverBoundInitiativeReview) return "none";
+  if (input.serverBoundInitiativeReview && input.hitlTierDefault >= 3) {
+    return "side-effects";
+  }
   if (input.hitlTierDefault <= 1) return "all";
   if (
     input.hitlTierDefault === 2
@@ -291,10 +297,11 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
             },
           })
         : null;
-    const trustedBoundItemId = resolveBoundInitiativeReviewItem(
+    const initiativeReviewBinding = resolveBoundInitiativeReviewBinding(
       task,
       execution.toolName,
     );
+    const trustedBoundItemId = initiativeReviewBinding?.itemId ?? null;
     const [agent, delegation, initiativeAuthority] = await Promise.all([
       agentPromise,
       delegationPromise,
@@ -343,6 +350,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       agent.governanceProfile?.updatedAt.toISOString(),
     ].filter((value): value is string => Boolean(value));
 
+    const roomAuthority = execution.context?.roomAuthority ?? null;
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
       organizationId: initiativeAuthority.organizationId,
@@ -350,14 +358,28 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         toolName: execution.toolName,
         requiredCapability: tool.requiredCapability,
         agentGrantAllowed,
+        roomAuthorityAllowed: roomAuthorizesTool(
+          execution.toolName,
+          roomAuthority?.authorizedGrants,
+        ),
         sideEffect: tool.sideEffect === true,
         executionMode: tool.executionMode ?? "immediate",
         routeContext: execution.context?.routeContext ?? null,
         allowedRouteContexts: deriveAllowedRouteContexts(tool.screenSurface),
         approvalPolicy,
+        policyProjectionAllowed:
+          agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
+        consequence: tool.consequence ?? null,
         requiresDelegationChain: Boolean(execution.context?.delegationChainId),
       },
       subject: initiativeAuthority.subject,
+      room: roomAuthority
+        ? {
+            workroomId: roomAuthority.workroomId ?? "",
+            collaborationShape: roomAuthority.collaborationShape,
+            workShapeKey: roomAuthority.workShapeKey,
+          }
+        : null,
       delegation: delegation
         ? {
             chainId: delegation.chainId,
@@ -369,10 +391,12 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         : null,
       integration: {
         required: tool.requiresExternalAccess === true,
+        // Server-resolved (room + standing grant, BI-947780FE): an external
+        // tool the turn was not admitted to is "disconnected", never guessed.
         state: tool.requiresExternalAccess
           ? execution.context?.externalAccessEnabled === true
             ? "connected"
-            : "unknown"
+            : "disconnected"
           : "not-required",
       },
       dataPolicy: {
@@ -382,7 +406,13 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         decisionVersionsCurrent: true,
         decisionVersionIds,
       },
-      task,
+      task: task
+        ? {
+            taskRunId: task.taskRunId,
+            parentTaskRunId: task.parentTaskRunId,
+            ...(initiativeReviewBinding ? { initiativeReviewBinding } : {}),
+          }
+        : null,
       rawParams: execution.rawParams,
       approval: null,
     };

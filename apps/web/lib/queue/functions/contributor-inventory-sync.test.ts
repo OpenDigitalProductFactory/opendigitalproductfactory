@@ -66,6 +66,7 @@ vi.mock("@dpf/db", () => ({
 import {
   resolveContributorInventoryGitCwd,
   runContributorInventorySync,
+  computeSnapshotDigest,
   type SyncSourceReaders,
 } from "./contributor-inventory-sync";
 
@@ -608,5 +609,105 @@ describe("runContributorInventorySync — Phase 6 stale-cron notification", () =
         }),
       }),
     );
+  });
+});
+
+// ─── BI-BFFB9211: write-on-change ────────────────────────────────────────────
+
+describe("write-on-change (BI-BFFB9211)", () => {
+  it("skips the insert and points snapshotRunId at the prior run when the digest is unchanged", async () => {
+    const readers = fakeReaders();
+    const priorRows = (await readers.githubPr()) as { ok: true; rows: { sourceKey: string; payload: unknown }[] };
+    const priorDigest = computeSnapshotDigest(priorRows.rows);
+    mocks.syncRunFindFirst.mockImplementation(async ({ where }) => {
+      const path = (where.perSourceResult?.path as string[] | undefined)?.[0];
+      if (path === "github-pr") {
+        return {
+          syncRunId: "civs-prev",
+          perSourceResult: {
+            "github-pr": { ok: true, count: 1, error: null, digest: priorDigest, snapshotRunId: "civs-prev" },
+          },
+        };
+      }
+      return null;
+    });
+
+    const result = await runContributorInventorySync({ now: FIXED_NOW, readers });
+
+    const githubInserts = mocks.snapshotCreateMany.mock.calls.filter(
+      (c) => (c[0] as { data: { source: string }[] }).data[0]?.source === "github-pr",
+    );
+    expect(githubInserts).toHaveLength(0);
+    expect(result.perSourceResult["github-pr"]).toMatchObject({
+      ok: true,
+      unchanged: true,
+      snapshotRunId: "civs-prev",
+      digest: priorDigest,
+    });
+    // The local sources had no prior run recorded, so they still wrote rows and point at THIS run.
+    expect(result.perSourceResult["git-worktree"].snapshotRunId).toBe(result.syncRunId);
+    expect(result.perSourceResult["git-branch"].snapshotRunId).toBe(result.syncRunId);
+  });
+
+  it("a provider not-modified response carries the prior representation forward instead of an empty run", async () => {
+    mocks.syncRunFindFirst.mockImplementation(async ({ where }) => {
+      const path = (where.perSourceResult?.path as string[] | undefined)?.[0];
+      if (path === "github-pr") {
+        return {
+          syncRunId: "civs-unchanged-run",
+          perSourceResult: {
+            "github-pr": { ok: true, count: 7, error: null, unchanged: true, snapshotRunId: "civs-holder", digest: "d1" },
+          },
+        };
+      }
+      return null;
+    });
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders({ githubPr: async () => ({ ok: true, rows: [], unchanged: true }) }),
+    });
+
+    expect(result.perSourceResult["github-pr"]).toMatchObject({
+      ok: true,
+      unchanged: true,
+      count: 7,
+      snapshotRunId: "civs-holder",
+      digest: "d1",
+    });
+  });
+
+  it("the digest ignores the volatile observedAt stamp and key order, and reacts to real content", () => {
+    const a = computeSnapshotDigest([
+      { sourceKey: "1", payload: { number: 1, title: "x", observedAt: "2026-01-01T00:00:00Z" } },
+    ]);
+    const b = computeSnapshotDigest([
+      { sourceKey: "1", payload: { observedAt: "2026-02-02T00:00:00Z", title: "x", number: 1 } },
+    ]);
+    const c = computeSnapshotDigest([{ sourceKey: "1", payload: { number: 1, title: "y" } }]);
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+  });
+
+  it("the prune preserve-set includes the run an unchanged run points at", async () => {
+    mocks.syncRunFindFirst.mockImplementation(async ({ where }) => {
+      const path = (where.perSourceResult?.path as string[] | undefined)?.[0];
+      if (path === "git-worktree") return { syncRunId: "civs-wt-keep" };
+      if (path === "git-branch") return { syncRunId: "civs-br-keep" };
+      if (path === "github-pr") {
+        return {
+          syncRunId: "civs-gh-keep",
+          perSourceResult: { "github-pr": { ok: true, count: 1, error: null, snapshotRunId: "civs-gh-holder", digest: "zz" } },
+        };
+      }
+      return null;
+    });
+    mocks.syncRunDeleteMany.mockResolvedValue({ count: 1 });
+
+    await runContributorInventorySync({ now: FIXED_NOW, readers: fakeReaders() });
+
+    const deleteCall = mocks.syncRunDeleteMany.mock.calls[0]?.[0];
+    const notIn = (deleteCall?.where.syncRunId.notIn as string[]).sort();
+    expect(notIn).toEqual(["civs-br-keep", "civs-gh-holder", "civs-gh-keep", "civs-wt-keep"]);
   });
 });

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildCoworkerApprovalBinding, type CoworkerAuthorityInput } from "./coworker-authority-decision";
 import {
   buildPolicyActionJudgmentRequest,
+  routinePolicyActionEligibility,
   producePolicyActionJudgment,
 } from "./policy-action-judgment";
 
@@ -53,6 +54,108 @@ function authorityInput(): CoworkerAuthorityInput {
 }
 
 describe("policy action judgment", () => {
+  const workroomRef = {
+    kind: "workroom-head" as const,
+    workroomId: "WC-48A3D214",
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    branchName: "fix/wwmd-exact-bound-receipts",
+    headSha: "f5681171c826a328c6795dfbdac8868efc2e4506",
+  };
+  const artifactRef = {
+    kind: "repo-blob-at-commit" as const,
+    repositoryFullName: workroomRef.repositoryFullName,
+    commitSha: workroomRef.headSha,
+    path: "docs/superpowers/specs/wwmd-exact-bound-receipts.md",
+    providerBlobId: "blob-1",
+  };
+
+  function routine(overrides: Record<string, unknown> = {}) {
+    const input = authorityInput();
+    input.task = {
+      taskRunId: "TR-EXACT",
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-2014236E",
+        gate: "research",
+        workroomRef: { ...workroomRef },
+        artifactRef: { ...artifactRef },
+      },
+    };
+    input.rawParams = {
+      decision: "pass",
+      reason: "The named-ref reproduction and evidence pass.",
+      findings: [],
+      resolvedFindingRefs: [],
+      ...overrides,
+    };
+    return input;
+  }
+
+  it("admits only an exact-bound finding-free platform receipt pass", () => {
+    expect(routinePolicyActionEligibility(routine())).toEqual({ eligible: true });
+  });
+
+  it("admits recording a grounded negative design review without granting a waiver", () => {
+    const input = routine({
+      decision: "fail",
+      findings: [{
+        issue: "The default page size is not selected from measured fixtures.",
+        severity: "important",
+        evidence: { blobId: artifactRef.providerBlobId, startLine: 79, endLine: 80,
+          quote: "Default page size and supported minimum transport budget must be selected from serialized fixtures before implementation approval." },
+      }],
+    });
+    input.action.toolName = "record_initiative_design_review";
+    input.task!.initiativeReviewBinding!.writerToolName = input.action.toolName;
+    input.task!.initiativeReviewBinding!.gate = "spec-approval";
+    expect(routinePolicyActionEligibility(input)).toEqual({ eligible: true });
+
+    input.rawParams.resolvedFindingRefs = ["finding-to-waive"];
+    expect(routinePolicyActionEligibility(input)).toEqual({ eligible: false, reason: "findings-present" });
+  });
+
+  it.each([
+    ["finding-bearing pass", { findings: [{ issue: "Unresolved", severity: "important" }] }, "findings-present"],
+    ["failed review", { decision: "fail" }, "non-pass-decision"],
+    ["not-applicable review", { decision: "not-applicable" }, "non-pass-decision"],
+    ["failure with missing findings", { decision: "fail", findings: undefined }, "findings-present"],
+    ["failure with malformed resolutions", { decision: "fail", findings: [{ issue: "Unresolved" }], resolvedFindingRefs: null }, "findings-present"],
+  ])("escalates a %s", (_name, rawPatch, reason) => {
+    expect(routinePolicyActionEligibility(routine(rawPatch))).toEqual({ eligible: false, reason });
+  });
+
+  it("escalates missing and mismatched immutable Workroom bindings", () => {
+    const missing = routine();
+    delete missing.task?.initiativeReviewBinding?.workroomRef;
+    expect(routinePolicyActionEligibility(missing)).toEqual({ eligible: false, reason: "workroom-binding-required" });
+
+    const mismatch = routine();
+    mismatch.task!.initiativeReviewBinding!.artifactRef.commitSha = "different-head";
+    expect(routinePolicyActionEligibility(mismatch)).toEqual({ eligible: false, reason: "workroom-binding-mismatch" });
+  });
+
+  it("escalates cross-scope, customer-business, external, and non-immediate actions", () => {
+    const customerBusiness = routine();
+    customerBusiness.organizationId = "org-customer";
+    expect(routinePolicyActionEligibility(customerBusiness)).toEqual({ eligible: false, reason: "platform-scope-required" });
+
+    const external = routine();
+    external.integration = { required: true, state: "connected" };
+    expect(routinePolicyActionEligibility(external)).toEqual({ eligible: false, reason: "internal-action-required" });
+
+    const proposed = routine();
+    proposed.action.executionMode = "proposal";
+    expect(routinePolicyActionEligibility(proposed)).toEqual({ eligible: false, reason: "immediate-action-required" });
+
+    const destructive = routine();
+    destructive.action.consequence = "irreversible";
+    expect(routinePolicyActionEligibility(destructive)).toEqual({ eligible: false, reason: "consequential-action-requires-human" });
+
+    const always = routine();
+    always.action.policyProjectionAllowed = false;
+    expect(routinePolicyActionEligibility(always)).toEqual({ eligible: false, reason: "operator-policy-requires-approval" });
+  });
+
   it("builds a server-owned exact WWMD question without trusting caller policy fields", () => {
     const input = authorityInput();
     const approvalBinding = buildCoworkerApprovalBinding(input);
@@ -99,7 +202,7 @@ describe("policy action judgment", () => {
   });
 
   it("invokes the governed scorer once and passes the internal binding only to its ledger adapter", async () => {
-    const input = authorityInput();
+    const input = routine();
     const approvalBinding = buildCoworkerApprovalBinding(input);
     const runPrincipleDecision = vi.fn().mockResolvedValue({ success: true });
 

@@ -24,6 +24,20 @@ import {
   type WorkroomShapeConformance,
   type WorkroomShapeConformanceDeviation,
 } from "./workroom-shape-conformance";
+import { writebackLatchHolds } from "./writeback-latch";
+import {
+  EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
+  WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+  isCompletingWorkroomDriveReceipt,
+  type PriorWorkroomDrive,
+} from "./workroom-drive-receipts";
+
+export {
+  EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
+  WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+  isCompletingWorkroomDriveReceipt,
+} from "./workroom-drive-receipts";
+export type { PriorWorkroomDrive } from "./workroom-drive-receipts";
 
 export type DriveAction =
   | "do_not_wake"
@@ -63,6 +77,8 @@ export type DriveResolutionInput = {
   trigger?: WorkShapeTriggerClass;
   /** Test/override only. Production callers omit this and the next permitted stage is derived. */
   proposedStageKey?: string | null;
+  /** Last persisted drive tick. Used to fail closed when a dispatch produced no writeback. */
+  priorDrive?: PriorWorkroomDrive | null;
 };
 
 export type DrivePlan = {
@@ -71,6 +87,9 @@ export type DrivePlan = {
   roomId: string;
   shapeKey: string | null;
   shapeVersion: string | null;
+  /** The shape being driven, so the dispatcher can brief the coworker from it
+   *  rather than sending a bare stage key (BI-4A394B21). */
+  definition: WorkShapeDefinitionContract | null;
   stageKey: string | null;
   accountablePrincipalRef: string | null;
   agentId: string | null;
@@ -106,6 +125,7 @@ function emptyPlan(
     reason,
     roomId: input.roomId,
     shapeKey: input.definition?.key ?? null,
+    definition: input.definition ?? null,
     shapeVersion: input.definition?.version ?? null,
     stageKey: null,
     accountablePrincipalRef: null,
@@ -126,7 +146,9 @@ function nextStageKey(
 ): string | null {
   if (definition.stages.length === 0) return null;
   if (!currentStageKey) return definition.stages[0]?.key ?? null;
-  const currentHasReceipt = receipts.some((receipt) => receipt.stageKey === currentStageKey);
+  const currentHasReceipt = receipts.some((receipt) =>
+    isCompletingWorkroomDriveReceipt(receipt, currentStageKey),
+  );
   if (!currentHasReceipt) return currentStageKey;
   const index = definition.stages.findIndex((stage) => stage.key === currentStageKey);
   if (index < 0 || index + 1 >= definition.stages.length) return null;
@@ -272,6 +294,7 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
       reason,
       roomId: input.roomId,
       shapeKey: input.definition.key,
+      definition: input.definition ?? null,
       shapeVersion: input.definition.version,
       stageKey: stage.key,
       accountablePrincipalRef: stage.accountablePrincipalRef,
@@ -293,11 +316,53 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
     });
   }
 
+  const completing = input.receipts.some((receipt) =>
+    isCompletingWorkroomDriveReceipt(receipt, stage.key),
+  );
+  const blocked = input.receipts.some(
+    (receipt) =>
+      receipt.stageKey === stage.key && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+  );
+  const prior = input.priorDrive;
+  // Bounded, not permanent: the latch holds within a cycle and releases on the
+  // next, so a deployed fix can reach a room that previously failed closed.
+  // Without this the pause reason re-triggers the pause and the room is locked
+  // forever (12 of 24 rooms on this install were).
+  const alreadyTriedWriteback = !completing
+    && writebackLatchHolds({
+      prior: prior ?? null,
+      stageKey: stage.key,
+      currentCycleKey: cycle?.cycleKey ?? null,
+      blocked,
+    });
+  if (alreadyTriedWriteback) {
+    return {
+      action: "pause",
+      reason: EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
+      roomId: input.roomId,
+      shapeKey: input.definition.key,
+      definition: input.definition ?? null,
+      shapeVersion: input.definition.version,
+      stageKey: stage.key,
+      accountablePrincipalRef: stage.accountablePrincipalRef,
+      agentId: null,
+      attentionPrincipalRef: null,
+      taskId: null,
+      conformance,
+      cycle,
+      deviations: [],
+      ledger: [
+        `Stage ${stage.key} already dispatched without a completing receipt; pause until writeback exists.`,
+      ],
+    };
+  }
+
   return {
     action: "dispatch_agent",
     reason: "agent_stage",
     roomId: input.roomId,
     shapeKey: input.definition.key,
+    definition: input.definition ?? null,
     shapeVersion: input.definition.version,
     stageKey: stage.key,
     accountablePrincipalRef: stage.accountablePrincipalRef,

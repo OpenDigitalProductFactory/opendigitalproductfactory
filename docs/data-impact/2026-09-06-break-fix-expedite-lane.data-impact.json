@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "BacklogItemActivity rows of kind initiative_gate_receipt (gateKey now admits post-implementation-review)",
+    "BacklogItemActivity rows of kind break_fix_declared (new, payload schemaVersion 1: reason, declaredByUserId, declaredByPrincipalId, capsuleId, declaredAt, pirDueAt)",
+    "Workroom.scopeClaims workShape entry delivery-break-fix@1.0.0 with declaredByUserId"
+  ],
+  "migration": {
+    "name": "20260906230000_initiative_gate_post_implementation_review",
+    "backfill": "Additive enum value only (ALTER TYPE ... ADD VALUE IF NOT EXISTS). No row is created, rewritten or deleted; existing receipts keep their gate keys. The break_fix_declared activity kind is a new text value on an existing free-text column, written only by declare_break_fix from this change forward."
+  },
+  "tests": [
+    "apps/web/lib/work-capsules/declare-break-fix.test.ts",
+    "apps/web/lib/backlog/initiative-readiness/shape-requirements.test.ts",
+    "apps/web/lib/backlog/initiative-readiness/entry-adapter.test.ts",
+    "apps/web/lib/mcp/packs/initiative-readiness-pack.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:initiative-gate-key#post-implementation-review",
+      "prismaModel": "BacklogItemActivity",
+      "lifecycleDisposition": "Gate receipts are governance evidence retained for the life of the item; the new gate key follows the same retention as every other InitiativeGateKey value.",
+      "fields": [
+        {
+          "fieldId": "data:BacklogItemActivity#gateKey",
+          "resolution": "inherited",
+          "reason": "One more closed-enum value on the existing gate-key column; a post-implementation review receipt is recorded by the same governed writer path (record_initiative_post_implementation_review) with reviewer identity and authority snapshot like every other receipt.",
+          "provenance": "BI-F2FEC1EB; docs/superpowers/specs/2026-09-02-work-shape-taxonomy-and-proportional-gates-design.md \u00a74",
+          "flags": []
+        },
+        {
+          "fieldId": "data:BacklogItemActivity#payload.break_fix_declared",
+          "resolution": "governed",
+          "reason": "Records who declared the expedite lane and when its 48-hour PIR falls due. Carries the declarer's user id and principal id (already present on the actor); no new personal data.",
+          "provenance": "BI-F2FEC1EB; apps/web/lib/work-capsules/declare-break-fix.ts",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

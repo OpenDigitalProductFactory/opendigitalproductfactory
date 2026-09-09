@@ -12,7 +12,7 @@ import { DeliveryTaskHub } from "./DeliveryTaskHub";
 export function WorkControlPanel({
   deliveryHub,
   adoptable,
-  livenessSummary = { scanned: deliveryHub.rows.length, live: deliveryHub.rows.filter((row) => row.group !== "complete").length, history: 0, reapable: 0, byLiveness: {}, heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } },
+  livenessSummary = { scanned: deliveryHub.rows.length, live: deliveryHub.rows.filter((row) => row.group !== "complete").length, working: deliveryHub.rows.filter((row) => row.group !== "complete").length, history: 0, reapable: 0, byLiveness: {}, heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } },
   createAction,
   canCreateGovernedWork = false,
   portalContext,

@@ -354,10 +354,37 @@ dpf_state_migrate() {
   node "$(dpf_state_migrator_path)" --state "$(dpf_state_path)" --catalog "$(dpf_state_catalog_path)" --host-platform "$DPF_PLATFORM" --host-arch "$DPF_ARCH" --write
 }
 
-# Write a top-level key whose value is a JSON object/array/literal. Used by
-# the agent-toolchain bootstrap (Phase 4 of BI-4B17051B) to persist the
-# agentToolchain block. Differs from dpf_state_write in that it parses the
-# value as JSON rather than coercing it to a string.
+# Agent-client readiness sidecar. Rewritten on every client session start, so it
+# must NEVER live inside install-state.json: the self-upgrade binds that file
+# byte-for-byte in a signed handoff, and a bootstrap landing during the drain
+# fenced a live upgrade (SUR-4758058F, BI-95DF1BFC). Plain atomic write, no
+# install-state lock, no schema gate - nothing in the install transition reads it.
+dpf_agent_toolchain_state_path() {
+  echo "$(dpf_state_dir)/agent-toolchain-state.json"
+}
+
+# Args: $1 = JSON-encoded agentToolchain object
+dpf_agent_toolchain_state_write() {
+  local value="$1"
+  local path; path="$(dpf_agent_toolchain_state_path)"
+  mkdir -p "$(dirname "$path")" || return 1
+  local temp; temp="$(dirname "$path")/.agent-toolchain-state.json.tmp-$$"
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$value" | jq . > "$temp" || { rm -f "$temp"; return 1; }
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import json,sys; json.dump(json.loads(sys.argv[1]), open(sys.argv[2],"w",encoding="utf-8"), indent=2)' "$value" "$temp" || { rm -f "$temp"; return 1; }
+  else
+    printf '%s\n' "$value" > "$temp" || { rm -f "$temp"; return 1; }
+  fi
+  dpf_state_flush_file "$temp" || { rm -f "$temp"; return 1; }
+  mv -f "$temp" "$path" || { rm -f "$temp"; return 1; }
+  chmod 600 "$path" 2>/dev/null || true
+}
+
+# Write a top-level key whose value is a JSON object/array/literal. Retained
+# for installer-owned keys; the agent-toolchain bootstrap no longer uses it
+# (see dpf_agent_toolchain_state_write). Differs from dpf_state_write in that
+# it parses the value as JSON rather than coercing it to a string.
 #
 # Args: $1 = key, $2 = JSON-encoded value (object / array / true / false / null / number / string)
 dpf_state_write_json() {

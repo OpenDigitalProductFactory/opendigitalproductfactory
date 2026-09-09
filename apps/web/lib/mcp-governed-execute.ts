@@ -44,6 +44,7 @@ import {
 } from "./governed-tool-audit";
 import type { WorkCaseExecutionContext } from "./work-management/work-case-governance-hook";
 import type { AuthorizedSurfaceContext, AuthorizedSurfaceInvocation } from "@/lib/coworker/authorized-surface-execution-types";
+import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
 import {
   classifyConsequentialTool,
 } from "./tak/consequential-tool-policy";
@@ -123,11 +124,20 @@ export type GovernedExecuteContext = {
   coworkerAuthorizedSurfaceBaseline?: boolean;
   authorizedSurfaceContext?: AuthorizedSurfaceContext;
   /**
-   * Server-owned session permission for tools that cross the platform
-   * boundary. Callers may set this only after the tool registry has admitted
-   * the tool for the current session.
+   * Server-owned permission for tools that cross the platform boundary.
+   * Resolved from the coworker's standing grants and the Workroom the turn
+   * runs in (lib/work-management/room-turn-authority.ts) — never from a
+   * client-asserted switch (BI-947780FE).
    */
   externalAccessEnabled?: boolean;
+  /**
+   * EP-WORK-POSTURE §8.2 (BI-F114354D): the Workroom this call runs in and the
+   * tool surface that room authorizes. The authority evaluator intersects it
+   * with the coworker's grants and the human's capabilities; a tool outside
+   * the room's surface is denied `room-authority-denied`. Omitted for unroomed
+   * turns, which fall to the coworker's grants alone.
+   */
+  roomAuthority?: RoomAuthorityContext;
   /**
    * Optional Work Case context for consequential actions flowing through the
    * governed execution seam. Existing callers omit this and retain their

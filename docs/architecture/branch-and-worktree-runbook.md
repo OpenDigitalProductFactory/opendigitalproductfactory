@@ -41,7 +41,7 @@ Never share a working tree across sessions: it causes index/HEAD collisions and 
 
 `.mcp.json` and `.vscode/mcp.json` are gitignored — they carry your local `dpfmcp_...` bearer token — so `git worktree add` does not carry them across.
 
-From inside the new worktree, run `scripts/dpf-bootstrap-agent-toolchain.ps1` (Windows) or `bash scripts/dpf-bootstrap-agent-toolchain.sh` (macOS / Linux). It copies MCP config from the root clone, converges Claude Code + Codex CLI plugin state, seeds kernel-tier memory, runs read-only MCP + smoke probes, and prints a single six-state readiness banner. Re-running on a converged worktree is a no-op.
+From inside the new worktree, run `scripts/dpf-bootstrap-agent-toolchain.ps1` (Windows) or `bash scripts/dpf-bootstrap-agent-toolchain.sh` (macOS / Linux). It copies MCP config from the root clone, converges Claude Code + Codex CLI plugin state, seeds kernel-tier memory, runs read-only MCP + smoke probes, and prints a single six-state readiness banner; the readiness record lands in `~/.dpf/agent-toolchain-state.json`, never in `install-state.json`, so running it while a self-upgrade is draining is safe (BI-95DF1BFC). Re-running on a converged worktree is a no-op.
 
 The legacy `scripts/seed-worktree-mcp.{ps1,sh}` and `scripts/ensure-dpf-skill-pack.{ps1,sh}` scripts now shim into the new bootstrap; both names continue to work for one release cycle. ⟦runtime: expiry UNANCHORED — names no release or date, so it cannot expire on its own; anchor it or drop the legacy names⟧
 

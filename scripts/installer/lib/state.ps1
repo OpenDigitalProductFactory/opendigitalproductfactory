@@ -162,6 +162,28 @@ function Write-DpfStateCandidate {
     if (-not (Test-DpfStateFileValid $Path)) { throw "install_state_post_write_schema_validation_failed" }
 }
 
+# Agent-client readiness sidecar. Rewritten on every client session start, so it
+# must NEVER live inside install-state.json: the self-upgrade binds that file
+# byte-for-byte in a signed handoff, and a bootstrap landing during the drain
+# fenced a live upgrade (SUR-4758058F, BI-95DF1BFC). Plain atomic write, no
+# install-state lock, no schema gate - nothing in the install transition reads it.
+function Get-DpfAgentToolchainStatePath {
+    return (Join-Path (Get-DpfStateDir) "agent-toolchain-state.json")
+}
+
+function Write-DpfAgentToolchainState {
+    param([Parameter(Mandatory)]$State)
+    $path = Get-DpfAgentToolchainStatePath
+    $dir = Split-Path -Parent $path
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $temp = Join-Path $dir (".agent-toolchain-state.json.tmp-" + [guid]::NewGuid().ToString("n"))
+    $encoding = New-Object Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($temp, ($State | ConvertTo-Json -Depth 20), $encoding)
+    Flush-DpfStateFile $temp
+    Move-Item -LiteralPath $temp -Destination $path -Force
+    return $path
+}
+
 # Initialize a fresh state file at the canonical path. Idempotent.
 # Args: $InstallerVersion, $InstallPath
 function Initialize-DpfState {

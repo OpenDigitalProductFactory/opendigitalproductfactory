@@ -13,6 +13,7 @@ enum InitiativeGateKey {
   dependency_disposition @map("dependency-disposition")
   archetype_provisioning @map("archetype-provisioning")
   archetype_completeness @map("archetype-completeness")
+  post_implementation_review @map("post-implementation-review")
 }
 
 enum InitiativeArtifactSourceKind {

@@ -12,6 +12,8 @@ export type ToolCallEntry = {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+  /** Opaque native continuation data; never authority to execute a tool. */
+  gemini?: { modelId: string; functionCallId?: string; thoughtSignature?: string };
 };
 
 /** Pre-resolved provider connection info — callProvider resolves before dispatch */

@@ -1,5 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/workspace/cases/booking%3ABK-1",
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 import { WorkCaseDetailView } from "./WorkCaseDetailView";
 import { WorkroomBodyContent } from "./workroom/WorkroomBody";
@@ -58,6 +64,7 @@ const room: WorkroomView = {
     sourceRefs: [{ kind: "source", id: "BK-1", sourceType: "booking" }],
   },
   currentCycle: null,
+  cycleProjectionError: null,
   completedCycles: [],
   participants: [
     {
@@ -250,8 +257,8 @@ describe("WorkCaseDetailView", () => {
     expect(html).toContain("Details");
     expect(html).toContain("Storefront booking");
     expect(html).toContain("Definition v1");
-    expect(html.match(/aria-labelledby="workroom-shape-title"/g)).toHaveLength(2);
-    expect(html).toContain('tabindex="0"');
+    expect(html.match(/aria-label="Process steps"/g)).toHaveLength(1);
+    expect(html).toContain('data-step-key="convene"');
     expect(html).not.toContain('aria-labelledby="work-room-activity-title"');
     expect(html).not.toContain('aria-labelledby="work-room-participants-title"');
     expect(html).not.toContain("Room details");
@@ -333,6 +340,17 @@ describe("WorkCaseDetailView", () => {
     expect(html).toContain("Define the intended outcome and accountable owner");
     expect(html).toContain("Outcome not defined");
     expect(html).toContain("Accountable owner not assigned");
+  });
+
+  it("lists each missing boundary fact once instead of repeating the list in prose", () => {
+    const incompleteRoom: WorkroomView = { ...room,
+      boundary: { ...room.boundary, gaps: ["scope", "measures"] },
+      projection: { ...room.projection, incompleteBoundary: true },
+    };
+    const html = renderToStaticMarkup(<WorkCaseDetailView detail={{ ...detail, room: incompleteRoom }} />);
+    expect(html.match(/Scope not defined/g)).toHaveLength(1);
+    expect(html.match(/Measures not defined/g)).toHaveLength(1);
+    expect(html).toContain("before consequential work continues");
   });
 
   it("shows one recovery direction when the room source is unavailable", () => {

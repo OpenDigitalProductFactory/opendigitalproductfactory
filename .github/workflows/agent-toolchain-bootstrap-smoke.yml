@@ -8,7 +8,7 @@ name: Agent toolchain bootstrap smoke (BI-4B17051B)
 #   2. Invokes the @dpf/bootstrap Node bridge through pnpm + tsx.
 #   3. Produces a plan JSON the python apply step can parse.
 #   4. Emits a `missing_cli` readiness state with the spec's banner copy.
-#   5. Writes a schema-valid `agentToolchain` block to install-state.json.
+#   5. Writes valid agent readiness to agent-toolchain-state.json.
 #
 # This is a substrate proof, not a functional proof. The functional smoke
 # probe (claude --print refusing a destructive prompt) lives in Phase 8b's
@@ -117,7 +117,7 @@ jobs:
           DPF_MCP_BEARER_TOKEN: ""
         run: |
           # Without claude/codex installed, the live run records `missing_cli`
-          # but still writes the agentToolchain block. Re-running must be a
+          # but still writes the agent-toolchain state. Re-running must be a
           # no-op (no errors, same state).
           set -euo pipefail
           bash scripts/dpf-bootstrap-agent-toolchain.sh --headless > first.txt 2>&1 || {
@@ -128,13 +128,12 @@ jobs:
             cat second.txt
             exit 1
           }
-          test -f "$HOME/.dpf/install-state.json"
-          # Validate the agentToolchain block exists and has readinessState.
+          test -f "$HOME/.dpf/agent-toolchain-state.json"
+          # Agent readiness is separate from the installer transition state.
           python3 -c "
           import json, sys
-          state = json.load(open('$HOME/.dpf/install-state.json'))
-          at = state.get('agentToolchain') or {}
-          assert at, 'agentToolchain block missing from install-state'
+          at = json.load(open('$HOME/.dpf/agent-toolchain-state.json'))
+          assert at, 'agent toolchain readiness state is missing'
           rs = at.get('readinessState')
           assert rs == 'missing_cli', f'expected missing_cli, got {rs}'
           assert at.get('claudeCodeWired') is False, 'claudeCodeWired must be False on clean runner'
@@ -144,9 +143,9 @@ jobs:
           mcp = at.get('mcpReadiness', {})
           assert mcp.get('ok') is False, 'mcpReadiness must be ok=False without a token'
           # Bearer redaction structural check: no dpfmcp_ or 'Bearer <something>' anywhere in the state file.
-          raw = open('$HOME/.dpf/install-state.json').read()
+          raw = open('$HOME/.dpf/agent-toolchain-state.json').read()
           assert 'dpfmcp_' not in raw, 'state file contains a bearer-shaped substring'
           import re
           assert not re.search(r'Bearer\\s+[A-Za-z0-9]', raw), 'state file contains a literal Bearer token'
-          print('agentToolchain block ok:', rs)
+          print('agent toolchain readiness ok:', rs)
           "

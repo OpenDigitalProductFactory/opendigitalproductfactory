@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
+import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
 
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
@@ -120,11 +121,10 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
     return { ...err("workroom-identity-conflict"), reason: "workroom-identity-conflict" };
   }
 
-  const baselineActivities = await db.backlogItemActivity.findMany({
-    where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
-    orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-    select: { id: true, backlogItemId: true, kind: true, recordedAt: true, payload: true },
-  });
+  // BI-2515F779: a decomposed child is admitted against the baseline it
+  // inherits from its mapping parent, exactly as the router bound it.
+  const baselineSource = await loadBaselineSourceForItem(db as unknown as BaselineSourceDb, { id: item.id, itemId: item.itemId });
+  const baselineActivities = baselineSource?.baselineRows ?? [];
   const baselineRows = parseBaselinePayloads(baselineActivities.map((entry) => entry.payload));
   const baseline = baselineRows ? currentBaseline(baselineRows) : null;
   const expectedBaselineId = packet.binding.expectedCurrentBaselineId ?? null;

@@ -14,6 +14,8 @@ wins and this doc is the bug — fix it.
 
 ## The contract (read this first)
 
+Begin [failure analysis](../architecture/failure-analysis-and-recovery.md) in design, refine it during implementation, and give the independent reviewer executed evidence for the final change. Local integration reports now bind their output to the owning Workroom, source tree and diff. An empty checklist, stale report or skipped run cannot satisfy that requirement. Technical review outages follow internal recovery; they are not business-owner approval requests.
+
 Cross-session drift happens when each session reconstructs the workflow from
 prose. Don't. Before you open a PR, in order:
 
@@ -102,6 +104,34 @@ The profiles reflect execution substrate, not separate policy inventories:
 - `pull-request` uses PR event context and trailers.
 
 #### Re-evaluating a trailer or label without pushing
+
+### A scoped seed-fit answer names its mechanism
+
+`Seed-Fit-Decision: archetype-scoped` and `vertical-scoped` claim the content is
+limited to some installs. Since BI-B507DBD1 the claim must also say **how** that
+limit is enforced, and the named rule must appear in the diff:
+
+```
+Seed-Fit-Decision: archetype-scoped mechanism=seed-gate  symbol=referenceModelAppliesToInstall
+Seed-Fit-Decision: vertical-scoped  mechanism=read-scope symbol=regulationApplies
+```
+
+Two mechanisms exist, both correct, and the choice is yours:
+
+- **`seed-gate`** — do not put the content on installs it does not serve. The
+  seeder consults an applicability rule before writing.
+- **`read-scope`** — ship it everywhere on purpose and filter at consumption.
+  Each row declares applicability and the read path evaluates it.
+
+`global-default` claims no limit and owes no mechanism. A label can still carry
+the decision, but a scoped one needs the mechanism in the body, because a label
+cannot carry the evidence.
+
+This exists because in BI-C44EAEE6 a banking reference model was scoped at seed
+time and never on read, so a pet rescue advertised it as active. One half
+shipped, the other did not, and nothing looked at the pair. The gate now checks
+that the rule you name is actually referenced by a file you changed, so an
+unimplemented claim fails rather than reads well.
 
 Several `pull-request` guards — Seed Contribution Fit, UX Fit, Design Grounding,
 Docs Impact — tell you to add a trailer such as `Seed-Fit-Decision:` to the PR
@@ -1046,6 +1076,43 @@ composite widget rather than one control (a radio-group heading), add a
 `label-association-allow` comment on the same line stating why. Tracked debt
 is the checked-in baseline itself; file a live BI before proposing a separate
 paydown campaign.
+
+### Room Addressing Guard
+
+`scripts/check-no-unreachable-room-links.mjs` fails a PR that makes a room
+unopenable. An operator reported that no **Open room** button on the attention
+inbox worked; it was four defects across four surfaces, each a different wrong
+answer to "how do I address a room", and none caught by a test.
+
+Two rules:
+
+- **Rule 1 — no hand-built work-case path.** `/workspace/cases/${x}` must come
+  from `encodeWorkCaseKey`. A key without its source-type prefix does not decode,
+  so the link 404s. No baseline: this is always wrong.
+- **Rule 2 — no provably-unreachable link.** An interpolated link whose route
+  prefix names an App Router directory with no dynamic child can never resolve.
+  Baselined (`scripts/room-addressing-baseline.json`, owned and expiring) so the
+  class cannot grow while a pre-existing entry is judged on its own. The
+  baseline shipped with four entries and is now **empty** (BI-235E9F00):
+  judging them found that two claimant links had no page at all, three
+  integration links spelled a slug the filesystem did not have, and — once the
+  first four were gone — a fifth (`/build/<id>`) that had been hiding behind
+  them. Retightening a baseline is how you find the next instance; leaving it
+  is how you keep it. Integration pages are now addressed only through
+  `apps/web/lib/tools/integration-settings-href.ts`, which reads routability
+  from the generated route manifest rather than a catalog that drifts.
+
+Only link contexts are considered. `revalidatePath`, `fetch` and cache keys take
+the same shape but cannot 404 at a person; folding them in would make the guard
+noisy enough to be ignored.
+
+```bash
+node scripts/check-no-unreachable-room-links.mjs            # check (what CI runs)
+node scripts/check-no-unreachable-room-links.mjs --update   # retighten after fixing a link
+```
+
+The reasoning lives in the kernel principle
+[A Room Is Reachable by Construction](../founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md).
 
 ## What this gate is NOT
 

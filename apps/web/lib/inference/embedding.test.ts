@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
+vi.mock("./provider-inference-transport", () => ({ providerInferenceFetch: transport.fetch }));
+
 vi.mock("@/lib/routing/local-provider-capacity", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/routing/local-provider-capacity")>()),
   assertLocalProviderCapacityAvailable: vi.fn(),
 }));
 
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
-import { generateEmbedding, generateEmbeddingDetailed, isOversizeRejection } from "./embedding";
+import { generateEmbedding, generateEmbeddingDetailed, isEmbeddingAvailable, isOversizeRejection } from "./embedding";
 
 /** The exact rejection llama.cpp emits once n_batch is clamped to n_ubatch. */
 const OVERSIZE_BODY =
@@ -20,7 +23,9 @@ function okEmbedding(vec: number[]): Response {
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
+  transport.fetch.mockReset();
 });
 
 describe("embedding is exempt from the local-CI capacity gate (BI-0AA939DF / DI-7F674966B4B2)", () => {
@@ -29,7 +34,7 @@ describe("embedding is exempt from the local-CI capacity gate (BI-0AA939DF / DI-
     // no gate, 10-20ms with an active gate and three queued, no observable
     // effect on the gate. Gating it suppressed retrieval platform-wide for the
     // duration of every gate run and bought nothing.
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    const fetchSpy = transport.fetch.mockResolvedValue(
       new Response(JSON.stringify({ data: [{ embedding: [0.1, 0.2] }] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -59,7 +64,7 @@ describe("oversize retry (BI-633845B0)", () => {
   // observed live at 520, 550 and 599 tokens. Retrying shorter recovers it.
   it("retries at a shorter slice and returns the embedding instead of null", async () => {
     const sent: number[] = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    transport.fetch.mockImplementation(async (_url, init) => {
       const body = JSON.parse(String((init as RequestInit).body)) as { input: string };
       sent.push(body.input.length);
       // Reject anything over 1000 chars, mimicking a dense-text token overflow.
@@ -81,8 +86,7 @@ describe("oversize retry (BI-633845B0)", () => {
   it("gives up after the last slice rather than retrying forever", async () => {
     // A fresh Response per call: a body can only be read once, so a single
     // shared Response would make the second read empty and mask the retry.
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
+    const fetchSpy = transport.fetch
       .mockImplementation(async () => new Response(OVERSIZE_BODY, { status: 500 }));
 
     await expect(generateEmbedding("x".repeat(5000))).resolves.toBeNull();
@@ -91,8 +95,7 @@ describe("oversize retry (BI-633845B0)", () => {
   });
 
   it("does NOT retry a non-oversize failure — one attempt, then null", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
+    const fetchSpy = transport.fetch
       .mockResolvedValue(new Response("model not found", { status: 404 }));
 
     await expect(generateEmbedding("durable knowledge")).resolves.toBeNull();
@@ -100,7 +103,7 @@ describe("oversize retry (BI-633845B0)", () => {
   });
 
   it("does not retry when the first attempt succeeds", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(okEmbedding([0.9]));
+    const fetchSpy = transport.fetch.mockResolvedValue(okEmbedding([0.9]));
 
     await expect(generateEmbedding("short text")).resolves.toEqual([0.9]);
     expect(fetchSpy).toHaveBeenCalledOnce();
@@ -133,7 +136,7 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
     // broken embedding model across the whole install.
     // No gate raises this any more, but the branch stays: any future capacity
     // boundary must still report a deferral as deferred rather than failed.
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+    transport.fetch.mockRejectedValue(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
 
@@ -146,7 +149,7 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
   });
 
   it("reports a genuine backend error as failed, not deferred", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
+    transport.fetch.mockRejectedValue(new Error("connect ECONNREFUSED"));
 
     const result = await generateEmbeddingDetailed("anything");
 
@@ -154,10 +157,26 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
   });
 
   it("keeps generateEmbedding null-returning, so its existing callers are untouched", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+    transport.fetch.mockRejectedValue(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
 
     await expect(generateEmbedding("anything")).resolves.toBeNull();
+  });
+});
+
+
+describe("canonical embedding transport", () => {
+  it("generates embeddings and checks availability when global fetch is unusable", async () => {
+    const globalFetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("shared transport unavailable"));
+    transport.fetch
+      .mockResolvedValueOnce(okEmbedding([0.1, 0.2]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "ai/nomic-embed-text-v1.5" }] }), { status: 200 }));
+
+    await expect(generateEmbeddingDetailed("platform principles")).resolves.toEqual({ status: "ok", embedding: [0.1, 0.2] });
+    await expect(isEmbeddingAvailable()).resolves.toBe(true);
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(transport.fetch).toHaveBeenNthCalledWith(1, expect.stringContaining("/embeddings"), expect.objectContaining({ method: "POST" }));
+    expect(transport.fetch).toHaveBeenNthCalledWith(2, expect.stringContaining("/models"), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 });

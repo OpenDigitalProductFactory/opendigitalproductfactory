@@ -8,6 +8,7 @@
     "build": "node scripts/next-build.mjs",
     "start": "next start",
     "typecheck": "next typegen && node ../../scripts/run-tsc.mjs --noEmit",
+    "typecheck:tests": "next typegen && node ../../scripts/run-tsc.mjs --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -58,9 +59,9 @@
     "libphonenumber-js": "^1.13.9",
     "lucide-react": "^1.26.0",
     "mammoth": "^1.12.1",
-    "next": "^16.3.0",
+    "next": "^16.3.3",
     "next-auth": "5.0.0-beta.32",
-    "nodemailer": "^9.0.3",
+    "nodemailer": "^9.1.1",
     "papaparse": "^5.5.4",
     "pdf-parse": "^2.4.5",
     "pg": "^8.23.0",
@@ -73,7 +74,7 @@
     "read-excel-file": "9.2.0",
     "recharts": "^3.10.1",
     "remark-gfm": "^4.0.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "undici": "^8.10.0",
     "zod": "^4.4.3"
   },
@@ -88,7 +89,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.4",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "autoprefixer": "^10.5.4",
     "dotenv": "^17.2.3",
     "jsdom": "^29.1.1",
@@ -96,6 +97,6 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

@@ -20,8 +20,13 @@ import {
   resolveWorkroomPosture,
   type WorkroomPostureContext,
 } from "./room-posture";
+import { resolveRoomProjectionMode } from "./room-cycle";
 import { readWorkroomPostureClaim } from "./workroom-posture-claim";
-import { getWorkShape, readWorkShapeDefinitionContract } from "./work-shapes";
+import {
+  getWorkShape,
+  readDeclaredWorkShapeKey,
+  readWorkShapeDefinitionContract,
+} from "./work-shapes";
 import { readWorkShapeClaim, resolveWorkShapeClaim } from "./workroom-shape-claim";
 import {
   evaluateWorkroomShapeConformance,
@@ -52,6 +57,9 @@ export interface BuildWorkroomViewInput {
   detail: WorkCaseDetail;
   boundary?: Partial<WorkroomBoundaryInput>;
   currentCycle?: WorkroomCycleView | null;
+  /** Set when the cycle could not be projected. The room still renders; the
+   *  cycle section says so rather than the page dying (BI-97B24FB5). */
+  cycleProjectionError?: string | null;
   completedCycles?: readonly WorkroomCycleView[];
   participants?: readonly WorkroomParticipantView[];
   activities?: readonly WorkroomActivityInput[];
@@ -184,7 +192,13 @@ export function buildWorkroomView(
     context,
     contextProvided: Boolean(input.context),
   });
-  const mode = source?.roomProjection.mode ?? "finite";
+  // The room's own declared shape decides its mode, not the source entry alone
+  // — otherwise a standing room renders as finite while its cycle projects
+  // standing, and the two halves of the same room disagree (BI-97B24FB5).
+  const declaredShapeKey = readDeclaredWorkShapeKey(input.scopeClaims);
+  const mode = source
+    ? resolveRoomProjectionMode(caseRefForDetail(input.detail).sourceType, declaredShapeKey)
+    : "finite";
   const health = sourceHealth(input, source);
   const standingIdle = mode === "standing" && !input.currentCycle;
   const posture = resolveWorkroomPosture(
@@ -209,6 +223,7 @@ export function buildWorkroomView(
   const currentCycleRef = cycleRef(currentCycle);
   const executionRefs = dedupeRoomSourceRefs([
     ...activeCapsuleRefs,
+    ...sourceRefs.filter((ref) => ref.kind === "task-run"),
     ...(currentCycle?.sourceRefs ?? []).filter(
       (ref) =>
         ref.kind === "work-item"
@@ -289,6 +304,7 @@ export function buildWorkroomView(
     },
     boundary,
     currentCycle,
+    cycleProjectionError: input.cycleProjectionError ?? null,
     completedCycles: [...(input.completedCycles ?? [])],
     participants,
     activity: normalizeWorkroomActivities(input.activities ?? []),

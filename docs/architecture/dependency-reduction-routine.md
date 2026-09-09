@@ -222,6 +222,23 @@ goes through WWMD (`principle_decide`: `operational_independence` +
 review-list win: `gray-matter` (carrier of our one `js-yaml` finding) is a
 replace candidate that would shed that vuln entirely.
 
+## Build-time tools are tools, not workspace dependencies
+
+A tool the workspace only *runs* (never imports) does not belong in
+`pnpm-lock.yaml`: it inflates the SBOM, the override block and the shipped
+image for a binary nothing in the product executes. The Mermaid diagram
+renderer was the worked example (BI-DBDB8C6D, plan 2026-09-08 M2):
+`@mermaid-js/mermaid-cli` + `puppeteer` carried 129 resolved components, eight
+exact override pins, a second `commander`/`pino`/`elkjs` major and ~200 MB of
+the portal image, for one script. `scripts/lib/mermaid-renderer.mjs` now
+resolves a renderer in order — `MMDC=...`, a locally installed mermaid-cli, or
+the digest-pinned `minlag/mermaid-cli` tool image through Docker — and the
+"last policy-vetted diagram stack" rule the overrides used to carry lives in
+that image digest. Move the tag and digest together, re-render every committed
+SVG, and review the diff; `scripts/check-diagram-dependency-pins.mjs` refuses
+the npm packages coming back. `--check` modes stay pure Node everywhere, so no
+gate needs Docker; only rendering does.
+
 ## Hardening the rent: upgrade validation
 
 Renting safely means validating versions as they *change*, not just at acquisition:

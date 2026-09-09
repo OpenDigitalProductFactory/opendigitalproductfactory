@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-571093CC, deliverable D2 of BI-8DACBA07. Migration 20260907190000_organization_top_accountable_principal adds Organization.topAccountablePrincipalId, a nullable FK to Principal recording the human who answers for the organization's outcomes. It is the root of the accountability lineage that resolveEffectiveHumanAccountability walks up to; without it every room with no explicit assignment resolved to a setup state. Additive and nullable: no existing column changes and no row is required to have a value. The FK is attested data-safe because it is added on a column that is NULL on every existing row at constraint time. The inline backfill is narrow and idempotent, resolving PlatformSetupProgress.userId through the canonical PrincipalAlias user alias, and writes only where setup names exactly one user for the organization and that user resolves to exactly one active human Principal; anything ambiguous is left null for an operator to settle rather than guessed. Re-running the backfill updates zero rows. Verified against a populated database before commit.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "Organization",
+      "lifecycleDisposition": "retain-with-organization",
+      "fields": [
+        {
+          "name": "topAccountablePrincipalId",
+          "resolution": "inherited",
+          "reason": "FK to the existing canonical Principal row. It creates no second identity home and stores no personal attribute of its own: the person's name, email and any other identifying data continue to live on Principal and its aliases, and are read through them. Confidentiality follows Organization, already classified confidential in packages/db/src/table-classification.ts.",
+          "provenance": "Set by an operator recording the organization's owner, or by this migration's narrow backfill from PlatformSetupProgress.userId resolved through PrincipalAlias(aliasType=user) to a single active human Principal. Null wherever that cannot be resolved unambiguously.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

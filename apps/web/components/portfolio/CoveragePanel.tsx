@@ -6,6 +6,7 @@
 // report-kit StatusBadge (theme-tokened intents). No new route.
 
 import Link from "next/link";
+import { integrationSettingsHref } from "@/lib/tools/integration-settings-href";
 
 import { StatusBadge } from "@/components/ui/report-kit";
 
@@ -75,9 +76,10 @@ export function CoveragePanel({ products, className = "" }: Props) {
       </p>
       <div className="flex flex-col gap-2">
         {rows.map((p) => {
+          // Only a slug with a page behind it is offered as a link (BI-235E9F00).
           const enableHref =
             p.source === "integration_registry" && p.coverage === "potential"
-              ? `/platform/tools/integrations/${p.productId.replace(/^int-/, "")}`
+              ? integrationSettingsHref(p.productId.replace(/^int-/, ""))
               : null;
           return (
             <div

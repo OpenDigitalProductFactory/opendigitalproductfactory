@@ -136,7 +136,7 @@ const APPROVAL_ROOM_PROJECTION = {
   },
 } as const satisfies WorkCaseRoomProjectionPolicy;
 
-const STANDING_ROOM_PROJECTION = {
+export const STANDING_ROOM_PROJECTION = {
   mode: "standing",
   cycleCarrierPrecedence: ["work-item", "work-capsule", "task-run"],
   outcomePacket: {

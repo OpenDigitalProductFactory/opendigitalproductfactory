@@ -18,6 +18,7 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
   return {
     decision: inconclusive.length > 0 ? "inconclusive" : criticals > 0 ? "fail" : "pass",
     issues,
+    ...(results[0]?.failureAnalysisReview ? { failureAnalysisReview: results[0].failureAnalysisReview } : {}),
     summary: inconclusive.length > 0
       ? `${inconclusive.length} required semantic review branch${inconclusive.length === 1 ? " was" : "es were"} infrastructure-inconclusive; retry without treating capacity as a semantic finding.`
       : results.length === 1
@@ -34,7 +35,14 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
 export async function dispatchRoutedSemanticReview(
   prompt: string,
   context: SemanticChangeReviewDispatchContext,
+  runBranch: (agentId: string, execute: () => Promise<SemanticReviewResult>) => Promise<SemanticReviewResult>
+    = (_agentId, execute) => execute(),
 ): Promise<SemanticReviewResult> {
+  if (context.specialistIds.some((id) => !Object.hasOwn(SPECIALIST_SYSTEM_PROMPTS, id))) {
+    return { decision: "inconclusive", issues: [],
+      summary: "A required specialist has no supported dispatch definition.",
+      inconclusiveReason: "unsupported-required-specialist" };
+  }
   // Capacity belongs to the actual provider dispatch, including every fallback
   // through callProvider. A local reservation must not veto an eligible remote
   // review before routing has selected its provider.
@@ -44,13 +52,13 @@ export async function dispatchRoutedSemanticReview(
       displayName: "Change Reviewer",
       systemPrompt: CHANGE_REVIEWER_ROUTE_AGENT.systemPrompt,
     },
-    ...context.specialistIds.flatMap((agentId) => {
+    ...[...new Set(context.specialistIds)].flatMap((agentId) => {
       const systemPrompt = SPECIALIST_SYSTEM_PROMPTS[agentId];
       return systemPrompt ? [{ agentId, displayName: agentId, systemPrompt }] : [];
     }),
   ];
 
-  const settled = await Promise.allSettled(branches.map(async (branch) => {
+  const settled = await Promise.allSettled(branches.map((branch) => runBranch(branch.agentId, async () => {
     const response = await routeAndCall(
       [{ role: "user", content: prompt }],
       branch.systemPrompt,
@@ -79,7 +87,7 @@ export async function dispatchRoutedSemanticReview(
       },
     );
     return parseSemanticReviewResponse(response.content);
-  }));
+  })));
 
   const completed = settled.flatMap((branch) => branch.status === "fulfilled" ? [branch.value] : []);
   const rejected = settled.filter((branch) => branch.status === "rejected").length;

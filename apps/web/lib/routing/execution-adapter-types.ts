@@ -108,6 +108,43 @@ const VALID_AUTH_MODES: ReadonlySet<ExecutionAdapterSelector["authMode"]> = new 
   ExecutionAdapterSelector["authMode"]
 >(["api-key", "oauth", "local"]);
 
+/** Known transport limitation, shared by routing eligibility and final dispatch. */
+export function requiredToolChoiceExclusionReason(adapter: string | ExecutionAdapterSelector | null): string | null {
+  const kind = typeof adapter === "string" ? (adapter === "claude-cli" ? "claude-code-cli" : adapter) : adapter?.kind;
+  return kind === "claude-code-cli" || kind === "codex-cli"
+    ? `Execution adapter ${kind} cannot enforce required tool choice with a server-verifiable mechanism.`
+    : null;
+}
+
+/**
+ * How a bound terminal writer's contract is held for a given adapter.
+ *
+ *   required-tool-call  the adapter forces the call natively (HTTP adapters
+ *                       compile `toolChoice: "required"` to the provider's own
+ *                       forced-call form); the write is enforced before the model
+ *                       can answer otherwise.
+ *   receipt-verified    the adapter cannot force the call (CLI transports). The
+ *                       writer is still the sole tool on the surface, the model
+ *                       is dispatched with best-effort tool choice, and the SERVER
+ *                       verifies afterwards that the governed receipt exists for
+ *                       the workroom head. A missing receipt is a failed turn —
+ *                       resumable, rotated to the next provider, escalated after
+ *                       bounded attempts — never a pass.
+ *
+ * BI-C35576A9 / DI-48BC3C1F11A8. Before this, CLI adapters were excluded
+ * outright for a bound writer, which on an install whose cloud providers are all
+ * CLI subscriptions left only the local model — and the reviewer chain could not
+ * complete. The receipt check IS the server-verifiable mechanism; the adapter
+ * exclusion was belt-and-braces that starved the belt.
+ */
+export type TerminalWriterDispatchContract = "required-tool-call" | "receipt-verified";
+
+export function terminalWriterDispatchContract(
+  adapter: string | ExecutionAdapterSelector | null,
+): TerminalWriterDispatchContract {
+  return requiredToolChoiceExclusionReason(adapter) ? "receipt-verified" : "required-tool-call";
+}
+
 /**
  * Round-trip a legacy string-typed `executionAdapter` value (or an already-
  * structured selector) into the new ExecutionAdapterSelector shape.

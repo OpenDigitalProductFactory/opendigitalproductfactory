@@ -39,6 +39,9 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/platform/ai/agent/AGT-001",
+  useSearchParams: () => new URLSearchParams(),
   notFound: () => { throw new Error("notFound"); },
 }));
 
@@ -91,9 +94,6 @@ vi.mock("@/components/platform/coworker-record/RecordActionsMenu", () => ({
   RecordActionsMenu: () => null,
 }));
 
-vi.mock("@/components/golden-triangle/CoworkerPriorityControl", () => ({
-  CoworkerPriorityControl: () => null,
-}));
 
 vi.mock("@/lib/tak/work-pattern-read-model", () => ({
   getWorkPatternReadModel: vi.fn().mockResolvedValue({

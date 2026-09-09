@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@/lib/shared/canonical-json";
-import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import { ARTIFACT_AUTHOR_RECOVERY, readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 import type {
   InitiativeGateKey,
   InitiativeReadinessDecision,
@@ -9,6 +9,7 @@ import type {
 } from "@/lib/backlog/initiative-readiness";
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { formatInitiativeReviewObjective, IMMUTABLE_REVIEW_READER_TOOL as IMMUTABLE_READER_TOOL } from "./initiative-review-objective";
 
 export type InitiativeReadinessLane = {
   capability: NonNullable<ToolDefinition["requiredCapability"]>;
@@ -32,6 +33,8 @@ export const INITIATIVE_READINESS_LANES: Record<string, InitiativeReadinessLane>
   record_initiative_security_review: { capability: "manage_compliance", grant: "initiative_security_review", gates: ["security-review"], accountableRoles: ["security-reviewer"], independent: true },
   record_initiative_compliance_review: { capability: "manage_compliance", grant: "initiative_compliance_review", gates: ["compliance-review"], accountableRoles: ["compliance-reviewer"], independent: true },
   record_initiative_domain_review: { capability: "manage_backlog", grant: "initiative_domain_review", gates: ["domain-review"], accountableRoles: ["domain-reviewer"], independent: true },
+  // Break-fix PIR (BI-F2FEC1EB): independent by construction — the declarer authored the repair.
+  record_initiative_post_implementation_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["post-implementation-review"], accountableRoles: ["post-implementation-reviewer"], independent: true },
   record_initiative_archetype_review: { capability: "manage_taxonomy", grant: "initiative_archetype_review", gates: ["archetype-provisioning", "archetype-completeness"], accountableRoles: ["archetype-steward"], independent: true },
 };
 
@@ -47,6 +50,7 @@ export const INITIATIVE_READINESS_TOOL_GRANTS: Record<string, string[]> = {
   record_initiative_compliance_review: ["initiative_compliance_review"],
   record_initiative_domain_review: ["initiative_domain_review"],
   record_initiative_archetype_review: ["initiative_archetype_review"],
+  record_initiative_post_implementation_review: ["initiative_design_review"],
 };
 
 export function readinessLaneForRole(role: string): { toolName: string; lane: InitiativeReadinessLane } | null {
@@ -84,6 +88,12 @@ export type InitiativeReviewBindingPacket = {
 };
 
 export type InitiativeReviewerRecovery = {
+  identityRepair?: {
+    toolName: "adopt_worktree";
+    missingFields: Array<"baseSha" | "headSha">;
+    retainedFields: Record<string, string>;
+    packet: Record<string, string>;
+  };
   reviewerRoutes: Array<{
     accountableRole: string;
     toolName: string;
@@ -422,7 +432,7 @@ function sequenceBaselineBeforePlanCoverage(
  * recording a receipt. Inventing a lane would invent an approver.
  */
 const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
-  ARTIFACT_AUTHOR_REQUIRED: "Sign the design commit off (git commit -s), push the rewritten sha, then re-sync the workroom head with adopt_worktree.",
+  ARTIFACT_AUTHOR_REQUIRED: ARTIFACT_AUTHOR_RECOVERY,
   CLASSIFICATION_REQUIRED: "Classify the demand before shaping it: set the investment bucket and score inputs on the backlog item.",
   AUTHORIZATION_DENIED: "The caller's authority does not cover this transition. Re-run from a principal holding the required capability.",
   CAPSULE_IDENTITY_MISMATCH: "The claim did not match the workroom's recorded identity. The reasons above name which fields differ: a stale branch or head re-syncs with adopt_worktree(headBranch, headSha), an expired lease renews with heartbeat_workroom, and a terminal or foreign-held room needs a new claim.",
@@ -464,7 +474,6 @@ function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadine
  * `search_source_at_version`; a route binds one exact blob, so the point read is
  * the whole need and the broader search grant is not issued.
  */
-const IMMUTABLE_READER_TOOL = "read_source_at_version";
 const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
 
 function normalizeEligibleEvidenceActivityIds(value: readonly string[] | undefined): string[] | null {
@@ -486,16 +495,11 @@ function requestCoworkerPacket(args: {
   expectedCurrentBaselineId: string | null;
   eligibleEvidenceActivityIds: string[] | null;
 }) {
-  const reviewConstraint = args.independent ? "independently " : "";
   const reviewSha = args.artifact?.commitSha ?? args.dispatch.headSha;
-  const mappingInstruction = args.gate === "objective-mapping"
-    ? ` Map every current OBJ-* and AC-* statement to post-baseline evidence using only these eligible activity IDs: ${args.eligibleEvidenceActivityIds?.join(", ")}. Submit the proposal with record_initiative_evidence(operation='objective-mapping').`
-    : "";
-  const objective = `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at Workroom head ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
-    args.artifact
-      ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_READER_TOOL},`
-      : ""
-  } record a governed receipt only when the gate passes.${mappingInstruction}`;
+  const objective = formatInitiativeReviewObjective({ ...args.dispatch,
+    itemId: args.decision.subject.id, gate: args.gate, toolName: args.toolName,
+    independent: args.independent, artifact: args.artifact,
+    eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds });
   const questionPacketSummary = `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`;
   const base = {
     targetAgent: args.targetAgentId,
@@ -513,16 +517,16 @@ function requestCoworkerPacket(args: {
     itemId: args.decision.subject.id,
     gate: args.gate,
     expectedCurrentBaselineId: args.expectedCurrentBaselineId,
+    workroomRef: {
+      kind: "workroom-head" as const,
+      workroomId: args.dispatch.workroomId,
+      repositoryFullName: args.dispatch.repositoryFullName,
+      branchName: args.dispatch.branchName,
+      headSha: args.dispatch.headSha,
+    },
     ...(args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
       ? {
         eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
-        workroomRef: {
-          kind: "workroom-head" as const,
-          workroomId: args.dispatch.workroomId,
-          repositoryFullName: args.dispatch.repositoryFullName,
-          branchName: args.dispatch.branchName,
-          headSha: args.dispatch.headSha,
-        },
       }
       : {}),
     artifactRef: {

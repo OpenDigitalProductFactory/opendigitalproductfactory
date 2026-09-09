@@ -209,7 +209,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
 - **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you.
-- **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Workroom is the friendly Workspace view over a governed Work Case.
+- **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Workroom is the friendly Workspace view over a governed Work Case. One room means one case: however you address a room — from your inbox, the Workrooms inventory, or a link someone sent you by room ID — you arrive at the same case rather than a second copy of it.
 
 ## What You Can Do
 
@@ -219,6 +219,8 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
 - Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.
+- Each room also names the human accountable for it and says where that answer came from, alongside the workers in the room and any subagents they delegated — see [who is accountable, and who is working](work-rooms.md#who-is-accountable-and-who-is-working)
+- A Workroom that is not attached to a work item opens as [its own case](work-rooms.md#opening-a-workroom-that-has-no-work-item) instead of reporting that the page could not be found
 - Use your digital coworker to get a personalized briefing on what needs your attention
 - Select the installation badge beside the logo to open [what this installation is](../operations/index.md#what-this-installation-is) and correct it
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed

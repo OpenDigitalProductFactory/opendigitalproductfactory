@@ -97,6 +97,8 @@ describe("initiative readiness recovery routing", () => {
       path: planArtifact.path, providerBlobId: planArtifact.providerBlobId, commitSha: planArtifact.commitSha,
     });
     expect(plan.objective).toContain(planArtifact.path);
+    // A native-MCP reviewer never sees the bound schema, so the objective must carry the blob id itself.
+    expect(plan.objective).toContain(planArtifact.providerBlobId);
     expect(plan.requestKey).toMatch(/:plan:[a-f0-9]{64}$/);
     expect(recovery.reviewerRoutes.find((route) => route.gate === "spec-approval")?.requestCoworker.initiativeReviewBinding?.artifactRef.path).toBe(canonicalArtifact.path);
   });
@@ -473,13 +475,14 @@ describe("initiative readiness recovery routing", () => {
 
     expect(recovery.reviewerRoutes).toEqual([]);
     expect(recovery.escalations).toEqual([]);
-    expect(recovery.unroutable).toMatchObject([
-      {
-        accountableRole: "artifact-resolver",
-        code: "ARTIFACT_AUTHOR_REQUIRED",
-        nextAction: expect.stringContaining("git commit -s"),
-      },
-    ]);
+    expect(recovery.unroutable).toHaveLength(1);
+    expect(recovery.unroutable[0]).toMatchObject({
+      accountableRole: "artifact-resolver",
+      code: "ARTIFACT_AUTHOR_REQUIRED",
+    });
+    expect(recovery.unroutable[0]?.nextAction).toContain(
+      "if it is already valid, preserve its bytes and sha",
+    );
   });
 
   it("returns both exact next-action mappings when immutable dispatch identity is unavailable", async () => {
@@ -674,6 +677,13 @@ describe("recovery packets are executable by the real consumer", () => {
         parseInitiativeReviewBinding(route.requestCoworker.initiativeReviewBinding),
         `parseInitiativeReviewBinding rejected the packet for ${route.toolName}`,
       ).not.toBeNull();
+      expect(route.requestCoworker.initiativeReviewBinding.workroomRef).toEqual({
+        kind: "workroom-head",
+        workroomId: dispatchContext.workroomId,
+        repositoryFullName: dispatchContext.repositoryFullName,
+        branchName: dispatchContext.branchName,
+        headSha: dispatchContext.headSha,
+      });
     }
   });
 

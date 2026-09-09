@@ -1,5 +1,9 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
+import {
+  describeReferenceModelApplicability,
+  type InstallArchetype,
+} from "@dpf/db/reference-model-applicability";
 import { shapeIt4itCoverageHeatmap } from "./it4it-coverage-view";
 import {
   shapeIt4itParticipationGrid,
@@ -207,6 +211,28 @@ export const getRelationshipTypeId = cache(async (notationId: string, slug: stri
   return rt?.id ?? null;
 });
 
+/**
+ * The install's declared archetype, for scoping industry content at read time.
+ *
+ * `StorefrontConfig.archetypeId` is a cuid FK, so reaching the slugs the
+ * applicability lists are written in needs the join. Mirrors what the seed does
+ * with its own client; the RULE they share lives in one module (BI-C44EAEE6).
+ */
+const getInstallArchetype = cache(async (): Promise<InstallArchetype> => {
+  const config = await prisma.storefrontConfig.findFirst({
+    select: { archetypeId: true },
+  });
+  if (!config) return { category: null, archetypeId: null };
+  const archetype = await prisma.storefrontArchetype.findUnique({
+    where: { id: config.archetypeId },
+    select: { archetypeId: true, category: true },
+  });
+  return {
+    category: archetype?.category ?? null,
+    archetypeId: archetype?.archetypeId ?? null,
+  };
+});
+
 export const getReferenceModelsSummary = cache(async (): Promise<ReferenceModelSummary[]> => {
   const models = await prisma.eaReferenceModel.findMany({
     orderBy: [{ name: "asc" }, { version: "asc" }],
@@ -226,16 +252,28 @@ export const getReferenceModelsSummary = cache(async (): Promise<ReferenceModelS
     },
   });
 
-  return models.map((model) => ({
-    id: model.id,
-    slug: model.slug,
-    name: model.name,
-    version: model.version,
-    status: model.status,
-    criteriaCount: model._count.elements,
-    assessmentCount: model._count.assessments,
-    proposalCount: model._count.proposals,
-  }));
+  // The catalogue row is seeded on EVERY install on purpose, so an operator can
+  // see the standard exists. Seeding its ELEMENT hierarchy is scoped to the
+  // archetype (#4870). Reading it was not, so a pet rescue saw "BIAN Service
+  // Landscape — ACTIVE — 0 criteria": a banking standard presented as live and
+  // empty, which reads as broken rather than as someone else's (BI-C44EAEE6).
+  const install = await getInstallArchetype();
+
+  return models.map((model) => {
+    const applicability = describeReferenceModelApplicability(model.slug, install);
+    return {
+      id: model.id,
+      slug: model.slug,
+      name: model.name,
+      version: model.version,
+      status: model.status,
+      applies: applicability.applies,
+      applicabilityReason: applicability.reason,
+      criteriaCount: model._count.elements,
+      assessmentCount: model._count.assessments,
+      proposalCount: model._count.proposals,
+    };
+  });
 });
 
 const COVERAGE_STATUSES: CoverageStatus[] = [
@@ -393,8 +431,18 @@ export const getReferenceModelDetail = cache(
       },
     });
 
+    // A direct link to a model this install does not serve must be as honest as
+    // the card that offered it, or the drill-through becomes the place the
+    // "active but empty" impression survives (BI-C44EAEE6).
+    const applicability = describeReferenceModelApplicability(
+      model.slug,
+      await getInstallArchetype(),
+    );
+
     return {
       ...model,
+      applies: applicability.applies,
+      applicabilityReason: applicability.reason,
       valueStreamProjection: {
         viewId: valueStreamProjection?.id ?? null,
         viewName: valueStreamProjection?.name ?? null,

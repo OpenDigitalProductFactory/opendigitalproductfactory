@@ -397,9 +397,10 @@ describe("parseReviewResponse", () => {
     expect(result.parseError).toBeUndefined();
   });
 
-  it("defaults invalid severity to minor", () => {
+  it("rejects invalid severity instead of silently downgrading the finding", () => {
     const result = parseReviewResponse('{"decision":"fail","issues":[{"severity":"unknown","description":"test"}],"summary":"ok"}');
-    expect(result.issues[0].severity).toBe("minor");
+    expect(result.decision).toBe("inconclusive");
+    expect(result.parseError).toBe(true);
   });
 
   it("overrides reviewer's 'fail' decision when only important/minor issues exist", () => {

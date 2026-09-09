@@ -58,6 +58,8 @@
     "./sovereignty-assessment": "./src/sovereignty-assessment.ts",
     "./cada-readiness": "./src/cada-readiness.ts",
     "./regulation-applicability": "./src/regulation-applicability.ts",
+    "./reference-model-applicability": "./src/reference-model-applicability.ts",
+    "./workroom-recovery": "./src/workroom-recovery.ts",
     "./seed-deliberation": "./src/seed-deliberation.ts",
     "./edge-node-types": "./src/edge-node-types.ts",
     "./wiki-taxonomy": "./src/wiki-taxonomy.ts",
@@ -93,6 +95,7 @@
     "seed": "tsx src/seed.ts",
     "backlog:capture": "tsx scripts/capture-backlog-bundle.ts",
     "backlog:reconcile": "tsx scripts/reconcile-backlog-bundle.ts",
+    "workrooms:restore": "tsx scripts/restore-workrooms.ts",
     "graph:rebuild-doc-impact": "tsx src/rebuild-doc-impact-graph.ts",
     "graph:rebuild-knowledge-and-portfolio": "tsx src/rebuild-knowledge-and-portfolio-graph.ts",
     "graph:rebuild-projections": "pnpm run graph:rebuild-doc-impact && pnpm run graph:rebuild-knowledge-and-portfolio",
@@ -119,12 +122,12 @@
   "devDependencies": {
     "@types/pg": "^8.23.1",
     "@types/picomatch": "^4.0.2",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "picomatch": "^4.0.5",
     "prisma": "^7.9.1",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3",
     "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

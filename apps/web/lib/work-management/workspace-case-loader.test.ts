@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   decodeWorkCaseKey,
@@ -7,6 +7,7 @@ import {
   loadWorkspaceWorkCaseLens,
   type WorkspaceCasePrismaClient,
 } from "./workspace-case-loader";
+import { resolveCanonicalWorkCaseKey } from "./canonical-case-key";
 
 type WorkItemFixture = Awaited<ReturnType<WorkspaceCasePrismaClient["workItem"]["findMany"]>>[number];
 type CoworkerEngagementFixture =
@@ -79,6 +80,23 @@ const baseEngagement: CoworkerEngagementFixture = {
 };
 
 describe("workspace Work Case loader", () => {
+  it("resolves a Workroom URL through its canonical anchor even when the case source is a backlog item", async () => {
+    const anchored = { ...baseItem, sourceType: "backlog-item", sourceId: "BI-06AE6833" };
+    const db = prismaFor([anchored]);
+    const findFirst = vi.fn(async (args: unknown) => {
+      const where = (args as { where: { capsules?: { some: { capsuleId: string } } } }).where;
+      return where.capsules?.some.capsuleId === "WC-4A72DC95" ? anchored : null;
+    });
+    db.workItem.findFirst = findFirst;
+    const findMany = vi.fn().mockResolvedValue([{ id: "room-1", capsuleId: "WC-4A72DC95", status: "ready", title: "Reviewer recovery" }]);
+    db.workroom.findMany = findMany;
+    const detail = await loadWorkspaceWorkCaseDetail({ prismaClient: db,
+      caseKey: encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: "WC-4A72DC95" }), userId: "user-1" });
+    expect(detail).not.toBeNull();
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { capsules: { some: { capsuleId: "WC-4A72DC95" } } } }));
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { workItemId: "row-1", capsuleId: "WC-4A72DC95" } }));
+  });
+
   it("projects queued work as attention-first Work Cases", async () => {
     const dashboard = await loadWorkspaceWorkCaseLens({
       prismaClient: prismaFor([
@@ -589,6 +607,16 @@ describe("workspace Work Case loader", () => {
             recordedAt: new Date("2026-06-28T10:20:00.000Z"),
             recordedByAgentId: "AGT-BUILD",
           },
+          {
+            id: "ACT-REVIEW", workCapsuleId: "cap-row", kind: "evidence-recorded",
+            summary: "Review inconclusive: provider unavailable",
+            recordedAt: new Date("2026-06-28T10:21:00.000Z"), recordedByAgentId: "AGT-REVIEW",
+            payload: { kind: "verification", result: { decision: "inconclusive" } },
+          },
+          ...Array.from({ length: 19 }, (_, index) => ({
+            id: `ACT-LEASE-${index}`, workCapsuleId: "cap-row", kind: "lease-renewed",
+            summary: "Lease renewed", recordedAt: new Date("2026-06-28T10:19:00.000Z"),
+          })),
         ],
       },
     };
@@ -604,5 +632,101 @@ describe("workspace Work Case loader", () => {
     const entry = detail?.room?.activity.find((a) => a.summary === "Build started on the coding carrier");
     expect(entry?.sourceRef).toMatchObject({ kind: "work-capsule", id: "WC-7" });
     expect(entry?.actorRef?.actorKind).toBe("agent");
+    expect(detail?.room?.receipts).toContainEqual(expect.objectContaining({
+      summary: "Review inconclusive: provider unavailable", status: "observed",
+      rawRef: { table: "WorkroomActivity", id: "ACT-REVIEW" },
+      sourceRef: expect.objectContaining({ kind: "work-capsule", id: "WC-7" }),
+      actorRef: { actorKind: "agent", actorId: "AGT-REVIEW" },
+    }));
+    expect(detail?.room?.projection.sourceHealth).toBe("partial");
   });
+});
+
+// A room anchored only by its FK must still be reachable (BI-EBEB77E2).
+//
+// BI-650994D7 made Workroom.workItemId the canonical anchor between a room and
+// its WorkItem. The detail loader never adopted it: it resolved a work-capsule
+// case by matching WorkItem.sourceType/sourceId against the capsule id — a
+// naming convention, not the anchor. Rooms linked only by the FK fell through
+// to notFound(): 405 of 462 active rooms on the live install, 117 of them
+// holding a perfectly valid workItemId.
+//
+// The fix is NOT to render a second case under the capsule key. Every one of
+// those 117 rooms anchors to a `backlog-item` WorkItem, and that item owns one
+// case key; minting a parallel capsule-keyed case would break the one-case-per-
+// unit-of-work invariant the anchor exists to enforce (room-read-model.ts
+// asserts it). The capsule key instead RESOLVES to the anchored item's case.
+describe("a work-capsule case key resolves to its anchored canonical case", () => {
+  const anchored: WorkItemFixture = {
+    ...baseItem,
+    id: "wi-row-9",
+    itemId: "WI-9",
+    sourceType: "backlog-item",
+    sourceId: "BI-UNRELATED",
+    title: "Adopter health",
+  };
+
+  function prismaWithFkOnly(room: { workItemId: string | null } | null): WorkspaceCasePrismaClient {
+    return {
+      workItem: {
+        findMany: async () => [anchored],
+        findFirst: async (args: unknown) => {
+          const where = (args as { where?: Record<string, unknown> })?.where ?? {};
+          return where.id === "wi-row-9" ? anchored : null;
+        },
+      },
+      workItemMessage: { findMany: async () => [] },
+      workroom: {
+        findMany: async () => [],
+        findFirst: async () => (room === null ? null : ({
+          id: "cap-row-9",
+          capsuleId: "WC-0A92C30D",
+          workItemId: room.workItemId,
+          status: "open",
+          title: "Adopter health",
+        } as never)),
+      },
+      workroomActivity: { findMany: async () => [] },
+    };
+  }
+
+  it("resolves a capsule key to the case key of the WorkItem it anchors to", async () => {
+    const canonical = await resolveCanonicalWorkCaseKey(
+      prismaWithFkOnly({ workItemId: "wi-row-9" }),
+      encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: "WC-0A92C30D" }),
+    );
+    expect(canonical).toBe(encodeWorkCaseKey({ sourceType: "backlog-item", sourceId: "BI-UNRELATED" }));
+  });
+
+  it("leaves a room with no anchored WorkItem where it is", async () => {
+    const canonical = await resolveCanonicalWorkCaseKey(
+      prismaWithFkOnly({ workItemId: null }),
+      encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: "WC-0A92C30D" }),
+    );
+    expect(canonical).toBeNull();
+  });
+
+  it("does not redirect a non-capsule case key", async () => {
+    const canonical = await resolveCanonicalWorkCaseKey(
+      prismaWithFkOnly({ workItemId: "wi-row-9" }),
+      encodeWorkCaseKey({ sourceType: "booking", sourceId: "BK-1" }),
+    );
+    expect(canonical).toBeNull();
+  });
+});
+
+it("shows native reviewer waits before a final Workroom activity receipt exists", async () => {
+  const client = prismaFor([baseItem]);
+  client.workroom.findMany = async () => [{ id: "room-1", capsuleId: "WC-1", status: "working", title: "Review room" }];
+  Object.assign(client, { taskRun: { findMany: async () => [{
+    id: "task-row-1", taskRunId: "TR-REVIEW", userId: "user-1", status: "input-required",
+    updatedAt: new Date("2026-06-28T10:30:00Z"), lastHeartbeatAt: null,
+    progressPayload: { semanticReview: { reason: "provider-outcome-uncertain-after-restart" } }, nodes: [],
+  }] } });
+  const detail = await loadWorkspaceWorkCaseDetail({ prismaClient: client, caseKey: "booking%3ABK-1", userId: "user-1" });
+  expect(detail?.room?.receipts).toContainEqual(expect.objectContaining({ receiptKind: "reviewer-state-snapshot", status: "observed" }));
+  expect(detail?.room?.sourceRefs).toContainEqual(expect.objectContaining({ kind: "task-run", id: "TR-REVIEW" }));
+  expect(detail?.room?.work.attentionReason).toContain("TR-REVIEW");
+  expect(detail?.room?.work.nextAction).toContain("Observed execution");
+  expect(detail?.room?.identity.instance.occurrenceTrace.executionRefs).toContainEqual(expect.objectContaining({ kind: "task-run", id: "TR-REVIEW" }));
 });

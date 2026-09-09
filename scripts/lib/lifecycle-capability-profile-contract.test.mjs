@@ -6,8 +6,9 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { signTransitionPayload } from "./transition-signing.mjs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const root = resolve(new URL("../..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+const root = fileURLToPath(new URL("../..", import.meta.url));
 const bashPath = (path) => resolve(path).replace(/^([A-Za-z]):\\/, (_, drive) => `/mnt/${drive.toLowerCase()}/`).replaceAll("\\", "/");
 const runBash = (body, env = {}) => spawnSync("bash", [], { cwd: root, encoding: "utf8", input: body, env: { ...process.env, ...env } });
 

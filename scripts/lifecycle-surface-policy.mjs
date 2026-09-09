@@ -17,6 +17,31 @@ export const forbiddenOperationalPatterns = [
   { id: "neo4j-credential", pattern: /NEO4J_AUTH/ }, { id: "qdrant-env", pattern: /QDRANT_(?:URL|INTERNAL_URL)/ },
 ];
 
+// A lifecycle script that destroys the database must dump it first (BI-F9939341).
+// Workrooms, decisions and unmirrored backlog rows live only in Postgres; the
+// nightly backup is hours old and the backlog bundle does not run from a
+// consumer install, so `down -v` without a dump in the same script is data loss.
+// The prelude must be CALLED before the destructive line, not merely defined.
+export const destructivePreludes = [
+  { id: "reinstall-dumps-first", file: "dpf-reinstall.ps1", destructive: /^\s*docker compose down -v/, prelude: /Invoke-PreDestructivePostgresDump\s+-InstallDir/ },
+  { id: "fresh-install-dumps-first", file: "scripts/fresh-install.ps1", destructive: /^\s*docker compose down -v/, prelude: /Invoke-PreDestructivePostgresDump\s+-InstallDir/ },
+];
+
+/** Pure: the violations a single file's text raises against `destructivePreludes`. */
+export function findDestroyWithoutDump(file, text, preludes = destructivePreludes) {
+  const violations = [];
+  const lines = text.split(/\r?\n/);
+  for (const rule of preludes.filter((entry) => entry.file === file)) {
+    const destroyAt = lines.findIndex((line) => rule.destructive.test(line));
+    if (destroyAt === -1) continue;
+    const preludeAt = lines.findIndex((line) => rule.prelude.test(line) && !/^\s*function\b/.test(line));
+    if (preludeAt === -1 || preludeAt > destroyAt) {
+      violations.push({ file, line: destroyAt + 1, rule: rule.id, text: lines[destroyAt].trim() });
+    }
+  }
+  return violations;
+}
+
 // Compatibility exceptions must be exact and temporary. None are needed in the active surface today.
 export const legacyExceptions = [];
 export const expectedRemediation = [];
@@ -27,6 +52,7 @@ export async function auditLifecycleSurfaces(root) {
   const remediationHits = new Map(expectedRemediation.map((entry) => [entry.id, 0]));
   for (const file of activeLifecycleFiles) {
     const text = await readFile(resolve(root, file), "utf8");
+    violations.push(...findDestroyWithoutDump(file, text));
     for (const [index, line] of text.split(/\r?\n/).entries()) {
       for (const rule of forbiddenOperationalPatterns) {
         if (!rule.pattern.test(line)) continue;

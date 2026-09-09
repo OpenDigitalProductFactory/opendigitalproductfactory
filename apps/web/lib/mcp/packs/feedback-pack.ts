@@ -46,6 +46,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: null,
     sideEffect: true,
     consequence: "outward",
+    consequenceScope: "platform",
   },
   {
     name: "register_tech_debt",

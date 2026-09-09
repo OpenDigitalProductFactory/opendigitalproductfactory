@@ -148,4 +148,13 @@ describe("semantic-review outcome telemetry", () => {
     expect(projection.activity.kind).toBe("evidence-recorded");
     expect(projection.externalEvidence.details).toEqual(projection.activity.payload);
   });
+  it("keeps unobserved escaped failures unknown instead of claiming zero", () => {
+    const metrics = aggregateSemanticReviewOutcomes([completed({ postPublicationMissCount: null })]);
+    expect(metrics).toMatchObject({ postPublicationMissCount: null, postPublicationMissRate: null, unknownPostPublicationSamples: 1 });
+  });
+  it("retains incident and scenario follow-up in the existing outcome record", () => {
+    const followUp = { scenarioKey: "lost-response", incidentReference: "incident-record", followUpReference: "repair-work" };
+    expect(projectSemanticReviewOutcome(completed({ postPublicationMissCount: 1, escapedFailureFollowUps: [followUp] }))
+      .externalEvidence.details.escapedFailureFollowUps).toEqual([followUp]);
+  });
 });

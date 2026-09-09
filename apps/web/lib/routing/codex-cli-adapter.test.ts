@@ -99,6 +99,7 @@ import {
   writeContainerFileViaStdin,
   looksLikeCliAuthFailure,
   looksLikeCliRateLimit,
+  looksLikeCliUnsupportedModel,
 } from "./codex-cli-adapter";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
@@ -230,6 +231,19 @@ describe("writeContainerFileViaStdin", () => {
     proc.emit("close", 1);
 
     await expect(writePromise).rejects.toThrow("timed out");
+  });
+});
+
+describe("Codex CLI unsupported-model classification", () => {
+  it("recognizes the account-entitlement rejection as model_not_found", () => {
+    expect(looksLikeCliUnsupportedModel(
+      "The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account.",
+    )).toBe(true);
+  });
+
+  it("does not confuse auth or capacity failures with an unsupported model", () => {
+    expect(looksLikeCliUnsupportedModel("401 unauthorized")).toBe(false);
+    expect(looksLikeCliUnsupportedModel("You've hit your weekly usage limit")).toBe(false);
   });
 });
 

@@ -4,9 +4,10 @@ import { spawnSync } from "node:child_process";
 export const LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION = "semantic-change-review-local-gate.v1";
 export const SEMANTIC_DIFF_MAX_BUFFER = 256 * 1024 * 1024;
 
-export function readGitDiffDigest(mergeBase, spawn = spawnSync) {
+export function readGitDiffDigest(mergeBase, spawn = spawnSync, cwd) {
   const diff = spawn("git", ["diff", "--binary", mergeBase, "HEAD"], {
     encoding: null,
+    ...(cwd ? { cwd } : {}),
     maxBuffer: SEMANTIC_DIFF_MAX_BUFFER,
   });
   if (diff.error?.code === "ENOBUFS") {
@@ -15,6 +16,25 @@ export function readGitDiffDigest(mergeBase, spawn = spawnSync) {
   if (diff.error) throw new Error(`git diff could not start: ${diff.error.message ?? String(diff.error)}`);
   if (diff.status !== 0) throw new Error(diff.stderr?.toString().trim() || `git diff exited ${diff.status}`);
   return createHash("sha256").update(diff.stdout).digest("hex");
+}
+
+// Preserve failed-run diagnostics even when source identity cannot be resolved.
+// Null bindings cannot satisfy the server's failure-analysis evidence adapter.
+export function readFailureEvidenceBinding(sha, cwd, spawn = spawnSync) {
+  const resolve = args => {
+    const result = spawn("git", args, { cwd, encoding: "utf8" });
+    const value = result.stdout?.trim();
+    if (result.status !== 0 || !/^[a-f0-9]{40}$/.test(value ?? "")) throw new Error("Source identity is unavailable.");
+    return value;
+  };
+  try {
+    if (resolve(["rev-parse", "HEAD"]) !== sha) throw new Error("Candidate checkout changed before evidence binding.");
+    const headTreeHash = resolve(["rev-parse", `${sha}^{tree}`]);
+    const base = resolve(["merge-base", sha, "origin/main"]);
+    return { headTreeHash, diffDigest: readGitDiffDigest(base, spawn, cwd) };
+  } catch (error) {
+    return { headTreeHash: null, diffDigest: null, failureAnalysisBindingError: error.message };
+  }
 }
 
 const IDENTITY_FIELDS = [

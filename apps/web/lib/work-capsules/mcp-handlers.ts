@@ -1,5 +1,9 @@
+import { normalizePersistedScope, parseScopeInput } from "./scope-input";
 import { prisma } from "@dpf/db";
-import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule-workitem-anchor.server";
+import {
+  anchorCapsuleByIdNonFatal,
+  ensureCapsuleWorkItemAnchorNonFatal,
+} from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -25,11 +29,9 @@ import {
   isWorkCapsulePortfolioRole,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
-  normalizeWorkCapsuleScopeInput,
   WORK_CAPSULE_WORKROOM_SHAPES,
   type ScopeClaim,
   type WorkCapsuleEvidenceKind,
-  type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
 import { adoptWorktree } from "./adopt-worktree-handler";
@@ -89,24 +91,6 @@ function numberParam(params: Record<string, unknown>, key: string): number | nul
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
-  // Every key the tool schema advertises under scopeProperties must appear here.
-  // This function picks fields explicitly, so a field added to the schema and to
-  // the normalizer but not to this list is accepted by the caller, dropped here,
-  // and answered `success: true` — the same defect `backlogItemId` had on
-  // adopt_worktree. scope-input-parity.test.ts is what keeps the two in step.
-  return {
-    workroomShape: params.workroomShape,
-    workShape: params.workShape,
-    decisionScope: params.decisionScope,
-    portfolioRole: params.portfolioRole,
-    servedPersona: params.servedPersona,
-    activityKind: params.activityKind,
-    outcomeAnchor: params.outcomeAnchor,
-    servesPortfolioRoles: params.servesPortfolioRoles,
-    dependsOnPortfolioRoles: params.dependsOnPortfolioRoles,
-  };
-}
 
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
@@ -225,7 +209,6 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
-
   const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     include: {
@@ -233,6 +216,7 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
         orderBy: { recordedAt: "desc" },
         take: 25,
       },
+      taskRun: { select: { taskRunId: true, status: true } },
     },
   });
 
@@ -243,12 +227,12 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
       message: `Work Capsule ${capsuleId} not found.`,
     };
   }
-
+  const { projectWorkroomRecovery } = await import("./workroom-recovery-projection");
   return {
     success: true,
     entityId: capsule.capsuleId,
     message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule },
+    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule) } },
   };
 }
 
@@ -487,7 +471,7 @@ export async function createWorkCapsuleTool(
     ? executorKind
     : null;
   try {
-    normalizeWorkCapsuleScopeInput(parseScopeInput(params));
+    normalizePersistedScope(parseScopeInput(params));
   } catch (error) {
     return invalidScopeResult(error);
   }
@@ -671,6 +655,9 @@ export async function recordCapsuleEvidenceTool(
   const evidence: {
     kind: WorkCapsuleEvidenceKind;
     summary: string;
+    // The stage this evidence completes. Without it the drive cannot tell a
+    // stage outcome from a room-level note, and the stage never advances.
+    stageKey?: string;
     command?: string;
     url?: string;
     targetId?: string;
@@ -681,6 +668,8 @@ export async function recordCapsuleEvidenceTool(
     kind: rawKind,
     summary,
   };
+  const stageKey = stringParam(params, "stageKey");
+  if (stageKey) evidence.stageKey = stageKey;
   const command = stringParam(params, "command");
   const url = stringParam(params, "url");
   const targetId = stringParam(params, "targetId");
@@ -737,6 +726,11 @@ export async function startExternalWorkTool(
     repositoryFullName: stringParam(params, "repositoryFullName"),
     baseBranch: stringParam(params, "baseBranch"),
   });
+  // Both branches of ensureExternalSessionCapsule create the room without its
+  // WorkItem anchor — the dominant producer of the 289 unreachable rooms
+  // measured on the live install (BI-A5EEB5D1). Anchor it here, the way the
+  // adopt handler does.
+  await anchorCapsuleByIdNonFatal(capsuleId, "started");
 
   return {
     success: true,

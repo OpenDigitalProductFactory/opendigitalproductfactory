@@ -35,6 +35,8 @@ function participant(
 const definition: WorkShapeDefinitionContract = {
   key: "obligation-assurance-watch",
   version: "1.0.0",
+  title: "Test shape",
+  description: "A shape used in tests.",
   triggers: ["cadence"],
   stages: [
     { key: "scan", title: "Scan", accountablePrincipalRef: "agent:watcher", advance: { kind: "status-change", condition: "scanned" }, evidence: ["findings"] },

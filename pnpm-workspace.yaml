@@ -85,51 +85,52 @@ overrides:
   # reflection (GHSA-88fw-hqm2-52qc, high), then < 4.12.34 GHSA-8j4g-w8fx-2239 /
   # CVE-2026-69207 ReDoS in the CORS middleware via a crafted
   # Access-Control-Request-Headers value (Dependabot #139, medium).
-  # Runtime dependency; floor to the patched 4.12.34.
-  hono: '^4.12.34'
-  # Keep the CLI's diagram stack on the last policy-vetted releases. Floating
-  # transitive ranges let lockfile regeneration pull a same-day ZenUML/Floating
-  # UI graph even after the CLI itself was rolled back (BI-72E0A27B).
-  # mermaid < 11.16.1: GHSA-rhh3-jpg6-66xh (Dependabot #145, medium),
-  # GHSA-6x64-9x62-f2gx (Dependabot #143, medium), GHSA-3rrr-jr9j-h3q3
-  # (Dependabot #142, medium), GHSA-2v8p-3f2j-5mp7 (Dependabot #141, medium),
-  # and GHSA-c4c3-pg64-4m4v (Dependabot #144, low). Raise the policy pin from
-  # the vulnerable 11.15.0 to the patched 11.16.1 (deps diff is minor-range
-  # only; no ZenUML/Floating-UI companion move needed).
-  mermaid: '11.16.1'
-  '@mermaid-js/mermaid-zenuml': '0.2.2'
-  '@zenuml/core': '3.47.8'
+  # September fixes: GHSA-gqvv-2mrq-wpjv, GHSA-g6gw-c38x-mqfc and
+  # GHSA-crvj-82cr-hjcx (Dependabot #192/#191/#190), plus the newer
+  # GHSA-hxh3-vqpv-xpqv JSX escaping fix. Patched on the same 4.x line.
+  hono: '^4.13.7'
+  # @floating-ui/* exact pins. Introduced with the diagram-stack pin set
+  # (BI-72E0A27B); the mermaid/zenuml members left with the workspace's
+  # mermaid-cli dependency (BI-DBDB8C6D — rendering now runs from the pinned
+  # minlag/mermaid-cli tool image, see scripts/lib/mermaid-renderer.mjs).
+  # These remain because @floating-ui/react is a direct apps/web runtime
+  # dependency; lift them deliberately, with the guard in
+  # scripts/check-diagram-dependency-pins.mjs, not via Dependabot.
   '@floating-ui/core': '1.7.5'
   '@floating-ui/dom': '1.7.6'
   '@floating-ui/react-dom': '2.1.8'
   '@floating-ui/react': '0.27.19'
   '@floating-ui/utils': '0.2.11'
-  # extract-zip <= 2.0.1: GHSA-jmr9-qjv8-65gv unvalidated symlink path traversal
-  # (Dependabot #153, high). extract-zip has NO patched release — 2.0.1 is the
-  # latest published version and the package is unmaintained (last publish
-  # 2023-03). The only remediation is to remove it from the tree: its sole
-  # parent is @puppeteer/browsers, which dropped extract-zip in 3.0.0 (it now
-  # unpacks via modern-tar). @puppeteer/browsers 3.x first ships in puppeteer
-  # 25.x, so floor puppeteer to ^25. Dev-only transitive of
-  # @mermaid-js/mermaid-cli (diagram rendering); the CLI's peer range widened to
-  # '^23 || ^24 || ^25' in 11.16.0, which this commit adopts in lockstep.
-  puppeteer: '^25'
   # js-yaml GHSA-5p4m-2wfm-xmqj (high): special-character handling flaw. Both
   # supported major lines resolve to a vulnerable transitive copy, so each is
   # floored to its patched release independently.
-  # js-yaml < 3.15.1: GHSA-5p4m-2wfm-xmqj (Dependabot #147, high).
-  'js-yaml@>=3.0.0 <3.15.1': '^3.15.1'
-  # js-yaml >= 4.0.0 < 4.3.1: GHSA-5p4m-2wfm-xmqj (Dependabot #146, high).
-  'js-yaml@>=4.0.0 <4.3.1': '^4.3.1'
+  # Also GHSA-2883-xcg3-v3hh (Dependabot #194/#193, high): raise each
+  # existing floor in place, retaining the consumer's supported major line.
+  'js-yaml@>=3.0.0 <3.15.2': '^3.15.2'
+  # GHSA-2883-xcg3-v3hh (Dependabot #193): patched 4.x counterpart.
+  'js-yaml@>=4.0.0 <4.3.2': '^4.3.2'
+  # @xmldom/xmldom September parser advisory cluster (Dependabot #187–171,
+  # #162/#158): GHSA-c7q8-3ch8-vqpv, GHSA-jxjr-3g7g-3944,
+  # GHSA-27p8-2357-5qqv, GHSA-3px3-54cx-rmw9, GHSA-vr34-hp96-76pp,
+  # GHSA-6h8r-xr42-gp59, GHSA-8344-3jmq-59r6, GHSA-x4fp-j954-r2f4,
+  # GHSA-965w-775f-mr7g, GHSA-93r5-fhx6-vmg9, GHSA-6mj3-qw4j-hgrw,
+  # GHSA-6gmq-8vp8-gcm6. Preserve both consumers' 0.x minor API lines.
+  '@xmldom/xmldom@>=0.8.0 <0.8.15': '0.8.15'
+  # GHSA-c7q8-3ch8-vqpv and the cluster above: patched 0.9.x counterpart.
+  '@xmldom/xmldom@>=0.9.0 <0.9.12': '0.9.12'
+  # qs GHSA-x5fp-wj9c-mxmx / GHSA-4mjr-xmp4-gh2g (Dependabot #161/#160).
+  # Express/body-parser consumers remain on the patched 6.x line.
+  'qs@<6.16.0': '^6.16.0'
   # ip-address < 10.3.1: GHSA-mwp4-54f8-5fhr / CVE-2026-69192, high severity —
   # Address4 decodes leading-zero octets as decimal while resolvers decode
   # them as octal, an SSRF-adjacent parser confusion (found on PR #3893's
   # OSV scan). Was floored at ^10.2.0 for an earlier issue; raised to ^10.3.1.
   ip-address: '^10.3.1'
   # sharp < 0.35.0: inherited libvips vulnerabilities CVE-2026-33327/33328/35590/35591
-  # (Dependabot #110, high). apps/web already depends on ^0.35.3 directly; this floor
+  # (Dependabot #110, high). apps/web depends on ^0.35.4 directly; this floor
   # also lifts the stale sharp@0.34.5 that Next.js ships as a bundled optionalDependency.
-  sharp: '^0.35.3'
+  # GHSA-rgj7-g3m4-5g8c (Dependabot #195, high) raises that floor to 0.35.4.
+  sharp: '^0.35.4'
   # body-parser < 2.3.0: GHSA-v422-hmwv-36x6 DoS when an invalid `limit` value silently
   # disables body size enforcement (Dependabot #104, low). Transitive; floor to 2.3.0.
   body-parser: '^2.3.0'
@@ -219,7 +220,6 @@ allowBuilds:
   msw: true
   prisma: true
   protobufjs: false
-  puppeteer: false
   sharp: true
   unrs-resolver: false
 # Restore peerDependencies that @testing-library/jest-dom dropped in 6.x but still
@@ -231,4 +231,3 @@ packageExtensions:
   '@testing-library/jest-dom':
     peerDependencies:
       vitest: '*'
-

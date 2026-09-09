@@ -11,6 +11,7 @@ import {
   type AdapterCapabilityRequirement,
   type ExecutionAdapterKind,
   type ExecutionAdapterSelector,
+  terminalWriterDispatchContract,
 } from "./execution-adapter-types";
 
 /**
@@ -144,5 +145,20 @@ describe("AdapterCapabilityRequirement shape", () => {
       required: false,
     };
     expect(req.required).toBe(false);
+  });
+});
+
+// BI-C35576A9 — the contract a bound terminal writer is held to per adapter.
+describe("terminalWriterDispatchContract", () => {
+  it("is required-tool-call for adapters that can force the call", () => {
+    expect(terminalWriterDispatchContract("chat")).toBe("required-tool-call");
+    expect(terminalWriterDispatchContract({ kind: "http-anthropic", authMode: "api-key" })).toBe("required-tool-call");
+    expect(terminalWriterDispatchContract({ kind: "http-openai", authMode: "api-key" })).toBe("required-tool-call");
+  });
+
+  it("is receipt-verified for CLI transports, which cannot force the call", () => {
+    expect(terminalWriterDispatchContract("claude-cli")).toBe("receipt-verified");
+    expect(terminalWriterDispatchContract("codex-cli")).toBe("receipt-verified");
+    expect(terminalWriterDispatchContract({ kind: "claude-code-cli", authMode: "oauth" })).toBe("receipt-verified");
   });
 });

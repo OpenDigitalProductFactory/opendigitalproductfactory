@@ -69,6 +69,25 @@ function contract(overrides: Partial<RequestContract> = {}): RequestContract {
 }
 
 describe("getExclusionReasonV2 — capability floor (EP-AGENT-CAP-002)", () => {
+  it.each(["codex", "anthropic-sub"])("excludes %s before a PLAIN required tool call is dispatched", (providerId) => {
+    const required = { ...contract({ requiresTools: true }), toolChoice: "required" } as RequestContract;
+    expect(getExclusionReasonV2(activeEp({ providerId }), required)).toContain("cannot enforce required tool choice");
+    expect(getExclusionReasonV2(activeEp({ providerId: "gemini" }), required)).toBeNull();
+  });
+
+  // BI-C35576A9: a BOUND terminal writer is verified by receipt after the turn,
+  // so a non-forcing CLI adapter stays eligible. Excluding it left subscription-
+  // only installs with only the local model for every governance write.
+  it.each(["codex", "anthropic-sub"])("keeps %s eligible when a terminal writer is bound (receipt-verified)", (providerId) => {
+    const bound = {
+      ...contract({ requiresTools: true }),
+      toolChoice: "required",
+      terminalWriterToolName: "record_initiative_design_review",
+    } as RequestContract;
+    expect(getExclusionReasonV2(activeEp({ providerId }), bound)).toBeNull();
+    expect(getExclusionReasonV2(activeEp({ providerId: "gemini" }), bound)).toBeNull();
+  });
+
   it("passes when no minimumCapabilities set (null/undefined)", () => {
     const ep = activeEp({ supportsToolUse: false });
     const c = contract(); // no minimumCapabilities

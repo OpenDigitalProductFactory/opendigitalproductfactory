@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { governCapabilityComposeArgs, governCapabilityComposeEnvironment } from "./govern-capability-compose-args.mjs";
 
@@ -74,7 +75,7 @@ test("disabled environment aliases fail closed", () => {
 });
 
 test("dpf-compose emits the exact disabled-profile failure before Docker", async () => {
-  const root = resolve(new URL("../..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+  const root = fileURLToPath(new URL("../..", import.meta.url));
   const catalog = JSON.parse(await readFile(join(root, "scripts", "capability-service-catalog.generated.json"), "utf8"));
   const enabled = new Set(["runtime:core"]);
   const lines = catalog.capabilities.map(({ capabilityId }) => `${capabilityId}=${enabled.has(capabilityId) ? "active" : "disabled"}`).sort().join("\n");
@@ -101,7 +102,7 @@ test("dpf-compose emits the exact disabled-profile failure before Docker", async
 });
 
 test("dpf-compose governs profile and topology environment before fake Docker", async () => {
-  const root = resolve(new URL("../..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+  const root = fileURLToPath(new URL("../..", import.meta.url));
   const catalog = JSON.parse(await readFile(join(root, "scripts", "capability-service-catalog.generated.json"), "utf8"));
   const dir = await mkdtemp(join(tmpdir(), "dpf-compose-env-"));
   const statePath = join(dir, "install-state.json");

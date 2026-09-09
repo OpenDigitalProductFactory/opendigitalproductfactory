@@ -187,6 +187,11 @@ const definitions: ToolDefinition[] = [
     ...definitionBase(LANES.record_initiative_domain_review),
   },
   {
+    name: "record_initiative_post_implementation_review",
+    inputSchema: inputSchemaFor("record_initiative_post_implementation_review", LANES.record_initiative_post_implementation_review),
+    ...definitionBase(LANES.record_initiative_post_implementation_review),
+  },
+  {
     name: "record_initiative_archetype_review",
     inputSchema: inputSchemaFor("record_initiative_archetype_review", LANES.record_initiative_archetype_review),
     ...definitionBase(LANES.record_initiative_archetype_review),

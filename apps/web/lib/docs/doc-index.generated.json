@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 698,
+  "pageCount": 702,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -461,6 +461,7 @@
         "recurring-obligation-work-shape-and-documentation-robustness",
         "1-the-finding-in-one-picture",
         "2-what-was-verified-not-asserted",
+        "22-the-split-registry-hazard-is-general-runtime-2026-09-02",
         "21-self-tasks-now-span-two-modules-runtime-2026-09-02",
         "3-the-generalization-obligations-are-a-family-not-a-feature",
         "31-coverage-of-the-four-watch-types-today",
@@ -679,7 +680,8 @@
         "short-term",
         "medium-term",
         "prototype-outcomes",
-        "submission-ready-future-work"
+        "submission-ready-future-work",
+        "mcp-discovery-refusal-conformance"
       ]
     },
     "docs/architecture/agent-standards-external-alignment.md": {
@@ -1323,7 +1325,8 @@
       "publishedPortal": false,
       "anchors": [
         "data-model-stewardship-runbook",
-        "record-lifecycle-convention"
+        "record-lifecycle-convention",
+        "evidence-payloads-never-live-inline"
       ]
     },
     "docs/architecture/decision-vectors-by-archetype.md": {
@@ -1446,6 +1449,7 @@
         "axis-3-acquisition-control-the-new-dependency-gate",
         "why-this-shape-wwmd",
         "doctrine-rent-vs-own-and-validate-the-rent",
+        "build-time-tools-are-tools-not-workspace-dependencies",
         "hardening-the-rent-upgrade-validation",
         "dual-package-hazard-guard-singleton-safety",
         "schedules",
@@ -1562,6 +1566,16 @@
         "worked-example-bad",
         "related-backlog",
         "change-control"
+      ]
+    },
+    "docs/architecture/failure-analysis-and-recovery.md": {
+      "publicHref": "/architecture/failure-analysis-and-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "failure-analysis-and-recovery-evidence",
+        "deployment-and-protection"
       ]
     },
     "docs/architecture/field-service-work-item.md": {
@@ -1746,6 +1760,7 @@
         "four-portfolio-archetype-standard-profile-catalog",
         "1-purpose",
         "2-facet-registry",
+        "cross-workroom-review-application-informative",
         "21-commercial-and-public-value-facets",
         "22-delivery-topology-facets",
         "23-resource-asset-and-custody-facets",
@@ -1925,7 +1940,8 @@
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
         "terminal-readiness-recovery-packets",
         "acting-coworker-binding-what-lets-a-token-join-a-work-room",
-        "diagnosing-requires-an-acting-coworker"
+        "diagnosing-requires-an-acting-coworker",
+        "diagnosing-an-empty-loadtools-result"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -2074,6 +2090,26 @@
         "scope-and-exclusions",
         "completion-evidence",
         "what-success-means"
+      ]
+    },
+    "docs/architecture/portal-ux-evaluation-framework.md": {
+      "publicHref": "/architecture/portal-ux-evaluation-framework/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-page-and-flow-evaluation-framework",
+        "1-evaluate-a-job-not-a-screenshot",
+        "2-rubric-and-decision-rules",
+        "inspect-inside-every-item",
+        "3-measurement-protocol",
+        "4-workroom-centered-disclosure",
+        "archetype-sentinels-without-ia-forks",
+        "5-standing-ux-design-and-fit-gate",
+        "every-pr-review-and-convergence-of-existing-ux",
+        "september-8-delivery-reconciliation",
+        "6-architecture-decision-and-research",
+        "consolidation-and-dependency-review"
       ]
     },
     "docs/architecture/principle-decide-mcda-identity.md": {
@@ -2459,6 +2495,9 @@
         "who-answers-for-a-room",
         "nesting-has-to-be-written-not-just-declared",
         "who-may-coordinate-authority-and-a-gate-with-no-key",
+        "concurrent-execution-and-recorded-state",
+        "the-brief-and-what-advances-a-stage",
+        "failing-closed-is-not-the-same-as-locking",
         "related-references"
       ]
     },
@@ -2489,11 +2528,20 @@
         "definition-and-instance-are-an-orthogonal-axis",
         "implemented-projection-seam",
         "composition-duration-and-evidence",
+        "human-accountability-is-not-coordination-execution-or-access",
+        "what-an-activity-symbol-is-allowed-to-claim",
+        "an-executor-is-a-teammate-not-a-surface",
+        "expansion-is-not-selection",
         "naming-rules",
         "a-known-tension-accepted-deliberately",
         "what-is-deliberately-not-renamed-yet",
         "what-a-human-reads-is-renamed-and-now-guarded",
-        "related"
+        "related",
+        "a-disclosure-control-discloses",
+        "a-count-says-what-it-counted",
+        "a-statement-names-its-room",
+        "the-room-inspector-renders-what-the-projections-resolve",
+        "a-room-with-no-workitem-is-its-own-case"
       ]
     },
     "docs/business-types/_readability-report.md": {
@@ -3392,6 +3440,17 @@
         "what39s-still-missing",
         "how-to-navigate",
         "status-of-this-index-page"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md": {
+      "publicHref": "/founder-kernel/wiki/principles/a-room-is-reachable-by-construction/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-rule",
+        "why",
+        "how-it-is-enforced"
       ]
     },
     "docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md": {
@@ -5217,6 +5276,7 @@
         "2-shell-scripts-bsd-vs-gnu-coreutils",
         "3-docker-compose",
         "4-git-repo-hygiene",
+        "room-route-guard-on-windows",
         "recurring-meta-pattern"
       ]
     },
@@ -10683,6 +10743,21 @@
         "populated-performance-live-acceptance"
       ]
     },
+    "docs/testing/portal-ux-scorecard-template.md": {
+      "publicHref": "/testing/portal-ux-scorecard-template/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-page-flow-scorecard-template",
+        "identity-and-purpose",
+        "measures",
+        "rubric",
+        "task-and-state-evidence",
+        "disposition-and-refactoring",
+        "item-detail-and-dependency-inventory"
+      ]
+    },
     "docs/testing/pr-health.md": {
       "publicHref": "/testing/pr-health/",
       "portalHref": null,
@@ -10711,6 +10786,7 @@
         "what-runs-in-ci",
         "policy-guard-profiles",
         "re-evaluating-a-trailer-or-label-without-pushing",
+        "a-scoped-seed-fit-answer-names-its-mechanism",
         "where-ci-runs-it",
         "run-locally-before-pushing",
         "the-pre-push-gate-pregate-default-on",
@@ -10727,6 +10803,7 @@
         "live-blocker-references-guard",
         "agent-principal-convergence-guard",
         "label-association-guard-ratchet",
+        "room-addressing-guard",
         "what-this-gate-is-not"
       ]
     },
@@ -10934,6 +11011,7 @@
         "how-oauth-works",
         "choosing-the-right-method",
         "business-safe-review",
+        "break-glass-accepting-a-risk-on-purpose",
         "openrouter-and-other-router-accounts",
         "finance-bridge",
         "where-to-review-it",
@@ -11218,6 +11296,7 @@
       "anchors": [
         "overview",
         "key-concepts",
+        "reference-models-and-your-archetype",
         "workroom-definitions",
         "what-you-can-do",
         "ai-coworker-identity",
@@ -12346,13 +12425,17 @@
         "overview",
         "what-you-see-first",
         "activity-and-participants",
+        "inspecting-the-process",
         "access-and-other-channels",
         "finite-and-standing-rooms",
+        "defining-the-room",
         "pace-and-priority",
         "changing-it",
         "setting-a-default-for-every-room",
         "giving-a-room-its-shape",
-        "incomplete-or-unavailable-rooms"
+        "incomplete-or-unavailable-rooms",
+        "who-is-accountable-and-who-is-working",
+        "opening-a-workroom-that-has-no-work-item"
       ]
     },
     "docs/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding.md": {

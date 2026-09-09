@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
 import {
   serverTaskrunRetry,
   serverTaskrunAbandon,
@@ -10,20 +11,17 @@ import {
 } from "@/lib/actions/taskrun-recovery-server-actions";
 
 /**
- * Recovery actions for a stalled TaskRun (BI-4ab6be39 Phase F).
- *
- * Renders three buttons — Retry / Abandon / Escalate — that call the
- * server actions in lib/actions/taskrun-recovery-server-actions.ts.
- *
- * Ship-phase Retry is gated behind a confirm dialog per spec §5.5 — the
- * caller passes `phase`; this component decides the disabled/confirm UX.
+ * Shared operator recovery. Native reviews resume the same bounded request;
+ * generic stalled tasks retain their existing actions. Authority stays server-side.
  */
 export function StalledTaskRecoveryActions({
   taskRunId,
   phase,
+  nativeReview = false,
 }: {
   taskRunId: string;
   phase: string | null;
+  nativeReview?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -32,20 +30,20 @@ export function StalledTaskRecoveryActions({
   const isShipPhase = phase === "ship";
 
   const onRetry = async () => {
-    if (isShipPhase) {
+    if (isShipPhase || nativeReview) {
       const ok = await confirmDialog({
-        title: "Retry ship-phase task",
+        title: nativeReview ? "Resume review" : "Retry ship-phase task",
         message:
-          "Ship-phase Retry can double-publish (resend emails, re-deploy, etc.). Are you sure you want to retry?",
+          nativeReview ? "Reuse completed checks. Replace uncertain inference; another provider charge is possible. Resume?" : "Retry may double-publish. Continue?",
         tone: "danger",
         confirmLabel: "Retry",
       });
       if (!ok) return;
     }
     startTransition(async () => {
-      const result = await serverTaskrunRetry(taskRunId, { force: isShipPhase });
+      const result = await serverTaskrunRetry(taskRunId, { force: isShipPhase || nativeReview });
       if (result.ok) {
-        setStatus({ kind: "success", message: `Retried as ${result.data.newTaskRunId}` });
+        setStatus({ kind: "success", message: nativeReview ? "Recovery requested" : `Retried as ${result.data.newTaskRunId}` });
         router.refresh();
       } else {
         setStatus({ kind: "error", message: result.error });
@@ -91,43 +89,39 @@ export function StalledTaskRecoveryActions({
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
-        Stalled — operator recovery
+      <p className="text-xs font-semibold text-[var(--dpf-muted)]">
+        {nativeReview ? "Review awaiting recovery" : "Stalled — operator recovery"}
       </p>
       <div className="flex flex-wrap gap-2">
-        <button
+        <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onRetry}
           disabled={pending}
-          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-accent)] hover:text-white disabled:opacity-50"
-          title={isShipPhase ? "Ship-phase Retry requires confirm (double-publish risk)" : "Spawn a sibling TaskRun and re-dispatch"}
         >
-          Retry{isShipPhase ? " (ship)" : ""}
-        </button>
-        <button
+          {nativeReview ? "Resume review" : "Retry"}
+        </Button>
+        {!nativeReview && <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onAbandon}
           disabled={pending}
-          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-error)] hover:text-white disabled:opacity-50"
           title="Cancel this task and live children"
         >
           Abandon
-        </button>
-        <button
+        </Button>}
+        {!nativeReview && <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onEscalate}
           disabled={pending}
-          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-warning)] hover:text-white disabled:opacity-50"
           title="Park for review; notifies the accountable owner"
         >
           Escalate
-        </button>
+        </Button>}
       </div>
       {status.kind === "success" && (
-        <p className="text-xs text-[var(--dpf-accent)]">{status.message}</p>
+        <p role="status" className="text-xs text-[var(--dpf-accent)]">{status.message}</p>
       )}
       {status.kind === "error" && (
-        <p className="text-xs text-[var(--dpf-error)]">{status.message}</p>
+        <p role="alert" className="text-xs text-[var(--dpf-error)]">{status.message}</p>
       )}
     </div>
   );

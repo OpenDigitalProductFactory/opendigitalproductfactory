@@ -6,7 +6,10 @@
 // and annotates every row with its true-liveness verdict plus a summary. Shared
 // by the `list_work_capsules` MCP tool so the handler stays thin.
 
-import { classifyWorkCapsuleLiveness } from "./liveness";
+import { classifyWorkCapsuleLiveness,
+  isDemonstrablyWorking,
+} from "./liveness";
+import { projectWorkroomRecovery } from "./workroom-recovery-projection";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -26,6 +29,8 @@ const INVENTORY_SELECT = {
   servesPortfolioRoles: true,
   dependsOnPortfolioRoles: true,
   headBranch: true,
+  baseSha: true,
+  headSha: true,
   worktreePath: true,
   pullRequestUrl: true,
   pullRequestNumber: true,
@@ -34,7 +39,7 @@ const INVENTORY_SELECT = {
   lastSyncedAt: true,
   updatedAt: true,
   featureBuildId: true,
-  taskRun: { select: { status: true, updatedAt: true } },
+  taskRun: { select: { taskRunId: true, status: true, updatedAt: true } },
 } as const;
 
 type InventoryDb = {
@@ -45,7 +50,14 @@ type InventoryDb = {
 
 export type CapsuleLivenessSummary = {
   scanned: number;
+  /** Rooms that are HELD — do not steal or reap. Includes `leased-idle`. */
   live: number;
+  /**
+   * Rooms where an agent is demonstrably WORKING, which is a strictly smaller
+   * set than `live`. The gap between the two is the number of rooms holding a
+   * lease with nothing to show for it (BI-7271460C).
+   */
+  working: number;
   history: number;
   reapable: number;
   byLiveness: Record<string, number>;
@@ -113,6 +125,7 @@ export async function loadCapsuleLivenessInventory(
     const { featureBuildId: _omit, taskRun: _taskRun, ...rest } = row;
     return {
       ...rest,
+      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }),
       liveness: verdict.liveness,
       isLive: verdict.isLive,
       isReapable: verdict.isReapable,
@@ -144,6 +157,7 @@ export async function loadCapsuleLivenessInventory(
     livenessSummary: {
       scanned: capsulesAll.length,
       live: capsulesAll.filter((c) => c.isLive).length,
+      working: capsulesAll.filter((c) => isDemonstrablyWorking(c.liveness)).length,
       history: capsulesAll.filter((c) => !c.isLive).length,
       reapable: capsulesAll.filter((c) => c.isReapable).length,
       byLiveness,

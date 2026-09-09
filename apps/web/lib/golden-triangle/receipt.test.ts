@@ -77,8 +77,8 @@ describe("buildGoldenTriangleReceipt", () => {
       ASSURED,
       decode(ASSURED),
       { modelId: "claude-opus-4-7-20250514" },
-      "agent",
+      "workroom",
     );
-    expect(agentScope.governedBy).toBe("agent");
+    expect(agentScope.governedBy).toBe("workroom");
   });
 });

@@ -14,6 +14,8 @@ import {
 import { NoEligibleEndpointsError } from "@/lib/routed-inference";
 import { logTokenUsage, type ChatMessage } from "@/lib/ai-inference";
 import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
+import { resolveWithheldHistory } from "@/lib/tak/thread-history-withholding";
+import { getKnowledgePointersForRoute } from "@/lib/actions/route-knowledge-pointers";
 import {
   buildFormAssistInstruction,
   extractFormAssistResult,
@@ -359,8 +361,7 @@ export async function sendMessage(input: {
   content: string;
   routeContext: string;
   coworkerMode?: "advise" | "act";
-  externalAccessEnabled?: boolean;
-  elevatedFormFillEnabled?: boolean;
+  /** Page form DATA only; whether to fill it is resolved from the Workroom (spec 8.2). */
   formAssistContext?: AgentFormAssistContext;
   buildId?: string;
   attachmentId?: string;
@@ -550,14 +551,25 @@ export async function sendMessage(input: {
   );
   const portalContextPrompt = portalContextPromptContext?.section ?? null;
 
+  const { loadRoomTurnAuthority } = await import("@/lib/work-management/room-turn-authority.server");
+  const roomAuthority = await loadRoomTurnAuthority({ agentId: agent.agentId, routeContext: input.routeContext,
+    capsuleId: portalContextPromptContext?.envelope.work?.capsule?.capsuleId ?? null });
+
   // Build inference context: recent window + semantic recall for older context.
   // Build phases need more context (research findings, schema details, tool results)
   // because the agentic loop's tool call results aren't persisted in messages.
   // Conversation phases use a shorter window to prevent context poisoning.
   const isBuildPhase = input.routeContext === "/build";
   const RECENT_WINDOW = isBuildPhase ? 20 : 8;
+  // BI-706530B2: withhold earlier history from DISPATCH (never from the owner's
+  // view) at all three doors. See lib/tak/thread-history-withholding.ts.
+  const withheld = await resolveWithheldHistory(prisma, input.threadId);
   const recentMessages = await prisma.agentMessage.findMany({
-    where: { threadId: input.threadId, role: { in: ["user", "assistant"] } },
+    where: {
+      threadId: input.threadId,
+      role: { in: ["user", "assistant"] },
+      ...withheld.windowWhere,
+    },
     orderBy: { createdAt: "desc" },
     take: RECENT_WINDOW,
     select: { id: true, role: true, content: true },
@@ -575,6 +587,7 @@ export async function sendMessage(input: {
     historyTokens += msgTokens;
   }
   const windowMessageIds = new Set(trimmedMessages.map((m) => m.id));
+  const withheldRecallExclusions = withheld.recallExclusions(windowMessageIds);
   let chatHistory: ChatMessage[] = trimmedMessages.map((m) => ({
     role: m.role as ChatMessage["role"],
     content: m.content,
@@ -598,7 +611,9 @@ export async function sendMessage(input: {
   // no-op until a checkpoint exists; non-fatal on any error.
   try {
     const { loadThreadCheckpointMessage } = await import("@/lib/tak/thread-checkpoint-runner");
-    const checkpointMessage = await loadThreadCheckpointMessage(input.threadId);
+    const checkpointMessage = withheld.checkpointAllowed
+      ? await loadThreadCheckpointMessage(input.threadId)
+      : null;
     if (checkpointMessage) {
       labelled = prependLabelled(labelled, checkpointMessage, "thread-checkpoint");
     }
@@ -698,12 +713,8 @@ export async function sendMessage(input: {
   // attributes each tool call to the active skill.
   let activeSkillId: string | null = null;
 
-  // BI-E35A8AA4 drove the Initiative block from this coworker's saved Proactivity
-  // choice. BI-87C9C91C removed that identity ownership: this is the interactive
-  // turn path with no Workroom in scope, so it takes the platform default and who
-  // is staffed to the conversation cannot change its initiative. `null` IS that
-  // default (buildInitiativeBlock maps it to balanced) — byte-identical to an
-  // agent with no saved preference. Spec §3.1.
+  // BI-87C9C91C: proactivity is room-owned; the interactive turn takes the
+  // platform default (`null` → balanced in buildInitiativeBlock). Spec §3.1.
   const proactivityLevel: ProactivityLevel | null = null;
 
   // Resolve the LOCAL model's served context ONCE up front — it sizes BOTH the
@@ -767,7 +778,7 @@ export async function sendMessage(input: {
       query: input.content,
       currentThreadId: input.threadId,
       limit: 8,
-      excludeMessageIds: windowMessageIds,
+      excludeMessageIds: withheldRecallExclusions,
     });
     const factsContext = governedMemory.factsContext;
     const factsCompressed = governedMemory.factsCompressed;
@@ -949,7 +960,7 @@ export async function sendMessage(input: {
       routeContext: input.routeContext,
       userId: user.id!,
       chatHistory,
-      elevatedFormFillEnabled: input.elevatedFormFillEnabled,
+      elevatedFormFillEnabled: roomAuthority.handsOn.enabled,
       formAssistContext: input.formAssistContext,
     });
     resolvedBuildId = coworkerExtra.resolvedBuildId;
@@ -1055,7 +1066,7 @@ export async function sendMessage(input: {
       promptSections.push("", portalContextPrompt);
     }
 
-    if (input.elevatedFormFillEnabled && input.formAssistContext) {
+    if (roomAuthority.handsOn.enabled && input.formAssistContext) {
       promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
     }
 
@@ -1260,11 +1271,10 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   };
   const allPlatformTools = await getAvailableTools(toolUserContext, {
-    externalAccessEnabled: input.externalAccessEnabled === true,
+    externalAccessEnabled: roomAuthority.externalAccess.enabled,
     // Skip mode filtering here — applied to merged set
-    unifiedMode: useUnified,
-    agentId: agent.agentId,
-    additionalGrants: coworkerDefaultGrants,
+    unifiedMode: useUnified, agentId: agent.agentId,
+    additionalGrants: coworkerDefaultGrants, roomAuthorizedGrants: roomAuthority.authorizedGrants,
   });
 
   // Get page-specific actions
@@ -1406,12 +1416,11 @@ export async function sendMessage(input: {
   const attachedTools = deferredTools.length > 0 ? [LOAD_TOOLS_TOOL, ...budgetedTools] : budgetedTools;
 
   let disabledExternalTools: Array<{ name: string; description: string }> = [];
-  if (input.externalAccessEnabled !== true) {
+  if (!roomAuthority.externalAccess.enabled) {
     const externalEnabledPlatformTools = await getAvailableTools(toolUserContext, {
       externalAccessEnabled: true,
-      unifiedMode: useUnified,
-      agentId: agent.agentId,
-      additionalGrants: coworkerDefaultGrants,
+      unifiedMode: useUnified, agentId: agent.agentId,
+      additionalGrants: coworkerDefaultGrants, roomAuthorizedGrants: roomAuthority.authorizedGrants,
     });
     disabledExternalTools = getExternalAccessToolSummaries(
       filterToolsForCoworkerRuntime(externalEnabledPlatformTools, {
@@ -1610,8 +1619,8 @@ export async function sendMessage(input: {
     mergedTools,
   });
 
-  // When external access is enabled, tell the agent about its web tools
-  if (input.externalAccessEnabled) {
+  // When the room admits web tools, tell the agent about them
+  if (roomAuthority.externalAccess.enabled) {
     const externalTools = availableTools.filter((t) => t.requiresExternalAccess);
     if (externalTools.length > 0) {
       const toolList = externalTools.map((t) => `- ${t.name}: ${t.description}`).join("\n");
@@ -1643,7 +1652,7 @@ export async function sendMessage(input: {
     taskRequiresWebSearch: taskClassification.requiresWebSearch,
     externalTools: disabledExternalTools,
   })) {
-    populatedPrompt += buildExternalAccessDisabledInstruction(disabledExternalTools);
+    populatedPrompt += buildExternalAccessDisabledInstruction(disabledExternalTools, roomAuthority);
     await recordExternalAccessPermissionAudit({
       decision: "request",
       threadId: input.threadId,
@@ -1969,6 +1978,7 @@ export async function sendMessage(input: {
         // conversational reply ("yes do the truck list first") does not
         // false-positive into a PlatformIssueReport.
         interactionMode: "chat",
+        roomTurn: roomAuthority,
         // BI-867263F4: Advise mode surfaces recommended actions as proposals —
         // the loop diverts each side-effecting non-artifact call to an
         // AgentActionProposal card instead of executing it.
@@ -2340,7 +2350,7 @@ export async function sendMessage(input: {
   }
   } // close if (!responseContent)
 
-  if (input.elevatedFormFillEnabled && input.formAssistContext) {
+  if (roomAuthority.handsOn.enabled && input.formAssistContext) {
     const extracted = extractFormAssistResult(responseContent, input.formAssistContext);
     responseContent = extracted.displayContent;
     formAssistUpdate = extracted.fieldUpdates ?? undefined;
@@ -2630,73 +2640,6 @@ export async function clearConversation(input: {
  * Costs ~45 tokens instead of ~150 for full summaries.
  * The agent uses search_knowledge_base to pull full content when needed.
  */
-async function getKnowledgePointersForRoute(routeContext: string): Promise<string> {
-  const productMatch = routeContext.match(/\/portfolio\/product\/([^/]+)/);
-  const portfolioMatch = !productMatch && routeContext.match(/\/portfolio\/([^/]+)/);
-
-  if (!productMatch && !portfolioMatch) return "";
-
-  const { searchKnowledgeArticles } = await import("@/lib/semantic-memory");
-
-  if (productMatch) {
-    const productId = productMatch[1];
-    const product = await prisma.digitalProduct.findUnique({
-      where: { id: productId },
-      select: { name: true },
-    });
-    if (!product) return "";
-
-    const articles = await searchKnowledgeArticles({
-      query: product.name,
-      productId,
-      limit: 3,
-    });
-    if (articles.length === 0) return "";
-
-    // Enrich with utility-generated abstracts from DB when available
-    const abstracts = await prisma.knowledgeArticle.findMany({
-      where: { articleId: { in: articles.map((a) => a.articleId) } },
-      select: { articleId: true, abstract: true },
-    });
-    const abstractMap = new Map(abstracts.map((a) => [a.articleId, a.abstract]));
-
-    const lines = articles.map((a) => {
-      const abs = abstractMap.get(a.articleId);
-      return abs ? `- ${a.articleId}: "${a.title}" (${a.category}) — ${abs}` : `- ${a.articleId}: "${a.title}" (${a.category})`;
-    });
-    return `KNOWLEDGE: ${articles.length} articles for ${product.name} — use search_knowledge_base for details.\n${lines.join("\n")}`;
-  }
-
-  if (portfolioMatch) {
-    const portfolioSlug = portfolioMatch[1];
-    const portfolio = await prisma.portfolio.findUnique({
-      where: { slug: portfolioSlug },
-      select: { id: true, name: true },
-    });
-    if (!portfolio) return "";
-
-    const articles = await searchKnowledgeArticles({
-      query: portfolio.name,
-      portfolioId: portfolio.id,
-      limit: 3,
-    });
-    if (articles.length === 0) return "";
-
-    const abstracts = await prisma.knowledgeArticle.findMany({
-      where: { articleId: { in: articles.map((a) => a.articleId) } },
-      select: { articleId: true, abstract: true },
-    });
-    const abstractMap = new Map(abstracts.map((a) => [a.articleId, a.abstract]));
-
-    const lines = articles.map((a) => {
-      const abs = abstractMap.get(a.articleId);
-      return abs ? `- ${a.articleId}: "${a.title}" (${a.category}) — ${abs}` : `- ${a.articleId}: "${a.title}" (${a.category})`;
-    });
-    return `KNOWLEDGE: ${articles.length} articles for ${portfolio.name} portfolio — use search_knowledge_base for details.\n${lines.join("\n")}`;
-  }
-
-  return "";
-}
 
 // ─── Marketing Skill Rules ─────────────────────────────────────────────
 

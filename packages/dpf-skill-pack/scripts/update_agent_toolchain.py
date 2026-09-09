@@ -1149,17 +1149,21 @@ def grok_hooks_file(home: Path) -> Path:
     return home / ".grok" / "hooks" / "dpf-guards.json"
 
 
-def _grok_hook_command(hooks_dir: Path, script: str, timeout: int = 15) -> dict[str, Any]:
-    return {
+def _managed_hook_command(hooks_dir: Path, script: str, timeout: int = 15, event: str = "PreToolUse") -> dict[str, Any]:
+    result = {
         "type": "command",
         "command": f'node "{hooks_dir / script}"',
         "timeout": timeout,
     }
+    purpose = hook_purposes(hooks_dir.parent, event).get(script)
+    if purpose:
+        result["statusMessage"] = purpose
+    return result
 
 
-def _grok_command_entry(hooks_dir: Path, script: str, timeout: int = 15) -> dict[str, Any]:
+def _grok_command_entry(hooks_dir: Path, script: str, timeout: int = 15, event: str = "PreToolUse") -> dict[str, Any]:
     """Single-script PreToolUse group (legacy shape used by session events)."""
-    return {"hooks": [_grok_hook_command(hooks_dir, script, timeout=timeout)]}
+    return {"hooks": [_managed_hook_command(hooks_dir, script, timeout=timeout, event=event)]}
 
 
 def _grok_matched_group(
@@ -1171,7 +1175,7 @@ def _grok_matched_group(
     timeout: int = 15,
 ) -> dict[str, Any] | None:
     hooks = [
-        _grok_hook_command(hooks_dir, script, timeout=timeout)
+        _managed_hook_command(hooks_dir, script, timeout=timeout)
         for script in scripts
         if dry_run or (hooks_dir / script).exists()
     ]
@@ -1192,21 +1196,21 @@ def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, 
     if pre_entries:
         payload["hooks"]["PreToolUse"] = pre_entries
     start = [
-        _grok_command_entry(hooks_dir, script, timeout=30)
+        _grok_command_entry(hooks_dir, script, timeout=30, event="SessionStart")
         for script in GROK_SESSION_START_SCRIPTS
         if dry_run or (hooks_dir / script).exists()
     ]
     if start:
         payload["hooks"]["SessionStart"] = start
     end = [
-        _grok_command_entry(hooks_dir, script, timeout=60)
+        _grok_command_entry(hooks_dir, script, timeout=60, event="SessionEnd")
         for script in GROK_SESSION_END_SCRIPTS
         if dry_run or (hooks_dir / script).exists()
     ]
     if end:
         payload["hooks"]["SessionEnd"] = end
     stop = [
-        _grok_command_entry(hooks_dir, script, timeout=60)
+        _grok_command_entry(hooks_dir, script, timeout=60, event="Stop")
         for script in GROK_STOP_SCRIPTS
         if dry_run or (hooks_dir / script).exists()
     ]
@@ -1358,21 +1362,21 @@ def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[di
     hooks_dir = managed / "hooks"
     groups: list[dict[str, Any]] = []
     bash_entries = [
-        {"type": "command", "command": f'node "{hooks_dir / guard}"', "timeout": 15}
+        _managed_hook_command(hooks_dir, guard)
         for guard in CODEX_BASH_GUARDS
         if dry_run or (hooks_dir / guard).exists()
     ]
     if bash_entries:
         groups.append({"matcher": "Bash", "hooks": bash_entries})
     ask_entries = [
-        {"type": "command", "command": f'node "{hooks_dir / guard}"', "timeout": 15}
+        _managed_hook_command(hooks_dir, guard)
         for guard in CODEX_ASK_GUARDS
         if dry_run or (hooks_dir / guard).exists()
     ]
     if ask_entries:
         groups.append({"matcher": "AskUserQuestion", "hooks": ask_entries})
     write_entries = [
-        {"type": "command", "command": f'node "{hooks_dir / guard}"', "timeout": 15}
+        _managed_hook_command(hooks_dir, guard)
         for guard in CODEX_WRITE_GUARDS
         if dry_run or (hooks_dir / guard).exists()
     ]
@@ -1495,37 +1499,24 @@ def codex_hook_trust_blocking_notice() -> list[str]:
     ]
 
 
-# One-line purpose per hook script. The operator granting hook-trust on Codex/Grok
-# sees an opaque numbered list ("Hook 1..N") because the hook-object schema has no
-# name/description field (BI-276EC984; upstream asks openai/codex#31469 and
-# xai-org/plugin-marketplace#71). Until those land, the installer prints this roster
-# so the trust decision is informed. Keyed by script basename; a CI test asserts
-# every command hook in hooks.json has an entry here (kept in sync mechanically).
-HOOK_PURPOSES = {
-    "lease-guard.mjs": "blocks launching a long-running server without a nonprod lease",
-    "root-clone-guard.mjs": "blocks destructive rm / git clean aimed at the root clone",
-    "compose-guard.mjs": "blocks docker compose commands that tear down shared services",
-    "portal-image-guard.mjs": "blocks hand-building the canonical portal image, which overwrites what the live install runs",
-    "lease-punt-guard.mjs": "blocks a runtime-bound gate (prisma migrate / db push) in a source-only worktree",
-    "decision-routing-guard.mjs": "blocks asking the operator a platform decision with no kernel consultation",
-    "workroom-claim-guard.mjs": "blocks work on a feature branch that no live Workroom claim covers (AGENTS.md 12)",
-    "plan-backlog-coverage-guard.mjs": "blocks production source edits until xlarge and independently shippable plan work has live BI coverage",
-    "pregate-evidence-guard.mjs": "blocks git push / gh pr create when HEAD has no unexpired local-CI sandbox evidence",
-    "pregate-invocation-guard.mjs": "blocks a pregate run shaped so it cannot succeed or cannot be read (piped, backgrounded, chained, timeout-wrapped)",
-    "ux-fit-precheck.mjs": "reminds to run a UX-fit review when editing UI surfaces",
-    "spec-plan-doc-precheck.mjs": "reminds to attach a spec/plan/doc when writing gated files",
-    "design-grounding-precheck.mjs": "reminds to review specs and current code substrate before UX/workflow edits",
-    "tool-economy-precheck.mjs": "reminds about tool-economy budget when adding tool surface",
-    "worktree-create.mjs": "seeds a new worktree with MCP config on WorktreeCreate",
-    "worktree-readiness-banner.mjs": "SessionStart: announces a SOURCE-ONLY worktree and what it forbids, so agents never promise a typecheck they cannot run",
-    "process-spine-health-check.mjs": "SessionStart: warns when DPF-native replacement skills are missing or hidden by retired generic skills",
-    "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
-    "grok-session-start.mjs": "Grok SessionStart: process-spine exposure probe + governance-freshness (global hook plane)",
-    "worktree-session-hygiene.mjs": "SessionStart observe worktree sprawl; SessionEnd reaps THIS worktree when Tier-A (merged+clean) — primary reaper, not cron",
-    "worktree-session-heartbeat.mjs": "SessionStart/Stop write + SessionEnd remove a gitignored session heartbeat so the janitor never reaps a worktree with a live session (non-destructive)",
-    "root-clone-freshness.mjs": "SessionStart: fast-forwards the shared root clone to origin/main (ff-only, on-main+clean) so junctioned worktrees never inherit a stale root",
-    "uncommitted-work-guard.mjs": "SessionEnd/Stop/post-checkout: warns before uncommitted spec/plan loss",
-}
+# Purpose metadata lives with each canonical handler (BI-26DC98EE).
+# Existing installer and client adapters consume it; there is no second roster.
+def hook_purposes(skill_pack: Path, event: str) -> dict[str, str]:
+    try:
+        data = json.loads((skill_pack / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    purposes = {}
+    for key, groups in data.get("hooks", {}).items():
+        if key != event:
+            continue
+        for group in groups:
+            for hook in group.get("hooks", []):
+                base = hook_script_basename(hook.get("command", ""))
+                purpose = hook.get("statusMessage")
+                if base and isinstance(purpose, str) and purpose.strip():
+                    purposes.setdefault(base, purpose)
+    return purposes
 
 
 def hook_script_basename(command: str) -> str | None:
@@ -1538,8 +1529,8 @@ def hook_roster(skill_pack: Path) -> list[str]:
     """Human-readable roster of the plugin's hooks (name + purpose), grouped by event.
 
     Printed so an operator granting hook-trust on Codex/Grok knows what each numbered
-    "Hook N" actually is (BI-276EC984). Order matches hooks.json, which is the order
-    the trust UIs number them.
+    "Hook N" actually is (BI-276EC984). Order follows hooks.json; clients may
+    reorder it, so confirm the event and command before trusting a definition.
     """
     hooks_json = skill_pack / "hooks" / "hooks.json"
     try:
@@ -1549,7 +1540,7 @@ def hook_roster(skill_pack: Path) -> list[str]:
     events = data.get("hooks", {})
     if not isinstance(events, dict):
         return []
-    lines = ["Plugin hooks — what each numbered 'Hook N' in the Codex/Grok trust UI is:"]
+    lines = ["Plugin hooks — purposes in definition order; confirm event and command in the trust UI:"]
     for event, groups in events.items():
         entry_lines = []
         n = 0
@@ -1558,7 +1549,7 @@ def hook_roster(skill_pack: Path) -> list[str]:
             for hook in group.get("hooks", []) if isinstance(group, dict) else []:
                 n += 1
                 base = hook_script_basename(hook.get("command", "")) or "?"
-                purpose = HOOK_PURPOSES.get(base, "(undescribed — add to HOOK_PURPOSES)")
+                purpose = hook.get("statusMessage") or "(purpose unavailable in this definition)"
                 mtag = f" [{matcher}]" if matcher else ""
                 entry_lines.append(f"    Hook {n}{mtag}: {base} — {purpose}")
         if entry_lines:
@@ -1596,6 +1587,40 @@ def guard_liveness_advisory() -> list[str]:
     ]
 
 
+def hook_reference(skill_pack: Path) -> str:
+    """Render the existing roster as a shipped reference, without reading trust state."""
+    hooks_dir = (skill_pack / "hooks").resolve()
+    data = json.loads((hooks_dir / "hooks.json").read_text(encoding="utf-8"))
+    for groups in data["hooks"].values():
+        for group in groups:
+            for hook in group["hooks"]:
+                base = hook_script_basename(hook.get("command", ""))
+                source = (hooks_dir / (base or "")).resolve()
+                if not base or hooks_dir not in source.parents or not source.is_file():
+                    raise ValueError(f"Hook source is unavailable: {base}")
+                if not isinstance(hook.get("statusMessage"), str) or not hook["statusMessage"].strip():
+                    raise ValueError(f"Hook purpose is missing: {base}")
+    lines = [
+        "# DPF hook purposes", "",
+        "Generated from [hooks.json](hooks.json). Do not edit this reference by hand.", "",
+        "Before enabling a hook, match its event and command with the entries below.",
+        "Numbers follow definition order; your client may order entries differently.",
+        "The client owns the current trust state. This reference does not grant trust.", "",
+        "Purpose text is stored as `statusMessage`, which clients may show while a hook runs.",
+        "Friendly names in approval rows remain a [Codex client request](https://github.com/openai/codex/issues/31469).",
+        "A purpose in this file is not proof that an approval row displays it.", "",
+    ]
+    for line in hook_roster(skill_pack)[1:]:
+        if line.startswith("    "):
+            entry = line.strip().replace("|", "\\|").replace("<", "&lt;").replace(">", "&gt;")
+            entry = re.sub(r"([A-Za-z0-9_.-]+\.mjs)", r"[\1](\1)", entry, count=1)
+            lines.append(f"- {entry}")
+        else:
+            lines.extend(["", f"## {line.strip().rstrip(':')}", ""])
+    lines.extend(["", "Regenerate with `python scripts/update_agent_toolchain.py --write-hook-reference` from the skill-pack directory.", ""])
+    return "\n".join(lines)
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
@@ -1616,7 +1641,22 @@ def main(argv: list[str]) -> int:
         help="Exit 2 when Codex is installed but hook trust has not been granted (BI-66EBEA06).",
     )
     parser.add_argument("--dry-run", action="store_true")
+    reference_mode = parser.add_mutually_exclusive_group()
+    reference_mode.add_argument("--write-hook-reference", action="store_true")
+    reference_mode.add_argument("--check-hook-reference", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.write_hook_reference or args.check_hook_reference:
+        root = Path(args.skill_pack_path).expanduser().resolve()
+        reference = hook_reference(root)
+        path = root / "hooks" / "README.md"
+        if args.write_hook_reference:
+            path.write_text(reference, encoding="utf-8")
+            return 0
+        if not path.exists() or path.read_text(encoding="utf-8") != reference:
+            print("Hook reference is stale; regenerate it from hooks.json.", file=sys.stderr)
+            return 1
+        return 0
 
     if args.codex_only and args.claude_only:
         raise SystemExit("--codex-only and --claude-only cannot be combined")

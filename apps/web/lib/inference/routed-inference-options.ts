@@ -1,4 +1,5 @@
 import type { ActivityContract } from "@/lib/routing/activity-contract";
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 import type { ModelClass } from "@/lib/routing/model-card-types";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { RouteDecisionActor } from "@/lib/routing/route-decision-attribution";
@@ -103,6 +104,12 @@ export interface RouteAndCallOptions {
   minimumCapabilities?: import("@/lib/routing/agent-capability-types").AgentMinimumCapabilities;
   agentMinimumContextTokens?: number;
   agentId?: string;
+  /**
+   * EP-WORK-POSTURE §8.2 (BI-7ADEBDC1): the Cost/Quality/Time posture of the
+   * Workroom this call runs in. Outranks the org/platform default in routing;
+   * a caller with an exact durable execution plan still wins.
+   */
+  workroomPriority?: GoldenTrianglePreference | null;
   agentMessageId?: string;
   /** FeatureBuild this call belongs to. Threaded into AdapterRunTelemetry so
    *  completeBuildPhaseRun can aggregate per-phase tokens/cost (BI-0A6B8B38). */

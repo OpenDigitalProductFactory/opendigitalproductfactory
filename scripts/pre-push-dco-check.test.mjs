@@ -14,11 +14,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { isSignedOff, findUnsignedCommits, resolvePushRange } from "./lib/dco-signoff.mjs";
 import { parseArgs, evaluateDcoPush, main } from "./pre-push-dco-check.mjs";
 
-const repoRoot = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const dcoCli = join(repoRoot, "scripts", "pre-push-dco-check.mjs");
 
 const US = "\x1f";

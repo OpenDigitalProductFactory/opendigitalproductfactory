@@ -2,6 +2,13 @@
 
 Living reference for all UI development. All developers and AI agents must follow these standards when creating or reviewing UI code.
 
+For outcome-based route audits and redesign acceptance, use the
+[portal page and flow evaluation framework](architecture/portal-ux-evaluation-framework.md)
+and its [scorecard](testing/portal-ux-scorecard-template.md). It connects the
+existing page-purpose contracts and UX budgets below to persona tasks, workroom
+disclosure, navigation fit and evidence. Counts alone do not establish that a
+user can complete the job.
+
 ## Color System
 
 Every UI component uses CSS custom properties for all color roles. These properties are set by the branding system via `buildBrandingStyleTag()` and fall back to defaults in `globals.css`.
@@ -326,6 +333,13 @@ Every asynchronous action MUST show a visible, consistent activity indicator. A 
 | Never | Skeleton **and** spinner together — pick one | — |
 
 **Refreshing existing content:** keep the current content visible and dimmed (`opacity`) with the region marked `aria-busy`, and show the spinner on the trigger. Don't blank out good content to show a placeholder.
+
+**Process evidence:** use the shared `workroomStage` status domain. `passed`
+requires a verification verdict; `observed` records an event without asserting
+success; `unknown` lacks proof; `cancelled` is separate from completion. A terminal
+room state does not prove that earlier steps passed. Keep intended definitions,
+observed execution, and any simulation distinct, with a keyboard-accessible list
+and step inspector. Do not turn stage position into an estimated percentage.
 
 **Accessibility (required):**
 - Mark the region being updated with `aria-busy="true"`.

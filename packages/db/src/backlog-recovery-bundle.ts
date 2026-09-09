@@ -401,7 +401,9 @@ export async function reconcileBacklogRecoveryBundle(
 /** An item the capture could not represent, and why. Never silently dropped. */
 export interface BacklogCaptureSkip {
   itemId: string;
-  reason: "done-item-has-no-evidence-activity" | "item-has-no-epic";
+  reason: "done-item-has-no-evidence-activity" | "item-has-no-epic" | "epic-not-representable";
+  /** For `epic-not-representable`: the contract violation the bundle format raised. */
+  detail?: string;
 }
 
 /**
@@ -678,3 +680,7 @@ export function buildBacklogRecoveryBundle(input: {
   // Round-trip so an unreconcilable bundle fails at capture, not at recovery.
   return { bundle: parseBacklogRecoveryBundle(bundle), skipped };
 }
+
+// Workroom capture and restore live in their own module; re-exported so existing
+// importers keep working and there is still one place to look.
+export * from "./workroom-recovery";

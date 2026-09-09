@@ -92,7 +92,7 @@ Assessed against `docs/architecture/context-engineering-standards.md` (P1–P13)
 | P10 Deterministic enforcement | Implemented | `apps/web/lib/mcp-tools.ts` (kernel gate), `packages/dpf-skill-pack/hooks/` | Kernel runtime gate + PreToolUse prechecks (incl. `tool-economy-precheck.mjs`). |
 | P11 Persist/re-inject across compaction | Partially Implemented | `apps/web/lib/tak/agentic-loop.ts` | `withPlanReminder` keeps the plan out of the compacted window; memory-fact re-injection tracked as R9. |
 | P12 Empirical measurement | Partially Implemented (Phase 1) | `apps/web/lib/tak/context-economy-metrics.ts` | Per-turn tool-surface gauge (count + est. definition tokens, banded vs the 15-tool cliff) + tool-selection accuracy, logged in the agentic loop. Cross-task tokens-per-task rollup staged (Phase 2). |
-| Deferred tool exposure on external CLI path | Implemented | `apps/web/lib/mcp/tool-tier.ts`, `apps/web/lib/mcp/load-tools.ts`, `apps/web/lib/tak/tool-intent.ts`, `packages/integration-shared/src/mcp-catalog-tier.ts` | Claude Code/Codex bootstrap with explicit `?tier=full` for host-native lazy attachment; generic/Grok/unknown clients default to core and expand by exact name or intent through `load_tools`. Client-host callability is verified separately from protocol conformance. |
+| Deferred tool exposure on external CLI path | Implemented | `apps/web/lib/mcp/tool-tier.ts`, `apps/web/lib/mcp/load-tools.ts`, `apps/web/lib/tak/tool-intent.ts`, `packages/integration-shared/src/mcp-catalog-tier.ts` | Claude Code/Codex bootstrap with explicit `?tier=full` for host-native lazy attachment; generic/Grok/unknown clients default to core and expand by exact name or intent through `load_tools`. The core tier carries the writers that CLOSE governed work — `update_backlog_item_status`, `record_execution_evidence`, and the nonprod lease claim/release pair — so a core client can finish what it starts rather than reaching for `?tier=full` to recover them. Client-host callability is verified separately from protocol conformance. |
 
 Recommended next steps for this area are tracked in `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md` (R3, R4, R6, R7, R8, R9) and kept current by `docs/architecture/agent-client-capability-parity.md`.
 
@@ -130,3 +130,11 @@ The most important prototype outcomes implied by the current standards refresh a
 - Expose `GAID` claims through `MCP`, `A2A`, and HTTP transport profiles.
 - Build repeatable `TAK`, `GAID`, and `TAK-JSI` conformance suites and preserve the resulting evidence.
 - Extend `DPF` from platform-local identity into a demonstrable cross-boundary trust implementation suitable for standards-body review.
+
+### MCP discovery refusal conformance
+
+Progressive tool discovery is an authorization-preserving projection. Empty
+results carry a structured reason and finite next step, while reviewer-only
+initiative writers point to the server-issued `get_backlog_item` reviewer route.
+The discovery response never converts catalog visibility into a grant or
+collapses a separate reviewer identity into the requesting author.

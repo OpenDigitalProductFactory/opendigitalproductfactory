@@ -205,7 +205,9 @@ describe("OpsClient", () => {
 
     expect(html).toContain("Workroom active");
     expect(html).toContain("Workroom ownership safety");
-    expect(html).toContain('href="/workspace/cases/WC-923105A2"');
+    // The canonical work-case address, not the capsule id alone: a key without
+    // its source-type prefix does not decode, so the link 404s (BI-00727E59).
+    expect(html).toContain('href="/workspace/cases/work-capsule%3AWC-923105A2"');
     expect(html).toContain("working");
     expect(html).toContain("Codex Desktop");
     expect(html).toContain("fix/bi-workroom-single-owner");

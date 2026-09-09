@@ -34,6 +34,7 @@ import { fileURLToPath } from "node:url";
 
 import { DERIVED_ARTIFACTS, affectedEntries, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
+import { availableMermaidRenderer } from "./lib/mermaid-renderer.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -104,9 +105,35 @@ export function evaluatePushExemption(diffFiles, registry = DERIVED_ARTIFACTS, r
   return { exempt: true, reason: affected.length > 0 ? "docs diff, all affected artifacts fresh" : "docs-only diff, no registered artifact touched" };
 }
 
-/** Run every registry entry's check; returns [{ entry, ok }]. */
-export function evaluateCheckAll(registry = DERIVED_ARTIFACTS, runCheck = () => true) {
-  return registry.map((entry) => ({ entry, ok: runCheck(entry) }));
+/**
+ * True when running inside GitHub's merge queue — the `merge_group` event, or
+ * the synthetic `gh-readonly-queue/<base>/pr-<n>-<sha>` ref it checks out.
+ * Nothing local ever sets either, so pre-commit and pregate stay strict.
+ */
+export function isMergeQueueContext(env = process.env) {
+  if (env.GITHUB_EVENT_NAME === "merge_group") return true;
+  return typeof env.GITHUB_REF === "string" && env.GITHUB_REF.startsWith("refs/heads/gh-readonly-queue/");
+}
+
+/**
+ * Run every registry entry's check; returns [{ entry, ok, tolerated }].
+ *
+ * `tolerated` is true only for an entry flagged `mergeQueueRaceTolerant` that
+ * is stale while `mergeQueue` is set. Such an artifact is derived from
+ * repo-wide state (e.g. the migration count), so two PRs that each touch a
+ * source produce a merged tree neither of them could have generated: the
+ * second one into the queue is always stale, through no author error, and
+ * cannot push a fix into the queue. PR-head CI (`pull_request`) still runs
+ * this check strictly against the author's own base, so an author who forgot
+ * to regenerate is still caught; only merge-order drift is tolerated, and the
+ * next PR touching a source regenerates it (pre-commit) and heals main.
+ */
+export function evaluateCheckAll(registry = DERIVED_ARTIFACTS, runCheck = () => true, { mergeQueue = false } = {}) {
+  return registry.map((entry) => {
+    const ok = runCheck(entry);
+    const tolerated = !ok && mergeQueue === true && entry.mergeQueueRaceTolerant === true;
+    return { entry, ok, tolerated };
+  });
 }
 
 // ── IO-touching implementations used by the CLI ────────────────────────────
@@ -126,6 +153,9 @@ function diffFiles(baseRef) {
 }
 
 function binaryAvailable(name) {
+  // The Mermaid renderer is a tool (local mermaid-cli OR the pinned Docker
+  // image), not a node_modules binary — ask the renderer module.
+  if (name === "mmdc") return availableMermaidRenderer() !== null;
   const envOverride = process.env[name.toUpperCase()];
   if (envOverride) return existsSync(envOverride);
   const candidates =
@@ -232,14 +262,23 @@ function cmdPushExempt(baseRef) {
 }
 
 function cmdCheckAll() {
-  const results = evaluateCheckAll(DERIVED_ARTIFACTS, runCheckLive);
+  const mergeQueue = isMergeQueueContext();
+  const results = evaluateCheckAll(DERIVED_ARTIFACTS, runCheckLive, { mergeQueue });
   let failed = false;
-  for (const { entry, ok } of results) {
-    console.log(`[derived-artifacts] ${entry.id}: ${ok ? "fresh" : "STALE"}`);
-    if (!ok) {
-      console.log(`[derived-artifacts]   run: ${entry.generate.join(" ")}`);
-      failed = true;
+  for (const { entry, ok, tolerated } of results) {
+    if (ok) {
+      console.log(`[derived-artifacts] ${entry.id}: fresh`);
+      continue;
     }
+    if (tolerated) {
+      console.log(
+        `[derived-artifacts] ${entry.id}: STALE — tolerated in the merge queue (repo-wide count drifted under a concurrent merge; PR-head CI enforced freshness against the author's base, and the next source-touching PR regenerates it)`,
+      );
+      continue;
+    }
+    console.log(`[derived-artifacts] ${entry.id}: STALE`);
+    console.log(`[derived-artifacts]   run: ${entry.generate.join(" ")}`);
+    failed = true;
   }
   return failed ? 1 : 0;
 }

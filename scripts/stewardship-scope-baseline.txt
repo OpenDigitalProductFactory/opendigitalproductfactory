@@ -165,7 +165,6 @@ DiscoveryFingerprintCatalogVersion
 DiscoveryFingerprintObservation
 DiscoveryFingerprintReview
 DiscoveryFingerprintRule
-DiscoveryRun
 DiscoveryTriageDecision
 Document
 DocumentAccessGrant

@@ -216,6 +216,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/pr-health.test.mjs",
+        "scripts/check-failure-readiness.test.mjs",
         "scripts/check-ci-build-cache.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
         "scripts/lib/ci-observation.test.mjs",
@@ -333,6 +334,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-n-minus-one-caller-honesty.test.mjs"),
       node("scripts/check-n-minus-one-caller-honesty.mjs"),
     ], { inputs: ["code"] }),
+    // BI-00727E59: an operator reported that no "Open room" button worked. It
+    // was three defects stacked on one button (BI-6F2CC21B, BI-EBEB77E2,
+    // BI-97B24FB5) and a fourth found by this guard — every one the same
+    // missing rule: nothing guaranteed a room was reachable, so each surface
+    // re-derived how to address one. This closes the class.
+    guard("no-unreachable-room-links", "Room Addressing Guard", [
+      node("scripts/check-no-unreachable-room-links.mjs"),
+      conformanceTest("scripts/check-no-unreachable-room-links.test.mjs"),
+    ], { inputs: ["code"] }),
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
     ], { inputs: ["code"] }),
@@ -407,6 +417,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("test-clock-bomb-guard", "Test Clock Bomb Guard", [
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
+    ], { inputs: ["code"] }),
+    // BI-5CC4159D: `new URL(..., import.meta.url).pathname` is "/D:/..." on
+    // Windows, so every filesystem call built on it fails on every Windows host
+    // while Linux CI stays green. Third recurrence (#4736, workroom-stall,
+    // #5247); the last one failed the local-CI gate for every branch on the
+    // host. Repo-wide, no baseline: the fix branch took the count to zero.
+    guard("no-url-pathname-fs-guard", "URL Pathname Filesystem Guard", [
+      node("--test", "scripts/check-no-url-pathname-fs.test.mjs"),
+      node("scripts/check-no-url-pathname-fs.mjs"),
     ], { inputs: ["code"] }),
     guard("work-unit-conformance-guard", "WorkUnit Conformance Guard", [
       node("--test", "scripts/check-work-unit-conformance.test.mjs"),
@@ -654,7 +673,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-docs-impact.mjs"),
     ]),
     guard("seed-fit-gate", "Seed Contribution Fit Gate", [
-      node("--test", "scripts/check-seed-fit-decision.test.mjs"),
+      node("--test", "scripts/check-seed-fit-decision.test.mjs", "scripts/lib/seed-fit-mechanism.test.mjs"),
       node("scripts/check-seed-fit-decision.mjs"),
     ]),
     guard("spec-plan-doc-gate", "Spec/Plan/Doc Gate", [

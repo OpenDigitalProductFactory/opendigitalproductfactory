@@ -2,6 +2,16 @@
 
 **Status:** procedure reference. Collected from `AGENTS.md` §3, §7, §9, §13, §14 and §15 by BI-0020D511 Phase 1. The *rules* from each stay always-on in their original section; everything here is how-to, reference tables, and rationale. No rule was dropped.
 
+
+> **Canonical identity bridge ⟦runtime: 2026-09-02⟧.** `COWORKER_SLUG_TO_CANONICAL_AGENT_ID`
+> in `packages/db/src/agent-identity.ts` now bridges the eight value-stream
+> orchestrators and the cross-cutting finance specialist. Seeding a coworker means
+> four registries, not one: the roster seed, this bridge, `agent_registry.json`
+> status, and a model floor in `AGENT_MODEL_CONFIG_DEFAULTS`. The coworker
+> definition conformance gate (LIFE-001/LIFE-005) fails a seed that has the first
+> three and not the last two — a coworker with no grants "boots with no tool
+> surface", and one with no model floor can be served by a model too weak for it.
+
 ## New page routes — regenerate companions (BI-206DAB95)
 
 Adding `apps/web/app/**/page.tsx` requires regenerating **four** derived artifacts. CI fails opaquely if any is stale. One command regenerates all of them against the **current** tree:

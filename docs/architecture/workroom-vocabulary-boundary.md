@@ -117,6 +117,116 @@ dependency; it is not recreated as a child record every day. A standing
 `Restaurant Operations` instance can receive each day's outcome packet through
 `contributes-to` without owning every operational record.
 
+## Human accountability is not coordination, execution, or access
+
+Who answers for a room's outcome is a separate axis from who coordinates it, who
+executes it, who requested it, and who holds its lease. They are separate
+identities with separate labels, and an AI coordinator can be absent while a
+human remains accountable. Resolving accountability grants no capability to
+anyone and never widens what a principal can read or write.
+
+`resolveEffectiveHumanAccountability` in
+[`apps/web/lib/work-management/human-accountability.ts`](../../apps/web/lib/work-management/human-accountability.ts)
+is the single place that answers it. Order: an explicit accountable principal on
+the room, then the nearest ancestor along containment, then the organization's
+recorded owner. A solo founder is the ordinary case of that last step.
+
+Two rules matter more than the order.
+
+Responsibility travels only along `contains` and `spawned-from`. The other three
+relation kinds — `depends-on`, `blocks`, `contributes-to` — describe execution
+order, and treating one as an ownership edge would make whoever a room waits on
+answerable for it.
+
+When nothing resolves, the result is a setup state naming what is missing. It
+never falls back to the room's creator, requester, lease holder, or the first
+administrator on the install. A guessed accountable is worse than a visible gap,
+because it reads as a decision somebody made. Ambiguity is reported the same
+way: two accountable principals on one room, two containers for one room, or a
+containment cycle each return a correctable state rather than an arbitrary
+answer.
+
+The organization's recorded owner is not yet persisted on this schema. Until it
+is, rooms with no explicit assignment resolve to that setup state, which is the
+intended behaviour rather than a defect. Recording it is a schema change with
+its own migration acceptance.
+## What an activity symbol is allowed to claim
+
+A count is not an answer. "12 rooms" tells an operator nothing they can act on,
+so a collapsed branch carries a bounded set of concrete statements — what is
+being done, or what is waiting — chosen attention-first, not a bare number.
+
+A symbol must be earned. Motion means fresh evidence of execution right now. A
+held lease, a claimed shape, a successful tool call and a completed task are not
+that. `deriveActivitySignal` in
+[`apps/web/lib/work-management/portfolio-activity-projection.ts`](../../apps/web/lib/work-management/portfolio-activity-projection.ts)
+resolves one of seven states — executing, waiting on a person, queued, blocked,
+completed, stale, unknown — and only `executing` animates.
+
+Three distinctions carry the intent. A verified receipt and a blocker are
+statements about the work and hold regardless of how recently anything was
+observed, so neither is overridden by a fresh heartbeat. No evidence at all is
+`unknown`, which is not the same as old evidence, which is `stale`; a
+disconnected client ages into stale rather than spinning indefinitely. And every
+representative statement carries the canonical destination of the room it
+describes, so a summary is always one click from the thing it summarises.
+
+Reads are bounded and ordered deterministically. Rooms are deduplicated by
+identity before counting, so a room reachable through two links is counted once,
+and rooms needing attention are counted separately from the branch total. A page
+that does not cover the estate reports itself as partial and hands back a cursor,
+rather than presenting its own size as a total.
+
+Authorization happens before projection, never after: filtering a rendered list
+would let hidden work leak through a count or a representative summary.
+
+## An executor is a teammate, not a surface
+
+The same worker reached through Claude Code, Codex, Grok or the portal is one
+identity with one session on the room. A roster deduplicates by identity rather
+than listing a row per connection, and multi-agent orchestration rolls up the
+same way: a planner and its specialists are one worker with subagents beneath
+it, never N peers competing for attention.
+
+`rollUpNamedWorkers` in
+[`apps/web/lib/work-management/worker-rollup.ts`](../../apps/web/lib/work-management/worker-rollup.ts)
+performs that rollup. A worker is described from its freshest observation, and
+`working` is a claim about now: without a recent progress observation it
+degrades to idle, and with none at all to unknown. `waiting` and `idle` are not
+claims about now and are reported as given.
+
+Delegation is not dependency. A worker's parent is the worker that delegated it,
+recorded at delegation time. Where that was never recorded the parentage stays
+`unknown`, and where two surfaces name different delegators it collapses to
+`unknown` rather than taking a vote. A child whose parent is not visible — hidden
+by authorization, or simply not loaded — is never promoted to a root, because
+that would present a subagent as an independent worker.
+
+A hundred subagents stay inspectable without either extreme: hiding them behind
+a running count answers nothing, and giving each a top-level destination floods
+navigation. They are grouped under the worker that delegated them, paged, and
+searchable by name or by what they are currently doing.
+
+## Expansion is not selection
+
+The activity tree separates two things a compact view usually conflates. The
+chevron discloses a branch's rooms; it does not change what the inspector shows.
+Selecting an activity does not collapse, reorder, or scroll anything. An
+operator who looks at one room must not lose their place in the estate.
+
+A collapsed branch already carries its representative activity, so the tree is
+readable without expanding anything, and each representative line carries the
+canonical destination of the room it describes. A summary is always one click
+from the thing it summarises, never a prompt to go hunting through ancestors.
+
+Counts supplement statements; they never replace them. A branch row shows how
+many rooms it holds and how many need attention, beside the concrete statements,
+not instead of them.
+
+Symbols are rendered from the server-decided signal, each with an accessible
+name, and only the executing state animates — stilled under reduced motion. See
+[`PortfolioActivityTree.tsx`](../../apps/web/components/ops/workrooms/PortfolioActivityTree.tsx).
+
 ## Naming rules
 
 - One stem, one casing: **`Workroom`** — never `WorkRoom`, `work-room` or
@@ -219,3 +329,82 @@ old word free to come back, which is exactly how this one survived.
 - [Claim a workroom before you work](../founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md)
 - [Workroom participation and channel continuity](work-room-participation-and-channel-continuity.md)
 - Plan: `docs/superpowers/plans/2026-08-15-workroom-canonical-rename.md`
+
+## A disclosure control discloses
+
+Expanding a branch of the portfolio activity tree replaces its summary with the
+rooms it carries. This is stated because the first implementation did not do it:
+the chevron flipped `aria-expanded`, swapped its own glyph, and left the list
+below unchanged, so the control announced a disclosure it never performed. A
+control that changes only its own appearance is worse than no control, because
+an operator reads the absence of new rows as "this branch has nothing more".
+
+Disclosure is bounded. A portfolio holding a thousand rooms discloses the first
+`DEFAULT_DISCLOSURE_LIMIT` of them in the order it was already summarising, then
+says how many it is not listing. Opening a branch never empties a portfolio into
+the page, and never reshuffles the rows the operator was reading.
+
+## A count says what it counted
+
+A branch count describes the rooms the page read, not the rooms that exist. The
+page reads a bounded number of Workrooms; when that read hits its limit the tree
+renders "N rooms read" and states the bound. Measured against 1,001 rooms and a
+200-room read, an unqualified "51 rooms" understated the portfolio five-fold
+while looking exactly like a total.
+
+## A statement names its room
+
+Every activity line carries its room's title alongside the action or blocker.
+Blockers are frequently generic and shared: at scale, several rooms blocked on
+one liveness reason rendered as identical lines with no way to tell which room
+each described, or that they were different rooms at all.
+
+## The room inspector renders what the projections resolve
+
+Accountability and the worker roster were computable before they were visible.
+The room inspector is where they surface, and it keeps three claims apart.
+
+A human is accountable: answerable for the work, defaulting to the
+organization's recorded owner and inherited down the responsibility graph unless
+a room records its own. The panel states where the answer came from — this room,
+a room N steps up, or the organization — because "who is accountable" and "why
+them" are different questions and the second one is how an operator corrects a
+wrong answer.
+
+Inheritance follows responsibility relations only. `contains` and `spawned-from`
+delegate answerability; every other relation links two rooms without delegating
+anything, and walking one would inherit an owner from a room that never owned
+this work.
+
+Coordination and execution are not accountability. A named worker is one
+identity across every surface it was reached through, its subagents are grouped
+under whoever delegated them, and none of that moves answerability from the
+accountable human.
+
+Where nothing was recorded, the panel says so. A participant row records who is
+in a room and what they said they are doing; it is not a progress observation,
+so a worker's state reads as not recorded rather than being derived from a row's
+`updatedAt` — which changes on any edit and is not evidence that anyone is
+working. Unrecorded delegation reads as unknown parentage, never as a plausible
+parent.
+## A room with no WorkItem is its own case
+
+`a-room-is-reachable-by-construction` says the read model resolves a room
+through the foreign key that anchors it, and that a room which exists can be
+opened. Both held only for anchored rooms. Measured on a live install: 464
+Workrooms, 290 of them — 62% — carry no `workItemId`, and every one served the
+not-found boundary when opened from the portfolio activity tree.
+
+The tree composed those links correctly. The failure was one layer down: the
+canonical resolver needs an anchor to redirect to and returns null without one,
+and the case loader then looks for a WorkItem whose source type is
+`work-capsule`, which nothing is.
+
+A room with no WorkItem is not a broken anchor — it is a room that is its own
+unit of work, so it is its own case. An anchored room still resolves to its
+item's case and never reaches this path, so one unit of work keeps one case.
+
+Such a case states what the room does not carry. Where no objective was
+recorded the boundary says so instead of restating the title as though it were
+intent, and urgency, effort and assignment read as not recorded rather than
+being given a plausible default.

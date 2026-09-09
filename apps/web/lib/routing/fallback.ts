@@ -6,7 +6,7 @@ import { callProvider, InferenceError } from "@/lib/ai-inference";
 import { resolveLocalToolCeiling } from "./local-tool-ceiling";
 import { resolveLocalToolFidelityCeiling } from "./local-tool-fidelity";
 import type { ChatMessage } from "@/lib/ai-inference";
-import type { AsyncOperationStartResult } from "./adapter-types";
+import type { AsyncOperationStartResult, ToolCallEntry } from "./adapter-types";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
@@ -105,7 +105,7 @@ export interface FallbackResult {
   providerId: string;
   modelId: string;
   content: string;
-  toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  toolCalls: ToolCallEntry[];
   tokenUsage?: { inputTokens: number; outputTokens: number };
   // BI-105E8A1E: the adapter's measured wall-clock latency, carried through to
   // metering so the `compute` cost model (watts × time) can price local

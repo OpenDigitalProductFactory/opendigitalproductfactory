@@ -3,9 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/portal-context/invalidation", () => ({
   revalidatePortalContext: vi.fn(),
 }));
+vi.mock("./capsule-workitem-anchor.server", () => ({ ensureCapsuleWorkItemAnchorNonFatal: vi.fn() }));
+import { adoptWorktree } from "./adopt-worktree-handler";
 
 import {
   adoptWorktreeCapsule,
+  createWorkCapsule,
+  claimWorkCapsuleScope,
+  releaseWorkCapsuleScope,
   CapsuleBranchOccupiedError,
   type CapsuleDb,
 } from "./work-capsule-store";
@@ -14,6 +19,8 @@ const db = {
   workroom: {
     create: vi.fn(),
     findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
     update: vi.fn(),
   },
   workroomActivity: { create: vi.fn() },
@@ -28,10 +35,163 @@ describe("work capsule branch adoption", () => {
   beforeEach(() => {
     db.workroom.create.mockReset();
     db.workroom.findFirst.mockReset();
+    db.workroom.findUnique.mockReset();
+    db.workroom.findMany.mockReset().mockResolvedValue([]);
     db.workroom.update.mockReset();
     db.workroomActivity.create.mockReset();
     db.$transaction.mockReset();
     db.$transaction.mockImplementation(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db));
+  });
+
+  it("carries the MCP execution shape through adoption to persisted readback", async () => {
+    db.workroom.findFirst.mockResolvedValueOnce(null);
+    db.workroom.create.mockImplementationOnce(async ({ data }) => ({ id: "row-shape", ...data }));
+    const result = await adoptWorktree({
+      db: capsuleDb(), userId: "user-1", context: undefined,
+      bindingReader: { backlogItem: { findFirst: vi.fn() } },
+      resolveActor: async () => ({ userId: "user-1", agentId: "codex", principalId: "principal-1" }),
+      params: {
+        title: "Reviewer recovery", objective: "Recover review independently of the client",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/reviewer-recovery", worktreePath: "D:/DPF-reviewer",
+        workShape: "delivery-large@1.0.0",
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ capsule: { scopeClaims: expect.arrayContaining([
+      expect.objectContaining({ workShape: "delivery-large@1.0.0" }),
+    ]) } });
+  });
+
+  it.each(["missing-shape@1.0.0", "delivery-large@99.0.0"])("refuses unavailable execution definition %s before writing", async (workShape) => {
+    db.workroom.findFirst.mockResolvedValue(null);
+    db.workroom.create.mockImplementation(async ({ data }) => ({ id: "invalid-shape-row", ...data }));
+    const result = await adoptWorktree({
+      db: capsuleDb(), userId: "user-1", context: undefined,
+      bindingReader: { backlogItem: { findFirst: vi.fn() } },
+      resolveActor: async () => ({ userId: "user-1", agentId: "codex", principalId: "principal-1" }),
+      params: { title: "Reviewer", objective: "Recover", repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory", headBranch: "feat/reviewer", worktreePath: "D:/DPF-reviewer", workShape },
+    });
+    expect(result).toMatchObject({ success: false, error: "invalid_scope" });
+    expect(db.workroom.create).not.toHaveBeenCalled();
+    expect(db.workroom.update).not.toHaveBeenCalled();
+  });
+
+  it("persists the versioned execution shape on fresh adoption and readback", async () => {
+    db.workroom.findFirst.mockResolvedValueOnce(null);
+    db.workroom.create.mockImplementationOnce(async ({ data }) => ({ id: "row-shape", ...data }));
+    const result = await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Reviewer recovery", objective: "Recover review independently of the client",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/reviewer-recovery", worktreePath: "D:/DPF-reviewer",
+        scope: { workShape: "delivery-large@1.0.0" },
+      },
+      actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
+    });
+    expect(result.scopeClaims).toEqual(expect.arrayContaining([
+      expect.objectContaining({ workShape: "delivery-large@1.0.0" }),
+    ]));
+  });
+
+  it.each(["ready", "abandoned"])("updates a %s adopted shape while preserving unrelated scope claims", async (status) => {
+    const unrelated = [
+      { kind: "path", value: "apps/web/lib/example.ts", intent: "edit", recordedAt: "2026-09-01", recordedByPrincipalId: "principal-1" },
+      { workroomShape: "solo", recordedAt: "2026-09-01" },
+      { extension: { owner: "another-subsystem" } },
+    ];
+    const existing = {
+      id: "row-shape", capsuleId: "WC-SHAPE", status, backlogItemId: null,
+      executorRef: null, worktreePath: "D:/DPF-reviewer",
+      scopeClaims: [...unrelated, { workShape: "delivery-small@1.0.0", recordedAt: "2026-09-01" }],
+    };
+    db.workroom.findFirst.mockResolvedValue(existing);
+    db.workroom.update.mockImplementation(async ({ data }) => ({ ...existing, ...data }));
+    const result = await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Reviewer recovery", objective: "Recover review independently of the client",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/reviewer-recovery", worktreePath: "D:/DPF-reviewer",
+        scope: { workShape: "delivery-large@1.0.0" },
+      },
+      actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
+    });
+    expect(result.scopeClaims).toEqual([
+      ...unrelated, expect.objectContaining({ workShape: "delivery-large@1.0.0" }),
+    ]);
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      payload: expect.objectContaining({ scopeChanges: { workShape: { before: "delivery-small@1.0.0", after: "delivery-large@1.0.0" } } }),
+    }) }));
+  });
+
+  it.each(["claim", "release"])("preserves the execution shape and foreign claims during scope %s", async (operation) => {
+    const preserved = [{ workShape: "delivery-large@1.0.0", recordedAt: "2026-09-01" }, { extension: "foreign" }];
+    const path = { kind: "module" as const, value: "reviewer", intent: "edit" as const, recordedAt: "2026-09-01", recordedByPrincipalId: "principal-1" };
+    const existing = { id: "row-shape", capsuleId: "WC-SHAPE", status: "ready", scopeClaims: [...preserved, path] };
+    db.workroom.findUnique.mockResolvedValue(existing);
+    db.workroom.update.mockImplementation(async ({ data }) => ({ ...existing, ...data }));
+    const args = { db: capsuleDb(), capsuleId: "WC-SHAPE", claims: [path], actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" } };
+    const result = await (operation === "claim" ? claimWorkCapsuleScope(args) : releaseWorkCapsuleScope(args));
+    expect(result.scopeClaims).toEqual(expect.arrayContaining(preserved));
+    expect(result.scopeClaims).toHaveLength(operation === "claim" ? 3 : 2);
+  });
+
+  it.each(["adopt", "claim", "release"])("refuses a concurrent scope change during %s instead of overwriting it", async (operation) => {
+    const original = [{ workShape: "delivery-small@1.0.0", recordedAt: "original" }];
+    const concurrent = [...original, { extension: "written-concurrently" }];
+    let stored = concurrent;
+    const existing = { id: "row-shape", capsuleId: "WC-SHAPE", status: "ready", scopeClaims: original, worktreePath: "D:/DPF-reviewer" };
+    db.workroom.findFirst.mockResolvedValue(existing);
+    db.workroom.findUnique.mockResolvedValue(existing);
+    db.workroom.update.mockImplementation(async ({ where, data }) => {
+      if (where.scopeClaims && JSON.stringify(where.scopeClaims.equals) !== JSON.stringify(stored)) throw new Error("Concurrent scope change; read and retry");
+      stored = data.scopeClaims;
+      return { ...existing, ...data };
+    });
+    const actor = { userId: "user-1", agentId: "codex", principalId: "principal-1" };
+    const promise = operation === "adopt" ? adoptWorktreeCapsule({ db: capsuleDb(), actor, input: {
+      title: "Reviewer recovery", objective: "Recover review", repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "feat/reviewer-recovery", worktreePath: "D:/DPF-reviewer", scope: { workShape: "delivery-large@1.0.0" },
+    } }) : (operation === "claim" ? claimWorkCapsuleScope : releaseWorkCapsuleScope)({
+      db: capsuleDb(), actor, capsuleId: "WC-SHAPE", claims: [{ kind: "module", value: "reviewer", intent: "edit" }],
+    });
+    await expect(promise).rejects.toThrow("Concurrent scope change");
+    expect(stored).toEqual(concurrent);
+    expect(db.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["delivery-large@1.0.0", "delivery-small@1.0.0"])("acknowledges duplicate adoption only when the winning shape matches (%s)", async (workShape) => {
+    const winner = { id: "row-shape", capsuleId: "WC-SHAPE", status: "ready", scopeClaims: [{ workShape }], worktreePath: "D:/DPF-reviewer" };
+    db.workroom.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(winner);
+    db.workroom.create.mockRejectedValueOnce({ code: "P2002" });
+    const promise = adoptWorktreeCapsule({ db: capsuleDb(), actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" }, input: {
+      title: "Reviewer recovery", objective: "Recover review", repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "feat/reviewer-recovery", worktreePath: "D:/DPF-reviewer", scope: { workShape: "delivery-large@1.0.0" },
+    } });
+    if (workShape === "delivery-large@1.0.0") await expect(promise).resolves.toEqual(winner);
+    else await expect(promise).rejects.toThrow(/scope.*retry/i);
+    expect(db.workroom.update).not.toHaveBeenCalled();
+    expect(db.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("does not let an omitted session replace another executor's shape", async () => {
+    db.workroom.findFirst.mockResolvedValue({ id: "row-other", capsuleId: "WC-OTHER", status: "ready", executorRef: "other-session", scopeClaims: [{ workShape: "delivery-small@1.0.0" }] });
+    await expect(adoptWorktreeCapsule({ db: capsuleDb(), actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" }, input: {
+      title: "Reviewer recovery", objective: "Recover review", repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "feat/reviewer-recovery", worktreePath: "D:/DPF-reviewer", scope: { workShape: "delivery-large@1.0.0" },
+    } })).rejects.toBeInstanceOf(CapsuleBranchOccupiedError);
+    expect(db.workroom.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses to acknowledge a different shape for an existing creation identity", async () => {
+    db.workroom.findUnique.mockResolvedValue({ id: "row-shape", capsuleId: "WC-SHAPE", scopeClaims: [{ workShape: "delivery-small@1.0.0" }] });
+    await expect(createWorkCapsule({ db: capsuleDb(), actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" }, input: {
+      title: "Reviewer", objective: "Recover", source: "manual", idempotencyKey: "reviewer-create", scope: { workShape: "delivery-large@1.0.0" },
+    } })).rejects.toThrow(/scope/i);
+    expect(db.workroom.create).not.toHaveBeenCalled();
+    expect(db.workroom.update).not.toHaveBeenCalled();
   });
 
   it("persists backlogItemId + epicId on a fresh adoption", async () => {

@@ -18,9 +18,21 @@ The EA Modeler is a canvas-based tool for building and maintaining your organiza
 - **Value Streams** — End-to-end sequences of activities that deliver value to a customer or stakeholder. Modelled in the business layer and traceable to the products and capabilities that enable them.
 - **Workroom Definitions** — Reusable collaboration patterns attached to value streams. Each definition names its portfolio, shape, participants, queues, human triggers, linked process view, and associated running instances.
 
+## Reference Models and your archetype
+
+Some reference models are universal and some belong to one industry. IT4IT describes IT management for any organisation that runs IT, so every install gets its full criteria set. An industry model such as the BIAN Service Landscape serves banking, and its criteria are imported only on an install whose archetype is a banking one.
+
+The catalogue entry is kept everywhere on purpose, so you can see that the standard exists and what it is for. On an install it does not serve, the model is listed as **not this archetype** with the reason, instead of showing a lifecycle status beside empty counts. Empty counts there are correct rather than incomplete: the criteria were never imported because the model is not your business.
+
+If you change the archetype your install declares, the next seed imports the criteria for any industry model that now applies.
+
 ## Workroom Definitions
 
-Open **Architecture > Workrooms** (`/ea/workrooms`) to review collaboration from the definition perspective. The page keeps all four portfolios visible, groups each Value Stream Team under its owning portfolio, and links the reusable shape to its process view and operational instances. Define or refine the underlying Value Stream Team when participants, queues, or approval triggers need to change; use **Operations > Workrooms** to inspect activity created from those definitions.
+Open **Architecture > Workrooms** (`/ea/workrooms`) to see the rooms that are actually running and how they sit across the four portfolios. The page leads with a true count of open rooms — completed and archived rooms are excluded — and says plainly how many have no portfolio recorded. Those are reported as unclassified, never quietly filed under a portfolio nobody assigned. Where team plans exist, each is grouped under its owning portfolio with its shape, participants, queues, triggers and process view.
+
+A team is placed in a portfolio from what the platform actually records: an explicit portfolio role on the team wins, and its portfolio slug or name are used only as weaker fallbacks. When none of those decides the question, the team is listed under **Not placed in a portfolio** with the reason, instead of being shown inside a portfolio nobody assigned it to. Those teams are counted separately, so a portfolio's total only ever counts teams that genuinely belong to it. Correct a placement by setting the team's portfolio role or linking it to the right portfolio.
+
+The room count is a real total. The plan list and the Coordination list are each a bounded read; when more exist than are shown the page says so (**Partial read**, **More rooms exist**), so a bounded list is never mistaken for the whole estate. If no team plans are configured on your install, the page says exactly that rather than implying you forgot to set one up — there is currently no in-product way to create one, so an install with none is normal.
 
 ## What You Can Do
 
@@ -46,6 +58,15 @@ principal coverage, portable identity metadata, and authorization inspection.
 Use the AI Workforce area for everyday coworker discovery and work assignment.
 
 ## Following a Concern Across Views
+
+On **Workrooms**, expand **Coordination** to open an actual room. It shows open rooms from a bounded database read and
+reports when more exist. A room with no team plan behind it says so explicitly.
+Select a plan's room link to narrow the list to that operation first.
+
+Inside the room, select a process step to inspect its reason, next action, owner
+and evidence. **Operation** returns to the same architecture selection. Intended
+process and observed records remain separate: a graph alone does not establish
+BPMN execution or SysML conformance.
 
 Select an element on an architecture canvas and open **Architecture context** in
 the inspector. **Related viewpoints** lists the nearest views that explain the
