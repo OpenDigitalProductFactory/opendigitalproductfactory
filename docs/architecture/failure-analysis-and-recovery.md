@@ -8,6 +8,8 @@ Use the existing local integration evidence lane, including its lightweight docu
 
 The existing Change Reviewer and path-selected specialists challenge omissions. The Change Reviewer returns `failureAnalysisReview` with `adequate` and a substantive `rationale`. Missing assessment blocks publication. Analysis and resolved results participate in the existing durable request and receipt identity; a changed result invalidates reuse. Lost GitHub responses retry status publication using the persisted review, not new inference.
 
+Reviewer responses must include a recognized decision, an issue array with recognized severities and substantive descriptions, and a nonempty summary. Empty objects, unknown decisions or severities, and malformed issue lists are inconclusive protocol failures. An explicit inconclusive verdict remains inconclusive. The parser never supplies an approval or downgrades an unknown severity to make an incomplete response usable.
+
 Technical review failures require internal repair or review recovery. They do not authorize a business owner approval prompt. Accepted, deferred and blocked residual risks currently fail closed: this implementation does not manufacture an authority receipt from an owner name. Resolve the risk through the established authority process; until its evidence adapter supports that acceptance, the automated gate cannot claim the risk is cleared.
 
 ## Deployment and protection

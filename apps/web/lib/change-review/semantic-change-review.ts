@@ -7,6 +7,8 @@
  * streams without adding another finding or receipt table.
  */
 
+import { z } from "zod";
+
 export const CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v2";
 export const CHANGE_REVIEW_POLICY_VERSION = "semantic-change-review-policy.v3";
 export const CHANGE_REVIEWER_VERSION = "change-reviewer.v1";
@@ -218,22 +220,24 @@ function reportsUnreviewableChange(issues: readonly SemanticReviewIssue[], summa
     .some((text) => UNREVIEWABLE_FINDING.some((pattern) => pattern.test(text)));
 }
 
+const reviewerResponseSchema = z.object({
+  decision: z.string().transform(value => value.trim().toLowerCase().replaceAll("_", "-"))
+    .pipe(z.enum(["pass", "fail", "cannot-verify", "inconclusive"])),
+  issues: z.array(z.object({
+    severity: z.enum(["critical", "important", "minor"]),
+    description: z.string().trim().min(1),
+    location: z.string().optional(), suggestion: z.string().optional(),
+  })),
+  summary: z.string().trim().min(1),
+  failureAnalysisReview: z.object({ adequate: z.boolean(), rationale: z.string() }).optional(),
+});
+
 export function parseSemanticReviewResponse(raw: string): SemanticReviewResult {
   try {
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON found");
-    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-    const issues = Array.isArray(parsed.issues)
-      ? parsed.issues.map((issue: Record<string, unknown>) => ({
-          severity: (["critical", "important", "minor"].includes(String(issue.severity))
-            ? String(issue.severity)
-            : "minor") as SemanticReviewSeverity,
-          description: String(issue.description ?? ""),
-          location: issue.location ? String(issue.location) : undefined,
-          suggestion: issue.suggestion ? String(issue.suggestion) : undefined,
-        }))
-      : [];
-    const summary = String(parsed.summary ?? "Review complete");
+    const parsed = reviewerResponseSchema.parse(JSON.parse(jsonMatch[0]));
+    const { issues, summary } = parsed;
     // BI-82902891: a reviewer that could not see the change must never reach the
     // pass path. Before this channel existed the response contract offered only
     // pass|fail and the decision came from issue severity alone, so "the tree I
@@ -241,11 +245,11 @@ export function parseSemanticReviewResponse(raw: string): SemanticReviewResult {
     // and aggregated into a PASS — an independent-review receipt for a change
     // nobody had read. Inability to review is an INCONCLUSIVE outcome, which
     // already fails closed downstream, not a finding about the code.
-    const stated = String(parsed.decision ?? "").trim().toLowerCase().replaceAll("_", "-");
+    const stated = parsed.decision;
     // The channel is the contract, but a reviewer that ignores it and files
     // "I could not see this change" as a finding must not reach the pass path
     // either — that is the exact shape of the BI-82902891 incident.
-    if (stated === "cannot-verify" || reportsUnreviewableChange(issues, summary)) {
+    if (stated === "cannot-verify" || stated === "inconclusive" || reportsUnreviewableChange(issues, summary)) {
       return {
         decision: "inconclusive",
         issues,
@@ -257,10 +261,7 @@ export function parseSemanticReviewResponse(raw: string): SemanticReviewResult {
       decision: issues.some((issue) => issue.severity === "critical") ? "fail" : "pass",
       issues,
       summary,
-      ...(parsed.failureAnalysisReview && typeof parsed.failureAnalysisReview === "object"
-        && typeof (parsed.failureAnalysisReview as Record<string, unknown>).adequate === "boolean"
-        && typeof (parsed.failureAnalysisReview as Record<string, unknown>).rationale === "string"
-        ? { failureAnalysisReview: parsed.failureAnalysisReview as { adequate: boolean; rationale: string } } : {}),
+      ...(parsed.failureAnalysisReview ? { failureAnalysisReview: parsed.failureAnalysisReview } : {}),
     };
   } catch {
     return {
