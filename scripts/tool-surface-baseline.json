@@ -9,13 +9,13 @@
     },
     "registry.packFiles": {
       "value": 101,
-      "reason": "New statutory-rate-pack.ts (BI-8E1FD1BD): the two tools a research coworker needs to deliver a cited statutory figure — list_statutory_rate_gaps and propose_statutory_rate. They belong in no existing pack, and the alternative was the status quo: coworkers holding web_search that could research a tax rate and had nowhere to record it, so the finding died in a backlog item. Deliberately no ratify tool — confirming a figure is a human action on the finance surface, and a pack that could ratify would defeat the propose/ratify split. Sits alongside federation-membership-pack (main, 2026-09-05) which took this metric to 100.",
+      "reason": "New statutory-rate-pack.ts (BI-8E1FD1BD): the two tools a research coworker needs to deliver a cited statutory figure \u2014 list_statutory_rate_gaps and propose_statutory_rate. They belong in no existing pack, and the alternative was the status quo: coworkers holding web_search that could research a tax rate and had nowhere to record it, so the finding died in a backlog item. Deliberately no ratify tool \u2014 confirming a figure is a human action on the finance surface, and a pack that could ratify would defeat the propose/ratify split. Sits alongside federation-membership-pack (main, 2026-09-05) which took this metric to 100.",
       "recordedAt": "2026-09-05"
     },
     "tier.coreToolNames": {
-      "value": 30,
-      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs — same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
-      "recordedAt": "2026-08-08"
+      "value": 35,
+      "reason": "Adds the five names without which a core-tier client can start governed work but never finish it: update_backlog_item_status and record_execution_evidence (AGENTS.md s5 requires recording completion and its evidence, and core could create/triage/size/update but not close); trace_code_surface (a surface's implementation files and tests, pairing with search_code_graph which is already core); and claim_nonprod_environment_lease with release_nonprod_environment_lease together, since a session that can take the shared singleton lock but not release it blocks every other worktree and the CI gate. A client that cannot close its own work reaches for ?tier=full and pays the whole ~400-tool surface to recover two names. No effect on Claude Code or Codex, whose client-aware default is already full. Raise again only for a tool without which governed work cannot be finished; convenience stays behind search_tool_marketplace.",
+      "recordedAt": "2026-09-08"
     },
     "dispatch.maxAttachedTools": {
       "value": 48
