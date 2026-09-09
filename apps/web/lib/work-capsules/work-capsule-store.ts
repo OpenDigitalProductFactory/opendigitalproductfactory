@@ -24,7 +24,10 @@ import {
 } from "@/lib/work-capsules";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
-import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
+import {
+  completeGovernedWorkCapsuleStatus,
+  WorkCapsulePublicationRefusedError,
+} from "./work-capsule-terminal-status";
 import {
   CapsuleBranchOccupiedError,
   isExternalLeaseExecutor,
@@ -48,7 +51,10 @@ import {
 
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
-export { WorkCapsuleCompletionDeniedError } from "./work-capsule-terminal-status";
+export {
+  WorkCapsuleCompletionDeniedError,
+  WorkCapsulePublicationRefusedError,
+} from "./work-capsule-terminal-status";
 export { recordWorkCapsuleEvidence } from "./work-capsule-activity-store";
 export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 
@@ -957,7 +963,9 @@ export async function updateWorkCapsuleStatus(args: {
   if (capsule.repositoryFullName && ["ready-for-review", "ready-for-promotion", "complete"].includes(args.status)) {
     const { checkWorkroomFailureReadiness } = await import("@/lib/change-review/failure-readiness-publication");
     const readiness = await checkWorkroomFailureReadiness(args.capsuleId);
-    if (!readiness.mayPublish) throw new Error(readiness.reason);
+    if (!readiness.mayPublish) {
+      throw new WorkCapsulePublicationRefusedError({ code: readiness.code, reason: readiness.reason });
+    }
   }
   if (args.status === "complete" && hasGovernedLink) {
     return completeGovernedWorkCapsuleStatus({

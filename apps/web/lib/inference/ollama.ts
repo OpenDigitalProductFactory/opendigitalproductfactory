@@ -4,6 +4,10 @@
 // OpenAI-compatible local inference endpoint.
 
 import { prisma, syncInfraCI } from "@dpf/db";
+import {
+  clearProviderCapacityStatus,
+  recordProviderCapacityStatus,
+} from "@/lib/routing/provider-capacity/store";
 import { autoDiscoverAndProfile, queueUncalibratedModelEvals } from "./ai-provider-internals";
 import { getOllamaBaseUrl } from "./ollama-url";
 export { getOllamaBaseUrl } from "./ollama-url";
@@ -58,6 +62,47 @@ async function enrichLocalInfraCI(baseUrl: string, status: string): Promise<void
 
 // ─── Bundled provider health check ───────────────────────────────────────────
 
+/** First probe: a warm runner answers /v1/models in well under a second. */
+const LOCAL_PROBE_TIMEOUT_MS = 3_000;
+/** Second probe: a runner that is loading a large model can take this long. */
+const LOCAL_PROBE_RETRY_TIMEOUT_MS = 10_000;
+/**
+ * Consecutive failed checks before an ACTIVE local provider is demoted. One
+ * missed probe used to demote it and nothing ever promoted it back, so a cold
+ * model load or a busy host silently removed the local model from routing until
+ * a human noticed (BI-A8EE127F).
+ */
+export const LOCAL_PROVIDER_DEMOTION_STRIKES = 2;
+
+// Per-process strike counter. The check runs from the portal server process on
+// page load, so consecutive misses within one process are the signal we want;
+// a restart resetting it is harmless (the first check after boot cannot demote).
+let consecutiveLocalProbeFailures = 0;
+
+/** Test seam: forget prior probe misses. */
+export function resetLocalProviderProbeState(): void {
+  consecutiveLocalProbeFailures = 0;
+}
+
+/**
+ * Probe the OpenAI-compatible /v1/models endpoint. A miss on the short timeout
+ * is retried once on the long one so a model that is still loading reads as
+ * reachable, not absent: /v1/models answers without loading a model, but the
+ * runner can be busy enough during a load to exceed the short budget.
+ */
+async function probeLocalRunner(baseUrl: string): Promise<boolean> {
+  const url = baseUrl.endsWith("/v1") ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
+  for (const timeoutMs of [LOCAL_PROBE_TIMEOUT_MS, LOCAL_PROBE_RETRY_TIMEOUT_MS]) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (res.ok) return true;
+    } catch {
+      // Timeout or connection error — try the longer budget once.
+    }
+  }
+  return false;
+}
+
 /**
  * Page-load health check for the bundled local LLM provider.
  * Uses the OpenAI-compatible /v1/models endpoint for reachability.
@@ -71,26 +116,28 @@ export async function checkBundledProviders(): Promise<void> {
   if (!provider) return;
 
   const baseUrl = getOllamaBaseUrl(provider);
-  let reachable = false;
-
-  try {
-    const url = baseUrl.endsWith("/v1") ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-    reachable = res.ok;
-  } catch {
-    // Timeout or connection error
-  }
+  const reachable = await probeLocalRunner(baseUrl);
+  consecutiveLocalProbeFailures = reachable ? 0 : consecutiveLocalProbeFailures + 1;
 
   // For the bundled "local" (Docker Model Runner) provider, promote from "disabled"
   // as well as "unconfigured". This covers the case where the installer pre-pulled
   // a model before portal-up (the normal customer path) but the provider row landed
   // in "disabled" (initial seed or prior state). Once the runner is reachable and
   // models exist, it should be active by default so first experience "just works".
-  if (reachable && (provider.status === "unconfigured" || provider.status === "disabled")) {
+  // "inactive" is the state THIS check writes when the runner goes away, so a
+  // reachable runner must promote it back too; otherwise one outage is permanent.
+  if (
+    reachable
+    && (provider.status === "unconfigured" || provider.status === "disabled" || provider.status === "inactive")
+  ) {
     await prisma.modelProvider.update({
       where: { providerId: "local" },
       data: { status: "active" },
     });
+    if (provider.status === "inactive") {
+      console.info("[local-provider] runner reachable again; promoted local from inactive to active");
+      await clearProviderCapacityStatus({ providerId: "local", source: "api" });
+    }
 
     // Discover + profile + queue the deterministic capability evals that promote
     // each model's seed prior to measured ("evaluated") scores. Without the eval
@@ -126,9 +173,33 @@ export async function checkBundledProviders(): Promise<void> {
     }
     await enrichLocalInfraCI(baseUrl, "operational");
   } else if (!reachable && provider.status === "active") {
+    if (consecutiveLocalProbeFailures < LOCAL_PROVIDER_DEMOTION_STRIKES) {
+      // One miss is a cold load or a busy host, not an outage. Keep routing to
+      // local; the next check decides.
+      console.warn(
+        `[local-provider] runner missed probe ${consecutiveLocalProbeFailures}/${LOCAL_PROVIDER_DEMOTION_STRIKES}; keeping local active`,
+      );
+      return;
+    }
     await prisma.modelProvider.update({
       where: { providerId: "local" },
       data: { status: "inactive" },
+    });
+    console.warn(
+      `[local-provider] runner unreachable on ${consecutiveLocalProbeFailures} consecutive checks; demoted local to inactive`,
+    );
+    await recordProviderCapacityStatus({
+      providerId: "local",
+      classification: {
+        state: "provider_degraded",
+        action: "reconnect",
+        safeSummary:
+          `Local runner did not answer ${consecutiveLocalProbeFailures} consecutive health checks; `
+          + "the local provider is inactive until the runner answers again.",
+        confidence: "exact",
+        isHumanActionRequired: false,
+      },
+      source: "api",
     });
     await enrichLocalInfraCI(baseUrl, "offline");
   }

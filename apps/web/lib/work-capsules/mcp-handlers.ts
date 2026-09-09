@@ -47,6 +47,7 @@ import {
   recordAgentActivity,
   updateWorkCapsuleStatus,
   WorkCapsuleCompletionDeniedError,
+  WorkCapsulePublicationRefusedError,
   ScopeOverlapError,
   type CapsuleDb,
   type WorkCapsuleActor,
@@ -354,6 +355,22 @@ export async function updateWorkCapsuleStatusTool(
         error: "initiative_not_ready",
         message: `Work Capsule completion is blocked by ${error.result.code}.`,
         data: { code: error.result.code, readiness: error.result.decision, recovery },
+      };
+    }
+    if (error instanceof WorkCapsulePublicationRefusedError) {
+      // A refusal with a repair path, not a crash: the executor re-syncs the
+      // room's immutable identity, or a reviewer records the failure review.
+      return {
+        success: false,
+        error: error.code,
+        message: error.reason,
+        data: {
+          capsuleId,
+          requestedStatus: status,
+          nextAction: error.code === "workroom_identity_incomplete"
+            ? "Call adopt_worktree with repositoryFullName, headBranch, worktreePath, baseSha and headSha for this room, then retry update_workroom_status."
+            : "Request an independent failure review of the current head (review_semantic_change) and retry once its receipt is recorded.",
+        },
       };
     }
     throw error;

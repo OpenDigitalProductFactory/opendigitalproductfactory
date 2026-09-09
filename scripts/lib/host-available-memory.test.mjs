@@ -123,8 +123,10 @@ test("reports unmeasurable when even the fallback fails", () => {
 });
 
 test("an unknown platform goes straight to the fallback", () => {
+  // win32 is no longer "unknown": it has its own WSL-aware probe (BI-E129F788),
+  // and without an injected reader that probe would touch the real host.
   const result = readAvailableMemory({
-    platform: "win32",
+    platform: "freebsd",
     readVmStat: () => VM_STAT,
     osFreeMemoryBytes: () => 5 * 1024 ** 3,
   });
