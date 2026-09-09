@@ -13,6 +13,8 @@ import {
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
+import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
 import { DynamicToolSurface } from "@/lib/tak/dynamic-tool-surface";
 import {
@@ -1015,6 +1017,19 @@ export type RunAgenticLoopParams = {
    */
   interactionMode?: "chat" | "autonomous";
   /**
+   * EP-WORK-POSTURE §8.2 — what the Workroom the turn runs in resolved for it
+   * (lib/work-management/room-turn-authority.ts). `workroomId` reaches the
+   * authorized-surface context so the room-aware pre-tool gate fires;
+   * `roomAuthority` reaches the governed executor so a tool outside the room's
+   * surface is denied; `externalAccessEnabled` is the server-resolved web
+   * permission (never a client flag); `workroomPriority` is the room's
+   * Cost/Quality/Time posture, which outranks org/platform in routing.
+   */
+  workroomId?: string | null;
+  roomAuthority?: RoomAuthorityContext | null;
+  externalAccessEnabled?: boolean;
+  workroomPriority?: GoldenTrianglePreference | null;
+  /**
    * BI-80532D5C — when true, a side-effecting non-artifact tool the model calls
    * is diverted to an AgentActionProposal (status "proposed") instead of being
    * executed. Set by the scheduler when the run's proactivity actionBoundary is
@@ -1202,6 +1217,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     agentMinimumContextTokens,
     agentId, routeContext,
     ...(agentMessageId ? { agentMessageId } : {}),
+    ...(params.workroomPriority ? { workroomPriority: params.workroomPriority } : {}),
     // mcpSession is forwarded through callWithFallbackChain → callProvider →
     // AdapterRequest. The Claude CLI execution adapter consumes it to mint a
     // short-lived JWT for `--mcp-config`, exposing platform tools as native
@@ -2457,8 +2473,21 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             // baseline read grant gets the tool attached but rejected on call.
             // Autonomous turns leave this false, so their authority is unchanged.
             coworkerReadBaseline: interactionMode === "chat",
-            ...createAuthorizedSurfaceTurnGovernance({ interactionMode, apiTokenId, route: routeContext, chatHistory }),
-            externalAccessEnabled: toolDef.requiresExternalAccess || undefined,
+            ...createAuthorizedSurfaceTurnGovernance({
+              interactionMode,
+              apiTokenId,
+              route: routeContext,
+              workroomId: params.workroomId ?? null,
+              chatHistory,
+            }),
+            // The turn's SERVER-resolved external permission when the caller
+            // supplied one (chat turns: room + standing grant). Callers that
+            // predate the resolver keep the prior admission-by-attachment
+            // behaviour so autonomous runs are unchanged.
+            externalAccessEnabled: params.externalAccessEnabled !== undefined
+              ? (toolDef.requiresExternalAccess ? params.externalAccessEnabled : undefined)
+              : (toolDef.requiresExternalAccess || undefined),
+            ...(params.roomAuthority ? { roomAuthority: params.roomAuthority } : {}),
             // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
             // user is messaging from into tool context so phase-scoped
             // tools (start_ideate_research, start_scout_research) can

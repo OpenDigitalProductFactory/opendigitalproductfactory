@@ -42,15 +42,17 @@ describe("resolveDispatchPosture", () => {
     expect(p?.routeContext.minimumTier).toBe("frontier");
   });
 
-  it("lets a coworker's own posture override the platform default", async () => {
-    const p = await resolveDispatchPosture("agent-x", "conversation", null, client({ platform: BALANCED, perAgent: { "agent-x": ASSURED } }));
-    expect(p?.source).toBe("agent");
+  it("lets the Workroom's posture override the platform default (BI-7ADEBDC1)", async () => {
+    const p = await resolveDispatchPosture("agent-x", "conversation", null, client({ platform: BALANCED }), {
+      workroomPriority: ASSURED,
+    });
+    expect(p?.source).toBe("workroom");
     expect(p?.preset).toBe("assured");
     expect(p?.routeContext.minimumTier).toBe("frontier");
   });
 
-  it("falls back to the platform default when the coworker has no own posture", async () => {
-    const p = await resolveDispatchPosture("agent-x", "conversation", null, client({ platform: ASSURED, perAgent: { other: FRUGAL } }));
+  it("ignores a legacy per-agent posture: identity no longer supplies a priority", async () => {
+    const p = await resolveDispatchPosture("agent-x", "conversation", null, client({ platform: ASSURED, perAgent: { "agent-x": FRUGAL } }));
     expect(p?.source).toBe("platform");
     expect(p?.preset).toBe("assured");
   });
@@ -90,7 +92,8 @@ describe("resolveDispatchPosture", () => {
     );
 
     expect(reads).toBe(1);
-    expect(postures.get("agent-x")?.preset).toBe("assured");
+    // Both coworkers inherit the platform posture; the per-agent map is inert.
+    expect(postures.get("agent-x")?.preset).toBe("frugal");
     expect(postures.get("agent-y")?.preset).toBe("frugal");
   });
 });

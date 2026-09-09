@@ -361,8 +361,7 @@ export async function sendMessage(input: {
   content: string;
   routeContext: string;
   coworkerMode?: "advise" | "act";
-  externalAccessEnabled?: boolean;
-  elevatedFormFillEnabled?: boolean;
+  /** Page form DATA only; whether to fill it is resolved from the Workroom (spec 8.2). */
   formAssistContext?: AgentFormAssistContext;
   buildId?: string;
   attachmentId?: string;
@@ -552,6 +551,10 @@ export async function sendMessage(input: {
   );
   const portalContextPrompt = portalContextPromptContext?.section ?? null;
 
+  const { loadRoomTurnAuthority } = await import("@/lib/work-management/room-turn-authority.server");
+  const roomAuthority = await loadRoomTurnAuthority({ agentId: agent.agentId, routeContext: input.routeContext,
+    capsuleId: portalContextPromptContext?.envelope.work?.capsule?.capsuleId ?? null });
+
   // Build inference context: recent window + semantic recall for older context.
   // Build phases need more context (research findings, schema details, tool results)
   // because the agentic loop's tool call results aren't persisted in messages.
@@ -710,12 +713,8 @@ export async function sendMessage(input: {
   // attributes each tool call to the active skill.
   let activeSkillId: string | null = null;
 
-  // BI-E35A8AA4 drove the Initiative block from this coworker's saved Proactivity
-  // choice. BI-87C9C91C removed that identity ownership: this is the interactive
-  // turn path with no Workroom in scope, so it takes the platform default and who
-  // is staffed to the conversation cannot change its initiative. `null` IS that
-  // default (buildInitiativeBlock maps it to balanced) — byte-identical to an
-  // agent with no saved preference. Spec §3.1.
+  // BI-87C9C91C: proactivity is room-owned; the interactive turn takes the
+  // platform default (`null` → balanced in buildInitiativeBlock). Spec §3.1.
   const proactivityLevel: ProactivityLevel | null = null;
 
   // Resolve the LOCAL model's served context ONCE up front — it sizes BOTH the
@@ -961,7 +960,7 @@ export async function sendMessage(input: {
       routeContext: input.routeContext,
       userId: user.id!,
       chatHistory,
-      elevatedFormFillEnabled: input.elevatedFormFillEnabled,
+      elevatedFormFillEnabled: roomAuthority.handsOn.enabled,
       formAssistContext: input.formAssistContext,
     });
     resolvedBuildId = coworkerExtra.resolvedBuildId;
@@ -1067,7 +1066,7 @@ export async function sendMessage(input: {
       promptSections.push("", portalContextPrompt);
     }
 
-    if (input.elevatedFormFillEnabled && input.formAssistContext) {
+    if (roomAuthority.handsOn.enabled && input.formAssistContext) {
       promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
     }
 
@@ -1272,11 +1271,10 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   };
   const allPlatformTools = await getAvailableTools(toolUserContext, {
-    externalAccessEnabled: input.externalAccessEnabled === true,
+    externalAccessEnabled: roomAuthority.externalAccess.enabled,
     // Skip mode filtering here — applied to merged set
-    unifiedMode: useUnified,
-    agentId: agent.agentId,
-    additionalGrants: coworkerDefaultGrants,
+    unifiedMode: useUnified, agentId: agent.agentId,
+    additionalGrants: coworkerDefaultGrants, roomAuthorizedGrants: roomAuthority.authorizedGrants,
   });
 
   // Get page-specific actions
@@ -1418,12 +1416,11 @@ export async function sendMessage(input: {
   const attachedTools = deferredTools.length > 0 ? [LOAD_TOOLS_TOOL, ...budgetedTools] : budgetedTools;
 
   let disabledExternalTools: Array<{ name: string; description: string }> = [];
-  if (input.externalAccessEnabled !== true) {
+  if (!roomAuthority.externalAccess.enabled) {
     const externalEnabledPlatformTools = await getAvailableTools(toolUserContext, {
       externalAccessEnabled: true,
-      unifiedMode: useUnified,
-      agentId: agent.agentId,
-      additionalGrants: coworkerDefaultGrants,
+      unifiedMode: useUnified, agentId: agent.agentId,
+      additionalGrants: coworkerDefaultGrants, roomAuthorizedGrants: roomAuthority.authorizedGrants,
     });
     disabledExternalTools = getExternalAccessToolSummaries(
       filterToolsForCoworkerRuntime(externalEnabledPlatformTools, {
@@ -1622,8 +1619,8 @@ export async function sendMessage(input: {
     mergedTools,
   });
 
-  // When external access is enabled, tell the agent about its web tools
-  if (input.externalAccessEnabled) {
+  // When the room admits web tools, tell the agent about them
+  if (roomAuthority.externalAccess.enabled) {
     const externalTools = availableTools.filter((t) => t.requiresExternalAccess);
     if (externalTools.length > 0) {
       const toolList = externalTools.map((t) => `- ${t.name}: ${t.description}`).join("\n");
@@ -1655,7 +1652,7 @@ export async function sendMessage(input: {
     taskRequiresWebSearch: taskClassification.requiresWebSearch,
     externalTools: disabledExternalTools,
   })) {
-    populatedPrompt += buildExternalAccessDisabledInstruction(disabledExternalTools);
+    populatedPrompt += buildExternalAccessDisabledInstruction(disabledExternalTools, roomAuthority);
     await recordExternalAccessPermissionAudit({
       decision: "request",
       threadId: input.threadId,
@@ -1981,6 +1978,7 @@ export async function sendMessage(input: {
         // conversational reply ("yes do the truck list first") does not
         // false-positive into a PlatformIssueReport.
         interactionMode: "chat",
+        roomTurn: roomAuthority,
         // BI-867263F4: Advise mode surfaces recommended actions as proposals —
         // the loop diverts each side-effecting non-artifact call to an
         // AgentActionProposal card instead of executing it.
@@ -2352,7 +2350,7 @@ export async function sendMessage(input: {
   }
   } // close if (!responseContent)
 
-  if (input.elevatedFormFillEnabled && input.formAssistContext) {
+  if (roomAuthority.handsOn.enabled && input.formAssistContext) {
     const extracted = extractFormAssistResult(responseContent, input.formAssistContext);
     responseContent = extracted.displayContent;
     formAssistUpdate = extracted.fieldUpdates ?? undefined;

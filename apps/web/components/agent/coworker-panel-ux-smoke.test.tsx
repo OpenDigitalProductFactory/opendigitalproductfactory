@@ -275,10 +275,9 @@ describe("UX smoke — panel controls have owner-readable accessible names (BI-3
   };
 
   const postureProps = {
-    elevatedAssistEnabled: false,
-    onToggleElevatedAssist: () => {},
-    externalAccessEnabled: false,
-    onToggleExternalAccess: () => {},
+    useUnified: true,
+    coworkerMode: "advise" as const,
+    onToggleCoworkerMode: () => {},
   };
 
   it("header overflow and close controls read in plain language, not ⋯ / x", () => {

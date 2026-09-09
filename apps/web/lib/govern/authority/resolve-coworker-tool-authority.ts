@@ -7,6 +7,7 @@ import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
 import { getGrantedCapabilities } from "@/lib/permissions";
+import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
 import {
   parseInitiativeReviewBinding,
   type InitiativeReviewBinding,
@@ -349,6 +350,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       agent.governanceProfile?.updatedAt.toISOString(),
     ].filter((value): value is string => Boolean(value));
 
+    const roomAuthority = execution.context?.roomAuthority ?? null;
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
       organizationId: initiativeAuthority.organizationId,
@@ -356,6 +358,10 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         toolName: execution.toolName,
         requiredCapability: tool.requiredCapability,
         agentGrantAllowed,
+        roomAuthorityAllowed: roomAuthorizesTool(
+          execution.toolName,
+          roomAuthority?.authorizedGrants,
+        ),
         sideEffect: tool.sideEffect === true,
         executionMode: tool.executionMode ?? "immediate",
         routeContext: execution.context?.routeContext ?? null,
@@ -367,6 +373,13 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         requiresDelegationChain: Boolean(execution.context?.delegationChainId),
       },
       subject: initiativeAuthority.subject,
+      room: roomAuthority
+        ? {
+            workroomId: roomAuthority.workroomId ?? "",
+            collaborationShape: roomAuthority.collaborationShape,
+            workShapeKey: roomAuthority.workShapeKey,
+          }
+        : null,
       delegation: delegation
         ? {
             chainId: delegation.chainId,
@@ -378,10 +391,12 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         : null,
       integration: {
         required: tool.requiresExternalAccess === true,
+        // Server-resolved (room + standing grant, BI-947780FE): an external
+        // tool the turn was not admitted to is "disconnected", never guessed.
         state: tool.requiresExternalAccess
           ? execution.context?.externalAccessEnabled === true
             ? "connected"
-            : "unknown"
+            : "disconnected"
           : "not-required",
       },
       dataPolicy: {

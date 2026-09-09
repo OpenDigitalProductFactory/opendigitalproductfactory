@@ -403,3 +403,33 @@ describe("page action integration", () => {
     }
   });
 });
+
+describe("getAvailableTools — the room owns the surface (EP-WORK-POSTURE 8.2)", () => {
+  const adminUser = { userId: "user-1", platformRole: "HR-000", isSuperuser: false };
+
+  it("keeps external tools out under unified mode unless external access was resolved on", async () => {
+    const off = await getAvailableTools(adminUser, { unifiedMode: true, externalAccessEnabled: false });
+    expect(off.some((tool) => tool.name === "search_public_web")).toBe(false);
+    const on = await getAvailableTools(adminUser, { unifiedMode: true, externalAccessEnabled: true });
+    expect(on.some((tool) => tool.name === "search_public_web")).toBe(true);
+  });
+
+  it("narrows the finance agent to the room-authorized surface", async () => {
+    const wide = await getAvailableTools(adminUser, { externalAccessEnabled: true, agentId: "finance-agent" });
+    const narrowed = await getAvailableTools(adminUser, {
+      externalAccessEnabled: true,
+      agentId: "finance-agent",
+      roomAuthorizedGrants: ["registry_read"],
+    });
+    expect(wide.some((tool) => tool.name === "search_public_web")).toBe(true);
+    expect(narrowed.some((tool) => tool.name === "search_public_web")).toBe(false);
+    expect(narrowed.length).toBeLessThan(wide.length);
+    for (const tool of narrowed) expect(wide.map((t) => t.name)).toContain(tool.name);
+  });
+
+  it("denies by default: an agent with no grants gets no grant-gated tools", async () => {
+    const tools = await getAvailableTools(adminUser, { externalAccessEnabled: true, agentId: "no-such-agent-zero-grants" });
+    expect(tools.some((tool) => tool.name === "get_finance_period_summary")).toBe(false);
+    expect(tools.some((tool) => tool.name === "search_public_web")).toBe(false);
+  });
+});
