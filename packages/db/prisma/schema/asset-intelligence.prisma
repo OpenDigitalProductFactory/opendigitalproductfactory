@@ -1,4 +1,5 @@
-/// @dpf lifecycle=telemetry-bounded retention=30d sensitivity=internal timeAxis=startedAt
+/// Every discovery sweep (hourly full sweep, Prometheus poll, Edge submissions — ~240 runs/day on one install) writes a DiscoveredItem row per observed item and a DiscoveredRelationship row per edge, cascading from the run. Nothing in the application reads those raw rows back; the deduplicated truth is InventoryEntity / InventoryRelationship (upserted with lastSeenAt), and the reviewable derivatives (identityResolutionLog, discoveryFingerprintObservation, triage decisions) are enrolled or retained separately. Without this policy the raw log grew without bound: 280k DiscoveredItem rows for 335 distinct keys in 16 days (BI-BFFB9211). Thirty days keeps a month of raw observations for forensics; the cascade removes items and relationships with the run.
+/// @dpf lifecycle=telemetry-bounded retention=30d sensitivity=internal categories=telemetry timeAxis=startedAt
 model DiscoveryRun {
   id                      String                            @id @default(cuid())
   // runKey is unique PER (edgeNodeId, runKey) — each Edge Node owns
@@ -154,7 +155,8 @@ model CatalogLifecycleMilestone {
 /// Audit lineage of every identity resolution — which rule / AI / human resolved an entity to a
 /// CatalogIdentity, with confidence + evidence. Human-confirmed rows are never overwritten by a
 /// rule (§6.3.1). BI-74579817.
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
+/// Per-resolution evidence rows from discovery sweeps. The resolved inventory entities are the durable record; 6 months.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=security-audit timeAxis=createdAt
 model IdentityResolutionLog {
   id                String                    @id @default(cuid())
   inventoryEntityId String?
@@ -176,7 +178,8 @@ model IdentityResolutionLog {
   @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
+/// Raw fingerprint evidence feeding rule approval. Approved rules are the durable output; observations disposable after 6 months.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=security-audit timeAxis=createdAt
 model DiscoveryFingerprintObservation {
   id                 String   @id @default(cuid())
   observationKey     String   @unique

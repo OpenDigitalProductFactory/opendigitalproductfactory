@@ -248,7 +248,7 @@ model EmploymentType {
 /// Superseded rather than updated: an engagement's facts drift (duration
 /// extended, direction increased, exclusivity emerged), and the history of what
 /// was determined when, on what evidence, is the audit trail.
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=personal-attribute,operational owner=business-operator steward=data-steward basis=Worker-classification_evidence_(IRS_worker-classification_+_FLSA_employment_recordkeeping)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=personal-attribute,operational owner=business-operator steward=data-steward basis=Worker-classification_evidence_(IRS_worker-classification_+_FLSA_employment_recordkeeping) minYears=7
 model WorkerClassificationDetermination {
   id                                  String               @id @default(cuid())
   workerClassificationDeterminationId String               @unique
@@ -291,7 +291,7 @@ model WorkerClassificationDetermination {
 /// into an employee. An extension is a NEW row superseding the previous one, so
 /// the drift stays visible and reads as a re-determination trigger rather than a
 /// silent continuation.
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=personal-attribute,operational owner=business-operator steward=data-steward basis=Engagement-term_evidence_for_worker_classification_(IRS_+_FLSA_employment_recordkeeping)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=personal-attribute,operational owner=business-operator steward=data-steward basis=Engagement-term_evidence_for_worker_classification_(IRS_+_FLSA_employment_recordkeeping) minYears=7
 model WorkerEngagementTerm {
   id                     String          @id @default(cuid())
   workerEngagementTermId String          @unique
@@ -370,7 +370,7 @@ model EmployeeAddress {
   @@index([addressId])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Employment_record_retention_(varies;_conservative_7y)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Employment_record_retention_(varies;_conservative_7y) minYears=7
 model EmploymentEvent {
   id                String          @id @default(cuid())
   eventId           String          @unique
@@ -389,7 +389,7 @@ model EmploymentEvent {
   @@index([eventType])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Employment_record_retention
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Employment_record_retention minYears=7
 model TerminationRecord {
   id                String          @id @default(cuid())
   terminationId     String          @unique
@@ -644,7 +644,7 @@ enum PayslipDisbursementStatus {
   failed
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=financial,operational owner=business-operator steward=data-steward basis=Payroll/wage_record_retention_(IRS_employment-tax_+_FLSA_payroll_recordkeeping)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=financial,operational owner=business-operator steward=data-steward basis=Payroll/wage_record_retention_(IRS_employment-tax_+_FLSA_payroll_recordkeeping) minYears=7
 model PayRun {
   id          String       @id @default(cuid())
   payRunRef   String       @unique
@@ -661,7 +661,7 @@ model PayRun {
   @@index([periodStart])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=financial,personal-attribute,operational owner=business-operator steward=data-steward basis=Payroll/wage_record_retention_(IRS_employment-tax_+_FLSA_payroll_recordkeeping)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=financial,personal-attribute,operational owner=business-operator steward=data-steward basis=Payroll/wage_record_retention_(IRS_employment-tax_+_FLSA_payroll_recordkeeping) minYears=7
 model Payslip {
   id                 String                    @id @default(cuid())
   payRunId           String
@@ -898,7 +898,8 @@ model StaffingAssignment {
 
 /// Append-only assignment history (spec §5.3): cancellation must not erase who
 /// was assigned previously.
-/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
+/// Assignment lifecycle transitions (proposed/confirmed/declined/…). Scheduling audit — NOT a wage/payroll record (those are retained); one year.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit timeAxis=createdAt
 model StaffingAssignmentEvent {
   id                   String   @id @default(cuid())
   staffingAssignmentId String
@@ -1256,7 +1257,7 @@ model RecruitingSource {
   @@index([type])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=identity,contact,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_applicant_recordkeeping_(41_CFR_60-1.12_/_29_CFR_1602)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=identity,contact,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_applicant_recordkeeping_(41_CFR_60-1.12_/_29_CFR_1602) minYears=2
 model Candidate {
   id          String   @id @default(cuid())
   candidateId String   @unique
@@ -1295,7 +1296,7 @@ model PipelineStage {
   @@index([requisitionId])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=operational,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_applicant-flow_recordkeeping_(41_CFR_60-1.12_/_29_CFR_1602)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=operational,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_applicant-flow_recordkeeping_(41_CFR_60-1.12_/_29_CFR_1602) minYears=2
 model Application {
   id                          String    @id @default(cuid())
   applicationId               String    @unique
@@ -1342,7 +1343,7 @@ model Application {
   @@index([referredByEmployeeProfileId])
 }
 
-/// @dpf lifecycle=business-record retention=retained sensitivity=confidential categories=operational owner=business-operator steward=data-steward basis=EEOC/OFCCP_selection-procedure_recordkeeping
+/// @dpf lifecycle=business-record retention=retained sensitivity=confidential categories=operational owner=business-operator steward=data-steward basis=EEOC/OFCCP_selection-procedure_recordkeeping minYears=2
 model ScheduledInterview {
   id            String    @id @default(cuid())
   applicationId String
@@ -1362,7 +1363,7 @@ model ScheduledInterview {
   @@index([applicationId])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=content,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_selection-procedure_recordkeeping_(adverse-impact_basis)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=content,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_selection-procedure_recordkeeping_(adverse-impact_basis) minYears=2
 model Scorecard {
   id                    String    @id @default(cuid())
   applicationId         String
@@ -1382,7 +1383,7 @@ model Scorecard {
   @@index([submittedById])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=operational,financial,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_applicant-flow_recordkeeping
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=operational,financial,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_applicant-flow_recordkeeping minYears=2
 model Offer {
   id            String    @id @default(cuid())
   offerRef      String    @unique
@@ -1413,7 +1414,7 @@ model DispositionReason {
   applications Application[]
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=restricted categories=personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_demographic_recordkeeping_(kept_separate_from_selection)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=restricted categories=personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_demographic_recordkeeping_(kept_separate_from_selection) minYears=2
 model DemographicResponse {
   id               String    @id @default(cuid())
   applicationId    String

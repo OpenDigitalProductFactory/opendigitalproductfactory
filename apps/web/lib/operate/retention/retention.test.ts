@@ -11,14 +11,28 @@
 import { describe, it, expect } from "vitest";
 
 import {
-  PURGE_POLICIES,
-  RETAINED_DATASETS,
-  PURGE_MODELS,
-  RETAINED_MODELS,
-  RETENTION_CATEGORIES,
+  RETENTION_FLOOR_BUCKETS,
+  RETENTION_OVERRIDES,
   type RetentionPrismaClient,
   TOOL_EXECUTION_SHORT_LIVED_AUDIT_CLASSES,
 } from "./policies";
+import {
+  buildPurgePolicies,
+  buildRetainedDatasets,
+  floorBucket,
+  orphanOverrides,
+  readDeclarationsFromSchemaFiles,
+} from "./declarations";
+
+// EP-A33A5C61 slice 4d: the registry under test IS the schema. Every
+// declaration below is read from packages/db/prisma/schema `/// @dpf` tags —
+// the same source the catalog is converged from at portal boot.
+const DECLARATIONS = readDeclarationsFromSchemaFiles();
+const PURGE_POLICIES = buildPurgePolicies(DECLARATIONS);
+const RETAINED_DATASETS = buildRetainedDatasets(DECLARATIONS);
+const PURGE_MODELS = PURGE_POLICIES.map((p) => p.model);
+const RETAINED_MODELS = RETAINED_DATASETS.map((d) => d.model);
+const POLICIES = PURGE_POLICIES;
 import { AUDIT_CLASSES } from "../../audit-classes";
 import {
   resolveEffectiveRetentionDays,
@@ -29,6 +43,29 @@ import { runRetentionSweep } from "./execute";
 import { SCHEDULED_JOB_CATALOG } from "../scheduled-jobs/catalog";
 
 describe("retention registry invariants", () => {
+  it("every behavioural override names a model the schema declares purgeable", () => {
+    expect(orphanOverrides(DECLARATIONS, RETENTION_OVERRIDES)).toEqual([]);
+  });
+
+  it("derives the floor bucket from the DataCategory tag, never from a declared category", () => {
+    expect(floorBucket({ lifecycle: "telemetry-bounded", categories: ["security-audit"] })).toBe("audit");
+    expect(floorBucket({ lifecycle: "telemetry-bounded", categories: ["authorization", "telemetry"] })).toBe("audit");
+    expect(floorBucket({ lifecycle: "telemetry-bounded", categories: ["content"] })).toBe("chat");
+    expect(floorBucket({ lifecycle: "telemetry-bounded", categories: ["telemetry"] })).toBe("telemetry");
+    expect(floorBucket({ lifecycle: "telemetry-bounded" })).toBe("telemetry");
+  });
+
+  it("expands a partition override into one policy per partition with the model window as default", () => {
+    const policies = buildPurgePolicies(
+      [{ model: "Widget", table: "Widget", metadata: { lifecycle: "telemetry-bounded", retention: { kind: "purge", days: 200 }, timeAxis: "seenAt" } }],
+      { widget: { partitions: [{ label: "a", extraWhere: { kind: "a" } }, { label: "b", extraWhere: { kind: "b" }, days: 10 }] } },
+    );
+    expect(policies.map((p) => [p.model, p.timestampField, p.baseRetentionDays, p.extraWhere])).toEqual([
+      ["widget", "seenAt", 200, { kind: "a" }],
+      ["widget", "seenAt", 10, { kind: "b" }],
+    ]);
+  });
+
   it("NEVER enrolls a regulated model for purge (the load-bearing guard)", () => {
     const overlap = PURGE_MODELS.filter((m) => RETAINED_MODELS.includes(m));
     expect(overlap).toEqual([]);
@@ -52,9 +89,8 @@ describe("retention registry invariants", () => {
     for (const p of PURGE_POLICIES) {
       expect(p.model.length).toBeGreaterThan(0);
       expect(p.label.length).toBeGreaterThan(0);
-      expect(p.rationale.length).toBeGreaterThan(0);
       expect(p.timestampField.length).toBeGreaterThan(0);
-      expect(RETENTION_CATEGORIES).toContain(p.category);
+      expect(RETENTION_FLOOR_BUCKETS).toContain(p.category);
       // Nothing is ever purged younger than a week — a tripwire against a
       // fat-fingered tiny window deleting live data.
       expect(p.baseRetentionDays).toBeGreaterThanOrEqual(7);
@@ -119,12 +155,12 @@ describe("retention registry invariants", () => {
 
 describe("industry / archetype retention floors", () => {
   it("lets a confirmed processing activity lengthen, never shorten, the effective floor", () => {
-    const policy = { category: "audit-log" as const, baseRetentionDays: 365 };
+    const policy = { category: "audit" as const, baseRetentionDays: 365 };
     expect(resolveEffectiveRetentionDays(policy, null, 730)).toBe(730);
     expect(resolveEffectiveRetentionDays(policy, null, 30)).toBe(365);
   });
 
-  const auditPolicy = { category: "audit-log" as const, baseRetentionDays: 365 };
+  const auditPolicy = { category: "audit" as const, baseRetentionDays: 365 };
 
   it("applies the base window when industry is null/unknown", () => {
     expect(resolveEffectiveRetentionDays(auditPolicy, null)).toBe(365);
@@ -134,14 +170,14 @@ describe("industry / archetype retention floors", () => {
   it("lengthens audit retention to 7 years for banking", () => {
     expect(
       resolveEffectiveRetentionDays(auditPolicy, "banking-financial-services"),
-    ).toBe(INDUSTRY_RETENTION_FLOORS["banking-financial-services"]["audit-log"]);
+    ).toBe(INDUSTRY_RETENTION_FLOORS["banking-financial-services"]["audit"]);
     expect(
       resolveEffectiveRetentionDays(auditPolicy, "banking-financial-services"),
     ).toBe(2555);
   });
 
   it("never shortens: a base longer than the floor wins", () => {
-    const longPolicy = { category: "audit-log" as const, baseRetentionDays: 5000 };
+    const longPolicy = { category: "audit" as const, baseRetentionDays: 5000 };
     expect(
       resolveEffectiveRetentionDays(longPolicy, "banking-financial-services"),
     ).toBe(5000);
@@ -237,6 +273,7 @@ describe("retention executor", () => {
       now: NOW,
       dryRun: true,
       industryKey: null,
+      policies: POLICIES,
       onlyModels: ["tokenUsage"],
     });
     expect(report.dryRun).toBe(true);
@@ -253,6 +290,7 @@ describe("retention executor", () => {
       now: NOW,
       dryRun: false,
       industryKey: null,
+      policies: POLICIES,
       onlyModels: ["toolExecution"],
       batchSize: 1000,
       perPolicyCap: 100_000,
@@ -271,6 +309,7 @@ describe("retention executor", () => {
       now: NOW,
       dryRun: false,
       industryKey: null,
+      policies: POLICIES,
       onlyModels: ["toolExecution"],
       batchSize: 1000,
       perPolicyCap: 2500,
@@ -286,6 +325,7 @@ describe("retention executor", () => {
       now: NOW,
       dryRun: false,
       industryKey: "banking-financial-services", // audit-log floor = 2555d
+      policies: POLICIES,
       onlyModels: ["toolExecution"],
     });
     expect(report.results[0].effectiveRetentionDays).toBe(2555);
@@ -307,6 +347,7 @@ describe("retention executor", () => {
       now: NOW,
       dryRun: false,
       industryKey: null,
+      policies: POLICIES,
       onlyModels: ["agentThread"],
     });
     expect(report.results[0].affected).toBe(5);
@@ -327,6 +368,7 @@ describe("retention executor", () => {
       now: NOW,
       dryRun: false,
       industryKey: null,
+      policies: POLICIES,
       onlyModels: ["routeDecisionLog", "tokenUsage"],
     });
     expect(report.errorCount).toBe(1);
@@ -343,6 +385,7 @@ describe("retention executor", () => {
       now: NOW,
       dryRun: false,
       industryKey: null,
+      policies: POLICIES,
       onlyModels: ["notification"],
     });
     const findManyCall = (
@@ -366,6 +409,7 @@ describe("legal hold (BI-90A8D153 GAP 2)", () => {
       now: NOW2,
       dryRun: false,
       industryKey: null,
+      policies: POLICIES,
       onlyModels: ["tokenUsage"],
     });
     const findManyCall = (

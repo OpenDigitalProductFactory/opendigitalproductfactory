@@ -244,7 +244,8 @@ model EdgeNodeCertificate {
 // Slice 0 owns ingest + persistence only. Cross-source correlation, escalation
 // policies, on-call routing, and ML grouping are separate downstream slices
 // — see BI-9FE9D48D.
-/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
+/// Per-node edge telemetry events (SNMP/syslog/probe detections). Settled events past 6 months are disposable; open alerts are never swept regardless of age.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=createdAt
 model EdgeEvent {
   id              String    @id @default(cuid())
   // FK to EdgeNode.id (the cuid surrogate); distinct from EdgeNode.nodeId.
@@ -318,7 +319,8 @@ model EdgeEvent {
 // The portal route accepts the same EdgeEventEnvelope wire shape and
 // discriminates on `eventType`; `action` is required by the schema for
 // envelope uniformity but ignored for changes.
-/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
+/// Configuration/state change detections from edge nodes. One year of change history for estate forensics.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=telemetry timeAxis=createdAt
 model ChangeEvent {
   id            String   @id @default(cuid())
   // FK to EdgeNode.id (the cuid surrogate). Route fills this from the

@@ -54,6 +54,7 @@ model RuntimeCapabilityTransition {
 }
 
 /// Append-only governance audit for every terminal runtime transition outcome.
+/// Per-transition outcome events for runtime capability orchestration. Debugging value decays fast; 90 days.
 /// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=security-audit owner=platform-owner steward=data-steward timeAxis=createdAt
 model RuntimeCapabilityTransitionEvent {
   id           String                      @id @default(cuid())
@@ -185,7 +186,8 @@ model RuntimeAdvisory {
   generatedAt DateTime @default(now())
 }
 
-/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal timeAxis=createdAt
+/// Read inbox items past 90 days. Unread notifications are preserved at any age.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=content timeAxis=createdAt
 model Notification {
   id        String   @id @default(cuid())
   userId    String

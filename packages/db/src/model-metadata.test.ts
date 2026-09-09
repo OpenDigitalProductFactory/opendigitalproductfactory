@@ -19,7 +19,7 @@ model ToolExecution {
   @@index([createdAt])
 }
 
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=financial basis=Financial_record_retention_(IRS_/_SOX)
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=financial basis=Financial_record_retention_(IRS_/_SOX) minYears=7
 model Invoice {
   id String @id
   @@map("invoices")
@@ -53,6 +53,7 @@ describe("parseModelMetadataSource", () => {
       sensitivity: "confidential",
       categories: ["financial"],
       basis: "Financial record retention (IRS / SOX)",
+      minYears: 7,
     });
     const tool = parsed.entries[0].metadata;
     expect(tool.retention).toEqual({ kind: "purge", days: 365 });

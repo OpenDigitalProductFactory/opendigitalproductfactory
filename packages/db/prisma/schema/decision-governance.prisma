@@ -583,7 +583,7 @@ model JurisdictionCriteriaProfile {
 // read access to this table. The one guardrail that matters most: the thing
 // you must measure for a bias audit is the thing you must never let touch the
 // score, so it does not share a foreign key with the score.
-/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=personal-attribute,security-audit owner=platform-owner steward=data-steward basis=NYC_LL144_bias-audit_/_EEOC_Title_VII_adverse-impact_record_retention
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=personal-attribute,security-audit owner=platform-owner steward=data-steward basis=NYC_LL144_bias-audit_/_EEOC_Title_VII_adverse-impact_record_retention minYears=1
 model ProtectedMonitoringObservation {
   id               String   @id @default(cuid())
   observationId    String   @unique
@@ -640,7 +640,7 @@ model WeightAdjustmentProposal {
 //
 // Spec: docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md
 //
-/// @dpf lifecycle=regulated-record retention=retained basis=Consent_provenance_(GDPR/biometric)
+/// @dpf lifecycle=regulated-record retention=retained basis=Consent_provenance_(GDPR/biometric) minYears=7
 model VoiceConsentRecord {
   id                    String         @id @default(cuid())
   subjectName           String
