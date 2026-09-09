@@ -232,3 +232,37 @@ describe("employee asset-allocation precondition evidence", () => {
     expect(relationshipKeys).not.toContain("prisma:relation:FixedAsset:employee:EmployeeProfile");
   });
 });
+
+describe("governance.declared from /// @dpf tags (EP-A33A5C61 slice 4d-ii)", () => {
+  it("projects the schema declaration onto the model element, even for a model the asset registry does not know", async () => {
+    const { parsePrismaSchema } = await import("../build/code-graph/extractors/prisma-schema-adapter");
+    const { buildDesiredState, declarationsFromSchemaSource } = await import("./data-model-mirror");
+    const source = [
+      "/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=telemetry owner=platform-architecture steward=data-steward timeAxis=createdAt",
+      "model ZzzProbeEvent {",
+      "  id String @id",
+      "  createdAt DateTime @default(now())",
+      "}",
+      "",
+      "model ZzzPlain {",
+      "  id String @id",
+      "}",
+    ].join("\n");
+    const facts = parsePrismaSchema(source);
+    const desired = buildDesiredState(facts, declarationsFromSchemaSource(source));
+    const probe = desired.elements.find((e) => e.name === "ZzzProbeEvent")!;
+    const governance = (probe.properties as { governance?: { declared?: Record<string, unknown> } }).governance;
+    expect(governance?.declared).toEqual({
+      lifecycle: "telemetry-bounded",
+      retention: "90d",
+      sensitivity: "internal",
+      categories: ["telemetry"],
+      scope: null,
+      owner: "platform-architecture",
+      steward: "data-steward",
+      timeAxis: "createdAt",
+    });
+    const plain = desired.elements.find((e) => e.name === "ZzzPlain")!;
+    expect((plain.properties as { governance?: unknown }).governance).toBeUndefined();
+  });
+});

@@ -11,6 +11,7 @@ import { prisma as defaultPrisma, readCanonicalPrismaSchema, syncEaElement, sync
 
 import { parsePrismaSchema } from "../build/code-graph/extractors/prisma-schema-adapter";
 import { reconcileDataModelMirror, type MirrorPrismaClient, type MirrorResult } from "./data-model-mirror-apply";
+import { declarationsFromSchemaSource } from "./data-model-mirror";
 import { runDataArchitectureSteward, type StewardPrismaClient, type StewardResult } from "./data-architecture-steward-apply";
 import { runTableGrowthSteward, type GrowthPrismaClient, type GrowthResult } from "./table-growth-apply";
 
@@ -43,6 +44,7 @@ export async function runDataModelMirror(deps: RunDeps = {}): Promise<DataModelM
   const mirror = await reconcileDataModelMirror({
     prisma: prisma as MirrorPrismaClient,
     facts,
+    declarations: declarationsFromSchemaSource(source),
     createdById: deps.createdById ?? null,
   });
 
