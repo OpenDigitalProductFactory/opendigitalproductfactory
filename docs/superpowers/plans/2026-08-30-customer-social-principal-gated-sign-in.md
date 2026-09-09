@@ -42,6 +42,8 @@ This plan is **atomic**. The shared authorization seam, transactional creation/d
 
 **Constraints:** `CustomerContact` remains the credential/profile and account-scope record; `Principal` remains authority; no second session identity cache; partner kind derives from live enrollment.
 
+**Refusal contract:** extend the existing authentication result with one closed, exported refusal-code set shared by workforce, customer, partner, and social callers. Callers branch only on that typed set; user-facing responses remain generic and never expose the internal code.
+
 **Verification:** table-driven tests prove identical refusal semantics across workforce, customer, and partner populations without merging their credential verification rules.
 
 ## Phase 3 — transactional lifecycle convergence and populated-data repair
@@ -51,6 +53,8 @@ This plan is **atomic**. The shared authorization seam, transactional creation/d
 **Files:** `apps/web/lib/actions/customer-auth.ts`, `apps/web/lib/actions/social-auth-actions.ts`, `apps/web/app/api/storefront/sign-up/route.ts`, session-capable customer-contact write paths, `packages/db/prisma/migrations/<timestamp>_customer_principal_auth_convergence/migration.sql`, and invariant tests/check.
 
 **Dependencies:** Phase 2.
+
+**Transaction boundary:** pass the active transaction client through the existing shared customer/partner linker. Contact creation, Principal materialization, canonical aliases, and any social identity link must commit together; no onboarding path may call a second, post-commit materializer.
 
 **Migration:** reuse the established `customer_contact` plus lowercase `email` alias grammar; preserve existing matching Principals; refuse ambiguous email convergence rather than choosing. The migration must apply against populated, partially converged, inactive, partner-enrolled, and merged-contact states. It performs set-based writes and the verification query reports counts/conflicts without loading an unbounded contact inventory.
 
@@ -64,7 +68,7 @@ This plan is **atomic**. The shared authorization seam, transactional creation/d
 
 **Dependencies:** Phases 2–3.
 
-**Verification:** inactive/unresolved/conflicted Principals receive no session or continuation token; active customers retain account/contact scope; Google/Apple link and onboarding flows cannot create a session-capable split state.
+**Verification:** inactive/unresolved/conflicted Principals receive no session or continuation token; active customers retain account/contact scope; Google/Apple link and onboarding flows cannot create a session-capable split state. A verified social email with no provider-subject link must not select an existing contact or mint a session, proving that email alone is never the identity key.
 
 ## Phase 5 — governed completion
 
