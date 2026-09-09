@@ -182,6 +182,9 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // Reads field-service jobs and customer contact data, updates job status, and
   // proposes customer notifications for approval.
   dispatcher: ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],
+  // Mailroom coordinator (design 2026-09-09 §4.10): reads items, records triage
+  // overrides and drafts replies on the queue rooms; never sends.
+  "mailroom-coordinator": ["work_room_read", "work_room_write", "registry_read"],
   "farm-ranch-steward": [
     "registry_read",
     "backlog_read",
