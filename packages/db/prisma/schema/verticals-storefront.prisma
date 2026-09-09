@@ -1,3 +1,4 @@
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model StorefrontArchetype {
   id                  String                           @id @default(cuid())
   archetypeId         String                           @unique
@@ -75,6 +76,7 @@ model StorefrontConfig {
 /// Operator-authored geometry for one operational-twin scene. Live business
 /// state remains in its owning domain models and is joined through layoutState
 /// placement entity references at read time.
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=configuration,operational,content owner=business-operator steward=data-steward
 model OperationalSceneLayout {
   id           String       @id @default(cuid())
   orgId        String
@@ -331,6 +333,7 @@ model BookingHold {
   @@index([expiresAt])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Sales/financial_record_retention
 model StorefrontOrder {
   id                String                    @id @default(cuid())
   orderRef          String                    @unique
@@ -358,6 +361,7 @@ model StorefrontOrder {
 
 // Normalized forward authority for storefront purchase lines. The legacy
 // StorefrontOrder.items JSON remains a compatibility payload during expand.
+/// @dpf lifecycle=business-record retention=domain sensitivity=confidential categories=identity,operational owner=founder-business-owner steward=data-steward
 model StorefrontOrderLineItem {
   id                    String                @id @default(cuid())
   lineId                String                @unique
@@ -425,6 +429,7 @@ model RentableUnit {
   @@index([catalogSkuId])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained basis=Contract_/_financial_record_retention
 model RentalAgreement {
   id                   String    @id @default(cuid())
   agreementRef         String    @unique
@@ -648,6 +653,7 @@ enum AnimalCustodyEventKind {
 
 /// Durable operational identity for an animal. A public AdoptableAnimal row is
 /// an optional projection of this record, never the source of custody truth.
+/// @dpf lifecycle=business-record retention=domain sensitivity=confidential categories=identity,operational owner=business-operator steward=data-steward
 model AnimalProfile {
   id                String                @id @default(cuid())
   animalRef         String
@@ -685,6 +691,7 @@ model AnimalProfile {
 
 /// One admission-to-outcome interval. Re-entry creates a new numbered episode
 /// instead of rewriting the animal's prior history.
+/// @dpf lifecycle=legal-evidence retention=domain sensitivity=confidential categories=operational,content owner=business-operator steward=data-steward
 model AnimalCustodyEpisode {
   id              String             @id @default(cuid())
   episodeRef      String             @unique
@@ -716,6 +723,7 @@ model AnimalCustodyEpisode {
 }
 
 /// Append-only custody timeline; sequence is monotonic inside an episode.
+/// @dpf lifecycle=legal-evidence retention=domain sensitivity=confidential categories=operational,security-audit owner=business-operator steward=data-steward
 model AnimalCustodyEvent {
   id                String                 @id @default(cuid())
   eventRef          String                 @unique
@@ -740,6 +748,7 @@ model AnimalCustodyEvent {
   @@index([organizationId, animalProfileId, occurredAt])
 }
 
+/// @dpf lifecycle=legal-evidence retention=domain sensitivity=confidential categories=contact,operational owner=business-operator steward=data-steward
 model AnimalAdoptionApplication {
   id                   String                          @id @default(cuid())
   applicationRef       String                          @unique
@@ -766,6 +775,7 @@ model AnimalAdoptionApplication {
   @@index([organizationId, animalProfileId, status])
 }
 
+/// @dpf lifecycle=legal-evidence retention=domain sensitivity=confidential categories=contact,financial,operational owner=business-operator steward=data-steward
 model AnimalPlacement {
   id                String                @id @default(cuid())
   placementRef      String                @unique
@@ -815,6 +825,7 @@ model StorefrontInquiry {
   @@index([customerEmail])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Nonprofit_financial_record_retention
 model StorefrontDonation {
   id                String           @id @default(cuid())
   donationRef       String           @unique
@@ -855,6 +866,7 @@ model StorefrontDonation {
 // Naming note: `InventoryEntity` is the IT-estate discovery model and `Bom*` is
 // the software bill of materials; neither describes physical supplies, so this
 // is genuinely new substrate rather than a fork of either.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model StockItem {
   id              String   @id @default(cuid())
   stockItemId     String   @unique
@@ -885,6 +897,7 @@ model StockItem {
 /// One line of a sellable item's recipe: selling one unit of `storefrontItem`
 /// consumes `quantityPerUnit` of `stockItem`. Archetype-neutral — a dish
 /// consumes mozzarella, a salon service consumes colourant.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration owner=business-operator steward=data-steward
 model StorefrontItemComponent {
   id               String   @id @default(cuid())
   storefrontItemId String

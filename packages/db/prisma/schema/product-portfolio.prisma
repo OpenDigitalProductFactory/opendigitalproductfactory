@@ -76,6 +76,7 @@ model DigitalProduct {
 // Organization-owned business product hierarchy (EP-ED496EB0 Phase 1).
 // This is intentionally separate from DigitalProduct, which remains the
 // digital-architecture product model.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model ProductLine {
   id                    String                          @id @default(cuid())
   lineId                String                          @unique
@@ -109,6 +110,7 @@ model ProductLine {
   @@index([parentId, organizationId]) // FK-leading (tree parent): product-line hierarchy traversal
 }
 
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model Product {
   id                   String                @id @default(cuid())
   productId            String                @unique
@@ -145,6 +147,7 @@ model Product {
 // (EP-ED496EB0 Phase 9 / BI-162FBDCC). Business Product owns the objective;
 // DigitalProduct remains an architecture/delivery authority. Product-line
 // posture is derived through Product rather than persisted as a second ledger.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=operational,derived-analytic owner=founder-business-owner steward=data-steward
 model ProductObjective {
   id                String                      @id @default(cuid())
   objectiveId       String                      @unique
@@ -183,6 +186,7 @@ model ProductObjective {
 }
 
 // Link only: canonical demand and delivery state remains on BacklogItem.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=operational,derived-analytic owner=founder-business-owner steward=data-steward
 model ProductObjectiveWork {
   id               String           @id @default(cuid())
   objectiveId      String
@@ -200,6 +204,7 @@ model ProductObjectiveWork {
 
 // Append-only learned evidence. Corrections create a new observation that
 // supersedes one current row; there is deliberately no mutable "current value".
+/// @dpf lifecycle=business-record retention=domain sensitivity=confidential categories=operational,derived-analytic owner=founder-business-owner steward=data-steward
 model ProductOutcomeObservation {
   id                      String                     @id @default(cuid())
   observationId           String                     @unique
@@ -230,6 +235,7 @@ model ProductOutcomeObservation {
 // (EP-ED496EB0 Phase 2). ServiceOffering remains the digital operational-
 // commitment model; the nullable trace below exists only when that real
 // operational commitment realizes this commercial promise.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model ProductOffering {
   id                           String           @id @default(cuid())
   offeringId                   String           @unique
@@ -265,6 +271,7 @@ model ProductOffering {
 
 // Canonical selectable/requestable commercial object. Channel-specific rows
 // such as StorefrontItem project this definition instead of owning a copy.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model CatalogItem {
   id                       String                           @id @default(cuid())
   catalogItemId            String                           @unique
@@ -310,6 +317,7 @@ model CatalogItem {
 // Deliberately reusable product configuration. One-off sale configurations
 // stay as immutable QuoteLineItem.configurationSnapshot JSON and do not create
 // permanent catalog rows.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model ProductConfiguration {
   id                          String         @id @default(cuid())
   configurationId             String         @unique
@@ -346,6 +354,7 @@ model ProductConfiguration {
 // Optional reusable stock-keeping identity. A CatalogItem does not need a SKU;
 // one is created only when the operator deliberately publishes a reusable
 // configuration or inventory identity.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model CatalogSku {
   id                   String                    @id @default(cuid())
   skuId                String                    @unique
@@ -380,6 +389,7 @@ model CatalogSku {
 // A CatalogItem can package other CatalogItems without changing any Product or
 // ProductLine parentage. Component attribution is non-additive: the package
 // sale is counted once and these rows explain its component contribution.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model CatalogBundleComponent {
   id                     String       @id @default(cuid())
   componentId            String       @unique
@@ -406,6 +416,7 @@ model CatalogBundleComponent {
   @@index([componentCatalogItemId])
 }
 
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model CatalogPriceList {
   id             String                  @id @default(cuid())
   priceListId    String                  @unique
@@ -431,6 +442,7 @@ model CatalogPriceList {
   @@index([effectiveTo])
 }
 
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model CatalogPriceListEntry {
   id              String           @id @default(cuid())
   entryId         String           @unique
@@ -460,6 +472,7 @@ model CatalogPriceListEntry {
   @@index([effectiveTo])
 }
 
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model CatalogPromotion {
   id              String                 @id @default(cuid())
   promotionId     String                 @unique
@@ -486,6 +499,7 @@ model CatalogPromotion {
   @@index([effectiveTo])
 }
 
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model CatalogPromotionItem {
   id              String            @id @default(cuid())
   promotionItemId String            @unique
@@ -504,6 +518,7 @@ model CatalogPromotionItem {
   @@index([priceListId])
 }
 
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model CatalogChannelEligibility {
   id             String       @id @default(cuid())
   eligibilityId  String       @unique
@@ -529,6 +544,7 @@ model CatalogChannelEligibility {
 // Existing transaction and fulfillment models remain their own authorities;
 // ProductSold snapshots the selected commercial contract and links to those
 // authorities through typed ProductSoldEvidence rows.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=operational,financial owner=founder-business-owner steward=data-steward
 model ProductSold {
   id                     String                           @id @default(cuid())
   productSoldId          String                           @unique
@@ -588,6 +604,7 @@ model ProductSold {
 
 // One row per typed transaction or fulfillment authority observed for a sale.
 // The SQL migration enforces exactly one source FK on every evidence row.
+/// @dpf lifecycle=business-record retention=domain sensitivity=confidential categories=identity,operational owner=founder-business-owner steward=data-steward
 model ProductSoldEvidence {
   id                        String                       @id @default(cuid())
   evidenceId                String                       @unique
@@ -629,6 +646,7 @@ model ProductSoldEvidence {
 
 // Evidence-backed role projection. Account, consumer, and subscriber are roles,
 // not synonyms; SQL requires exactly one canonical account or contact target.
+/// @dpf lifecycle=business-record retention=domain sensitivity=confidential categories=identity,operational owner=founder-business-owner steward=data-steward
 model ProductSoldParty {
   id              String              @id @default(cuid())
   partyId         String              @unique
@@ -660,6 +678,7 @@ model ProductSoldParty {
 
 // Optional rights record. A sale alone does not create an entitlement; a row
 // requires evidence and exactly one canonical beneficiary.
+/// @dpf lifecycle=business-record retention=domain sensitivity=confidential categories=identity,operational owner=founder-business-owner steward=data-steward
 model ProductSoldEntitlement {
   id              String              @id @default(cuid())
   entitlementId   String              @unique
@@ -699,6 +718,7 @@ model ProductSoldEntitlement {
 // Optional realization or consumption record. A completed one-time service,
 // booking, rental unit, or supported EdgeNode can be represented without
 // pretending that each is a Subscription or installed asset.
+/// @dpf lifecycle=business-record retention=domain sensitivity=confidential categories=identity,operational owner=founder-business-owner steward=data-steward
 model ProductFulfillmentInstance {
   id                  String              @id @default(cuid())
   instanceId          String              @unique
@@ -739,6 +759,7 @@ model ProductFulfillmentInstance {
 
 // Non-additive explanation of a package sale. Revenue remains counted only at
 // ProductSold; these rows expose component contribution without a second sale.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=operational,financial owner=founder-business-owner steward=data-steward
 model ProductSoldComponentAllocation {
   id                     String       @id @default(cuid())
   allocationId           String       @unique

@@ -66,6 +66,7 @@ enum CapacityAllocationState {
 /// OperationalSceneLayout. `subjectRef` links a human-backed resource row to
 /// its identity home (for example ServiceProvider or EmployeeProfile row keys)
 /// without cloning it.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model Resource {
   id              String          @id @default(cuid())
   resourceKey     String // stable business key within (organization, domain) — the clone families call this resourceId
@@ -105,6 +106,7 @@ model Resource {
 /// Replaces BeautyResourceAvailability, HospitalityResourceAvailability, and
 /// (via adapters) ProviderAvailability. Recurring windows may reference the
 /// canonical RFC-5545 RecurrenceSchedule instead of the legacy days[] shape.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model ResourceAvailability {
   id                   String                 @id @default(cuid())
   organizationId       String
@@ -142,6 +144,7 @@ model ResourceAvailability {
 
 /// Unified aggregate time-bounded capacity (kitchen covers, bake batches,
 /// delivery windows). Replaces HospitalityCapacityPool.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model ResourceCapacityPool {
   id              String          @id @default(cuid())
   poolKey         String // stable business key within (organization, domain) — HospitalityCapacityPool calls this poolId
@@ -178,6 +181,7 @@ model ResourceCapacityPool {
 /// exactly one discrete resource OR one aggregate pool for one demand (the
 /// operator-reviewed migration carries the CHECK invariant). Replaces
 /// BeautyCapacityAllocation and HospitalityCapacityAllocation.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational owner=business-operator steward=data-steward
 model ResourceCapacityAllocation {
   id              String                  @id @default(cuid())
   organizationId  String

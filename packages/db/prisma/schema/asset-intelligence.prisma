@@ -1,3 +1,4 @@
+/// @dpf lifecycle=telemetry-bounded retention=30d sensitivity=internal timeAxis=startedAt
 model DiscoveryRun {
   id                      String                            @id @default(cuid())
   // runKey is unique PER (edgeNodeId, runKey) — each Edge Node owns
@@ -153,6 +154,7 @@ model CatalogLifecycleMilestone {
 /// Audit lineage of every identity resolution — which rule / AI / human resolved an entity to a
 /// CatalogIdentity, with confidence + evidence. Human-confirmed rows are never overwritten by a
 /// rule (§6.3.1). BI-74579817.
+/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
 model IdentityResolutionLog {
   id                String                    @id @default(cuid())
   inventoryEntityId String?
@@ -174,6 +176,7 @@ model IdentityResolutionLog {
   @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=createdAt
 model DiscoveryFingerprintObservation {
   id                 String   @id @default(cuid())
   observationKey     String   @unique

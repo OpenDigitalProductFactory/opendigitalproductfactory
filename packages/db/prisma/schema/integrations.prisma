@@ -87,6 +87,7 @@ model IntegrationCredential {
 // event receipt; IntegrationImportStagedRecord remains read/import staging.
 // connectionId is the stable IntegrationCredential.integrationId value, never
 // the rotatable credential row id. credentialId is optional audit provenance.
+/// @dpf lifecycle=operational retention=projection sensitivity=internal categories=operational,configuration,security-audit owner=platform-owner steward=data-steward
 model ExternalChannelProjection {
   id                          String                              @id @default(cuid())
   externalChannelProjectionId String                              @unique
@@ -164,6 +165,7 @@ model BrowserSessionBinding {
 // Distinct from ComplianceAuditLog (entity-diff focused) and AgentActionProposal
 // (write-proposal focused). Reusable across ADP, QuickBooks, Plaid, Workday.
 // argsHash is sha256 of canonicalized args — raw args are never stored.
+/// @dpf lifecycle=telemetry-bounded retention=180d timeAxis=calledAt
 model IntegrationToolCallLog {
   id           String   @id @default(cuid())
   calledAt     DateTime @default(now())
@@ -187,6 +189,7 @@ model IntegrationToolCallLog {
 // Idempotency and recovery state for at-least-once connector callbacks.
 // requestHash and acknowledgment are safe, adapter-redacted projections; raw
 // callback payloads, signatures, and credentials must never be stored here.
+/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=createdAt
 model IntegrationCallbackReceipt {
   id                     String    @id @default(cuid())
   connectorId            String
@@ -336,6 +339,7 @@ model CommunicationChannelSession {
   @@index([workItemId])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=createdAt
 model CommunicationDeliveryAttempt {
   id                String                       @id @default(cuid())
   attemptId         String                       @unique @default(cuid())
@@ -411,6 +415,7 @@ model McpIntegration {
 // The vocabulary MATCHES IncumbentCoverageAssessment.verdict (spec 2026-07-23
 // §5.2) so the per-customer coverage stage-1 can default from this matrix.
 // Purely additive: a new empty table, no backfill, fleet-safe by construction.
+/// @dpf lifecycle=operational retention=reference sensitivity=public categories=configuration owner=platform-owner steward=data-steward
 model AbsorptionPosture {
   id                  String   @id @default(cuid())
   postureId           String   @unique
@@ -465,6 +470,7 @@ model AbsorptionPosture {
 // coveringBusinessCapabilityId / backlogItemId are soft references (plain columns,
 // not enforced FKs — same pattern as AbsorptionPosture) so an assessment can exist
 // before every referent is normalized. Additive, fleet-safe.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational,configuration owner=platform-owner steward=data-steward
 model IncumbentCoverageAssessment {
   id                           String    @id @default(cuid())
   assessmentId                 String    @unique
@@ -714,6 +720,7 @@ model GearInterface {
 /// `tools/list` can APPEND them to the lean core tier (never swap it) on the
 /// next fetch. Short-TTL and swept on expiry — discovery-only state, no
 /// authorization meaning (execution still gates on grants at tools/call).
+/// @dpf lifecycle=ephemeral retention=domain sensitivity=internal categories=configuration owner=platform-operator steward=data-steward
 model McpToolSession {
   tokenId         String   @id
   loadedToolNames String[] @default([])

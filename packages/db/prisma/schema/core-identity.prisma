@@ -339,6 +339,7 @@ model AuthorityBindingGrant {
   @@index([grantKey])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=restricted timeAxis=createdAt
 model AuthorizationDecisionLog {
   id                        String                   @id @default(cuid())
   decisionId                String                   @unique
@@ -760,6 +761,7 @@ enum OAuthClientRegistrationKind {
 }
 
 /// An OAuth client registered against this install's authorization server.
+/// @dpf lifecycle=operational retention=domain sensitivity=restricted categories=configuration,credential-secret owner=platform-owner steward=data-steward
 model OAuthClient {
   id               String                      @id @default(cuid())
   /// The OAuth `client_id` value this client presents. Named for the model
@@ -806,6 +808,7 @@ model OAuthClient {
 /// A single-use authorization code. Short-lived, consumed on first exchange;
 /// a second presentation is a replay and is refused. The PKCE challenge is
 /// stored, never the verifier.
+/// @dpf lifecycle=operational retention=90d sensitivity=restricted categories=credential-secret owner=platform-owner steward=data-steward timeAxis=createdAt
 model OAuthAuthorizationCode {
   id                  String    @id @default(cuid())
   codeHash            String    @unique
@@ -833,6 +836,7 @@ model OAuthAuthorizationCode {
 /// issues a successor. A replayed refresh token is therefore detectable — its
 /// successor already exists — and the whole chain is revoked, per OAuth 2.1
 /// refresh-token-rotation guidance.
+/// @dpf lifecycle=operational retention=365d sensitivity=restricted categories=credential-secret owner=platform-owner steward=data-steward timeAxis=createdAt
 model OAuthRefreshToken {
   id            String    @id @default(cuid())
   tokenHash     String    @unique

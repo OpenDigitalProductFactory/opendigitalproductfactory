@@ -145,6 +145,7 @@ model DocumentAccessGrant {
   @@index([createdByPrincipalId])
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=365d timeAxis=createdAt
 model DocumentLifecycleEvent {
   id               String         @id @default(cuid())
   documentId       String
@@ -488,6 +489,7 @@ model WikiPageSource {
   @@index([sourceId]) // FK-leading (join table): source-side lookups; @@id only covers pageId
 }
 
+/// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=createdAt
 model WikiIngestEvent {
   id             String        @id @default(cuid())
   organizationId String?

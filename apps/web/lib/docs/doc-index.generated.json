@@ -1326,6 +1326,7 @@
       "anchors": [
         "data-model-stewardship-runbook",
         "record-lifecycle-convention",
+        "model-metadata-lives-in-the-schema-and-the-catalog",
         "evidence-payloads-never-live-inline"
       ]
     },

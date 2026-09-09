@@ -510,6 +510,7 @@ model DeferralCapture {
 // review.ts): an independent pass re-resolves the recorded locator against the live
 // source and compares excerpts. A mismatch/unresolved locator degrades the affected
 // dimension to unevidenced. Append-only (no updatedAt); each verdict is its own row.
+/// @dpf lifecycle=legal-evidence retention=domain sensitivity=confidential categories=security-audit,derived-analytic owner=platform-owner steward=data-steward
 model EvidenceReVerification {
   id               String              @id @default(cuid())
   reverificationId String              @unique
@@ -542,6 +543,7 @@ model EvidenceReVerification {
 // scoring VECTOR: which axes are required, which are forbidden, which are
 // monitoring-only (never a scoring input), plus a per-axis weight overlay.
 // Axis keys are validated at the app layer against PRINCIPLE_DIMENSIONS.
+/// @dpf lifecycle=operational retention=reference sensitivity=internal categories=configuration owner=platform-owner steward=data-steward
 model JurisdictionCriteriaProfile {
   id                 String    @id @default(cuid())
   profileKey         String
@@ -581,6 +583,7 @@ model JurisdictionCriteriaProfile {
 // read access to this table. The one guardrail that matters most: the thing
 // you must measure for a bias audit is the thing you must never let touch the
 // score, so it does not share a foreign key with the score.
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=personal-attribute,security-audit owner=platform-owner steward=data-steward basis=NYC_LL144_bias-audit_/_EEOC_Title_VII_adverse-impact_record_retention
 model ProtectedMonitoringObservation {
   id               String   @id @default(cuid())
   observationId    String   @unique
@@ -608,6 +611,7 @@ model ProtectedMonitoringObservation {
 // stance material uses) or "rejected" — the review-queue pattern this reuses
 // (stance-promotion.ts) has no reject primitive of its own, so this model
 // carries its own explicit status rather than inventing a second ladder.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=derived-analytic,security-audit owner=platform-owner steward=data-steward
 model WeightAdjustmentProposal {
   id                       String                     @id @default(cuid())
   proposalId               String                     @unique
@@ -636,6 +640,7 @@ model WeightAdjustmentProposal {
 //
 // Spec: docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md
 //
+/// @dpf lifecycle=regulated-record retention=retained basis=Consent_provenance_(GDPR/biometric)
 model VoiceConsentRecord {
   id                    String         @id @default(cuid())
   subjectName           String
@@ -760,6 +765,7 @@ enum DecisionProposalStatus {
 //
 // `interactionId` references DecisionInteraction.id (the row id), matching the
 // naming EscalationCapture and DeferralCapture already use on this spine.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=content,operational,security-audit owner=platform-owner steward=data-steward
 model DecisionResolutionProposal {
   id                   String                       @id @default(cuid())
   proposalId           String                       @unique

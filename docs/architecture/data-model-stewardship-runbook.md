@@ -34,6 +34,21 @@ Semantics per state: `archived` = kept for reference, excluded from operational 
 
 **Pilot family.** The W19 unified resource-scheduling models (`Resource`, `ResourceAvailability`, `ResourceCapacityPool`, `ResourceCapacityAllocation`) are born on the convention — zero-data adoption. Existing carriers migrate per the operator-reviewed plan: [`docs/superpowers/plans/2026-08-18-w20-lifecycle-convention-migration-plan.md`](../superpowers/plans/2026-08-18-w20-lifecycle-convention-migration-plan.md). Business-state machines (e.g. an allocation's `reserved→confirmed→released` flow) remain domain enums — the record lifecycle says whether the ROW is live, not where the BUSINESS process stands.
 
+## Model metadata lives in the schema and the catalog
+
+**One declaration, one carrier, many readers (BI-D9F158AF, EP-A33A5C61 slice 4, founder direction 2026-09-08).** Governance metadata for a model is declared ONCE as a `/// @dpf` documentation line directly above the `model` block and converged into the Postgres catalog as `COMMENT ON TABLE "X" IS 'dpf:{...}'` at every portal boot ([`packages/db/scripts/apply-model-metadata-comments.ts`](../../packages/db/scripts/apply-model-metadata-comments.ts), called from `scripts/portal-migrate-boot.sh` right after `prisma migrate deploy`). The parser, vocabularies and carrier format are in [`packages/db/src/model-metadata.ts`](../../packages/db/src/model-metadata.ts).
+
+```prisma
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=internal categories=telemetry,security-audit owner=platform-architecture steward=data-steward timeAxis=createdAt
+model ToolExecution { ... }
+```
+
+- **Keys (closed set).** `lifecycle` (operational · telemetry-bounded · business-record · regulated-record · security-audit · legal-evidence · ephemeral) and `retention` are required. `retention` is exactly one disposition: `<N>d` (auto-purge past N days on `timeAxis`), `retained` (statutory minimum, needs `basis=`), `domain` (rows follow their own lifecycle), `reference`, `config`, or `projection` (derived copy, reconciled not aged). Optional: `sensitivity`, `categories`, `scope` (pci-cardholder / phi-health), `owner`, `steward`.
+- **The gate.** `scripts/check-model-metadata-tags.mjs` (source policy guards) fails the build on an invalid tag, a purge window on a non-purgeable class, or a NEW persistent model with no tag. Models that predate the convention sit in `scripts/model-metadata-baseline.txt`, which can only shrink — tag a model and run `--update`.
+- **Reading it.** `SELECT relname, obj_description(oid, 'pg_class') FROM pg_class` answers lifecycle and sensitivity for every table; external catalog tools ingest the same comment. In code, `parseCatalogComment` turns the string back into the typed declaration.
+- **What it replaces, and when.** This slice seeds the tags from `table-classification.ts`, the govern/data asset registry, `operate/retention/policies.ts` and `stewardship-exemptions.txt` (one-off codemod `apps/web/scripts/seed-model-metadata-tags.ts`). Those homes keep driving behaviour until slice 4d switches the retention sweep, the ERD mirror and the sanitized clone to read `pg_catalog`; after that they are deleted and the schema tag is the only place a disposition is ever written.
+- **Adding a model?** Write the tag before the migration. A model whose disposition you cannot name is a design question, not a default.
+
 ## Evidence payloads never live inline
 
 **The ceiling (BI-39AAE9B8, EP-A33A5C61 slice 2).** A ledger row records *that* something happened and what it carried, by digest. Any string leaf above `EVIDENCE_INLINE_CEILING_BYTES` (64 KB, [`apps/web/lib/evidence/bounded-output.ts`](../../apps/web/lib/evidence/bounded-output.ts)) leaves the JSON column:
