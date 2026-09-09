@@ -2,10 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, posix, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
 
-const root = resolve(dirname(new URL(import.meta.url).pathname.replace(/^\/(.:\/)/, "$1")), "..");
+const root = resolve(dirname(fileURLToPath(new URL(import.meta.url)).replace(/^\/(.:\/)/, "$1")), "..");
 const validatorAssets = [
   "scripts/installer/validate-install-state.mjs",
   "scripts/installer/install-state-schema-registry.mjs",

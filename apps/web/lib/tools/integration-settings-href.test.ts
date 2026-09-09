@@ -1,4 +1,5 @@
 import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -10,7 +11,9 @@ import {
   routableIntegrationSlugs,
 } from "./integration-settings-href";
 
-const INTEGRATIONS_DIR = new URL("../../app/(shell)/platform/tools/integrations/", import.meta.url).pathname;
+// fileURLToPath, never `new URL(...).pathname`: on Windows the latter is
+// "/D:/..." and readdirSync fails on every host here (BI-5CBDC146 class).
+const INTEGRATIONS_DIR = fileURLToPath(new URL("../../app/(shell)/platform/tools/integrations/", import.meta.url));
 
 describe("integrationSettingsHref", () => {
   it("links an integration that has a page", () => {

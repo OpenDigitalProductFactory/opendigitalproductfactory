@@ -5,6 +5,7 @@ import { readFile, realpath, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   assertSafeHarnessConfig,
@@ -298,7 +299,7 @@ test("completed evidence must preserve the exact observed baseline bytes", async
 });
 
 test("acceptance workflow executes the real baseline-to-candidate N-1 runner", async () => {
-  const workflow = await readFile(join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), ".github/workflows/self-upgrade-acceptance.yml"), "utf8");
+  const workflow = await readFile(join(fileURLToPath(new URL("..", import.meta.url)), ".github/workflows/self-upgrade-acceptance.yml"), "utf8");
   assert.match(workflow, /node scripts\/test-n-minus-one-upgrade\.mjs \\/);
   for (const flag of ["--base-sha", "--candidate-sha", "--repository", "--project", "--evidence-dir"]) assert.match(workflow, new RegExp(flag));
   assert.match(workflow, /--pr-number "\$\{\{ steps\.baseline\.outputs\.pr_number \}\}"/);
