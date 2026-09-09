@@ -140,30 +140,76 @@ export async function writeEvidenceTextBlob(text: string): Promise<OffloadedText
   };
 }
 
+/** True when any string leaf in the tree exceeds the ceiling. Pure. */
+export function hasOversizedString(value: unknown, ceilingBytes = EVIDENCE_INLINE_CEILING_BYTES): boolean {
+  if (typeof value === "string") return utf8ByteLength(value) > ceilingBytes;
+  if (Array.isArray(value)) return value.some((v) => hasOversizedString(v, ceilingBytes));
+  if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).some((v) => hasOversizedString(v, ceilingBytes));
+  return false;
+}
+
 /**
- * If `evidence.output` is a string above the ceiling, write it to the blob store
- * and return a new evidence object whose `output` is the bounded excerpt and
- * whose `outputBlob` is the reference. Anything else is returned untouched (same
- * reference), so small evidence costs nothing and idempotent re-application is
- * a no-op (an already-offloaded excerpt is below the ceiling by construction).
+ * Walk an evidence tree and offload EVERY string leaf above the ceiling —
+ * wherever it sits. The first cut only handled `evidence.output`; on the live
+ * install the console text actually lived under
+ * `evidence.content.execution.vitest.output` and `…productionBuild.output`
+ * (≈1 GB uncompressed across 385 rows), so a top-level-only rule missed 99% of
+ * the bytes. Each offloaded leaf keeps the same contract as before: the key
+ * still holds a string (a head+tail excerpt naming the digest), and two sibling
+ * keys are added — `<key>Blob` {sha256, storageKey, sizeBytes, mimeType} and
+ * `<key>Truncated: true`. Unchanged subtrees are returned by reference, so the
+ * common small case allocates nothing and re-applying is a no-op.
+ */
+export async function offloadLargeStrings<T>(
+  value: T,
+  options: { ceilingBytes?: number; writeBlob?: EvidenceBlobWriter } = {},
+): Promise<T> {
+  const ceiling = options.ceilingBytes ?? EVIDENCE_INLINE_CEILING_BYTES;
+  const writer = options.writeBlob ?? writeEvidenceTextBlob;
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next: unknown[] = [];
+    for (const entry of value) {
+      const v = await offloadLargeStrings(entry, { ceilingBytes: ceiling, writeBlob: writer });
+      if (v !== entry) changed = true;
+      next.push(v);
+    }
+    return (changed ? next : value) as T;
+  }
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (typeof entry === "string") {
+      const byteLength = utf8ByteLength(entry);
+      if (byteLength > ceiling) {
+        const reference = await writer(entry);
+        next[key] = excerptText(entry, reference.sha256, byteLength);
+        next[`${key}Blob`] = reference;
+        next[`${key}Truncated`] = true;
+        changed = true;
+        continue;
+      }
+      next[key] = entry;
+      continue;
+    }
+    const v = await offloadLargeStrings(entry, { ceilingBytes: ceiling, writeBlob: writer });
+    if (v !== entry) changed = true;
+    next[key] = v;
+  }
+  return (changed ? next : value) as T;
+}
+
+/**
+ * Offload oversized text anywhere in an evidence object. Kept under its
+ * original name for the writers that already call it; the behaviour is now the
+ * whole-tree walk above (the top-level `output` case is just one leaf of it).
  */
 export async function offloadEvidenceOutput<T>(
   evidence: T,
   options: { ceilingBytes?: number; writeBlob?: EvidenceBlobWriter } = {},
 ): Promise<T> {
-  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return evidence;
-  const record = evidence as Record<string, unknown>;
-  const output = record.output;
-  if (typeof output !== "string") return evidence;
-  const ceiling = options.ceilingBytes ?? EVIDENCE_INLINE_CEILING_BYTES;
-  const byteLength = utf8ByteLength(output);
-  if (byteLength <= ceiling) return evidence;
-  const writer = options.writeBlob ?? writeEvidenceTextBlob;
-  const reference = await writer(output);
-  return {
-    ...record,
-    output: excerptText(output, reference.sha256, byteLength),
-    outputBlob: reference,
-    outputTruncated: true,
-  } as T;
+  if (!evidence || typeof evidence !== "object") return evidence;
+  return offloadLargeStrings(evidence, options);
 }
