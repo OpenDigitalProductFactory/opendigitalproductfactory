@@ -500,6 +500,23 @@ export const PURGE_POLICIES: readonly PurgePolicy[] = [
       "Per-resolution evidence rows from discovery sweeps. The resolved inventory entities are the durable record; 6 months.",
   },
   {
+    model: "discoveryRun",
+    label: "Discovery runs (raw observation log)",
+    category: "edge-telemetry",
+    timestampField: "startedAt",
+    baseRetentionDays: DAYS_30,
+    extraWhere: {
+      // A run still in flight is never eligible; a run that is the LAST
+      // confirming run for any inventory entity or relationship is the evidence
+      // behind that row's lastSeenAt and stays until a newer run supersedes it.
+      status: { not: "running" },
+      confirmedEntities: { none: {} },
+      confirmedRelations: { none: {} },
+    },
+    rationale:
+      "Every discovery sweep (hourly full sweep, Prometheus poll, Edge submissions — ~240 runs/day on one install) writes a DiscoveredItem row per observed item and a DiscoveredRelationship row per edge, cascading from the run. Nothing in the application reads those raw rows back; the deduplicated truth is InventoryEntity / InventoryRelationship (upserted with lastSeenAt), and the reviewable derivatives (identityResolutionLog, discoveryFingerprintObservation, triage decisions) are enrolled or retained separately. Without this policy the raw log grew without bound: 280k DiscoveredItem rows for 335 distinct keys in 16 days (BI-BFFB9211). Thirty days keeps a month of raw observations for forensics; the cascade removes items and relationships with the run.",
+  },
+  {
     model: "discoveryFingerprintObservation",
     label: "Discovery fingerprint observations",
     category: "audit-log",
