@@ -82,3 +82,29 @@ describe("writeGovernedToolAudit", () => {
     }));
   });
 });
+
+describe("writeGovernedToolAudit — payload ceiling (BI-39AAE9B8)", () => {
+  it("replaces an oversized ledger parameter with a digest marker and keeps the rest verbatim", async () => {
+    const create = vi.fn(async () => ({ id: "tool-execution-2" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    const log = "L".repeat(200 * 1024);
+
+    await writeGovernedToolAudit({
+      // Audit class is derived from the PLATFORM registry by tool name, so use
+      // a real ledger tool: the one that actually carried multi-megabyte logs.
+      toolName: "record_local_integration_result",
+      rawParams: { candidateBranch: "feat/x", evidence: { output: log, sha: "abc" } },
+      result: { success: true, message: "recorded" },
+      userId: "user-1",
+      source: "external-jsonrpc",
+      durationMs: 5,
+    });
+
+    const row = (create.mock.calls as unknown as Array<[Record<string, unknown>]>)[0]?.[0] as unknown as { auditClass: string; parameters: { candidateBranch: string; evidence: { sha: string; output: unknown } } };
+    expect(row.auditClass).toBe("ledger");
+    expect(row.parameters.candidateBranch).toBe("feat/x");
+    expect(row.parameters.evidence.sha).toBe("abc");
+    expect(row.parameters.evidence.output).toMatchObject({ __dpfBounded: true, byteLength: 200 * 1024 });
+    expect(JSON.stringify(row.parameters).length).toBeLessThan(8 * 1024);
+  });
+});

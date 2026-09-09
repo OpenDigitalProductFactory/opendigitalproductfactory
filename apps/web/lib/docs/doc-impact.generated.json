@@ -693,6 +693,9 @@
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
+    "apps/web/lib/evidence/bounded-output.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/explore/backlog.ts": [
       "docs/architecture/backlog-archetype-scope.md"
     ],
@@ -1235,6 +1238,9 @@
     ],
     "apps/web/scripts/issue-edge-bootstrap-token.ts": [
       "docs/install/verification-runbook.md"
+    ],
+    "apps/web/scripts/offload-evidence-output.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "config/merge-readiness-policy.json": [
       "docs/testing/pr-health.md"
@@ -2493,10 +2499,12 @@
       "packages/db/src/capability-maturity.ts"
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
+      "apps/web/lib/evidence/bounded-output.ts",
       "apps/web/lib/routes.ts",
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
       "apps/web/lib/shared/org-address.ts",
+      "apps/web/scripts/offload-evidence-output.ts",
       "packages/db/prisma/schema/resource-scheduling.prisma",
       "scripts/check-no-local-isrecord.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
