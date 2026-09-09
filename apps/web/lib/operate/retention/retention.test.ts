@@ -17,7 +17,9 @@ import {
   RETAINED_MODELS,
   RETENTION_CATEGORIES,
   type RetentionPrismaClient,
+  TOOL_EXECUTION_SHORT_LIVED_AUDIT_CLASSES,
 } from "./policies";
+import { AUDIT_CLASSES } from "../../audit-classes";
 import {
   resolveEffectiveRetentionDays,
   toFloorKey,
@@ -59,9 +61,42 @@ describe("retention registry invariants", () => {
     }
   });
 
-  it("has no duplicate models in either axis", () => {
-    expect(new Set(PURGE_MODELS).size).toBe(PURGE_MODELS.length);
+  it("has no duplicate policies: a model appears once per distinct extraWhere partition", () => {
+    // A model MAY be enrolled more than once when each entry selects a
+    // disjoint partition (ToolExecution by auditClass). Two entries with the
+    // same model AND the same extraWhere would double-count and double-delete.
+    const keys = PURGE_POLICIES.map((p) => `${p.model}::${JSON.stringify(p.extraWhere ?? null)}`);
+    expect(new Set(keys).size).toBe(keys.length);
     expect(new Set(RETAINED_MODELS).size).toBe(RETAINED_MODELS.length);
+  });
+
+  it("splits ToolExecution by audit class exactly as lib/audit-classes.ts states (BI-A55A651B)", () => {
+    const branches = PURGE_POLICIES.filter((p) => p.model === "toolExecution");
+    const byClass = new Map<string, number>();
+    let complement: (typeof branches)[number] | undefined;
+    for (const b of branches) {
+      const where = b.extraWhere as { auditClass?: unknown; NOT?: { auditClass?: { in?: readonly string[] } } } | undefined;
+      if (typeof where?.auditClass === "string") byClass.set(where.auditClass, b.baseRetentionDays);
+      else if (where?.NOT?.auditClass?.in) complement = b;
+    }
+    // journal + metrics_only are the short-lived classes, 30 days each.
+    expect(TOOL_EXECUTION_SHORT_LIVED_AUDIT_CLASSES).toEqual(["journal", "metrics_only"]);
+    for (const cls of TOOL_EXECUTION_SHORT_LIVED_AUDIT_CLASSES) {
+      expect(AUDIT_CLASSES).toContain(cls);
+      expect(byClass.get(cls)).toBe(30);
+    }
+    // ledger is the complement branch (so NULL auditClass can never escape),
+    // and it is the long window.
+    expect(complement).toBeDefined();
+    const complementWhere = complement!.extraWhere as { NOT: { auditClass: { in: readonly string[] } } };
+    expect([...complementWhere.NOT.auditClass.in]).toEqual([...TOOL_EXECUTION_SHORT_LIVED_AUDIT_CLASSES]);
+    expect(complement!.baseRetentionDays).toBe(365);
+    // Every declared audit class is covered by exactly one branch.
+    const uncovered = AUDIT_CLASSES.filter(
+      (c) => !byClass.has(c) && !TOOL_EXECUTION_SHORT_LIVED_AUDIT_CLASSES.includes(c as never) && c !== "ledger",
+    );
+    expect(uncovered).toEqual([]);
+    expect(branches).toHaveLength(3);
   });
 
   it("routes coworker chat through a cascade-correct custom handler", () => {
@@ -196,19 +231,19 @@ describe("retention executor", () => {
   const NOW = new Date("2026-06-14T04:00:00.000Z");
 
   it("dry-run counts and never deletes", async () => {
-    const prisma = makeFakePrisma({ toolExecution: 42 });
+    const prisma = makeFakePrisma({ tokenUsage: 42 });
     const report = await runRetentionSweep({
       prisma,
       now: NOW,
       dryRun: true,
       industryKey: null,
-      onlyModels: ["toolExecution"],
+      onlyModels: ["tokenUsage"],
     });
     expect(report.dryRun).toBe(true);
     expect(report.results).toHaveLength(1);
     expect(report.results[0].affected).toBe(42);
-    expect(prisma.sharedLog).toContain("toolExecution.count");
-    expect(prisma.sharedLog).not.toContain("toolExecution.deleteMany");
+    expect(prisma.sharedLog).toContain("tokenUsage.count");
+    expect(prisma.sharedLog).not.toContain("tokenUsage.deleteMany");
   });
 
   it("batch-deletes all eligible rows on a real run", async () => {
@@ -284,18 +319,18 @@ describe("retention executor", () => {
 
   it("isolates a failing policy: others still run", async () => {
     const prisma = makeFakePrisma(
-      { toolExecution: 10, tokenUsage: 10 },
-      { throwOn: { toolExecution: "findMany" } },
+      { routeDecisionLog: 10, tokenUsage: 10 },
+      { throwOn: { routeDecisionLog: "findMany" } },
     );
     const report = await runRetentionSweep({
       prisma,
       now: NOW,
       dryRun: false,
       industryKey: null,
-      onlyModels: ["toolExecution", "tokenUsage"],
+      onlyModels: ["routeDecisionLog", "tokenUsage"],
     });
     expect(report.errorCount).toBe(1);
-    const failed = report.results.find((r) => r.model === "toolExecution");
+    const failed = report.results.find((r) => r.model === "routeDecisionLog");
     const ok = report.results.find((r) => r.model === "tokenUsage");
     expect(failed!.error).toBeTruthy();
     expect(ok!.affected).toBe(10);
@@ -325,16 +360,16 @@ describe("legal hold (BI-90A8D153 GAP 2)", () => {
     // The exclusion spread must be a strict no-op for the 20 real policies (none
     // of which target a legalHold-bearing model) — it must not corrupt their
     // WHERE clause or accidentally spare rows.
-    const prisma = makeFakePrisma({ toolExecution: 3 });
+    const prisma = makeFakePrisma({ tokenUsage: 3 });
     await runRetentionSweep({
       prisma,
       now: NOW2,
       dryRun: false,
       industryKey: null,
-      onlyModels: ["toolExecution"],
+      onlyModels: ["tokenUsage"],
     });
     const findManyCall = (
-      prisma.toolExecution as unknown as { state: FakeModelState }
+      prisma.tokenUsage as unknown as { state: FakeModelState }
     ).state.calls.find((c) => c.op === "findMany");
     const where = findManyCall!.where as Record<string, unknown>;
     expect(where).not.toHaveProperty("legalHold");

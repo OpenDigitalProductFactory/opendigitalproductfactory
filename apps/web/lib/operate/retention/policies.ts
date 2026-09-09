@@ -21,6 +21,7 @@
 //                        model is ever enrolled for deletion.
 
 import {
+  DAYS_30,
   DAYS_90,
   DAYS_180,
   DAYS_365,
@@ -95,6 +96,14 @@ export type RetentionCustomPurge = (args: {
   batchSize: number;
   cap: number;
 }) => Promise<{ deleted: number; capped: boolean }>;
+
+/**
+ * ToolExecution audit classes that get the SHORT window. Kept as a literal
+ * (not derived from AUDIT_CLASSES) because the ledger branch below is defined
+ * as "everything else", and that complement must be reviewable at a glance —
+ * retention.test.ts asserts it stays consistent with lib/audit-classes.ts.
+ */
+export const TOOL_EXECUTION_SHORT_LIVED_AUDIT_CLASSES = ["journal", "metrics_only"] as const;
 
 export interface PurgePolicy {
   /** Prisma model accessor on PrismaClient, e.g. "toolExecution". */
@@ -202,14 +211,47 @@ export const PURGE_POLICIES: readonly PurgePolicy[] = [
     rationale:
       "Rotating refresh tokens for MCP clients (BI-E4DFDCB0). Retained past their own expiry on purpose: the rotation chain is what makes a replayed token detectable, so a purge window shorter than the refresh TTL would erase the evidence of a stolen token. One year comfortably exceeds the 30-day default TTL.",
   },
+  // ToolExecution is ONE table with THREE audit classes (lib/audit-classes.ts):
+  //   ledger       — side-effecting / authority trail, retained in full for the
+  //                  audit window (floors lengthen it);
+  //   journal      — external reads and reasoning checkpoints, 30 days rolling;
+  //   metrics_only — read chatter, probes, pings: no payload is written at all
+  //                  (governed-tool-audit.ts blanks parameters/result), 30 days.
+  // Before BI-A55A651B a single 365-day policy applied to every class, so
+  // ~57k metrics_only rows and every journal row outlived the doctrine by
+  // 11 months. The classes are split with extraWhere; the ledger branch is
+  // written as the COMPLEMENT of the short-lived classes so a row with a NULL
+  // auditClass (legacy writers, pre-classification rows) can never fall
+  // through every branch and live forever — it lands in the longest window.
   {
     model: "toolExecution",
-    label: "Tool execution audit log",
+    label: "Tool execution audit log — ledger (and unclassified)",
     category: "audit-log",
     timestampField: "createdAt",
     baseRetentionDays: DAYS_365,
+    extraWhere: { NOT: { auditClass: { in: TOOL_EXECUTION_SHORT_LIVED_AUDIT_CLASSES } } },
     rationale:
-      "Every tool/capability invocation (the #1 growth driver, /platform/ai/authority audit trail). One year of operational audit; regulated industries lengthen via floors.",
+      "Side-effecting / authority-trail invocations (the /platform/ai/authority audit trail) plus any row whose class was never set. One year of operational audit; regulated industries lengthen via floors.",
+  },
+  {
+    model: "toolExecution",
+    label: "Tool execution audit log — journal",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_30,
+    extraWhere: { auditClass: "journal" },
+    rationale:
+      "External reads and reasoning checkpoints. lib/audit-classes.ts: 'Retained for 30 days rolling'. Industry floors still lengthen this branch because it shares the audit-log category.",
+  },
+  {
+    model: "toolExecution",
+    label: "Tool execution audit log — metrics_only",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_30,
+    extraWhere: { auditClass: "metrics_only" },
+    rationale:
+      "Read chatter, probes, health pings and list/search calls. lib/audit-classes.ts: 'No payload retained' — the writer already blanks parameters and result, so only the row (toolName, timing, success, summary) exists; 30 days is enough for capacity and error-rate review.",
   },
   {
     model: "adapterRunTelemetry",
