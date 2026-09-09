@@ -277,7 +277,10 @@ acknowledging principal, the creating principal and the routed WorkItem are real
 Prisma relations (NOT VALID foreign keys on the existing table); the Mailroom
 source-registry entry, its shared policies and the navigation records live in
 their own modules to respect the module-size ceilings; provider probe and poll
-outcomes use the shared `ActionResult` helpers.
+outcomes use the shared `ActionResult` helpers. The architecture reviewer's
+observation is closed in code: a message with no provider id gets a deterministic
+synthetic idempotency id (`idempotentMessageId` in `intake.ts`), so the
+never-ingested-twice guarantee is total.
 
 ## Completion gate (every slice)
 

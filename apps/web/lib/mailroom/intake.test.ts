@@ -8,7 +8,7 @@ import { ok } from "@/lib/shared/action-result";
 
 import { ALL_ARCHETYPES, resolveMailroomProfile } from "@dpf/storefront-templates";
 
-import { ingestNormalizedMail, pollDueMailboxes, pollMailbox, type IntakeDb, type IntakeDeps, type MailboxRecord } from "./intake";
+import { idempotentMessageId, ingestNormalizedMail, pollDueMailboxes, pollMailbox, type IntakeDb, type IntakeDeps, type MailboxRecord } from "./intake";
 import { createMailboxProviderAdapters } from "./providers/registry";
 import type { MailboxProviderAdapter, NormalizedInboundMail } from "./providers/types";
 import { MAILROOM_QUEUE_SOURCE_TYPE } from "./queue-room";
@@ -197,6 +197,28 @@ describe("ingestNormalizedMail", () => {
     expect(n.recipientUserId).toBe("user-7");
     expect(n.urgency).toBe("urgent");
     expect(n.deepLink).toBe("https://rescue.example/workspace/mailroom/items/in-1");
+  });
+});
+
+describe("idempotentMessageId", () => {
+  it("uses the provider id, then the Message-ID header, then a deterministic digest", () => {
+    expect(idempotentMessageId(mail())).toBe("u-1");
+    expect(idempotentMessageId(mail({ providerMessageId: "", messageIdHeader: "<h@x>" }))).toBe("mid:<h@x>");
+    const a = idempotentMessageId(mail({ providerMessageId: "", messageIdHeader: null }));
+    const b = idempotentMessageId(mail({ providerMessageId: "", messageIdHeader: null }));
+    expect(a).toMatch(/^synthetic:[0-9a-f]{32}$/);
+    expect(a).toBe(b);
+    expect(idempotentMessageId(mail({ providerMessageId: "", messageIdHeader: null, subject: "other" }))).not.toBe(a);
+  });
+
+  it("a message without a provider id is still ingested once", async () => {
+    const f = fakeDb();
+    const d = deps(f.db, {});
+    const first = await ingestNormalizedMail(d, mailbox, mail({ providerMessageId: "", messageIdHeader: null }));
+    const second = await ingestNormalizedMail(d, mailbox, mail({ providerMessageId: "", messageIdHeader: null }));
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(f.inbound).toHaveLength(1);
   });
 });
 

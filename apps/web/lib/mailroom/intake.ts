@@ -12,6 +12,7 @@
 
 import type { MailroomProfile } from "@dpf/storefront-templates";
 import type { MailboxProviderKey } from "@dpf/db/mailroom-enums";
+import { createHash } from "node:crypto";
 
 import { dispatchMailroomItem, type DispatchDb, type DispatchTarget, type KnownSenderIngress, type NotifyPort } from "./dispatch";
 import type { MailboxProviderAdapters } from "./providers/registry";
@@ -74,11 +75,33 @@ function statusFor(triage: TriageResult, target: DispatchTarget | null): "noise"
   return "routed";
 }
 
+/**
+ * The idempotency id for a message. Providers always supply one (IMAP UID, Graph
+ * id); the residual case — a message with no provider id — gets a deterministic
+ * synthetic id from its stable headers so the guarantee stays total and a
+ * redelivery still lands on the same row (architecture-review observation on the
+ * 2026-09-09 design).
+ */
+export function idempotentMessageId(mail: NormalizedInboundMail): string {
+  const provided = mail.providerMessageId?.trim();
+  if (provided) return provided;
+  if (mail.messageIdHeader?.trim()) return `mid:${mail.messageIdHeader.trim()}`;
+  const digest = createHash("sha256")
+    .update(`${mail.from?.address ?? ""}
+${mail.subject ?? ""}
+${mail.receivedAt.toISOString()}
+${mail.textBody.slice(0, 2000)}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `synthetic:${digest}`;
+}
+
 /** Persist, triage and dispatch one provider-neutral message. Idempotent per (channelId, providerMessageId). */
 export async function ingestNormalizedMail(deps: IntakeDeps, mailbox: MailboxRecord, mail: NormalizedInboundMail): Promise<IngestOutcome> {
   const channelId = mailroomChannelId(mailbox.provider);
+  const messageId = idempotentMessageId(mail);
   const existing = await deps.db.inboundChannelMessage.findFirst({
-    where: { channelId, externalMessageId: mail.providerMessageId },
+    where: { channelId, externalMessageId: messageId },
     select: { inboundId: true },
   });
   if (existing) return { inboundId: existing.inboundId, created: false, triage: null, target: null };
@@ -89,8 +112,8 @@ export async function ingestNormalizedMail(deps: IntakeDeps, mailbox: MailboxRec
       domain: MAILROOM_DOMAIN,
       channelId,
       mailboxAccountId: mailbox.id,
-      externalThreadId: mail.inReplyTo ?? mail.references[0] ?? mail.messageIdHeader ?? mail.providerMessageId,
-      externalMessageId: mail.providerMessageId,
+      externalThreadId: mail.inReplyTo ?? mail.references[0] ?? mail.messageIdHeader ?? messageId,
+      externalMessageId: messageId,
       fromAddress: mail.from?.address ?? null,
       fromDisplayName: mail.from?.name ?? null,
       toAddress: mail.to[0]?.address ?? mailbox.address,
