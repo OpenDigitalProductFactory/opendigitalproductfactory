@@ -89,33 +89,18 @@ overrides:
   # GHSA-crvj-82cr-hjcx (Dependabot #192/#191/#190), plus the newer
   # GHSA-hxh3-vqpv-xpqv JSX escaping fix. Patched on the same 4.x line.
   hono: '^4.13.7'
-  # Keep the CLI's diagram stack on the last policy-vetted releases. Floating
-  # transitive ranges let lockfile regeneration pull a same-day ZenUML/Floating
-  # UI graph even after the CLI itself was rolled back (BI-72E0A27B).
-  # mermaid < 11.16.1: GHSA-rhh3-jpg6-66xh (Dependabot #145, medium),
-  # GHSA-6x64-9x62-f2gx (Dependabot #143, medium), GHSA-3rrr-jr9j-h3q3
-  # (Dependabot #142, medium), GHSA-2v8p-3f2j-5mp7 (Dependabot #141, medium),
-  # and GHSA-c4c3-pg64-4m4v (Dependabot #144, low). Raise the policy pin from
-  # the vulnerable 11.15.0 to the patched 11.16.1 (deps diff is minor-range
-  # only; no ZenUML/Floating-UI companion move needed).
-  mermaid: '11.16.1'
-  '@mermaid-js/mermaid-zenuml': '0.2.2'
-  '@zenuml/core': '3.47.8'
+  # @floating-ui/* exact pins. Introduced with the diagram-stack pin set
+  # (BI-72E0A27B); the mermaid/zenuml members left with the workspace's
+  # mermaid-cli dependency (BI-DBDB8C6D — rendering now runs from the pinned
+  # minlag/mermaid-cli tool image, see scripts/lib/mermaid-renderer.mjs).
+  # These remain because @floating-ui/react is a direct apps/web runtime
+  # dependency; lift them deliberately, with the guard in
+  # scripts/check-diagram-dependency-pins.mjs, not via Dependabot.
   '@floating-ui/core': '1.7.5'
   '@floating-ui/dom': '1.7.6'
   '@floating-ui/react-dom': '2.1.8'
   '@floating-ui/react': '0.27.19'
   '@floating-ui/utils': '0.2.11'
-  # extract-zip <= 2.0.1: GHSA-jmr9-qjv8-65gv unvalidated symlink path traversal
-  # (Dependabot #153, high). extract-zip has NO patched release — 2.0.1 is the
-  # latest published version and the package is unmaintained (last publish
-  # 2023-03). The only remediation is to remove it from the tree: its sole
-  # parent is @puppeteer/browsers, which dropped extract-zip in 3.0.0 (it now
-  # unpacks via modern-tar). @puppeteer/browsers 3.x first ships in puppeteer
-  # 25.x, so floor puppeteer to ^25. Dev-only transitive of
-  # @mermaid-js/mermaid-cli (diagram rendering); the CLI's peer range widened to
-  # '^23 || ^24 || ^25' in 11.16.0, which this commit adopts in lockstep.
-  puppeteer: '^25'
   # js-yaml GHSA-5p4m-2wfm-xmqj (high): special-character handling flaw. Both
   # supported major lines resolve to a vulnerable transitive copy, so each is
   # floored to its patched release independently.
@@ -235,7 +220,6 @@ allowBuilds:
   msw: true
   prisma: true
   protobufjs: false
-  puppeteer: false
   sharp: true
   unrs-resolver: false
 # Restore peerDependencies that @testing-library/jest-dom dropped in 6.x but still
