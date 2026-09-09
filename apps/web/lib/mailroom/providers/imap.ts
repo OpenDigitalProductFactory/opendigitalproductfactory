@@ -96,7 +96,7 @@ function headerString(headers: Map<string, unknown>, name: string): string | und
   const value = headers.get(name);
   if (value == null) return undefined;
   if (typeof value === "string") return value;
-  if (typeof value === "object" && value !== null && "value" in value) {
+  if (typeof value === "object" && "value" in value) {
     const inner = (value as { value: unknown }).value;
     return typeof inner === "string" ? inner : JSON.stringify(inner);
   }
