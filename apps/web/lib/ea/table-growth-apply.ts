@@ -106,7 +106,7 @@ export async function runTableGrowthSteward(deps: {
             `Rows/24h: ${String(details.rowsLast24h ?? "n/a")}\nBytes/day: ${String(details.bytesPerDay ?? "n/a")}\n` +
             `Total: ${String(details.totalBytes ?? "n/a")} bytes\nProjected 12 months: ${String(details.projected12Month ?? "n/a")}\n\n` +
             `Remedy: ${String(details.remedy ?? "")}\n\nRead the finding on the EA data-model view; the steward re-evaluates nightly and the item stays open until the finding clears.`,
-          agentId: "AGT-BUILD-DA",
+          agentId: "AGT-WS-DATA-ARCHITECT",
         });
         if (result.action === "created" || result.action === "updated") filed.push(result.itemId);
       }
