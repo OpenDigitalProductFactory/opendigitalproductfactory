@@ -94,9 +94,6 @@ vi.mock("@/components/platform/coworker-record/RecordActionsMenu", () => ({
   RecordActionsMenu: () => null,
 }));
 
-vi.mock("@/components/golden-triangle/CoworkerPriorityControl", () => ({
-  CoworkerPriorityControl: () => null,
-}));
 
 vi.mock("@/lib/tak/work-pattern-read-model", () => ({
   getWorkPatternReadModel: vi.fn().mockResolvedValue({

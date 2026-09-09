@@ -21,6 +21,7 @@
  * this.
  */
 import { prisma } from "@dpf/db";
+import { isGoldenTrianglePreference } from "@/lib/golden-triangle/persistence";
 
 import type { RoomPostureDeclaration } from "@/lib/work-posture";
 
@@ -55,12 +56,15 @@ export function parseWorkroomPostureDefault(value: unknown): RoomPostureDeclarat
   const boundary = raw.actionBoundary;
   const hasLevel = typeof level === "string" && PROACTIVITY_LEVELS.includes(level);
   const hasBoundary = typeof boundary === "string" && ACTION_BOUNDARIES.includes(boundary);
-  if (!hasLevel && !hasBoundary) return null;
+  // BI-7ADEBDC1: the decreed room default may carry a Golden Triangle too.
+  const hasPriority = isGoldenTrianglePreference(raw.priority);
+  if (!hasLevel && !hasBoundary && !hasPriority) return null;
   return {
     ...(hasLevel ? { proactivityLevel: level as RoomPostureDeclaration["proactivityLevel"] } : {}),
     ...(hasBoundary
       ? { actionBoundary: boundary as RoomPostureDeclaration["actionBoundary"] }
       : {}),
+    ...(hasPriority ? { priority: raw.priority as RoomPostureDeclaration["priority"] } : {}),
     declaredBy: typeof raw.declaredBy === "string" ? raw.declaredBy : null,
     declaredAt: typeof raw.declaredAt === "string" ? raw.declaredAt : null,
   };

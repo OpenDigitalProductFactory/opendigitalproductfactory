@@ -75,12 +75,6 @@ vi.mock("@/lib/decision-perspective/install-variant-context", () => ({
   resolveInstallVariantContext: vi.fn().mockResolvedValue({ archetype: null }),
 }));
 
-vi.mock("@/lib/actions/golden-triangle", () => ({
-  getCoworkerPostureInheritance: vi
-    .fn()
-    .mockResolvedValue({ hasOwnOverride: false }),
-}));
-
 vi.mock("@/lib/coworker-self-assessment/review-service", () => ({
   getCoworkerCapabilityNeedReview: vi.fn().mockResolvedValue({
     summary: { total: 0, byStatus: {}, bySeverity: {}, byKind: {} },
@@ -143,9 +137,6 @@ vi.mock("@/components/platform/coworker-record/CapabilitiesEditor", () => ({
 }));
 vi.mock("@/components/platform/coworker-record/RecordActionsMenu", () => ({
   RecordActionsMenu: () => null,
-}));
-vi.mock("@/components/golden-triangle/CoworkerPriorityControl", () => ({
-  CoworkerPriorityControl: () => null,
 }));
 vi.mock(
   "@/components/platform/coworker-record/CoworkerProactivityNote",

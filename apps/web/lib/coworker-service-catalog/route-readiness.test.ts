@@ -251,7 +251,7 @@ describe("projectCoworkerRouteReadiness", () => {
       },
       effort: "high" as const,
       preset: "assured" as const,
-      source: "agent" as const,
+      source: "workroom" as const,
     };
 
     await expect(

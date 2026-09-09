@@ -203,7 +203,9 @@ async function prepareRoute(
   // inherited organization/platform) posture alter routing context or effort.
   const posture = options?.durableAsyncOperation?.expectedExecution
     ? null
-    : await resolveDispatchPosture(options?.agentId ?? null, taskType);
+    : await resolveDispatchPosture(options?.agentId ?? null, taskType, null, undefined, {
+        workroomPriority: options?.workroomPriority ?? null,
+      });
   const initialRouteContext = buildInitialRouteContext({
     sensitivity,
     options,

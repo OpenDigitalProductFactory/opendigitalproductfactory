@@ -3,16 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 
 type Props = {
-  elevatedAssistEnabled: boolean;
-  onToggleElevatedAssist: () => void;
-  externalAccessEnabled: boolean;
-  onToggleExternalAccess: () => void;
-  /**
-   * When false, the Web access switch is hidden. Agents without the
-   * `web_search` grant cannot use public web tools even if the session
-   * flag is on — showing the toggle is a no-op (BI-CD9DC3BC).
-   */
-  webAccessAvailable?: boolean;
   coworkerMode?: "advise" | "act";
   onToggleCoworkerMode?: () => void;
   useUnified?: boolean;
@@ -23,96 +13,21 @@ type Props = {
   disabled?: boolean;
 };
 
-/** A labelled row with a real switch affordance. */
-function ToggleSwitchRow({
-  checked,
-  onToggle,
-  label,
-  description,
-  title,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-  label: string;
-  description: string;
-  title: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      title={title}
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        width: "100%",
-        textAlign: "left",
-        background: "none",
-        border: "none",
-        padding: "8px 12px",
-        cursor: "pointer",
-      }}
-    >
-      <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 12, color: "var(--dpf-text)" }}>{label}</span>
-        <span style={{ fontSize: 10, color: "var(--dpf-muted)", lineHeight: 1.3 }}>{description}</span>
-      </span>
-      <span
-        aria-hidden="true"
-        style={{
-          position: "relative",
-          width: 34,
-          height: 18,
-          borderRadius: 999,
-          flex: "0 0 auto",
-          background: checked
-            ? "var(--dpf-success)"
-            : "color-mix(in srgb, var(--dpf-text) 22%, transparent)",
-          transition: "background 0.15s ease",
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: 2,
-            left: checked ? 18 : 2,
-            width: 14,
-            height: 14,
-            borderRadius: "50%",
-            background: "var(--dpf-text)",
-            transition: "left 0.15s ease",
-          }}
-        />
-      </span>
-    </button>
-  );
-}
-
 /**
  * The coworker "posture" control — a compact summary chip that expands into the
- * real switches that govern how much the coworker can do this conversation:
- * mode (advise/act), page editing, and web access.
+ * Advise / Act mode switch for this conversation.
  *
- * Lives in the composer lip (input-anchored), matching the permission controls
- * leading assistant UIs place next to the prompt box. Work *priority* (the
- * Golden Triangle) is a separate concern and lives in its own dock at the
- * composer (CoworkerPriorityDock) — it is intentionally NOT in this menu.
+ * EP-WORK-POSTURE 8.2 (founder direction 2026-09-08, BI-947780FE): the
+ * "Edit fields on this page" and "Web access" switches that used to live here
+ * are gone. Whether a coworker may act hands-on in the UI or reach the public
+ * web is a consequence of the Workroom it is working in (its shape, its
+ * declared activity, the coworker's role and standing grants) — resolved
+ * server-side per turn, never a per-conversation preference. Work priority
+ * (the Golden Triangle) is likewise a Workroom parameter (BI-7ADEBDC1).
+ *
+ * Renders nothing when there is no mode to switch, rather than an empty menu.
  */
 export function CoworkerPostureControl({
-  elevatedAssistEnabled,
-  onToggleElevatedAssist,
-  externalAccessEnabled,
-  onToggleExternalAccess,
-  webAccessAvailable = true,
   coworkerMode,
   onToggleCoworkerMode,
   useUnified,
@@ -124,7 +39,6 @@ export function CoworkerPostureControl({
   const [open, setOpen] = useState(false);
   const showMode = Boolean(useUnified && onToggleCoworkerMode);
   const isAct = coworkerMode === "act";
-  const showWebAccess = webAccessAvailable;
 
   useEffect(() => {
     if (!open) return;
@@ -137,11 +51,8 @@ export function CoworkerPostureControl({
 
   const summaryParts: string[] = [];
   if (showMode) summaryParts.push(isAct ? "Act" : "Advise");
-  if (elevatedAssistEnabled) summaryParts.push("edits on");
-  if (showWebAccess && externalAccessEnabled) summaryParts.push("web on");
   const summaryLabel = summaryParts.length > 0 ? summaryParts.join(" · ") : "Controls";
-  const postureActive =
-    elevatedAssistEnabled || (showWebAccess && externalAccessEnabled) || (showMode && isAct);
+  const postureActive = showMode && isAct;
 
   const popoverShell: React.CSSProperties = {
     position: "absolute",
@@ -156,6 +67,8 @@ export function CoworkerPostureControl({
     zIndex: 30,
     padding: "6px 0",
   };
+
+  if (!showMode) return null;
 
   return (
     <div ref={rootRef} style={{ position: "relative" }} onMouseDown={(e) => e.stopPropagation()}>
@@ -173,7 +86,7 @@ export function CoworkerPostureControl({
         // when nothing is active — which reads as cryptic chrome. The visible
         // summary still communicates active posture at a glance.
         aria-label={`Conversation controls${summaryParts.length > 0 ? `: ${summaryLabel}` : ""}`}
-        title="Conversation controls — mode, page editing, and web access for this coworker"
+        title="Conversation controls — Advise or Act for this coworker. Page editing and web access follow the room, not this menu."
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -271,30 +184,6 @@ export function CoworkerPostureControl({
                 })}
               </span>
             </div>
-          )}
-          <ToggleSwitchRow
-            checked={elevatedAssistEnabled}
-            onToggle={onToggleElevatedAssist}
-            label="Edit fields on this page"
-            description="Let the coworker fill in forms for you"
-            title={
-              elevatedAssistEnabled
-                ? "On: this page's coworker can update approved form fields"
-                : "Off: this page's coworker only suggests changes"
-            }
-          />
-          {showWebAccess && (
-            <ToggleSwitchRow
-              checked={externalAccessEnabled}
-              onToggle={onToggleExternalAccess}
-              label="Web access"
-              description="Allow web search and fetch this session"
-              title={
-                externalAccessEnabled
-                  ? "On: this page's coworker can use approved public web search and fetch tools"
-                  : "Off: this page's coworker cannot reach public web tools"
-              }
-            />
           )}
         </div>
       )}
