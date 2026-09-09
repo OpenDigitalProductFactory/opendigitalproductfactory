@@ -159,7 +159,7 @@ After the install completes, `install-dpf` prints a single readiness banner. The
 - **`needs_refresh`** — a token exists in the contributor's environment, but the running client hasn't picked it up yet. Restart Claude Code / Codex in this worktree. If the issue persists after restart, the endpoint is unreachable or returning an unexpected shape — collect a `dpf-doctor` bundle.
 - **`portal-unavailable`** — a token exists, but the portal endpoint cannot be reached or is clearly rebooting/quiescing. The bootstrap still performs local-only repairs such as plugin convergence, MCP client config writes, and memory seeding, then records a local state that can be reconciled after the portal returns.
 - **`mcp-unavailable`** — the portal is reachable enough to answer, but the MCP route is missing, unavailable, or returning a server-side failure that is not a portal reboot signal. The bootstrap still performs the same local repairs and keeps the contributor unblocked for source-local work.
-- **`failed_smoke`** — the installed CLI responded to the kernel smoke prompt but did not include any of the expected refusal signatures. This is usually a CLI version that hasn't loaded the kernel memory yet. See the smoke-test transcript under `~/.dpf/install-state.json` → `agentToolchain.smokeTest.transcript`.
+- **`failed_smoke`** — the installed CLI responded to the kernel smoke prompt but did not include any of the expected refusal signatures. This is usually a CLI version that hasn't loaded the kernel memory yet. See the smoke-test transcript under `~/.dpf/agent-toolchain-state.json` → `smokeTest.transcript`.
 
 ### Idempotence guarantee
 
@@ -210,7 +210,7 @@ session start.
 
 ### Where state lives
 
-`~/.dpf/install-state.json` carries the `agentToolchain` block after every install run. Schema reference: `scripts/installer/install-state.schema.json`. The block is:
+`~/.dpf/agent-toolchain-state.json` carries the agent-toolchain block after every bootstrap run. It is a sidecar, deliberately **not** a key inside `install-state.json`: the self-upgrade binds `install-state.json` byte-for-byte in a signed handoff, and the bootstrap runs on every client session start — one landing during an upgrade's quiescence drain fenced the upgrade with `install_state_envelope_state_changed` (BI-95DF1BFC). Older installs still carrying an `agentToolchain` key inside `install-state.json` have it dropped by the next self-upgrade's migration. The block is:
 
 ```jsonc
 "agentToolchain": {
@@ -270,7 +270,7 @@ production".
 
 ### `dpf-doctor`
 
-`bash install-dpf.sh doctor` (POSIX) or `install-dpf.ps1 doctor` (Windows; if added in a future phase) emits a tar bundle at `~/.dpf/doctor-<timestamp>.tar.gz` containing install-state, recent compose output, and the `agentToolchain` block. Attach this bundle when filing install-failure reports.
+`bash install-dpf.sh doctor` (POSIX) or `install-dpf.ps1 doctor` (Windows; if added in a future phase) emits a tar bundle at `~/.dpf/doctor-<timestamp>.tar.gz` containing install-state, the agent-toolchain sidecar, and recent compose output. Attach this bundle when filing install-failure reports.
 
 ### `--reconcile-installed-plugins` flag
 

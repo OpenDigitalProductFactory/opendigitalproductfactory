@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
 import { ok } from "@/lib/shared/action-result";
@@ -127,6 +128,50 @@ export function registerInstallStateHandoffTests({ mocks, runSelfUpgrade, instal
     mocks.runPromoter.mockImplementation(async (params: any) => { order.push("promotion"); expect(params.promoterImage).toBe(`sha256:${"d".repeat(64)}`); expect(params.installStateMigrationHandoff).toBe(persistedHandoff); return { exitCode: 0, stdout: "", stderr: "" }; });
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(order).toEqual(["resolve", "readiness", "evidence", "quiescence", "promotion"]);
+  });
+
+  it("re-binds the handoff after the drain when a host-side writer moved install-state.json, then promotes (BI-95DF1BFC)", async () => {
+    // SUR-4758058F: the agent-toolchain bootstrap rewrote install-state.json
+    // three minutes into the quiescence drain. The handoff had been verified
+    // BEFORE the drain, so promote.sh refused the stale envelope at
+    // install-state-migrate. Readiness must re-run against the moved bytes.
+    const movedState = `${installState.trim().replace(/}$/, ',"agentToolchain":{"appliedAt":"2026-09-08T22:22:43Z"}}')}`;
+    const movedHash = createHash("sha256").update(movedState).digest("hex");
+    const order: string[] = [];
+    const handoffs: unknown[] = [];
+    let currentState = installState;
+    mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? currentState : "s".repeat(32));
+    mocks.resolvePromoterArtifact.mockImplementation(async () => ({ digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } }));
+    mocks.runPromoterReadiness.mockImplementation(async () => {
+      order.push("readiness");
+      const sourceHash = currentState === installState ? installStateHash : movedHash;
+      return { exitCode: 0, stdout: JSON.stringify({ failures: [], sourceHash, projectionHash: "b".repeat(64), fromSchemaVersion: 2, toSchemaVersion: 2 }), stderr: "" };
+    });
+    mocks.recordPromoterReadiness.mockImplementation(async (_runId: string, report: any) => { handoffs.push(report.migrationHandoff); return {}; });
+    mocks.startQuiescence.mockImplementation(async () => {
+      order.push("quiescence");
+      return { runId: "QR-1", awaitReady: async () => { currentState = movedState; order.push("state-moved"); return { ...ok(), outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }; } };
+    });
+    mocks.runPromoter.mockImplementation(async (params: any) => {
+      order.push("promotion");
+      expect(params.installStateMigrationHandoff).toBe(handoffs[1]);
+      expect(params.installStateMigrationHandoff.envelope.sourceHash).toBe(movedHash);
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ status: "succeeded" });
+    expect(order).toEqual(["readiness", "quiescence", "state-moved", "readiness", "promotion"]);
+    expect(handoffs).toHaveLength(2);
+    expect(mocks.failRun).not.toHaveBeenCalled();
+  });
+
+  it("does not re-run readiness after the drain when install-state.json did not move", async () => {
+    mocks.resolvePromoterArtifact.mockImplementation(async () => ({ digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } }));
+    mocks.runPromoterReadiness.mockImplementation(async () => ({ exitCode: 0, stdout: JSON.stringify({ failures: [], sourceHash: installStateHash, projectionHash: "b".repeat(64), fromSchemaVersion: 2, toSchemaVersion: 2 }), stderr: "" }));
+    mocks.startQuiescence.mockImplementation(async () => ({ runId: "QR-1", awaitReady: async () => ({ ...ok(), outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }) }));
+    mocks.runPromoter.mockImplementation(async () => ({ exitCode: 0, stdout: "", stderr: "" }));
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.runPromoterReadiness).toHaveBeenCalledTimes(1);
   });
 
   it.each(["missing", "tampered", "expired", "wrong-run", "wrong-digest", "changed-source", "wrong-identity"])("rejects %s migration evidence before quiescence", async (kind) => {
