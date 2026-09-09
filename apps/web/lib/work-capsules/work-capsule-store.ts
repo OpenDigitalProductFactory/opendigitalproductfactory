@@ -24,10 +24,8 @@ import {
 } from "@/lib/work-capsules";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
-import {
-  completeGovernedWorkCapsuleStatus,
-  WorkCapsulePublicationRefusedError,
-} from "./work-capsule-terminal-status";
+import { assertWorkroomPublishable } from "./publication-refusal";
+import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import {
   CapsuleBranchOccupiedError,
   isExternalLeaseExecutor,
@@ -960,13 +958,7 @@ export async function updateWorkCapsuleStatus(args: {
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
 
   const hasGovernedLink = Boolean(capsule.backlogItemId || capsule.featureBuildId || capsule.taskRunId);
-  if (capsule.repositoryFullName && ["ready-for-review", "ready-for-promotion", "complete"].includes(args.status)) {
-    const { checkWorkroomFailureReadiness } = await import("@/lib/change-review/failure-readiness-publication");
-    const readiness = await checkWorkroomFailureReadiness(args.capsuleId);
-    if (!readiness.mayPublish) {
-      throw new WorkCapsulePublicationRefusedError({ code: readiness.code, reason: readiness.reason });
-    }
-  }
+  await assertWorkroomPublishable({ capsuleId: args.capsuleId, status: args.status, repositoryFullName: capsule.repositoryFullName });
   if (args.status === "complete" && hasGovernedLink) {
     return completeGovernedWorkCapsuleStatus({
       db: args.db,

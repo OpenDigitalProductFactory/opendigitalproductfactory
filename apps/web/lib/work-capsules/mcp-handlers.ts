@@ -53,6 +53,7 @@ import {
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
+import { publicationRefusedToolResult } from "./publication-refusal";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
@@ -358,20 +359,7 @@ export async function updateWorkCapsuleStatusTool(
       };
     }
     if (error instanceof WorkCapsulePublicationRefusedError) {
-      // A refusal with a repair path, not a crash: the executor re-syncs the
-      // room's immutable identity, or a reviewer records the failure review.
-      return {
-        success: false,
-        error: error.code,
-        message: error.reason,
-        data: {
-          capsuleId,
-          requestedStatus: status,
-          nextAction: error.code === "workroom_identity_incomplete"
-            ? "Call adopt_worktree with repositoryFullName, headBranch, worktreePath, baseSha and headSha for this room, then retry update_workroom_status."
-            : "Request an independent failure review of the current head (review_semantic_change) and retry once its receipt is recorded.",
-        },
-      };
+      return publicationRefusedToolResult(error, { capsuleId, status });
     }
     throw error;
   }

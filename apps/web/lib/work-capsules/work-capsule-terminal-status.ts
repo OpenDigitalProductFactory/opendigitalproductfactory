@@ -15,7 +15,7 @@ export class WorkCapsulePublicationRefusedError extends Error {
   readonly code: "workroom_identity_incomplete" | "failure_review_required";
   readonly reason: string;
 
-  constructor(input: { code: "workroom_identity_incomplete" | "failure_review_required"; reason: string }) {
+  constructor(input: { code: WorkCapsulePublicationRefusedError["code"]; reason: string }) {
     super(input.reason);
     this.name = "WorkCapsulePublicationRefusedError";
     this.code = input.code;
