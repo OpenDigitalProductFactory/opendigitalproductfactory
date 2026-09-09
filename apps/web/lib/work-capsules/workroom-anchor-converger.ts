@@ -45,12 +45,45 @@ export interface WorkroomAnchorConvergeResult {
 /** Bounded so a tick never holds a long transaction over hundreds of rooms. */
 export const WORKROOM_ANCHOR_CONVERGER_BATCH = 50;
 
+/** How long a room that failed to anchor is left alone before it is retried.
+ *  A room can fail for a reason no retry will change — the first one found was
+ *  a row whose `source` violated the DB check constraint, so every UPDATE
+ *  failed. Retrying that once a minute logged 1,147 identical failures. Once
+ *  an hour keeps the room visible without drowning the log (BI-A5EEB5D1). */
+export const WORKROOM_ANCHOR_RETRY_AFTER_MS = 60 * 60 * 1000;
+
+/** In-memory, per-process. Losing it on restart is fine: the room is retried
+ *  once and backs off again. */
+export class AnchorFailureBackoff {
+  private readonly retryAt = new Map<string, number>();
+  constructor(private readonly retryAfterMs = WORKROOM_ANCHOR_RETRY_AFTER_MS) {}
+  recordFailure(capsuleId: string, now: number): void {
+    this.retryAt.set(capsuleId, now + this.retryAfterMs);
+  }
+  clear(capsuleId: string): void {
+    this.retryAt.delete(capsuleId);
+  }
+  /** Rooms still inside their backoff window — exclude these from the batch. */
+  skipped(now: number): string[] {
+    const out: string[] = [];
+    for (const [id, at] of this.retryAt) {
+      if (at > now) out.push(id);
+      else this.retryAt.delete(id);
+    }
+    return out;
+  }
+}
+
 export async function convergeWorkroomAnchors(args: {
   ports: WorkroomAnchorConvergerPorts;
   batch?: number;
+  backoff?: AnchorFailureBackoff;
+  now?: number;
 }): Promise<WorkroomAnchorConvergeResult> {
   const batch = args.batch ?? WORKROOM_ANCHOR_CONVERGER_BATCH;
-  const rooms = await args.ports.listUnanchoredRooms(batch);
+  const now = args.now ?? Date.now();
+  const skip = new Set(args.backoff?.skipped(now) ?? []);
+  const rooms = (await args.ports.listUnanchoredRooms(batch + skip.size)).filter((r) => !skip.has(r.capsuleId)).slice(0, batch);
   const result: WorkroomAnchorConvergeResult = {
     candidates: rooms.length,
     anchored: 0,
@@ -69,8 +102,10 @@ export async function convergeWorkroomAnchors(args: {
       if (outcome) {
         result.anchored += 1;
         if (outcome.created) result.created += 1;
+        args.backoff?.clear(room.capsuleId);
       }
     } catch (error) {
+      args.backoff?.recordFailure(room.capsuleId, now);
       // One bad room must not stop the rest of the batch; it is reported, not hidden.
       result.failed.push({
         capsuleId: room.capsuleId,

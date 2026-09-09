@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AnchorFailureBackoff,
   convergeWorkroomAnchors,
   type UnanchoredRoom,
   type WorkroomAnchorConvergerPorts,
@@ -92,5 +93,26 @@ describe("convergeWorkroomAnchors", () => {
       created: 0,
       failed: [],
     });
+  });
+
+  it("backs off a room that failed, so an unfixable row is not hammered every tick", async () => {
+    const rooms = [
+      { capsuleId: "WC-STUCK", backlogItemId: null, title: "stuck" },
+      { capsuleId: "WC-FINE", backlogItemId: null, title: "fine" },
+    ];
+    const { ports } = fakePorts(rooms, { failOn: "WC-STUCK" });
+    const backoff = new AnchorFailureBackoff(1000);
+
+    const first = await convergeWorkroomAnchors({ ports, backoff, now: 0 });
+    expect(first.failed.map((f) => f.capsuleId)).toEqual(["WC-STUCK"]);
+
+    // Next tick, inside the window: the stuck room is not even a candidate.
+    const second = await convergeWorkroomAnchors({ ports, backoff, now: 500 });
+    expect(second.candidates).toBe(1);
+    expect(second.failed).toEqual([]);
+
+    // After the window it is retried once more, and backs off again.
+    const third = await convergeWorkroomAnchors({ ports, backoff, now: 1500 });
+    expect(third.failed.map((f) => f.capsuleId)).toEqual(["WC-STUCK"]);
   });
 });
