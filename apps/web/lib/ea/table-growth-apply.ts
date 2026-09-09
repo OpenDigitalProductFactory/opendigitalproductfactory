@@ -13,6 +13,7 @@
 
 import { loadModelDeclarations } from "@/lib/operate/retention/declarations";
 import { captureCorrectiveFailureBI } from "@/lib/backlog/capture-corrective-bi";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import { reconcileConformanceIssues, type ConformanceIssueClient } from "./conformance-issue-reconciler";
 import {
@@ -112,7 +113,7 @@ export async function runTableGrowthSteward(deps: {
     }
     return { sampled: samples.length, findings: findings.length, byType, filedBacklogItems: filed };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     console.error("[table-growth] growth pass failed:", message);
     return { sampled: 0, findings: 0, byType, filedBacklogItems: [], error: message };
   }
