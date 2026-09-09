@@ -209,3 +209,145 @@ describe("the latch releases through resolveDrivePlan", () => {
     expect(released.reason).not.toBe("executor_writeback_unavailable");
   });
 });
+
+// ─── A blocked receipt is cycle-scoped too ───────────────────────────────────
+//
+// Found on the live install AFTER the bounded latch deployed. The cycle rolled
+// (stored lastCycleKey 2026-09-08, current 2026-09-09) and the rooms stayed
+// locked anyway, because every one of them carries:
+//
+//   [{"kind": "blocked", "stageKey": "sweep"}]
+//
+// and the first version of this function returned true unconditionally on that,
+// before any cycle comparison. The reasoning was that a recorded receipt is a
+// durable statement rather than a prior-tick inference — which preserved the
+// exact deadlock the bounded latch was written to remove, for exactly the twelve
+// rooms that were already stuck.
+//
+// A blocked receipt records "this stage produced no writeback in THIS cycle".
+// It is not a finding that the stage is permanently unfit.
+
+describe("a blocked receipt does not outlive its cycle", () => {
+  const CYCLE_YESTERDAY = "dependency-advisory-watch@1.0.0:2026-09-08";
+  const CYCLE_TODAY = "dependency-advisory-watch@1.0.0:2026-09-09";
+
+  it("holds inside the cycle that recorded it", () => {
+    expect(
+      writebackLatchHolds({
+        prior: {
+          action: "pause",
+          reason: "executor_writeback_unavailable",
+          stageKey: "sweep",
+          cycleKey: CYCLE_TODAY,
+        },
+        stageKey: "sweep",
+        currentCycleKey: CYCLE_TODAY,
+        blocked: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("RELEASES on the next cycle — the live case that stayed locked", () => {
+    expect(
+      writebackLatchHolds({
+        prior: {
+          action: "pause",
+          reason: "executor_writeback_unavailable",
+          stageKey: "sweep",
+          cycleKey: CYCLE_YESTERDAY,
+        },
+        stageKey: "sweep",
+        currentCycleKey: CYCLE_TODAY,
+        blocked: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("still holds when the cycle cannot be determined", () => {
+    // Unknown must never be read as "a new cycle"; that re-opens the loop.
+    expect(
+      writebackLatchHolds({
+        prior: { action: "pause", reason: "executor_writeback_unavailable", stageKey: "sweep", cycleKey: null },
+        stageKey: "sweep",
+        currentCycleKey: CYCLE_TODAY,
+        blocked: true,
+      }),
+    ).toBe(true);
+    expect(
+      writebackLatchHolds({ prior: null, stageKey: "sweep", currentCycleKey: CYCLE_TODAY, blocked: true }),
+    ).toBe(true);
+  });
+
+  it("does not let another stage's blocked receipt hold this stage", () => {
+    expect(
+      writebackLatchHolds({
+        prior: { action: "pause", reason: "executor_writeback_unavailable", stageKey: "raise", cycleKey: CYCLE_TODAY },
+        stageKey: "sweep",
+        currentCycleKey: CYCLE_TODAY,
+        blocked: true,
+      }),
+    ).toBe(false);
+  });
+});
+
+// ─── The live state, through the real resolver ───────────────────────────────
+//
+// Reproduces WC-A69BCABB exactly as the database held it on 2026-09-09:
+//   receipts     [{"kind":"blocked","stageKey":"sweep"}]
+//   lastCycleKey dependency-advisory-watch@1.0.0:2026-09-08
+//   reason       executor_writeback_unavailable
+// and asserts it dispatches. The predicate tests above would all have passed
+// while this room stayed locked, which is how the first fix shipped believing
+// itself complete.
+
+describe("the twelve locked rooms, reproduced", () => {
+  it("dispatches WC-A69BCABB from its real stored state", async () => {
+    const { resolveDrivePlan } = await import("./drive-resolution");
+    const { STANDING_SHAPES } = await import("./standing-operations-shapes");
+    const { readWorkShapeDefinitionContract } = await import("./work-shapes");
+    const shape = STANDING_SHAPES["dependency-advisory-watch"];
+
+    const plan = resolveDrivePlan({
+      roomId: "WC-A69BCABB",
+      definition: readWorkShapeDefinitionContract(shape),
+      collaborationShape: shape.collaborationShape ?? null,
+      postureLevel: "balanced" as const,
+      participants: [
+        {
+          workroomId: "r1",
+          principalRef: "PRN-SEC",
+          displayName: "security-engineer",
+          kind: "agent" as const,
+          roles: ["coordinator"],
+          assignmentSource: "explicit",
+          coordinatorSource: "explicit" as const,
+          enteredReason: null,
+          currentWorkSummary: null,
+          sponsorPrincipalRef: null,
+          sponsorDisplayName: null,
+          authoritySummary: "",
+        },
+      ],
+      currentStageKey: "sweep",
+      // The live rows, verbatim.
+      receipts: [{ stageKey: "sweep", kind: "blocked" }],
+      priorDrive: {
+        action: "pause",
+        reason: "executor_writeback_unavailable",
+        stageKey: "sweep",
+        cycleKey: "dependency-advisory-watch@1.0.0:2026-09-08",
+      },
+      budgetUsage: [],
+      stopConditionHits: [],
+      reviewDue: false,
+      substrateReachable: true,
+      substrateEmpty: false,
+      coordinatorEligibility: { jsi: "not-applicable" as const, authorityBinding: "eligible" as const },
+      now: new Date("2026-09-09T10:00:00Z"),
+    } as never);
+
+    expect(plan.reason).not.toBe("executor_writeback_unavailable");
+    expect(plan.action).toBe("dispatch_agent");
+    expect(plan.stageKey).toBe("sweep");
+  });
+});
