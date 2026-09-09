@@ -367,6 +367,7 @@ export async function loadObjectiveMappingHistoryFromDb(db: ObjectiveMappingHist
     targetAgent: string;
     questionPacketSummary: string;
     requiredToolNames: string[];
+    objective: string;
   }> = [];
   for (const row of rows) {
     const metadata = row.a2aMetadata && typeof row.a2aMetadata === "object" && !Array.isArray(row.a2aMetadata)
@@ -378,10 +379,17 @@ export async function loadObjectiveMappingHistoryFromDb(db: ObjectiveMappingHist
     const questionPacketSummary = nonEmptyString(row.title);
     const requiredToolNames = parseHistoricalToolNames(row.authorityScope);
     const binding = parseHistoricalObjectiveMappingBinding(metadata?.initiativeReviewBinding);
-    if (!binding || !targetAgent || !questionPacketSummary || !requiredToolNames) {
+    // TaskRun.objective is a shortened display projection. Both recovery and
+    // action-time admission must compare the immutable request preserved by the
+    // submitter. Only older rows without that field may use the legacy value;
+    // key validation still verifies it against the original complete request.
+    const hasRequestObjective = metadata !== null
+      && Object.prototype.hasOwnProperty.call(metadata, "requestObjective");
+    const objective = nonEmptyString(hasRequestObjective ? metadata.requestObjective : row.objective);
+    if (!binding || !targetAgent || !questionPacketSummary || !requiredToolNames || !objective) {
       return err("objective-mapping-history-invalid");
     }
-    matching.push({ row, idempotencyKey, binding, targetAgent, questionPacketSummary, requiredToolNames });
+    matching.push({ row, idempotencyKey, binding, targetAgent, questionPacketSummary, requiredToolNames, objective });
   }
   const taskRunIds = matching.map((entry) => entry.row.taskRunId);
   const executions = taskRunIds.length === 0 ? [] : await db.toolExecution.findMany({
@@ -397,7 +405,7 @@ export async function loadObjectiveMappingHistoryFromDb(db: ObjectiveMappingHist
       taskRunId: entry.row.taskRunId,
       status: entry.row.status,
       targetAgent: entry.targetAgent,
-      objective: entry.row.objective,
+      objective: entry.objective,
       questionPacketSummary: entry.questionPacketSummary,
       idempotencyKey: entry.idempotencyKey,
       requiredToolNames: entry.requiredToolNames,

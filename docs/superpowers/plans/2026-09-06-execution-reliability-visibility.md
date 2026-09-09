@@ -562,6 +562,23 @@ and product closure are separate required acceptance, not implied by these tests
 
 ## September 8 served navigation follow-up
 
+### Immutable objective recovery readback (BI-06AE6833)
+
+The accepted Pet Rescue successor `66484EEC63EE` preserves its 1236-character
+request in `a2aMetadata.requestObjective`; `TaskRun.objective` is a 1000-character
+display projection. The terminal history reader incorrectly compares that
+projection with the immutable replay. Repair the existing history reader, under
+WC-5C67495F, independently of navigation PR #5235. First reproduce accepted
+submission, missing terminal writer, and unchanged same-task replay through the
+action-time admission guard. Prefer valid full metadata; legacy fallback applies
+only when the metadata field is absent, and existing authenticated request-key
+validation must still prove the complete identity. Present invalid metadata must
+fail closed. Test genuine objective, identity, evidence and authority conflicts.
+Preserve all historical tasks and receipts. After protected release, resume only
+the accepted successor and require a real writer receipt before product closure.
+Consolidate history parsing at its existing shared loader; both recovery and
+submission admission consume it. No schema, UI or policy change is required.
+
 Normal upgrade SUR-3B5A6D60 succeeded on ed7cf82c501f; live readiness returned
 CAN-TEST. Creation-key retry reuses WC-9CECAF46, and governed adoption preserves
 all 120 unrelated path claims and the versioned delivery shape. These are bounded
