@@ -623,10 +623,25 @@ Four requirements follow:
    without a re-seed. Donations keep their own route and their own form. **The same form still
    serves all seven reasons** — requirement 2 below is open.
 2. **The reason for contact is a typed field**, because it sets the queue and the clock. A cruelty
-   report and a bequest enquiry cannot share a lane.
+   report and a bequest enquiry cannot share a lane. **Built 2026-09-09, acceptance pending**
+   (BI-9BD223B1, acceptance BI-E6BAF90F): the Mailroom assigns every inbound email a reason key
+   from the archetype's Mailroom profile — the seven reasons in this table plus
+   `veterinary-correspondence` and `adopter-follow-up` — each with its urgency and the queue that
+   owns it. The storefront contact form is not yet routed through the same profile; that is the
+   remaining gap on this requirement.
 3. **An enquiry about an animal carries that animal's reference**, or staff cannot answer it.
-4. **A reply is possible from inside the product.** Today the only action on an enquiry is to
-   convert it into an internal work item; there is no reply.
+   **Built 2026-09-09, acceptance pending**: an adoption, follow-up or veterinary message that names
+   an animal reference is confirmed against the roster and the item carries it.
+4. **A reply is possible from inside the product.** **Built 2026-09-09, acceptance pending**
+   (BI-DFEFAE1C): from a Mailroom item a reply is drafted for a person to edit and approve; it is
+   sent threaded onto the sender's conversation, and only after "Approve and send". Before this,
+   the only action on an enquiry was to convert it into an internal work item.
+
+How the correspondence reaches the queue at all is the Mailroom
+(`docs/superpowers/specs/2026-09-09-mailroom-email-triage-and-dispatch-design.md`): the mailboxes
+a rescue runs are declared at the `mailroom` setup step and read about once an hour; an item
+nobody acknowledges inside its window (immediate 1 h, hours 4 h, days 2 d, weeks 7 d) surfaces on
+the owner's "Needs you" list.
 
 ## 8. Definition of done
 

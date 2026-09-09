@@ -24,6 +24,7 @@ import { loadComplianceSourceFreshnessItems } from "./sources/compliance-source-
 import { loadReservationExceptionItems } from "./sources/reservation-exception";
 import { loadHospitalityCapacityAttentionItems } from "./sources/hospitality-capacity";
 import { loadStorefrontInquiryItems } from "./sources/storefront-inquiry";
+import { loadMailroomItemAttentionItems } from "./sources/mailroom-item";
 import { loadBusinessJourneyItems } from "./sources/business-journey";
 import {
   loadOutboundItems,
@@ -124,6 +125,7 @@ export function attentionSourceLoaders(
       load: () => loadHospitalityCapacityAttentionItems(db),
     },
     { source: "storefront-inquiry", load: () => loadStorefrontInquiryItems(db) },
+    { source: "mailroom-item", load: () => loadMailroomItemAttentionItems(db) },
     {
       // Pure registry arithmetic — no query, so it costs nothing per load.
       source: "compliance-source-freshness",

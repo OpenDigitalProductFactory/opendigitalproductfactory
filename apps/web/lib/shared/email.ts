@@ -15,6 +15,9 @@ type EmailOptions = {
    * value here always wins.
    */
   replyTo?: string;
+  /** RFC 5322 threading for a reply: the original Message-ID, and the chain. */
+  inReplyTo?: string;
+  references?: string[];
   attachments?: Array<{
     filename: string;
     content: Buffer;
@@ -434,6 +437,8 @@ export async function sendEmail(options: EmailOptions): Promise<{ messageId: str
     subject: options.subject,
     text: options.text,
     html: options.html,
+    ...(options.inReplyTo ? { inReplyTo: options.inReplyTo } : {}),
+    ...(options.references?.length ? { references: options.references } : {}),
     attachments: options.attachments?.map((a) => ({
       filename: a.filename,
       content: a.content,

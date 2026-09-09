@@ -246,6 +246,30 @@ Run design §9 on the reference install and record evidence with
 `record_execution_evidence`; reconcile against the objective baseline with
 `record_product_outcome_observation`; close the parent.
 
+## Implementation record (2026-09-09, branch `feat/mailroom-email-triage-dispatch`)
+
+Slices 1–4 were built on one branch as one PR because the registry, data model,
+intake loop, chase, reply and surface share a single migration and are not
+usable apart; each child item keeps its own tests and acceptance criteria and
+closes against the same PR. Three deviations from the sketches above, all
+deliberate:
+
+- **Approval lives on the item, not in the marketing approval queue.** The
+  Mailroom item page's "Approve and send" records an `OutboundApprovalDecision`
+  (reviewer, decision, edited body) and only then sends. The marketing queue
+  renders marketing drafts; routing a rescue's reply to a vet through it would
+  have put correspondence under the marketing specialist's authority.
+- **Owner notification reads the queue room's assignee.** The archetype-role
+  rung of the owner ladder is being built by the onboarding-ownership plan
+  (BI-4B5E3443); until it lands, a queue room's `assignedToUserId` is the
+  explicit rung, and an unowned queue is still visible through the chase
+  surface rather than silent.
+- **Microsoft 365 first read is bounded to seven days.** A delta query with no
+  cursor returns an established mailbox's whole history; the first read filters
+  to recent mail so connecting an old inbox does not route years of
+  correspondence. IMAP has no such bound because its cursor starts at UID 1 of
+  the configured folder, which for a purpose mailbox is the intended behaviour.
+
 ## Completion gate (every slice)
 
 1. Focused vitest for the touched files, then the affected package suites.
