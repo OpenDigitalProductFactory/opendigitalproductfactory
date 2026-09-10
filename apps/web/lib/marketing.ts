@@ -5,81 +5,59 @@ import {
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
 import { upsertMarketingStrategyTolerant } from "@/lib/marketing/strategy-bootstrap";
-export const MARKETING_STRATEGY_STATUS = ["draft", "active", "archived"] as const;
-export type MarketingStrategyStatus = typeof MARKETING_STRATEGY_STATUS[number];
-
-export const MARKETING_ROUTE_TO_MARKET = [
-  "direct-sales",
-  "inbound",
-  "outbound",
-  "channel-partner",
-  "marketplace",
-  "referral",
-  "hybrid",
-] as const;
-export type MarketingRouteToMarket = typeof MARKETING_ROUTE_TO_MARKET[number];
-
-export const MARKETING_LOCALITY_MODEL = [
-  "hyperlocal",
-  "regional",
-  "national",
-  "international",
-  "online-only",
-] as const;
-export type MarketingLocalityModel = typeof MARKETING_LOCALITY_MODEL[number];
-
-export const MARKETING_REVIEW_CADENCE = [
-  "weekly",
-  "monthly",
-  "quarterly",
-  "annually",
-] as const;
-export type MarketingReviewCadence = typeof MARKETING_REVIEW_CADENCE[number];
-
-export const MARKETING_PROOF_ASSET_TYPE = [
-  "case-study",
-  "testimonial",
-  "certification",
-  "outcome",
-  "award",
-  "press",
-] as const;
-export type MarketingProofAssetType = typeof MARKETING_PROOF_ASSET_TYPE[number];
-
-export const MARKETING_REVIEW_TYPE = [
-  "scheduled",
-  "ad-hoc",
-  "ai-proactive",
-  "post-campaign",
-] as const;
-export type MarketingReviewType = typeof MARKETING_REVIEW_TYPE[number];
-
-export const MARKETING_CHANNELS = [
-  "email",
-  "linkedin",
-  "facebook",
-  "instagram",
-  "x",
-  "youtube",
-  "tiktok",
-  "outbound-mail",
-  "event-attend",
-  "event-sponsor",
-  "referral",
-  "partner",
-  "content-seo",
-  "paid-search",
-  "paid-social",
-  "podcast",
-  "webinar",
-  "phone",
-] as const;
-export type MarketingChannel = typeof MARKETING_CHANNELS[number];
-
-export const DEFAULT_MARKETING_STRATEGY_STATUS: MarketingStrategyStatus = "draft";
-export const DEFAULT_MARKETING_ROUTE_TO_MARKET: MarketingRouteToMarket = "hybrid";
-export const DEFAULT_MARKETING_LOCALITY_MODEL: MarketingLocalityModel = "regional";
-export const DEFAULT_MARKETING_REVIEW_CADENCE: MarketingReviewCadence = "quarterly";
+import {
+  cleanText,
+  dedupeStrings,
+  type MarketingChannel,
+  type MarketingLocalityModel,
+  type MarketingProofAssetType,
+  type MarketingReviewCadence,
+  type MarketingReviewType,
+  type MarketingRouteToMarket,
+  type MarketingStrategyStatus,
+  MARKETING_CHANNELS,
+  MARKETING_PROOF_ASSET_TYPE,
+  MARKETING_REVIEW_CADENCE,
+  DEFAULT_MARKETING_STRATEGY_STATUS,
+  DEFAULT_MARKETING_REVIEW_CADENCE,
+} from "@/lib/marketing/vocabulary";
+import {
+  buildConstraints,
+  buildDifferentiators,
+  buildEntryOffers,
+  buildIdealCustomerProfiles,
+  buildServiceTerritories,
+  buildTargetSegments,
+  inferLocalityModel,
+  inferPrimaryChannels,
+  inferRouteToMarket,
+  summarizeAddress,
+} from "@/lib/marketing/strategy-derivation";
+// The closed vocabularies now live in lib/marketing/vocabulary.ts so that
+// modules deriving a strategy can read them without importing this module.
+// Re-exported here: every existing consumer imports them from "@/lib/marketing".
+export {
+  MARKETING_STRATEGY_STATUS,
+  MARKETING_ROUTE_TO_MARKET,
+  MARKETING_LOCALITY_MODEL,
+  MARKETING_REVIEW_CADENCE,
+  MARKETING_PROOF_ASSET_TYPE,
+  MARKETING_REVIEW_TYPE,
+  MARKETING_CHANNELS,
+  DEFAULT_MARKETING_STRATEGY_STATUS,
+  DEFAULT_MARKETING_ROUTE_TO_MARKET,
+  DEFAULT_MARKETING_LOCALITY_MODEL,
+  DEFAULT_MARKETING_REVIEW_CADENCE,
+} from "@/lib/marketing/vocabulary";
+export type {
+  MarketingStrategyStatus,
+  MarketingRouteToMarket,
+  MarketingLocalityModel,
+  MarketingReviewCadence,
+  MarketingProofAssetType,
+  MarketingReviewType,
+  MarketingChannel,
+} from "@/lib/marketing/vocabulary";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -309,65 +287,12 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function cleanText(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 
-function dedupeStrings(values: Array<string | null | undefined>): string[] {
-  return [...new Set(values.map(cleanText).filter((value): value is string => Boolean(value)))];
-}
 
 function parseJsonArray<T>(value: Prisma.JsonValue | null | undefined): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
-function summarizeAddress(address: Prisma.JsonValue | null | undefined): string | null {
-  if (!isRecord(address)) return null;
-  return dedupeStrings([
-    typeof address.city === "string" ? address.city : null,
-    typeof address.region === "string" ? address.region : null,
-    typeof address.state === "string" ? address.state : null,
-    typeof address.country === "string" ? address.country : null,
-  ]).join(", ") || null;
-}
-
-function inferRouteToMarket(
-  revenueModel: string | null | undefined,
-  ctaType: string | null | undefined,
-): MarketingRouteToMarket {
-  const value = `${revenueModel ?? ""} ${ctaType ?? ""}`.toLowerCase();
-  if (value.includes("marketplace")) return "marketplace";
-  if (value.includes("partner") || value.includes("channel")) return "channel-partner";
-  if (value.includes("referral")) return "referral";
-  if (value.includes("outbound")) return "outbound";
-  if (value.includes("inbound")) return "inbound";
-  if (
-    value.includes("appointment") ||
-    value.includes("quote") ||
-    value.includes("sales") ||
-    value.includes("booking") ||
-    value.includes("purchase")
-  ) {
-    return "direct-sales";
-  }
-  return DEFAULT_MARKETING_ROUTE_TO_MARKET;
-}
-
-function inferLocalityModel(scope: string | null | undefined): MarketingLocalityModel {
-  const value = (scope ?? "").toLowerCase();
-  if (value.includes("online") || value.includes("remote")) return "online-only";
-  if (value.includes("international") || value.includes("global")) return "international";
-  if (value.includes("national") || value.includes("countrywide")) return "national";
-  if (value.includes("local") || value.includes("city") || value.includes("neighborhood")) {
-    return "hyperlocal";
-  }
-  if (value.includes("regional") || value.includes("state") || value.includes("county")) {
-    return "regional";
-  }
-  return DEFAULT_MARKETING_LOCALITY_MODEL;
-}
 
 function addDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -387,128 +312,6 @@ function getCadenceWindow(cadence: MarketingReviewCadence): number {
     default:
       return 90;
   }
-}
-
-function inferPrimaryChannels(input: {
-  targetMarket: string | null;
-  customerSegments: string[];
-  geographicScope: string | null;
-  ctaType: string | null;
-}): MarketingChannel[] {
-  const hints = `${input.targetMarket ?? ""} ${input.customerSegments.join(" ")}`.toLowerCase();
-  const channels: MarketingChannel[] = ["content-seo", "email"];
-
-  if (
-    hints.includes("business") ||
-    hints.includes("b2b") ||
-    hints.includes("company") ||
-    hints.includes("organization") ||
-    hints.includes("professional")
-  ) {
-    channels.push("linkedin");
-  }
-
-  if (input.ctaType === "booking" || input.ctaType === "inquiry") {
-    channels.push("phone");
-  }
-
-  const localityModel = inferLocalityModel(input.geographicScope);
-  if (localityModel === "hyperlocal" || localityModel === "regional") {
-    channels.push("event-attend");
-  }
-
-  return dedupeStrings(channels).filter((channel): channel is MarketingChannel =>
-    MARKETING_CHANNELS.includes(channel as MarketingChannel),
-  );
-}
-
-function buildTargetSegments(
-  customerSegments: string[],
-  targetMarket: string | null,
-  playbook?: MarketingPlaybook | null,
-): MarketingNamedItem[] {
-  const seeded = customerSegments.map((segment) => ({
-    name: segment,
-    description: cleanText(targetMarket),
-  }));
-
-  if (seeded.length > 0) return seeded;
-  if (targetMarket) {
-    return [{ name: targetMarket, description: "Imported from business context target market" }];
-  }
-
-  // BusinessContext is silent on a fresh install, which used to leave
-  // targetSegments EMPTY. The drafter reads this field, so empty means every
-  // generated asset is written for nobody — the reference install's marketing
-  // coworker ran twice and produced nothing for exactly this reason.
-  //
-  // Choosing an archetype now gives a starting point instead: the groups that
-  // archetype serves by definition. Labelled as an archetype default so nobody
-  // mistakes a seed for a finding about THIS organization — the operator's own
-  // answers and the coworker's research replace them.
-  return (playbook?.seedSegments ?? []).map((segment) => ({
-    name: segment.name,
-    description: `${segment.description} (archetype default — confirm or replace with what is true here)`,
-  }));
-}
-
-function buildIdealCustomerProfiles(
-  segments: MarketingNamedItem[],
-  valueProposition: string | null,
-): MarketingProfile[] {
-  return segments.map((segment) => ({
-    name: segment.name,
-    traits: dedupeStrings([segment.description ?? null]),
-    painPoints: dedupeStrings([valueProposition]),
-  }));
-}
-
-function buildEntryOffers(input: {
-  tagline: string | null;
-  description: string | null;
-  website: string | null;
-}): MarketingOffer[] {
-  const description = cleanText(input.description) ?? cleanText(input.tagline);
-  if (!description) return [];
-
-  return [
-    {
-      name: cleanText(input.tagline) ?? "Primary offer",
-      description,
-      ctaUrl: cleanText(input.website),
-    },
-  ];
-}
-
-function buildServiceTerritories(
-  geographicScope: string | null,
-  addressSummary: string | null,
-): MarketingTerritory[] {
-  const name = cleanText(geographicScope) ?? cleanText(addressSummary);
-  if (!name) return [];
-  return [{ name, postalCodes: [] }];
-}
-
-function buildDifferentiators(input: {
-  valueProposition: string | null;
-  archetypeName: string | null;
-  industry: string | null;
-}): string[] {
-  return dedupeStrings([
-    input.valueProposition,
-    input.archetypeName ? `${input.archetypeName} positioning` : null,
-    input.industry ? `${input.industry} expertise` : null,
-  ]);
-}
-
-function buildConstraints(input: {
-  geographicScope: string | null;
-  companyStage: string | null;
-}): MarketingConstraintSummary | null {
-  const constraints: MarketingConstraintSummary = {};
-  if (cleanText(input.geographicScope)) constraints.geography = input.geographicScope;
-  if (cleanText(input.companyStage)) constraints.productMaturity = input.companyStage;
-  return Object.keys(constraints).length > 0 ? constraints : null;
 }
 
 function normalizeSuggestions(value: Prisma.JsonValue | null | undefined): MarketingSuggestion[] {

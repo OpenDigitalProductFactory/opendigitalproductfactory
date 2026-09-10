@@ -5,7 +5,7 @@
 // category answer turns out to be wrong for it, and the parent module was
 // already at its complexity ceiling.
 
-import type { MarketingPlaybook } from "./marketing-playbooks";
+import type { MarketingPlaybook } from "./marketing-playbook-types";
 
 // ─── Leaf-Archetype Playbooks (most specific; beat the category) ───────────
 //
