@@ -9,8 +9,6 @@
 // rows older than the cutoff, bounded by a per-policy cap.
 
 import {
-  PURGE_POLICIES,
-  RETAINED_DATASETS,
   type PurgePolicy,
   type RetentionPrismaClient,
 } from "./policies";
@@ -57,6 +55,10 @@ export interface RetentionSweepReport {
 export interface RunRetentionSweepOptions {
   prisma: RetentionPrismaClient;
   now: Date;
+  /** Policies to execute — built from the catalog declarations (declarations.ts). */
+  policies: readonly PurgePolicy[];
+  /** Count of retained (never-purged) declarations, for the report. */
+  retainedDatasetCount?: number;
   /** When true, count only — no deletes. */
   dryRun: boolean;
   /** Industry/archetype key for floor widening (null = base windows). */
@@ -146,12 +148,13 @@ export async function runRetentionSweep(
     batchSize = RETENTION_BATCH_SIZE,
     perPolicyCap = RETENTION_PER_POLICY_CAP,
     onlyModels,
+    retainedDatasetCount = 0,
   } = opts;
 
   const startedAt = now;
   const policies = onlyModels
-    ? PURGE_POLICIES.filter((p) => onlyModels.includes(p.model))
-    : PURGE_POLICIES;
+    ? opts.policies.filter((p) => onlyModels.includes(p.model))
+    : opts.policies;
 
   const results: PolicyResult[] = [];
   let totalAffected = 0;
@@ -229,6 +232,6 @@ export async function runRetentionSweep(
     totalAffected,
     errorCount,
     results,
-    retainedDatasetCount: RETAINED_DATASETS.length,
+    retainedDatasetCount,
   };
 }

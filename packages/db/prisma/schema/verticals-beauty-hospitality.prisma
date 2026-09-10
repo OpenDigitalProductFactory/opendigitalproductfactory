@@ -1,5 +1,6 @@
 /// Beauty-owned fixed operating resource. People remain in ServiceProvider;
 /// bookings remain in StorefrontBooking; geometry remains in OperationalSceneLayout.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model BeautyResource {
   id             String   @id @default(cuid())
   resourceId     String
@@ -31,6 +32,7 @@ model BeautyResource {
 }
 
 /// Explicit service eligibility for a chair, station, or treatment room.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model BeautyResourceService {
   id           String   @id @default(cuid())
   storefrontId String
@@ -48,6 +50,7 @@ model BeautyResourceService {
 
 /// Recurring or dated availability/block window for a fixed beauty resource.
 /// Human working time remains in ProviderAvailability.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model BeautyResourceAvailability {
   id             String    @id @default(cuid())
   availabilityId String    @unique
@@ -75,6 +78,7 @@ model BeautyResourceAvailability {
 
 /// Append-preserving beauty capacity consumption ledger. Each row reserves one
 /// fixed resource for exactly one booking or temporary booking hold.
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=configuration,operational owner=business-operator steward=data-steward
 model BeautyCapacityAllocation {
   id             String    @id @default(cuid())
   allocationId   String    @unique
@@ -110,6 +114,7 @@ model BeautyCapacityAllocation {
 
 /// Food & Hospitality-owned discrete operating resource. People remain in
 /// ServiceProvider/Staffing; geometry remains in OperationalSceneLayout.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model HospitalityResource {
   id                      String   @id @default(cuid())
   resourceId              String
@@ -144,6 +149,7 @@ model HospitalityResource {
 
 /// Aggregate time-bounded capacity such as kitchen covers, bake batches, or a
 /// delivery window. Event people remain in the staffing substrate.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model HospitalityCapacityPool {
   id              String   @id @default(cuid())
   poolId          String
@@ -172,6 +178,7 @@ model HospitalityCapacityPool {
 
 /// Recurring or dated availability/block window for a discrete hospitality
 /// resource. This is intentionally separate from human ProviderAvailability.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=configuration,operational owner=business-operator steward=data-steward
 model HospitalityResourceAvailability {
   id             String    @id @default(cuid())
   availabilityId String    @unique
@@ -199,6 +206,7 @@ model HospitalityResourceAvailability {
 
 /// Append-preserving capacity consumption ledger. A row targets exactly one
 /// discrete resource or aggregate pool; the migration owns that CHECK invariant.
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=operational owner=business-operator steward=data-steward
 model HospitalityCapacityAllocation {
   id                    String    @id @default(cuid())
   allocationId          String    @unique
@@ -242,6 +250,7 @@ model HospitalityCapacityAllocation {
 /// One party's authoritative in-service lifecycle across one or more table
 /// allocations. Reservation, capacity, commerce, staffing, and geometry remain
 /// separate authorities joined through this aggregate.
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=operational owner=business-operator steward=data-steward
 model HospitalityServiceTurn {
   id                   String    @id @default(cuid())
   turnId               String    @unique
@@ -275,6 +284,7 @@ model HospitalityServiceTurn {
 
 /// Append-only evidence for service-stage, table-assignment, and staffing
 /// changes. One event records each accepted aggregate version.
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=operational owner=business-operator steward=data-steward
 model HospitalityServiceTurnEvent {
   id             String   @id @default(cuid())
   eventId        String   @unique

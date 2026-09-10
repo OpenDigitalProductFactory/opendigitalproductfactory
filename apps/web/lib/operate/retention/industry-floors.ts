@@ -21,9 +21,9 @@ import {
   YEARS_3_IN_DAYS,
   DAYS_365,
 } from "./constants";
-import type { RetentionCategory, RetentionPrismaClient } from "./policies";
+import type { RetentionFloorBucket, RetentionPrismaClient } from "./policies";
 
-export type IndustryRetentionFloor = Partial<Record<RetentionCategory, number>>;
+export type IndustryRetentionFloor = Partial<Record<RetentionFloorBucket, number>>;
 
 /**
  * Minimum retention days per category, keyed by archetype/industry category.
@@ -33,32 +33,30 @@ export type IndustryRetentionFloor = Partial<Record<RetentionCategory, number>>;
  * sector cousins (HIPAA ~6y clinical, public-records ~3y).
  */
 export const INDUSTRY_RETENTION_FLOORS: Record<string, IndustryRetentionFloor> = {
+  // Buckets come from the model's DataCategory tag (declarations.ts:floorBucket):
+  //   audit     — anything carrying security-audit / authorization
+  //   chat      — anything carrying content (a coworker may give financial guidance)
+  //   telemetry — everything else (routing, metrics, build logs, …)
   // Banks / credit unions / lenders — BSA/AML + financial-advice record rules.
   "banking-financial-services": {
-    "audit-log": YEARS_7_IN_DAYS,
-    "security-audit": YEARS_7_IN_DAYS,
-    "routing-log": DAYS_365,
-    "ai-telemetry": DAYS_365,
-    "coworker-chat": YEARS_7_IN_DAYS, // coworker may give financial guidance
-    "coworker-metrics": DAYS_365,
+    audit: YEARS_7_IN_DAYS,
+    chat: YEARS_7_IN_DAYS,
+    telemetry: DAYS_365,
   },
   // Accounting / legal / consultancy — 7-year professional record norms.
   "professional-services": {
-    "audit-log": YEARS_7_IN_DAYS,
-    "security-audit": YEARS_7_IN_DAYS,
-    "coworker-chat": YEARS_7_IN_DAYS,
+    audit: YEARS_7_IN_DAYS,
+    chat: YEARS_7_IN_DAYS,
   },
   // Clinics / dental / therapy — HIPAA-adjacent ~6-year floor.
   "healthcare-wellness": {
-    "audit-log": YEARS_6_IN_DAYS,
-    "security-audit": YEARS_6_IN_DAYS,
-    "coworker-chat": YEARS_6_IN_DAYS,
+    audit: YEARS_6_IN_DAYS,
+    chat: YEARS_6_IN_DAYS,
   },
   // Municipal / civic — public-records-law ~3-year floor.
   "public-sector": {
-    "audit-log": YEARS_3_IN_DAYS,
-    "security-audit": YEARS_3_IN_DAYS,
-    "coworker-chat": YEARS_3_IN_DAYS,
+    audit: YEARS_3_IN_DAYS,
+    chat: YEARS_3_IN_DAYS,
   },
 };
 
@@ -107,7 +105,7 @@ export const INDUSTRY_ALIASES: Record<string, string> = {
  * uncovered category falls through to the policy's conservative base.
  */
 export function resolveEffectiveRetentionDays(
-  policy: { category: RetentionCategory; baseRetentionDays: number },
+  policy: { category: RetentionFloorBucket; baseRetentionDays: number },
   industryKey: string | null | undefined,
   confirmedProcessingActivityFloorDays = 0,
 ): number {

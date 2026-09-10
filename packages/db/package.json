@@ -8,6 +8,8 @@
     ".": "./src/index.ts",
     "./bom-component-key": "./src/bom-component-key.ts",
     "./schema-source": "./src/schema-source.ts",
+    "./model-metadata": "./src/model-metadata.ts",
+    "./table-classification": "./src/table-classification.ts",
     "./reference-freshness": "./src/reference-freshness.ts",
     "./sysml-model-seed": "./src/sysml-model-seed.ts",
     "./coworker-service-catalog-seed": "./src/coworker-service-catalog-seed.ts",

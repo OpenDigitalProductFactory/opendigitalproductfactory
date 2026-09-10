@@ -20,7 +20,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 
-export type CorrectiveFailureSource = "build-failure" | "self-upgrade-failure";
+export type CorrectiveFailureSource =
+  | "build-failure"
+  | "self-upgrade-failure"
+  // EP-A33A5C61 slice 5: a growth / payload-anatomy finding that persisted for
+  // PERSISTENT_NIGHTS consecutive steward samples (lib/ea/table-growth.ts).
+  | "data-growth";
 
 export type CorrectiveFailureInput = {
   source: CorrectiveFailureSource;

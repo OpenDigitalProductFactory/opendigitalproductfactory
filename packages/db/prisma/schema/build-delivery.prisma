@@ -928,6 +928,8 @@ model ReleaseBundle {
   @@index([status])
 }
 
+/// Tool runs during a build. Operational build trail; 90 days covers post-build investigation.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=telemetry timeAxis=createdAt
 model BuildActivity {
   id        String       @id @default(cuid())
   buildId   String
@@ -940,6 +942,8 @@ model BuildActivity {
   @@index([createdAt])
 }
 
+/// One row per AI specialist dispatch attempt/retry. Build telemetry; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=startedAt
 model BuildDispatchAttempt {
   id               String       @id @default(cuid())
   buildId          String
@@ -1102,6 +1106,8 @@ model TaskRun {
 // thresholds in effect) and the resulting operator outcome (retry,
 // abandon, escalate). Used by the Build Studio phase panel history
 // strip and as candidate WWMD profile material in v2.
+/// Build Studio stall detections + operator outcomes. Operational; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=createdAt
 model StallEvent {
   id                  String    @id @default(cuid())
   taskRunId           String
@@ -1148,6 +1154,8 @@ model StallEvent {
 // substrate (e.g., SelfUpgradeRun.runId).
 //
 // Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.1
+/// Activity-quiescence drain orchestration records. Coordination audit; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=startedAt
 model QuiescenceRun {
   id           String  @id @default(cuid())
   // Public/human-readable id (e.g., "QR-2026-05-24-abc123"). Used in event
@@ -1353,6 +1361,8 @@ enum SelfUpgradeDispatchStatus {
   dispatch_failed
 }
 
+/// Platform self-upgrade orchestration history. Low volume but operationally valuable; one year of deployment history.
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=internal categories=telemetry timeAxis=createdAt
 model SelfUpgradeRun {
   id                    String    @id @default(cuid())
   runId                 String    @unique

@@ -15,6 +15,28 @@ const FIELD_PROVENANCE = {
 
 export const LIFECYCLE_GOVERNANCE_ASSETS: readonly DataAssetDefinition[] = [
   {
+    // EP-A33A5C61 slice 5: nightly per-table size/growth samples taken by the
+    // Data Architect steward from pg_class / pg_stat_user_tables. Table names and
+    // byte/row counts only — no row content, no identifiers of people. The
+    // schema tag (telemetry-bounded, retention=90d) is the executable disposition;
+    // this entry keeps the field-level coverage gate satisfied.
+    id: "data:table-growth-sample",
+    physical: { prismaModel: "TableGrowthSample" },
+    domain: "enterprise-architecture-lifecycle",
+    ownerRole: "platform-architecture",
+    stewardRole: "data-steward",
+    categories: ["telemetry"],
+    sensitivity: "internal",
+    criticality: "standard",
+    subjectLocators: [],
+    lifecycleClass: "telemetry-bounded",
+    purposeCapabilities: ["platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: CONFIRMED_CLASSIFICATION,
+    fields: [],
+  },
+  {
     id: "data:lifecycle-event",
     physical: { prismaModel: "LifecycleEvent" },
     domain: "enterprise-architecture-lifecycle",
