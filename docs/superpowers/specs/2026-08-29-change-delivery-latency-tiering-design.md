@@ -5,7 +5,7 @@ status: active
 # Change-delivery latency — tier by risk, fail open on infrastructure
 
 - **Epic:** EP-ABB3AC9D
-- **Backlog items:** BI-D908DA0A, BI-E58B57EC, BI-D088D06D, BI-8CDA7F95, BI-282AE0BC, BI-C09ECA63, BI-6332DD3D, BI-397EBDD6, BI-2C0A01CD
+- **Backlog items:** BI-D908DA0A, BI-E58B57EC, BI-D088D06D, BI-8CDA7F95, BI-282AE0BC, BI-C09ECA63, BI-6332DD3D, BI-397EBDD6, BI-2C0A01CD, BI-41C3E303
 - **Decision ledger:** DI-0DD38401DF9F (`principle_decide`, high stakes, no commandment conflict)
 - **Profile:** refactor
 - **Authored:** 2026-08-29
@@ -370,6 +370,50 @@ Stated as an invariant that a guard can enforce:
 Commandment-tier checks — auth, DCO, secret scanning, migration safety — are
 explicitly out of scope for every tiering, sampling and caching change in this
 spec. They run in every tier they run in today.
+
+#### Corollary: a qualifier on a PASS may never be read as a verdict (BI-41C3E303, 2026-09-10)
+
+The invariant above constrains what a gate may **write**. It said nothing about
+what the reader may **conclude**, and the reader found a way around it.
+
+`evidencePending` means *the gate passed and publication of that pass has not
+finished*. It is a qualifier on a PASS. But `gate-worktree.mjs` legitimately
+writes it alongside `gatePassed: false` for `blocked_control_plane_starvation`,
+because the local evidence is worth preserving across a control-plane outage even
+when the run never graded the diff. `classifySlotRecord` tested `evidencePending`
+**before** `gatePassed`, so such a record short-circuited into:
+
+```
+local-CI gate: PENDING
+  reason  gate passed but evidence publication is pending (tool_threw) — finish with: pnpm run pregate -- --finalize-evidence
+```
+
+Observed on `fix/principle-decide-requires-option-id` @ `04f681eae8d6`. The gate
+had not passed, and `--finalize-evidence` then refused with *no exact published
+PASS is available to finalize* — the authoritative verdict surface asserted a
+state its own record contradicted, and sent the operator to an action that cannot
+succeed. That is the failure `make-silent-failures-observable` forbids, arriving
+through the reader rather than the writer.
+
+So the invariant extends:
+
+> A field that qualifies a PASS is never evaluated before the record is known to
+> BE a pass. `classifySlotRecord` classifies `gatePassed !== true` first, and
+> reaches the PENDING branch only on a record that passed.
+
+Concretely: the unpassed-record classification is extracted into
+`classifyUnpassedRecord`, and the PENDING branch now sits after it, so no future
+qualifier can be inserted above the pass check by accident. A record whose gate
+did not pass and that still holds unpublished evidence reports its real verdict —
+`INCONCLUSIVE` for the infrastructure statuses, `FAIL` for a genuine failure — and
+its reason names the pending publication as *not* a pass, without naming
+`--finalize-evidence`, whose only correct next action is to re-gate the SHA.
+
+The two other consumers of these records were already correct and are unchanged:
+`.githooks/pre-push-gate` exits on `gatePassed !== true` before it ever looks at
+`evidencePending`, and `scripts/pr-health.mjs` tests
+`gatePassed !== true || evidencePending === true`. Only the reader disagreed with
+them.
 
 ## Scope — this change
 

@@ -717,7 +717,11 @@ the state branch, SHA, metadata candidate SHA, and evidence record ID all agree;
 an expired 24-hour window still requires a new pregate.
 
 The pre-push gate blocks `evidencePending=true` records until finalization
-succeeds. Failure evidence also carries `failureSummary`, a bounded list of
+succeeds. `evidencePending` qualifies a PASS; it never establishes one. A run
+blocked by control-plane starvation also preserves its local evidence and sets
+the flag while `gatePassed` stays `false`, so `pregate:status` reports that
+record as `INCONCLUSIVE` and the fix is to re-run pregate on the SHA —
+`--finalize-evidence` has no published PASS to finalize and refuses (BI-41C3E303). Failure evidence also carries `failureSummary`, a bounded list of
 failed tests/checks and omitted counts, plus an explicit pointer to
 BI-A4EC0EA6 for code-graph impacted-test recommendations. The complete output
 from the most recent run is retained outside the working tree at the git-private
