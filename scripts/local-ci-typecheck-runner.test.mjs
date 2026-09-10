@@ -25,7 +25,7 @@ test("typecheck writes and then reuses an exact-tree passed receipt", async () =
     runObservedProcess: async ({ command, args }) => {
       launches += 1;
       assert.equal(command, "pnpm");
-      assert.deepEqual(args, ["--filter", "web", "typecheck"]);
+      assert.deepEqual(args, ["--filter", "web", "typecheck:all"]);
       return {
         status: 0,
         signal: null,
