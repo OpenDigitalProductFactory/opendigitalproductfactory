@@ -97,6 +97,33 @@ describe("parseInboundPayload", () => {
     expect(parsed?.externalThreadId).toBe("MSG-3");
   });
 
+  it("folds every header to lowercase so the noise rules can read them (BI-D2ED96B1)", () => {
+    const parsed = parseInboundPayload({
+      MessageID: "MSG-4",
+      TextBody: "x",
+      Headers: [
+        { Name: "Precedence", Value: "bulk" },
+        { Name: "List-Unsubscribe", Value: "<https://supplier.example/u>" },
+        { Name: "Auto-Submitted", Value: "auto-generated" },
+        { Name: "X-Broken" },
+      ],
+    });
+    expect(parsed?.headers).toEqual({
+      precedence: "bulk",
+      "list-unsubscribe": "<https://supplier.example/u>",
+      "auto-submitted": "auto-generated",
+    });
+  });
+
+  it("reads In-Reply-To whatever case the sender used (RFC 5322 3.6.4)", () => {
+    const parsed = parseInboundPayload({
+      MessageID: "MSG-5",
+      TextBody: "x",
+      Headers: [{ Name: "in-reply-to", Value: "<earlier@example.com>" }],
+    });
+    expect(parsed?.externalThreadId).toBe("<earlier@example.com>");
+  });
+
   it("returns null on missing MessageID", () => {
     expect(parseInboundPayload({ TextBody: "no id" })).toBeNull();
     expect(parseInboundPayload(null)).toBeNull();

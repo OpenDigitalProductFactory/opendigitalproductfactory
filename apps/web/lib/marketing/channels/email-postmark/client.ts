@@ -129,6 +129,18 @@ export type ParsedInboundEmail = {
   textBody: string;
   htmlBody: string | null;
   receivedAt: Date;
+  /**
+   * Every header Postmark sent, keyed lowercase.
+   *
+   * BI-D2ED96B1 (found by live acceptance 2026-09-10): the Mailroom's noise
+   * stage judges `auto-submitted`, `list-id`, `list-unsubscribe` and
+   * `precedence` (RFC 3834 / RFC 2369). The inbound route used to hand intake
+   * an empty header map, so on the Postmark path that whole rules-first stage
+   * was dead and a `Precedence: bulk` newsletter was routed into a business
+   * queue with an acknowledge-by time. Parsing them ONCE here keeps the
+   * Postmark path at parity with the IMAP adapter.
+   */
+  headers: Record<string, string>;
   metadata: Record<string, unknown>;
 };
 
@@ -156,8 +168,15 @@ export function parseInboundPayload(raw: unknown): ParsedInboundEmail | null {
 
   // Use the In-Reply-To / References header for thread continuity when
   // available; fall back to the message id itself for a new conversation.
-  const headers = Array.isArray(p.Headers) ? p.Headers : [];
-  const inReplyTo = headers.find((h) => h.Name === "In-Reply-To")?.Value ?? null;
+  const headerList = Array.isArray(p.Headers) ? p.Headers : [];
+  const headers: Record<string, string> = {};
+  for (const entry of headerList) {
+    if (typeof entry?.Name !== "string" || typeof entry.Value !== "string") continue;
+    headers[entry.Name.trim().toLowerCase()] = entry.Value;
+  }
+  // Header names are case-insensitive (RFC 5322 §3.6.4), so read the folded map
+  // rather than matching the exact spelling a sender happened to use.
+  const inReplyTo = headers["in-reply-to"] ?? null;
   const externalThreadId = inReplyTo ?? messageId;
 
   const textBody =
@@ -177,6 +196,7 @@ export function parseInboundPayload(raw: unknown): ParsedInboundEmail | null {
     textBody,
     htmlBody: typeof p.HtmlBody === "string" ? p.HtmlBody : null,
     receivedAt: p.Date ? new Date(p.Date) : new Date(),
+    headers,
     metadata: {
       messageStream: p.MessageStream ?? "inbound",
       headerCount: headers.length,

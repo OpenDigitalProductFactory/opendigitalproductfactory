@@ -92,7 +92,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       textBody: parsed.textBody,
       htmlBody: parsed.htmlBody,
       receivedAt: parsed.receivedAt,
-      headers: {},
+      headers: parsed.headers,
       attachments: [],
     },
   }).catch(() => null);

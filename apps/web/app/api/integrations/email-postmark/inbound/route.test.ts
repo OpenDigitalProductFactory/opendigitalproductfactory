@@ -6,7 +6,7 @@ const h = vi.hoisted(() => ({
   stored: { signingSecret: "sig", fromAddress: "a@b.com", replyToAddress: null, serverToken: "token" } as unknown,
   verified: true,
   parsed: { externalMessageId: "MSG-1", externalThreadId: "THREAD-1", fromAddress: "from@example.com", fromDisplayName: "Founder", subject: "Hello", textBody: "Body", receivedAt: new Date("2026-01-01"), metadata: { stream: "inbound" } } as unknown,
-  create: vi.fn(), send: vi.fn(), audit: vi.fn(), execute: vi.fn(), verify: vi.fn(), parse: vi.fn(),
+  create: vi.fn(), send: vi.fn(), audit: vi.fn(), execute: vi.fn(), verify: vi.fn(), parse: vi.fn(), mailroom: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: {
@@ -19,6 +19,7 @@ vi.mock("@/lib/marketing/channels/email-postmark/client", () => ({
   verifyInboundSignature: h.verify,
   parseInboundPayload: h.parse,
 }));
+vi.mock("@/lib/mailroom/runtime.server", () => ({ ingestPostmarkInboundForMailbox: h.mailroom }));
 vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: h.send } }));
 vi.mock("@/lib/integrations/kernel/audit", () => ({
   createDurableConnectorAudit: () => ({ record: h.audit }),
@@ -44,6 +45,9 @@ beforeEach(() => {
   h.create.mockResolvedValue({ inboundId: "inbound-1" });
   h.send.mockResolvedValue({});
   h.audit.mockResolvedValue(undefined);
+  // Default: no declared Mailroom mailbox for this recipient, so the marketing
+  // responder path the rest of this suite asserts stays unchanged.
+  h.mailroom.mockResolvedValue(null);
   h.execute.mockImplementation(async (input) => {
     const domain = await input.performDomainWrite({ inboundChannelMessage: { create: h.create } });
     return { ...domain, replayed: false, operationalErrors: [] };
@@ -101,5 +105,30 @@ describe("Postmark inbound compatibility", () => {
     h.execute.mockRejectedValueOnce(Object.assign(new Error("serialization conflict"), { code: "P2034" }));
     await expect(POST(request() as never)).rejects.toMatchObject({ code: "P2034" });
     expect(h.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("Mailroom branch header fidelity (BI-D2ED96B1)", () => {
+  it("hands intake the headers Postmark sent, so the noise rules can judge bulk mail", async () => {
+    // The route used to pass `headers: {}`, which left the rules-first noise
+    // stage (auto-submitted / list-id / list-unsubscribe / precedence) with
+    // nothing to read. Live acceptance 2026-09-10 routed a `Precedence: bulk`
+    // newsletter into the veterinary queue because of it.
+    h.parsed = {
+      externalMessageId: "MSG-BULK", externalThreadId: "MSG-BULK",
+      fromAddress: "newsletter@supplier.example", fromDisplayName: "Supplier Monthly",
+      toAddress: "vet@rescue.example", subject: "September deals", textBody: "Unsubscribe below.",
+      htmlBody: null, receivedAt: new Date("2026-09-10"),
+      headers: { precedence: "bulk", "list-unsubscribe": "<https://supplier.example/u>" },
+      metadata: { stream: "inbound" },
+    };
+    h.mailroom.mockResolvedValue({ inboundId: "inbound-mailroom-1" });
+
+    const res = await POST(request() as never);
+
+    expect(res.status).toBe(200);
+    expect(h.mailroom).toHaveBeenCalledTimes(1);
+    const passed = h.mailroom.mock.calls[0]![0] as { mail: { headers: Record<string, string> } };
+    expect(passed.mail.headers).toEqual({ precedence: "bulk", "list-unsubscribe": "<https://supplier.example/u>" });
   });
 });
