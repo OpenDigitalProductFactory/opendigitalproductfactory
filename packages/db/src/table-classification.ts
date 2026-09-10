@@ -23,7 +23,6 @@ export type TableSensitivity = "public" | "internal" | "confidential" | "restric
 export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // Mailroom (design 2026-09-09 §4.3): a declared mailbox row carries the
   // encrypted IMAP password or Graph client secret in secretsEnc — never copy.
-  MailboxAccount: "restricted",
   // -- public --
   // Published IEEE registry of manufacturer MAC prefixes (BI-9632B15B). Contains no
   // customer, estate or personal data — an OUI identifies a manufacturer, never a
@@ -99,7 +98,6 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   ScheduledJob: "internal",
   // EP-A33A5C61 slice 5: per-table byte/row samples, no row content. The schema
   // tag carries the same class; this entry leaves with slice 4d-ii.
-  TableGrowthSample: "internal",
   McpServer: "internal",
   McpServerTool: "internal",
   McpIntegration: "internal",
