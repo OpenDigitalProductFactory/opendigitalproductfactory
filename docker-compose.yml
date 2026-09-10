@@ -967,69 +967,6 @@ services:
           memory: 1g
           cpus: "1.0"
 
-  # ─── Voice Input — Speech-to-text sidecar (capability-owned, CPU) ──────────
-  # Owning spec: docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md
-  # Owning plan: docs/superpowers/plans/2026-05-17-voice-input-slice-1-5-default-on-cpu.md
-  #
-  # 3-tier hardware ladder:
-  #   Tier 1 (default — this block):  hwdsl2/whisper-server CPU image.
-  #                                   ~190 MB image + ~145 MB base model.
-  #                                   OpenAI-compatible /v1/audio/transcriptions
-  #                                   matches transcription-adapter.ts contract.
-  #                                   Multi-arch amd64 + arm64.
-  #   Tier 2 (operator-enabled GPU):  Override DPF_STT_IMAGE to a CUDA-enabled
-  #                                   variant. Activated via the SpeechToTextCard
-  #                                   "Upgrade to GPU" button (Slice 1.6).
-  #   Tier 3 (hosted):                Connect Groq / Deepgram / AssemblyAI via
-  #                                   the standard provider-add flow. The
-  #                                   classifyBiasPrompt gate already strips
-  #                                   off-org-unsafe tokens before dispatch.
-  #
-  # The local-speech capability activates this sidecar.
-  dpf-stt:
-    profiles: ["runtime-local-speech", "tts"]
-    # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-09-07 (the prior 29d01f2e… digest was deleted from the
-    # registry — Release Image Manifest Guard caught it again). The registry
-    # owner re-pushes :latest periodically and prunes the previous index, so
-    # this digest must be re-resolved every time the guard fails. Bump
-    # deliberately; never reach for `:latest` in shipped compose because it
-    # makes the install non-reproducible.
-    # OPERATOR RECOVERY (immediate, per-install): if this digest has rotted and
-    # the sidecar won't start, set DPF_STT_IMAGE in .env to a reachable ref
-    # (e.g. hwdsl2/whisper-server:latest) then `docker compose up -d dpf-stt`,
-    # and open a PR re-resolving the digest here (this is that PR's pattern).
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:257302e5ea7efb041546d1b5d8ee11bcba2235711ab94f08c4dcc54be074ac36}
-    restart: unless-stopped
-    logging: *default-logging
-    environment:
-      # `base` (~145 MB) is the smallest model with usable accuracy on English.
-      # Override DPF_STT_MODEL to e.g. `distil-small.en` for lower latency on
-      # GPUs, or `large-v3` on a beefier machine.
-      WHISPER_MODEL: ${DPF_STT_MODEL:-base}
-    volumes:
-      # Cache downloaded models across container restarts. First start downloads
-      # the model (~10-30 s for base on a typical connection); subsequent
-      # starts are warm.
-      - dpf_stt_models:/app/models
-    healthcheck:
-      # hwdsl2/whisper-server listens on port 9000 internally. The legacy
-      # speaches image was on 8000 — when swapping default-on tier we updated
-      # all three: healthcheck, host port mapping below, and the provider
-      # baseUrl in providers-registry.json.
-      test: ["CMD", "curl", "-fsS", "http://localhost:9000/v1/models"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      # The first start downloads the model, so start_period accommodates it.
-      # Subsequent restarts hit the cached model and pass in ~3 s.
-      start_period: 120s
-    ports:
-      # Localhost-only port binding. The portal reaches the sidecar via the
-      # Docker network DNS name (dpf-stt:9000); the host-port mapping is for
-      # developer-machine smoke testing only.
-      - "127.0.0.1:8765:9000"
-
   # ─── Voice Output — Text-to-speech sidecar (opt-in via `tts` profile) ──────
   #
   # Provider: Chatterbox (Resemble AI, MIT license) — self-hosted, zero-shot
@@ -1042,7 +979,10 @@ services:
   #   Tier 1 (CPU):   DPF_TTS_IMAGE=travisvn/chatterbox-tts-api:latest + unset NVIDIA deploy
   #                   ~10–30x slower but requires no GPU. Good for testing.
   #   Tier 2 (CUDA):  Default. Requires NVIDIA GPU ≥ 6 GB VRAM (Turbo model).
-  #                   Can share GPU with dpf-stt when total VRAM ≥ 10 GB.
+  #                   Speech-to-text no longer runs as a shipped sidecar
+  #                   (BI-F7E9A541), so this is the only local speech service
+  #                   competing for VRAM. An operator running their own STT
+  #                   container should budget for both.
   #   Tier 3 (API):   Set TTS_PROVIDER=cartesia or TTS_PROVIDER=fish-audio in
   #                   the portal service env to route to a managed API instead.
   #
@@ -1125,4 +1065,3 @@ volumes:
   grafana_data:
   loki_data:
   alloy_data:
-  dpf_stt_models:

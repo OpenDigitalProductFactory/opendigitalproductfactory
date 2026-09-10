@@ -25,7 +25,9 @@ boot-time fail-loud for desired-state drift.
 `monitoring/prometheus/prometheus.yml` scrapes: `portal`, `sandbox`, `postgres`
 (exporter), `redis` (exporter), `qdrant`, `inngest`, `loki`, `alloy`, `windows-host`
 (windows_exporter), `prometheus`. **Not scrapeable** (no `/metrics`): `dpf-tts`,
-`dpf-stt`, `neo4j`, the model runner (DMR) — covered by portal-side probes below.
+`neo4j`, the model runner (DMR) — covered by portal-side probes below.
+Speech-to-text runs no DPF-shipped container at all; it is provider-managed
+and observed through the portal-side `dpf_voice_stt_*` counters.
 
 ## Portal-side health gauges (`/api/metrics`, refreshed per scrape)
 

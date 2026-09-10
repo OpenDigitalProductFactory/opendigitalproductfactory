@@ -69,10 +69,21 @@ export type ContentBlock =
   /**
    * Audio input for multimodal models (ASR / diarization / audio understanding).
    * OpenAI Chat Completions wire form (`input_audio` with base64 data + format).
-   * Verified on-machine (2026-06-15): local Gemma 4 12B transcribes a wav via
-   * Docker Model Runner through this exact block. Anthropic has no audio-input
-   * block, so this is OpenAI-compatible only — routing sends audio to an
-   * audio-capable endpoint via the `audioInput` floor, never to Anthropic.
+   * Anthropic has no audio-input block, so this is OpenAI-compatible only —
+   * routing sends audio to an audio-capable endpoint via the `audioInput`
+   * floor, never to Anthropic.
+   *
+   * NOTE (2026-09-09, BI-F7E9A541): this block is NOT the path voice input
+   * takes. `transcribe()` sets executionAdapter="transcription", which
+   * dispatches to transcription-adapter.ts and posts multipart audio to
+   * /v1/audio/transcriptions — a different API that the local model runner does
+   * not serve (404). A previous note here claimed a local Gemma 4 12B had
+   * transcribed a wav through Docker Model Runner on 2026-06-15; that model is
+   * no longer installed, and a direct retest returned "audio input is not
+   * supported ... you may need to provide the mmproj". Serving transcription
+   * from a local chat model needs an audio-capable model WITH a multimodal
+   * projector plus a dispatch branch that speaks chat rather than multipart.
+   * Do not assume this path works for speech without retesting it.
    */
   | { type: "input_audio"; input_audio: { data: string; format: "wav" | "mp3" } }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }

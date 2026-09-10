@@ -147,13 +147,14 @@ Materials alone produce a fully functional text-only gate. Adding generation sty
 
 ### Speech-to-Text (input)
 
-STT is **on by default** on every install. The bundled service is **speaches** — a local Docker service at `dpf-stt:9000` running faster-whisper / distil-whisper. No GPU is required; speaches runs CPU-friendly. A 3-tier hardware ladder is available for installs that want to upgrade:
+STT is **provider-managed**: DPF ships no speech container, and voice input turns on as soon as you configure a provider that can transcribe. Any provider serving an OpenAI-compatible `/v1/audio/transcriptions` endpoint works.
 
-| Tier | Backend | When to use |
+| Option | Backend | When to use |
 |------|---------|-------------|
-| **CPU (default)** | `speaches` on CPU | Every install gets this. Adequate for normal admin and coworker dictation. |
-| **GPU (upgrade)** | `speaches` with the CUDA image (`DPF_STT_IMAGE` env var) | Faster, lower-latency transcription on hosts with an NVIDIA GPU. |
-| **Hosted** | Groq / Deepgram / AssemblyAI / OpenAI Whisper | Customer-supplied fallback when local STT isn't desired, or when local hardware is constrained. |
+| **Self-hosted** | Your own speech server (speaches, whisper.cpp server — both MIT) | Audio never leaves your infrastructure. Ranked first when configured, and the only option cleared for regulated data. |
+| **Hosted** | OpenAI, Groq | Nothing to run or maintain. Audio leaves your install, so org vocabulary is redacted before dispatch by the bias-classification gate. |
+
+DPF stopped bundling a speech image because a third party's registry housekeeping was able to block platform releases for every install.
 
 The mic button is wired into the coworker chat surface; transcripts feed the existing coworker message pipeline. Errors surface inline rather than silently failing.
 
