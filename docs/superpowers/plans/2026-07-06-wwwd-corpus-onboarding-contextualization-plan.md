@@ -69,6 +69,45 @@ From the recontextualized bridge pages (`stances/contextualize-dont-transform`, 
    **Update 2026-07-09 (BI-3AAB96E9): loop closed.** Live end-to-end verification found the surfacing half shipped but the finding's CTA dead-ended at the manual `/wiki/stance` editor rather than the qa enricher. Fixed: `/wiki/review` now classifies gap clusters by profile (org vs kernel/WWMD via `DecisionInteraction.profileId`); an **org-scoped** gap renders an inline "Answer this once" affordance (`gap-answer-form.tsx`) whose `answerGovernanceGap` server action routes the answer through the shared `captureOrgBusinessAnswer` helper (the same path `record_org_business_answer` uses — enrichOrgCorpus qa/first-party, draft-by-default) and resolves the cluster's unresolved deferrals (`humanOutcome`) so the gap clears. Kernel/WWMD gaps keep the stance-editor action. The review query now filters resolved rows (`humanOutcome` null), fixing the latent "deferrals accumulate forever" behavior.
 3. **C3 — (verify-only)** confirm the existing research/document feeders grade provenance correctly against the new pages; no new build expected.
 
+### Phase D — the same loop for marketing's STRUCTURED grounding (BI-74E9BD73, EP-5CC9C184)
+
+Added 2026-09-09. C1/C2 land operator answers in the org corpus as narrative,
+which is right for how a business sees its market. But the marketing drafter does
+not read narrative — `draft-builder.ts` reads `MarketingStrategy.targetSegments`,
+falls back to `.idealCustomerProfiles`, and reads `.proofAssets`. Those fields
+were bootstrap-only until BI-06BB96F0 opened a write path, and nothing has ever
+asked for them.
+
+Measured: the marketing self-task fired on 2026-08-31 and again on 2026-09-07 and
+produced nothing either time. Its prompt forbids inventing customers, it had no
+segments, no ICPs and no proof, so it correctly refused and stalled. The coworker
+behaved properly; the question had never been put.
+
+1. **D1 — a few directional questions, same shape as C1.** Who the organization
+   actually serves, where those people find it today, what it can genuinely point
+   to, what it will not do. Four questions, all optional. `buildMarketingGrounding`
+   (`apps/web/lib/onboarding/capture-marketing-grounding.ts`) turns them into
+   structured grounding plus an explicit research list.
+
+2. **D2 — the coworker researches the rest.** Founder direction: the operator will
+   not know the specialist channels their sector uses, and should not be asked. The
+   capture always emits `channels` and `channel-rules` research prompts, even when
+   reach is answered — an operator's answer says where people find them *today*,
+   not what the sector supports. Findings are **proposed**, never silently applied,
+   and carry provenance so they can later feed the archetype seed (BI-627F1E8B).
+
+3. **D3 — ask-when-silent, reusing C2's affordance.** `assessMarketingGrounding`
+   (BI-06BB96F0) already distinguishes an untouched bootstrap stub from a partly
+   filled plan. That verdict should raise the same "Answer this once" finding C2
+   built, rather than a second review surface. Not yet wired.
+
+**Proof is never inferred.** `buildMarketingGrounding` deliberately does not derive
+proof assets by splitting prose — a proof asset is a claim about what the
+organization achieved, and manufacturing those is the failure the marketing
+placeholder brief was removed for ("the fabricated brief is strictly worse than
+the truth"). Proven results are kept as one operator-attributed note; anything
+further is researched from the organization's own records or asked for.
+
 ### Out of scope (explicitly)
 
 - Profile-aware re-scoring inside `principle_decide` (consolidation C2b was retracted 2026-05-31; the gate is the governed door).
