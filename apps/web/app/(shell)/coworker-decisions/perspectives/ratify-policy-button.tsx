@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { ratifyPolicyVersion, type RatifyPolicyVersionResult } from "@/lib/actions/decision-perspective-ratify";
 
 export const RATIFY_COPY = {
-  action: "Ratify this policy",
+  action: "Ratify",
   pending: "Ratifying…",
   why: "Ratifying once lets your AI act on this policy's own high-confidence answers without asking you each time.",
   ratified: "Ratified",

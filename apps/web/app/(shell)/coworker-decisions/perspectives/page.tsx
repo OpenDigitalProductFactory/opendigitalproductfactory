@@ -145,7 +145,7 @@ export default async function PerspectivesIndexPage() {
                     href={`/coworker-decisions/perspectives/${profile.profileId}/voice`}
                     className="text-sm text-primary hover:underline"
                   >
-                    Voice config →
+                    Voice →
                   </Link>
                 </div>
               </div>
