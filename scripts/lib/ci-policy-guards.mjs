@@ -108,6 +108,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-D908DA0A: a parked claim says whether it waits behind work or behind
       // a closed pool; the two used to print identically.
       node("--test", "scripts/gate-worktree-pool-closed.test.mjs"),
+      // BI-FFCFCCE0: --finalize-evidence resolved its record before admission
+      // and so always read slot-0, while pregate:status reconciles every slot.
+      // A real pending PASS on slot-1 was unfinalizable. Registered here for the
+      // same reason as the tests above: in the allowlist it would never run.
+      node("--test", "scripts/gate-worktree-finalize-slot.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken
