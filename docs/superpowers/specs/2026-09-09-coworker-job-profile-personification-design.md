@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Coworker Job Profile — Personification at Execution Time — Design Spec
 
 | Field | Value |
