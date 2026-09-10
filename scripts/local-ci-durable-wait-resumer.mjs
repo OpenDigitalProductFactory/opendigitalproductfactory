@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   DEFAULT_RESUME_DEADLINE_MS,
@@ -23,6 +25,26 @@ import {
 // single source of the verdict and this file adds no second home for one.
 
 const EXIT_QUEUED = 75;
+
+// A detached process with stdio "ignore" that leaves no trace is undiagnosable:
+// when the first field build of this resumer died on its second re-claim there
+// was nothing at all to read. The log lives beside the observer record so the
+// same reap that clears one clears the other.
+function makeLogger(directory, token) {
+  if (!directory) return () => {};
+  const path = join(directory, `${token}.resumer.log`);
+  try {
+    mkdirSync(directory, { recursive: true });
+  } catch {
+    return () => {};
+  }
+  return (event, detail = {}) => {
+    try {
+      appendFileSync(path, `${JSON.stringify({ at: new Date().toISOString(), event, ...detail })}
+`);
+    } catch { /* logging must never take the resumer down */ }
+  };
+}
 
 export function parseResumerArgs(argv) {
   const options = {
@@ -58,7 +80,12 @@ export function parseResumerArgs(argv) {
   return options;
 }
 
-const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms).unref?.(); });
+// NOT unref'd, deliberately. An unref'd timer does not hold the event loop
+// open, and between re-claims this process has nothing else referenced - the
+// gate child has exited and stdio is "ignore". The first field build unref'd
+// here and every resumer died silently mid-sleep with exit 0, after exactly one
+// re-claim, which looked identical to the defect it was written to fix.
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 function runGateOnce({ gateArgv, env, spawnFn }) {
   return new Promise((resolve) => {
@@ -87,12 +114,14 @@ export async function resumeUntilAdmitted({
   now = () => Date.now(),
   spawnFn = spawn,
   sleepFn = sleep,
+  log = () => {},
 }) {
   const giveUpAt = now() + deadlineMs;
   let attempts = 0;
   for (;;) {
     attempts += 1;
     const code = await runGateOnce({ gateArgv, env, spawnFn });
+    log("gate-attempt", { attempts, code });
     if (code !== EXIT_QUEUED && code !== null) return { code, attempts };
     if (now() >= giveUpAt) return { code: EXIT_QUEUED, attempts };
     await sleepFn(intervalMs);
@@ -127,13 +156,20 @@ async function main() {
     }
   }
 
+  const log = makeLogger(options.observerDirectory, identity.token);
+  log("start", { pid: process.pid, gateArgv: options.gateArgv, intervalMs: options.intervalMs });
   try {
-    const { code } = await resumeUntilAdmitted({
+    const { code, attempts } = await resumeUntilAdmitted({
       gateArgv: options.gateArgv,
       intervalMs: options.intervalMs,
       deadlineMs: options.deadlineMs,
+      log,
     });
+    log("finished", { code, attempts });
     process.exitCode = code ?? EXIT_QUEUED;
+  } catch (error) {
+    log("crashed", { message: String(error?.message || error) });
+    throw error;
   } finally {
     if (observerPath) {
       try {

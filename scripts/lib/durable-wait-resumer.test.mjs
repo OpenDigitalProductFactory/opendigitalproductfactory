@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   DEFAULT_RESUME_INTERVAL_MS,
@@ -192,4 +197,46 @@ test("a resumer spawn error is retried, never reported as a gate verdict", async
   });
   assert.equal(code, 0);
   assert.equal(attempts, 2);
+});
+
+// The resumer's whole job is to still be there on the second re-claim. The
+// first field build unref'd its sleep timer, so between re-claims nothing held
+// the event loop open: every resumer exited 0 mid-sleep after exactly one
+// attempt, silently, which on the wire looked identical to the defect it was
+// written to fix. A unit test cannot see that - only a real child can.
+test("the resumer survives its sleep and re-claims more than once", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-resumer-"));
+  const fakeGate = join(directory, "always-queued-gate.mjs");
+  writeFileSync(fakeGate, "process.exit(75);\n");
+  chmodSync(fakeGate, 0o755);
+
+  const runner = join(dirname(dirname(fileURLToPath(import.meta.url))), "local-ci-durable-wait-resumer.mjs");
+  const child = spawn(process.execPath, [
+    runner,
+    "--interval-ms", "200",
+    "--deadline-ms", "4000",
+    "--observer-dir", directory,
+    "--branch", "fix/x",
+    "--sha", "abc123",
+    "--owner-session-id", "session-1",
+    "--", fakeGate,
+  ], { stdio: "ignore" });
+
+  const exitCode = await new Promise((resolve) => {
+    const timer = setTimeout(() => { child.kill(); resolve("still-running"); }, 15_000);
+    child.once("exit", (code) => { clearTimeout(timer); resolve(code); });
+  });
+
+  const logFile = readdirSync(directory).find((name) => name.endsWith(".resumer.log"));
+  assert.ok(logFile, "the resumer must leave a log; a silent detached process is undiagnosable");
+  const attempts = readFileSync(join(directory, logFile), "utf8")
+    .split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    .filter((entry) => entry.event === "gate-attempt");
+
+  assert.ok(
+    attempts.length >= 3,
+    `expected the resumer to keep re-claiming across sleeps, got ${attempts.length} attempt(s)`,
+  );
+  assert.ok(attempts.every((entry) => entry.code === 75));
+  assert.equal(exitCode, 75, "still queued at its deadline is still queued, not a verdict");
 });
