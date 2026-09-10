@@ -18,6 +18,13 @@ import {
 } from "./gate-worktree.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 
+// BI-D35B85BF. A queued gate now hands its claim to a detached resumer that
+// keeps re-claiming until admitted. These tests assert the exit-75 CONTRACT
+// against a stub server, so a real resumer would outlive each test and keep
+// re-claiming against a server that has been torn down. The spawn decision
+// itself is covered with an injected spawn in lib/durable-wait-resumer.test.mjs.
+process.env.DPF_DURABLE_RESUMER = "off";
+
 const TEST_HOST_PRESSURE = {
   observedAt: "2026-07-30T05:00:00.000Z",
   availableMemoryBytes: 16 * 1024 ** 3,
@@ -361,6 +368,10 @@ test("a server-owned durable queue response checkpoints once and exits without p
       DPF_GATE_RETRY_JITTER: "0", DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
     } });
     assert.equal(result.code, 75, result.output);
+    // BI-D35B85BF: the queued report must say who owns the resume instead of
+    // leaving the reader to assume the platform does.
+    assert.match(result.output, /"resumeOwner":"caller"/, result.output);
+    assert.match(result.output, /"resumeUnavailableReason":"disabled"/, result.output);
     assert.equal(calls.filter((tool) => tool === "claim_nonprod_environment_lease").length, 1);
     assert.equal(calls.includes("renew_nonprod_environment_lease"), false);
     assert.equal(calls.includes("release_nonprod_environment_lease"), false);

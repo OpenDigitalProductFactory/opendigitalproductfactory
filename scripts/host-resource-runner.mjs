@@ -3,11 +3,13 @@
 import { readFileSync } from "node:fs";
 import { hostname, freemem, totalmem } from "node:os";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { isAllowedMcpEndpoint, mcpCall } from "./lib/mcp-client.mjs";
 import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
+import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 
 const PROFILE_CONTRACT = JSON.parse(readFileSync(
   new URL("../apps/web/lib/nonprod/host-resource-profiles.json", import.meta.url),
@@ -15,6 +17,7 @@ const PROFILE_CONTRACT = JSON.parse(readFileSync(
 ));
 
 const DEFAULT_LOCAL_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1";
+const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
 
 export const HEAVY_PROCESS_CLASSES = Object.freeze([
   "typescript",
@@ -269,15 +272,25 @@ async function main() {
     throw new Error(`host resource admission failed: ${claim?.error ?? "unknown"}`);
   }
   if (claim?.data?.admission?.status === "queued") {
-    // The server-owned TaskRun now preserves queue position and owns liveness.
-    // Exit without releasing: the event/reconciler wakes this exact claimant,
-    // which then makes one fresh pressure-aware claim under the same identity.
+    // BI-D35B85BF. This block used to assert that "the event/reconciler wakes
+    // this exact claimant". It never did: applyNonprodCapacityEvent writes a
+    // TaskRun projection that no process reads back. Spawn the resumer that
+    // actually re-claims, and report who owns the resume rather than leaving
+    // the reader to assume the platform does.
+    const resume = spawnDurableWaitResumer({
+      runnerPath: resolve(SCRIPT_DIR, "local-ci-durable-wait-resumer.mjs"),
+      gateArgv: process.argv,
+      cwd: process.cwd(),
+    });
     process.stderr.write(JSON.stringify({
       status: "queued",
       code: "host_resource_durable_wait",
       leaseId,
       taskRunId: claim?.data?.admission?.taskRunId ?? null,
       resumeMode: claim?.data?.admission?.resumeMode ?? "durable-task",
+      resumeOwner: resume.spawned ? "detached-resumer" : "caller",
+      resumerPid: resume.pid,
+      ...(resume.spawned ? {} : { resumeUnavailableReason: resume.reason }),
       resourceClass: parsed.resourceClass,
       reason: claim?.data?.poolPolicy?.rollbackReason ?? "capacity-full",
       ungovernedProcesses: findings,
