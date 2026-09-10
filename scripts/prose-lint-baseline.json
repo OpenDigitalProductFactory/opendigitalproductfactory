@@ -237,7 +237,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 7
+    "textMass": 24
   },
   "apps/web/app/(shell)/admin/backups/RestoreHistorySection.tsx": {
     "vocabulary": 0,

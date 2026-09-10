@@ -1,6 +1,7 @@
 /**
  * Unit tests for the shared managed-restore engine (EP-8DC217EB BET-11,
- * BI-B72328D5), parametrized across all three restore specs. Mirrors the
+ * BI-B72328D5), parametrized across every restore spec (postgres-only after
+ * BET-5 retired neo4j + qdrant; the table stays so a future engine slots in). Mirrors the
  * mocking idiom of postgres-restore-runner.test.ts.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,14 +25,6 @@ vi.mock("@/lib/operate/metrics", () => {
     postgresBackupLastSuccessSeconds: gauge(),
     postgresBackupStorageBytes: gauge(),
     postgresBackupDurationSeconds: histogram(),
-    neo4jBackupRunsTotal: counter(),
-    neo4jBackupLastSuccessSeconds: gauge(),
-    neo4jBackupStorageBytes: gauge(),
-    neo4jBackupDurationSeconds: histogram(),
-    qdrantBackupRunsTotal: counter(),
-    qdrantBackupLastSuccessSeconds: gauge(),
-    qdrantBackupStorageBytes: gauge(),
-    qdrantBackupDurationSeconds: histogram(),
     postgresRestoreRunsTotal: counter(),
     postgresRestoreDurationSeconds: histogram(),
   };
@@ -49,12 +42,7 @@ import {
   isRestoreInFlight,
   runManagedRestore,
 } from "./managed-restore";
-import {
-  NEO4J_RESTORE_SPEC,
-  POSTGRES_RESTORE_SPEC,
-  QDRANT_RESTORE_SPEC,
-  type RestoreEngineSpec,
-} from "./engine-specs";
+import { POSTGRES_RESTORE_SPEC, type RestoreEngineSpec } from "./engine-specs";
 import { runManagedScript } from "./managed-script-path";
 
 type Mock = ReturnType<typeof vi.fn>;
@@ -75,20 +63,6 @@ const ENGINES: RestoreCase[] = [
     failLine: "[restore-trace] failed: pg_restore boom",
     prunedText: /its file is no longer on disk/,
     checksumText: /checksum does not match what was recorded/,
-  },
-  {
-    spec: NEO4J_RESTORE_SPEC,
-    subdir: "neo4j",
-    failLine: "[restore-neo4j-trace] failed: pg_restore boom",
-    prunedText: /pruned; file is gone/,
-    checksumText: /Source dump checksum mismatch/,
-  },
-  {
-    spec: QDRANT_RESTORE_SPEC,
-    subdir: "qdrant",
-    failLine: "[restore-qdrant-trace] failed: pg_restore boom",
-    prunedText: /pruned; file is gone/,
-    checksumText: /Source snapshot checksum mismatch/,
   },
 ];
 
@@ -247,24 +221,13 @@ describe.each(ENGINES)(
 );
 
 describe("target check", () => {
-  it("neo4j/qdrant reject a source whose target does not match", async () => {
-    for (const { spec, subdir } of ENGINES.slice(1)) {
-      const prisma = makePrisma();
-      prisma.backupRun.findUnique.mockResolvedValue({
-        ...makeSource(spec, `${subdir}/x`),
-        target: "postgres",
-      });
-      await expect(
-        runManagedRestore(spec, { sourceBackupRunId: "src", prismaClient: prisma as never }),
-      ).rejects.toThrow(new RegExp(`expected ${spec.target}`));
-    }
-  });
-
   it("postgres has no target check (fails later on the missing artifact instead)", async () => {
     const prisma = makePrisma();
     prisma.backupRun.findUnique.mockResolvedValue({
       ...makeSource(POSTGRES_RESTORE_SPEC, "postgres/nope"),
-      target: "neo4j",
+      // A BackupRun row left behind by a pre-BET-5 install can still carry a
+      // retired target; postgres predates the wrongTarget check and skips it.
+      target: "retired-engine",
     });
     await expect(
       runManagedRestore(POSTGRES_RESTORE_SPEC, {
@@ -344,7 +307,7 @@ describe.each(ENGINES)(
         // pinned 0 (a fast-but-nonzero run yields 0.001 and flakes).
         expect(spec.metrics?.durationSeconds.observe).toHaveBeenCalledWith(expect.any(Number));
       } else {
-        // Neo4j/Qdrant never touch Postgres audit rows nor restore metrics.
+        // An engine without the audit hooks/metrics leaves both untouched.
         expect(prisma.backupRun.upsert).not.toHaveBeenCalled();
         expect(POSTGRES_RESTORE_SPEC.metrics?.runsTotal.inc).not.toHaveBeenCalled();
       }

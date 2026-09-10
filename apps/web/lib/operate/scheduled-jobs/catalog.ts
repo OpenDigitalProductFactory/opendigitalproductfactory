@@ -141,7 +141,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     ungatedReason:
       "Quiescence caller: the daily backup fan-out is the disaster-recovery floor the upgrade path depends on; gating it would deadlock self-upgrade.",
     name: "All backups (fan-out)",
-    purpose: "Fans out daily backups across Postgres / Neo4j / Qdrant sub-runners.",
+    purpose: "Runs the daily Postgres backup, then the trial-restore verification (postgres-only after BET-5).",
     cron: "daily",
     cadence: "Daily",
     category: "core",

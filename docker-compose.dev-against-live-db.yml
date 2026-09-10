@@ -1,8 +1,8 @@
 # docker-compose.dev-against-live-db.yml
 #
 # Opt-in override that points the dev-portal hot-reload service at the LIVE
-# DPF databases (postgres / neo4j / qdrant from the base docker-compose.yml)
-# instead of the isolated dev-postgres / dev-neo4j / dev-qdrant stack.
+# DPF database (postgres from the base docker-compose.yml) instead of the
+# isolated dev-postgres stack.
 #
 # Why this exists
 #   The base dev-portal service runs Next.js dev with hot-reload on port 3001
@@ -20,10 +20,9 @@
 #     --profile dev up -d dev-portal
 #
 # The `-p dpf` flag attaches to the existing `dpf` compose project so the
-# `postgres` / `neo4j` / `qdrant` references resolve to the already-running
-# production-stack containers (dpf-postgres-1 etc.). Without it, compose
-# would create a brand-new project with brand-new sibling DBs — defeating
-# the purpose.
+# `postgres` reference resolves to the already-running production-stack
+# container (dpf-postgres-1). Without it, compose would create a brand-new
+# project with a brand-new sibling DB — defeating the purpose.
 #
 # Risk profile
 #   dev-portal can WRITE to the live DBs. A coding mistake in the worktree
@@ -52,14 +51,10 @@ services:
       - ${DPF_DEV_WORKTREE:?DPF_DEV_WORKTREE must be set to the absolute worktree path with forward slashes}:/workspace
       - dev_node_modules:/workspace/node_modules
     environment:
-      # Swap from dev-postgres / dev-neo4j / dev-qdrant to the live stack.
+      # Swap from dev-postgres to the live stack.
       # Credentials come from the live install's .env so encrypted secrets
       # (AUTH_SECRET, CREDENTIAL_ENCRYPTION_KEY) decrypt correctly.
       DATABASE_URL: postgresql://${POSTGRES_USER:-dpf}:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/dpf
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-dpf_dev_password}
-      QDRANT_INTERNAL_URL: http://qdrant:6333
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set — already required by the live portal}
       AUTH_TRUST_HOST: "true"
       AUTH_URL: http://localhost:3001
@@ -87,10 +82,8 @@ services:
     depends_on: !reset
       postgres:
         condition: service_healthy
-      # BET-5 (BI-A1E864A5): neo4j / qdrant deps removed — services retired
-      # (Postgres pgvector + graph mirror). NEO4J_URI/QDRANT_INTERNAL_URL env
-      # above is kept so the one-time upgrade backfill can still reach any
-      # surviving legacy containers by network alias.
+      # BET-5 (BI-A1E864A5): neo4j / qdrant deps and env removed — services
+      # retired (Postgres pgvector + graph mirror).
 
   # Swap Prometheus to the contributor overlay so the Health tab gains a
   # "Contributor Preview" tile while dev-portal is running. Customer installs

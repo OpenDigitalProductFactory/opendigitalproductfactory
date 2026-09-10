@@ -8,18 +8,12 @@ export const POSTGRES_BACKUP_JOB_NAME =
   "Postgres daily backup (platform-managed)";
 export const POSTGRES_BACKUP_SCHEDULE = "daily";
 
-export const NEO4J_BACKUP_JOB_ID = "neo4j-daily-backup";
-export const NEO4J_BACKUP_JOB_NAME = "Neo4j daily backup (platform-managed)";
-export const NEO4J_BACKUP_SCHEDULE = "daily";
+// The retired neo4j-daily-backup / qdrant-daily-backup job ids live only in
+// packages/db/src/seed-platform-backup.ts, where the seed deactivates any
+// ScheduledJob rows left behind by installs that predate BET-5.
 
-export const QDRANT_BACKUP_JOB_ID = "qdrant-daily-backup";
-export const QDRANT_BACKUP_JOB_NAME = "Qdrant daily backup (platform-managed)";
-export const QDRANT_BACKUP_SCHEDULE = "daily";
-
-/** Inngest events for manual triggers. */
+/** Inngest event for the manual trigger. */
 export const POSTGRES_BACKUP_EVENT = "ops/postgres-backup.requested";
-export const NEO4J_BACKUP_EVENT = "ops/neo4j-backup.requested";
-export const QDRANT_BACKUP_EVENT = "ops/qdrant-backup.requested";
 
 /** Cron expression — 03:00 UTC daily. */
 export const POSTGRES_BACKUP_CRON = "0 3 * * *";
@@ -27,9 +21,9 @@ export const POSTGRES_BACKUP_CRON = "0 3 * * *";
 export const ALL_BACKUPS_CRON = "0 3 * * *";
 
 // ─── Trial-restore verification (BI-31C9FBDF) ────────────────────────────────
-// Runs as the final step of allBackupsDailyScheduled after postgres + neo4j +
-// qdrant backups complete; also exposed via a manual-trigger event so admins
-// can re-verify on demand.
+// Runs as the final step of allBackupsDailyScheduled after the Postgres
+// backup completes; also exposed via a manual-trigger event so admins can
+// re-verify on demand.
 
 export const POSTGRES_TRIAL_RESTORE_JOB_ID = "postgres-trial-restore-daily";
 export const POSTGRES_TRIAL_RESTORE_JOB_NAME =
