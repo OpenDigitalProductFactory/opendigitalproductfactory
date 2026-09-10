@@ -725,7 +725,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 60
+    "textMass": 75
   },
   "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx": {
     "vocabulary": 0,

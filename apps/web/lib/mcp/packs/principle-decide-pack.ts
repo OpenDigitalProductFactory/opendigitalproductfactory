@@ -73,6 +73,7 @@ const definitions: ToolDefinition[] = [
         // Trust-envelope evidence grounding params (spec §2 Axis 1) — defined in
         // evidence-grounding.ts so this pack stays under the module-size ceiling.
         ...PRINCIPLE_DECIDE_EVIDENCE_SCHEMA,
+        decisionDomain: { type: "string", enum: ["org-business", "platform-development"], description: "Owning scope (BI-HDLEMP-01, BI-9C384562): org-business is answered by the organization WWWD profile, platform-development by the founder WWMD profile. Omitted, routing falls back to callingPopulation, which sends an in-platform coworker to the organization profile." },
         callingPopulation: {
           type: "string",
           enum: ["in_platform_coworker", "external_coding_agent", "human"],
@@ -141,11 +142,7 @@ export async function runPrincipleDecision(
 ): Promise<ToolResult> {
   // Pull in-scope commandments plus relevant core/contextual principles, run
   // the pure scoring math, and return its contribution ledger.
-  const validPopulations = new Set([
-    "in_platform_coworker",
-    "external_coding_agent",
-    "human",
-  ]);
+  const validPopulations = new Set(["in_platform_coworker", "external_coding_agent", "human"]);
   const callingPopulation = params["callingPopulation"];
   if (
     typeof callingPopulation !== "string" ||
@@ -650,13 +647,13 @@ export async function runPrincipleDecision(
   // so agents/operators know which kernel weighed in. Additive — does not
   // change scoring yet; Gate-routed scoring + boundary enforcement is the
   // follow-on (C2b). callingPopulation was validated above.
-  const { resolveDecisionCallerContext } = await import(
-    "@/lib/decision/caller-context"
-  );
+  const { resolveDecisionCallerContext, resolveDecisionDomainParam } = await import("@/lib/decision/caller-context");
   const governingProfile = await resolveDecisionCallerContext({
     callingPopulation:
       callingPopulation as "in_platform_coworker" | "external_coding_agent" | "human",
     agentId: context?.agentId ?? null,
+    // BI-9C384562: a policy-projection consult is platform-development by construction.
+    decisionDomain: resolveDecisionDomainParam(params, Boolean(policyProjection)),
   });
 
   // BI-E0151DB2. The abstention must be impossible to mistake for a verdict.

@@ -191,6 +191,7 @@ describe("policy action judgment", () => {
     });
     expect(request.params).toMatchObject({
       callingPopulation: "in_platform_coworker",
+      decisionDomain: "platform-development",
       stakes: "elevated",
       options: [
         { id: "proceed", features: expect.objectContaining({ governance_compliance: 1, evidence_density: 1 }) },

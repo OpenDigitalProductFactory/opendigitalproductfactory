@@ -125,6 +125,12 @@ Candidate anchor standards for the pilot three (each profession's research pass 
 
 SFIA 9 and O*NET/ESCO inform which knowledge areas each role profile must cover — used as a completeness checklist, not ingested as text. WSID does **not** include verbatim ingestion of licensed/copyrighted texts, per the corpus content policy.
 
+## Ratifying a Policy Once
+
+Autonomy is delegated by a person, not claimed by the platform. When a coworker asks WWMD to authorize an exact, bounded platform action (for example recording a readiness receipt), the authority projector only turns a high-confidence yes into an approval when the policy version that answered was **ratified by a human**. A fresh install seeds the platform and organization perspectives unsigned, so until someone ratifies them every such action falls to a per-action approval card in your inbox.
+
+Ratify once at `/coworker-decisions/perspectives`: the platform and organization rows show **Ratify this policy** until a person with capability management rights clicks it, then show **Ratified**. The act records your own principal as the root of that delegation; it never overwrites an earlier ratifier, and profession (WSID) doctrine is confirmed on its craft page instead. After ratification, routine exact-bound actions that WWMD answers with a high-confidence, autonomy-eligible yes proceed without a card; anything uncertain, declined, or outside the bound still comes to you (BI-9C384562).
+
 ## Calling the Gate
 
 In-product coworkers call the gate through the platform's internal handler — they don't need to know it exists. The gate is also exposed as an MCP tool so external clients (Claude Code, Claude Desktop, Codex CLI, custom orchestrators) face the same gate under the same governance rules.
