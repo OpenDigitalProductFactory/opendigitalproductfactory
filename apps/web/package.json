@@ -9,6 +9,7 @@
     "start": "next start",
     "typecheck": "next typegen && node ../../scripts/run-tsc.mjs --noEmit",
     "typecheck:tests": "next typegen && node ../../scripts/run-tsc.mjs --noEmit -p tsconfig.test.json",
+    "typecheck:all": "pnpm run typecheck && pnpm run typecheck:tests",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

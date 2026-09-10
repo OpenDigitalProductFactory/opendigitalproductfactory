@@ -285,6 +285,7 @@ echo ""
 # within each workspace.
 
 RUN_WEB=0
+RUN_WEB_TESTS=0
 RUN_DB=0
 RUN_TYPES=0
 RUN_VALIDATORS=0
@@ -295,6 +296,8 @@ RUN_ADP_SERVICE=0
 
 while IFS= read -r file; do
   case "$file" in
+    apps/web/*.test.ts | apps/web/*.test.tsx | apps/web/e2e/* | apps/web/tests/* | apps/web/test-support/*)
+                                  RUN_WEB=1; RUN_WEB_TESTS=1 ;;
     apps/web/*)                   RUN_WEB=1 ;;
     packages/db/*)                RUN_DB=1 ;;
     packages/types/*)             RUN_TYPES=1 ;;
@@ -319,8 +322,9 @@ FAILED=""
 run_typecheck() {
   filter="$1"
   label="$2"
+  script="${3:-typecheck}"
   echo "  → $label"
-  if ! pnpm --filter "$filter" typecheck >/tmp/pre-commit-tc.log 2>&1; then
+  if ! pnpm --filter "$filter" "$script" >/tmp/pre-commit-tc.log 2>&1; then
     echo ""
     echo "ERROR: typecheck failed for $label"
     echo ""
@@ -342,7 +346,11 @@ run_typecheck() {
   fi
 }
 
-[ "$RUN_WEB" = "1" ]           && run_typecheck "web"               "apps/web"
+# apps/web has two TypeScript programs since BI-0A3B155F: `typecheck` covers the
+# shipped sources, `typecheck:tests` covers *.test.ts(x) and the test harness.
+# Staging a test file must check the program that actually contains it.
+[ "$RUN_WEB" = "1" ] && [ "$RUN_WEB_TESTS" = "1" ] && run_typecheck "web" "apps/web (both programs)" "typecheck:all"
+[ "$RUN_WEB" = "1" ] && [ "$RUN_WEB_TESTS" = "0" ] && run_typecheck "web" "apps/web"
 [ "$RUN_DB" = "1" ]            && run_typecheck "@dpf/db"           "packages/db"
 [ "$RUN_TYPES" = "1" ]         && run_typecheck "@dpf/types"        "packages/types"
 [ "$RUN_VALIDATORS" = "1" ]    && run_typecheck "@dpf/validators"   "packages/validators"
