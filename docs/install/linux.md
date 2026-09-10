@@ -262,10 +262,15 @@ it with `docker compose stop ollama` if you don't want it running.
 DPF coworkers support voice **input** (speech-to-text) and voice
 **output** (text-to-speech).
 
-**Speech-to-text (STT) — works out of the box.** The bundled `dpf-stt`
-container (faster-whisper) is profile-free, so it starts on a plain
-install and the coworker mic button works immediately. CPU-friendly; no
-GPU required.
+**Speech-to-text (STT) — connect a provider.** DPF ships no speech
+container. Voice input becomes available as soon as you configure a
+provider that can transcribe, under **Platform Tools → Communications**.
+Any provider serving an OpenAI-compatible `/v1/audio/transcriptions`
+endpoint works, including OpenAI and Groq. If you would rather audio
+never left your own network, run your own speech server — speaches and
+whisper.cpp server are both MIT-licensed — and give DPF its address under
+the self-hosted speech provider. DPF stopped bundling one so that a third
+party's registry housekeeping could no longer block platform releases.
 
 **Text-to-speech (TTS) — automatic on an NVIDIA GPU.** Spoken output
 uses the bundled `dpf-tts` container (Chatterbox — self-hosted, no API
@@ -277,7 +282,8 @@ already wired to reach it (`TTS_PROVIDER=chatterbox`,
 
 **No NVIDIA GPU?** The installer skips `dpf-tts` — its GPU reservation
 can't start on a GPU-less host, and the self-hosted CPU tier is
-~10–30× slower. STT still works. For spoken output without a GPU, route
+~10–30× slower. Voice input is unaffected — it follows your provider
+configuration, not this container. For spoken output without a GPU, route
 to a managed TTS API: set `TTS_PROVIDER=cartesia` or
 `TTS_PROVIDER=fish-audio` (plus the provider's API key) in `.env` and
 re-run the installer. (A GPU-reservation-free CPU-tier default is

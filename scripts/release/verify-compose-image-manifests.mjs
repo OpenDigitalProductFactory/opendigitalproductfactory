@@ -135,8 +135,23 @@ function main() {
       ? renderedImages.filter((image) => image.includes("@sha256:"))
       : renderedImages;
 
+  // An empty RENDERED set means compose rendering broke — still a failure.
+  if (renderedImages.length === 0) {
+    throw new Error(`No compose images rendered for ${options.mode}/${options.platform}.`);
+  }
+
+  // An empty DIGEST-PINNED set is a legitimate, and now the expected, state
+  // (BI-F7E9A541). This guard exists to catch a pinned third-party digest that
+  // its publisher has pruned; DPF ships no digest-pinned third-party image any
+  // more, so there is nothing to check and nothing to fail. Treating "none
+  // found" as a failure would make removing the last pin impossible, which is
+  // exactly the state this guard was protecting us toward.
   if (images.length === 0) {
-    throw new Error(`No ${options.only} compose images found for ${options.mode}/${options.platform}.`);
+    console.log(
+      `[compose-image-manifests] No digest-pinned images for ${options.mode}/${options.platform} — nothing to verify. `
+        + `${renderedImages.length} image(s) rendered, none pinned by digest.`,
+    );
+    return;
   }
 
   console.log(

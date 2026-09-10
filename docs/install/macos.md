@@ -269,12 +269,16 @@ DPF coworkers support both voice **input** (speech-to-text) and voice
 **output** (text-to-speech). On macOS the two halves are provisioned
 differently because Docker Desktop can't reach the Apple Neural Engine.
 
-**Speech-to-text (STT) — works out of the box.** A bundled `speaches`
-(faster-whisper / distil-whisper) service runs as the `dpf-stt`
-container. It's CPU-friendly and needs no GPU, so the mic button in the
-coworker panel works immediately after install — click it, speak, and
-your words land in the message box. STT is identical across macOS,
-Linux, and Windows.
+**Speech-to-text (STT) — connect a provider.** DPF ships no speech
+container. Voice input becomes available as soon as you configure a
+provider that can transcribe, under **Platform Tools → Communications**.
+Any provider serving an OpenAI-compatible `/v1/audio/transcriptions`
+endpoint works, including OpenAI and Groq. If you would rather audio
+never left your own machine, run your own speech server — speaches and
+whisper.cpp server are both MIT-licensed — and give DPF its address under
+the self-hosted speech provider. DPF stopped bundling one so that a third
+party's registry housekeeping could no longer block platform releases.
+This is identical across macOS, Linux, and Windows.
 
 **Text-to-speech (TTS) — provisioned automatically on Apple Silicon.**
 Spoken output needs a synthesis engine with hardware acceleration.
@@ -389,12 +393,6 @@ a docker command` error. Update Docker Desktop and re-run
 `bash install-dpf.sh` to pull the model, or point the portal at an external
 LLM provider under Admin → Providers.
 
-**Install log says an "optional sidecar … image is unavailable upstream".**
-The bundled voice speech-to-text sidecar (`dpf-stt`) is pulled from a
-third-party registry that occasionally prunes its image tag. When that
-happens the installer brings the platform up *without* voice input rather
-than failing the whole install — everything else works. Re-run
-`bash install-dpf.sh` later to pick the image up once it's available again.
 
 **`/api/health` returns 500.**
 The portal's database migrations may not have completed. Tail the
