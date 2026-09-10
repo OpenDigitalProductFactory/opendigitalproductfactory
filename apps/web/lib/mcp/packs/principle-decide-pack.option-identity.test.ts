@@ -74,7 +74,11 @@ vi.mock("@/lib/inference/embedding", () => ({
   generateEmbedding: (...a: unknown[]) => wiki.generateEmbedding(...a),
   isEmbeddingAvailable: (...a: unknown[]) => wiki.isEmbeddingAvailable(...a),
 }));
-vi.mock("@/lib/decision/caller-context", () => ({
+// Spread the ACTUAL module: the pack lazy-imports more than one binding from
+// it (resolveDecisionDomainParam arrived with BI-9C384562), and a hand-listed
+// mock silently loses whichever binding is added next.
+vi.mock("@/lib/decision/caller-context", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/decision/caller-context")>()),
   resolveDecisionCallerContext: (...a: unknown[]) => decision.resolveDecisionCallerContext(...a),
 }));
 vi.mock("@/lib/decision/kernel-consult-ledger", () => ({
