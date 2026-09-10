@@ -708,6 +708,9 @@
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
+    "apps/web/lib/ea/table-growth.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/evidence/bounded-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -2554,6 +2557,7 @@
       "packages/db/src/capability-maturity.ts"
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
+      "apps/web/lib/ea/table-growth.ts",
       "apps/web/lib/evidence/bounded-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
       "apps/web/lib/routes.ts",

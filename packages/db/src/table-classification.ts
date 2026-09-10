@@ -141,6 +141,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   PlatformConfig: "internal",
   SelfUpgradeRun: "internal",
   ScheduledJob: "internal",
+  // EP-A33A5C61 slice 5: per-table byte/row samples, no row content. The schema
+  // tag carries the same class; this entry leaves with slice 4d-ii.
+  TableGrowthSample: "internal",
   McpServer: "internal",
   McpServerTool: "internal",
   McpIntegration: "internal",

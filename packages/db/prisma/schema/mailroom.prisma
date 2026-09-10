@@ -50,6 +50,7 @@ enum MailroomItemStatus {
   closed
 }
 
+/// @dpf lifecycle=operational retention=domain sensitivity=restricted categories=credential-secret,configuration owner=platform-architecture steward=data-steward
 model MailboxAccount {
   id                  String          @id @default(cuid())
   /// Public reference, `MBX-` prefixed.
