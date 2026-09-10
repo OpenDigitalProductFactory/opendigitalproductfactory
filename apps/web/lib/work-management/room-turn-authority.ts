@@ -208,6 +208,37 @@ export function deriveRoomTurnAuthority(facts: RoomTurnAuthorityFacts): RoomTurn
   };
 }
 
+/**
+ * The Workroom a portal route names, when it names one directly. Two shapes
+ * today: the Build Studio work page (`/build/work/<WC-id>`) and the Workroom
+ * case page (`/workspace/cases/work-capsule%3A<WC-id>`). Live acceptance on
+ * 2026-09-09 found the second was never resolved, so a coworker opened on a
+ * room's own page ran UNROOMED — the exact surface the founder direction
+ * names ("in the context of the UX"). Any other route returns null and the
+ * caller falls back to the portal envelope's capsule, then to unroomed.
+ */
+export function workroomIdFromRoute(routeContext: string | null | undefined): string | null {
+  if (!routeContext) return null;
+  const pathname = routeContext.split("?")[0] ?? "";
+  const build = pathname.match(/^\/build\/work\/([^/]+)\/?$/);
+  if (build?.[1]) return safeDecode(build[1]);
+  const cases = pathname.match(/^\/workspace\/cases\/([^/]+)\/?$/);
+  if (cases?.[1]) {
+    const key = safeDecode(cases[1]);
+    const sep = key.indexOf(":");
+    if (sep > 0 && key.slice(0, sep) === "work-capsule") return key.slice(sep + 1) || null;
+  }
+  return null;
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /** The unroomed, no-authority-declared answer: everything denied, nothing inherited. */
 export function unroomedTurnAuthority(agentGrants: readonly string[]): RoomTurnAuthority {
   return deriveRoomTurnAuthority({ room: null, agentGrants, platformDefaultActionBoundary: null });

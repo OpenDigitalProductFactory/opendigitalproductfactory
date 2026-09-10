@@ -10,7 +10,6 @@ import "server-only";
 // whatever we could guess".
 import { prisma } from "@dpf/db";
 
-import { normalizePortalContextPathname, resolveCapsuleIdFromPathname } from "@/lib/coworker/agent-coworker-core";
 import { getAgentToolGrantsAsync } from "@/lib/tak/agent-grants";
 import { shapeBiasFor } from "@/lib/work-posture/derive";
 
@@ -21,6 +20,7 @@ import { readWorkroomShapeClaim } from "./workroom-shape-claim";
 import { getWorkroomPostureDefault } from "./workroom-posture-defaults";
 import {
   deriveRoomTurnAuthority,
+  workroomIdFromRoute,
   type RoomTurnAuthority,
   type RoomTurnAuthorityFacts,
 } from "./room-turn-authority";
@@ -99,11 +99,7 @@ export async function loadRoomTurnAuthority(input: {
   db?: RoomTurnAuthorityDb;
 }): Promise<RoomTurnAuthority> {
   const db = input.db ?? (prisma as unknown as RoomTurnAuthorityDb);
-  const capsuleId =
-    input.capsuleId
-    ?? (input.routeContext
-      ? resolveCapsuleIdFromPathname(normalizePortalContextPathname(input.routeContext))
-      : null);
+  const capsuleId = input.capsuleId ?? workroomIdFromRoute(input.routeContext);
   const [agentGrants, room, platformDefault] = await Promise.all([
     getAgentToolGrantsAsync(input.agentId).catch(() => [] as string[]),
     capsuleId ? loadRoomFacts(capsuleId, input.agentId, db).catch(() => null) : Promise.resolve(null),

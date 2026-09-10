@@ -5,6 +5,7 @@ import { COWORKER_READ_BASELINE_GRANTS } from "@/lib/tak/agent-grants";
 import {
   deriveRoomTurnAuthority,
   roomAuthorizesTool,
+  workroomIdFromRoute,
   roomGrantsFromWorkShape,
   toRoomAuthorityContext,
   unroomedTurnAuthority,
@@ -177,6 +178,19 @@ describe("deriveRoomTurnAuthority — participant term (W2)", () => {
   it("an unresolved agent principal in a participant-recording room is not a member", () => {
     const out = deriveRoomTurnAuthority({ room: withParticipants(null, ["specialist"]), agentGrants: [], platformDefaultActionBoundary: null });
     expect(out.memberOfRoom).toBe(false);
+  });
+});
+
+describe("workroomIdFromRoute", () => {
+  it("names the room from the Build Studio work page and the Workroom case page", () => {
+    expect(workroomIdFromRoute("/build/work/WC-ROOM")).toBe("WC-ROOM");
+    expect(workroomIdFromRoute("/workspace/cases/work-capsule%3AWC-F99E0B98")).toBe("WC-F99E0B98");
+    expect(workroomIdFromRoute("/workspace/cases/work-capsule:WC-F99E0B98?tab=details")).toBe("WC-F99E0B98");
+  });
+  it("returns null for routes that do not name a room directly", () => {
+    expect(workroomIdFromRoute("/workspace/cases/booking%3ABK-1")).toBeNull();
+    expect(workroomIdFromRoute("/finance")).toBeNull();
+    expect(workroomIdFromRoute(null)).toBeNull();
   });
 });
 
