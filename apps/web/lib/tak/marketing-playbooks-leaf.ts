@@ -57,6 +57,33 @@ export const LEAF_PLAYBOOKS: Record<string, MarketingPlaybook> = {
       "Urgent capacity appeal",
       "Longer-stay animal feature",
     ],
+    seedSegments: [
+      {
+        name: "Adopters",
+        description:
+          "Looking for a specific animal that fits their home, and needing honest information about behaviour, medical needs and unknowns before they commit.",
+      },
+      {
+        name: "Foster carers",
+        description:
+          "Willing to hold an animal temporarily; the constraint is capacity and support, not goodwill. Recruiting them is what keeps intake possible.",
+      },
+      {
+        name: "Volunteers",
+        description:
+          "Give time rather than money — transport, events, admin, kennel and yard work.",
+      },
+      {
+        name: "Surrendering owners",
+        description:
+          "Considering giving up an animal. Often reachable with keep-them-home support instead, which prevents an intake the rescue would otherwise absorb.",
+      },
+      {
+        name: "Donors and sponsors",
+        description:
+          "Fund the work rather than being the work. Respond to named, verifiable costs more than to general appeals.",
+      },
+    ],
     channelVehicles: [
       {
         channel: "Dedicated pet-adoption listing sites",

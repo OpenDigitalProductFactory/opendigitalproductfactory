@@ -1,4 +1,5 @@
 import { prisma, type Prisma } from "@dpf/db";
+import { getPlaybook, type MarketingPlaybook } from "@/lib/tak/marketing-playbooks";
 import {
   deriveRevenueModelFromActivationProfile,
   readActivationProfile,
@@ -424,6 +425,7 @@ function inferPrimaryChannels(input: {
 function buildTargetSegments(
   customerSegments: string[],
   targetMarket: string | null,
+  playbook?: MarketingPlaybook | null,
 ): MarketingNamedItem[] {
   const seeded = customerSegments.map((segment) => ({
     name: segment,
@@ -431,9 +433,23 @@ function buildTargetSegments(
   }));
 
   if (seeded.length > 0) return seeded;
-  if (!targetMarket) return [];
+  if (targetMarket) {
+    return [{ name: targetMarket, description: "Imported from business context target market" }];
+  }
 
-  return [{ name: targetMarket, description: "Imported from business context target market" }];
+  // BusinessContext is silent on a fresh install, which used to leave
+  // targetSegments EMPTY. The drafter reads this field, so empty means every
+  // generated asset is written for nobody — the reference install's marketing
+  // coworker ran twice and produced nothing for exactly this reason.
+  //
+  // Choosing an archetype now gives a starting point instead: the groups that
+  // archetype serves by definition. Labelled as an archetype default so nobody
+  // mistakes a seed for a finding about THIS organization — the operator's own
+  // answers and the coworker's research replace them.
+  return (playbook?.seedSegments ?? []).map((segment) => ({
+    name: segment.name,
+    description: `${segment.description} (archetype default — confirm or replace with what is true here)`,
+  }));
 }
 
 function buildIdealCustomerProfiles(
@@ -1051,6 +1067,9 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
           archetype: {
             select: {
               id: true,
+              // archetypeId is the slug (pet-rescue); id is the row id. The leaf
+              // playbook lookup keys on the slug.
+              archetypeId: true,
               name: true,
               category: true,
               ctaType: true,
@@ -1076,6 +1095,11 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
   const targetSegments = buildTargetSegments(
     customerSegments,
     cleanText(organization.businessContext?.targetMarket),
+    getPlaybook(
+      organization.storefrontConfig?.archetype?.category ?? null,
+      organization.storefrontConfig?.archetype?.ctaType ?? null,
+      organization.storefrontConfig?.archetype?.archetypeId ?? null,
+    ),
   );
   const idealCustomerProfiles = buildIdealCustomerProfiles(
     targetSegments,

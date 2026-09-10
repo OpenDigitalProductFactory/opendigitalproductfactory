@@ -33,6 +33,29 @@ export type MarketingPlaybook = {
    * whether the rule still holds.
    */
   channelConstraints?: MarketingChannelConstraint[];
+  /**
+   * The archetype's canonical starting segments — a FIRST REVISION, not a
+   * finding about any particular organization.
+   *
+   * MarketingStrategy bootstraps from BusinessContext, and when that is silent
+   * (the common case on a fresh install) targetSegments lands empty. The
+   * drafter reads targetSegments, so an empty one means every generated asset is
+   * written for nobody — which is why the reference install's marketing coworker
+   * ran twice and produced nothing.
+   *
+   * Choosing an archetype should therefore give a starting point. These are the
+   * groups that archetype serves by definition; the operator's own answers
+   * (BI-74E9BD73) and the coworker's research replace them with what is true for
+   * this organization. Descriptions say plainly that they are archetype
+   * defaults, so nobody mistakes a seed for an established fact.
+   */
+  seedSegments?: MarketingSeedSegment[];
+};
+
+export type MarketingSeedSegment = {
+  name: string;
+  /** What this group wants from an organization of this kind. */
+  description: string;
 };
 
 export type MarketingChannelVehicle = {

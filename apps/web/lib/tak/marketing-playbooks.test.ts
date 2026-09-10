@@ -178,3 +178,29 @@ describe("channel policy (EP-5CC9C184 / BI-3543E59D)", () => {
     expect(category.channelVehicles).toBeUndefined();
   });
 });
+
+describe("archetype seed strategy (EP-5CC9C184)", () => {
+  it("gives pet-rescue a starting set of segments so a fresh install is not empty", () => {
+    const leaf = getPlaybook("nonprofit-community", "inquiry", "pet-rescue");
+    const names = leaf.seedSegments?.map((s) => s.name) ?? [];
+
+    // The drafter reads targetSegments; empty means every asset is written for
+    // nobody. Choosing the archetype has to give a starting point.
+    expect(names).toContain("Adopters");
+    expect(names).toContain("Foster carers");
+    expect(names.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("every seed segment says what that group wants, not just its name", () => {
+    const leaf = getPlaybook("nonprofit-community", "inquiry", "pet-rescue");
+    for (const segment of leaf.seedSegments ?? []) {
+      expect(segment.description.length, segment.name).toBeGreaterThan(20);
+    }
+  });
+
+  it("seed segments are a first revision, so the field stays optional", () => {
+    // Most archetypes are not fleshed out yet. An archetype without seeds must
+    // behave exactly as before rather than fail.
+    expect(getPlaybookForCategory("retail-goods").seedSegments).toBeUndefined();
+  });
+});
