@@ -70,15 +70,19 @@ describe("hint matching", () => {
     expect(matchReasonByHints(profile, mail({ textBody: "I want to adopt and also donate" }))).toBeNull();
   });
   it("a vet's message about a named animal carries the animal reference", async () => {
+    // BI-92DDAD88: this test used to spell the reference "A-1234", a format no
+    // install has ever issued, so it passed while the shipped pattern could not
+    // match a single real animal. Use the format the roster actually holds.
+    const ref = "ANML-23E98CB8";
     const result = await triageInboundMail({
       profile,
-      mail: mail({ subject: "Bloodwork results for A-1234", textBody: "Lab results attached from the clinic." }),
-      lookupSubject: async (kind, candidate) => (kind === "animal" && candidate === "A-1234" ? "A-1234" : null),
+      mail: mail({ subject: `Bloodwork results for ${ref}`, textBody: "Lab results attached from the clinic." }),
+      lookupSubject: async (kind, candidate) => (kind === "animal" && candidate === ref ? ref : null),
     });
     expect(result.reasonKey).toBe("veterinary-correspondence");
     expect(result.queueKey).toBe("veterinary");
-    expect(result.subjectRef).toBe("A-1234");
-    expect(extractSubjectCandidate(profile, "animal", mail({ subject: "re: A-1234" }))).toBe("A-1234");
+    expect(result.subjectRef).toBe(ref);
+    expect(extractSubjectCandidate(profile, "animal", mail({ subject: `re: ${ref}` }))).toBe(ref);
   });
 });
 

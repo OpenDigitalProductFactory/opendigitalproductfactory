@@ -60,6 +60,17 @@ describe("mailroom profile registry", () => {
     );
   });
 
+  it("the animal reference pattern matches the reference format the platform issues (BI-92DDAD88)", () => {
+    // Live acceptance 2026-09-10: every animalRef on a real install looks like
+    // ANML-23E98CB8, and the pattern shipped here matched only ANI-/A-, so a
+    // vet's lab-result email never linked to the animal it was about.
+    const kind = (resolveMailroomProfile(petRescue).subjectKinds ?? []).find((k) => k.kind === "animal")!;
+    const pattern = new RegExp(kind.referencePattern);
+    expect(pattern.test("Lab results ready for ANML-23E98CB8 (Pip)")).toBe(true);
+    expect("Lab results ready for ANML-23E98CB8 (Pip)".match(pattern)?.[0]).toBe("ANML-23E98CB8");
+    expect(pattern.test("no reference here")).toBe(false);
+  });
+
   it("merge replaces by key and keeps the rest", () => {
     const merged = mergeMailroomProfile(COMMON_MAILROOM_PROFILE, {
       expectedMailboxes: [{ purposeKey: "general", label: "Front desk", examples: ["desk@"], why: "x" }],

@@ -82,7 +82,12 @@ const ANIMAL_WELFARE_MAILROOM_PROFILE: MailroomProfile = {
   subjectKinds: [
     // An animal reference is the platform's animal id token or a listed
     // animal's name; the app layer confirms the candidate against the roster.
-    { kind: "animal", referencePattern: "\\b(?:ANI|A)-[A-Z0-9]{4,12}\\b", lookup: "animal-roster" },
+    // The platform issues animal references as `ANML-<id>` (AdoptableAnimal /
+    // AnimalProfile.animalRef). The first pattern shipped here matched `ANI-`
+    // and `A-`, which no reference has ever used, so no vet or adopter message
+    // ever linked to the animal it was about — found by live acceptance
+    // 2026-09-10 (BI-92DDAD88). `ANI` stays as a tolerated alias.
+    { kind: "animal", referencePattern: "\\b(?:ANML|ANI)-[A-Z0-9]{4,12}\\b", lookup: "animal-roster" },
   ],
   defaultReasonKey: "adopt-animal",
 };
