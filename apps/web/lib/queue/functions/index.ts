@@ -57,6 +57,7 @@ import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import { edgeNodeJanitor } from "./edge-node-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
 import { worktreeJanitor } from "./worktree-janitor";
+import { pullRequestMergedBinding } from "./pull-request-merged-binding";
 import { sandboxBuildGc } from "./sandbox-build-gc";
 import {
   dataRetentionSweepScheduled,
@@ -182,6 +183,7 @@ export const scheduledFunctions = [
   edgeNodeJanitor, // BI-D4F79CE2: retire an installer enrollment a live one has superseded, hourly
   runtimeArtifactJanitor, // BI-DBF3F426/BI-A55BE432: orphaned CI images + stray compose projects (+ their volumes), daily 05:20; DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED=observe, +DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=live
   worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
+  pullRequestMergedBinding, // BI-A6E4D205: bind a room to its PR on the merge webhook, not a poll
   sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
   regulatoryMonitorScanScheduled, // BI-DA37A602: weekly regulatory rescan so the compliance surface self-heals instead of aging into a false green, Mon 06:00

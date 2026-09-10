@@ -60,3 +60,22 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 10. **Run `pnpm run pregate` in the FOREGROUND, UNPIPED, as the sole command.** Backgrounding it with output redirected produced the record status `blocked_child_signal_death with NO recorded reason`, whose own text says it *is not evidence the diff is bad*. The exit code lied; the record did not. `pnpm run pregate:status` is the verdict — read it before treating any gate failure as a finding about the change.
 
 **Build Studio mirrors this gate.** Per-task and pre-ship verification in the sandbox runs typecheck + production build. A Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox. Implementation status: landed ⟦runtime: dated snapshot, not doctrine — re-audited 2026-06-19; re-confirm against the cited files⟧ — the sandbox shells `npx tsc --noEmit` and `npx vitest run` (`apps/web/lib/build/coding-agent.ts`), the specialist/review prompts require `NODE_ENV=production pnpm --filter web build` before ship (`apps/web/lib/build/build-agent-prompts.ts`), and the orchestrator scopes the verdict to the build's own diff and gates the build→review transition on it (`apps/web/lib/build/build-orchestrator.ts`, `apps/web/lib/queue/functions/build-review-verification.ts`).
+
+## A merged pull request is delivered, not discovered (BI-A6E4D205)
+
+The thread that pushes should be able to end at the push. It could not, because nothing told the platform when a pull request merged — it went looking, on a timer.
+
+`POST /api/platform/git/updates` has always been a signed GitHub webhook receiver: HMAC-SHA256 against `DPF_GIT_WEBHOOK_SECRET`, idempotent on `x-github-delivery`, emitting Inngest events. It handled `push` and filed everything else as an inert candidate. So `pull_request` with `action: closed, merged: true` — the one event that answers "did this ship" — arrived, was verified, and was never acted on.
+
+What filled the gap was `build/pr-delivery-reconcile`, a REST poll every five minutes, scoped to Workrooms carrying a linked feature build. Agent-authored pull requests were not covered at all. Two things depended on a fact that arrived late or never:
+
+- a worktree becomes Tier-A reapable **at the instant its PR merges**, and the SessionEnd reaper has already run and correctly declined by then;
+- completion needs `mergedThroughGates`, so a merged item could sit with recorded evidence and no receipt.
+
+Now the receiver emits `build/pr-merged.received` carrying repository, number, head branch, head sha, merge commit and merge time. `readPullRequestMergedSignal` (`apps/web/lib/build/pull-request-merged-signal.ts`) is the pure decision and is deliberately strict about one thing: **a closed-unmerged pull request carries the same `action`**, and treating it as delivery would record evidence for abandoned work and reap the worktree holding the only copy of the branch. A rebase merge legitimately has no merge commit, so that field stays optional rather than making the payload look malformed.
+
+The first subscriber is `build/pr-merged-binding`, which binds the room to its pull request via the existing `resolvePullRequestBindings` substrate. It never repoints a room already bound to a different number — two answers is a conflict a person should see, not something a webhook resolves — and a re-delivered webhook is a no-op by construction.
+
+The five-minute cron stays as a **backstop** for missed deliveries. That is the same primary/backstop split the worktree janitor documents, applied to delivery.
+
+**Operational prerequisite:** the webhook must be registered on the repository for the `pull_request` event, and `DPF_GIT_WEBHOOK_SECRET` set. Nothing depended on this receiver beyond `push`, so an install may never have configured it. `verifyGitHubSignature` returns true when no secret is set (local dev); the route itself refuses unsigned traffic in production.

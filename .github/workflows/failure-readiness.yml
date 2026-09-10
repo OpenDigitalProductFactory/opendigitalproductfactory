@@ -16,8 +16,19 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+      # Exit 2 is "cannot run" (no trusted publisher configured), not a verdict.
+      # It is surfaced as a neutral notice rather than a red check, because a
+      # gate that is red on every PR spends the signal a real failure needs.
       - name: Verify platform failure evidence for every source change
         env:
           GH_TOKEN: ${{ github.token }}
           DPF_REVIEW_STATUS_PUBLISHER: ${{ vars.DPF_REVIEW_STATUS_PUBLISHER }}
-        run: node scripts/check-failure-readiness.mjs
+        run: |
+          set +e
+          node scripts/check-failure-readiness.mjs
+          code=$?
+          if [ "$code" -eq 2 ]; then
+            echo "::notice title=Failure Readiness not configured::This gate cannot evaluate until DPF_REVIEW_STATUS_PUBLISHER is set; it is not asserting the change is safe."
+            exit 0
+          fi
+          exit "$code"

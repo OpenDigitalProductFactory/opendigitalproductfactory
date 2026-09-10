@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { prisma, type Prisma } from "@dpf/db";
+import { readPullRequestMergedSignal } from "./pull-request-merged-signal";
 
 export type GitProvider = "github";
 
@@ -180,7 +181,7 @@ export async function handleGitHubWebhook(input: {
 
   if (input.eventName !== "push") {
     const payload = parseGitHubWebhookPayload(input.rawBody);
-    return recordGitPromotionCandidate({
+    const recorded = await recordGitPromotionCandidate({
       provider: "github",
       eventName: input.eventName,
       deliveryId: input.deliveryId,
@@ -189,6 +190,32 @@ export async function handleGitHubWebhook(input: {
         repository: payload.repository ?? { full_name: "unknown" },
       },
     });
+
+    // A merged pull request is the delivery fact this platform previously had
+    // to POLL for, every five minutes, and only for Workrooms with a linked
+    // feature build (BI-A6E4D205). The event already arrived here signed and
+    // deduplicated; it was simply filed and never acted on. Emit it so the
+    // thread that pushed can end instead of being held open to watch the queue.
+    //
+    // Sent only on a genuine merge. A closed-unmerged pull request carries the
+    // same `action`, and treating it as delivery would reap the worktree
+    // holding the only copy of an abandoned branch.
+    //
+    // A duplicate delivery is NOT re-announced: `recordGitPromotionCandidate`
+    // already dedupes on x-github-delivery, and re-emitting would make every
+    // subscriber idempotent-or-wrong rather than simply idempotent.
+    if (!recorded.duplicate) {
+      const verdict = readPullRequestMergedSignal(input.eventName, payload);
+      if (verdict.merged) {
+        const { inngest } = await import("@/lib/queue/inngest-client");
+        await inngest.send({
+          name: "build/pr-merged.received",
+          data: { candidateId: recorded.candidateId, ...verdict.signal },
+        });
+      }
+    }
+
+    return recorded;
   }
 
   return recordGitPromotionCandidate({
