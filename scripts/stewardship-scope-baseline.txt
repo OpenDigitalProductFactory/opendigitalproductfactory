@@ -370,7 +370,6 @@ RiskControl
 RouteOutcome
 RuntimeAdvisory
 RuntimeCapabilityTransition
-RuntimeCapabilityTransitionEvent
 RuntimeTarget
 RuntimeVerification
 SalesOrder

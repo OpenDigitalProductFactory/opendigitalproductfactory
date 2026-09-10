@@ -133,18 +133,22 @@ async function dispositionsFromTags() {
   const purgeModels = new Set();
   const retainedModels = new Set();
   const exemptions = new Map();
+  // 4d-ii: a model whose tag carries sensitivity= is classified by the schema;
+  // the registry file only lists the untagged remainder.
+  const taggedSensitivity = new Set();
   for (const e of parsed.entries) {
+    if (e.metadata.sensitivity) taggedSensitivity.add(e.model);
     const kind = e.metadata.retention.kind;
     if (kind === "purge") purgeModels.add(delegate(e.model));
     else if (kind === "retained") retainedModels.add(delegate(e.model));
     else exemptions.set(e.model, RETENTION_KIND_TO_EXEMPTION_REASON[kind]);
   }
-  return { purgeModels, retainedModels, exemptions };
+  return { purgeModels, retainedModels, exemptions, taggedSensitivity };
 }
 const dispositions = await dispositionsFromTags();
 const input = {
   models: persistentModels(readPrismaSchemaText(REPO_ROOT)),
-  classified: classifiedModels(rd(CLASSIFICATION_PATH)),
+  classified: new Set([...classifiedModels(rd(CLASSIFICATION_PATH)), ...dispositions.taggedSensitivity]),
   purgeModels: dispositions.purgeModels,
   retainedModels: dispositions.retainedModels,
   exemptions: dispositions.exemptions,
