@@ -220,6 +220,69 @@ test("PENDING when the gate passed but evidence publication is unfinished", () =
   assert.equal(exitCodeForVerdict(r.verdict), 1, "pending evidence is not a green light to push");
 });
 
+test("PENDING requires the gate to have PASSED — a blocked run carrying stale pending evidence is INCONCLUSIVE", () => {
+  // Observed 2026-09-10 on fix/principle-decide-requires-option-id @ 04f681eae8d6.
+  // gate-worktree.mjs writes gatePassed:false WITH evidencePending:true for
+  // blocked_control_plane_starvation — the local evidence is preserved for later
+  // publication even though the run never graded the diff. Reading evidencePending
+  // as a verdict of its own headlined "gate passed" over a record that says it did not.
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_control_plane_starvation",
+      evidenceRecordId: "",
+      evidencePending: true,
+      evidencePendingReason: "tool_threw",
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.doesNotMatch(r.reason, /gate passed/, "must not assert a pass the record contradicts");
+  assert.doesNotMatch(
+    r.reason,
+    /finalize-evidence/,
+    "must not send the operator to a finalizer that refuses without a published PASS",
+  );
+  assert.match(r.reason, /blocked_control_plane_starvation/);
+});
+
+test("a failing record carrying pending evidence is still FAIL, not PENDING", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "failed",
+      evidenceRecordId: "",
+      evidencePending: true,
+      evidencePendingReason: "tool_threw",
+      failureReason: "vitest exited 1",
+    }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "FAIL");
+  assert.doesNotMatch(r.reason, /gate passed/);
+});
+
+test("a queued record carrying pending evidence is INCONCLUSIVE, not PENDING", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "queued",
+      evidenceRecordId: "",
+      evidencePending: true,
+      evidencePendingReason: "control_plane_unavailable",
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.doesNotMatch(r.reason, /gate passed/);
+});
+
 test("reconcile takes the best slot so a sibling's stale record cannot fake a failure", () => {
   const best = reconcileSlots([
     { slotKey: "slot-0", verdict: "STALE", reason: "old" },
