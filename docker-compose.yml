@@ -142,7 +142,7 @@ services:
       # them through /api/build/<buildId>/evidence/<fileName> (auth-gated).
       # Read-only from the portal's side — only browser-use should write.
       - browser_evidence:/evidence:ro
-      # Platform-managed backups (daily Postgres + Neo4j + Qdrant).
+      # Platform-managed backups (daily Postgres; Neo4j + Qdrant retired by BET-5).
       # Host bind mount (NOT a Docker volume) so `docker compose down -v`,
       # `docker volume rm`, or worktree-induced compose re-labelling cannot
       # destroy backups. Same path the promoter writes pre-promote dumps to.

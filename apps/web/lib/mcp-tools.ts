@@ -616,8 +616,8 @@ export async function executeTool(
   // CodeQL js/log-injection: toolName + _slug are user-influenced (model
   // submits the tool name; principle slugs derive from wiki frontmatter
   // edited by operators). JSON.stringify each user-influenced value to
-  // neutralize CR/LF / control chars — same pattern as
-  // neo4j-restore-runner.ts. _decision.verdict and _sessionClass are typed
+  // neutralize CR/LF / control chars — same pattern as the backup engine
+  // trace logging. _decision.verdict and _sessionClass are typed
   // enums and not user-influenced.
   // eslint-disable-next-line no-console
   console.log(
