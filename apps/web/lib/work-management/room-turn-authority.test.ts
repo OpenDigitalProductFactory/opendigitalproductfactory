@@ -133,6 +133,53 @@ describe("deriveRoomTurnAuthority — Golden Triangle", () => {
   });
 });
 
+describe("deriveRoomTurnAuthority — participant term (W2)", () => {
+  const withParticipants = (agentPrincipalId: string | null, roles: string[] | null) =>
+    room({
+      workShapeGrants: ["tool:read", "tool:web_search"],
+      participants: [
+        { principalId: "PR-OTHER", roles: ["coordinator"] },
+        ...(roles ? [{ principalId: "PR-AGENT", roles }] : []),
+      ],
+      agentPrincipalId,
+    });
+
+  it("does not narrow a room that records no participants", () => {
+    const out = deriveRoomTurnAuthority({ room: room(), agentGrants: ["web_search"], platformDefaultActionBoundary: null });
+    expect(out.participantRoles).toBeNull();
+    expect(out.memberOfRoom).toBe(true);
+    expect(out.handsOn.enabled).toBe(true);
+  });
+
+  it("narrows a coworker the room does not list to the read baseline, hands off", () => {
+    const out = deriveRoomTurnAuthority({ room: withParticipants("PR-AGENT", null), agentGrants: ["web_search"], platformDefaultActionBoundary: null });
+    expect(out.memberOfRoom).toBe(false);
+    expect(out.participantRoles).toEqual([]);
+    expect(out.authorizedGrants).toEqual([...COWORKER_READ_BASELINE_GRANTS]);
+    expect(out.externalAccess).toEqual({ enabled: false, reason: "room-does-not-authorize-web" });
+    expect(out.handsOn).toEqual({ enabled: false, reason: "not-a-room-participant" });
+  });
+
+  it("treats an observer as read-only", () => {
+    const out = deriveRoomTurnAuthority({ room: withParticipants("PR-AGENT", ["observer"]), agentGrants: ["web_search"], platformDefaultActionBoundary: null });
+    expect(out.memberOfRoom).toBe(true);
+    expect(out.handsOn.reason).toBe("not-a-room-participant");
+    expect(out.authorizedGrants).toEqual([...COWORKER_READ_BASELINE_GRANTS]);
+  });
+
+  it("keeps the activity surface for a listed specialist", () => {
+    const out = deriveRoomTurnAuthority({ room: withParticipants("PR-AGENT", ["specialist"]), agentGrants: ["web_search"], platformDefaultActionBoundary: null });
+    expect(out.participantRoles).toEqual(["specialist"]);
+    expect(out.externalAccess.enabled).toBe(true);
+    expect(out.handsOn.enabled).toBe(true);
+  });
+
+  it("an unresolved agent principal in a participant-recording room is not a member", () => {
+    const out = deriveRoomTurnAuthority({ room: withParticipants(null, ["specialist"]), agentGrants: [], platformDefaultActionBoundary: null });
+    expect(out.memberOfRoom).toBe(false);
+  });
+});
+
 describe("toRoomAuthorityContext", () => {
   it("projects only the executor-relevant fields and null when unroomed", () => {
     const ctx = toRoomAuthorityContext(deriveRoomTurnAuthority({

@@ -28,20 +28,44 @@ import {
 export type RoomTurnAuthorityDb = {
   workroom: {
     findFirst(args: unknown): Promise<{
+      id: string;
       capsuleId: string;
       scopeClaims: unknown;
+      participants?: Array<{ principalId: string; roles: string[] }>;
     } | null>;
+  };
+  principalAlias: {
+    findFirst(args: unknown): Promise<{ principalId: string } | null>;
   };
 };
 
 async function loadRoomFacts(
   capsuleId: string,
+  agentId: string,
   db: RoomTurnAuthorityDb,
 ): Promise<RoomTurnAuthorityFacts["room"]> {
-  const room = await db.workroom.findFirst({
-    where: { OR: [{ capsuleId }, { id: capsuleId }] },
-    select: { capsuleId: true, scopeClaims: true },
-  });
+  const [room, alias] = await Promise.all([
+    db.workroom.findFirst({
+      where: { OR: [{ capsuleId }, { id: capsuleId }] },
+      select: {
+        id: true,
+        capsuleId: true,
+        scopeClaims: true,
+        participants: {
+          where: { lifecycle: "active" },
+          select: { principalId: true, roles: true },
+        },
+      },
+    }),
+    // The coworker's Principal ROW id (WorkroomParticipant.principalId is the
+    // row id, not the semantic principalId) via its internal agent alias.
+    db.principalAlias
+      .findFirst({
+        where: { aliasType: "agent", aliasValue: agentId, issuer: "" },
+        select: { principalId: true },
+      })
+      .catch(() => null),
+  ]);
   if (!room) return null;
   const collaborationShape = readWorkroomShapeClaim(room.scopeClaims);
   const workShapeKey = readDeclaredWorkShapeKey(room.scopeClaims);
@@ -55,6 +79,8 @@ async function loadRoomFacts(
     declaredActionBoundary: declaration?.actionBoundary ?? null,
     declaredPriority: declaration?.priority ?? null,
     shapeActionBoundary: shapeBiasFor(collaborationShape)?.actionBoundary ?? null,
+    participants: room.participants?.length ? room.participants : null,
+    agentPrincipalId: alias?.principalId ?? null,
   };
 }
 
@@ -80,7 +106,7 @@ export async function loadRoomTurnAuthority(input: {
       : null);
   const [agentGrants, room, platformDefault] = await Promise.all([
     getAgentToolGrantsAsync(input.agentId).catch(() => [] as string[]),
-    capsuleId ? loadRoomFacts(capsuleId, db).catch(() => null) : Promise.resolve(null),
+    capsuleId ? loadRoomFacts(capsuleId, input.agentId, db).catch(() => null) : Promise.resolve(null),
     getWorkroomPostureDefault().catch(() => null),
   ]);
   return deriveRoomTurnAuthority({

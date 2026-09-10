@@ -589,9 +589,16 @@ export async function governedExecuteTool(
     return hookRejection;
   }
 
+  // EP-WORK-POSTURE 8.2 (BI-F114354D item 6): inside a Workroom, EVERY tool the
+  // classification marks consequential clears the WWWD x WSID alignment gate,
+  // not only the outward/legacy-named subset. The room is where the coworker's
+  // job (WSID) and the org's constitution (WWWD) are both in scope; unroomed
+  // calls keep the narrower reach so nothing outside a room changes.
+  const alignmentRequired = consequence.alignmentRequired
+    || (consequence.consequential && Boolean(args.context?.roomAuthority?.workroomId));
   const preexecution = await enforceTakPreexecution({
     args,
-    alignmentRequired: consequence.alignmentRequired,
+    alignmentRequired,
     preconditionRequired: consequence.preconditionRequired,
     writeAudit: ({ result, alignmentDecision: alignment, preconditionDecision: precondition }) => writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,

@@ -35,6 +35,14 @@ export type RoomTurnAuthority = {
   authorizedGrants: readonly string[] | null;
   /** The action boundary the room resolved (declared → shape bias → default). */
   actionBoundary: ProactivityActionBoundary | null;
+  /**
+   * The coworker's recorded participant roles in the room, or null when the
+   * room records no participants at all (pre-W2 rooms). An empty array means
+   * the room DOES record participants and this coworker is not one of them.
+   */
+  participantRoles: readonly string[] | null;
+  /** False only when the room records participants and this coworker is absent. */
+  memberOfRoom: boolean;
   externalAccess: {
     enabled: boolean;
     reason:
@@ -47,6 +55,7 @@ export type RoomTurnAuthority = {
     reason:
       | "room-action-boundary"
       | "room-advises-only"
+      | "not-a-room-participant"
       | "platform-default-boundary"
       | "platform-default-advises-only"
       | "no-authority-declared";
@@ -68,6 +77,13 @@ export type RoomTurnAuthorityFacts = {
     declaredPriority: GoldenTrianglePreference | null;
     /** The shape-derived action boundary (work-posture derive.ts), when any. */
     shapeActionBoundary: ProactivityActionBoundary | null;
+    /**
+     * Every active participant the room records (principal row id → roles).
+     * Null when the room records none — the pre-W2 shape, which does not narrow.
+     */
+    participants?: ReadonlyArray<{ principalId: string; roles: readonly string[] }> | null;
+    /** The coworker's Principal row id, when its alias resolves. */
+    agentPrincipalId?: string | null;
   } | null;
   /** The coworker's standing grants (AgentToolGrant / registry), already loaded. */
   agentGrants: readonly string[];
@@ -122,7 +138,20 @@ function boundaryPermitsHandsOn(boundary: ProactivityActionBoundary | null): boo
 export function deriveRoomTurnAuthority(facts: RoomTurnAuthorityFacts): RoomTurnAuthority {
   const room = facts.room;
   const hasWebGrant = facts.agentGrants.includes("web_search");
-  const authorizedGrants = room?.workShapeGrants ? roomGrantsFromWorkShape(room.workShapeGrants) : null;
+  // Participant term (BI-F114354D, W2 substrate): a room that records who is
+  // in it narrows a coworker that is not. Tighten-only — a room with no
+  // participant rows is exactly as permissive as before.
+  const recorded = room?.participants ?? null;
+  const participantRoles: readonly string[] | null = recorded
+    ? recorded.find((p) => room?.agentPrincipalId && p.principalId === room.agentPrincipalId)?.roles ?? []
+    : null;
+  const memberOfRoom = participantRoles === null || participantRoles.length > 0;
+  const observerOnly = participantRoles !== null && participantRoles.length > 0
+    && participantRoles.every((r) => r === "observer");
+  const shapeGrants = room?.workShapeGrants ? roomGrantsFromWorkShape(room.workShapeGrants) : null;
+  const authorizedGrants = !memberOfRoom || observerOnly
+    ? [...COWORKER_READ_BASELINE_GRANTS]
+    : shapeGrants;
 
   let externalAccess: RoomTurnAuthority["externalAccess"];
   if (!hasWebGrant) {
@@ -138,7 +167,9 @@ export function deriveRoomTurnAuthority(facts: RoomTurnAuthorityFacts): RoomTurn
     : facts.platformDefaultActionBoundary;
 
   let handsOn: RoomTurnAuthority["handsOn"];
-  if (room) {
+  if (room && (!memberOfRoom || observerOnly)) {
+    handsOn = { enabled: false, reason: "not-a-room-participant" };
+  } else if (room) {
     handsOn = boundaryPermitsHandsOn(actionBoundary)
       ? { enabled: true, reason: "room-action-boundary" }
       : actionBoundary
@@ -168,6 +199,8 @@ export function deriveRoomTurnAuthority(facts: RoomTurnAuthorityFacts): RoomTurn
     workShapeKey: room?.workShapeKey ?? null,
     authorizedGrants,
     actionBoundary,
+    participantRoles,
+    memberOfRoom,
     externalAccess,
     handsOn,
     priority,
@@ -186,7 +219,13 @@ export function unroomedTurnAuthority(agentGrants: readonly string[]): RoomTurnA
  */
 export type RoomAuthorityContext = Pick<
   RoomTurnAuthority,
-  "workroomId" | "collaborationShape" | "workShapeKey" | "authorizedGrants" | "actionBoundary"
+  | "workroomId"
+  | "collaborationShape"
+  | "workShapeKey"
+  | "authorizedGrants"
+  | "actionBoundary"
+  | "participantRoles"
+  | "memberOfRoom"
 >;
 
 export function toRoomAuthorityContext(authority: RoomTurnAuthority): RoomAuthorityContext | null {
@@ -197,5 +236,7 @@ export function toRoomAuthorityContext(authority: RoomTurnAuthority): RoomAuthor
     workShapeKey: authority.workShapeKey,
     authorizedGrants: authority.authorizedGrants,
     actionBoundary: authority.actionBoundary,
+    participantRoles: authority.participantRoles,
+    memberOfRoom: authority.memberOfRoom,
   };
 }
