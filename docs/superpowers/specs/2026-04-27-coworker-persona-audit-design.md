@@ -127,8 +127,17 @@ The script does **not** read the database. The audit runs against the seed at PR
 | **PERSONA-008** | warn | `description` ≤ 120 chars | Soft length cap on the one-liner |
 | **PERSONA-009** | warn | Persona `status: draft` requires a backlog item | If persona is `draft`, expect a tracking row; advisory only |
 | **PERSONA-010** | warn | `composesFrom` targets exist | Every referenced `category/slug` resolves to a real file |
+| **PERSONA-011** | error | Every registry coworker **resolves** a job description through the runtime's own lookup | `resolvePersonaTemplate` — the function the runtime calls — returns a persona for every registry `agent_id`, and no two files claim the same one. Added by BI-5CCBF85B; designed in the coworker job-profile personification spec §4.2 |
 
 `error` findings exit non-zero and block CI. `warn` findings print to the report but do not block.
+
+### 4.2.1 Presence is not reachability (BI-5CCBF85B)
+
+PERSONA-001 through PERSONA-010 all check the **file**: that it exists, that its frontmatter mirrors the registry, that its six sections are present. None of them checks that the runtime can find it.
+
+They diverged. The audit keys on frontmatter `agent_id`; `loadPromptBackplane` keyed on the template slug, which is the file **basename**, inside the `route-persona` category only. No persona file has a basename equal to its agent id, and 60 of the 91 live under `specialist`. This suite reported zero errors while 101 of 130 selectable coworkers executed on a generated one-liner instead of the job description written for them.
+
+PERSONA-011 closes that by asserting the proposition the platform actually needs — *every executing coworker is given its job description* — and by calling the runtime's own resolver to do it, so the two cannot drift apart again. It is an `error`: a coworker running without a job is a defect, not a warning.
 
 ### 4.3 Output
 

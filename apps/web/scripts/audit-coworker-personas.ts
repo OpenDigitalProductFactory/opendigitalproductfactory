@@ -29,6 +29,11 @@
 
 import { readFileSync, existsSync, writeFileSync, readdirSync } from "node:fs";
 import { join, resolve, basename } from "node:path";
+import {
+  resolvePersonaTemplate,
+  findDuplicateDeclarations,
+  type PersonaTemplateIndexEntry,
+} from "@dpf/db/persona-reachability";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -551,6 +556,63 @@ function diffAgainstBaseline(current: Finding[], baselinePath: string): Baseline
 
 // ─── Main ──────────────────────────────────────────────────────────────────
 
+/**
+ * PERSONA-011 — every registry coworker resolves a job description through the
+ * RUNTIME's own lookup.
+ *
+ * BI-5CCBF85B. PERSONA-001 asserts that a persona file declaring this agent
+ * exists. That is not the proposition the platform needs. The runtime resolves
+ * by a different key, and for 101 of 130 selectable coworkers it resolved
+ * nothing while this suite reported zero errors — a gate measuring the wrong
+ * thing, which is worse than no gate because it claims to have checked.
+ *
+ * This check calls `resolvePersonaTemplate`, the same function the runtime
+ * calls, over an index built from the files on disk. It fails when a coworker
+ * would execute on a generic work instruction.
+ */
+function checkPersona011(registry: RegistryAgent[], personas: Persona[]): void {
+  const index: PersonaTemplateIndexEntry[] = personas
+    .filter((p) => !isFragment(p))
+    .map((p) => {
+      const aid = p.frontmatter.agent_id;
+      return {
+        category: p.category,
+        slug: p.slug,
+        declaredAgentId: typeof aid === "string" && aid ? aid : null,
+      };
+    });
+
+  for (const agent of registry) {
+    const resolution = resolvePersonaTemplate(agent.agent_id, index);
+    if (resolution.ref) continue;
+    record(
+      "PERSONA-011",
+      "error",
+      agent.agent_id,
+      null,
+      `${agent.agent_id} (${agent.agent_name}) would execute with no job description`,
+      `The runtime resolves a coworker's job description by the declared agent_id of a persona file, preferring prompts/route-persona/ over prompts/specialist/. Nothing resolved for this agent; it tried: ${resolution.attempted.join(", ")}.
+
+It would run on the generic fallback — "Complete the assigned scheduled work with your granted tools" — with no purpose, accountability, boundary or peers.
+
+Fix: give a persona file frontmatter agent_id: ${agent.agent_id}. A file whose basename differs from the agent id is fine; the declared id is the key.`,
+    );
+  }
+
+  for (const dup of findDuplicateDeclarations(index)) {
+    record(
+      "PERSONA-011",
+      "error",
+      dup.declaredAgentId,
+      dup.refs.map((r) => `prompts/${r.category}/${r.slug}.prompt.md`).join(", "),
+      `${dup.declaredAgentId} is claimed by ${dup.refs.length} persona files`,
+      `Two files declare the same coworker's job description, so one of them is dead: only ${dup.refs[0].category}/${dup.refs[0].slug} is ever loaded.
+
+Fix: merge them, or correct the agent_id on the file that is not this coworker's job.`,
+    );
+  }
+}
+
 function main(): void {
   const args = process.argv.slice(2);
   let baselinePath: string | null = null;
@@ -589,6 +651,7 @@ function main(): void {
   checkPersona007(registry, personaByAgentId);
   checkPersona008(personas);
   checkPersona010(personas);
+  checkPersona011(registry, personas);
 
   const errorCount = findings.filter((f) => f.severity === "error").length;
   const warnCount = findings.filter((f) => f.severity === "warn").length;
@@ -596,7 +659,7 @@ function main(): void {
   const report: Report = {
     generatedAt: new Date().toISOString(),
     spec: "docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md",
-    invariantsChecked: 9,
+    invariantsChecked: 10,
     errorCount,
     warnCount,
     findings,
