@@ -115,6 +115,22 @@ describe("parseInboundPayload", () => {
     });
   });
 
+  it("never lets a sender's header name become a property name", () => {
+    const parsed = parseInboundPayload({
+      MessageID: "MSG-6",
+      TextBody: "x",
+      Headers: [
+        { Name: "__proto__", Value: "polluted" },
+        { Name: "constructor", Value: "polluted" },
+        { Name: "X-Whatever", Value: "ignored" },
+        { Name: "Precedence", Value: "bulk" },
+      ],
+    });
+    expect(parsed?.headers).toEqual({ precedence: "bulk" });
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+  });
+
   it("reads In-Reply-To whatever case the sender used (RFC 5322 3.6.4)", () => {
     const parsed = parseInboundPayload({
       MessageID: "MSG-5",
