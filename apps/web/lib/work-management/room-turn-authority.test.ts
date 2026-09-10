@@ -5,6 +5,7 @@ import { COWORKER_READ_BASELINE_GRANTS } from "@/lib/tak/agent-grants";
 import {
   deriveRoomTurnAuthority,
   roomAuthorizesTool,
+  workroomIdFromRoute,
   roomGrantsFromWorkShape,
   toRoomAuthorityContext,
   unroomedTurnAuthority,
@@ -130,6 +131,66 @@ describe("deriveRoomTurnAuthority — Golden Triangle", () => {
     const b = deriveRoomTurnAuthority({ room: room(), agentGrants: [], platformDefaultActionBoundary: null });
     expect(a.priority).toEqual(b.priority);
     expect(a.handsOn).toEqual(b.handsOn);
+  });
+});
+
+describe("deriveRoomTurnAuthority — participant term (W2)", () => {
+  const withParticipants = (agentPrincipalId: string | null, roles: string[] | null) =>
+    room({
+      workShapeGrants: ["tool:read", "tool:web_search"],
+      participants: [
+        { principalId: "PR-OTHER", roles: ["coordinator"] },
+        ...(roles ? [{ principalId: "PR-AGENT", roles }] : []),
+      ],
+      agentPrincipalId,
+    });
+
+  it("does not narrow a room that records no participants", () => {
+    const out = deriveRoomTurnAuthority({ room: room(), agentGrants: ["web_search"], platformDefaultActionBoundary: null });
+    expect(out.participantRoles).toBeNull();
+    expect(out.memberOfRoom).toBe(true);
+    expect(out.handsOn.enabled).toBe(true);
+  });
+
+  it("narrows a coworker the room does not list to the read baseline, hands off", () => {
+    const out = deriveRoomTurnAuthority({ room: withParticipants("PR-AGENT", null), agentGrants: ["web_search"], platformDefaultActionBoundary: null });
+    expect(out.memberOfRoom).toBe(false);
+    expect(out.participantRoles).toEqual([]);
+    expect(out.authorizedGrants).toEqual([...COWORKER_READ_BASELINE_GRANTS]);
+    expect(out.externalAccess).toEqual({ enabled: false, reason: "room-does-not-authorize-web" });
+    expect(out.handsOn).toEqual({ enabled: false, reason: "not-a-room-participant" });
+  });
+
+  it("treats an observer as read-only", () => {
+    const out = deriveRoomTurnAuthority({ room: withParticipants("PR-AGENT", ["observer"]), agentGrants: ["web_search"], platformDefaultActionBoundary: null });
+    expect(out.memberOfRoom).toBe(true);
+    expect(out.handsOn.reason).toBe("not-a-room-participant");
+    expect(out.authorizedGrants).toEqual([...COWORKER_READ_BASELINE_GRANTS]);
+  });
+
+  it("keeps the activity surface for a listed specialist", () => {
+    const out = deriveRoomTurnAuthority({ room: withParticipants("PR-AGENT", ["specialist"]), agentGrants: ["web_search"], platformDefaultActionBoundary: null });
+    expect(out.participantRoles).toEqual(["specialist"]);
+    expect(out.externalAccess.enabled).toBe(true);
+    expect(out.handsOn.enabled).toBe(true);
+  });
+
+  it("an unresolved agent principal in a participant-recording room is not a member", () => {
+    const out = deriveRoomTurnAuthority({ room: withParticipants(null, ["specialist"]), agentGrants: [], platformDefaultActionBoundary: null });
+    expect(out.memberOfRoom).toBe(false);
+  });
+});
+
+describe("workroomIdFromRoute", () => {
+  it("names the room from the Build Studio work page and the Workroom case page", () => {
+    expect(workroomIdFromRoute("/build/work/WC-ROOM")).toBe("WC-ROOM");
+    expect(workroomIdFromRoute("/workspace/cases/work-capsule%3AWC-F99E0B98")).toBe("WC-F99E0B98");
+    expect(workroomIdFromRoute("/workspace/cases/work-capsule:WC-F99E0B98?tab=details")).toBe("WC-F99E0B98");
+  });
+  it("returns null for routes that do not name a room directly", () => {
+    expect(workroomIdFromRoute("/workspace/cases/booking%3ABK-1")).toBeNull();
+    expect(workroomIdFromRoute("/finance")).toBeNull();
+    expect(workroomIdFromRoute(null)).toBeNull();
   });
 });
 
