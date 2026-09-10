@@ -684,6 +684,9 @@
     "apps/web/lib/decision/golden-decisions.test.ts": [
       "docs/founder-kernel/AUTHORING.md"
     ],
+    "apps/web/lib/decision/option-input-contract.ts": [
+      "docs/architecture/principle-decide-mcda-identity.md"
+    ],
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -2734,6 +2737,9 @@
     ],
     "docs/architecture/portal-ux-evaluation-framework.md": [
       "scripts/check-ux-fit-decision.mjs"
+    ],
+    "docs/architecture/principle-decide-mcda-identity.md": [
+      "apps/web/lib/decision/option-input-contract.ts"
     ],
     "docs/architecture/section-navigation.md": [
       "apps/web/components/shell/SectionNav.tsx",

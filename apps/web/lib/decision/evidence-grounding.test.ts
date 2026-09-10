@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { groundOptionFeatures, isAdmissibleGrade, type OptionEvidenceMap } from "./evidence-grounding";
+import {
+  groundOptionFeatures,
+  groundOptionsFromParams,
+  buildScoredDecisionOptions,
+  isAdmissibleGrade,
+  type OptionEvidenceMap,
+} from "./evidence-grounding";
 
 const codeLocator = { sourceType: "code", filePath: "resume.txt", line: 12 };
 
@@ -79,5 +85,50 @@ describe("evidence-grounding", () => {
     });
     expect(typeof r.evidenceDigests.cand.skill_match).toBe("string");
     expect(r.evidenceDigests.cand.skill_match).toHaveLength(16);
+  });
+});
+
+describe("evidence-grounding — the feature handoff is positional (BI-9889566B)", () => {
+  it("keeps each option's own features when two options share an id", async () => {
+    // The failure this replaces: groundedFeatures was a Map keyed on the
+    // caller-supplied id, so a shared id (including the "" every id-less
+    // option collapsed to) meant one map won and every option was scored with
+    // it — identical composites, no discrimination, no warning.
+    const params = {
+      options: [
+        { id: "", description: "A", features: { reusability: 0.9 } },
+        { id: "", description: "B", features: { reusability: 0.1 } },
+      ],
+    };
+    const { groundedFeaturesByIndex } = groundOptionsFromParams(params);
+    expect(groundedFeaturesByIndex).toEqual([{ reusability: 0.9 }, { reusability: 0.1 }]);
+
+    const built = await buildScoredDecisionOptions({
+      optionsParam: params.options,
+      groundedFeaturesByIndex,
+      generateEmbedding: async () => undefined,
+    });
+    expect(built.map((o) => o.features)).toEqual([
+      { reusability: 0.9 },
+      { reusability: 0.1 },
+    ]);
+  });
+
+  it("stays aligned when a non-object entry sits between two real options", async () => {
+    const optionsParam = [
+      { id: "a", description: "A", features: { reusability: 0.9 } },
+      null,
+      { id: "b", description: "B", features: { reusability: 0.1 } },
+    ];
+    const { groundedFeaturesByIndex } = groundOptionsFromParams({ options: optionsParam });
+    const built = await buildScoredDecisionOptions({
+      optionsParam,
+      groundedFeaturesByIndex,
+      generateEmbedding: async () => undefined,
+    });
+    expect(built.map((o) => [o.id, o.features])).toEqual([
+      ["a", { reusability: 0.9 }],
+      ["b", { reusability: 0.1 }],
+    ]);
   });
 });
