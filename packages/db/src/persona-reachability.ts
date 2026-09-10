@@ -35,7 +35,7 @@
 import {
   CANONICAL_AGENT_ID_TO_COWORKER_SLUG,
   resolveCanonicalAgentId,
-} from "./agent-identity.js";
+} from "./agent-identity";
 
 /**
  * Prompt categories that can hold a coworker job description, in preference

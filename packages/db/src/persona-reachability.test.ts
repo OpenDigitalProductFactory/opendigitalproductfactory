@@ -13,7 +13,7 @@ import {
   resolvePersonaTemplate,
   findDuplicateDeclarations,
   type PersonaTemplateIndexEntry,
-} from "./persona-reachability.js";
+} from "./persona-reachability";
 
 /** The shape the real index has: basename slug, directory category, declared id. */
 const index: PersonaTemplateIndexEntry[] = [
