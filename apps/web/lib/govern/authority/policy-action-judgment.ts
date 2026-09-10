@@ -153,6 +153,9 @@ export function buildPolicyActionJudgmentRequest(
         `${approvalBinding.inputFingerprint}? Apply Mark's current promoted DPF principles. ` +
         "Proceed only when the bounded action is justified; defer on ambiguity and decline when policy opposes it.",
       callingPopulation: "in_platform_coworker",
+      // BI-9C384562: name the owning scope; the population heuristic alone routes
+      // an in-platform coworker to the organization profile.
+      decisionDomain: "platform-development",
       callingSurface: "policy-action-authority",
       consumerContexts: ["build-studio", "initiative-readiness"],
       ringScope: ["ring-2-workflow", "ring-4-sandbox-prod"],

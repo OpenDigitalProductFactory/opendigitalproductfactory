@@ -193,6 +193,38 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
     });
     expect(authorizationCreate).toHaveBeenCalledTimes(1);
 
+    // BI-9C384562: the live DEV shape — a sealed, high-confidence, autonomy-
+    // eligible yes whose policy version nobody has ratified. The projector
+    // must not root autonomy in an unsigned policy, so this falls to the
+    // human; ratifying the version once (decision-perspective-ratify.ts) is
+    // what turns the same row into an approval.
+    decisionFind.mockResolvedValue([{
+      ...decisionRow,
+      profileVersion: { versionId: "PV-7", promotedByPrincipalId: null },
+    }]);
+    const unratified = await resolveAndPersistPolicyActionAuthority({
+      execution: {
+        toolName: "record_initiative_design_review",
+        rawParams: authorityInput.rawParams,
+        userId: "user-mark",
+        userContext: { platformRole: "admin", isSuperuser: false },
+        context: {
+          agentId: "AGT-WS-DEV",
+          organizationId: "platform",
+          routeContext: "/tool/record_initiative_design_review",
+        },
+        source: "agentic-loop",
+      },
+      authorityInput,
+      approvalBinding,
+    }, db as never, { produceJudgment: vi.fn().mockResolvedValue(undefined) });
+    expect(unratified).toMatchObject({
+      outcome: "not-authorized",
+      explanation: expect.stringContaining("Human decision required"),
+    });
+    expect(authorizationCreate).toHaveBeenCalledTimes(1);
+    decisionFind.mockResolvedValue([decisionRow]);
+
     decisionFind.mockResolvedValueOnce([{
       ...decisionRow,
       outcomePayload: {
