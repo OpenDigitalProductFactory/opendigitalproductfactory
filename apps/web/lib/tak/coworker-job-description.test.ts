@@ -159,10 +159,26 @@ describe("loadCoworkerJobDescription", () => {
 
     expect(vi.mocked(console.warn).mock.calls).toHaveLength(1);
     const line = String(vi.mocked(console.warn).mock.calls[0][0]);
-    // The whole warning stays on one line, so the forged second entry cannot
-    // stand on its own in a log stream.
+    // Two properties defeat the forgery, and the attacker's words surviving as
+    // inline text defeats nothing on its own. First: the warning stays on one
+    // line, so no second entry can form. Second: the bracketed prefix a reader
+    // and a log parser key on appears exactly once — the genuine one.
     expect(line).not.toMatch(/[\r\n]/);
-    expect(line).not.toContain("AGT-REAL resolved fine");
+    expect(line.match(/\[coworker_job_profile_unresolved\]/g)).toHaveLength(1);
+  });
+
+  it("treats the unicode line separators as line breaks too", async () => {
+    // U+2028 and U+2029 end a line in plenty of log viewers and in JavaScript
+    // itself, so a sanitiser that only knows \r and \n still leaves the forgery
+    // open in exactly the places a person would read the log.
+    findMany.mockResolvedValue([]);
+    const forged = `AGT-EVIL\u2028[coworker_job_profile_unresolved] AGT-REAL fine\u2029`;
+
+    await loadCoworkerJobDescription(forged, FALLBACK);
+
+    const line = String(vi.mocked(console.warn).mock.calls[0][0]);
+    expect(line).not.toMatch(/[\u2028\u2029]/);
+    expect(line.match(/\[coworker_job_profile_unresolved\]/g)).toHaveLength(1);
   });
 
   it("ignores a prompt that declares no coworker", async () => {

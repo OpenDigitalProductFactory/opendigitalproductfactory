@@ -171,7 +171,13 @@ export async function loadCoworkerJobDescription(
  * convincing extra lines. Reported by CodeQL on this file.
  */
 function logSafe(value: string): string {
-  const cleaned = value.replace(/[^A-Za-z0-9_.:@+/-]/g, "?");
+  // Strip the line terminators first and explicitly. Forging a log entry needs
+  // a line break, so this is the step that actually defeats the attack, and
+  // naming the characters keeps that legible to a reader and to the scanner.
+  const singleLine = value.replace(/[\r\n\u2028\u2029]/g, " ");
+  // Then keep only the identifier alphabet, so anything else hostile — control
+  // characters, terminal escapes — cannot survive either.
+  const cleaned = singleLine.replace(/[^A-Za-z0-9_.:@+/ -]/g, "?");
   return cleaned.length > 120 ? `${cleaned.slice(0, 120)}...` : cleaned;
 }
 
