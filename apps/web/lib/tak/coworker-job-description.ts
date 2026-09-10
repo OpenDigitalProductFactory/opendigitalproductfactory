@@ -160,6 +160,21 @@ export async function loadCoworkerJobDescription(
   };
 }
 
+/**
+ * Make one value safe to put in a log line.
+ *
+ * The agent id reaching this module is caller-supplied — `request_coworker`
+ * accepts one over an external token — so a crafted id containing newlines
+ * could forge whole log entries and make a coworker appear to have resolved a
+ * job it never received. Strip everything outside the identifier alphabet and
+ * cap the length, so a hostile id shows up as visibly mangled rather than as
+ * convincing extra lines. Reported by CodeQL on this file.
+ */
+function logSafe(value: string): string {
+  const cleaned = value.replace(/[^A-Za-z0-9_.:@+/-]/g, "?");
+  return cleaned.length > 120 ? `${cleaned.slice(0, 120)}...` : cleaned;
+}
+
 function recordUnresolved(
   canonicalAgentId: string,
   requestedRef: string,
@@ -172,8 +187,8 @@ function recordUnresolved(
   });
 
   console.warn(
-    `[coworker_job_profile_unresolved] ${canonicalAgentId} executed with no job description. ` +
-      `requested=${JSON.stringify(requestedRef)} tried=${attempted.join(", ")}. ` +
+    `[coworker_job_profile_unresolved] ${logSafe(canonicalAgentId)} executed with no job description. ` +
+      `requested=${logSafe(requestedRef)} tried=${attempted.map(logSafe).join(", ")}. ` +
       `It will run on a generic work instruction: no purpose, accountability or boundary. ` +
       `See BI-5CCBF85B.`,
   );

@@ -144,6 +144,27 @@ describe("loadCoworkerJobDescription", () => {
     expect(findMany).toHaveBeenCalledTimes(1);
   });
 
+  it("cannot be used to forge log entries through a crafted agent id", async () => {
+    // request_coworker accepts an agent id over an external token, so this value
+    // is caller-supplied. A crafted id carrying newlines could otherwise write
+    // whole extra log lines and make a coworker look like it resolved a job it
+    // never received. Reported by CodeQL on this file.
+    findMany.mockResolvedValue([]);
+    const forged = [
+      "AGT-EVIL",
+      "[coworker_job_profile_unresolved] AGT-REAL resolved fine",
+    ].join("\n");
+
+    await loadCoworkerJobDescription(forged, FALLBACK);
+
+    expect(vi.mocked(console.warn).mock.calls).toHaveLength(1);
+    const line = String(vi.mocked(console.warn).mock.calls[0][0]);
+    // The whole warning stays on one line, so the forged second entry cannot
+    // stand on its own in a log stream.
+    expect(line).not.toMatch(/[\r\n]/);
+    expect(line).not.toContain("AGT-REAL resolved fine");
+  });
+
   it("ignores a prompt that declares no coworker", async () => {
     findMany.mockResolvedValue([
       { category: "specialist", slug: "shared-identity", metadata: null },
