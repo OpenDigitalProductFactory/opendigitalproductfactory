@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 703,
+  "pageCount": 704,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3905,6 +3905,17 @@
         "decision-dimensions",
         "examples",
         "related"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": {
+      "publicHref": "/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply"
       ]
     },
     "docs/founder-kernel/wiki/principles/evidence-before-diagnosis.md": {

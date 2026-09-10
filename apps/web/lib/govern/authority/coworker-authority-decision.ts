@@ -10,6 +10,11 @@ import {
   canAccessAuthoritySubject,
   type AuthoritySubject,
 } from "./authority-subject";
+import {
+  resolveEscalation,
+  type EscalationDecision,
+  type EscalationSteering,
+} from "./escalation-gate";
 
 export const COWORKER_AUTHORITY_OUTCOMES = [
   "allow",
@@ -86,8 +91,17 @@ export type CoworkerAuthorityInput = {
     /** False when an explicit operator policy forbids policy projection. */
     policyProjectionAllowed?: boolean;
     consequence?: ToolConsequence | null;
+    /** A Work Case may elevate an otherwise ordinary mutation to consequential. */
+    workCaseConsequential?: boolean;
     requiresDelegationChain?: boolean;
   };
+  /**
+   * BI-6B3DA9DD: what can decide this action without a person, server-resolved.
+   * Absent means `none` — nothing recorded can steer it. See escalation-gate.ts:
+   * a trust tier is a ceiling on what a coworker may attempt, never a reason to
+   * put a non-damaging, steered action in front of a human.
+   */
+  steering?: EscalationSteering;
   subject?: CoworkerAuthoritySubject | null;
   /** The Workroom the call runs in, for the receipt; null when unroomed. */
   room?: {
@@ -150,6 +164,8 @@ type CoworkerAuthorityAllowDecision = {
   reasonCode: "authorized";
   explanation: string;
   nextAction: "execute";
+  /** Which escalation branch decided; recorded on the authority evidence. */
+  escalation?: EscalationDecision;
 };
 
 type CoworkerAuthorityDenyDecision = {
@@ -168,6 +184,8 @@ type CoworkerAuthorityApprovalDecision = {
   explanation: string;
   nextAction: "request-approval";
   approvalBinding: CoworkerApprovalBinding;
+  /** Which escalation branch decided; recorded on the authority evidence. */
+  escalation?: EscalationDecision;
 };
 
 export type CoworkerAuthorityDecision =
@@ -282,11 +300,33 @@ function deny(
   };
 }
 
-function requiresApproval(input: CoworkerAuthorityInput): boolean {
-  if (input.action.executionMode === "proposal") return true;
-  if (!input.action.sideEffect) return false;
-  return input.action.approvalPolicy === "all"
-    || input.action.approvalPolicy === "side-effects";
+/**
+ * BI-6B3DA9DD — escalation is a property of the decision, not of the actor.
+ *
+ * This used to be `requiresApproval`, which asked only whether the acting
+ * coworker's HITL tier said "approve side effects" and minted a human envelope
+ * for any side effect if it did. That escalated the specialist reviewers' own
+ * governance receipts to a person, which is what the founder's ruling forbids.
+ *
+ * The operator's standing configuration is carried through unchanged as
+ * `operatorRequiresApproval`; the gate only decides, among the actions that
+ * configuration would have escalated, which ones genuinely need a person.
+ */
+function escalationFor(input: CoworkerAuthorityInput): EscalationDecision {
+  return resolveEscalation({
+    operatorRequiresApproval: input.action.approvalPolicy === "all"
+      || input.action.approvalPolicy === "side-effects",
+    action: {
+      sideEffect: input.action.sideEffect,
+      executionMode: input.action.executionMode,
+      consequence: input.action.consequence ?? null,
+      ...(input.action.workCaseConsequential !== undefined
+        ? { workCaseConsequential: input.action.workCaseConsequential }
+        : {}),
+    },
+    dataPolicy: { sensitivity: input.dataPolicy.sensitivity },
+    steering: input.steering ?? "none",
+  });
 }
 
 function sameBinding(
@@ -388,12 +428,14 @@ export function evaluateCoworkerAuthority(
     return deny("policy-version-stale");
   }
 
-  if (!requiresApproval(input)) {
+  const escalation = escalationFor(input);
+  if (escalation.verdict === "automated") {
     return {
       outcome: "allow",
       reasonCode: "authorized",
       explanation: EXPLANATIONS.authorized,
       nextAction: "execute",
+      escalation,
     };
   }
 
@@ -405,6 +447,7 @@ export function evaluateCoworkerAuthority(
       explanation: EXPLANATIONS["approval-required"],
       nextAction: "request-approval",
       approvalBinding: currentBinding,
+      escalation,
     };
   }
   if (input.approval.status !== "approved") {
@@ -422,5 +465,6 @@ export function evaluateCoworkerAuthority(
     reasonCode: "authorized",
     explanation: EXPLANATIONS.authorized,
     nextAction: "execute",
+    escalation,
   };
 }
