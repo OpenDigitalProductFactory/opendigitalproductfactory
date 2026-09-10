@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # AI Coworker Persona & Job-Description Audit — Design Spec
 
 | Field | Value |
