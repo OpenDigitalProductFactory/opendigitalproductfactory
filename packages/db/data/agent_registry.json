@@ -3734,7 +3734,14 @@
           "sandbox_execute",
           "architecture_read",
           "registry_read",
-          "tool_script_exec"
+          "tool_script_exec",
+          "backlog_read",
+          "backlog_write",
+          "telemetry_read",
+          "ea_graph_read",
+          "data_governance_validate",
+          "policy_read",
+          "spec_plan_read"
         ]
       }
     },

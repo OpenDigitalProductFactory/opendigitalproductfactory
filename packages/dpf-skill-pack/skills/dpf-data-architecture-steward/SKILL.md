@@ -1,18 +1,18 @@
 ---
 name: dpf-data-architecture-steward
-description: "Use when asked about the DPF data model, ERD, table relationships, foreign keys, indexes, schema structure, or schema drift."
+description: "Use for the DPF data model: ERD, relations, indexes, drift, and lifecycle — retention, table growth, @dpf declarations."
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: mcp__dpf__describe_model mcp__dpf__query_ontology_graph mcp__dpf__explain_blast_radius mcp__dpf__search_code_graph mcp__dpf__wiki_query
+allowed-tools: mcp__dpf__describe_model mcp__dpf__query_ontology_graph mcp__dpf__explain_blast_radius mcp__dpf__search_code_graph mcp__dpf__wiki_query mcp__dpf__list_backlog_items mcp__dpf__get_backlog_item mcp__dpf__create_backlog_item
 
 category: data-stewardship
 assignTo: ["data-architect"]
 capability: null
 taskType: review
-triggerPattern: "data model|data architecture|ERD|entity relationship|schema (structure|drift|map)|foreign key|table relationships|mirror the (prisma|data) model"
+triggerPattern: "data model|data architecture|ERD|entity relationship|schema (structure|drift|map)|foreign key|table relationships|mirror the (prisma|data) model|retention (window|polic)|data lifecycle|table growth|grow(s|ing) (forever|without)|@dpf|payload anatomy"
 userInvocable: true
 agentInvocable: true
-allowedTools: ["mcp__dpf__describe_model", "mcp__dpf__query_ontology_graph", "mcp__dpf__explain_blast_radius", "mcp__dpf__search_code_graph", "mcp__dpf__wiki_query"]
+allowedTools: ["mcp__dpf__describe_model", "mcp__dpf__query_ontology_graph", "mcp__dpf__explain_blast_radius", "mcp__dpf__search_code_graph", "mcp__dpf__wiki_query", "mcp__dpf__list_backlog_items", "mcp__dpf__get_backlog_item", "mcp__dpf__create_backlog_item"]
 composesFrom: ["dpf-verify-substrate-first", "dpf-architecture-review"]
 contextRequirements: ["EA data-model view present (or generatable via the data-model mirror)"]
 riskBand: low
