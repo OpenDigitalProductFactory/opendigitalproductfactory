@@ -42,6 +42,12 @@ overrides:
   # 8.0.0 is a clean upstream fix with zero runtime dependencies and the same
   # `node >=16` engine, so floor it instead of accepting the finding.
   deepmerge-ts: '^8.0.0'
+  # @types/node: first-party workspaces declare ^26, but @inngest/ai (22),
+  # @types/net-snmp (24) and docx (25) each pin an older major, so the tree
+  # resolved FOUR copies of a types-only package. Floor every older range to
+  # the workspace major (plan 2026-09-08 M7, BI-5265CAD0). Types-only: no
+  # runtime behaviour changes; typecheck across all workspaces is the proof.
+  '@types/node@<26': '^26.2.0'
   lodash: '4.18.0'
   lodash-es: '4.18.0'
   node-forge: '1.4.0'
