@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   createLocalCiPassEvidenceValidity,
+  isInconclusiveLocalCiGateStatus,
   isRecoverableInterruptedGateState,
   projectReusedPassMetadata,
   readLocalCiGateState,
@@ -222,4 +223,139 @@ test("supersession leaves other SHAs, other branches, passes, and pending eviden
   for (const file of [otherSha, otherBranch, realPass, pending]) {
     assert.notEqual(readLocalCiGateState(file).status, "superseded", file);
   }
+});
+
+// BI-FFCFCCE0: a starvation event that arrives AFTER a terminal PASS is a
+// separate inconclusive observation, not a re-verdict. Observed 2026-09-10 on
+// fix/principle-decide-requires-option-id: the gate passed and reported PASS at
+// 05:55Z, and at 06:15Z the same slot record was rewritten to
+// blocked_control_plane_starvation with gatePassed:false and an empty
+// evidenceRecordId. One lease, one run — the verdict was reached, then erased.
+test("an infrastructure-blocked write cannot downgrade a terminal PASS for the same branch+SHA", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-pass-guard-")), "gate.json");
+  const shared = { branch: "fix/x", sha: "d".repeat(40), leaseId: "NPEL-1", resilience: null, leaseEvents: [] };
+
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: true,
+    evidenceId: "cmtv4u0220h4301qn5r8le9ev",
+    status: "passed",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+  });
+  const result = writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: false,
+    evidenceId: "",
+    status: "blocked_control_plane_starvation",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+    evidencePending: true,
+    evidencePendingReason: "control_plane_unavailable",
+    failureReason: "control plane unreachable for two sustained rounds",
+  });
+
+  const state = readLocalCiGateState(stateFile);
+  assert.equal(state.gatePassed, true, "the reached verdict must stand");
+  assert.equal(state.status, "passed");
+  assert.equal(state.evidenceRecordId, "cmtv4u0220h4301qn5r8le9ev");
+  assert.equal(result.preservedPass, true);
+  // The event is not swallowed: it is recorded as its own inconclusive observation.
+  assert.equal(state.inconclusiveObservations.length, 1);
+  assert.equal(state.inconclusiveObservations[0].status, "blocked_control_plane_starvation");
+  assert.equal(
+    state.inconclusiveObservations[0].reason,
+    "control plane unreachable for two sustained rounds",
+  );
+});
+
+test("a PASS whose evidence is still pending is protected the same way", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-pass-pending-")), "gate.json");
+  const shared = { branch: "fix/x", sha: "e".repeat(40), leaseId: "NPEL-2", resilience: null, leaseEvents: [] };
+
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: true,
+    evidenceId: "",
+    status: "passed",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+    evidencePending: true,
+    evidencePendingReason: "tool_threw",
+  });
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: false,
+    evidenceId: "",
+    status: "blocked_child_signal_death",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+  });
+
+  const state = readLocalCiGateState(stateFile);
+  assert.equal(state.gatePassed, true);
+  assert.equal(state.evidencePending, true);
+  assert.equal(state.evidencePendingReason, "tool_threw");
+});
+
+test("a real verdict, a different candidate, and a re-run in flight still overwrite a PASS", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-gate-pass-overwrite-"));
+  const base = { leaseId: "L", evidenceId: "", resilience: null, leaseEvents: [], expiresAt: "2026-09-11T06:00:00.000Z" };
+  const pass = { ...base, gatePassed: true, status: "passed", evidenceId: "E1" };
+
+  // A FAIL for the same tree is a claim about the diff, not infrastructure.
+  const verdict = join(dir, "verdict.json");
+  writeLocalCiGateState(verdict, { ...pass, branch: "fix/x", sha: "abc" });
+  writeLocalCiGateState(verdict, { ...base, branch: "fix/x", sha: "abc", gatePassed: false, status: "failed" });
+  assert.equal(readLocalCiGateState(verdict).status, "failed");
+
+  // A blocked write for a DIFFERENT sha describes a different candidate.
+  const other = join(dir, "other.json");
+  writeLocalCiGateState(other, { ...pass, branch: "fix/x", sha: "abc" });
+  writeLocalCiGateState(other, {
+    ...base, branch: "fix/x", sha: "def", gatePassed: false, status: "blocked_control_plane_starvation",
+  });
+  assert.equal(readLocalCiGateState(other).sha, "def");
+
+  // A re-run in flight must own the record; a stale PASS beside a live run lies.
+  const rerun = join(dir, "rerun.json");
+  writeLocalCiGateState(rerun, { ...pass, branch: "fix/x", sha: "abc" });
+  writeLocalCiGateState(rerun, { ...base, branch: "fix/x", sha: "abc", gatePassed: false, status: "running" });
+  assert.equal(readLocalCiGateState(rerun).status, "running");
+});
+
+test("every blocked_* status counts as infrastructure, including ones added later", () => {
+  for (const status of [
+    "blocked_control_plane_starvation",
+    "blocked_child_signal_death",
+    "blocked_sandbox_drift",
+    "blocked_quiescence",
+    "blocked_wrapper_exited",
+    "blocked_something_nobody_has_written_yet",
+  ]) {
+    assert.equal(isInconclusiveLocalCiGateStatus(status), true, status);
+  }
+  // Verdicts about the tree are not infrastructure and must stay able to
+  // replace a stale PASS.
+  for (const status of ["passed", "failed", "conflict", "superseded", "running", "queued", null, undefined]) {
+    assert.equal(isInconclusiveLocalCiGateStatus(status), false, String(status));
+  }
+});
+
+test("a wrapper that exited before a terminal state cannot withdraw a PASS either", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-wrapper-")), "gate.json");
+  const shared = { branch: "fix/x", sha: "a".repeat(40), leaseId: "NPEL-3", resilience: null, leaseEvents: [] };
+
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: true,
+    evidenceId: "E9",
+    status: "passed",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+  });
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: false,
+    evidenceId: "",
+    status: "blocked_wrapper_exited",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+  });
+
+  assert.equal(readLocalCiGateState(stateFile).status, "passed");
 });

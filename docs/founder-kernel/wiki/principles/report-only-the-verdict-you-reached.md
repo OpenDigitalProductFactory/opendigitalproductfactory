@@ -72,6 +72,17 @@ should report the ambiguity rather than pick.
 **Do not report a verdict about state you did not read.** A record from a
 previous run is evidence about that run, not this one.
 
+**An inconclusive result never withdraws a verdict already reached.** "I could
+not tell" is not evidence that the earlier answer was wrong -- it is the absence
+of evidence, and absence cannot overturn a measurement. When an infrastructure
+event lands after a check has already concluded, record it beside the verdict,
+not on top of it. Measured 2026-09-10: a local-CI gate PASSED, published its
+result, and twenty minutes later the same record was rewritten to
+`blocked_control_plane_starvation` with the verdict and its evidence id erased --
+one lease, one run, and nothing had re-examined the tree. Whoever writes the
+result record owns this: a downgrade guard belongs at the write, because every
+caller that could clobber a verdict is a caller who did not mean to.
+
 ## The consequence clause
 
 A check that reports verdicts it did not reach **gets disabled** — by a switch,

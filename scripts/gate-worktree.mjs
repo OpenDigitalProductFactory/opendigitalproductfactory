@@ -218,6 +218,56 @@ function siblingSlotStateFiles({ currentSlotKey, rootClone, gitCommonDir, candid
     }).evidence.state);
 }
 
+/**
+ * BI-FFCFCCE0. `--finalize-evidence` runs BEFORE admission, so `currentSlotKey`
+ * is still the `slot-0` default and slot-0's evidence files carry no suffix.
+ * The finalize path therefore read the UNSLOTTED `dpf-local-ci-gate.json` while
+ * `pregate:status` reconciles across every `dpf-local-ci-gate-slot-*.json`, and
+ * the two disagreed about which record was authoritative: a genuine PASS
+ * recorded on slot-1 could not be finalized at all, only refused with
+ * `no exact published PASS is available to finalize at ...dpf-local-ci-gate.json`.
+ *
+ * Resolve the same way the reader does. A pending record wins over a published
+ * one: it names the exact run whose publication was deferred.
+ *
+ * @returns {{ manifest: object, searched: string[], matchedBy: "pending"|"published-pass"|"none" }}
+ */
+export function resolveFinalizeSlot({ branch, sha, rootClone, gitCommonDir, candidateGitDir, defaultSlotKey }) {
+  const manifests = LOCAL_CI_SLOT_KEYS.map((slotKey) => createLocalCiSlotManifest({
+    slotKey,
+    rootClone,
+    gitCommonDir,
+    candidateGitDir,
+  }));
+  const searched = [];
+  for (const manifest of manifests) {
+    searched.push(manifest.evidence.pending);
+    let pending = null;
+    try {
+      pending = JSON.parse(readFileSync(manifest.evidence.pending, "utf8"));
+    } catch {
+      // An absent or unreadable pending file simply means this slot is not it.
+    }
+    if (pending?.branch === branch && pending?.sha === sha) {
+      return { manifest, searched, matchedBy: "pending" };
+    }
+  }
+  for (const manifest of manifests) {
+    searched.push(manifest.evidence.state);
+    const state = readLocalCiGateState(manifest.evidence.state);
+    if (
+      state?.branch === branch
+      && state?.sha === sha
+      && state?.gatePassed === true
+      && state?.status === "passed"
+    ) {
+      return { manifest, searched, matchedBy: "published-pass" };
+    }
+  }
+  const fallback = manifests.find((manifest) => manifest.slotKey === defaultSlotKey) ?? manifests[0];
+  return { manifest: fallback, searched, matchedBy: "none" };
+}
+
 function retryDelayMs({ attempt, pollSeconds, retryAfterSeconds = 0 }) {
   const floorMs = Math.max(10, pollSeconds * 1000);
   const requestedMs = Math.max(0, Number(retryAfterSeconds) * 1000);
@@ -1046,6 +1096,19 @@ async function main() {
   }
 
   if (options.finalizeEvidence) {
+    const finalizeSlot = resolveFinalizeSlot({
+      branch,
+      sha,
+      rootClone,
+      gitCommonDir,
+      candidateGitDir,
+      defaultSlotKey: currentSlotKey,
+    });
+    slotManifest = finalizeSlot.manifest;
+    currentSlotKey = slotManifest.slotKey;
+    stateFile = slotManifest.evidence.state;
+    metadataFile = slotManifest.evidence.metadata;
+    pendingEvidenceFile = slotManifest.evidence.pending;
     if (!existsSync(pendingEvidenceFile)) {
       const state = readLocalCiGateState(stateFile);
       let metadata = null;
@@ -1063,7 +1126,10 @@ async function main() {
         || !state?.evidenceRecordId
         || metadata?.candidateSha !== sha
       ) {
-        die(`no exact published PASS is available to finalize at ${stateFile}`);
+        die(
+          `no exact published PASS is available to finalize for ${branch} @ ${sha}; searched `
+            + finalizeSlot.searched.join(", "),
+        );
       }
       const evidenceValidity = createLocalCiPassEvidenceValidity({
         issuedAt: state.evidenceValidity?.issuedAt || state.recordedAt,
@@ -2040,7 +2106,7 @@ async function main() {
         retryAfterSeconds: 30,
         recordArgs: evidenceArgs,
       });
-      writeState(stateFile, {
+      const starvationWrite = writeState(stateFile, {
         branch,
         sha,
         gatePassed: false,
@@ -2054,6 +2120,14 @@ async function main() {
         evidencePendingReason: evidenceError || "control_plane_unavailable",
       });
       process.stderr.write("gate-worktree: control-plane starvation evidence is preserved locally and pending portal recovery.\n");
+      // BI-FFCFCCE0: the record already held a PASS this gate reached for the
+      // same tree, so the starvation was appended as an observation and the
+      // verdict stands. Say so, or the exit code reads as a lost pass.
+      if (starvationWrite?.preservedPass) {
+        process.stderr.write(
+          `gate-worktree: the PASS already recorded for ${sha} still stands; this starvation is logged on it as an inconclusive observation, not a verdict.\n`,
+        );
+      }
       process.exit(5);
     }
     if (outcome.gatePassed && evidenceError === "portal_quiescing") {
@@ -2193,7 +2267,7 @@ function writeState(stateFile, {
   childExitCode = null,
   onPassWritten = null,
 }) {
-  writeLocalCiGateState(stateFile, {
+  const result = writeLocalCiGateState(stateFile, {
     branch,
     sha,
     gatePassed,
@@ -2224,6 +2298,7 @@ function writeState(stateFile, {
 `);
     }
   }
+  return result;
 }
 
 // A gate that silently skips main() exits 0 — a false "pass" — so the entry

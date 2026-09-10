@@ -578,8 +578,14 @@ export async function recoverInterruptedGate({
       const releaseText = recovered.releaseSucceeded
         ? "released the lease"
         : `could not release the lease (${recovered.releaseError || "unknown error"})`;
+      // BI-FFCFCCE0: the record this path writes is `blocked_wrapper_exited`,
+      // which BI-D088D06D introduced precisely so an interrupted wrapper stops
+      // reading as a grade on the diff. This line kept the pre-BI-D088D06D
+      // wording and said "failed" anyway — the record told the truth while the
+      // one sentence an operator actually reads did not.
       stderr.write(
-        `pregate: recovered interrupted local-CI gate for ${context.branch} @ ${context.sha}; ${releaseText}; marked the local gate state failed.\n`,
+        `pregate: recovered interrupted local-CI gate for ${context.branch} @ ${context.sha}; ${releaseText}; `
+          + "recorded blocked_wrapper_exited: the run was interrupted before it could grade the diff, so this is NOT a verdict on your changes. Re-run pregate on the same SHA.\n",
       );
       return recovered;
     }
