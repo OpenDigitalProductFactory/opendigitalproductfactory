@@ -118,6 +118,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // classified as "request-failed" — an operator reads that as a broken
       // endpoint and hunts a connection fault that never happened.
       node("--test", "scripts/local-ci-control-plane-probe.test.mjs"),
+      // BI-D35B85BF: a queued gate hands its claim to a detached resumer, and
+      // the recursion guard on that spawn is the one thing that must never
+      // regress - without it every re-claim forks another waiter. Registered
+      // here rather than in ci-policy-test-inventory-allowlist.txt, where it
+      // would never run.
+      node("--test", "scripts/lib/durable-wait-resumer.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),

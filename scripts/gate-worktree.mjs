@@ -107,6 +107,7 @@ import {
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -1531,6 +1532,21 @@ async function main() {
         },
       });
       if (admission.resumeMode === "durable-task" && admission.taskRunId) {
+        // BI-D35B85BF. Exiting here used to strand the claim outright. The
+        // TaskRun projection this lease carries has no reader anywhere, so
+        // "durable-task" in practice meant "an AI session may or may not
+        // remember to re-run me" - 13 of 41 did. Hand the claim to a detached
+        // resumer FIRST and drop this process's observer record second, in that
+        // order, so the queued row is never left unbacked between the two.
+        const resume = spawnDurableWaitResumer({
+          runnerPath: resolvePath(SCRIPT_DIR, "local-ci-durable-wait-resumer.mjs"),
+          gateArgv: process.argv,
+          observerDirectory: queueObserverDirectory,
+          branch,
+          sha,
+          ownerSessionId,
+          cwd: worktreePath,
+        });
         if (queueObserverPath) {
           releaseLocalQueueObserver({ path: queueObserverPath, token: gateObserverIdentity.token });
           queueObserverPath = "";
@@ -1543,6 +1559,13 @@ async function main() {
           claimKey,
           queuePosition: admission.queuePosition ?? null,
           resumeMode: "durable-task",
+          // Name the owner of the resume outright. A caller reading "caller"
+          // knows it must keep polling; one reading "detached-resumer" knows it
+          // must not. Leaving that to inference is what BI-D35B85BF "Wanted"
+          // item 1 asked to end.
+          resumeOwner: resume.spawned ? "detached-resumer" : "caller",
+          resumerPid: resume.pid,
+          ...(resume.spawned ? {} : { resumeUnavailableReason: resume.reason }),
           ...(closedReason ? { poolClosedReason: closedReason } : {}),
         }) + "\n");
         process.exit(75);

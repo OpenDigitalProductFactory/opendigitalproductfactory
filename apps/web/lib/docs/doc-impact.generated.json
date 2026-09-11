@@ -1949,6 +1949,9 @@
       "docs/maintenance/staleness-report.md",
       "docs/operations/install.md"
     ],
+    "scripts/local-ci-durable-wait-resumer.mjs": [
+      "docs/architecture/dpf-patterns.md"
+    ],
     "scripts/local-ci-pilot-report.mjs": [
       "docs/operations/local-ci-sandbox-slots.md"
     ],
@@ -2618,7 +2621,8 @@
       "apps/web/lib/nonprod/host-resource-profiles.json",
       "packages/db/prisma/schema/build-delivery.prisma",
       "packages/db/prisma/schema/work-coordination.prisma",
-      "scripts/host-resource-runner.mjs"
+      "scripts/host-resource-runner.mjs",
+      "scripts/local-ci-durable-wait-resumer.mjs"
     ],
     "docs/architecture/enforced-ci-gates.md": [
       "apps/web/lib/docs-route-map.ts",

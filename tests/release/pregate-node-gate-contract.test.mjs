@@ -259,6 +259,11 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "git-fetch-shared-safe.mjs"), join(temp, "scripts", "lib", "git-fetch-shared-safe.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "entry-module.mjs"), join(temp, "scripts", "lib", "entry-module.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-integration-status.mjs"), join(temp, "scripts", "lib", "local-integration-status.mjs"));
+  // BI-D35B85BF: a queued gate hands its claim to a detached resumer, so
+  // gate-worktree.mjs now static-imports the spawn helper too. Same
+  // copies-scripts-by-name trap as the modules above - without this the temp
+  // tree dies on ERR_MODULE_NOT_FOUND before the stub-refusal path can run.
+  cpSync(join(repoRoot, "scripts", "lib", "durable-wait-resumer.mjs"), join(temp, "scripts", "lib", "durable-wait-resumer.mjs"));
   cpSync(
     join(repoRoot, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
     join(temp, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
