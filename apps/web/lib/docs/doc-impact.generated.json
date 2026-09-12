@@ -907,6 +907,9 @@
     "apps/web/lib/operate/retention/declarations.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "apps/web/lib/operate/retention/obligation-floors.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/operate/retention/policies.ts": [
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/enforced-ci-gates.md"
@@ -1522,6 +1525,9 @@
     ],
     "packages/db/src/seed-platform-backup.ts": [
       "docs/operations/disaster-recovery.md"
+    ],
+    "packages/db/src/seed-retention-floor-obligations.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "packages/db/src/seed-skills.ts": [
       "docs/architecture/skill-surfaces-runbook.md"
@@ -2573,6 +2579,7 @@
       "apps/web/lib/ea/table-growth.ts",
       "apps/web/lib/evidence/bounded-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
+      "apps/web/lib/operate/retention/obligation-floors.ts",
       "apps/web/lib/routes.ts",
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
@@ -2581,6 +2588,7 @@
       "packages/db/prisma/schema/resource-scheduling.prisma",
       "packages/db/scripts/apply-model-metadata-comments.ts",
       "packages/db/src/model-metadata.ts",
+      "packages/db/src/seed-retention-floor-obligations.ts",
       "scripts/check-model-metadata-tags.mjs",
       "scripts/check-no-local-isrecord.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",

@@ -10,6 +10,7 @@
 
 import {
   type PurgePolicy,
+  type RetentionFloorBucket,
   type RetentionPrismaClient,
 } from "./policies";
 import { resolveEffectiveRetentionDays } from "./industry-floors";
@@ -59,6 +60,8 @@ export interface RunRetentionSweepOptions {
   policies: readonly PurgePolicy[];
   /** Count of retained (never-purged) declarations, for the report. */
   retainedDatasetCount?: number;
+  /** Floors derived from the obligations binding this install (EP-A33A5C61 slice 6). */
+  obligationFloorDays?: Partial<Record<RetentionFloorBucket, number>>;
   /** When true, count only — no deletes. */
   dryRun: boolean;
   /** Industry/archetype key for floor widening (null = base windows). */
@@ -149,6 +152,7 @@ export async function runRetentionSweep(
     perPolicyCap = RETENTION_PER_POLICY_CAP,
     onlyModels,
     retainedDatasetCount = 0,
+    obligationFloorDays = {},
   } = opts;
 
   const startedAt = now;
@@ -165,6 +169,8 @@ export async function runRetentionSweep(
     const effectiveRetentionDays = resolveEffectiveRetentionDays(
       policy,
       industryKey,
+      0,
+      obligationFloorDays,
     );
     const cutoff = cutoffForDays(effectiveRetentionDays, now);
 

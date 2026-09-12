@@ -58,6 +58,19 @@ model ToolExecution { ... }
 
 Findings reconcile into `EaConformanceIssue` beside the structural ones (visible on `/ea/data-model`). A finding that stays open for three consecutive nightly samples is filed once as a fingerprinted backlog item with source `data-growth` (`captureCorrectiveFailureBI`), owned by AGT-BUILD-DA, and re-observed nightly until it clears. The sample table is itself tagged `telemetry-bounded retention=90d`, so the steward's telemetry is governed by the mechanism it enforces.
 
+## Retention floors come from the obligations that bind this install
+
+**Derived, not hardcoded (BI-69C29492, EP-A33A5C61 slice 6).** A retention window may only ever LENGTHEN: `effective = max(base, industry floor, obligation floor, processing-activity floor)`. The obligation floor is the one derived from the compliance plane:
+
+1. `Obligation.retentionMinimumDays` and `Obligation.retentionFloorBuckets` carry the duration a regulator states. Before this, durations existed only as prose in `description` ("wage records ... for at least three years") and no engine could read them.
+2. `apps/web/lib/operate/retention/obligation-floors.ts` reads the minimums of the obligations whose regulation **applies to this install**, using the existing classifier (`compliance-library.ts`), which already scopes by archetype **and** jurisdiction. There is one answer to "what binds us", not two.
+3. The sweep max()es that against the base window. Each floor carries its citation, so a sweep can name the regulator behind a lengthened window.
+
+- **Failure is always the safe direction.** An unreadable compliance plane, an unresolvable applicability, a null or zero minimum, an unknown bucket: each leaves the base window in place or considers more obligations, never fewer. A sweep never aborts because compliance is unreadable.
+- **An obligation that names no bucket binds every bucket.** A records rule that does not distinguish audit trails from chat is making a claim about all of them; reading it narrowly would understate a regulator.
+- **The legacy table is still in the max().** `INDUSTRY_RETENTION_FLOORS` (four hardcoded industry rows) stays until parity is proven. `obligation-floors.test.ts` is that proof: it fails if any hardcoded row lacks an obligation at least as long. When it passes with no gaps the table can be deleted without any install's window shortening — deleting it first would be the one thing floors must never do.
+- **Adding a floor?** State it as an obligation on the regulation that already binds the archetype (`packages/db/src/seed-retention-floor-obligations.ts`); the seed invents no regulation and reports a floor it could not attach rather than pretending a regulator said something. The window then shows on `/compliance/obligations/<id>`.
+
 ## Evidence payloads never live inline
 
 **The ceiling (BI-39AAE9B8, EP-A33A5C61 slice 2).** A ledger row records *that* something happened and what it carried, by digest. Any string leaf above `EVIDENCE_INLINE_CEILING_BYTES` (64 KB, [`apps/web/lib/evidence/bounded-output.ts`](../../apps/web/lib/evidence/bounded-output.ts)) leaves the JSON column:

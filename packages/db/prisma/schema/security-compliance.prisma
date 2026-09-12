@@ -261,6 +261,20 @@ model Obligation {
   // attestation | evidence-pack | policy-acknowledgement | none), so the platform
   // and the compliance coworker know what to produce/track. Null = unspecified.
   deliverableType String?
+  // EP-A33A5C61 slice 6 — the STRUCTURED retention minimum this obligation
+  // imposes, so the retention sweep can derive its floors from the compliance
+  // plane instead of a hardcoded industry table. Before this, durations existed
+  // only as prose in `description` ("at least three years"), unreadable by the
+  // engine. Null = this obligation says nothing about retention.
+  //
+  // retentionMinimumDays: the regulator's minimum. Floors only ever LENGTHEN a
+  // window (effective = max(base, floor)), so a wrong-but-shorter value can
+  // never cause an early delete; a missing one simply leaves the base in place.
+  // retentionFloorBuckets: which retention floor buckets it binds
+  // (audit | chat | telemetry — apps/web/lib/operate/retention/policies.ts).
+  // Empty with a non-null minimum means "every bucket".
+  retentionMinimumDays   Int?
+  retentionFloorBuckets  String[] @default([])
   penaltySummary  String?
   ownerEmployeeId String?
   reviewDate      DateTime?

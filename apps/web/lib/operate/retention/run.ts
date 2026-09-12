@@ -15,6 +15,7 @@ import { runRetentionSweep, type RetentionSweepReport } from "./execute";
 import type { RetentionPrismaClient } from "./policies";
 import { resolveOrgIndustryKey } from "./industry-floors";
 import { buildPurgePolicies, buildRetainedDatasets, loadModelDeclarations } from "./declarations";
+import { loadObligationFloors } from "./obligation-floors";
 import {
   DATA_RETENTION_JOB_ID,
   nextRetentionRunAt,
@@ -90,6 +91,18 @@ export async function executeScheduledRetentionSweep(opts: {
   // EP-A33A5C61 slice 4d: the policies come from the Postgres catalog (the
   // schema's /// @dpf tags), not from a TypeScript list.
   const declarations = await loadModelDeclarations(prisma, (m) => console.warn(`[retention] ${m}`));
+  // EP-A33A5C61 slice 6: floors come from the obligations that bind this
+  // install, scoped by archetype and jurisdiction by the existing compliance
+  // classifier. Unresolvable applicability means "consider every stated
+  // minimum", which can only lengthen a window.
+  const applicableRegulationIds = await import("@/lib/compliance-library")
+    .then((m) => m.resolveApplicableRegulationDbIds(prisma))
+    .catch(() => null);
+  const obligationFloors = await loadObligationFloors(
+    prisma,
+    applicableRegulationIds,
+    (m) => console.warn(`[retention] ${m}`),
+  );
   const report = await runRetentionSweep({
     prisma: retentionPrisma,
     now,
@@ -97,6 +110,7 @@ export async function executeScheduledRetentionSweep(opts: {
     industryKey,
     policies: buildPurgePolicies(declarations),
     retainedDatasetCount: buildRetainedDatasets(declarations).length,
+    obligationFloorDays: obligationFloors.byBucket,
   });
 
   if (!dryRun) {

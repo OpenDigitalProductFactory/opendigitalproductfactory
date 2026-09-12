@@ -1329,6 +1329,7 @@
         "record-lifecycle-convention",
         "model-metadata-lives-in-the-schema-and-the-catalog",
         "the-steward-watches-growth-not-only-structure",
+        "retention-floors-come-from-the-obligations-that-bind-this-install",
         "evidence-payloads-never-live-inline"
       ]
     },
