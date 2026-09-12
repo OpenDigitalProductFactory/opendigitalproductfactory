@@ -35,10 +35,11 @@ async function assertFence(db: Prisma.TransactionClient, taskRunId: string, gene
   const owned = await db.taskRun.updateMany({ where: fence(taskRunId, generation), data: { lastHeartbeatAt: new Date() } });
   if (owned.count !== 1) throw new Error("semantic-review-generation-no-longer-owned");
 }
-async function settle(row: Run, status: "failed" | "auth-required" | "input-required", reason: string) {
+async function settle(row: Run, status: "failed" | "auth-required" | "input-required", reason: string,
+  details: Record<string, unknown> = {}) {
   const changed = await prisma.taskRun.updateMany({ where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
     data: { status, ...(status === "failed" ? { completedAt: new Date() } : {}),
-      progressPayload: progress(row, { state: status, reason }) } });
+      progressPayload: progress(row, { state: status, reason, ...details }) } });
   const current = changed.count === 1 ? status
     : (await prisma.taskRun.findUnique({ where: { taskRunId: row.taskRunId }, select: { status: true } }))?.status ?? "unknown";
   return { taskRunId: row.taskRunId, status: current, changed: changed.count === 1 };
@@ -176,7 +177,13 @@ export async function executePersistedSemanticReview(taskRunId: string) {
   const currentEvidence = reviewRoom ? await resolveFailureAnalysisEvidence(packet.input.failureAnalysis, reviewRoom.id) : [];
   const currentAnalysis = validateFailureAnalysis(packet.input.failureAnalysis, packet.input.identity, currentEvidence);
   if (!currentAnalysis.valid || currentAnalysis.digest !== packet.input.identity.failureAnalysisDigest) {
-    return settle(row, "input-required", "failure-analysis-evidence-changed; internal author must refresh evidence and review");
+    // The persisted packet is immutable, so changed evidence cannot be repaired
+    // by resuming this TaskRun. Terminalize the stale attempt: the next
+    // submission resolves current evidence into a new gate identity instead of
+    // subscribing forever to an unrecoverable input-required run.
+    return settle(row, "failed", "failure-analysis-evidence-changed", {
+      action: "Submit a refreshed immutable review request with current failure evidence.",
+    });
   }
   const generation = randomUUID();
   const owned = await reserveSubmittedTaskRunWorking({ taskRunId, updatedAt: row.updatedAt,

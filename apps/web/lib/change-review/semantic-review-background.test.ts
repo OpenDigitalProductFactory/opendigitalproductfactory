@@ -204,6 +204,22 @@ describe("durable semantic review worker", () => {
     expect(row.status).toBe("auth-required");
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
+  it("terminalizes an immutable request whose failure evidence changed so a refreshed request is not stranded", async () => {
+    mocks.resolveFailureEvidence.mockResolvedValue([]);
+
+    expect(await executePersistedSemanticReview("TR-1")).toMatchObject({
+      taskRunId: "TR-1",
+      status: "failed",
+      changed: true,
+    });
+    expect(row.status).toBe("failed");
+    expect(row.progressPayload).toMatchObject({ semanticReview: {
+      state: "failed",
+      reason: "failure-analysis-evidence-changed",
+      action: "Submit a refreshed immutable review request with current failure evidence.",
+    } });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
   it("reports cancellation when it wins against an admission failure", async () => {
     mocks.db.taskArtifact.findUnique.mockImplementation(async () => { row.status = "canceled"; return null; });
     expect(await executePersistedSemanticReview("TR-1")).toMatchObject({ status: "canceled" });
