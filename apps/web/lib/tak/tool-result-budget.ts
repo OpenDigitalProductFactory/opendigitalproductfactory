@@ -77,6 +77,11 @@ export type ClampedToolResult = {
 
 function buildFullText(result: ModelFacingToolResult): string {
   if (!result.success) {
+    const data = result.data as { page?: { version?: number; disposition?: string }; recovery?: { toolName?: string } } | undefined;
+    if (data?.page?.version === 1 && data.page.disposition === "restart-required" && data.recovery?.toolName === "list_workrooms") {
+      return JSON.stringify({ success: false, error: result.error, message: result.message,
+        data: { page: data.page, recovery: data.recovery } });
+    }
     const err = result.error ?? result.message ?? "unknown error";
     return `Error: ${err}`;
   }
@@ -115,8 +120,8 @@ export function clampToolResultForModel(
   // Typed Workroom pages must never become a successful-looking text prefix.
   // A mask or an unusually small caller cap may enlarge/exceed the pre-sized
   // page. Refuse that envelope explicitly; its cursor must not skip unseen rows.
-  const page = (result.data as { page?: { version?: number; observationId?: string } } | undefined)?.page;
-  if (page?.version === 1 && typeof page.observationId === "string") {
+  const page = (result.data as { page?: { version?: number; observationId?: string; disposition?: string } } | undefined)?.page;
+  if (page?.version === 1 && (typeof page.observationId === "string" || page.disposition === "restart-required")) {
     const error = JSON.stringify({ success: false, error: "page_budget_too_small", recovery: "Restart list_workrooms without cursor and with limit:1; preserve filters." });
     return { text: error.length <= maxChars ? error : maxChars >= 2 ? "{}" : "", truncated: true, originalChars: full.length,
       ...(handle ? { rehydrationHandle: handle } : {}) };

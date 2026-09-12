@@ -48,4 +48,14 @@ describe("Workroom observation loading and transport", () => {
     expect(JSON.parse(output.text)).toMatchObject({ success: false, error: "page_budget_too_small" });
     expect(output.text.length).toBeLessThanOrEqual(300);
   });
+
+  it("preserves typed restart guidance for native agents without exposing unrelated error data", async () => {
+    const result = await listWorkroomObservation({} as never, { cursor: "invalid", status: "ready" }, "u", context);
+    const output = clampToolResultForModel(result);
+    expect(JSON.parse(output.text)).toMatchObject({ success: false, error: "invalid_cursor",
+      data: { page: { version: 1, disposition: "restart-required" }, recovery: { toolName: "list_workrooms", arguments: { status: "ready" } } } });
+    const tiny = clampToolResultForModel(result, { maxChars: 300 });
+    expect(JSON.parse(tiny.text)).toMatchObject({ success: false, error: "page_budget_too_small" });
+    expect(tiny.text.length).toBeLessThanOrEqual(300);
+  });
 });
