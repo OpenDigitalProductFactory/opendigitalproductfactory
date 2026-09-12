@@ -158,7 +158,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // sync (#5007), was fixed file-by-file, and the SHAPE was never guarded -
     // so the same defect was still live in a sibling federation module when
     // this guard first ran.
-    guard("prisma-null-contains", "Prisma Null-Contains Semantics", [
+    guard("prisma-runtime-traps", "Prisma Runtime Traps", [
       node("scripts/check-no-unguarded-not-contains.mjs"),
       node("--test", "scripts/check-no-unguarded-not-contains.test.mjs"),
       // BI-1281A164 drain: every DPF enum whose values carry hyphens declares
