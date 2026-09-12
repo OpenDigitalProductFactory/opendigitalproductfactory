@@ -66,6 +66,16 @@ export type ResolvedLocalCiPoolPolicy = {
   slotKeys: Array<"slot-0" | "slot-1">;
   rollbackReason: string | null;
   config: LocalCiPoolConfig | null;
+  /**
+   * The host observation this decision was actually taken on (BI-48F42581).
+   *
+   * The caller sends its own client sample and used to record that beside the
+   * server's rollbackReason, so a gate record could report 19.9% CPU next to a
+   * "host-cpu-high" refusal against an 85 ceiling. A reason and the numbers
+   * printed beside it have to come from one observation, or the record is not
+   * evidence. Present whenever the canonical broker contributed.
+   */
+  decidedHostPressure?: LocalCiHostPressure;
 };
 
 /**

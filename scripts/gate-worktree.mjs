@@ -1541,7 +1541,11 @@ async function main() {
           queuePosition: admission?.queuePosition ?? null,
           waitAgeMs: admission?.waitAgeMs ?? null,
           poolPolicy: claimResponse?.data?.poolPolicy ?? null,
-          hostPressure,
+          // The observation the DECISION was taken on, when the canonical broker
+          // contributed one (BI-48F42581). Falling back to our own client sample
+          // is honest only when nothing better exists; recording it beside a
+          // server-derived rollbackReason is what made records self-contradictory.
+          hostPressure: claimResponse?.data?.poolPolicy?.decidedHostPressure ?? hostPressure,
         },
       });
       break;
@@ -1576,7 +1580,11 @@ async function main() {
           resumeMode: admission.resumeMode ?? null,
           taskRunId: admission.taskRunId ?? null,
           poolPolicy: claimResponse?.data?.poolPolicy ?? null,
-          hostPressure,
+          // The observation the DECISION was taken on, when the canonical broker
+          // contributed one (BI-48F42581). Falling back to our own client sample
+          // is honest only when nothing better exists; recording it beside a
+          // server-derived rollbackReason is what made records self-contradictory.
+          hostPressure: claimResponse?.data?.poolPolicy?.decidedHostPressure ?? hostPressure,
         },
       });
       if (admission.resumeMode === "durable-task" && admission.taskRunId) {
