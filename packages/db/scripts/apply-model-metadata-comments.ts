@@ -29,6 +29,44 @@ const dryRun = process.argv.includes("--dry-run");
 
 type CatalogRow = { table: string; comment: string | null };
 
+/**
+ * `COMMENT ON` is a PostgreSQL UTILITY statement: it cannot be prepared, so it
+ * cannot take a bind parameter (BI-EA61F512). `COMMENT ON TABLE "x" IS $1`
+ * fails with `syntax error at or near "COMMENT"` at execution time — and the
+ * first cut of this script shipped exactly that, because `--dry-run` never
+ * executed the statement and so could not fail the way the real run failed.
+ * Every install therefore booted with an empty catalog while the dry-run
+ * reported 198 comments ready.
+ *
+ * The payload must be inlined as a quoted literal instead. Both helpers below
+ * quote defensively even though their inputs are constrained (table names come
+ * from pg_catalog, payloads are machine-generated JSON): an identifier or a
+ * literal built by string concatenation is exactly where an injection lives, so
+ * the escaping is explicit rather than assumed.
+ */
+export function quoteSqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+export function quoteSqlIdentifier(value: string): string {
+  if (value.includes(String.fromCharCode(0))) throw new Error(`Refusing to quote an identifier containing a NUL byte: ${JSON.stringify(value)}`);
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+/** Sentinel that unwinds a dry-run probe transaction; never escapes the applier. */
+class DryRunRollback extends Error {
+  constructor() {
+    super("dry-run rollback");
+    this.name = "DryRunRollback";
+  }
+}
+
+/** The exact statement the applier runs. Exported so a test can assert its shape without a database. */
+export function commentOnTableStatement(table: string, payload: string | null): string {
+  const target = quoteSqlIdentifier(table);
+  return `COMMENT ON TABLE ${target} IS ${payload === null ? "NULL" : quoteSqlLiteral(payload)}`;
+}
+
 export async function applyModelMetadataComments(opts: { dryRun?: boolean } = {}): Promise<{
   applied: number;
   unchanged: number;
@@ -41,6 +79,23 @@ export async function applyModelMetadataComments(opts: { dryRun?: boolean } = {}
   for (const issue of parsed.issues) {
     console.error(`[model-metadata] ${issue.file}:${issue.line} ${issue.model ?? ""} ${issue.message}`);
   }
+
+  const runCommentStatement = async (statement: string, rollback: boolean): Promise<void> => {
+    if (!rollback) {
+      await prisma.$executeRawUnsafe(statement);
+      return;
+    }
+    // Prove the statement really runs, then undo it: an interactive transaction
+    // whose callback throws is rolled back by Prisma.
+    await prisma
+      .$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(statement);
+        throw new DryRunRollback();
+      })
+      .catch((err: unknown) => {
+        if (!(err instanceof DryRunRollback)) throw err;
+      });
+  };
 
   const rows = await prisma.$queryRawUnsafe<CatalogRow[]>(
     `SELECT c.relname AS "table", obj_description(c.oid, 'pg_class') AS "comment"
@@ -66,9 +121,10 @@ export async function applyModelMetadataComments(opts: { dryRun?: boolean } = {}
       unchanged += 1;
       continue;
     }
-    if (!opts.dryRun) {
-      await prisma.$executeRawUnsafe(`COMMENT ON TABLE "${entry.table}" IS $1`, want);
-    }
+    // The dry-run EXECUTES the statement and rolls it back, so a syntax or
+    // permission error fails the dry-run too (BI-EA61F512: the previous
+    // dry-run skipped the write and could not fail the way the real run did).
+    await runCommentStatement(commentOnTableStatement(entry.table, want), opts.dryRun === true);
     applied += 1;
   }
 
@@ -77,7 +133,7 @@ export async function applyModelMetadataComments(opts: { dryRun?: boolean } = {}
     if (!comment || !comment.startsWith(MODEL_METADATA_COMMENT_PREFIX)) continue;
     if (declaredTables.has(table)) continue;
     if (parseCatalogComment(comment) === null && !comment.startsWith(MODEL_METADATA_COMMENT_PREFIX)) continue;
-    if (!opts.dryRun) await prisma.$executeRawUnsafe(`COMMENT ON TABLE "${table}" IS NULL`);
+    await runCommentStatement(commentOnTableStatement(table, null), opts.dryRun === true);
     removed += 1;
   }
 
