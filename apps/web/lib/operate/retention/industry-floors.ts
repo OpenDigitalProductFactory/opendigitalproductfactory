@@ -108,6 +108,12 @@ export function resolveEffectiveRetentionDays(
   policy: { category: RetentionFloorBucket; baseRetentionDays: number },
   industryKey: string | null | undefined,
   confirmedProcessingActivityFloorDays = 0,
+  // EP-A33A5C61 slice 6: floors derived from the obligations that actually bind
+  // this install (archetype AND jurisdiction), from obligation-floors.ts. They
+  // join the max() alongside the legacy industry table rather than replacing it
+  // — a floor may only ever lengthen, so the table stays until
+  // retention.test.ts proves the derived set covers every row it encodes.
+  obligationFloorDays: Partial<Record<RetentionFloorBucket, number>> = {},
 ): number {
   const floorKey = industryKey != null ? toFloorKey(industryKey) : null;
   const floor =
@@ -117,6 +123,7 @@ export function resolveEffectiveRetentionDays(
   return Math.max(
     policy.baseRetentionDays,
     floor ?? 0,
+    obligationFloorDays[policy.category] ?? 0,
     confirmedProcessingActivityFloorDays,
   );
 }

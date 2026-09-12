@@ -51,6 +51,7 @@ import { seedBankingCompliance } from "./seed-banking-compliance.js";
 import { seedUkCorpGovCompliance } from "./seed-uk-corp-gov-compliance.js";
 import { seedSoftwareHorizontalCompliance } from "./seed-software-horizontal-compliance.js";
 import { seedHrEmploymentCompliance } from "./seed-hr-employment-compliance.js";
+import { seedRetentionFloorObligations } from "./seed-retention-floor-obligations.js";
 import { seedBusinessOperationsCompliance } from "./seed-business-operations-compliance.js";
 import { seedVerticalRecurringCompliance } from "./seed-vertical-recurring-compliance.js";
 import { seedPeoplePremisesCompliance } from "./seed-people-premises-compliance.js";
@@ -2601,6 +2602,9 @@ async function main(): Promise<void> {
   await step("verticalRecurringCompliance", () => seedVerticalRecurringCompliance(prisma));
   await step("peoplePremisesCompliance", () => seedPeoplePremisesCompliance(prisma));
   await step("industrialVerticalCompliance", () => seedIndustrialVerticalCompliance(prisma));
+  // EP-A33A5C61 slice 6: attaches retention floors to regulations the packs
+  // above just seeded, so it must run after every compliance pack.
+  await step("retentionFloorObligations", () => seedRetentionFloorObligations(prisma));
   await step("businessCapabilityPerspective", async () => {
     const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
     console.log(

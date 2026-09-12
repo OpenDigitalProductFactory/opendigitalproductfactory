@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./bom-component-key": "./src/bom-component-key.ts",
     "./schema-source": "./src/schema-source.ts",
+    "./seed-retention-floor-obligations": "./src/seed-retention-floor-obligations.ts",
     "./model-metadata": "./src/model-metadata.ts",
     "./table-classification": "./src/table-classification.ts",
     "./reference-freshness": "./src/reference-freshness.ts",
