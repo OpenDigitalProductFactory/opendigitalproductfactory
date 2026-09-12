@@ -120,6 +120,7 @@
   },
   "pnpm": {
     "ignoredBuiltDependencies": [
+      "@parcel/watcher",
       "@scarf/scarf",
       "protobufjs",
       "unrs-resolver"
