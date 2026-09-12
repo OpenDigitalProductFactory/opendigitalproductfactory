@@ -28,7 +28,12 @@ export function detectScheduledRunInferenceFailure(input: {
 
 export type ScheduledRunToolExecution = {
   name: string;
-  result?: { success?: boolean; data?: { proposalId?: string; status?: string } };
+  result?: {
+    success?: boolean;
+    /** "approval_required" when the call opened a CoworkerActionEnvelope. */
+    error?: string;
+    data?: { proposalId?: string; status?: string };
+  };
 };
 
 export type ScheduledRequiredToolOutcome =
@@ -77,15 +82,35 @@ export function classifyScheduledRequiredTools(input: {
 
   for (const tool of input.authorizedTools) {
     if (!tool.sideEffect || !prompt.includes(tool.name.toLowerCase())) continue;
-    const attempts = input.executedTools.filter(
-      (execution) => execution.name === tool.name && execution.result?.success === true,
-    );
-    if (attempts.some((execution) => execution.result?.data?.status !== "proposed")) {
+    const calls = input.executedTools.filter((execution) => execution.name === tool.name);
+    if (
+      calls.some(
+        (execution) =>
+          execution.result?.success === true &&
+          execution.result.data?.status !== "proposed",
+      )
+    ) {
       continue;
     }
-    if (attempts.length > 0) {
-      // Attempted, and every attempt was diverted. Remember it, but keep
-      // looking: a genuinely absent mutation elsewhere still outranks this.
+    // Two different mechanisms park a governed mutation on a human decision.
+    // Both mean "the coworker asked; a person has not answered yet".
+    //   - AgentActionProposal: succeeds with data.status "proposed".
+    //   - CoworkerActionEnvelope: FAILS with error "approval_required".
+    // The envelope path is the larger one — 425 such tool failures on the
+    // reference install since 2026-08-25, led by record_initiative_evidence
+    // (187) and record_initiative_design_review (186). Reading those as "the
+    // tool executed zero times" is why the readiness and evidence chain looks
+    // broken: the coworker requested approval, was handed back a failure, and
+    // retried until it exhausted its turn.
+    const awaitingDecision = calls.some(
+      (execution) =>
+        (execution.result?.success === true &&
+          execution.result.data?.status === "proposed") ||
+        execution.result?.error === "approval_required",
+    );
+    if (awaitingDecision) {
+      // Remember it, but keep looking: a genuinely absent mutation elsewhere
+      // still outranks this.
       proposed ??= { kind: "proposed", toolName: tool.name };
       continue;
     }

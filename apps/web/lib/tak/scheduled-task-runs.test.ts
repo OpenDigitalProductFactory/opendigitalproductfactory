@@ -197,6 +197,61 @@ describe("classifyScheduledRequiredTools (BI-4F64C5D3)", () => {
     ).toEqual({ kind: "absent", toolName: "create_backlog_item" });
   });
 
+  it("calls an approval-envelope rejection proposed, not absent", async () => {
+    // The live marketing repro, TR-SCHED-76846488 on 2026-09-07: the coworker
+    // read its context, then called create_marketing_campaign_brief, which was
+    // rejected with error "approval_required" and an envelope expiring 15
+    // minutes later. Nobody was watching a Monday 16:10 autonomous run, so the
+    // envelope lapsed; the coworker saw a failed call and retried until it hit
+    // its safety limit. The run was filed as an error, and its last words were
+    // "couldn't complete a final answer before hitting my safety limit".
+    //
+    // 425 tool failures on this install carry that error since 2026-08-25.
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "If there is NO recent brief, create one with create_marketing_campaign_brief.",
+        authorizedTools: [{ name: "create_marketing_campaign_brief", sideEffect: true }],
+        executedTools: [
+          {
+            name: "create_marketing_campaign_brief",
+            result: { success: false, error: "approval_required" },
+          },
+        ],
+      }),
+    ).toEqual({ kind: "proposed", toolName: "create_marketing_campaign_brief" });
+  });
+
+  it("a failure that is not an approval request is still absent", async () => {
+    // Only a pending human decision earns the third verdict. A validation
+    // error, a denied grant or a crash is a real failure and must keep its
+    // retry.
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [
+          { name: "run_hive_scout_ingest", result: { success: false, error: "grant_denied" } },
+        ],
+      }),
+    ).toEqual({ kind: "absent", toolName: "run_hive_scout_ingest" });
+  });
+
+  it("a later successful call beats an earlier approval rejection", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [
+          { name: "run_hive_scout_ingest", result: { success: false, error: "approval_required" } },
+          { name: "run_hive_scout_ingest", result: { success: true } },
+        ],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+
   it("a read-only tool is never required", async () => {
     const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
     expect(
