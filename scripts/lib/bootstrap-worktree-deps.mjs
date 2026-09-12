@@ -164,8 +164,22 @@ function run(cmd, args, cwd, opts = {}) {
 // three carry a deliberate `false`, and it left every worktree created off main
 // stuck at SOURCE-ONLY with no way to converge. Pass the policy-denied set in so
 // a recorded decision counts as classified wherever it was recorded.
+// BI-5318366C: pnpm prints this INSTEAD of a package list when it cannot answer
+// the question at all. `pnpm ignored-builds` reads the `ignoredBuilds` key from
+// node_modules/.modules.yaml, and pnpm writes that key only on an install that
+// actually reached its build phase — so an install that links nothing new
+// rewrites the manifest WITHOUT it, and every later call prints this line.
+//
+// It is a diagnostic, not a package. Read as one it invented an unclassified
+// dependency named "Cannot identify as no node_modules found", failed the cheap
+// gate, and took every worktree sharing that node_modules to SOURCE-ONLY at
+// once — with the fabricated name as the only clue. Observed 2026-09-12 across
+// the whole host, costing a long read through pnpm's own dist bundle to explain.
+const PNPM_UNREADABLE_BUILD_RECORD = /cannot identify as no node_modules found/i;
+
 export function classifyIgnoredBuilds(stdout, policyDenied = new Set()) {
   const packages = [];
+  let indeterminate = false;
   let inUnclassifiedSection = false;
   for (const raw of String(stdout ?? "").split(/\r?\n/)) {
     if (/^\s*$/.test(raw)) {
@@ -180,11 +194,18 @@ export function classifyIgnoredBuilds(stdout, policyDenied = new Set()) {
     if (!inUnclassifiedSection) continue;
     const entry = raw.trim().replace(/^[-*•]\s*/, "");
     if (!entry || /^none\.?$/i.test(entry) || /^hint:/i.test(entry)) continue;
+    if (PNPM_UNREADABLE_BUILD_RECORD.test(entry)) {
+      indeterminate = true;
+      continue;
+    }
     // pnpm prints bare names here; a policy decision is keyed by name too.
     if (policyDenied.has(entry.replace(/@[^@]*$/, "")) || policyDenied.has(entry)) continue;
     packages.push(entry);
   }
-  return { ok: packages.length === 0, packages };
+  // Still fails closed: nothing here proves no build script went unclassified.
+  // But `indeterminate` separates "pnpm answered, and the answer was none" from
+  // "pnpm could not answer", so the caller can say which one it hit.
+  return { ok: packages.length === 0 && !indeterminate, packages, indeterminate };
 }
 
 /**
@@ -334,6 +355,12 @@ export function probeWorktreeReadiness(worktreePath, opts = {}) {
     status: classifyReadiness({ hasNodeModules, depProbeOk, gateOk }),
     reason: !ignoredBuilds.ok && ignoredBuilds.packages.length > 0
       ? `ignored_builds_unclassified:${ignoredBuilds.packages.join(",")}`
+      // BI-5318366C: name the state and its remedy. This is not a dependency
+      // anyone must classify — the package manager has no build record to read,
+      // and a clean install writes one.
+      : ignoredBuilds.indeterminate
+      ? "build_record_unreadable:the package manager kept no build record for this node_modules; "
+        + "remove node_modules at the workspace root and install again to write one"
       : missing.length > 0 && hasNodeModules && depProbeOk && linkCheck.ok
       ? `missing_compile_artifacts:${missing.map((m) => m.path).join(",")}`
       : readinessReason({ hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks: linkCheck.stale }),
