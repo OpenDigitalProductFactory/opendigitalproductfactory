@@ -1,4 +1,5 @@
 import { fileURLToPath } from "url";
+import { currentPageBuildBudget } from "./build-memory-budget.mjs";
 
 const turbopackRoot = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -41,6 +42,7 @@ const config = {
     root: turbopackRoot,
   },
   experimental: {
+    ...currentPageBuildBudget(),
     // Turbopack filesystem cache for `next build` — persists compilation
     // artifacts under `.next/cache` so a warm CI cache skips recompiling
     // unchanged modules. Still EXPERIMENTAL for production builds in Next 16.2,
