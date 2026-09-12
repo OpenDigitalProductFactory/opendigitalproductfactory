@@ -13,7 +13,18 @@ import {
   shouldSpawnResumer,
   spawnDurableWaitResumer,
 } from "./durable-wait-resumer.mjs";
-import { resumeUntilAdmitted } from "../local-ci-durable-wait-resumer.mjs";
+import {
+  EXIT_QUEUED,
+  INFRASTRUCTURE_BACKOFF_MS,
+  RETRYABLE_EXITS,
+  isRetryableExit,
+  resumeUntilAdmitted,
+} from "../local-ci-durable-wait-resumer.mjs";
+import {
+  EXIT_CONTROL_PLANE_STARVATION,
+  EXIT_SANDBOX_DRIFT,
+  classifyGateOutcome,
+} from "./sandbox-freshness.mjs";
 
 const GATE_ARGV = ["/usr/bin/node", "/repo/scripts/gate-worktree.mjs", "--branch", "fix/x"];
 
@@ -239,4 +250,90 @@ test("the resumer survives its sleep and re-claims more than once", async () => 
   );
   assert.ok(attempts.every((entry) => entry.code === 75));
   assert.equal(exitCode, 75, "still queued at its deadline is still queued, not a verdict");
+});
+
+// ── infrastructure is not a verdict (observed live 2026-09-12) ──────────────
+
+// RED for the field defect: attempt 7 returned exit 5, the resumer wrote
+// "finished", and the branch was left carrying a phantom FAIL that exact-tree
+// reuse replayed. A starved control plane is a host condition, not an answer.
+test("a control-plane starvation does not end the wait", async () => {
+  const codes = [EXIT_QUEUED, EXIT_CONTROL_PLANE_STARVATION, 0];
+  let i = 0;
+  const slept = [];
+  const { code, attempts, blockedAttempts } = await resumeUntilAdmitted({
+    gateArgv: ["/repo/scripts/gate-worktree.mjs"],
+    intervalMs: 20_000,
+    deadlineMs: 3_600_000,
+    env: {},
+    now: () => 0,
+    sleepFn: async (ms) => { slept.push(ms); },
+    spawnFn: () => {
+      const c = codes[i];
+      i += 1;
+      return { once(e, h) { if (e === "exit") queueMicrotask(() => h(c)); } };
+    },
+  });
+  assert.equal(code, 0, "the wait ends on the gate's real verdict, not on the starvation");
+  assert.equal(attempts, 3);
+  assert.equal(blockedAttempts, 1);
+  assert.equal(slept[1], INFRASTRUCTURE_BACKOFF_MS, "a host that just starved needs longer than the queue poll");
+});
+
+test("a killed build child does not end the wait either", async () => {
+  for (const infra of [87, 130, 143]) {
+    const codes = [infra, 1];
+    let i = 0;
+    const { code, attempts } = await resumeUntilAdmitted({
+      gateArgv: ["/repo/scripts/gate-worktree.mjs"],
+      intervalMs: 10,
+      deadlineMs: 3_600_000,
+      env: {},
+      now: () => 0,
+      sleepFn: async () => {},
+      spawnFn: () => {
+        const c = codes[i];
+        i += 1;
+        return { once(e, h) { if (e === "exit") queueMicrotask(() => h(c)); } };
+      },
+    });
+    assert.equal(code, 1, `exit ${infra} must be retried, then the real FAIL returned`);
+    assert.equal(attempts, 2);
+  }
+});
+
+test("a product FAIL ends the wait immediately - fail closed on safety", async () => {
+  const { code, attempts } = await resumeUntilAdmitted({
+    gateArgv: ["/repo/scripts/gate-worktree.mjs"],
+    intervalMs: 10,
+    deadlineMs: 3_600_000,
+    env: {},
+    now: () => 0,
+    sleepFn: async () => {},
+    spawnFn: () => ({ once(e, h) { if (e === "exit") queueMicrotask(() => h(1)); } }),
+  });
+  assert.equal(code, 1);
+  assert.equal(attempts, 1, "a real failure must not be retried into a green");
+});
+
+// Retrying a drifted sandbox cannot converge it; it would spin to the deadline.
+test("sandbox drift is not retried", () => {
+  assert.equal(isRetryableExit(EXIT_SANDBOX_DRIFT), false);
+});
+
+// The one rule that must never rot: this set is a SUBSET of what the canonical
+// classifier calls blocked. If someone reclassifies a code, this fails here
+// rather than silently turning an infrastructure blip into a verdict again.
+test("every retryable exit is one the canonical classifier calls blocked", () => {
+  for (const code of RETRYABLE_EXITS) {
+    const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: code });
+    assert.equal(
+      outcome.productEvidence, false,
+      `exit ${code} is treated as retryable but classifyGateOutcome calls it product evidence`,
+    );
+    assert.match(
+      outcome.status, /^blocked_/,
+      `exit ${code} is treated as retryable but classifies as "${outcome.status}"`,
+    );
+  }
 });
