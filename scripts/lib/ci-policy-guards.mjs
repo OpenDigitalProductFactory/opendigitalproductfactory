@@ -282,10 +282,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/pregate-exit-honesty.test.mjs",
         "scripts/pregate-fence-safety.test.mjs",
         "scripts/report-principle-vectors.test.mjs",
+        "scripts/check-authoring-cost-dimensions.test.mjs",
         "scripts/pre-push-gate-slot-contract.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
+      node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
