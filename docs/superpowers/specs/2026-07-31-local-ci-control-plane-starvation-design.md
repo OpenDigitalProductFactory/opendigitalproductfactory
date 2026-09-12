@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local-CI Control-Plane Starvation Prevention
 
 - **Status:** accepted for implementation
