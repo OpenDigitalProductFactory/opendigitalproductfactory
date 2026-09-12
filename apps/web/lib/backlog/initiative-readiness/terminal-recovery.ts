@@ -36,6 +36,7 @@ export type TerminalRecoveryRoom = {
 
 export type TerminalRecoveryEscalationReason =
   | "acceptance-evidence-required"
+  | "research-evidence-required"
   | "workroom-not-found"
   | "workroom-ambiguous"
   | "workroom-identity-incomplete"
@@ -50,7 +51,10 @@ export type TerminalRecoveryEscalationReason =
   | "canonical-artifact-unavailable";
 
 type TerminalEscalation = {
-  accountableRole: "acceptance-reviewer" | "delivery-coordinator";
+  // design-author owns RESEARCH_REQUIRED on every shape that carries it
+  // (shape-requirements.ts small() and medium()), so the research lane's
+  // escalation is addressed to the author, not to a reviewer (BI-7876699F).
+  accountableRole: "acceptance-reviewer" | "delivery-coordinator" | "design-author";
   toolName: "record_initiative_evidence" | "record_execution_evidence";
   grant: "initiative_evidence_write" | "backlog_write";
   reason: TerminalRecoveryEscalationReason;
@@ -75,6 +79,34 @@ function smallShapeAcceptanceEscalation(): TerminalInitiativeRecovery {
       grant: "backlog_write",
       reason: "acceptance-evidence-required",
       nextAction: "This delivery shape is accepted by the runtime check on the live install or by the failing-to-passing test, not by objective mapping. Record it with record_execution_evidence (kind manual_check or ux_verified) inside the current completion window, then cite that activity id in completionEvidence.evidenceActivityIds. Do not re-claim the item to refresh readiness; a re-claim does not reopen the window.",
+    }],
+  };
+}
+
+/**
+ * BI-7876699F: research is satisfied by the AUTHOR, never by objective mapping.
+ *
+ * When RESEARCH_REQUIRED was the only unmet lane this function did not exist, so
+ * the packet fell through to the workroom/baseline chain and answered
+ * "baseline-not-found — complete independent spec approval". A delivery-small
+ * shape's requirement set contains no OBJECTIVE_BASELINE_REQUIRED at all, so that
+ * route could never legally be taken: the item was unclosable by anyone, and the
+ * packet was pointing at a gate its own policy said did not apply.
+ *
+ * Same principle as smallShapeAcceptanceEscalation above (BI-05F8860A): name the
+ * writer the accountable role can actually reach, and do not consult machinery
+ * this lane does not use.
+ */
+function researchLaneEscalation(): TerminalInitiativeRecovery {
+  return {
+    reviewerRoutes: [],
+    unroutable: [],
+    escalations: [{
+      accountableRole: "design-author",
+      toolName: "record_initiative_evidence",
+      grant: "initiative_evidence_write",
+      reason: "research-evidence-required",
+      nextAction: "Research is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect on a named ref (commit or branch + file + line) and the failing-to-passing proof. This lane needs no objective baseline and no independent spec approval — the delivery shape does not require one.",
     }],
   };
 }
@@ -555,6 +587,15 @@ export async function resolveTerminalInitiativeRecovery(args: {
     .find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
   if (acceptanceLane && acceptanceLane.accountableRole === "delivery-coordinator") {
     return smallShapeAcceptanceEscalation();
+  }
+  // BI-7876699F: an unmet research lane is author-satisfiable on every shape.
+  // Checked after acceptance so the existing small-shape hint keeps precedence
+  // when both are open, and before the room/baseline chain because research
+  // does not use it.
+  const researchLane = [...args.decision.blockers, ...args.decision.unmet]
+    .find((entry) => entry.code === "RESEARCH_REQUIRED");
+  if (researchLane) {
+    return researchLaneEscalation();
   }
   const rooms = await ports.loadLiveRooms({
     itemId: args.decision.subject.id,

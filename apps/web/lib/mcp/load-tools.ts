@@ -7,11 +7,32 @@
 // write stay in the route/store — this module is presentation + payload shaping.
 
 import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
+import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
 type JsonRpcId = string | number | null;
 type NoMatchReason = "unknown-tool-name" | "reviewer-route-required" | "not-granted" | "intent-no-match" | "missing-query";
 type LoadToolsNoMatch = { reason: NoMatchReason; requestedNames?: string[] };
+
+/**
+ * A writer the author must NOT invoke directly — the registry decides, not the
+ * tool's name (BI-7876699F).
+ *
+ * `record_initiative_*` used to be matched by prefix, which is right for nine of
+ * the ten lanes and wrong for the only one that matters to an author:
+ * `record_initiative_evidence` is declared `independent: false` with
+ * `design-author` among its accountableRoles. Prefix-matching it meant a
+ * delivery-small item could never satisfy RESEARCH_REQUIRED — its own shape owes
+ * no baseline and no plan, so the author had no reachable writer at all and the
+ * item could not be closed by anyone.
+ *
+ * The prefix test also sat ABOVE the not-granted branch, so a missing grant was
+ * reported as "reviewer-route-required" and sent the operator to a recovery
+ * packet that issues no route. One registry, one answer.
+ */
+function isReviewerOnlyWriter(name: string): boolean {
+  return INITIATIVE_READINESS_LANES[name]?.independent === true;
+}
 
 export function classifyLoadToolsNoMatch(
   args: Record<string, unknown>,
@@ -26,7 +47,7 @@ export function classifyLoadToolsNoMatch(
   if (requestedNames.length > 0) {
     const reason = requestedNames.some((name) => !knownNames.has(name))
       ? "unknown-tool-name"
-      : requestedNames.some((name) => name.startsWith("record_initiative_"))
+      : requestedNames.some(isReviewerOnlyWriter)
         ? "reviewer-route-required"
         : requestedNames.some((name) => !grantedNames.has(name))
           ? "not-granted"
