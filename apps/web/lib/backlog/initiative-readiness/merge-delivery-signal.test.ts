@@ -141,23 +141,85 @@ describe("merge-delivery signal against real repositories (BI-043946C5)", () => 
   });
 });
 
+describe("a negative is only trusted against a current trunk (BI-043946C5)", () => {
+  let repo: Fixture;
+
+  beforeAll(async () => { repo = await makeRepo(); });
+  afterAll(async () => { await rm(repo.root, { recursive: true, force: true }).catch(() => {}); });
+
+  const ELEVEN_DAYS_AGO = new Date(Date.now() + 11 * 24 * 60 * 60 * 1000);
+
+  it("downgrades a negative to signal-unavailable when the trunk ref is stale", async () => {
+    // The Build Studio workspace is fetched at start_build, not on the completion
+    // path; it was measured ten days behind on a live install. A trunk that old
+    // reports merged work as unmerged with total confidence — the same silent
+    // wrong answer this whole change exists to remove, one layer along.
+    await expect(resolveMergeSignalFromRefs({
+      heads: [repo.unmergedSha],
+      pullRequests: [],
+      roots: [repo.root],
+      now: ELEVEN_DAYS_AGO,
+    })).resolves.toBe("signal-unavailable");
+  });
+
+  it("keeps a negative when the trunk ref is current", async () => {
+    await expect(resolveMergeSignalFromRefs({
+      heads: [repo.unmergedSha],
+      pullRequests: [],
+      roots: [repo.root],
+    })).resolves.toBe("not-merged");
+  });
+
+  it("still reports merged from a stale trunk, because reachability is monotone", async () => {
+    // Staleness can only ever make the trunk MISS a merge, never invent one, so a
+    // positive needs no freshness check and must not be withheld by one.
+    await expect(resolveMergeSignalFromRefs({
+      heads: [repo.mergedSha],
+      pullRequests: [],
+      roots: [repo.root],
+      now: ELEVEN_DAYS_AGO,
+    })).resolves.toBe("merged");
+  });
+
+  it("treats an unreadable trunk date as unavailable rather than as a negative", async () => {
+    await expect(resolveMergeSignalFromRefs({
+      heads: [repo.unmergedSha],
+      pullRequests: [],
+      roots: [repo.root],
+      readTrunkCommittedAt: async () => null,
+    })).resolves.toBe("signal-unavailable");
+  });
+});
+
 describe("mergeSignalRoots (BI-043946C5)", () => {
   it("puts the configured roots ahead of the built-in fallbacks", async () => {
     const { mergeSignalRoots } = await import("./backlog-terminal-transition");
-    const savedRepoRoot = process.env.DPF_REPO_ROOT;
-    const savedSourceRoot = process.env.DPF_HOST_SOURCE_ROOT;
+    const saved = {
+      repo: process.env.DPF_REPO_ROOT,
+      source: process.env.DPF_HOST_SOURCE_ROOT,
+      project: process.env.PROJECT_ROOT,
+    };
     try {
       process.env.DPF_REPO_ROOT = "/configured-a";
       process.env.DPF_HOST_SOURCE_ROOT = "/configured-b";
+      process.env.PROJECT_ROOT = "/sandbox-workspace";
       const roots = mergeSignalRoots();
       expect(roots[0]).toBe("/configured-a");
       expect(roots[1]).toBe("/configured-b");
+      // The runtime's own source root is probed ahead of the install-path guess,
+      // so a consumer install needs no operator configuration at all.
+      expect(roots[2]).toBe("/sandbox-workspace");
+      expect(roots.indexOf("/sandbox-workspace")).toBeLessThan(roots.indexOf("/host-dpf"));
       expect(roots).toContain("/host-dpf");
     } finally {
-      if (savedRepoRoot === undefined) delete process.env.DPF_REPO_ROOT;
-      else process.env.DPF_REPO_ROOT = savedRepoRoot;
-      if (savedSourceRoot === undefined) delete process.env.DPF_HOST_SOURCE_ROOT;
-      else process.env.DPF_HOST_SOURCE_ROOT = savedSourceRoot;
+      for (const [key, value] of [
+        ["DPF_REPO_ROOT", saved.repo],
+        ["DPF_HOST_SOURCE_ROOT", saved.source],
+        ["PROJECT_ROOT", saved.project],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   });
 });
