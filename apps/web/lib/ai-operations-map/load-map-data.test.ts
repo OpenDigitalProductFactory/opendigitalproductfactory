@@ -77,13 +77,13 @@ vi.mock("@/lib/inference/phase-model-resolution", () => ({
 }));
 
 import { prisma } from "@dpf/db";
+import { OPERATIONS_REVIEW_WHERE } from "./operations-run-read-model";
 import {
   RECENT_TOOL_LIMIT,
   WINDOWED_SOURCE_LIMIT,
   loadOperationsMapData,
   resolveEvidenceRange,
 } from "./load-map-data";
-
 describe("loadOperationsMapData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -202,7 +202,7 @@ describe("loadOperationsMapData", () => {
     expect(prisma.taskRun.findMany).toHaveBeenCalledWith({
       where: {
         archivedAt: null,
-        source: "proactive",
+        OR: [{ source: "proactive" }, OPERATIONS_REVIEW_WHERE],
       },
       orderBy: { startedAt: "desc" },
       take: 40,
@@ -611,7 +611,7 @@ describe("loadOperationsMapData", () => {
     expect(prisma.taskRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          source: "proactive",
+          OR: [{ source: "proactive" }, OPERATIONS_REVIEW_WHERE],
           startedAt: { gte: window.start, lte: window.end },
         }),
         take: WINDOWED_SOURCE_LIMIT,
@@ -621,7 +621,7 @@ describe("loadOperationsMapData", () => {
       expect.objectContaining({
         where: { archivedAt: null, OR: [
           { status: "stalled" },
-          { status: "input-required", a2aMetadata: { path: ["gateKind"], equals: "semantic-review" } },
+          { status: "input-required", ...OPERATIONS_REVIEW_WHERE },
         ] },
       }),
     );

@@ -632,3 +632,18 @@ screenshot and prescribed fresh measurement 34294055045 both show 369 arrival
 words. Update only that route's measured accessibility snapshot, retaining every
 numeric limit and every other route. The fresh measurement passed; the amended
 commit still requires independent review and protected CI.
+
+## September 12 reviewer outcome visibility
+
+WC-4B4B03F5 continues BI-06AE6833 on current main. Include native semantic
+reviews in the existing bounded recent TaskRun query, regardless of status;
+retain the separate outstanding-wait query and identity deduplication. Share
+the reviewer query predicate in the canonical Operations Map run read model.
+This preserves completed outcomes within the selected start-time window and
+existing source cap; it does not claim an unlimited historical ledger.
+
+Resolve the selected inspector against loaded evidence rather than the filtered
+list so changing a filter does not erase navigation context. No cached state or
+inferred completion is introduced. Verify query bounds, terminal reviewer
+projection without a recovery action, deduplication, and filter navigation.
+Protected CI and live portal verification remain required before completion.
