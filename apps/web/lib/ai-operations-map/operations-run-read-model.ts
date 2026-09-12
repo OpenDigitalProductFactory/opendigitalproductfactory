@@ -32,6 +32,11 @@
 import type { Prisma } from "@dpf/db";
 import type { OperationsMapSeverity } from "./types";
 
+/** Keep reviewer identity identical in recent outcomes and outstanding waits. */
+export const OPERATIONS_REVIEW_WHERE = {
+  a2aMetadata: { path: ["gateKind"], equals: "semantic-review" },
+} satisfies Prisma.TaskRunWhereInput;
+
 /**
  * Canonical TaskRun select for AI Operations Map projections. Both the
  * recent-window and stalled-window queries in load-map-data.ts use exactly

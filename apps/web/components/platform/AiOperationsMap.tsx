@@ -204,7 +204,7 @@ export function AiOperationsMap({
     ? agents.find((agent) => agent.agentId === selected.id) ?? null
     : null;
   const selectedProjection = selected.kind === "projection"
-    ? filteredProjections.find((projection) => projection.id === selected.id) ?? null
+    ? projections.find((projection) => projection.id === selected.id) ?? null
     : null;
 
   const applyQuickView = (viewId: OperationsMapQuickViewId) => {
