@@ -50,6 +50,32 @@ export function createLocalCiPassEvidenceValidity(options) {
   return createCiEvidenceValidity(options);
 }
 
+/**
+ * The freshness stamp carried by a reused canonical PASS, or null when the
+ * admission carried none this gate can stand behind (BI-03E1139A).
+ *
+ * A gate that reuses someone else's verdict must date it by the evidence's own
+ * clock. The pool lease beside it lives for minutes, and writing that expiry
+ * into the evidence field stamped a PASS as expired before it was written — so
+ * `pregate:status` answered STALE and the author was told to re-run a gate whose
+ * only possible outcome was to reuse the same verdict again.
+ *
+ * Strict by intent. A malformed or partial stamp yields null, and the caller
+ * runs the gate rather than guessing a window: a verdict nobody can date is not
+ * a verdict this gate may publish.
+ */
+export function readReusedEvidenceValidity(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const { issuedAt, expiresAt } = value;
+  // The expiry is the whole decision. The issue time is informational, and
+  // records written before the field existed do not carry one.
+  if (typeof expiresAt !== "string" || !Number.isFinite(Date.parse(expiresAt))) return null;
+  const issued = typeof issuedAt === "string" && Number.isFinite(Date.parse(issuedAt))
+    ? issuedAt
+    : null;
+  return { schemaVersion: 1, issuedAt: issued, expiresAt };
+}
+
 export function readLocalCiGateState(stateFile) {
   if (!stateFile) return null;
   try {

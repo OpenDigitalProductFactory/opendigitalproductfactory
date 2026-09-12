@@ -26,8 +26,31 @@ export type GateRunIdentity = GateRunIdentityInput & {
   schemaVersion: typeof GATE_RUN_IDENTITY_SCHEMA_VERSION;
 };
 
+/**
+ * The freshness stamp a local-CI PASS carries, as recorded by the run that
+ * produced it. A reuse decision is made against this and nothing else, so the
+ * caller reusing the verdict must be told the same window rather than left to
+ * infer one (BI-03E1139A).
+ */
+export type LocalCiEvidenceValidity = {
+  /** Informational. Older records predate the field. */
+  issuedAt: string | null;
+  /** The instant this reuse decision was actually made against. */
+  expiresAt: string;
+};
+
 export type LocalCiTerminalEvidenceProjection =
-  | { status: "reused"; evidenceRecordId: string; resultClass: "pass" | "fail" }
+  | {
+    status: "reused";
+    evidenceRecordId: string;
+    resultClass: "pass" | "fail";
+    /**
+     * Present whenever the reuse was decided by a real stamp. Reuse of a record
+     * that reached a product verdict always carries one; the infrastructure
+     * records that skip validity are `rerunnable`, never `reused`.
+     */
+    evidenceValidity: LocalCiEvidenceValidity | null;
+  }
   | { status: "rerunnable" }
   | {
     status: "blocked";
@@ -163,10 +186,18 @@ export function projectLocalCiTerminalEvidence(input: {
   if (expiresAt <= input.now.getTime()) {
     return { status: "blocked", reason: "expired-evidence" };
   }
+  // Hand back the very stamp this decision was made against. The caller writes
+  // the verdict into its own state and needs the evidence's clock; left without
+  // one it reached for the lease's, which is minutes long, and stamped a PASS as
+  // already expired (BI-03E1139A).
   return {
     status: "reused",
     evidenceRecordId: input.evidence.id,
     resultClass: details.status === "passed" ? "pass" : "fail",
+    evidenceValidity: {
+      issuedAt: typeof validity?.issuedAt === "string" ? validity.issuedAt : null,
+      expiresAt: String(validity?.expiresAt),
+    },
   };
 }
 

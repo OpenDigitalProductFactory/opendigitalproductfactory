@@ -10,6 +10,7 @@ import {
   isRecoverableInterruptedGateState,
   projectReusedPassMetadata,
   readLocalCiGateState,
+  readReusedEvidenceValidity,
   supersedeLosingSlotRecords,
   writeLocalCiGateState,
 } from "./local-ci-gate-state.mjs";
@@ -358,4 +359,68 @@ test("a wrapper that exited before a terminal state cannot withdraw a PASS eithe
   });
 
   assert.equal(readLocalCiGateState(stateFile).status, "passed");
+});
+
+test("a reused PASS is dated by the stamp it arrives with", () => {
+  const validity = readReusedEvidenceValidity({
+    issuedAt: "2026-09-12T07:52:00.000Z",
+    expiresAt: "2026-09-13T07:52:00.000Z",
+  });
+
+  assert.equal(validity.issuedAt, "2026-09-12T07:52:00.000Z");
+  assert.equal(validity.expiresAt, "2026-09-13T07:52:00.000Z");
+  assert.equal(validity.schemaVersion, 1);
+});
+
+test("an older record without an issue time still carries the expiry that decides reuse", () => {
+  const validity = readReusedEvidenceValidity({ expiresAt: "2026-09-13T07:52:00.000Z" });
+
+  assert.equal(validity.expiresAt, "2026-09-13T07:52:00.000Z");
+  assert.equal(validity.issuedAt, null);
+});
+
+test("a stamp this gate cannot read yields nothing, so the caller runs instead of guessing", () => {
+  // Each of these once reached the state file as an expiry the gate then
+  // enforced against itself (BI-03E1139A). A verdict nobody can date is not a
+  // verdict this gate may publish.
+  for (const value of [
+    null,
+    undefined,
+    "2026-09-13T07:52:00.000Z",
+    [],
+    {},
+    { issuedAt: "2026-09-12T07:52:00.000Z" },
+    { issuedAt: "2026-09-12T07:52:00.000Z", expiresAt: "whenever" },
+  ]) {
+    assert.equal(readReusedEvidenceValidity(value), null, JSON.stringify(value ?? null));
+  }
+});
+
+test("the evidence clock and the lease clock are recorded as two separate fields", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-reuse-clock-")), "gate.json");
+  const evidenceValidity = readReusedEvidenceValidity({
+    issuedAt: "2026-09-12T07:52:00.000Z",
+    expiresAt: "2026-09-13T07:52:00.000Z",
+  });
+
+  writeLocalCiGateState(stateFile, {
+    branch: "fix/x",
+    sha: "a".repeat(40),
+    gatePassed: true,
+    leaseId: "NPEL-1",
+    evidenceId: "E1",
+    status: "passed",
+    expiresAt: evidenceValidity.expiresAt,
+    // The lease died fourteen minutes before this record was written. Recorded
+    // in the evidence field it would have made the PASS unreadable.
+    leaseExpiresAt: "2026-09-12T08:08:05.061Z",
+    evidenceValidity,
+    resilience: null,
+    leaseEvents: [],
+  });
+
+  const state = readLocalCiGateState(stateFile);
+  assert.equal(state.expiresAt, "2026-09-13T07:52:00.000Z");
+  assert.equal(state.leaseExpiresAt, "2026-09-12T08:08:05.061Z");
+  assert.ok(Date.parse(state.expiresAt) > Date.parse(state.leaseExpiresAt));
 });

@@ -91,6 +91,7 @@ import {
   createLocalCiPassEvidenceValidity,
   projectReusedPassMetadata,
   readLocalCiGateState,
+  readReusedEvidenceValidity,
   supersedeLosingSlotRecords,
   writeLocalCiGateState,
 } from "./lib/local-ci-gate-state.mjs";
@@ -1397,6 +1398,21 @@ async function main() {
     if (claimResponse?.success === true && admission?.status === "reused") {
       const evidenceId = admission.evidenceRecordId || claimResponse.entityId || "";
       const passed = admission.resultClass === "pass";
+      // BI-03E1139A: a reused PASS is stamped with the EVIDENCE's clock, never
+      // the lease's. Evidence validity runs for a day; a pool lease runs for
+      // minutes. Writing the lease expiry into the evidence field produced a
+      // record born expired — pregate:status read it as STALE and the author was
+      // told to re-run a gate that could only ever reuse the same verdict again.
+      const reusedValidity = readReusedEvidenceValidity(admission.evidenceValidity);
+      // A reuse with no stamp is a server that did not tell us how fresh this
+      // verdict is. Absent evidence of freshness is not evidence of freshness,
+      // so do the work rather than inventing a window.
+      if (passed && !reusedValidity) {
+        die(
+          `local-CI admission reused evidence ${evidenceId} without a validity stamp; `
+            + "refusing to date a verdict this gate cannot vouch for — re-run the gate",
+        );
+      }
       if (queueObserverPath) {
         releaseLocalQueueObserver({
           path: queueObserverPath,
@@ -1411,7 +1427,11 @@ async function main() {
         leaseId: canonicalLeaseId,
         evidenceId,
         status: passed ? "passed" : "failed",
-        expiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        expiresAt: reusedValidity?.expiresAt
+          || claimResponse?.data?.lease?.expiresAt
+          || expiresAt,
+        leaseExpiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        evidenceValidity: reusedValidity,
         resilience: null,
         leaseEvents: [
           ...leaseEvents,
