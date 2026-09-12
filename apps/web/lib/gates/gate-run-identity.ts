@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
 
 export const GATE_RUN_IDENTITY_SCHEMA_VERSION = 1 as const;
-export const GATE_KINDS = ["local-integration-ci", "semantic-review"] as const;
+/**
+ * `in-platform-preflight` is the Build Studio fast tier: the guard gauntlet only,
+ * with no typecheck, tests, production build or image, because the sandbox has no
+ * Docker socket by design. It is a SEPARATE kind rather than a flag on
+ * `local-integration-ci` precisely so a fast-tier record can never be handed back
+ * to a claim asking for the heavy one — the gate key hashes the kind, so the two
+ * tiers derive different keys for the same tree and cannot be confused
+ * (BI-4A9910A9).
+ */
+export const GATE_KINDS = ["local-integration-ci", "semantic-review", "in-platform-preflight"] as const;
 
 export type GateKind = (typeof GATE_KINDS)[number];
 
