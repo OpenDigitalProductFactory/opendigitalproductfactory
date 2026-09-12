@@ -29,6 +29,11 @@ const mocks = vi.hoisted(() => ({
   notificationFindFirst: vi.fn(),
   notificationCreate: vi.fn(),
   notificationUpdateMany: vi.fn(),
+  bindObservations: vi.fn(),
+}));
+
+vi.mock("@/lib/work-capsules/pull-request-binding-runtime", () => ({
+  reconcileInventoryPullRequestBindings: mocks.bindObservations,
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -67,10 +72,24 @@ import {
   resolveContributorInventoryGitCwd,
   runContributorInventorySync,
   computeSnapshotDigest,
+  syncAndBind,
   type SyncSourceReaders,
 } from "./contributor-inventory-sync";
 
 const FIXED_NOW = new Date("2026-05-26T20:00:00.000Z");
+
+describe("inventory binding checkpoint", () => {
+  it("uses the persisted sync identity without repeating provider reads", async () => {
+    mocks.bindObservations.mockResolvedValue({ bound: 1 });
+    const run = vi.fn(async (name: string, callback: () => Promise<unknown>) =>
+      name === "run-sync-cron" ? { syncRunId: "persisted-run", status: "completed" } : callback());
+    expect(await syncAndBind({ run }, "run-sync-cron", { triggeredBy: "cron" })).toMatchObject({
+      syncRunId: "persisted-run", workroomBindings: { bound: 1 },
+    });
+    expect(run.mock.calls.map(([name]) => name)).toEqual(["run-sync-cron", "bind-workroom-pr-observations"]);
+    expect(mocks.bindObservations).toHaveBeenCalledWith("persisted-run");
+  });
+});
 
 function fakeReaders(
   overrides: Partial<SyncSourceReaders> = {},

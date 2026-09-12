@@ -685,6 +685,15 @@ function cuid(): string {
 
 // ─── Inngest function wrappers ──────────────────────────────────────────────
 
+export async function syncAndBind(step: Pick<Parameters<typeof gateAtEntry>[0], "run">, stepId: string, options: RunSyncOptions) {
+  const sync = await step.run(stepId, () => runContributorInventorySync(options)) as RunSyncResult;
+  const bindings = await step.run("bind-workroom-pr-observations", async () => {
+    const { reconcileInventoryPullRequestBindings } = await import("@/lib/work-capsules/pull-request-binding-runtime");
+    return reconcileInventoryPullRequestBindings(sync.syncRunId);
+  });
+  return { ...sync, workroomBindings: bindings };
+}
+
 export const contributorInventorySyncCron = inngest.createFunction(
   {
     id: "ops/contributor-inventory-sync-cron",
@@ -696,9 +705,7 @@ export const contributorInventorySyncCron = inngest.createFunction(
     const gate = await gateAtEntry(step, "ops/contributor-inventory-sync-cron");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    return await step.run("run-sync-cron", () =>
-      runContributorInventorySync({ triggeredBy: "cron", reapStuckRuns: true }),
-    );
+    return syncAndBind(step, "run-sync-cron", { triggeredBy: "cron", reapStuckRuns: true });
   },
 );
 
@@ -716,8 +723,6 @@ export const contributorInventorySyncOnDemand = inngest.createFunction(
     const triggeredBy =
       (event.data as { triggeredBy?: string } | undefined)?.triggeredBy ?? "mcp";
 
-    return await step.run("run-sync-on-demand", () =>
-      runContributorInventorySync({ triggeredBy, reapStuckRuns: false }),
-    );
+    return syncAndBind(step, "run-sync-on-demand", { triggeredBy, reapStuckRuns: false });
   },
 );
