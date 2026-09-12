@@ -127,7 +127,7 @@ describe("completeBacklogItemTransition", () => {
       dependencies: {
         resolveCompletionEvidence: async () => ({ kind: "evaluated", item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" }, verdict: { allowed: true, noOp: false, normalizedManifest: null, blockers: [], nextAction: null } }),
         reconcileObjectives: () => ({ state: "missing", baselineId: "BASE-1", evidenceRefs: [], requiredStatementIds: ["OBJ-1"] }),
-        resolveMergeDelivery: async () => false,
+        resolveMergeDelivery: async () => "not-merged" as const,
         projectReadiness: () => projected("input-required"),
       },
     });
@@ -165,7 +165,7 @@ describe("completeBacklogItemTransition", () => {
           },
         }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
-        resolveMergeDelivery: async () => false,
+        resolveMergeDelivery: async () => "not-merged" as const,
         projectReadiness: ((input: { completion: { acceptanceEvidence: string; objectiveReconciliation: string; evidenceRefs: Record<string, string[]> } }) => {
           seen.push(input);
           return projected("allowed");
@@ -208,7 +208,7 @@ describe("completeBacklogItemTransition", () => {
           },
         }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
-        resolveMergeDelivery: async () => false,
+        resolveMergeDelivery: async () => "not-merged" as const,
         projectReadiness: ((input: { completion: { acceptanceEvidence: string } }) => {
           seen.push(input);
           return projected("input-required");
@@ -249,7 +249,7 @@ describe("completeBacklogItemTransition", () => {
           },
         }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
-        resolveMergeDelivery: async () => false,
+        resolveMergeDelivery: async () => "not-merged" as const,
         projectReadiness: ((input: { completion: { acceptanceEvidence: string; objectiveReconciliation: string; evidenceRefs: Record<string, string[]> } }) => {
           seen.push(input);
           return projected("allowed");
@@ -288,7 +288,7 @@ describe("completeBacklogItemTransition", () => {
           },
         }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
-        resolveMergeDelivery: async () => false,
+        resolveMergeDelivery: async () => "not-merged" as const,
         projectReadiness: ((input: { completion: { acceptanceEvidence: string } }) => { seen.push(input); return projected("input-required"); }) as never,
       },
     });
@@ -308,7 +308,7 @@ describe("completeBacklogItemTransition", () => {
       dependencies: {
         resolveCompletionEvidence: async () => ({ kind: "evaluated", item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" }, verdict: { allowed: true, noOp: false, normalizedManifest: { workClass: "implementation", evidenceActivityIds: ["E-1"], useActiveBuildEvidence: false }, blockers: [], nextAction: null } }),
         reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["E-1"], requiredStatementIds: ["OBJ-1"] }),
-        resolveMergeDelivery: async () => false,
+        resolveMergeDelivery: async () => "not-merged" as const,
         projectReadiness: () => projected("allowed"),
       },
     });
@@ -338,7 +338,7 @@ describe("completeBacklogItemTransition", () => {
         // No hand-built manifest — delivery would otherwise read `missing`.
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["E-1"], requiredStatementIds: ["OBJ-1"] }),
-        resolveMergeDelivery: async () => true,
+        resolveMergeDelivery: async () => "merged" as const,
         projectReadiness: ((input: { completion: { deliveryEvidence: string; requirementReasons?: Record<string, string[]> } }) => { seen.push(input.completion); return projected("allowed"); }) as never,
       },
     });
@@ -361,7 +361,7 @@ describe("completeBacklogItemTransition", () => {
       dependencies: {
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: "BASE-1", evidenceRefs: [], requiredStatementIds: ["OBJ-1"] }),
-        resolveMergeDelivery: async () => false,
+        resolveMergeDelivery: async () => "not-merged" as const,
         projectReadiness: ((input: { completion: { deliveryEvidence: string } }) => { seen.push(input.completion); return projected("input-required"); }) as never,
       },
     });
@@ -384,7 +384,7 @@ describe("completeBacklogItemTransition", () => {
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         // No objective baseline to reconcile (the whole point — merged platform work).
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
-        resolveMergeDelivery: async () => true,
+        resolveMergeDelivery: async () => "merged" as const,
         resolveHasDesignSpec: async () => true,
         projectReadiness: ((input: { recognizeMergeThroughGates?: boolean; completion: { deliveryEvidence: string; acceptanceEvidence: string; objectiveReconciliation: string } }) => { seen.push(input); return projected("allowed"); }) as never,
       },
@@ -409,7 +409,7 @@ describe("completeBacklogItemTransition", () => {
       dependencies: {
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
-        resolveMergeDelivery: async () => true,
+        resolveMergeDelivery: async () => "merged" as const,
         resolveHasDesignSpec: async () => true,
         projectReadiness: ((input: { recognizeMergeThroughGates?: boolean; completion: { acceptanceEvidence: string } }) => { seen.push(input); return projected("input-required"); }) as never,
       },
@@ -417,6 +417,97 @@ describe("completeBacklogItemTransition", () => {
     expect(seen[0]?.recognizeMergeThroughGates).toBe(false);
     // Acceptance is NOT waved through for product work with no reconciliation.
     expect(seen[0]?.completion.acceptanceEvidence).toBe("missing");
+  });
+});
+
+describe("merge signal unavailability is reported, never disguised as a negative (BI-043946C5)", () => {
+  it("does NOT recognize direct-merge work when the signal could not run, and says so on every requirement it would have satisfied", async () => {
+    // Identical to the recognition case above in EVERY term except the signal:
+    // platform scope, no build, no product, no objective, design spec present.
+    // The only difference is that no runtime could answer whether it merged.
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: null, activeBuild: null, productObjectiveWork: [] });
+    const seen: Array<{
+      recognizeMergeThroughGates?: boolean;
+      completion: { requirementReasons?: Partial<Record<string, string[]>> };
+    }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Landed through the merge queue, but this runtime has no checkout to prove it.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "signal-unavailable" as const,
+        resolveHasDesignSpec: async () => true,
+        projectReadiness: ((input: {
+          recognizeMergeThroughGates?: boolean;
+          completion: { requirementReasons?: Partial<Record<string, string[]>> };
+        }) => { seen.push(input); return projected("input-required"); }) as never,
+      },
+    });
+    // Governance still fails safe: unknown is never treated as merged.
+    expect(seen[0]?.recognizeMergeThroughGates).toBe(false);
+    const reasons = seen[0]?.completion.requirementReasons;
+    for (const code of ["DELIVERY_EVIDENCE_REQUIRED", "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"]) {
+      const text = (reasons?.[code] ?? []).join(" ");
+      expect(text, `${code} must carry the unavailability reason`).toContain("could not run on this runtime");
+      expect(text, `${code} must not be reported as a negative verdict`).toContain("UNKNOWN");
+      expect(text).toContain("DPF_HOST_SOURCE_ROOT");
+    }
+  });
+
+  it("stays silent about the signal when the item could never qualify anyway", async () => {
+    // Demand-driven product work keeps the full lifecycle regardless of the
+    // signal, so naming an unavailable merge probe would be noise pointing at
+    // a lever that would change nothing.
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: "DP-1" });
+    const seen: Array<{ completion: { requirementReasons?: Partial<Record<string, string[]>> } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Product feature.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "signal-unavailable" as const,
+        resolveHasDesignSpec: async () => true,
+        projectReadiness: ((input: { completion: { requirementReasons?: Partial<Record<string, string[]>> } }) => { seen.push(input); return projected("input-required"); }) as never,
+      },
+    });
+    const reasons = seen[0]?.completion.requirementReasons;
+    expect((reasons?.ACCEPTANCE_EVIDENCE_REQUIRED ?? []).join(" ")).not.toContain("could not run");
+    expect((reasons?.OBJECTIVE_RECONCILIATION_REQUIRED ?? []).join(" ")).not.toContain("could not run");
+  });
+
+  it("a measured negative carries no unavailability text", async () => {
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: null, activeBuild: null, productObjectiveWork: [] });
+    const seen: Array<{ completion: { requirementReasons?: Partial<Record<string, string[]>> } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Not merged.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "not-merged" as const,
+        resolveHasDesignSpec: async () => true,
+        projectReadiness: ((input: { completion: { requirementReasons?: Partial<Record<string, string[]>> } }) => { seen.push(input); return projected("input-required"); }) as never,
+      },
+    });
+    const reasons = seen[0]?.completion.requirementReasons;
+    expect((reasons?.DELIVERY_EVIDENCE_REQUIRED ?? []).join(" ")).not.toContain("could not run");
   });
 });
 

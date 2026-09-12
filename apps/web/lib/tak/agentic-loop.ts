@@ -71,6 +71,7 @@ import {
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
 import { rotateTerminalWriterRoute } from "./terminal-writer-route";
+import { shouldExitWithLocalToolCallDiagnostic } from "./local-tool-call-diagnostic";
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -1356,7 +1357,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `totalMs=${Date.now() - startTime} ` +
         `ctxPeakTokens=${ctxPeakTokens} ctxZone=${ctxPressure.zone} ` +
         `toolSurface=${surface.toolCount} estToolTokens=${surface.estDefinitionTokens} surfaceZone=${surface.zone} ` +
-        `toolAccuracy=${economyMetrics.toolSelectionAccuracy === null ? "na" : economyMetrics.toolSelectionAccuracy.toFixed(2)}`,
+        // toolAccuracy scores the calls a turn MADE, so a requireTools turn that
+        // made none still logged a clean 1.00 and read as healthy (BI-2FA5A874).
+        `toolAccuracy=${economyMetrics.toolSelectionAccuracy === null ? "na" : economyMetrics.toolSelectionAccuracy.toFixed(2)}` +
+        (requireTools ? ` requiredToolsMet=${executedTools.length > 0}` : ""),
       ),
     );
     // BI-47443B67: persist the same rollup durably so the regression detector
@@ -2104,19 +2108,13 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         requireToolExecution: requireTools,
       });
 
-        // Local model produced text-only on iteration 0 of a tool-backed turn:
-        // exit with a diagnostic instead of nudging — nudging won't teach a
-        // small local model to use tools mid-turn, it just burns iterations.
-        // The previous Build-Studio carve-out (!BUILD_ROUTE_PATTERN) was the
-        // root cause of 200-iteration hangs on /build threads when the
-        // preferred provider was unavailable and routing fell back to local.
-        // See FB-71FB3A53 thread, 2026-05-22.
-        if (
-          shouldNudgeNow &&
-          iteration === 0 &&
-          executedTools.length === 0 &&
-          result.providerId === "local"
-        ) {
+        if (shouldExitWithLocalToolCallDiagnostic({
+          shouldNudgeNow,
+          iteration,
+          executedToolCount: executedTools.length,
+          providerId: result.providerId,
+          requireTools: Boolean(requireTools),
+        })) {
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
