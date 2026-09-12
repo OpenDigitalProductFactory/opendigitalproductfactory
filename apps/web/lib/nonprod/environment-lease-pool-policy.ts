@@ -141,16 +141,24 @@ export async function resolveNonprodPoolPolicy(input: {
       evidenceIsolationHealthy: false,
     };
   }
-  return resolveLocalCiPoolPolicy({
-    configValue,
-    host: mergeLocalCiHostPressure({
-      client: clientPressure,
-      server: serverPressure,
-    }),
-    manifestSlotCount: input.manifestSlotCount,
-    reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
-    env: process.env,
-    now: input.now,
-    installation,
+  const decidedHostPressure = mergeLocalCiHostPressure({
+    client: clientPressure,
+    server: serverPressure,
   });
+  // Hand the decided observation back with the decision (BI-48F42581). The
+  // caller only has its own client sample; recording that next to a
+  // server-derived rollbackReason produced gate records that contradicted
+  // themselves and sent operators looking for a bug in the wrong place.
+  return {
+    ...resolveLocalCiPoolPolicy({
+      configValue,
+      host: decidedHostPressure,
+      manifestSlotCount: input.manifestSlotCount,
+      reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
+      env: process.env,
+      now: input.now,
+      installation,
+    }),
+    decidedHostPressure,
+  };
 }

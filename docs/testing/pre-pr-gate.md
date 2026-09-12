@@ -611,8 +611,15 @@ consume this host reservation.
 
 Every queued observation persists its queue position, wait age, resolved pool
 policy (including `rollbackReason` and effective slot capacity), and paired
-host-pressure sample in the candidate's SHA-bound gate state. Later recovery or
-terminal writes retain the latest admission record. Diagnose a timeout from
+host-pressure sample in the candidate's SHA-bound gate state. That sample is
+the observation the decision was actually taken on — the client's own reading
+merged with the canonical runtime's, which is what the policy weighed. It was
+previously the caller's sample alone, so a record could name a server-derived
+`rollbackReason` beside client numbers that did not support it (a
+`host-cpu-high` refusal printed next to 19.9% CPU against an 85 ceiling). A
+reason and the numbers beside it now come from one observation, because a
+record that disagrees with itself is not evidence (BI-48F42581). Later recovery
+or terminal writes retain the latest admission record. Diagnose a timeout from
 that durable record; do not infer the refusal from process residency, cancel
 and recreate a healthy FIFO claim, or conflate Docker model residency and GPU
 VRAM with Windows physical-memory telemetry.
