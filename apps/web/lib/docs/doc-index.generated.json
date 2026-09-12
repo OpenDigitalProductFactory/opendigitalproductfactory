@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 737,
+  "pageCount": 738,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2750,6 +2750,18 @@
         "decision-rules",
         "links-to-live-work",
         "maintenance"
+      ]
+    },
+    "docs/architecture/workroom-review-profile-contract.md": {
+      "publicHref": "/architecture/workroom-review-profile-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-review-profile-read-contract",
+        "common-requirements-and-extensions",
+        "coverage-and-representative-domains",
+        "verification-and-recovery"
       ]
     },
     "docs/architecture/workroom-vocabulary-boundary.md": {
