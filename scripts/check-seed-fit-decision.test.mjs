@@ -113,3 +113,72 @@ describe("seed-fit PR gate", () => {
     }
   });
 });
+
+// BI-4F1E9249 - the decision may travel in the commit, so the gate can answer
+// before a pull request exists and the pre-push gate can refuse the push.
+describe("seed-fit decision in the commit range", () => {
+  const SEED = ["prompts/reviewer/code-review.prompt.md"];
+  const COMMIT_WITH_DECISION = `feat(prompts): sharpen the reviewer prompt
+
+Seed-Fit-Decision: global-default
+`;
+
+  it("accepts a decision stated only in a commit message", () => {
+    const result = evaluateSeedFitGate({
+      changedFiles: SEED,
+      commitMessages: COMMIT_WITH_DECISION,
+      prBody: "",
+      labels: [],
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.reason, "eligible-decision");
+    assert.equal(result.decision, "global-default");
+    assert.deepEqual(result.seedPaths, SEED);
+  });
+
+  it("still accepts a decision stated only in the PR body", () => {
+    const fromBody = evaluateSeedFitGate({
+      changedFiles: SEED,
+      prBody: "Seed-Fit-Decision: global-default",
+      labels: [],
+    });
+    assert.equal(fromBody.ok, true);
+    assert.equal(fromBody.decision, "global-default");
+  });
+
+  it("treats the same decision in both sources as one decision, not a contradiction", () => {
+    const result = evaluateSeedFitGate({
+      changedFiles: SEED,
+      commitMessages: "Seed-Fit-Decision: global-default",
+      prBody: "Seed-Fit-Decision: global-default",
+      labels: [],
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.decision, "global-default");
+  });
+
+  it("refuses a commit and a PR body that disagree", () => {
+    const result = evaluateSeedFitGate({
+      changedFiles: SEED,
+      commitMessages: "Seed-Fit-Decision: global-default",
+      prBody: "Seed-Fit-Decision: install-local-only",
+      labels: [],
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "contradictory-decisions");
+  });
+
+  it("reads a scoped decision's enforcement mechanism from the commit too", () => {
+    const result = evaluateSeedFitGate({
+      changedFiles: SEED,
+      commitMessages: "Seed-Fit-Decision: vertical-scoped mechanism=seed-gate symbol=nothingReferencesThis",
+      prBody: "",
+      labels: [],
+      readFile: () => "",
+    });
+    // Parsed from the commit, then refused on evidence. That is the mechanism
+    // check doing its job, not the commit source being ignored.
+    assert.equal(result.ok, false);
+    assert.notEqual(result.reason, "missing-decision");
+  });
+});

@@ -54,8 +54,14 @@ export const PREFLIGHT_SKIP_ENV = "DPF_SKIP_PREGATE_PREFLIGHT_REASON";
 // a full CI round trip on #4558, where Docs Impact failed in CI on an edge the
 // preflight had just declared clean.
 //
-// Two gates stay excluded, and these reasons do NOT expire:
-//   - seed-fit-gate reads the PR body, which does not exist before push;
+// seed-fit-gate joined this list on 2026-09-11 (BI-4F1E9249). Its exclusion
+// reason — "reads the PR body, which does not exist before push" — was removed
+// rather than waived: the gate now reads `git log <base>..HEAD` for its
+// decision, as its four sibling decision gates already did. It cost a full CI
+// round trip on #5291, where a kernel principle was pushed without a seed-fit
+// decision and the fix needed an amended commit plus a fresh local-CI gate.
+//
+// ONE gate stays excluded, and that reason does NOT expire:
 //   - decision-baseline MERGES origin/main into the branch — a tree mutation
 //     the preflight must never perform.
 export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
@@ -65,6 +71,7 @@ export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
   "data-impact-gate",
   "convergence-impact-gate",
   "spec-plan-doc-gate",
+  "seed-fit-gate",
 ]);
 
 // Exit-output signatures that mean "this host cannot run the guard", not
