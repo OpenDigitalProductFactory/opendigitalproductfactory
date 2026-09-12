@@ -4062,6 +4062,7 @@
         "anti-pattern",
         "additivity-to-never-fabricate",
         "why-one-rule-not-a-per-case-enumeration",
+        "the-rule-governs-estimates-not-only-gates",
         "related-principles"
       ]
     },
@@ -4986,6 +4987,7 @@
         "why-this-exists",
         "the-contract",
         "anti-pattern",
+        "two-checks-and-the-report-looks-identical-either-way",
         "related-principles"
       ]
     },
