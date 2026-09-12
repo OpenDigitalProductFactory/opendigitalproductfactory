@@ -109,6 +109,34 @@ import {
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 
+/**
+ * Append the gate identity behind one queued claim, for BI-D35B85BF Wanted 2.
+ *
+ * One JSONL line per queued claim, beside the queue observer records so the
+ * same reap clears both. Two lines for one wait with two different claimKeys
+ * name the component that moved; a single line is equally informative.
+ *
+ * Never throws: this is diagnostics, and a gate must not fail because a
+ * diagnostic file could not be written.
+ */
+function recordQueuedClaimIdentity({ directory, branch, sha, claimKey, leaseId, identity }) {
+  if (!directory) return;
+  try {
+    mkdirSync(directory, { recursive: true });
+    appendFileSync(
+      resolvePath(directory, "queued-claim-identity.jsonl"),
+      `${JSON.stringify({
+        at: new Date().toISOString(),
+        branch,
+        sha,
+        leaseId,
+        claimKey,
+        identity: identity ?? null,
+      })}\n`,
+    );
+  } catch { /* diagnostics must never take the gate down */ }
+}
+
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
 const LOCAL_CI_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
@@ -1551,12 +1579,32 @@ async function main() {
           releaseLocalQueueObserver({ path: queueObserverPath, token: gateObserverIdentity.token });
           queueObserverPath = "";
         }
+        // BI-D35B85BF Wanted 2. A resumed wait was observed minting a SECOND
+        // queue row with a different server-derived gate:<hash>, orphaning the
+        // first for its full two-hour deadline. The server derives that hash
+        // from repository + integrationTreeSha + evidencePlanDigest +
+        // toolchainFingerprint, and the two claims are gone by the time anyone
+        // looks, so which component moved has never been established.
+        //
+        // This is deliberately observation, not a fix: if the integration tree
+        // genuinely changed, a new key is CORRECT and only the orphaned row is
+        // the defect. Appending the identity behind every queued claim makes the
+        // next real wait answer the question instead of inviting a guess.
+        recordQueuedClaimIdentity({
+          directory: queueObserverDirectory,
+          branch,
+          sha,
+          claimKey,
+          leaseId,
+          identity: preAdmissionGateIdentity,
+        });
         process.stderr.write(JSON.stringify({
           status: "queued",
           code: "local_ci_durable_wait",
           leaseId,
           taskRunId: admission.taskRunId,
           claimKey,
+          gateIdentity: preAdmissionGateIdentity ?? null,
           queuePosition: admission.queuePosition ?? null,
           resumeMode: "durable-task",
           // Name the owner of the resume outright. A caller reading "caller"

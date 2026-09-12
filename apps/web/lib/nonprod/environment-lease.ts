@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
-import { planEnvironmentAdmission, type AdmissionLease } from "./environment-lease-admission";
+import {
+  ABANDONED_QUEUE_ROW_AFTER_MS,
+  planEnvironmentAdmission,
+  type AdmissionLease,
+} from "./environment-lease-admission";
 import { type LocalCiHostPressure, type ResolvedLocalCiPoolPolicy } from "./local-ci-pool-policy";
 import type { LocalCiCapacityBroker } from "./local-ci-capacity-broker";
 import {
@@ -153,6 +157,7 @@ async function reconcileEnvironmentInTransaction(input: {
   /** BI-B1CB7EC3: only these rows may take a slot on this pass. */
   admissibleLeaseIds?: string[];
   livenessWindowMs?: number;
+  abandonedWaiterAfterMs?: number;
 }): Promise<{
   expiredLeaseIds: string[];
   admittedLeaseIds: string[];
@@ -178,6 +183,7 @@ async function reconcileEnvironmentInTransaction(input: {
     slotKeys: input.slotKeys,
     admissibleLeaseIds: input.admissibleLeaseIds,
     livenessWindowMs: input.livenessWindowMs,
+    abandonedWaiterAfterMs: input.abandonedWaiterAfterMs,
   });
 
   if (plan.expiredLeaseIds.length > 0) {
@@ -452,6 +458,9 @@ export async function claimNonprodEnvironmentLease(input: {
       livenessWindowMs: selfAdmitting
         ? admittedLeaseTtlMs(input.environmentKey, ttlMs)
         : undefined,
+      // Only a self-admitting environment has a known re-claim cadence, so it is
+      // the only one where silence is evidence of abandonment (BI-D35B85BF).
+      abandonedWaiterAfterMs: selfAdmitting ? ABANDONED_QUEUE_ROW_AFTER_MS : undefined,
     });
     admittedNow = reconciliation.admittedLeaseIds.includes(lease.id);
     queueDepth = reconciliation.queueDepth;
