@@ -161,6 +161,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("prisma-null-contains", "Prisma Null-Contains Semantics", [
       node("scripts/check-no-unguarded-not-contains.mjs"),
       node("--test", "scripts/check-no-unguarded-not-contains.test.mjs"),
+      // BI-1281A164 drain: every DPF enum whose values carry hyphens declares
+      // members with underscores and @maps them. Prisma accepts only the
+      // MEMBER; the database spelling throws at runtime, and a mocked Prisma in
+      // a unit test does not enforce the enum - which is why declare_break_fix
+      // shipped completely broken with every test green (BI-D36E2916, #5185).
+      node("scripts/check-no-mapped-enum-database-value.mjs"),
+      node("--test", "scripts/check-no-mapped-enum-database-value.test.mjs"),
     ]),
     guard("db-commandment-coverage", "DB Commandment Coverage", [
       // The never-wipe-db commandment guarded two spellings and allowed three
