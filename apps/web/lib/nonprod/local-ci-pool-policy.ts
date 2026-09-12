@@ -548,7 +548,8 @@ export function resolveLocalCiPoolPolicy(input: {
     });
     const hostBuildCapacity = localCiBuildHeadroomCapacity({
       dockerAvailableMemoryBytes:
-        input.host.dockerAvailableMemoryBytes ?? Number.NaN,
+        Math.max(0, (input.host.dockerAvailableMemoryBytes ?? Number.NaN)
+          - config.ceilings.minAvailableMemoryBytes),
       builderMemoryBytes,
       builderMemoryUsageBytes: input.host.builderMemoryUsageBytes ?? [],
       manifestCapacity,

@@ -159,6 +159,41 @@ builds. The prior rollback remains binding until that new evidence exists.
   bounded policy;
 - portal/MCP/PostgreSQL/Docker health is sampled before, during, and after the gate.
 
+## 2026-09-12 amendment: page-worker and admission memory budgets
+
+BI-06AE6833 / WC-3064DEE4 extends this design to repair the infrastructure failure
+preventing reviewer-recovery visibility verification. The visibility candidate
+at `0ac23a372279bb4a5062025e36b0eef3bcb92a51` compiled with Next 16.3.3, then ran
+11 page-data/static-generation workers. After 75 of 151 pages, the log recorded
+SIGKILL and BuildKit ResourceExhausted (`cannot allocate memory`). The builder
+ceiling was 16 GiB; Docker reported 23.47 GiB total. The child-process peak and
+whether the exhausted boundary was the container or VM remain unmeasured.
+
+Withdraw the earlier 8 GiB high-water plus 2 GiB margin admission calibration.
+Reserve the full existing 16 GiB builder ceiling pending representative new
+measurements. Apply the configured safety floor to Docker available memory as
+well as host memory through the existing pool policy. Existing builder usage is
+deducted from each remaining reservation; running jobs do not reserve their
+memory a second time. No new scheduler or resource registry is introduced.
+
+The canonical Next config uses one shared page-build budget: at most two workers,
+one concurrent page per worker, and one worker when memory or CPU evidence is
+missing or insufficient. Available and constrained process memory bound the host
+memory input. The 8 GiB allowance per worker is a conservative planning budget,
+not a measured peak or hard heap limit. This may lengthen page generation; it does
+not establish that an upstream memory-retention defect is fixed. The existing
+16 GiB boundary and watchdog remain authoritative.
+
+Next documents [static-generation concurrency controls](https://nextjs.org/docs/app/api-reference/config/next-config-js/staticGeneration)
+and [build memory investigation](https://nextjs.org/docs/app/guides/memory-usage).
+The installed worker selector consumes `experimental.cpus`; its alternative
+memory-based selector has a minimum of four workers and cannot meet this budget.
+
+Acceptance requires source tests for unknown/small/large memory, safety-floor
+boundaries and slot isolation, followed by a canonical build recording worker
+count, peak memory and control-plane health. Unit tests alone do not establish
+runtime recovery or completion of BI-06AE6833.
+
 ## Dependency readiness for the bounded build
 
 
