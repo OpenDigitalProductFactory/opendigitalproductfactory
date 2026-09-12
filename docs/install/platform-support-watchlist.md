@@ -27,6 +27,14 @@ Fedora 39 / Debian 12, air-gapped Linux.
 
 ## How to use this file
 
+For `@parcel/watcher` 2.6.0, retain optional dependencies: Windows x64, macOS
+arm64, and Linux x64/arm64 glibc/musl use locked prebuilt binaries. The canonical
+`allowBuilds` policy denies its opt-in node-gyp install hook. A target lacking
+a prebuilt binary needs a compatibility review, not a silent source-build
+fallback. A Windows snapshot/create-event check passed; cross-platform runtime
+verification belongs to the canonical build. See the
+[bounded-build dependency disposition](../superpowers/specs/2026-07-31-local-ci-control-plane-starvation-design.md#dependency-readiness-for-the-bounded-build).
+
 - **Before** adding a host-specific service, scrape target, bind mount, shell
   command, or hardcoded URL/port, scan the relevant section below.
 - **When** you fix a new platform-specific defect, add a row. Each PR that

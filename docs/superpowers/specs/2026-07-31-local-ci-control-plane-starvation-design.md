@@ -189,3 +189,21 @@ Acceptance requires source tests for unknown/small/large memory, safety-floor
 boundaries and slot isolation, followed by a canonical build recording worker
 count, peak memory and control-plane health. Unit tests alone do not establish
 runtime recovery or completion of BI-06AE6833.
+
+### Dependency readiness for the bounded build
+
+Explicitly deny the existing `@parcel/watcher` install hook in `allowBuilds`.
+Version 2.6.0 loads a platform-specific optional prebuilt binary before trying
+a local build. Its [install hook](https://github.com/parcel-bundler/watcher/blob/v2.6.0/scripts/build-from-source.js)
+only invokes node-gyp when `npm_config_build_from_source=true`. Locked prebuilds
+cover DPF's Windows x64 host, macOS arm64 host, and Linux x64/arm64 glibc/musl
+build targets. Keep optional dependencies enabled; do not silently fall back to
+source compilation on a target without a prebuild. Such a target needs a separate
+compatibility decision. No dependency version or integrity pin changes.
+
+This classifies an already-denied script, rather than authorizing additional
+install execution. A fresh managed install recorded the hook as unclassified,
+while an older sibling install had no watcher entry at all. The recorded policy
+makes readiness independent of that installation history. Verify managed
+readiness and exercise the Windows prebuilt watcher's snapshot operation;
+Linux loading and the production build remain canonical-build checks.

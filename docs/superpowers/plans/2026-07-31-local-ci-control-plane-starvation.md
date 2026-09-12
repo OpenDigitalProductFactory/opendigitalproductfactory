@@ -166,8 +166,10 @@ the reviewer visibility candidate remains separate and immutable for its review.
 
 Source verification so far: 22 budget/pool tests and 20 bounded-builder/manifest
 tests pass. The affected capacity-profile Vitest suite also passes all 20 tests.
-The general worktree readiness probe still reports an unclassified
-`@parcel/watcher` install script; this successful targeted run does not classify
-that script or prove the production build. No install-script approval is implied
-by this memory repair.
+The initial managed readiness probe refused an unclassified `@parcel/watcher`
+install script. The companion spec now records its explicit deny disposition:
+use locked prebuilt binaries, without source compilation during install. Readiness
+now reports compile-ready; 37 policy/bootstrap tests pass and a Windows x64
+snapshot/create-event check exercised the prebuilt binary successfully. Linux
+binary loading and the production build still require canonical verification.
 This amendment does not close the overarching execution/portal acceptance work.
