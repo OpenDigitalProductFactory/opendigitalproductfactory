@@ -22,6 +22,10 @@ vi.mock("./prompt-loader", () => ({
   loadPrompt: vi.fn(),
 }));
 
+vi.mock("./coworker-job-description", () => ({
+  loadCoworkerJobDescription: vi.fn(),
+}));
+
 vi.mock("@/lib/actions/agent-skills", () => ({
   getSkillsForAgentLegacy: vi.fn(),
 }));
@@ -42,6 +46,7 @@ import { prisma } from "@dpf/db";
 import { resolveAgentForRoute } from "./agent-routing";
 import { coworkerIdFromRecordRoute } from "./selected-coworker-route";
 import { loadPrompt } from "./prompt-loader";
+import { loadCoworkerJobDescription } from "./coworker-job-description";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
 import { can } from "@/lib/permissions";
@@ -71,6 +76,14 @@ describe("resolveAgentForRouteWithPrompts", () => {
       if (key === "company-mission") return "Company mission";
       return fallback ?? "";
     });
+    vi.mocked(loadCoworkerJobDescription).mockImplementation(
+      async (agentIdOrSlug: string, fallback: string) => ({
+        content: fallback,
+        resolved: false,
+        source: "unresolved",
+        canonicalAgentId: agentIdOrSlug,
+      }),
+    );
     vi.mocked(can).mockReturnValue(true);
     vi.mocked(prisma.agent.findFirst).mockResolvedValue({
       agentId: "AGT-WS-SCOUT",
@@ -110,8 +123,10 @@ describe("resolveAgentForRouteWithPrompts", () => {
     });
 
     expect(ensureAgentPrincipalIdentity).toHaveBeenCalledWith("external-catalog-scout");
-    expect(loadPrompt).toHaveBeenCalledWith(
-      "route-persona",
+    // BI-5CCBF85B: the job description is resolved by the coworker's identity,
+    // not by guessing that a persona file is named after it. The generic
+    // instruction is passed only as the last resort if nothing resolves.
+    expect(loadCoworkerJobDescription).toHaveBeenCalledWith(
       "external-catalog-scout",
       expect.stringContaining("External Catalog Scout"),
     );
