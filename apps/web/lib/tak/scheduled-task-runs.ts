@@ -26,27 +26,85 @@ export function detectScheduledRunInferenceFailure(input: {
   return classifyInferenceFailure(input.content);
 }
 
+export type ScheduledRunToolExecution = {
+  name: string;
+  result?: { success?: boolean; data?: { proposalId?: string; status?: string } };
+};
+
+export type ScheduledRequiredToolOutcome =
+  /** The required mutation landed. */
+  | { kind: "executed" }
+  /**
+   * The required mutation was attempted and DIVERTED to an AgentActionProposal
+   * (BI-80532D5C), because the run's actionBoundary is "propose". The run did
+   * its job at the boundary it was given; what is outstanding is an owner
+   * decision, not a retry.
+   */
+  | { kind: "proposed"; toolName: string }
+  /** The required mutation was never attempted. This is the failure. */
+  | { kind: "absent"; toolName: string };
+
+/**
+ * Which required governed mutations a scheduled run actually completed.
+ *
+ * WHY THIS IS THREE STATES AND NOT TWO (BI-4F64C5D3).
+ *
+ * The original check asked only "did the mutation land?", and treated a
+ * proposal as a no — deliberately, because a proposal is not delivery. But when
+ * the run's actionBoundary is "propose", diverting the call IS the correct
+ * behaviour, so every propose-boundary coworker recorded lastStatus=error and
+ * was handed to the BI-754C9E82 retry cadence, which re-proposed what it had
+ * already proposed.
+ *
+ * Measured on the reference install on 2026-09-12: 183 AgentActionProposal rows
+ * in status "proposed" going back to 2026-08-26, none ever approved, including
+ * 55 copies of one run_hive_scout_ingest and 50 of one run_discovery_triage.
+ * Those are not seventeen days of daily proposals; that is the retry loop. The
+ * lastError text said so out loud — "the daily external catalog scout pass has
+ * been proposed and is now awaiting your approval" — filed as a failure.
+ *
+ * So: absent is a failure, executed is a success, and proposed is neither. The
+ * caller records the third verdict instead of collapsing it into one of the
+ * other two.
+ */
+export function classifyScheduledRequiredTools(input: {
+  prompt: string;
+  authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
+  executedTools: ScheduledRunToolExecution[];
+}): ScheduledRequiredToolOutcome {
+  const prompt = input.prompt.toLowerCase();
+  let proposed: ScheduledRequiredToolOutcome | null = null;
+
+  for (const tool of input.authorizedTools) {
+    if (!tool.sideEffect || !prompt.includes(tool.name.toLowerCase())) continue;
+    const attempts = input.executedTools.filter(
+      (execution) => execution.name === tool.name && execution.result?.success === true,
+    );
+    if (attempts.some((execution) => execution.result?.data?.status !== "proposed")) {
+      continue;
+    }
+    if (attempts.length > 0) {
+      // Attempted, and every attempt was diverted. Remember it, but keep
+      // looking: a genuinely absent mutation elsewhere still outranks this.
+      proposed ??= { kind: "proposed", toolName: tool.name };
+      continue;
+    }
+    return { kind: "absent", toolName: tool.name };
+  }
+
+  return proposed ?? { kind: "executed" };
+}
+
 /** Baseline reproduction: explicit governed mutations are not yet terminal requirements. */
 export function detectScheduledRequiredToolFailure(input: {
   prompt: string;
   authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
-  executedTools: Array<{
-    name: string;
-    result?: { success?: boolean; data?: { proposalId?: string; status?: string } };
-  }>;
+  executedTools: ScheduledRunToolExecution[];
 }): string | null {
-  const prompt = input.prompt.toLowerCase();
-  for (const tool of input.authorizedTools) {
-    if (!tool.sideEffect || !prompt.includes(tool.name.toLowerCase())) continue;
-    const succeeded = input.executedTools.some(
-      (execution) =>
-        execution.name === tool.name &&
-        execution.result?.success === true &&
-        execution.result.data?.status !== "proposed",
-    );
-    if (!succeeded) return `required governed tool ${tool.name} executed zero times`;
-  }
-  return null;
+  const outcome = classifyScheduledRequiredTools(input);
+  return outcome.kind === "absent"
+    ? `required governed tool ${outcome.toolName} executed zero times`
+    : null;
 }
 
 export function detectScheduledRunFailure(input: {

@@ -71,6 +71,16 @@ export type WorkHealth =
   | "ok"
   /** Last run reported an error. */
   | "error"
+  /**
+   * Ran correctly and its work is waiting on an owner decision (BI-4F64C5D3).
+   *
+   * A run under a "propose" actionBoundary diverts its mutation to an
+   * AgentActionProposal. That is the run succeeding, so it is not an error; but
+   * nothing has been delivered, so it is not OK either. Reporting it as OK is
+   * how 183 proposals accumulated on the reference install with nobody told
+   * there was anything to approve.
+   */
+  | "awaiting-approval"
   /** Active + recurring, but nextRunAt is well past due — it has stopped firing. */
   | "overdue"
   /** Has never run, and it maintains run data — so this is a real silence. */
@@ -377,6 +387,10 @@ export function deriveHealth(input: HealthInput, now: Date): {
     return { health: enabled ? "never" : "spent", overdueByMs: 0 };
   }
   if (lastStatus === "error") return { health: "error", overdueByMs: 0 };
+  // Neither green nor error: the run did its job and delivery waits on the
+  // owner (BI-4F64C5D3). Checked before the overdue/ok paths so a task that
+  // proposed on its last tick reads as needing a decision, not as healthy.
+  if (lastStatus === "proposed") return { health: "awaiting-approval", overdueByMs: 0 };
   if (!enabled || !nextRunAt) return { health: "ok", overdueByMs: 0 };
 
   const lateBy = now.getTime() - nextRunAt.getTime();

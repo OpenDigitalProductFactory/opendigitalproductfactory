@@ -57,6 +57,7 @@ function laneOf(job: ScheduledWorkView): Lane {
 const HEALTH_PILL: Record<WorkHealth, { bg: string; color: string; label: string }> = {
   ok: { bg: "var(--dpf-state-success)", color: "var(--dpf-success)", label: "OK" },
   error: { bg: "var(--dpf-state-error)", color: "var(--dpf-error)", label: "ERROR" },
+  "awaiting-approval": { bg: "var(--dpf-state-warning)", color: "var(--dpf-warning)", label: "NEEDS APPROVAL" },
   overdue: { bg: "var(--dpf-state-warning)", color: "var(--dpf-warning)", label: "OVERDUE" },
   never: { bg: "var(--dpf-surface-3)", color: "var(--dpf-muted)", label: "NEVER RUN" },
   untracked: { bg: "var(--dpf-surface-3)", color: "var(--dpf-muted)", label: "NO REPORTING" },
@@ -131,7 +132,7 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
  *  "untracked" is deliberately absent: a cron with tracksRunData:false reports
  *  nothing by design, and counting those made the strip read 51 when 3 were
  *  real. An attention count nobody believes is worse than none. */
-const ATTENTION: WorkHealth[] = ["error", "overdue", "never"];
+const ATTENTION: WorkHealth[] = ["error", "overdue", "never", "awaiting-approval"];
 
 export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWorkView[] }) {
   const [jobs, setJobs] = useState<ScheduledWorkView[]>(initialJobs);
@@ -252,7 +253,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
             >
               {attention.length} need{attention.length === 1 ? "s" : ""} attention
             </button>
-            {(["error", "overdue", "never"] as WorkHealth[]).map((h) => {
+            {(["error", "overdue", "never", "awaiting-approval"] as WorkHealth[]).map((h) => {
               const n = jobs.filter((j) => j.health === h).length;
               if (n === 0) return null;
               return (

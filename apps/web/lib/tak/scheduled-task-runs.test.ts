@@ -73,7 +73,17 @@ describe("detectScheduledRequiredToolFailure", () => {
     ).toBe("required governed tool promote_to_build_studio executed zero times");
   });
 
-  it("does not mistake a pending action proposal for an executed governed mutation", async () => {
+  it("does not call a diverted proposal a failed run (BI-4F64C5D3)", async () => {
+    // This case used to report "executed zero times". A proposal is genuinely
+    // not delivery — but when the run's actionBoundary is "propose", diverting
+    // the call is the run behaving correctly, and calling that a failure put
+    // every propose-boundary coworker into the BI-754C9E82 retry cadence, which
+    // re-proposed what it had already proposed. Measured on the reference
+    // install 2026-09-12: 183 proposals since 2026-08-26, none approved,
+    // including 55 copies of a single run_hive_scout_ingest.
+    //
+    // The distinction the old boolean could not carry now lives in
+    // classifyScheduledRequiredTools: absent is a failure, proposed is not.
     const { detectScheduledRequiredToolFailure } = await import("./scheduled-task-runs");
     expect(
       detectScheduledRequiredToolFailure({
@@ -89,7 +99,113 @@ describe("detectScheduledRequiredToolFailure", () => {
           },
         ],
       }),
-    ).toBe("required governed tool promote_to_build_studio executed zero times");
+    ).toBeNull();
+  });
+});
+
+describe("classifyScheduledRequiredTools (BI-4F64C5D3)", () => {
+  const REQUIRED = [{ name: "run_hive_scout_ingest", sideEffect: true }];
+  const PROMPT = "Invoke run_hive_scout_ingest once before writing any summary.";
+
+  it("calls a landed mutation executed", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [{ name: "run_hive_scout_ingest", result: { success: true } }],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+
+  it("calls a diverted mutation proposed, and names the tool", async () => {
+    // The live shape: the coworker said "the daily external catalog scout pass
+    // has been proposed and is now awaiting your approval", and the platform
+    // filed the run as a failure.
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [
+          {
+            name: "run_hive_scout_ingest",
+            result: { success: true, data: { proposalId: "prop-1", status: "proposed" } },
+          },
+        ],
+      }),
+    ).toEqual({ kind: "proposed", toolName: "run_hive_scout_ingest" });
+  });
+
+  it("calls a mutation that was never attempted absent — still a failure", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [{ name: "get_marketing_summary", result: { success: true } }],
+      }),
+    ).toEqual({ kind: "absent", toolName: "run_hive_scout_ingest" });
+  });
+
+  it("a failed attempt is absent, not proposed", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [{ name: "run_hive_scout_ingest", result: { success: false } }],
+      }),
+    ).toEqual({ kind: "absent", toolName: "run_hive_scout_ingest" });
+  });
+
+  it("one landed attempt beats an earlier diverted one", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [
+          {
+            name: "run_hive_scout_ingest",
+            result: { success: true, data: { proposalId: "p", status: "proposed" } },
+          },
+          { name: "run_hive_scout_ingest", result: { success: true } },
+        ],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+
+  it("a genuinely absent mutation outranks a diverted one elsewhere", async () => {
+    // A run that proposed one thing and never attempted another has still
+    // failed: the retry cadence is the right home for the missing one.
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Call run_hive_scout_ingest, then create_backlog_item.",
+        authorizedTools: [
+          { name: "run_hive_scout_ingest", sideEffect: true },
+          { name: "create_backlog_item", sideEffect: true },
+        ],
+        executedTools: [
+          {
+            name: "run_hive_scout_ingest",
+            result: { success: true, data: { proposalId: "p", status: "proposed" } },
+          },
+        ],
+      }),
+    ).toEqual({ kind: "absent", toolName: "create_backlog_item" });
+  });
+
+  it("a read-only tool is never required", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Call get_marketing_summary first.",
+        authorizedTools: [{ name: "get_marketing_summary" }],
+        executedTools: [],
+      }),
+    ).toEqual({ kind: "executed" });
   });
 });
 
