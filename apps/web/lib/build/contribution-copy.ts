@@ -13,11 +13,21 @@ export const CONTRIBUTION_COPY = {
   tokenScope: {
     maintainerDirect:
       "This token needs `contents:write` on the upstream repo. Only maintainers of the OpenDigitalProductFactory org should use this mode.",
+    // BI-D75B87B1: this promised a fork the shipped code never creates. Both
+    // shipping paths write a branch straight into the TARGET repository with
+    // head and base the same repo; the fork dispatcher exists but has no
+    // production caller and sits behind a default-off flag. The old wording told
+    // the operator their code would land in their own namespace under their own
+    // credentials, which is not what happens, so it is corrected rather than
+    // softened.
     forkPr:
-      "This token needs the `public_repo` scope on your own GitHub account. It does NOT need access to the upstream repo — the platform will create a fork under your account the first time you contribute.",
+      "This token needs `contents:write` on the repository you are contributing to. The platform does NOT create a fork — it writes a branch named dpf/<id>/<slug> directly into that repository and opens a pull request there. Your commits are authored under this install's pseudonymous identity; your real name and email stay local.",
   },
+  // BI-D75B87B1: the exposure is the TOKEN OWNER, not a fork owner — there is
+  // no fork. Naming the wrong mechanism made the trade-off sound avoidable by
+  // choosing a different fork target, which it is not.
   pseudonymityTradeoff:
-    "Your GitHub username will be visible on every PR you contribute. The platform-generated commit identity (dpf-agent-<shortId>) still applies to commit metadata, but the fork owner is necessarily visible on GitHub. If that is not acceptable, use a pseudonymous GitHub account for this install.",
+    "The GitHub account whose token this install uses will be visible as the author of every contribution. The platform-generated commit identity (dpf-agent-<shortId>) still applies to commit metadata, but the token owner is necessarily visible on GitHub. If that is not acceptable, use a dedicated GitHub account for this install.",
   machineUserOptIn: {
     label: "I am using a dedicated machine-user GitHub account",
     description:

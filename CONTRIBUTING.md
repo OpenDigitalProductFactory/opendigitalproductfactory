@@ -116,7 +116,15 @@ Configure provider choices in **Admin > AI Workforce > Providers & Routing**; do
 
 ## Contributing from a running install
 
-DPF installs can ship features built in Build Studio back to the upstream repo through the platform's own contribution pipeline — fork, branch, commit, and PR all happen automatically once GitHub auth is configured once in Admin > Platform Development. This is distinct from the manual fork → branch → PR flow documented above, which remains the supported path for human contributors who don't run a DPF install.
+DPF installs can ship features built in Build Studio back to the upstream repo through the platform's own contribution pipeline, once GitHub auth is configured in Admin > Platform Development. This is distinct from the manual fork -> branch -> PR flow documented above, which remains the supported path for human contributors who don't run a DPF install.
+
+**What the shipped pipeline actually does today, corrected 2026-09-12 (BI-D75B87B1).** This section previously said "fork, branch, commit, and PR all happen automatically". The fork half is not true of the shipped code, and the difference matters because it changes where your code lands and whose access carries it.
+
+What happens: the install writes a branch named `dpf/<clientId>/<slug>` **directly into the target repository** through the GitHub API, then opens a pull request with head and base in that same repository. There is no fork step. The token configured for the install is what authorises the write, and the commit is authored under the install's pseudonymous identity (`dpf-agent-<shortId>`), with your real name and email staying in the local database.
+
+A fork-based model is designed and present in the code, but it is not wired to either shipping path and sits behind a flag that is off by default. Until that changes, choose a setup tier on the understanding that contributions are written into the target repo rather than into a fork of it.
+
+Naming trap worth knowing: the `fork_only` contribution mode does **not** mean "contribute via a fork". It means do not contribute — keep changes local. Any mode other than `fork_only` is opted in to contributing.
 
 The setup below applies to anyone whose contributions originate from a running install (Build Studio features, hive contributions, scripted automation). The choice of tier determines only how the install authenticates to GitHub — the resulting PRs look identical from the upstream side.
 
