@@ -129,6 +129,6 @@
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.62.0",
     "docx": "^9.7.1",
-    "tsx": "^4.23.12"
+    "tsx": "^4.23.13"
   }
 }
