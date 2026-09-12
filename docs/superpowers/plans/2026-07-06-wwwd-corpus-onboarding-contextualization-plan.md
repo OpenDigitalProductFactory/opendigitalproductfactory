@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # WWWD Corpus & Onboarding Contextualization — Review & Plan
 
 **Date:** 2026-07-06
