@@ -13,7 +13,9 @@ import {
   recoverInterruptedGateState,
   resolvePregateGateContext,
   reviveInterruptedQueuedGateState,
+  shouldReuseExistingPass,
   shouldUseShell,
+  stripForceRerunFlag,
 } from "./pregate.mjs";
 
 test("pregate recovery uses the bare common directory as the canonical root", () => {
@@ -448,4 +450,60 @@ test("a clean exit is still not a recovery", async () => {
   });
 
   assert.equal(recovered.reason, "not-a-recoverable-invocation");
+});
+
+// BI-1669E08A. A claim for a HEAD that already carries a passing, non-stale gate
+// record must report that pass and stop. Re-running can only lose information:
+// the tree is identical, so a second verdict is either the same or wrong — and
+// the second run takes the record with it the moment it starts.
+//
+// Reproduced twice on this install. 2026-09-10 on chore/retired-substrate-sweep:
+// a waiting loop re-invoked pregate and a 0xC0000142 launch failure erased the
+// PASS. 2026-09-12 on fix/local-ci-runner-tests-run-on-windows: NOTHING
+// re-invoked pregate — the durable-wait detached resumer ran the gate to a PASS
+// and the original queued claim was then also admitted, wrote `running` over the
+// record, and died on blocked_control_plane_starvation. A two-step erasure.
+test("a PASS at HEAD is reused instead of starting a second run", () => {
+  assert.deepEqual(
+    shouldReuseExistingPass({ args: [], verdictAtHead: "PASS" }),
+    { reuse: true, reason: "a passing local-CI gate record already covers this HEAD" },
+  );
+});
+
+test("every non-PASS verdict still runs the gate, and names what it saw", () => {
+  for (const verdict of ["NO-RECORD", "STALE", "FAIL", "PENDING", "INCONCLUSIVE"]) {
+    const decision = shouldReuseExistingPass({ args: [], verdictAtHead: verdict });
+    assert.equal(decision.reuse, false, verdict);
+    assert.match(decision.reason, new RegExp(verdict));
+  }
+  // An unreadable record must fail OPEN into running the gate, never into reuse:
+  // corroboration that cannot be read is not corroboration (BI-A9CF0D69).
+  const unreadable = shouldReuseExistingPass({ args: [], verdictAtHead: "" });
+  assert.equal(unreadable.reuse, false);
+  assert.match(unreadable.reason, /unreadable/);
+});
+
+test("--force-rerun re-gates a passing HEAD, and record-exempt invocations never reuse", () => {
+  const forced = shouldReuseExistingPass({ args: ["--force-rerun"], verdictAtHead: "PASS" });
+  assert.equal(forced.reuse, false);
+  assert.match(forced.reason, /--force-rerun/);
+
+  // --finalize-evidence exists precisely to act on an existing record; short-
+  // circuiting it would make the reuse path eat its own recovery tool.
+  for (const exempt of ["--dry-run", "--finalize-evidence", "--help", "-h"]) {
+    const decision = shouldReuseExistingPass({ args: [exempt], verdictAtHead: "PASS" });
+    assert.equal(decision.reuse, false, exempt);
+    assert.match(decision.reason, /record-exempt/);
+  }
+});
+
+test("the force flag is consumed by the wrapper and never forwarded to the gate", () => {
+  // gate-worktree.mjs dies on an unknown option, so forwarding it would turn a
+  // deliberate re-gate into a crash.
+  assert.deepEqual(
+    stripForceRerunFlag(["--branch", "fix/x", "--force-rerun", "--no-push"]),
+    ["--branch", "fix/x", "--no-push"],
+  );
+  assert.deepEqual(stripForceRerunFlag([]), []);
+  assert.deepEqual(stripForceRerunFlag(["--no-push"]), ["--no-push"]);
 });

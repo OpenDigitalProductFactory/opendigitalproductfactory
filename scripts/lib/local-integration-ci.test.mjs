@@ -11,6 +11,7 @@ import {
   executeLocalIntegrationPlan,
   resolveGitRevision,
   resolveCommandInvocation,
+  isHostProcessLaunchFailure,
 } from "./local-integration-ci.mjs";
 
 describe("createLocalIntegrationPlan", () => {
@@ -402,6 +403,9 @@ describe("createLocalIntegrationPlan", () => {
       elapsedMs: 1180,
       status: 1,
       signal: null,
+      // BI-1669E08A: the diagnostics now say whether the host could START the
+      // command. An exit 1 from a command that ran is a verdict, so: false.
+      hostLaunchFailure: false,
       error: null,
     });
   });
@@ -524,4 +528,65 @@ describe("resolveGitRevision", () => {
       spawnSyncImpl: () => ({ status: 128, stdout: "", stderr: "fatal: bad revision\n" }),
     }), /failed to resolve missing: fatal: bad revision/);
   });
+});
+
+// BI-1669E08A, second half. 0xC0000142 (3221225794) is STATUS_DLL_INIT_FAILED:
+// Windows could not START the process. Nothing ran, so nothing was graded — but
+// the runner passed the code straight through as a command failure, the gate
+// recorded `failed`, and a real PASS for that tree was superseded by it.
+// Observed 2026-09-10 on chore/retired-substrate-sweep: the git merge step died
+// 7 ms in with exactly this code.
+//
+// The runner already has this concept — classifyTypecheckResult calls
+// status null/-1/4294967295 "runner-termination" — it just never covered the
+// launch failure, and never reached the integration plan's own commands.
+describe("host launch failure is not a verdict (BI-1669E08A)", () => {
+it("a Windows process-initialisation failure is a launch failure, not a verdict", () => {
+  assert.equal(isHostProcessLaunchFailure(3221225794), true, "0xC0000142 STATUS_DLL_INIT_FAILED");
+  assert.equal(isHostProcessLaunchFailure(4294967295), true, "the wrapper-terminated sentinel");
+  assert.equal(isHostProcessLaunchFailure(null), true, "a killed spawn reports no status");
+  assert.equal(isHostProcessLaunchFailure(-1), true);
+});
+
+it("an ordinary non-zero status stays a verdict about the diff", () => {
+  for (const status of [1, 2, 86, 87, 130, 143]) {
+    assert.equal(isHostProcessLaunchFailure(status), false, String(status));
+  }
+  assert.equal(isHostProcessLaunchFailure(0), false);
+});
+
+it("a command that could not be started reports infrastructure death, not its raw code", () => {
+  const plan = { commands: [["git", "merge", "--no-ff", "--no-edit", "--signoff", "candidate"]] };
+  const errors = [];
+  const outcome = executeLocalIntegrationPlan(plan, {
+    spawnSyncImpl: () => ({ status: 3221225794, signal: null }),
+    baseEnv: {},
+    platform: "win32",
+    now: () => 0,
+    log: () => {},
+    error: (line) => errors.push(line),
+  });
+
+  // EXIT_CHILD_SIGNAL_DEATH is what classifyGateOutcome already reads as
+  // "infrastructure evidence, NOT a product build failure". Passing 3221225794
+  // through instead is what let a launch failure outrank a real pass.
+  assert.equal(outcome.status, 87);
+  assert.equal(outcome.diagnostics.status, 3221225794, "the raw code stays in the diagnostics");
+  assert.equal(outcome.diagnostics.hostLaunchFailure, true);
+  assert.match(errors.join("\n"), /command-failure/);
+});
+
+it("a genuine command failure still reports its own status", () => {
+  const plan = { commands: [["pnpm", "test"]] };
+  const outcome = executeLocalIntegrationPlan(plan, {
+    spawnSyncImpl: () => ({ status: 1, signal: null }),
+    baseEnv: {},
+    platform: "linux",
+    now: () => 0,
+    log: () => {},
+    error: () => {},
+  });
+  assert.equal(outcome.status, 1);
+  assert.equal(outcome.diagnostics.hostLaunchFailure, false);
+});
 });

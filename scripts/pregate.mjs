@@ -66,6 +66,55 @@ export function isRecordExemptInvocation(args) {
   );
 }
 
+/** The flag that forces a re-gate of a HEAD that already passed (BI-1669E08A). */
+export const FORCE_RERUN_FLAG = "--force-rerun";
+
+/**
+ * BI-1669E08A. Should this invocation reuse the PASS already recorded for HEAD
+ * instead of starting a second run?
+ *
+ * A second run of an identical tree cannot add information — its verdict is
+ * either the same or wrong — but it can destroy some, because a run takes the
+ * record the moment it starts. Both observed erasures on this install ran that
+ * way: 2026-09-10 a waiting loop re-invoked pregate and a 0xC0000142 launch
+ * failure ate the PASS; 2026-09-12 nothing re-invoked anything at all — the
+ * durable-wait detached resumer gated to a PASS and the original queued claim
+ * was then also admitted, wrote `running` over it, and died on starvation.
+ *
+ * Deliberately keyed on the SAME reconciled verdict the exit-honesty rule uses,
+ * so "already passed" cannot mean one thing to the wrapper's entry and another
+ * to its exit. Anything but PASS runs the gate, and an unreadable record runs it
+ * too: corroboration that cannot be read is not corroboration (BI-A9CF0D69).
+ *
+ * @returns {{ reuse: boolean, reason: string }}
+ */
+export function shouldReuseExistingPass({ args = [], verdictAtHead = "" } = {}) {
+  if (isRecordExemptInvocation(args)) {
+    return { reuse: false, reason: "record-exempt invocation — it acts on the record rather than reading it" };
+  }
+  if (args.includes(FORCE_RERUN_FLAG)) {
+    return { reuse: false, reason: `${FORCE_RERUN_FLAG} was passed — re-gating a HEAD that already has a verdict` };
+  }
+  if (verdictAtHead !== "PASS") {
+    return {
+      reuse: false,
+      reason: verdictAtHead
+        ? `verdict at HEAD is ${verdictAtHead}, not PASS`
+        : "verdict at HEAD is unreadable",
+    };
+  }
+  return { reuse: true, reason: "a passing local-CI gate record already covers this HEAD" };
+}
+
+/**
+ * Drop the wrapper-only force flag before the gate sees it — gate-worktree.mjs
+ * dies on an unknown option, so forwarding it would turn a deliberate re-gate
+ * into a crash (BI-1669E08A).
+ */
+export function stripForceRerunFlag(args = []) {
+  return args.filter((arg) => arg !== FORCE_RERUN_FLAG);
+}
+
 // Pure exit-code policy so the honesty rules are unit-testable without a gate:
 // timedOut (admission window elapsed, nothing gated) and status-0-without-a-
 // corroborating-PASS both map to ABANDONED_OR_UNRECORDED_EXIT_CODE; a genuine
@@ -755,6 +804,19 @@ async function main() {
     process.exit(1);
   }
 
+  // BI-1669E08A: check BEFORE the preflight. A tree that already has a passing
+  // record for this exact HEAD needs neither the three-minute guard parity run
+  // nor a lease; starting either can only cost time and risk the record.
+  const reuse = shouldReuseExistingPass({ args, verdictAtHead: readReconciledVerdictAtHead() });
+  if (reuse.reuse) {
+    process.stdout.write(
+      `pregate: ${reuse.reason} — not starting a second run.\n`
+        + `pregate: a second run of an identical tree can only repeat or contradict that verdict, and it takes the record the moment it starts.\n`
+        + `pregate: read it with  pnpm run pregate:status  — re-gate anyway with  pnpm run pregate -- ${FORCE_RERUN_FLAG}\n`,
+    );
+    process.exit(0); // exit-0: a PASS record bound to current HEAD already exists; this run reused it and gated nothing
+  }
+
   if (shouldRunPreflight(args)) {
     // BI-B1065D41: the guard-parity preflight is loud and, on a passing run,
     // uninteresting — including a TOLERATED GuardRuntimeEnvironmentError that
@@ -794,7 +856,7 @@ async function main() {
   }
 
   const useShell = shouldUseShell();
-  const { result, timedOut } = await runGateWithQueuedRevival({ args, useShell });
+  const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
   if (result?.error) {
     process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
     process.exit(1);
