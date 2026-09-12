@@ -148,4 +148,4 @@ Do not close the umbrella until all four objectives and all twelve acceptance ca
 
 Parent: BI-IMP-9DA35549. Decision: decomposed. Live mappings and dependencies are in the delivery graph above. New child BIs BI-11458908, BI-BF20F828 and BI-64E86574 reference the approved design; existing UI, domain and standards owners are reused.
 
-Coverage receipt: pending immutable plan publication and governed `record_plan_backlog_coverage`. This draft is not implementation-ready until the receipt is recorded and independent plan review passes. Keep the initial immutable plan locator and receipt in the Workroom; append the returned receipt here as provenance without altering the deliverable graph.
+Coverage receipt: `cmtyolx721ihv01mbf0d9tewb`, recorded September 12, 2026 by governed `record_plan_backlog_coverage`, validates all six live mappings above. Initial immutable plan: commit `6c16742983293ef2867043ce4f1e9b2e4d7de8f8`, blob `de57af1124a83f5f39434209c1cec90b027deb59`, at this path in `OpenDigitalProductFactory/opendigitalproductfactory`. This provenance addition does not alter the deliverable graph. Independent plan review remains required before implementation.
