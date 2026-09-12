@@ -132,6 +132,13 @@ describe("parity with the legacy industry table (BI-69C29492)", () => {
     const { attached, unattached } = planRetentionFloorObligations(regulations);
     expect(unattached).toEqual([]);
     expect(attached).toHaveLength(RETENTION_FLOOR_OBLIGATIONS.length);
+    // These fixture ids are deliberately NOT the named regulations, so this
+    // case also pins that archetype coverage alone still yields an attachment —
+    // by the fallback arm, which the basis reports rather than hides.
+    const banking = attached.find((a) => a.floor.reference === "retention/floor/banking-financial-services");
+    expect(banking?.basis).toBe("preferred");
+    const health = attached.find((a) => a.floor.reference === "retention/floor/healthcare-wellness");
+    expect(health?.basis).toBe("fallback");
   });
 
   it("reports an unattached floor rather than inventing a regulation for it", () => {
@@ -140,6 +147,51 @@ describe("parity with the legacy industry table (BI-69C29492)", () => {
     ]);
     expect(attached.length).toBeGreaterThan(0);
     expect(unattached.map((f) => f.reference)).toContain("retention/floor/healthcare-wellness");
+  });
+
+  // BI-0C723E18. The regression that motivated preferences: on a real install
+  // five active regulations name a public-sector archetype and "EPA" sorts
+  // first, so the public-records floor cited the Clean Water Act. The duration
+  // was right; the citation was a compliance claim the platform must not make.
+  it("cites the regulation the floor is about, not the alphabetically first match", () => {
+    const publicSectorRegulations = [
+      { id: "db-epa", regulationId: "REG-US-EPA-NPDES", applicability: { archetypes: ["public-sector", "municipal-utility"] } },
+      { id: "db-sdwa", regulationId: "REG-US-EPA-SDWA", applicability: { archetypes: ["municipal-utility"] } },
+      { id: "db-fin", regulationId: "REG-US-STATE-MUNI-FINANCE", applicability: { archetypes: ["small-town-municipality"] } },
+      { id: "db-meet", regulationId: "REG-US-STATE-OPEN-MEETINGS", applicability: { archetypes: ["public-sector"] } },
+      { id: "db-rec", regulationId: "REG-US-STATE-PUBLIC-RECORDS", applicability: { archetypes: ["public-sector"] } },
+    ];
+    const { attached } = planRetentionFloorObligations(publicSectorRegulations);
+    const publicFloor = attached.find((a) => a.floor.reference === "retention/floor/public-sector");
+    expect(publicFloor?.regulation.regulationId).toBe("REG-US-STATE-PUBLIC-RECORDS");
+    expect(publicFloor?.basis).toBe("preferred");
+  });
+
+  it("walks the preference list in order when the best regulation is absent", () => {
+    const { attached } = planRetentionFloorObligations([
+      { id: "db-epa", regulationId: "REG-US-EPA-NPDES", applicability: { archetypes: ["public-sector"] } },
+      { id: "db-meet", regulationId: "REG-US-STATE-OPEN-MEETINGS", applicability: { archetypes: ["public-sector"] } },
+    ]);
+    const publicFloor = attached.find((a) => a.floor.reference === "retention/floor/public-sector");
+    expect(publicFloor?.regulation.regulationId).toBe("REG-US-STATE-OPEN-MEETINGS");
+    expect(publicFloor?.basis).toBe("preferred");
+  });
+
+  // The fallback must survive: an install that seeds none of the named
+  // regulations still needs its floor. Losing the floor to protect the citation
+  // would trade a weak claim for a short retention window, which is backwards.
+  it("still attaches by the deterministic fallback, and says that is what happened", () => {
+    const { attached } = planRetentionFloorObligations([
+      { id: "db-epa", regulationId: "REG-US-EPA-NPDES", applicability: { archetypes: ["public-sector"] } },
+    ]);
+    const publicFloor = attached.find((a) => a.floor.reference === "retention/floor/public-sector");
+    expect(publicFloor?.regulation.regulationId).toBe("REG-US-EPA-NPDES");
+    expect(publicFloor?.basis).toBe("fallback");
+  });
+
+  it("names a preferred regulation for every floor, so none attaches by accident", () => {
+    const unnamed = RETENTION_FLOOR_OBLIGATIONS.filter((f) => f.preferredRegulationIds.length === 0);
+    expect(unnamed.map((f) => f.reference), "a floor with no named regulation cites whatever sorts first").toEqual([]);
   });
 
   it("matches archetypes only against a declared applicability list", () => {
