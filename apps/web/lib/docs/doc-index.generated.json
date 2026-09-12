@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 704,
+  "pageCount": 710,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3476,6 +3476,18 @@
         "how-it-is-enforced"
       ]
     },
+    "docs/founder-kernel/wiki/principles/absorb-dont-adopt.md": {
+      "publicHref": "/founder-kernel/wiki/principles/absorb-dont-adopt/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md": {
       "publicHref": "/founder-kernel/wiki/principles/all-changes-land-via-pr/",
       "portalHref": null,
@@ -3712,6 +3724,18 @@
         "examples",
         "when-this-does-not-apply",
         "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/contribute-pseudonymously-not-anonymously.md": {
+      "publicHref": "/founder-kernel/wiki/principles/contribute-pseudonymously-not-anonymously/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/count-the-operations-to-outcome.md": {
@@ -4382,6 +4406,18 @@
         "related-principles"
       ]
     },
+    "docs/founder-kernel/wiki/principles/paused-work-is-not-abandoned-work.md": {
+      "publicHref": "/founder-kernel/wiki/principles/paused-work-is-not-abandoned-work/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/plan-before-install-paths.md": {
       "publicHref": "/founder-kernel/wiki/principles/plan-before-install-paths/",
       "portalHref": null,
@@ -4668,6 +4704,18 @@
         "sources"
       ]
     },
+    "docs/founder-kernel/wiki/principles/seed-is-bootstrap-runtime-is-truth.md": {
+      "publicHref": "/founder-kernel/wiki/principles/seed-is-bootstrap-runtime-is-truth/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/selective-memory-not-total-recall.md": {
       "publicHref": "/founder-kernel/wiki/principles/selective-memory-not-total-recall/",
       "portalHref": null,
@@ -4802,6 +4850,18 @@
         "sources"
       ]
     },
+    "docs/founder-kernel/wiki/principles/submitting-work-is-not-accepting-it.md": {
+      "publicHref": "/founder-kernel/wiki/principles/submitting-work-is-not-accepting-it/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/substrate-cleanup-before-substrate-addition.md": {
       "publicHref": "/founder-kernel/wiki/principles/substrate-cleanup-before-substrate-addition/",
       "portalHref": null,
@@ -4861,6 +4921,18 @@
         "examples",
         "when-this-does-not-apply",
         "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/the-platform-is-a-conduit-not-a-broker.md": {
+      "publicHref": "/founder-kernel/wiki/principles/the-platform-is-a-conduit-not-a-broker/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/trust-is-prospective-not-retrospective.md": {
