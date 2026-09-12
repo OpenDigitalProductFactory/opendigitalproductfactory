@@ -9,6 +9,31 @@ Workroom: WC-4A72DC95. Parent delivery item: BI-06AE6833.
 Decision: DI-515AD614CCF6, harden existing DPF/Inngest execution.
 Canonical design: [throughput design sections 8.1–8.7](../specs/2026-09-03-local-first-agentic-delivery-throughput-design.md).
 
+## 2026-09-12 reviewer source classification repair
+
+WC-C7F9AB04 extends BI-06AE6833 after the memory review exposed another routing
+defect. Task TR-GATE-17CAD3AAE52422739C8CFF11 and screen
+`screen_d67cb7b6c5cda47d` recorded customer-contact classification and local-only
+routing. The exact artifact contains memory byte literals matching the phone
+detector and a versioned dependency patch filename matching the email detector.
+The global local-only setting and task-specific override are absent. These facts
+explain route restriction; they do not prove the subsequent provider failure.
+
+1. Reproduce the five artifact matches through the public classifier, while
+   retaining real and ambiguous phone/email evidence, including mixed messages.
+2. Extend the existing span exception mechanism for explicit unquoted resource
+   byte quantities and versioned dependency patch paths. Never exempt an entire
+   source block, message, caller or Workroom. Preserve all other screening rules.
+3. Consolidate contact-specific span handling outside the general classifier;
+   rerun authorship, classification and policy tests with typechecks and guards.
+4. Obtain exact-source review and protected merge checks, then verify ordinary
+   development review can use an eligible external route on the canonical image.
+   Actual customer contacts and an explicit local-only policy must remain enforced.
+
+Related prior work BI-EBE25715 and BI-67CAF494 is retained, not duplicated or
+modified on its owning peer. This repair does not certify the seven execution
+scenarios or close the overarching portal objective.
+
 ## Design grounding
 
 Reconciles published amendment 58b4480b against main 729c017e7d6. The three
