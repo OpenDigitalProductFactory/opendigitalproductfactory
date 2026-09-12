@@ -2,15 +2,20 @@
 // Category-level marketing strategies keyed by archetype category.
 // Each business model has distinct marketing objectives, stakeholders, and engagement patterns.
 
-export type MarketingPlaybook = {
-  primaryGoal: string;
-  stakeholders: string;
-  campaignTypes: string[];
-  contentTone: string;
-  keyMetrics: string[];
-  ctaLanguage: string[];
-  agentSkills: string[];
-};
+import { getPlaybookForLeafArchetype } from "./marketing-playbooks-leaf";
+
+export { getPlaybookForLeafArchetype };
+
+// The playbook contract lives in marketing-playbook-types.ts; re-exported so
+// consumers keep importing it from here.
+export type {
+  MarketingPlaybook,
+  MarketingSeedSegment,
+  MarketingChannelVehicle,
+  MarketingChannelConstraint,
+} from "./marketing-playbook-types";
+
+import type { MarketingPlaybook } from "./marketing-playbook-types";
 
 // ─── Category-Based Playbooks (primary lookup) ─────────────────────────────
 
@@ -666,9 +671,24 @@ export function getPlaybookForCtaType(ctaType: string | null | undefined): Marke
   return CTA_FALLBACKS[ctaType ?? "inquiry"] ?? CTA_FALLBACKS["inquiry"]!;
 }
 
-/** Best-effort lookup: try category first, fall back to CTA type. */
-export function getPlaybook(category: string | null | undefined, ctaType: string | null | undefined): MarketingPlaybook {
-  return CATEGORY_PLAYBOOKS[category ?? ""] ?? CTA_FALLBACKS[ctaType ?? "inquiry"] ?? CTA_FALLBACKS["inquiry"]!;
+/**
+ * Best-effort lookup: leaf archetype first, then category, then CTA type.
+ *
+ * The leaf tier is checked first because it only exists where the category
+ * answer is wrong for that leaf (see LEAF_PLAYBOOKS). Callers that do not know
+ * the leaf keep the previous two-tier behaviour by omitting `archetypeId`.
+ */
+export function getPlaybook(
+  category: string | null | undefined,
+  ctaType: string | null | undefined,
+  archetypeId?: string | null,
+): MarketingPlaybook {
+  return (
+    getPlaybookForLeafArchetype(archetypeId)
+    ?? CATEGORY_PLAYBOOKS[category ?? ""]
+    ?? CTA_FALLBACKS[ctaType ?? "inquiry"]
+    ?? CTA_FALLBACKS["inquiry"]!
+  );
 }
 
 /**

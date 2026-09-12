@@ -3,6 +3,7 @@ import {
   getPlaybook,
   getPlaybookForCategory,
   getCompositePlaybook,
+  getPlaybookForLeafArchetype,
 } from "./marketing-playbooks";
 
 describe("getPlaybook", () => {
@@ -97,5 +98,109 @@ describe("getCompositePlaybook", () => {
   it("primary goal is taken from primary even for same-category secondary", () => {
     const composite = getCompositePlaybook("trades-maintenance", ["trades-maintenance"]);
     expect(composite.primaryGoal).toContain("first call");
+  });
+});
+
+describe("leaf-archetype playbooks (EP-5CC9C184)", () => {
+  it("gives pet-rescue a placement goal, not the category's donor goal", () => {
+    const leaf = getPlaybook("nonprofit-community", "inquiry", "pet-rescue");
+    const category = getPlaybook("nonprofit-community", "inquiry");
+
+    // The category answer is wrong for this leaf: a rescue's job is placing
+    // animals, and marketing it as a fundraiser is the wrong job.
+    expect(category.primaryGoal).toMatch(/donor/i);
+    expect(leaf.primaryGoal).toMatch(/place/i);
+    expect(leaf.primaryGoal).not.toMatch(/donor base/i);
+  });
+
+  it("names adopters and fosters, whom the category playbook omits entirely", () => {
+    const leaf = getPlaybook("nonprofit-community", "inquiry", "pet-rescue");
+    const category = getPlaybook("nonprofit-community", "inquiry");
+
+    expect(category.stakeholders).not.toMatch(/adopter|foster/i);
+    expect(leaf.stakeholders).toMatch(/adopter/i);
+    expect(leaf.stakeholders).toMatch(/foster/i);
+  });
+
+  it("leaves every other leaf on its category playbook", () => {
+    // The leaf tier exists only where the category is wrong; it must not become
+    // a second place to restate the same advice.
+    expect(getPlaybook("nonprofit-community", "inquiry", "food-bank")).toEqual(
+      getPlaybook("nonprofit-community", "inquiry"),
+    );
+    expect(getPlaybookForLeafArchetype("hoa-single-family")).toBeNull();
+    expect(getPlaybookForLeafArchetype(null)).toBeNull();
+  });
+
+  it("keeps the pre-existing two-arg behaviour unchanged", () => {
+    expect(getPlaybook("retail-goods", "purchase")).toEqual(
+      getPlaybookForCategory("retail-goods"),
+    );
+  });
+});
+
+describe("channel policy (EP-5CC9C184 / BI-3543E59D)", () => {
+  it("carries the Marketplace constraint with a rationale and a route that works", () => {
+    const leaf = getPlaybook("nonprofit-community", "inquiry", "pet-rescue");
+    const marketplace = leaf.channelConstraints?.find((c) => /Marketplace/i.test(c.channel));
+
+    expect(marketplace).toBeDefined();
+    expect(marketplace!.constraint).toMatch(/do not list/i);
+    // Rationale is load-bearing: it is how an operator re-checks a crowd-sourced
+    // rule when a platform changes its terms.
+    expect(marketplace!.rationale.length).toBeGreaterThan(40);
+    expect(marketplace!.insteadUse).toMatch(/group/i);
+  });
+
+  it("does not publish an animal that is not yet available", () => {
+    const leaf = getPlaybook("nonprofit-community", "inquiry", "pet-rescue");
+    const hold = leaf.channelConstraints?.find((c) => /hold|assessment/i.test(c.constraint));
+    expect(hold).toBeDefined();
+    expect(hold!.rationale).toMatch(/reclaim|owner/i);
+  });
+
+  it("every constraint explains itself and every vehicle says what it is for", () => {
+    for (const [id] of Object.entries({ "pet-rescue": true })) {
+      const pb = getPlaybook(null, null, id);
+      for (const c of pb.channelConstraints ?? []) {
+        expect(c.channel.length, `${id} constraint channel`).toBeGreaterThan(0);
+        expect(c.rationale.length, `${id} constraint rationale`).toBeGreaterThan(0);
+      }
+      for (const v of pb.channelVehicles ?? []) {
+        expect(v.purpose.length, `${id} vehicle purpose`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("channel policy is optional, so untouched category playbooks stay valid", () => {
+    const category = getPlaybookForCategory("retail-goods");
+    expect(category.channelConstraints).toBeUndefined();
+    expect(category.channelVehicles).toBeUndefined();
+  });
+});
+
+describe("archetype seed strategy (EP-5CC9C184)", () => {
+  it("gives pet-rescue a starting set of segments so a fresh install is not empty", () => {
+    const leaf = getPlaybook("nonprofit-community", "inquiry", "pet-rescue");
+    const names = leaf.seedSegments?.map((s) => s.name) ?? [];
+
+    // The drafter reads targetSegments; empty means every asset is written for
+    // nobody. Choosing the archetype has to give a starting point.
+    expect(names).toContain("Adopters");
+    expect(names).toContain("Foster carers");
+    expect(names.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("every seed segment says what that group wants, not just its name", () => {
+    const leaf = getPlaybook("nonprofit-community", "inquiry", "pet-rescue");
+    for (const segment of leaf.seedSegments ?? []) {
+      expect(segment.description.length, segment.name).toBeGreaterThan(20);
+    }
+  });
+
+  it("seed segments are a first revision, so the field stays optional", () => {
+    // Most archetypes are not fleshed out yet. An archetype without seeds must
+    // behave exactly as before rather than fail.
+    expect(getPlaybookForCategory("retail-goods").seedSegments).toBeUndefined();
   });
 });
