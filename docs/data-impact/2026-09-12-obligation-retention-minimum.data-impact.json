@@ -12,7 +12,7 @@
     "reviewDisposition": "No data-subject workflow is introduced. The effect on subjects is that some records are kept LONGER, never shorter: floors only lengthen a window. A shorter statutory maximum (storage limitation) is a separate concept the lifecycle algebra already distinguishes and this change does not touch."
   },
   "migration": {
-    "name": "20260912060000_obligation_retention_minimum",
+    "name": "20260912103000_obligation_retention_minimum",
     "backfill": "Additive. retentionMinimumDays is NULL on every existing row, which reads as 'this obligation states no retention minimum' — true of every obligation seeded before this migration, whose durations existed only as prose. retentionFloorBuckets defaults to the empty array. No existing row changes meaning and no retention window moves until a seed populates a value; because floors only lengthen, a NULL can never shorten retention.",
     "rollback": "Forward-only. A corrective migration would drop both columns; nothing else references them, and the retention sweep treats their absence as 'no obligation floors'."
   },
