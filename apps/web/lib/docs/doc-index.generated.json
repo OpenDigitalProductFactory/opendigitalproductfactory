@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 710,
+  "pageCount": 711,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -6045,6 +6045,15 @@
         "how-to-disable",
         "known-limits",
         "composition-with-other-dr-hardening-features"
+      ]
+    },
+    "docs/operations/workroom-pagination.md": {
+      "publicHref": "/operations/workroom-pagination/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "enumerating-workrooms-through-mcp"
       ]
     },
     "docs/personas/README.md": {

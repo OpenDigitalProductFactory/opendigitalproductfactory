@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPrisma = {
+  $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(mockPrisma)),
+  $executeRawUnsafe: vi.fn(),
   workroom: {
     create: vi.fn(),
     findFirst: vi.fn(),
@@ -48,7 +50,7 @@ describe("work capsule MCP tools", () => {
     ]);
 
     const { executeTool } = await import("@/lib/mcp-tools");
-    const result = await executeTool("list_workrooms", { status: "ready" }, "user-1");
+    const result = await executeTool("list_workrooms", { status: "ready" }, "user-1", { userContext: { platformRole: "HR-000", isSuperuser: true } });
 
     expect(result.success).toBe(true);
     expect(result.data?.capsules).toEqual([
@@ -57,6 +59,22 @@ describe("work capsule MCP tools", () => {
     // read tool — must never touch lease fields
     expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
     expect(mockPrisma.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("finds a stale Workroom beyond the old 100-row cutoff through either public name", async () => {
+    const rows = Array.from({ length: 251 }, (_, i) => ({
+      capsuleId: `WC-CUTOFF-${i}`, title: "Room", status: "ready", source: "external-adoption",
+      executorKind: "codex-desktop", leaseHolderPrincipalId: "u", executorRef: "session",
+      updatedAt: new Date(), leaseExpiresAt: i === 200 ? new Date(0) : new Date(Date.now() + 3600000),
+    }));
+    mockPrisma.workroom.findMany.mockImplementation(async ({ take }: { take: number }) => rows.slice(0, take));
+    const { executeTool } = await import("@/lib/mcp-tools");
+    for (const name of ["list_workrooms", "list_work_capsules"]) {
+      const result = await executeTool(name, { staleOnly: true, limit: 1 }, "u", { userContext: { platformRole: "HR-000", isSuperuser: true } });
+      expect(result.success).toBe(true);
+      expect(result.data?.capsules).toEqual([expect.objectContaining({ capsuleId: "WC-CUTOFF-200" })]);
+      expect(result.data?.page).toMatchObject({ populationCount: 1, pageCount: 1, nextCursor: null });
+    }
   });
 
   it("list_workrooms filters by decision scope and portfolio role", async () => {
@@ -78,6 +96,7 @@ describe("work capsule MCP tools", () => {
       "list_workrooms",
       { decisionScope: "wwwd", portfolioRole: "productsAndServicesSold" },
       "user-1",
+      { userContext: { platformRole: "HR-000", isSuperuser: true } },
     );
 
     expect(result.success).toBe(true);

@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local-CI Control-Plane Starvation Implementation Plan
 
 - **Status:** ready for implementation

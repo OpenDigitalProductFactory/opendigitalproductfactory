@@ -112,6 +112,15 @@ export function clampToolResultForModel(
       ...(handle ? { rehydrationHandle: handle } : {}),
     };
   }
+  // Typed Workroom pages must never become a successful-looking text prefix.
+  // A mask or an unusually small caller cap may enlarge/exceed the pre-sized
+  // page. Refuse that envelope explicitly; its cursor must not skip unseen rows.
+  const page = (result.data as { page?: { version?: number; observationId?: string } } | undefined)?.page;
+  if (page?.version === 1 && typeof page.observationId === "string") {
+    const error = JSON.stringify({ success: false, error: "page_budget_too_small", recovery: "Restart list_workrooms without cursor and with limit:1; preserve filters." });
+    return { text: error.length <= maxChars ? error : maxChars >= 2 ? "{}" : "", truncated: true, originalChars: full.length,
+      ...(handle ? { rehydrationHandle: handle } : {}) };
+  }
   const notice =
     `\n…[truncated ${full.length - maxChars} of ${full.length} chars — result exceeds the per-call ` +
     `context budget; narrow it with filter/pagination/range parameters and call again]`;
