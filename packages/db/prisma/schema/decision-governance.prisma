@@ -370,6 +370,20 @@ model PerspectiveMaterial {
   @@index([sourceType])
 }
 
+// What a governed decision can be ABOUT (BI-01F8F06D).
+//
+// One member, deliberately. A subject kind is only legitimate once a writer
+// actually records it, and today the backlog triage drain is the only caller
+// that names one. Adding a kind is a migration, which is the point: the set is
+// closed so a new writer cannot invent a spelling nobody can query for.
+//
+// `build` and `taskRun` are NOT members. Those subjects already have their own
+// declared columns and relations on DecisionInteraction, so repeating them here
+// would give one fact two homes and two answers.
+enum DecisionSubjectKind {
+  backlog_item @map("backlog-item")
+}
+
 model DecisionInteraction {
   id                      String                            @id @default(cuid())
   interactionId           String                            @unique
@@ -419,6 +433,28 @@ model DecisionInteraction {
   // True when the gate ran but doctrine fell back off the gate's own profile
   // kind (e.g. profession gate resolving to MARK_DPF_PLATFORM_PROFILE).
   gateFallbackUsed        Boolean                           @default(false)
+  // BI-01F8F06D. What the decision was ABOUT, and whether anyone watched it.
+  //
+  // Without these a decision is an isolated event: of the first 1,093 rows, one
+  // carried a buildId and twenty a taskRunId, while the backlog item id lived
+  // inside the question prose. Nothing could join a decision to the work it
+  // governed, so no outcome could ever be attributed to it.
+  //
+  // `autonomous` is not telemetry. An unattended cron decision has no human to
+  // agree or disagree with, so it must be excluded from an agreement denominator
+  // BY CONSTRUCTION — 518 of those first rows were an hourly drain, and a rate
+  // computed over them would measure nothing while looking authoritative.
+  //
+  // Null subject is honest for a caller that genuinely governs nothing
+  // identifiable; a fabricated subject is not.
+  subjectKind             DecisionSubjectKind?
+  // Named `subjectRef`, not `subjectId`: the reference is POLYMORPHIC — the
+  // kind discriminates a backlog item from a build from a design doc — so it
+  // can never be a single declared relation. An `*Id` name would promise a
+  // foreign key the column cannot honour, which is what the FK index-coverage
+  // ratchet correctly objected to.
+  subjectRef              String?
+  autonomous              Boolean                           @default(false)
   // Trust-envelope immutability (BI-81CC5D8E, EP-VERIFICATION-INTEGRITY).
   // A recorded decision is sealed into an append-only per-(chainId) hash chain:
   // chainEntryHash = H(canonical{criteria, evidence-digests, weights, composite}
@@ -460,6 +496,8 @@ model DecisionInteraction {
   @@index([riskTier, createdAt])
   // Trust-envelope chain lookups (find the head of a chain to link the next entry).
   @@index([chainId, sealedAt])
+  @@index([subjectKind, subjectRef])
+  @@index([autonomous])
 }
 
 model EscalationCapture {

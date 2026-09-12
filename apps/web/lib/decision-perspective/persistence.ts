@@ -11,6 +11,7 @@ import {
   type DecisionEvaluationSource,
   type PerspectiveMaterialFreshness,
 } from "./types";
+import type { DecisionSubjectKind } from "@dpf/db";
 import { normalizeLocator } from "@/lib/deliberation/evidence";
 
 type DecisionInteractionClient = {
@@ -226,6 +227,19 @@ export async function persistDecisionInteraction(input: {
   /** True when doctrine fell back off the gate's own profile kind. */
   gateFallbackUsed?: boolean;
   /**
+   * What the decision is ABOUT (BI-01F8F06D). Without it a decision is an
+   * isolated event that no later outcome can be attributed to. Omit only when
+   * the caller genuinely governs nothing identifiable — a null subject is
+   * honest, a fabricated one is not.
+   */
+  subject?: { kind: DecisionSubjectKind; id: string } | null;
+  /**
+   * True when no human was in the loop. Not telemetry: an unattended decision
+   * has nobody to agree or disagree with, so it must be excluded from an
+   * agreement denominator by construction rather than filtered out later.
+   */
+  autonomous?: boolean;
+  /**
    * Trust-envelope immutability seal (BI-81CC5D8E). When present, the row is
    * written as the next append-only entry in a hash chain. Omitted for callers
    * that do not seal (behavior unchanged — all chain columns stay NULL).
@@ -270,6 +284,9 @@ export async function persistDecisionInteraction(input: {
       principleConflict: input.evaluation.principleConflict,
       gateKey: input.gateKey ?? null,
       gateFallbackUsed: input.gateFallbackUsed ?? false,
+      subjectKind: input.subject?.kind ?? null,
+      subjectRef: input.subject?.id ?? null,
+      autonomous: input.autonomous ?? false,
       chainId: input.chain?.chainId ?? null,
       prevHash: input.chain?.prevHash ?? null,
       chainEntryHash: input.chain?.chainEntryHash ?? null,
