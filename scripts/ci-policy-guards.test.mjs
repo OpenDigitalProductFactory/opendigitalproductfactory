@@ -25,6 +25,7 @@ const EXPECTED_LEGACY_JOBS = [
   "data-impact-gate",
   "db-commandment-coverage",
   "decision-baseline",
+  "decoder-consumer-regression",
   "derived-artifact-registry",
   "design-grounding-gate",
   "diagram-dependency-pin-guard",
