@@ -520,6 +520,45 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   const labels = ["build-studio", "automated"];
   const { publishBranchCommit, openPullRequest } = await import("@/lib/build/github-api-commit");
 
+  const {
+    buildPublishedReadinessCommand,
+    evaluateBuildVerificationReadiness,
+    parsePublishedReadinessOutput,
+  } = await import("@/lib/build/build-studio-pr-readiness");
+
+  // Verify BEFORE publishing (BI-46E9AB38). This used to run after the branch
+  // was already on the target repository, so a build that failed its own
+  // readiness contract still left a ref behind — on a consumer install, upstream,
+  // authored pseudonymously, with nothing cleaning it up. The check withheld the
+  // pull request while the thing that actually costs something had already
+  // happened.
+  //
+  // Only the LOCAL half can move: the canonical check fetches and checks out the
+  // published commit, so it cannot run before one exists. That half stays where
+  // it is. This half needs nothing but the build's own recorded verification, and
+  // it is the half that catches a build which never passed its tests.
+  const verificationReadiness = evaluateBuildVerificationReadiness({
+    typecheckPassed,
+    testsFailed,
+    acceptanceMet: acMet,
+    acceptanceTotal: acTotal,
+  });
+  const prePublishBlockers = [...verificationReadiness.blockers];
+  if (prePublishBlockers.length > 0) {
+    logBuildActivity(
+      buildId,
+      "pr-readiness:blocked-before-publish",
+      `blockers=${prePublishBlockers.join(" | ").slice(0, 700)}`,
+    );
+    return {
+      success: false,
+      error: "Verification blocked publication.",
+      message: `Nothing was published for \`${branchName}\`, because this change has not passed verification.\n\n`
+        + prePublishBlockers.map((blocker) => `- ${blocker}`).join("\n"),
+      data: { branchName, blockers: prePublishBlockers, published: false },
+    };
+  }
+
   const published = await publishBranchCommit({
     headOwner: repoOwner,
     headRepo: repoName,
@@ -527,18 +566,6 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     commitMessage,
     diff: shareableDiff,
     token,
-  });
-
-  const {
-    buildPublishedReadinessCommand,
-    evaluateBuildVerificationReadiness,
-    parsePublishedReadinessOutput,
-  } = await import("@/lib/build/build-studio-pr-readiness");
-  const verificationReadiness = evaluateBuildVerificationReadiness({
-    typecheckPassed,
-    testsFailed,
-    acceptanceMet: acMet,
-    acceptanceTotal: acTotal,
   });
   let canonicalReadiness = {
     ready: false,
@@ -567,7 +594,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       };
     }
   }
-  const blockers = [...verificationReadiness.blockers, ...canonicalReadiness.blockers];
+  const blockers = [...canonicalReadiness.blockers];
   const contextState = readinessTrailers ? "context-present" : "context-missing";
   const verdictState = blockers.length === 0 ? "ready" : "blocked";
   logBuildActivity(
