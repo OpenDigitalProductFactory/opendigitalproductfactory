@@ -5,7 +5,7 @@ status: published
 abstract: For third-party enterprise integrations the customer holds their own agreement, account and credentials with the vendor. The platform supplies connector code, never the business relationship.
 principleDirection: Build bring-your-own-credential integrations and reject architectures that place the platform as a vendor partner or customer of record.
 principleTier: core
-principleDimensionVector: {"governance_compliance": 0.8, "data_sovereignty": 0.9, "vendor_lock_in": -0.6, "speed_to_value": -0.2}
+principleDimensionVector: {"governance_compliance": 0.8, "data_privacy": 0.9, "operational_independence": 0.6, "vendor_lock_in": -0.6}
 principleWeight: 0.6
 principleWeightRationale: Governs integration architecture and compliance posture; weighted to decide integration design without overriding safety commandments.
 principleAppliesTo:

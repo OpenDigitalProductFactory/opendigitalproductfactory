@@ -5,7 +5,7 @@ status: published
 abstract: When an open-source project already implements a capability DPF needs, own the source and blend the functionality in. A third-party stack running beside the platform is an appendage, not a capability.
 principleTier: core
 principleDirection: Default to absorbing a capability into the platform spine; running a third-party stack alongside DPF requires justification, and the refactor-to-feature budget is roughly 80/20 in favour of integration.
-principleDimensionVector: {"long_term_maintainability": 0.8, "architectural_coherence": 0.9, "speed_to_value": -0.5, "vendor_lock_in": -0.4}
+principleDimensionVector: {"long_term_maintainability": 0.9, "operational_independence": 0.8, "vendor_lock_in": -0.6, "speed_to_value": -0.5}
 principleWeight: 0.6
 principleWeightRationale: Strategic allocation doctrine rather than a safety rule; weighted below the commandments so it shapes planning without perturbing safety decisions.
 principleAppliesTo:

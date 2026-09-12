@@ -5,7 +5,7 @@ status: published
 abstract: An install contributing upstream carries a stable, distinguishable public identifier. Real names and machine names stay private; a contributor the community cannot tell apart from every other is not privacy, it is a broken commons.
 principleDirection: Give every contributing install a stable per-install pseudonym in both the author name and the email, and never let a hostname, machine name or personal identifier reach a public surface.
 principleTier: core
-principleDimensionVector: {"governance_compliance": 0.7, "data_sovereignty": 0.6, "long_term_maintainability": 0.4}
+principleDimensionVector: {"governance_compliance": 0.7, "data_privacy": 0.6, "legibility_of_consequence": 0.4}
 principleWeight: 0.6
 principleWeightRationale: Governs outbound identity on every contribution surface; weighted to settle identity design without competing with the safety commandments.
 principleAppliesTo:
