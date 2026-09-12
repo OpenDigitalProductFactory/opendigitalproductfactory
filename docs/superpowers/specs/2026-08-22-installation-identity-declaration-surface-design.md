@@ -23,20 +23,17 @@ claim that the runtime already provides the sequence. Portable references below
 are independent of any organization's backlog IDs. The adopting workroom owns
 the local mapping and approval receipts.
 
-**OBJ-COMPANION-001:** A confirmed development instance of another installation
-can reach its parent's agreed work inventory through one resumable setup journey.
-An ordinary business instance or standalone development instance is never forced
-through this development-sync setup.
+**OBJ-COMPANION-001:** A confirmed development instance of another installation can reach its parent's agreed work inventory through one resumable setup journey; ordinary business instances and standalone development instances are never forced through this development-sync setup.
 
-| Acceptance | Required behavior |
-|---|---|
-| AC-COMPANION-001 | Derive applicability server-side from confirmed effective development identity and a resolved parent relationship. Purpose alone, a host environment hint or discovery cannot activate the branch. |
-| AC-COMPANION-002 | Present current nearby candidates and existing trusted links through the existing identity surface; confirm the selected parent's installation identity. Ambiguous labels, self-selection, expired candidates and foreign relationships cannot bind silently. |
-| AC-COMPANION-003 | Resume canonical membership/pairing, preserving its authorization, certificate and organization checks. Identity save grants no credentials, approval or peer-write rights. Existing trusted links are reused. |
-| AC-COMPANION-004 | Advance from confirmed identity to selected parent, trust, synchronization and verified readiness in that order. Identity can be saved when connectivity fails, but readiness cannot be asserted. |
-| AC-COMPANION-005 | Require a complete, identity-bound sync/reconciliation result for the agreed inventory, including required member-origin work, epic scope and references. Ordinary inbound health or an origin-only subset cannot satisfy full master-list readiness. Unsupported coverage produces an explicit blocking result. |
-| AC-COMPANION-006 | Reload/retry resumes canonical state without duplicate links or imports. Parent change invalidates prior admission evidence; late old-target responses cannot complete the new identity. Reclassification does not silently revoke links or delete work. |
-| AC-COMPANION-007 | Human and MCP consumers receive the same continuation state, selected parent, reason and next permitted action. Keyboard/mobile/theme/permission and no-client background reconciliation have equivalent outcomes. |
+| Acceptance | Objective | Required behavior |
+|---|---|---|
+| AC-COMPANION-001 | OBJ-COMPANION-001 | Derive applicability server-side from confirmed effective development identity and a resolved parent relationship. Purpose alone, a host environment hint or discovery cannot activate the branch. |
+| AC-COMPANION-002 | OBJ-COMPANION-001 | Present current nearby candidates and existing trusted links through the existing identity surface; confirm the selected parent's installation identity. Ambiguous labels, self-selection, expired candidates and foreign relationships cannot bind silently. |
+| AC-COMPANION-003 | OBJ-COMPANION-001 | Resume canonical membership/pairing, preserving its authorization, certificate and organization checks. Identity save grants no credentials, approval or peer-write rights. Existing trusted links are reused. |
+| AC-COMPANION-004 | OBJ-COMPANION-001 | Advance from confirmed identity to selected parent, trust, synchronization and verified readiness in that order. Identity can be saved when connectivity fails, but readiness cannot be asserted. |
+| AC-COMPANION-005 | OBJ-COMPANION-001 | Require a complete, identity-bound sync/reconciliation result for the agreed inventory, including required member-origin work, epic scope and references. Ordinary inbound health or an origin-only subset cannot satisfy full master-list readiness. Unsupported coverage produces an explicit blocking result. |
+| AC-COMPANION-006 | OBJ-COMPANION-001 | Reload/retry resumes canonical state without duplicate links or imports. Parent change invalidates prior admission evidence; late old-target responses cannot complete the new identity. Reclassification does not silently revoke links or delete work. |
+| AC-COMPANION-007 | OBJ-COMPANION-001 | Human and MCP consumers receive the same continuation state, selected parent, reason and next permitted action. Keyboard/mobile/theme/permission and no-client background reconciliation have equivalent outcomes. |
 
 **CON-COMPANION-IDENTITY:** Reuse `installation.operating-intent.v1`, the existing
 effective environment precedence and `pairedProductionInstallationRef`. Resolve
