@@ -94,7 +94,7 @@ function displayNameOf(principal: Record<string, unknown> | null | undefined): s
  * kind is a link between rooms that does not delegate accountability, and
  * following one would inherit an owner from a room that never owned this work.
  */
-async function loadAncestorClosure(
+export async function loadAncestorClosure(
   db: RoomWorkforceDb,
   workroomId: string,
 ): Promise<{ roomIds: string[]; edges: AccountabilityEdge[] }> {
@@ -138,6 +138,51 @@ async function loadAncestorClosure(
  * `query` filters the roster by worker name or current task, which is how an
  * operator finds one worker among a hundred.
  */
+/**
+ * The accountability lineage input, built from the rooms walked and their
+ * active participants. Shared so the drive's conclusion resolver and the room
+ * workforce read cannot drift apart on who answers for a room.
+ */
+export function accountabilityRoomsFrom(
+  roomIds: readonly string[],
+  participantRows: readonly Record<string, unknown>[],
+): AccountabilityRoomInput[] {
+  return roomIds.map((roomId) => ({
+    workroomId: roomId,
+    accountablePrincipalIds: participantRows
+      .filter((row) => row["workroomId"] === roomId && asRoles(row["roles"]).includes("accountable"))
+      .map((row) => String(row["principalId"])),
+  }));
+}
+
+/**
+ * Who answers for this room, for callers that need only that.
+ *
+ * BI-12A083B4: the drive asks this when a tick ends in a blockage, so the
+ * blockage can name an owner instead of waiting on nobody. It deliberately
+ * loads less than loadRoomWorkforce — no roster, no pagination — because a
+ * stuck room needs an owner, not a team list.
+ */
+export async function resolveRoomAccountabilityFromDb(
+  db: RoomWorkforceDb,
+  input: { workroomId: string; organizationId?: string },
+): Promise<EffectiveHumanAccountability> {
+  const { roomIds, edges } = await loadAncestorClosure(db, input.workroomId);
+  const participantRows = await db.workroomParticipant.findMany({
+    where: { workroomId: { in: roomIds }, lifecycle: "active" },
+    select: { workroomId: true, principalId: true, roles: true },
+  });
+  return resolveEffectiveHumanAccountability({
+    workroomId: input.workroomId,
+    rooms: accountabilityRoomsFrom(roomIds, participantRows),
+    edges,
+    organizationTopAccountablePrincipalId: await readOrganizationTopAccountablePrincipalId(
+      db,
+      input.organizationId,
+    ),
+  });
+}
+
 export async function loadRoomWorkforce(
   db: RoomWorkforceDb,
   input: { workroomId: string; organizationId?: string; query?: string | null; now?: Date },
@@ -155,12 +200,7 @@ export async function loadRoomWorkforce(
     },
   });
 
-  const rooms: AccountabilityRoomInput[] = roomIds.map((roomId) => ({
-    workroomId: roomId,
-    accountablePrincipalIds: participantRows
-      .filter((row) => row["workroomId"] === roomId && asRoles(row["roles"]).includes("accountable"))
-      .map((row) => String(row["principalId"])),
-  }));
+  const rooms = accountabilityRoomsFrom(roomIds, participantRows);
 
   const accountability = resolveEffectiveHumanAccountability({
     workroomId: input.workroomId,
