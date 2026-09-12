@@ -45,8 +45,12 @@ try {
   process.exit(1);
 }
 
+// BI-4F1E9249: read the decision from the outgoing commits as well as the PR
+// body, so the gate gives a truthful answer before a pull request exists and
+// `pregate-preflight` can refuse the push instead of CI refusing the PR.
 const result = evaluateSeedFitGate({
   changedFiles,
+  commitMessages: git("log", `${base}..HEAD`, "--format=%B"),
   prBody: process.env.PR_BODY || "",
   labels,
 });
@@ -64,7 +68,14 @@ if (result.ok) {
 console.error(`[seed-fit-gate] FAILED: ${result.reason}.`);
 for (const path of result.seedPaths) console.error(`  - ${path}`);
 if (result.reason === "missing-decision") {
-  console.error("Add exactly one reviewed `Seed-Fit-Decision: <value>` PR-body trailer or `seed-fit:<value>` label.");
+  console.error(
+    "Add exactly one reviewed `Seed-Fit-Decision: <value>` trailer to a commit message "
+      + "in this range or to the PR body, or a `seed-fit:<value>` label.",
+  );
+  console.error(
+    "Putting it in the commit is preferred: the decision then travels with the change, "
+      + "and the pre-push gate can refuse before a pull request exists.",
+  );
 }
 if (result.reason === "contradictory-decisions") {
   console.error(`Conflicting decisions: ${result.decisions.join(", ")}`);

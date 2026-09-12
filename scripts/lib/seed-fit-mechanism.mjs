@@ -108,12 +108,25 @@ export function findMechanismEvidence({ symbol, changedFiles, readFile }) {
  * machine-readable code; the caller renders the sentence, so this stays pure and
  * testable and the gate output stays in one place.
  */
-export function evaluateScopeMechanism({ decision, prBody = "", changedFiles = [], readFile }) {
+/**
+ * BI-4F1E9249: a scoped decision states its enforcement mechanism wherever the
+ * decision itself is stated, so this reads the commit range and the PR body
+ * together, exactly as evaluateSeedFitGate does.
+ */
+export function evaluateScopeMechanism({
+  decision,
+  commitMessages = "",
+  prBody = "",
+  changedFiles = [],
+  readFile,
+}) {
   if (!isScopedSeedFitDecision(decision)) {
     return { ok: true, reason: "not-a-scoped-decision", mechanism: null, symbol: null, evidenceFiles: [] };
   }
 
-  const { mechanism, symbol } = parseSeedFitMechanism(prBody);
+  const { mechanism, symbol } = parseSeedFitMechanism(
+    [commitMessages, prBody].filter(Boolean).join("\n"),
+  );
 
   if (!mechanism) {
     return { ok: false, reason: "missing-mechanism", mechanism: null, symbol, evidenceFiles: [] };
