@@ -67,7 +67,8 @@ const definitions: ToolDefinition[] = [
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
         staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
-        limit: { type: "number", description: "Max results (default 50, max 100)." },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Requested page size (default 5, maximum 100); whole rows are reduced to fit the client budget." },
+        cursor: { type: "string", maxLength: 1024, description: "Opaque continuation from this observation. Keep filters unchanged; expiry requires a fresh traversal." },
       },
       required: [],
     },
@@ -381,7 +382,7 @@ export const workCapsulesPack: ToolPack = {
   packId: "work-capsules",
   definitions,
   handlers: {
-    list_workrooms: (params) => HANDLERS().then((m) => m.listWorkCapsulesTool(params)),
+    list_workrooms: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
     get_workroom: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
     create_workroom: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_workroom_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
@@ -398,7 +399,7 @@ export const workCapsulesPack: ToolPack = {
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
     record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),
     // Legacy workroom names — callable, deliberately NOT advertised in `definitions`.
-    list_work_capsules: (params) => HANDLERS().then((m) => m.listWorkCapsulesTool(params)),
+    list_work_capsules: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
     get_work_capsule: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
     create_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_capsule_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),

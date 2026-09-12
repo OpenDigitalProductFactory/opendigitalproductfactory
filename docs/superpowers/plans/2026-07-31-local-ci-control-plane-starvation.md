@@ -177,3 +177,9 @@ now reports compile-ready; 37 policy/bootstrap tests pass and a Windows x64
 snapshot/create-event check exercised the prebuilt binary successfully. Linux
 binary loading and the production build still require canonical verification.
 This amendment does not close the overarching execution/portal acceptance work.
+
+## Dependency readiness verification
+
+The companion design records the explicit deny disposition for the existing
+`@parcel/watcher` install hook. Verify managed readiness and the locked Windows
+and Linux prebuilt binaries; keep production build acceptance separate.

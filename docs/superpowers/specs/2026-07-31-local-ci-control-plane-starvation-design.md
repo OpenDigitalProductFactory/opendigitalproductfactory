@@ -194,7 +194,8 @@ boundaries and slot isolation, followed by a canonical build recording worker
 count, peak memory and control-plane health. Unit tests alone do not establish
 runtime recovery or completion of BI-06AE6833.
 
-### Dependency readiness for the bounded build
+## Dependency readiness for the bounded build
+
 
 Explicitly deny the existing `@parcel/watcher` install hook in `allowBuilds`.
 Version 2.6.0 loads a platform-specific optional prebuilt binary before trying
