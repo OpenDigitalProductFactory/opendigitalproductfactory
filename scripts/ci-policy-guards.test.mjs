@@ -63,6 +63,7 @@ const EXPECTED_LEGACY_JOBS = [
   "package-boundary-guard",
   "platform-composition-single-home",
   "pr-health-test",
+  "prisma-runtime-traps",
   "prose-lint-guard",
   "published-image-freshness",
   "release-asset-contract",

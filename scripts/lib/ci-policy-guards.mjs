@@ -153,6 +153,22 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/check-release-asset-contract.test.mjs"),
       node("--test", "scripts/installer/local-model-policy-contract.test.mjs"),
     ]),
+    // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
+    // drops every NULL row (SQL three-valued logic). It cost 29 epics their
+    // sync (#5007), was fixed file-by-file, and the SHAPE was never guarded -
+    // so the same defect was still live in a sibling federation module when
+    // this guard first ran.
+    guard("prisma-runtime-traps", "Prisma Runtime Traps", [
+      node("scripts/check-no-unguarded-not-contains.mjs"),
+      node("--test", "scripts/check-no-unguarded-not-contains.test.mjs"),
+      // BI-1281A164 drain: every DPF enum whose values carry hyphens declares
+      // members with underscores and @maps them. Prisma accepts only the
+      // MEMBER; the database spelling throws at runtime, and a mocked Prisma in
+      // a unit test does not enforce the enum - which is why declare_break_fix
+      // shipped completely broken with every test green (BI-D36E2916, #5185).
+      node("scripts/check-no-mapped-enum-database-value.mjs"),
+      node("--test", "scripts/check-no-mapped-enum-database-value.test.mjs"),
+    ]),
     guard("db-commandment-coverage", "DB Commandment Coverage", [
       // The never-wipe-db commandment guarded two spellings and allowed three
       // equivalents, including `docker system prune -a --volumes` and every
