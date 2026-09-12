@@ -1132,7 +1132,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "build-gate-runbook"
+        "build-gate-runbook",
+        "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {
@@ -2518,7 +2519,8 @@
         "concurrent-execution-and-recorded-state",
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
-        "related-references"
+        "related-references",
+        "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
       ]
     },
     "docs/architecture/workos-iam-equivalence-scorecard.md": {

@@ -170,6 +170,28 @@ export interface BuildGitUpdateReceivedEvent {
   };
 }
 
+/**
+ * BI-A6E4D205 — a pull request MERGED, delivered by webhook rather than found
+ * by poll. Sent by handleGitHubWebhook on `pull_request` with action=closed and
+ * merged=true; carries the identity every downstream consumer keys on.
+ *
+ * The merge is the moment a worktree first becomes Tier-A reapable and the
+ * moment `mergedThroughGates` becomes true, so this is the event that lets a
+ * thread end at push instead of being held open to watch the queue.
+ */
+export interface BuildPullRequestMergedEvent {
+  name: "build/pr-merged.received";
+  data: {
+    candidateId: string;
+    repositoryFullName: string;
+    number: number;
+    headRefName: string;
+    headSha: string;
+    mergeCommitSha: string | null;
+    mergedAt: string | null;
+  };
+}
+
 /** BI-89030C9B Phase 1 — durable build execution. Sent by autoExecuteBuild
  *  when DPF_BUILD_DURABLE_EXECUTION_ENABLED is on; handled by
  *  queue/functions/build-execute.ts. Sends carry a deterministic idempotency

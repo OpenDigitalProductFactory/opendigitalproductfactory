@@ -57,6 +57,7 @@ import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import { edgeNodeJanitor } from "./edge-node-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
 import { worktreeJanitor } from "./worktree-janitor";
+import { pullRequestMergedBinding } from "./pull-request-merged-binding";
 import { sandboxBuildGc } from "./sandbox-build-gc";
 import {
   dataRetentionSweepScheduled,
@@ -222,6 +223,7 @@ export const scheduledFunctions = [
 ];
 
 export const eventFunctions = [
+  pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
   localModelInstall,
   rateRecovery,

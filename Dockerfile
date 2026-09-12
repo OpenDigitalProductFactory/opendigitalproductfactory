@@ -159,6 +159,15 @@ COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/
 COPY scripts/lib/gate-sensitivity.mjs ./scripts/lib/
 COPY scripts/lib/seed-fit-gate.mjs ./scripts/lib/
 COPY scripts/lib/seed-fit-mechanism.mjs ./scripts/lib/
+# BI-B3370CB2: the worktree janitor is EXECUTED by the portal (queue function
+# worktreeJanitor, daily 05:40) but was never copied, so every run died with
+# MODULE_NOT_FOUND, was caught, and reported UNHEALTHY. A backstop that has
+# never once reached its subject looked exactly like a quiet success.
+COPY scripts/worktree-janitor.mjs ./scripts/
+COPY scripts/lib/worktree-janitor-core.mjs ./scripts/lib/
+COPY scripts/lib/worktree-session-heartbeat.mjs ./scripts/lib/
+COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
+COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
 COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/

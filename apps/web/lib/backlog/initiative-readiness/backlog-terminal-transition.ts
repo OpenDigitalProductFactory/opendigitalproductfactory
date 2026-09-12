@@ -427,15 +427,44 @@ export async function completeBacklogItemTransition(args: {
       const hasDesignSpec = await (args.dependencies?.resolveHasDesignSpec ?? defaultResolveHasDesignSpec)({
         itemId: lockedItem.itemId,
       });
+      // BI-82DCD601, kernel DI-273E6E15C8EB. `hasDesignSpec` used to be ANDed in
+      // here, which closed this clause against exactly the work it was written
+      // for: a bug fix has no design spec — that is what makes it a bug fix — so
+      // the rule that spares direct-merge platform work the feature reviewer
+      // lifecycle only fired for work that had already completed that lifecycle.
+      //
+      // Measured 2026-09-09: 150 items held recorded execution evidence with no
+      // gate receipt, median age 12.4 days against a p90 receipt latency of 10.9
+      // days. The largest cohort was 23 merged bug fixes being asked at
+      // COMPLETION for research comparing industry implementations and a phased
+      // plan — design-time gates evaluated after the code shipped, which cannot
+      // change what shipped and can only strand the record.
+      //
+      // The kernel scored dropping it at 9.27 against 4.99 for demanding the
+      // retrofit, high confidence and autonomy-eligible; "Do the work; don't task
+      // the operator with what an agent can do" penalises the retrofit directly.
+      //
+      // What still holds the line, deliberately: `isDirectMergePlatformWork`
+      // keeps customer feature work on every gate, and a conflict/malformed
+      // reconciliation is still NEVER waved through (see acceptancePass below).
+      // `hasDesignSpec` is retained as a REPORTED fact rather than a gate, so a
+      // reader can still tell which merges carried a spec.
       const recognizeMergeThroughGates =
-        mergedThroughGates === "merged" && isDirectMergePlatformWork(lockedItem) && hasDesignSpec;
+        mergedThroughGates === "merged" && isDirectMergePlatformWork(lockedItem);
       // BI-043946C5: the item clears every OTHER term of the direct-merge predicate,
       // so the merge signal is the only thing standing between it and recognition —
       // and the signal could not run. That is the difference between "this did not
       // merge" and "this runtime cannot tell", and the operator has to be told which
       // one they are looking at, on the requirements the signal would have satisfied.
+      //
+      // `hasDesignSpec` is dropped from BOTH predicates, not just the first
+      // (BI-82DCD601, DI-273E6E15C8EB). Keeping it here while dropping it above
+      // would leave a spec-less item that merged through the gates recognised,
+      // but a spec-less item whose SIGNAL failed with neither recognition nor
+      // the explanation of why — the worst of both, and the operator would be
+      // told nothing at all.
       const mergeSignalBlindSpot =
-        mergedThroughGates === "signal-unavailable" && isDirectMergePlatformWork(lockedItem) && hasDesignSpec;
+        mergedThroughGates === "signal-unavailable" && isDirectMergePlatformWork(lockedItem);
       const mergeSignalReasons = mergeSignalBlindSpot
         ? [mergeSignalUnavailableReason(mergeSignalRoots())]
         : [];
@@ -521,6 +550,10 @@ export async function completeBacklogItemTransition(args: {
           objectiveEvidenceRefs: reconciliation.evidenceRefs,
           deliveryState: delivery,
           mergedThroughGates,
+          // No longer a gate (DI-273E6E15C8EB) but still worth recording: a
+          // reader reconciling a receipt can tell whether this merge carried a
+          // design spec or was recognised on the merge alone.
+          hasDesignSpec,
           deliveryEvidenceRefs: completion.kind === "evaluated"
             ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
             : [],

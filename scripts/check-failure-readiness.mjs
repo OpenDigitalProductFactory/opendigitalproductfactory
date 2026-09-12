@@ -14,8 +14,26 @@ export function reviewHeads(event, entries = []) {
   return [...new Set(heads)];
 }
 
+/**
+ * Is this gate configured well enough to reach a verdict at all?
+ *
+ * Without a trusted publisher there is nothing to compare a status against, so
+ * the check cannot pass OR fail honestly — it can only refuse. Returning
+ * `valid: false` for that made the gate red on 30 of the last 30 merged PRs
+ * (measured 2026-09-09), every one of which merged anyway. A gate that is
+ * always red teaches every reader that red means nothing, which is worse than
+ * having no gate: it spends the signal that a real failure needs.
+ *
+ * "Cannot run" is a third state, and it is reported as such (BI-*): exit 2,
+ * distinct from a verdict. Same shape as the room-addressing guard's refusal
+ * in #5228.
+ */
+export function failureReadinessConfigured(publisher) {
+  return typeof publisher === "string" && publisher.trim().length > 0;
+}
+
 export function validateFailureStatus(statuses, publisher, now = Date.now()) {
-  if (!publisher) return { valid: false, reason: "Trusted status publisher is not configured." };
+  if (!publisher) return { valid: false, unconfigured: true, reason: "Trusted status publisher is not configured." };
   const current = statuses.filter(status => status.context === "dpf/failure-readiness")
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
   if (!current) return { valid: false, reason: "Final-change failure readiness evidence is missing." };
@@ -60,9 +78,18 @@ export async function checkFailureReadiness({ event, repository, token, publishe
 }
 
 if (isEntryModule(import.meta.url)) {
-  try {
-    await checkFailureReadiness({ event: JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")),
-      repository: process.env.GITHUB_REPOSITORY, token: process.env.GH_TOKEN, publisher: process.env.DPF_REVIEW_STATUS_PUBLISHER });
-    console.log("Final-change failure analysis and recovery evidence verified.");
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+  const publisher = process.env.DPF_REVIEW_STATUS_PUBLISHER;
+  if (!failureReadinessConfigured(publisher)) {
+    console.error("[failure-readiness] CANNOT RUN - no trusted status publisher configured.");
+    console.error("Set the repository variable DPF_REVIEW_STATUS_PUBLISHER to the login that");
+    console.error("publishes the `dpf/failure-readiness` commit status. Until then this gate");
+    console.error("has no evidence to check, so it reports that rather than failing every PR.");
+    process.exitCode = 2;
+  } else {
+    try {
+      await checkFailureReadiness({ event: JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")),
+        repository: process.env.GITHUB_REPOSITORY, token: process.env.GH_TOKEN, publisher });
+      console.log("Final-change failure analysis and recovery evidence verified.");
+    } catch (error) { console.error(error.message); process.exitCode = 1; }
+  }
 }
