@@ -51,6 +51,22 @@ Four instances, all measured on this platform within one working session:
 None of these errored. Each produced a plausible wrong answer, and each cost
 real time to a reader who had no way to tell it from a real one.
 
+A fifth, measured 2026-09-12, is worse than the other four because it was not a
+transient. The merge-through-gates **signal** asks git whether a branch reached
+the trunk, probing a list of candidate repository roots. On every install the
+first root was the *installed runtime directory*, not a checkout, so no root
+resolved and the signal returned a silent, unconditional "did not merge" — for
+as long as it had shipped. Two capabilities that depend on it were dead
+platform-wide with nothing anywhere saying so, and the suite stayed green
+because every test injected a stub in place of the probe.
+
+The lesson is not "add a third state to gates". It is that **anything a decision
+reads is a check** — a signal, a probe, a lookup — and inherits this obligation.
+An inconclusive branch that can never succeed in production is not a fail-safe,
+it is a blind spot wearing a fail-safe's clothes. If a code path's honest answer
+is always "I could not tell", someone has to be told that, once, loudly, rather
+than every caller being told "no" forever.
+
 ## What to do
 
 **Give "I could not tell" its own outcome.** A tri-state (`true` / `false` /
@@ -71,6 +87,15 @@ should report the ambiguity rather than pick.
 
 **Do not report a verdict about state you did not read.** A record from a
 previous run is evidence about that run, not this one.
+
+**Ask which direction of the answer needs fresh state — it is often only one.**
+Some properties are monotone: once a commit is an ancestor of the trunk it stays
+one, so a *positive* reachability answer read from a stale clone is still true,
+while a *negative* from the same clone is worthless — it cannot distinguish "not
+merged" from "not fetched since". Gating both answers on freshness costs
+availability for nothing; gating neither ships confident wrong negatives.
+Measured 2026-09-12: the workspace the merge signal reads is refreshed when a
+build starts, not when an item completes, and was found ten days behind.
 
 **An inconclusive result never withdraws a verdict already reached.** "I could
 not tell" is not evidence that the earlier answer was wrong -- it is the absence

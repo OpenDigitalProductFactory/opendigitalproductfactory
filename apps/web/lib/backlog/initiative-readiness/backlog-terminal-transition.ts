@@ -8,7 +8,7 @@ import {
   type ResolveCompletionEvidenceResult,
 } from "@/lib/backlog/completion-evidence-runtime";
 import { canonicalJson } from "@/lib/shared/canonical-json";
-import { isReachableFromTrunk, trunkHasMergedPullRequest, trunkRefExists } from "@/lib/work-capsules/git-scanner";
+import { isReachableFromTrunk, trunkHasMergedPullRequest, trunkRefCommittedAt, trunkRefExists } from "@/lib/work-capsules/git-scanner";
 
 import { projectBacklogItemReadiness, readinessShapeFromWorkShape, type InitiativeReadinessActivity } from "./entry-adapter";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
@@ -141,9 +141,38 @@ export type ResolveMergeDelivery = (args: { itemRowId: string; itemId: string })
  * real checkout.
  */
 export function mergeSignalRoots(): string[] {
-  const roots = [process.env.DPF_REPO_ROOT, process.env.DPF_HOST_SOURCE_ROOT, "/host-dpf", process.cwd()];
+  const roots = [
+    process.env.DPF_REPO_ROOT,
+    process.env.DPF_HOST_SOURCE_ROOT,
+    // The runtime's own source root. On a consumer install this is the Build
+    // Studio workspace volume (`/sandbox-workspace`), which docker-entrypoint.sh
+    // makes a real repo and `start_build` points at the upstream — so the signal
+    // works with NO operator configuration on exactly the installs that have no
+    // host checkout. It was simply never asked (BI-043946C5).
+    process.env.PROJECT_ROOT,
+    "/host-dpf",
+    process.cwd(),
+  ];
   return [...new Set(roots.filter((r): r is string => Boolean(r)))];
 }
+
+/**
+ * How stale a trunk ref may be before a NEGATIVE reachability answer stops
+ * counting as a measurement. Positives are unaffected: reachability is monotone,
+ * so a stale trunk can only ever miss a merge, never invent one.
+ *
+ * This exists because the roots above are not guaranteed to be fetched. The
+ * Build Studio workspace is refreshed at `start_build`, not on the completion
+ * path, and was observed ten days behind on a live install — old enough to
+ * report merged work as unmerged with total confidence, which is the exact
+ * failure BI-043946C5 set out to remove. Reading the ref is local and cheap;
+ * fetching here is deliberately NOT done, because the completion path must not
+ * depend on the network.
+ */
+const TRUNK_FRESHNESS_WINDOW_MS = (() => {
+  const raw = Number(process.env.DPF_MERGE_SIGNAL_MAX_TRUNK_AGE_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 24 * 60 * 60 * 1000;
+})();
 
 /**
  * The operator-facing sentence for an unavailable merge signal. It names the
@@ -196,8 +225,14 @@ export async function resolveMergeSignalFromRefs(input: {
   heads: readonly string[];
   pullRequests: readonly number[];
   roots: readonly string[];
+  /** Injectable for tests; defaults to the real clock. */
+  now?: Date;
+  /** Injectable for tests; defaults to reading the trunk tip's commit date. */
+  readTrunkCommittedAt?: (root: string) => Promise<Date | null>;
 }): Promise<MergeDeliverySignal> {
   const { heads, pullRequests, roots } = input;
+  const now = input.now ?? new Date();
+  const readTrunkCommittedAt = input.readTrunkCommittedAt ?? ((root: string) => trunkRefCommittedAt(root));
   // Nothing to look up: no room recorded a head and no PR is linked. That is a
   // real measurement about THIS item — there is no branch identity to find on
   // the trunk — not a broken probe, so it stays a negative.
@@ -219,7 +254,13 @@ export async function resolveMergeSignalFromRefs(input: {
       if (merged === true) return "merged";
       if (merged === false) sawDefiniteNegative = true;
     }
-    return sawDefiniteNegative ? "not-merged" : "signal-unavailable";
+    if (!sawDefiniteNegative) return "signal-unavailable";
+    // A negative is only a measurement if the trunk it was measured against is
+    // current. An unfetched trunk reports merged work as unmerged, confidently.
+    const trunkAt = await readTrunkCommittedAt(root);
+    if (!trunkAt) return "signal-unavailable";
+    const staleBy = now.getTime() - trunkAt.getTime();
+    return staleBy <= TRUNK_FRESHNESS_WINDOW_MS ? "not-merged" : "signal-unavailable";
   }
   // No candidate root is a readable repository.
   return "signal-unavailable";
