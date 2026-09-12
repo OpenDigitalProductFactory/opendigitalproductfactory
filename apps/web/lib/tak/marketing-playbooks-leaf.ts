@@ -58,31 +58,17 @@ export const LEAF_PLAYBOOKS: Record<string, MarketingPlaybook> = {
       "Longer-stay animal feature",
     ],
     seedSegments: [
-      {
-        name: "Adopters",
-        description:
-          "Looking for a specific animal that fits their home, and needing honest information about behaviour, medical needs and unknowns before they commit.",
-      },
-      {
-        name: "Foster carers",
-        description:
-          "Willing to hold an animal temporarily; the constraint is capacity and support, not goodwill. Recruiting them is what keeps intake possible.",
-      },
-      {
-        name: "Volunteers",
-        description:
-          "Give time rather than money — transport, events, admin, kennel and yard work.",
-      },
-      {
-        name: "Surrendering owners",
-        description:
-          "Considering giving up an animal. Often reachable with keep-them-home support instead, which prevents an intake the rescue would otherwise absorb.",
-      },
-      {
-        name: "Donors and sponsors",
-        description:
-          "Fund the work rather than being the work. Respond to named, verifiable costs more than to general appeals.",
-      },
+      // Terse on purpose. The strategy surface renders a segment's description
+      // and then renders it AGAIN under its derived profile's traits, so every
+      // word here costs twice — a verbose first revision pushed
+      // /customer/marketing/strategy from 346 to 661 words on arrival against a
+      // 450 budget. Say what the group wants in one clause; the coworker's
+      // research is what replaces these with something specific anyway.
+      { name: "Adopters", description: "Want an animal that fits their home, told honestly" },
+      { name: "Foster carers", description: "Willing to hold an animal; limited by capacity, not goodwill" },
+      { name: "Volunteers", description: "Give time rather than money" },
+      { name: "Surrendering owners", description: "Often reachable with keep-them-home support instead" },
+      { name: "Donors and sponsors", description: "Fund named, verifiable costs over general appeals" },
     ],
     channelVehicles: [
       {

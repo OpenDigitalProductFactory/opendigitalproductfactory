@@ -125,8 +125,7 @@ export function inferPrimaryChannels(input: {
 }
 
 /** How an archetype default is marked so a reader never mistakes it for a finding. */
-export const ARCHETYPE_DEFAULT_SUFFIX =
-  "(archetype default — confirm or replace with what is true here)";
+export const ARCHETYPE_DEFAULT_SUFFIX = "(archetype default)";
 
 export function buildTargetSegments(
   customerSegments: string[],
@@ -164,9 +163,20 @@ export function buildIdealCustomerProfiles(
 ): Profile[] {
   return segments.map((segment) => ({
     name: segment.name,
-    traits: dedupeStrings([segment.description ?? null]),
+    // An archetype default is a starting point, not an observed trait of anyone
+    // — restating it here would assert as a finding what the segment line
+    // already flags as provisional, and the strategy surface renders both, so
+    // the claim would also cost its words twice.
+    traits: isArchetypeDefault(segment.description)
+      ? []
+      : dedupeStrings([segment.description ?? null]),
     painPoints: dedupeStrings([valueProposition]),
   }));
+}
+
+/** True when this description came from the archetype seed rather than the org. */
+export function isArchetypeDefault(description: string | null | undefined): boolean {
+  return typeof description === "string" && description.includes(ARCHETYPE_DEFAULT_SUFFIX);
 }
 
 export function buildEntryOffers(input: {

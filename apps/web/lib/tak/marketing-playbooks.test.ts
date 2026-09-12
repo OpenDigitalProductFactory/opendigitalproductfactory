@@ -204,3 +204,14 @@ describe("archetype seed strategy (EP-5CC9C184)", () => {
     expect(getPlaybookForCategory("retail-goods").seedSegments).toBeUndefined();
   });
 });
+
+describe("seed segments stay inside the surface's word budget", () => {
+  it("keeps every seed description short, because it renders twice", () => {
+    // /customer/marketing/strategy went 346 -> 661 words on arrival (budget
+    // 450) when these were first written as full sentences.
+    const leaf = getPlaybook("nonprofit-community", "inquiry", "pet-rescue");
+    for (const segment of leaf.seedSegments ?? []) {
+      expect(segment.description.split(/\s+/).length, segment.name).toBeLessThanOrEqual(12);
+    }
+  });
+});
