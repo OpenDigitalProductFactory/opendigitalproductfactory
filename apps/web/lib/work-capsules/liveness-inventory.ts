@@ -8,6 +8,7 @@
 
 import { classifyWorkCapsuleLiveness,
   isDemonstrablyWorking,
+  type WorkCapsuleLiveness,
 } from "./liveness";
 import { projectWorkroomRecovery } from "./workroom-recovery-projection";
 
@@ -42,7 +43,7 @@ const INVENTORY_SELECT = {
   taskRun: { select: { taskRunId: true, status: true, updatedAt: true } },
 } as const;
 
-type InventoryDb = {
+export type InventoryDb = {
   workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
   nonProductionEnvironmentLease?: { findMany(args: unknown): Promise<any[]> };
@@ -72,14 +73,14 @@ export type CapsuleLivenessSummary = {
  */
 export async function loadCapsuleLivenessInventory(
   db: InventoryDb,
-  args: { where: Record<string, unknown>; take: number },
+  args: { where: Record<string, unknown>; take: number; compact?: boolean },
   now: Date = new Date(),
 ): Promise<{ capsulesAll: Array<Record<string, unknown>>; livenessSummary: CapsuleLivenessSummary }> {
   const rows = await db.workroom.findMany({
     where: args.where,
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
     take: args.take,
-    select: INVENTORY_SELECT,
+    select: args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
   });
 
   const buildIds = rows.map((r) => r.featureBuildId).filter((id): id is string => Boolean(id));
@@ -135,6 +136,10 @@ export async function loadCapsuleLivenessInventory(
     };
   });
 
+  return { capsulesAll, livenessSummary: summarizeCapsuleLiveness(capsulesAll, leases, now) };
+}
+
+export function summarizeCapsuleLiveness(capsulesAll: Array<Record<string, unknown>>, leases: any[] = [], now: Date = new Date()): CapsuleLivenessSummary {
   const byLiveness: Record<string, number> = {};
   for (const c of capsulesAll) byLiveness[c.liveness as string] = (byLiveness[c.liveness as string] ?? 0) + 1;
 
@@ -153,11 +158,9 @@ export async function loadCapsuleLivenessInventory(
     : null).filter((age): age is number => age != null);
 
   return {
-    capsulesAll,
-    livenessSummary: {
       scanned: capsulesAll.length,
       live: capsulesAll.filter((c) => c.isLive).length,
-      working: capsulesAll.filter((c) => isDemonstrablyWorking(c.liveness)).length,
+      working: capsulesAll.filter((c) => isDemonstrablyWorking(c.liveness as WorkCapsuleLiveness)).length,
       history: capsulesAll.filter((c) => !c.isLive).length,
       reapable: capsulesAll.filter((c) => c.isReapable).length,
       byLiveness,
@@ -170,6 +173,5 @@ export async function loadCapsuleLivenessInventory(
         oldestWaitMs: waitAges.length ? Math.max(...waitAges) : null,
         maxNoTransitionMs: transitionAges.length ? Math.max(...transitionAges) : null,
       },
-    },
   };
 }

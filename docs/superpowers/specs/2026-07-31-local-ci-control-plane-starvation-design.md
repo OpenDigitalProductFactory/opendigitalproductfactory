@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local-CI Control-Plane Starvation Prevention
 
 - **Status:** accepted for implementation
@@ -154,3 +158,22 @@ builds. The prior rollback remains binding until that new evidence exists.
 - the exact local-CI pregate proves the Docker artifact still builds and records the
   bounded policy;
 - portal/MCP/PostgreSQL/Docker health is sampled before, during, and after the gate.
+
+## Dependency readiness for the bounded build
+
+
+Explicitly deny the existing `@parcel/watcher` install hook in `allowBuilds`.
+Version 2.6.0 loads a platform-specific optional prebuilt binary before trying
+a local build. Its [install hook](https://github.com/parcel-bundler/watcher/blob/v2.6.0/scripts/build-from-source.js)
+only invokes node-gyp when `npm_config_build_from_source=true`. Locked prebuilds
+cover DPF's Windows x64 host, macOS arm64 host, and Linux x64/arm64 glibc/musl
+build targets. Keep optional dependencies enabled; do not silently fall back to
+source compilation on a target without a prebuild. Such a target needs a separate
+compatibility decision. No dependency version or integrity pin changes.
+
+This classifies an already-denied script, rather than authorizing additional
+install execution. A fresh managed install recorded the hook as unclassified,
+while an older sibling install had no watcher entry at all. The recorded policy
+makes readiness independent of that installation history. Verify managed
+readiness and exercise the Windows prebuilt watcher's snapshot operation;
+Linux loading and the production build remain canonical-build checks.

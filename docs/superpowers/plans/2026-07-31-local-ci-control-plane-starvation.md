@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local-CI Control-Plane Starvation Implementation Plan
 
 - **Status:** ready for implementation
@@ -145,3 +149,9 @@ restore unbounded execution as an operational workaround; leave capacity at one 
 classify gates blocked until a safe replacement is deployed. Builder containers are
 slot-scoped cache infrastructure and may be removed only through the governed local-CI
 cleanup/recovery path.
+
+## Dependency readiness verification
+
+The companion design records the explicit deny disposition for the existing
+`@parcel/watcher` install hook. Verify managed readiness and the locked Windows
+and Linux prebuilt binaries; keep production build acceptance separate.
