@@ -22,6 +22,11 @@ successful traversal, even if Workrooms change while the client reads. A lost
 or expired observation produces a typed restart instruction, never a silently
 different population under the old cursor.
 
+**OBJ-PAGE-COMPLETE:** Enumerate every matching Workroom exactly once within a fixed observation, with explicit page and population counts.
+**OBJ-PAGE-TYPED:** Preserve usable typed records, detail routes and continuation within supported client budgets.
+**OBJ-PAGE-SAFE:** Bound observation resources and recheck authority on continuation, with explicit recovery when an observation cannot continue.
+**OBJ-PAGE-SHARED:** Reuse canonical liveness, recovery and transport behavior across current, legacy and native consumers.
+
 ## Research & Benchmarking
 
 - [Kubernetes consistent lists](https://kubernetes.io/docs/reference/using-api/api-concepts/)
@@ -178,6 +183,18 @@ duplicate selection/projection/serialization behavior, with affected consumers
 covered by tests. Formatting does not count as refactoring evidence.
 
 ## Acceptance and verification
+
+These stable acceptance identifiers bind the detailed verification cases below
+to the objectives; they do not assert that those cases have passed.
+
+| Acceptance | Objectives | Required result |
+| --- | --- | --- |
+| AC-PAGE-1 | OBJ-PAGE-COMPLETE | Cases 1 and 3 enumerate the full matching observation, including stale matches beyond the old cutoff, with exact IDs and correctly scoped counts. |
+| AC-PAGE-2 | OBJ-PAGE-COMPLETE, OBJ-PAGE-TYPED | Cases 2 and 4 preserve fixed membership under concurrent changes and retain each oversized or escaped row as a valid typed record. |
+| AC-PAGE-3 | OBJ-PAGE-TYPED | Case 4 preserves detail routes and continuation at every supported transport budget and refuses an insufficient envelope budget explicitly. |
+| AC-PAGE-4 | OBJ-PAGE-SAFE | Case 5 rejects altered, foreign, expired and filter-mismatched cursors and prevents cached disclosure after authority narrows. |
+| AC-PAGE-5 | OBJ-PAGE-SAFE | Case 6 enforces finite construction and retention budgets and verifies restart behavior across eviction, process replacement and supported worker routing. |
+| AC-PAGE-6 | OBJ-PAGE-TYPED, OBJ-PAGE-SHARED | Cases 7 and 8 verify equivalent actual client traversal and protect existing detail, alias, liveness, recovery and native behavior. |
 
 1. Enumerate at least 251 matching rooms with tied ordering values through pages
    below 100. Compare exact IDs with the captured observation: no gaps/duplicates.
