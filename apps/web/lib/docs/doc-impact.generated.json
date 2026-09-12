@@ -1671,6 +1671,9 @@
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/application-boundaries.md"
     ],
+    "scripts/check-authoring-cost-dimensions.mjs": [
+      "docs/founder-kernel/AUTHORING.md"
+    ],
     "scripts/check-build-namespace.mjs": [
       "docs/architecture/build-studio-namespace.md"
     ],
@@ -2864,7 +2867,8 @@
       "apps/web/lib/decision/golden-decisions.test.ts",
       "packages/db/src/seed-wiki-kernel.ts",
       "packages/db/src/wiki-taxonomy.ts",
-      "scripts/build-kernel-embeddings.ts"
+      "scripts/build-kernel-embeddings.ts",
+      "scripts/check-authoring-cost-dimensions.mjs"
     ],
     "docs/founder-kernel/SCHEMA.md": [
       "apps/web/lib/queue/functions/wiki-lint.ts",
