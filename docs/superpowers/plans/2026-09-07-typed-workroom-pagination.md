@@ -9,6 +9,14 @@ Design: [typed traversal](../specs/2026-09-07-typed-workroom-pagination-design.m
 All deliverables below belong to this existing BI. No additional work hierarchy
 is needed. This draft is not an implementation-readiness or plan-review receipt.
 
+The single deliverable, `typed-workroom-traversal`, implements contract
+`CT-MCP-PAGE` through flow `list_workrooms -> typed continuation -> get_workroom`.
+It covers baseline objectives `OBJ-PAGE-COMPLETE`, `OBJ-PAGE-TYPED`,
+`OBJ-PAGE-SAFE` and `OBJ-PAGE-SHARED`. Verification binds `AC-PAGE-1`,
+`AC-PAGE-2`, `AC-PAGE-3`, `AC-PAGE-4`, `AC-PAGE-5` and `AC-PAGE-6` from the
+design. Snapshot construction, projection and transport must ship together:
+shipping only one leaves incomplete enumeration or unusable continuation.
+
 ## 1. Resolve the bounded observation contract
 
 - Complete the independent architecture review of the exact published design
