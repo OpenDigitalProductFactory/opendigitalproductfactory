@@ -111,4 +111,34 @@ describe("initiative-readiness.v3 — gates keyed by (shape, sensitivity, target
     expect(xlarge.blockers.map((entry) => entry.code)).toContain("DECOMPOSITION_REQUIRED");
     expect(xlarge.blockers.find((entry) => entry.code === "DECOMPOSITION_REQUIRED")?.nextAction).toMatch(/Decompose/);
   });
+
+  // BI-BD60DC91: a delivery-small fix was gated as medium — owing an
+  // independent objective baseline it could never mint — because its body
+  // mentioned a keyword while describing the blast radius. The verdict was
+  // correct policy; the silence about WHY was the defect.
+  it("reports the shape that actually gated the evaluation, and whether sensitivity raised it", () => {
+    const plain = evaluateInitiativeReadiness(facts({ shape: "small" }), "completion");
+    expect(plain.shapeDecision).toEqual({ declared: "small", effective: "small", sensitivity: null, raised: false });
+    expect(codes(plain)).not.toContain("OBJECTIVE_BASELINE_REQUIRED");
+
+    const raised = evaluateInitiativeReadiness(facts({ shape: "small", sensitivity: "elevated" }), "completion");
+    expect(raised.shapeDecision).toEqual({ declared: "small", effective: "medium", sensitivity: "elevated", raised: true });
+    // The raise is what pulls in the medium-only baseline; naming it explains the refusal.
+    expect(codes(raised)).toContain("OBJECTIVE_BASELINE_REQUIRED");
+
+    const high = evaluateInitiativeReadiness(facts({ shape: "small", sensitivity: "high" }), "completion");
+    expect(high.shapeDecision).toMatchObject({ declared: "small", effective: "large", raised: true });
+
+    // An unshaped item is still gated by the v2 profile and claims no shape.
+    expect(evaluateInitiativeReadiness(facts(), "completion").shapeDecision).toBeUndefined();
+  });
+
+  it("does not change any verdict: the reported effective shape is the one the table used", () => {
+    for (const sensitivity of [null, "elevated", "high"] as const) {
+      for (const shape of ["break-fix", "small", "medium", "large"] as const) {
+        const decision = evaluateInitiativeReadiness(facts({ shape, sensitivity }), "completion");
+        expect(decision.shapeDecision?.effective).toBe(effectiveShape(shape, sensitivity));
+      }
+    }
+  });
 });
