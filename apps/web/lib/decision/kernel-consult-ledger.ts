@@ -357,6 +357,11 @@ export async function recordKernelConsultInteraction(input: {
       // BI-FD7CBA06: name the door so WWMD audit can filter external MCP consults
       // separately from build-studio / backlog-triage (was always null before).
       gateKey: "kernel-consult",
+      // BI-01F8F06D: a consult is attended when a human triggered it and
+      // unattended when an agent did. Derived from the caller the request
+      // already declares rather than assumed, so the agreement denominator
+      // never silently absorbs a decision nobody reviewed.
+      autonomous: !input.triggeredByUserId,
       phaseFrom: null,
       phaseTo: null,
       chain,
