@@ -219,7 +219,7 @@ export function isTimeoutRejection(error) {
     || (error instanceof Error && error.name === "TimeoutError");
 }
 
-async function timedProbe(run, timeoutMs = CONTROL_PLANE_PROBE_TIMEOUT_MS) {
+export async function timedProbe(run, timeoutMs = CONTROL_PLANE_PROBE_TIMEOUT_MS) {
   const started = Date.now();
   let timer;
   try {
@@ -229,11 +229,23 @@ async function timedProbe(run, timeoutMs = CONTROL_PLANE_PROBE_TIMEOUT_MS) {
         timer = setTimeout(() => reject(new Error("timeout")), timeoutMs);
       }),
     ]);
-    return {
-      healthy: value === true,
-      elapsedMs: Date.now() - started,
-      ...(value === true ? {} : { reason: "invalid-response" }),
-    };
+    const elapsedMs = Date.now() - started;
+    if (value === true) return { healthy: true, elapsedMs };
+    // BI-3A008EBC: a probe that already knows WHY it failed keeps its own
+    // verdict. Collapsing every non-true value into "invalid-response" is what
+    // made a wedged engine, an absent engine and a missing binary one string.
+    // A bare boolean still behaves exactly as it always did, so the portal, MCP
+    // and postgres probes that share this helper are untouched.
+    if (value && typeof value === "object") {
+      const healthy = value.healthy === true;
+      return {
+        healthy,
+        elapsedMs,
+        ...(healthy ? {} : { reason: value.reason || "invalid-response" }),
+        ...(value.detail ? { detail: value.detail } : {}),
+      };
+    }
+    return { healthy: false, elapsedMs, reason: "invalid-response" };
   } catch (error) {
     return {
       healthy: false,
@@ -249,22 +261,159 @@ async function timedProbe(run, timeoutMs = CONTROL_PLANE_PROBE_TIMEOUT_MS) {
   }
 }
 
-async function commandHealthy(command, args, timeoutMs) {
+/**
+ * BI-3A008EBC. How much of a failing command's stderr reaches the evidence.
+ * `docker info` prints the one sentence that separates a wedged engine from an
+ * absent one, so discarding stderr discarded the diagnosis; the payload is
+ * written to disk, so this is a bounded tail rather than the lot.
+ */
+const COMMAND_STDERR_TAIL_LIMIT = 2_000;
+
+/**
+ * Run a command and report WHAT happened, not merely whether it worked.
+ *
+ * This used to resolve a bare boolean with `stdio: "ignore"`, so the exit code,
+ * the stderr and the spawn error were all thrown away and every failure became
+ * one indistinguishable reason. `spawnImpl` is injected only so the four failure
+ * shapes can be unit-tested without a Docker engine.
+ */
+export async function commandHealthy(command, args, timeoutMs, { spawnImpl = spawn } = {}) {
   return await new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: "ignore", windowsHide: true, shell: false });
+    let stderrTail = "";
+    let settled = false;
+    const child = spawnImpl(command, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+      windowsHide: true,
+      shell: false,
+    });
+    const settle = (outcome) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        healthy: false,
+        exitCode: null,
+        stderrTail,
+        spawnError: null,
+        timedOut: false,
+        ...outcome,
+      });
+    };
     const timer = setTimeout(() => {
-      child.kill();
-      resolve(false);
+      // A probe that gave up must not leave the child running.
+      try {
+        child.kill();
+      } catch {
+        // already gone
+      }
+      settle({ timedOut: true });
     }, timeoutMs);
-    child.once("error", () => {
-      clearTimeout(timer);
-      resolve(false);
+    child.stderr?.on("data", (chunk) => {
+      stderrTail = `${stderrTail}${chunk}`.slice(-COMMAND_STDERR_TAIL_LIMIT);
     });
-    child.once("close", (code) => {
-      clearTimeout(timer);
-      resolve(code === 0);
-    });
+    child.once("error", (error) => settle({ spawnError: error }));
+    child.once("close", (code) => settle({ healthy: code === 0, exitCode: code }));
   });
+}
+
+/**
+ * The phrasings Docker uses when the engine is not there to talk to, as opposed
+ * to being there and answering badly. Windows names the missing named pipe,
+ * POSIX the missing socket. Both mean "start Docker", which is a different
+ * operator action from "recover the wedged engine".
+ */
+const DOCKER_ENGINE_UNREACHABLE_PATTERNS = [
+  /cannot find the file specified/i,
+  /cannot find the path specified/i,
+  /is the docker daemon running/i,
+  /cannot connect to the docker daemon/i,
+  /failed to connect to the docker api/i,
+  /no such file or directory/i,
+];
+
+/**
+ * BI-3A008EBC. Name the docker failure the probe actually observed.
+ *
+ * Observed 2026-09-10 with 13 GB of host memory free: the engine was wedged and
+ * answering HTTP 500 while the gate reported
+ * `blocked_control_plane_starvation docker:invalid-response`. The remedy was
+ * clearing orphaned AF_UNIX sockets (BI-DDA569D9) and had nothing to do with
+ * memory — but four conditions with four different remedies shared one string,
+ * so seven outages were worked around by hand and never diagnosed.
+ *
+ * The unrecognised case still answers `invalid-response`: a failure we cannot
+ * classify is not a licence to invent a cause.
+ */
+export function classifyDockerProbeFailure({
+  exitCode = null,
+  stderrTail = "",
+  spawnError = null,
+  timedOut = false,
+} = {}) {
+  if (spawnError) {
+    return spawnError.code === "ENOENT"
+      ? "binary-missing"
+      : `spawn-failed (${spawnError.code || "unknown"})`;
+  }
+  // A deadline is a deadline (BI-24D5D7C2), and it outranks whatever partial
+  // stderr was captured before it fired.
+  if (timedOut) return "timeout";
+  const text = String(stderrTail || "");
+  if (DOCKER_ENGINE_UNREACHABLE_PATTERNS.some((pattern) => pattern.test(text))) {
+    return "engine-unreachable";
+  }
+  const status = text.match(/returned\s+(\d{3})\b/i)
+    || text.match(/\b(\d{3})\s+internal server error/i);
+  if (status) return `engine-error (${status[1]})`;
+  if (/error during connect|requested api version/i.test(text)) return "engine-error";
+  void exitCode;
+  return "invalid-response";
+}
+
+/**
+ * BI-3A008EBC. The inner command owns a STRICTLY SHORTER deadline than the
+ * `timedProbe` wrapping it. Both were previously handed the same
+ * CONTROL_PLANE_PROBE_TIMEOUT_MS, so two timers raced on an identical deadline
+ * and whichever fired first decided the label — a genuine docker deadline was
+ * reported as `invalid-response` nondeterministically, silently bypassing the
+ * classification BI-24D5D7C2 shipped.
+ */
+const DOCKER_PROBE_COMMAND_TIMEOUT_MS = Math.max(
+  1_000,
+  Math.floor(CONTROL_PLANE_PROBE_TIMEOUT_MS * 0.8),
+);
+
+async function dockerCommandProbe(args, timeoutMs = DOCKER_PROBE_COMMAND_TIMEOUT_MS) {
+  const outcome = await commandHealthy("docker", args, timeoutMs);
+  if (outcome.healthy) return true;
+  return {
+    healthy: false,
+    reason: classifyDockerProbeFailure(outcome),
+    detail: {
+      exitCode: outcome.exitCode,
+      timedOut: outcome.timedOut,
+      ...(outcome.spawnError
+        ? { spawnError: outcome.spawnError.code || String(outcome.spawnError.message || "") }
+        : {}),
+      ...(outcome.stderrTail ? { stderrTail: outcome.stderrTail } : {}),
+    },
+  };
+}
+
+/**
+ * BI-3A008EBC. The `blocked_control_plane_starvation` status value is persisted
+ * in gate records and read by scripts/lib/pregate-status.mjs, so it is not
+ * renamed here — but when the engine itself answered badly, the word
+ * "starvation" asserts a cause the probe never established and sends the
+ * operator to free memory that was never short. Say what was actually seen.
+ */
+export function controlPlaneEngineAdvisory(failures) {
+  const engine = (Array.isArray(failures) ? failures : [])
+    .map((failure) => String(failure))
+    .find((failure) => /:(engine-error|engine-unreachable|binary-missing)\b/.test(failure));
+  if (!engine) return null;
+  return `the engine itself answered badly (${engine}) — this is NOT host memory pressure;`
+    + " recover the engine and re-gate the same SHA (orphaned-socket recovery: BI-DDA569D9)";
 }
 
 async function probePostgres(databaseUrl) {
@@ -299,7 +448,9 @@ function resolveControlPlanePostgresProbe() {
     container,
     environment: inspected.stdout,
   });
-  return () => commandHealthy("docker", args, 2_500);
+  // BI-3A008EBC: the postgres container probe shells out to docker too, so a
+  // wedged engine must not be reported here as an opaque invalid-response either.
+  return () => dockerCommandProbe(args, 2_500);
 }
 
 async function probeControlPlane(postgresProbe) {
@@ -327,7 +478,7 @@ async function probeControlPlane(postgresProbe) {
       });
       return response?.success === true;
     }),
-    timedProbe(() => commandHealthy("docker", ["info"], CONTROL_PLANE_PROBE_TIMEOUT_MS)),
+    timedProbe(() => dockerCommandProbe(["info"])),
     timedProbe(postgresProbe),
   ]);
   return { portal, mcp, docker, postgres };
@@ -486,6 +637,8 @@ async function main() {
     writeEvidence(evidencePath, payload);
     stageReceipt.complete(payload.status, payload);
     process.stderr.write(`[local-ci-bounded-build] ${payload.status} ${payload.failures.join(",")}\n`);
+    const advisory = controlPlaneEngineAdvisory(payload.failures);
+    if (advisory) process.stderr.write(`[local-ci-bounded-build] ${advisory}\n`);
     return EXIT_CONTROL_PLANE_STARVATION;
   }
 
@@ -597,6 +750,8 @@ async function main() {
     stageReceipt.complete(receiptStatus, payload);
     if (finalStatus === "blocked_control_plane_starvation") {
       process.stderr.write(`[local-ci-bounded-build] ${finalStatus} ${failures.join(",")}\n`);
+      const advisory = controlPlaneEngineAdvisory(failures);
+      if (advisory) process.stderr.write(`[local-ci-bounded-build] ${advisory}\n`);
       exitCode = EXIT_CONTROL_PLANE_STARVATION;
     } else {
       // Retention runs ONLY on a green build, so the slot always keeps a working
