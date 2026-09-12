@@ -99,6 +99,29 @@ publication: source preflight, relevant tests/type checking, exact-tree semantic
 review and required runtime gate. Before merge: PR readiness/health and bot findings.
 No tests have been run for this implementation candidate.
 
+Documentation review preparation uses the existing documentation evidence lane
+in `scripts/lib/documentation-evidence-lane.mjs`. Preserve its shared validity
+contract (`createLocalCiPassEvidenceValidity`), exact source identity, executed
+commands and output when recording proof. A narrative that checks passed is not
+a substitute for the complete report. Missing or expired proof must stop review
+before inference; refresh proof by rerunning the checks, never by extending an
+old report's expiry. Keep the failed report for audit.
+
+Before entering the delivery workflow, verify that its workroom has exactly one
+explicit process coordinator, resolved through the canonical principal identity.
+The coordinator routes internal review and recovery; this assignment neither
+approves the author's design nor asks the business owner to select reviewers.
+Keep review state separate from workflow state: an assigned coordinator does not
+prove that a paused review resumed. Read the task's actual reason and use its
+supported recovery action. An exhausted deadline is not permission to replay an
+unchanged request or reset its attempt budget.
+
+Include missing/expired verification evidence and interrupted review in the
+external-agent rehearsal. Assert a bounded diagnostic, accountable internal next
+action and an unchanged readiness verdict until valid proof and independent
+review exist. Preserve this rehearsal's reports outside the disposable install,
+with instance-local work references kept in its captured coordination bundle.
+
 First integration fixture: disposable new development companion of a test parent,
 with known master selection. Demonstrate skip paths, same-org discovery, trust,
 paginated sync, final authorized work readback, failed peer and resumed run. Parent
