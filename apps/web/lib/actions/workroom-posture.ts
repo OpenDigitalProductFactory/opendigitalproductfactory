@@ -29,7 +29,7 @@ import {
   getWorkroomPostureDefault,
   setWorkroomPostureDefault,
 } from "@/lib/work-management/workroom-posture-defaults";
-import { withWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
+import { readWorkroomPostureClaim, withWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { buildWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import { WORKROOM_SHAPE_KEYS, type WorkroomShapeKey } from "@/lib/work-management/room-shapes";
 import type { RoomPostureDeclaration } from "@/lib/work-posture";
@@ -66,7 +66,12 @@ export async function saveWorkroomPosture(
       select: { scopeClaims: true },
     });
     if (!room) return err("That room could not be found.");
+    // Merge onto what the room already declared: the control saves one axis at
+    // a time (pace, authority, priority), and replacing the whole declaration
+    // would silently drop the other two.
+    const existing = readWorkroomPostureClaim(room.scopeClaims);
     const next = withWorkroomPostureClaim(room.scopeClaims, {
+      ...(existing ?? {}),
       ...declaration,
       declaredBy: user.id ?? null,
       declaredAt: new Date().toISOString(),

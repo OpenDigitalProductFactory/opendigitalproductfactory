@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import type { AlignmentGateDecision } from "./tak/alignment-tool-gate";
 import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-gate";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
+import { boundLargeStrings } from "./evidence/bounded-output";
 import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute";
 import type { ToolDefinition, ToolResult } from "./mcp-tools";
 
@@ -48,7 +49,13 @@ export async function writeGovernedToolAudit(data: {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const isMetricsOnly = auditClass === "metrics_only";
   const retainParameters = !isMetricsOnly || data.tool?.retainAuditParameters === true;
-  const redactedParameters = redactWriteOnlyParameters(data.rawParams, data.tool?.inputSchema);
+  // BI-39AAE9B8: the ledger records THAT a call happened and what it carried,
+  // by digest — never a multi-megabyte payload. Any string leaf above the
+  // ceiling becomes {__dpfBounded, sha256, byteLength, head}; the durable full
+  // copy is the evidence record's blob (same sha256), not this row.
+  const redactedParameters = boundLargeStrings(
+    redactWriteOnlyParameters(data.rawParams, data.tool?.inputSchema),
+  );
   const row = {
     threadId: data.context?.threadId ?? "", agentId: data.context?.agentId ?? "unknown",
     userId: data.userId, taskRunId: data.context?.taskRunId ?? null, toolName: data.toolName,

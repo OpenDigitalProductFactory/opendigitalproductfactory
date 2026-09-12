@@ -32,7 +32,7 @@ import { RUNNER_FAILURE_EXIT_CODE } from "./check-guards.mjs";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 import { shouldRunPreflight } from "./pregate.mjs";
 
-const repoRoot = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const preflightCli = join(repoRoot, "scripts", "pregate-preflight.mjs");
 const pregateCli = join(repoRoot, "scripts", "pregate.mjs");
 
@@ -131,18 +131,40 @@ test("buildPreflightPlan includes only commit-range-safe pull-request gates", ()
   for (const id of LOCAL_SAFE_PR_GUARD_IDS) {
     assert.ok(ids.has(id), `expected local-safe gate ${id} in the plan`);
   }
-  // PR-body-dependent and tree-mutating gates must never run host-side.
-  assert.ok(!ids.has("seed-fit-gate"), "seed-fit-gate reads the PR body");
+  // BI-4F1E9249: seed-fit-gate now reads the commit range like its sibling
+  // decision gates, so it CAN answer host-side and must be planned. Its former
+  // exclusion cost a full CI round trip on #5291.
+  assert.ok(ids.has("seed-fit-gate"), "seed-fit-gate reads the commit range");
+  // Tree-mutating gates must never run host-side. This reason does not expire.
   assert.ok(!ids.has("decision-baseline"), "decision-baseline merges origin/main");
+});
+
+test("a decision guard that can read the commit range is not excluded from the preflight", () => {
+  // The generalisation of BI-4F1E9249. A gate excluded for "needs the PR body"
+  // is excluded for a removable reason: the decision can travel in the commit.
+  // Only a gate that MUTATES the tree has a reason that does not expire.
+  const CANNOT_ANSWER_HOST_SIDE = new Set(["decision-baseline"]);
+  const planned = new Set(buildPreflightPlan().map((entry) => entry.id));
+  const excluded = POLICY_GUARD_PROFILES["pull-request"]
+    .map((entry) => entry.id)
+    .filter((id) => !planned.has(id));
+  assert.deepEqual(
+    excluded.filter((id) => !CANNOT_ANSWER_HOST_SIDE.has(id)),
+    [],
+    "A pull-request gate is excluded from the preflight for a reason that can expire. "
+      + "If it needs the PR body, teach it to read the commit range instead (BI-4F1E9249).",
+  );
 });
 
 test("buildPreflightPlan runs every pull-request gate that can answer host-side", () => {
   // Parity with CI's pull-request profile is the point of the preflight. A gate
   // omitted here is one a push can only discover in CI — which is what happened
-  // to Docs Impact on #4558. Only the two gates that CANNOT answer before a push
-  // may be missing; anything else added to the profile must be triaged into or
-  // out of LOCAL_SAFE_PR_GUARD_IDS deliberately, and this test is the prompt.
-  const CANNOT_ANSWER_HOST_SIDE = new Set(["seed-fit-gate", "decision-baseline"]);
+  // to Docs Impact on #4558, and to Seed Contribution Fit on #5291. Only a gate
+  // that CANNOT answer before a push may be missing, and after BI-4F1E9249 that
+  // is one gate: the tree-mutating decision-baseline. Anything else added to the
+  // profile must be triaged into or out of LOCAL_SAFE_PR_GUARD_IDS deliberately,
+  // and this test is the prompt.
+  const CANNOT_ANSWER_HOST_SIDE = new Set(["decision-baseline"]);
   const planned = new Set(buildPreflightPlan().map((entry) => entry.id));
   const missing = POLICY_GUARD_PROFILES["pull-request"]
     .map((entry) => entry.id)

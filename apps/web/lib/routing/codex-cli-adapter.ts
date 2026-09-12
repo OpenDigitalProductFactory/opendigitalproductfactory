@@ -73,6 +73,12 @@ export function looksLikeCliRateLimit(text: string): boolean {
   return CLI_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+export function looksLikeCliUnsupportedModel(text: string): boolean {
+  return /model is not supported when using Codex with a ChatGPT account/i.test(text)
+    || /unsupported model/i.test(text)
+    || /model [`'\"]?[^`'\"\s]+[`'\"]? (?:is )?not (?:available|supported)/i.test(text);
+}
+
 // ─── Container file writer ─────────────────────────────────────────────────
 
 /**
@@ -152,7 +158,7 @@ export function extractMentionedPlatformToolNames(text: string): string[] {
  * - tokens.access_token: the OAuth access token
  * - tokens.id_token: a JWT (same as access_token if JWT, or synthetic)
  */
-async function injectAuth(providerId: string): Promise<{ mode: "oauth" } | { mode: "apikey"; apiKey: string }> {
+export async function prepareCodexCliAuth(providerId: string): Promise<{ mode: "oauth" } | { mode: "apikey"; apiKey: string }> {
   const credential = await getDecryptedCredential(providerId);
   if (!credential) {
     throw new InferenceError(
@@ -216,7 +222,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
 
     // 1. Inject auth
-    const auth = await injectAuth(providerId);
+    const auth = await prepareCodexCliAuth(providerId);
 
     // 2. Build prompt from messages
     const promptParts: string[] = [];
@@ -371,6 +377,12 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
               reject(new InferenceError(
                 `Codex CLI auth failed: ${stderr.slice(0, 300)}`,
                 "auth",
+                providerId,
+              ));
+            } else if (looksLikeCliUnsupportedModel(stderr)) {
+              reject(new InferenceError(
+                `Codex CLI model not found: ${stderr.slice(0, 300)}`,
+                "model_not_found",
                 providerId,
               ));
             } else if (looksLikeCliRateLimit(stderr)) {

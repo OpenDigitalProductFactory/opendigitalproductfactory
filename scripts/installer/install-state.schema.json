@@ -142,7 +142,7 @@
     },
     "agentToolchain": {
       "type": "object",
-      "description": "Result of the most recent dpf-bootstrap-agent-toolchain run. Persisted so re-installs are idempotent and `install-dpf.sh doctor` can report the contributor's kernel-awareness state. Source: docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md.",
+      "description": "DEPRECATED (BI-95DF1BFC): legacy copy of the agent-toolchain readiness block. The bootstrap now writes ~/.dpf/agent-toolchain-state.json and migration drops this key; it stays in the schema only so states written before that migrate cleanly. Source: docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md.",
       "required": [
         "appliedAt",
         "dpfPlatformVersion",

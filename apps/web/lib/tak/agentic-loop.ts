@@ -13,6 +13,8 @@ import {
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
+import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
 import { DynamicToolSurface } from "@/lib/tak/dynamic-tool-surface";
 import {
@@ -69,6 +71,7 @@ import {
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
 import { rotateTerminalWriterRoute } from "./terminal-writer-route";
+import { shouldExitWithLocalToolCallDiagnostic } from "./local-tool-call-diagnostic";
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -1015,6 +1018,19 @@ export type RunAgenticLoopParams = {
    */
   interactionMode?: "chat" | "autonomous";
   /**
+   * EP-WORK-POSTURE §8.2 — what the Workroom the turn runs in resolved for it
+   * (lib/work-management/room-turn-authority.ts). `workroomId` reaches the
+   * authorized-surface context so the room-aware pre-tool gate fires;
+   * `roomAuthority` reaches the governed executor so a tool outside the room's
+   * surface is denied; `externalAccessEnabled` is the server-resolved web
+   * permission (never a client flag); `workroomPriority` is the room's
+   * Cost/Quality/Time posture, which outranks org/platform in routing.
+   */
+  workroomId?: string | null;
+  roomAuthority?: RoomAuthorityContext | null;
+  externalAccessEnabled?: boolean;
+  workroomPriority?: GoldenTrianglePreference | null;
+  /**
    * BI-80532D5C — when true, a side-effecting non-artifact tool the model calls
    * is diverted to an AgentActionProposal (status "proposed") instead of being
    * executed. Set by the scheduler when the run's proactivity actionBoundary is
@@ -1202,6 +1218,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     agentMinimumContextTokens,
     agentId, routeContext,
     ...(agentMessageId ? { agentMessageId } : {}),
+    ...(params.workroomPriority ? { workroomPriority: params.workroomPriority } : {}),
     // mcpSession is forwarded through callWithFallbackChain → callProvider →
     // AdapterRequest. The Claude CLI execution adapter consumes it to mint a
     // short-lived JWT for `--mcp-config`, exposing platform tools as native
@@ -1340,7 +1357,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `totalMs=${Date.now() - startTime} ` +
         `ctxPeakTokens=${ctxPeakTokens} ctxZone=${ctxPressure.zone} ` +
         `toolSurface=${surface.toolCount} estToolTokens=${surface.estDefinitionTokens} surfaceZone=${surface.zone} ` +
-        `toolAccuracy=${economyMetrics.toolSelectionAccuracy === null ? "na" : economyMetrics.toolSelectionAccuracy.toFixed(2)}`,
+        // toolAccuracy scores the calls a turn MADE, so a requireTools turn that
+        // made none still logged a clean 1.00 and read as healthy (BI-2FA5A874).
+        `toolAccuracy=${economyMetrics.toolSelectionAccuracy === null ? "na" : economyMetrics.toolSelectionAccuracy.toFixed(2)}` +
+        (requireTools ? ` requiredToolsMet=${executedTools.length > 0}` : ""),
       ),
     );
     // BI-47443B67: persist the same rollup durably so the regression detector
@@ -2088,19 +2108,13 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         requireToolExecution: requireTools,
       });
 
-        // Local model produced text-only on iteration 0 of a tool-backed turn:
-        // exit with a diagnostic instead of nudging — nudging won't teach a
-        // small local model to use tools mid-turn, it just burns iterations.
-        // The previous Build-Studio carve-out (!BUILD_ROUTE_PATTERN) was the
-        // root cause of 200-iteration hangs on /build threads when the
-        // preferred provider was unavailable and routing fell back to local.
-        // See FB-71FB3A53 thread, 2026-05-22.
-        if (
-          shouldNudgeNow &&
-          iteration === 0 &&
-          executedTools.length === 0 &&
-          result.providerId === "local"
-        ) {
+        if (shouldExitWithLocalToolCallDiagnostic({
+          shouldNudgeNow,
+          iteration,
+          executedToolCount: executedTools.length,
+          providerId: result.providerId,
+          requireTools: Boolean(requireTools),
+        })) {
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
@@ -2457,8 +2471,21 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             // baseline read grant gets the tool attached but rejected on call.
             // Autonomous turns leave this false, so their authority is unchanged.
             coworkerReadBaseline: interactionMode === "chat",
-            ...createAuthorizedSurfaceTurnGovernance({ interactionMode, apiTokenId, route: routeContext, chatHistory }),
-            externalAccessEnabled: toolDef.requiresExternalAccess || undefined,
+            ...createAuthorizedSurfaceTurnGovernance({
+              interactionMode,
+              apiTokenId,
+              route: routeContext,
+              workroomId: params.workroomId ?? null,
+              chatHistory,
+            }),
+            // The turn's SERVER-resolved external permission when the caller
+            // supplied one (chat turns: room + standing grant). Callers that
+            // predate the resolver keep the prior admission-by-attachment
+            // behaviour so autonomous runs are unchanged.
+            externalAccessEnabled: params.externalAccessEnabled !== undefined
+              ? (toolDef.requiresExternalAccess ? params.externalAccessEnabled : undefined)
+              : (toolDef.requiresExternalAccess || undefined),
+            ...(params.roomAuthority ? { roomAuthority: params.roomAuthority } : {}),
             // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
             // user is messaging from into tool context so phase-scoped
             // tools (start_ideate_research, start_scout_research) can

@@ -18,6 +18,13 @@ import {
 } from "./gate-worktree.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 
+// BI-D35B85BF. A queued gate now hands its claim to a detached resumer that
+// keeps re-claiming until admitted. These tests assert the exit-75 CONTRACT
+// against a stub server, so a real resumer would outlive each test and keep
+// re-claiming against a server that has been torn down. The spawn decision
+// itself is covered with an injected spawn in lib/durable-wait-resumer.test.mjs.
+process.env.DPF_DURABLE_RESUMER = "off";
+
 const TEST_HOST_PRESSURE = {
   observedAt: "2026-07-30T05:00:00.000Z",
   availableMemoryBytes: 16 * 1024 ** 3,
@@ -84,6 +91,14 @@ function isolatedFencePath() {
   return join(mkdtempSync(join(tmpdir(), "dpf-gate-fence-")), "owner.json");
 }
 
+// BI-03E1139A: the two clocks a reused PASS is dated by, kept far enough apart
+// that a record stamped with the wrong one is unmistakable. The lease expiry is
+// in the past exactly as it is in the field, where a pool lease outlives its run
+// by minutes while the evidence stays valid for a day.
+const LEASE_EXPIRED_AT = "2020-01-01T00:00:00.000Z";
+const EVIDENCE_ISSUED_AT = "2999-01-01T00:00:00.000Z";
+const EVIDENCE_EXPIRES_AT = "2999-01-02T00:00:00.000Z";
+
 function makeTempWorktree() {
   const dir = mkdtempSync(join(tmpdir(), "dpf-gate-worktree-"));
   const git = (args) => {
@@ -98,6 +113,7 @@ function makeTempWorktree() {
   writeFileSync(join(dir, "README.md"), "gate test\n");
   git(["add", "README.md"]);
   git(["commit", "-q", "-m", "init"]);
+  git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
   return dir;
 }
 
@@ -360,6 +376,10 @@ test("a server-owned durable queue response checkpoints once and exits without p
       DPF_GATE_RETRY_JITTER: "0", DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
     } });
     assert.equal(result.code, 75, result.output);
+    // BI-D35B85BF: the queued report must say who owns the resume instead of
+    // leaving the reader to assume the platform does.
+    assert.match(result.output, /"resumeOwner":"caller"/, result.output);
+    assert.match(result.output, /"resumeUnavailableReason":"disabled"/, result.output);
     assert.equal(calls.filter((tool) => tool === "claim_nonprod_environment_lease").length, 1);
     assert.equal(calls.includes("renew_nonprod_environment_lease"), false);
     assert.equal(calls.includes("release_nonprod_environment_lease"), false);
@@ -398,11 +418,18 @@ test("a subscriber observes the canonical run and reuses its terminal evidence w
             entityId: "EXT-WINNER",
             data: {
               gateKey: "a".repeat(64),
-              lease: { leaseId: "NPEL-WINNER" },
+              // The lease died minutes ago; the evidence it points at is good
+              // for another day. The gate must date its record by the second
+              // clock, not the first (BI-03E1139A).
+              lease: { leaseId: "NPEL-WINNER", expiresAt: LEASE_EXPIRED_AT },
               admission: {
                 status: "reused",
                 evidenceRecordId: "EXT-WINNER",
                 resultClass: "pass",
+                evidenceValidity: {
+                  issuedAt: EVIDENCE_ISSUED_AT,
+                  expiresAt: EVIDENCE_EXPIRES_AT,
+                },
               },
             },
           }
@@ -441,10 +468,86 @@ test("a subscriber observes the canonical run and reuses its terminal evidence w
     assert.equal(result.code, 0, result.output);
     assert.match(result.output, /owned by another caller/);
     assert.match(result.output, /reused canonical local-CI pass evidence: EXT-WINNER/);
+    // The record is dated by the evidence, and the lease's own expiry survives
+    // beside it rather than overwriting it. Stamped with the lease clock, this
+    // PASS would be born expired and pregate:status would answer STALE forever.
+    const reusedState = JSON.parse(readFileSync(join(worktree, ".git", "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(reusedState.expiresAt, EVIDENCE_EXPIRES_AT);
+    assert.equal(reusedState.leaseExpiresAt, LEASE_EXPIRED_AT);
+    assert.equal(reusedState.evidenceValidity.issuedAt, EVIDENCE_ISSUED_AT);
     assert.equal(calls.filter((tool) => tool === "claim_nonprod_environment_lease").length, 2);
     assert.equal(calls.includes("renew_nonprod_environment_lease"), false);
     assert.equal(calls.includes("release_nonprod_environment_lease"), false);
     assert.equal(calls.includes("record_local_integration_result"), false);
+  } finally {
+    rmSync(worktree, { recursive: true, force: true });
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("a reused PASS carrying no validity stamp is refused rather than dated by guesswork", async () => {
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const result = payload.params.name === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: "EXT-UNSTAMPED",
+          data: {
+            gateKey: "b".repeat(64),
+            lease: { leaseId: "NPEL-UNSTAMPED", expiresAt: LEASE_EXPIRED_AT },
+            // No evidenceValidity: the server did not say how fresh this
+            // verdict is, and the gate must not invent a window for it.
+            admission: {
+              status: "reused",
+              evidenceRecordId: "EXT-UNSTAMPED",
+              resultClass: "pass",
+            },
+          },
+        }
+        : { success: true, data: { level: "normal" } };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const worktree = makeTempWorktree();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/unstamped-reuse",
+      "--worktree", worktree,
+      "--poll-seconds", "0.01",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.notEqual(result.code, 0, result.output);
+    assert.match(result.output, /without a validity stamp/);
+    // And it must not have left a PASS behind that nobody can date.
+    const statePath = join(worktree, ".git", "dpf-local-ci-gate.json");
+    if (existsSync(statePath)) {
+      const state = JSON.parse(readFileSync(statePath, "utf8"));
+      assert.notEqual(state.status, "passed");
+    }
   } finally {
     rmSync(worktree, { recursive: true, force: true });
     server.closeAllConnections();
@@ -1376,7 +1479,7 @@ test("rolling upgrade observes the legacy conflict contract without failing", as
       "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.01",
-      "--lease-wait-seconds", "2",
+      "--lease-wait-seconds", "10",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
     ], {
@@ -1446,7 +1549,7 @@ test("transient admission transport reset retries the same durable claim", async
       "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.01",
-      "--lease-wait-seconds", "2",
+      "--lease-wait-seconds", "10",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
     ], {

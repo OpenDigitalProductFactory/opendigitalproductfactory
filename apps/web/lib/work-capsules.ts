@@ -30,6 +30,13 @@ export const WORK_CAPSULE_SOURCES = [
   "worker-onboarding",
   "worker-change",
   "worker-offboarding",
+  // Platform maintenance rooms (embedding-coverage-workroom.ts). This value was
+  // written by a raw upsert without being registered here or in the DB check
+  // constraint, so the row it created could never be updated by anyone —
+  // every UPDATE re-validated the NOT VALID check and failed (BI-A5EEB5D1).
+  // The parity test beside the converger keeps this list and the migration
+  // that mirrors it from drifting apart again.
+  "platform-maintenance",
 ] as const;
 
 /**

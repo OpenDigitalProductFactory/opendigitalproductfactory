@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
     taskArtifact: { findUnique: vi.fn() }, taskNode: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     workroom: { findUnique: vi.fn() }, $transaction: vi.fn() },
   reserve: vi.fn(), authority: vi.fn(), dispatch: vi.fn(), evidence: vi.fn(), activity: vi.fn(), publish: vi.fn(), send: vi.fn(),
+  resolveFailureEvidence: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: mocks.db }));
 vi.mock("@/lib/observability/heartbeat", () => ({ reserveSubmittedTaskRunWorking: mocks.reserve,
@@ -17,11 +18,14 @@ vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: v
 vi.mock("./semantic-review-authority", () => ({ verifySemanticReviewAuthority: mocks.authority }));
 vi.mock("./routed-semantic-review", () => ({ dispatchRoutedSemanticReview: mocks.dispatch }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({ getQuiescenceLevel: vi.fn(async () => "normal") }));
-import { createSemanticReviewRequest } from "./semantic-review-request";
 import { getQuiescenceLevel } from "@/lib/self-upgrade/quiescence";
 import { executePersistedSemanticReview, enqueueSemanticReview, reconcileSemanticReviews, retryPersistedSemanticReview } from "./semantic-review-background";
+vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: mocks.resolveFailureEvidence }));
+vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus: vi.fn() }));
+import { createSemanticReviewRequest } from "./semantic-review-request";
+import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 
-const result = { decision: "pass", issues: [], summary: "Exact diff reviewed." };
+const result = { decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Exact diff reviewed." };
 let row: Record<string, unknown>;
 let packet: ReturnType<typeof createSemanticReviewRequest>;
 let providerCalls: number;
@@ -31,6 +35,7 @@ beforeEach(() => {
   vi.mocked(getQuiescenceLevel).mockResolvedValue("normal");
   packet = createSemanticReviewRequest({ surface: "external", authorSurface: "codex", artifactType: "code-change",
     title: "Review", artifact: "diff", changedFiles: ["a.ts"], verificationEvidence: "Tests passed",
+    ...failureAnalysisFixture({ capsuleId: "WC-1", headTreeHash: "b".repeat(40), diffDigest: createHash("sha256").update("diff").digest("hex") }),
     identity: { capsuleId: "WC-1", baseTreeHash: "a".repeat(40), headTreeHash: "b".repeat(40),
       diffDigest: createHash("sha256").update("diff").digest("hex"), specialistIds: [] },
   }, { userId: "user-1", agentId: null, apiTokenId: "token-1", authSource: "pat" });
@@ -58,6 +63,7 @@ beforeEach(() => {
   });
   mocks.publish.mockImplementation(() => { expect(transactionCommitted).toBe(true); });
   mocks.authority.mockResolvedValue(true);
+  mocks.resolveFailureEvidence.mockResolvedValue(packet.input.resolvedFailureEvidence);
   mocks.db.taskNode.findUnique.mockResolvedValue(null);
   mocks.db.taskNode.findFirst.mockResolvedValue(null);
   mocks.db.taskNode.create.mockResolvedValue({ id: "node-new" });

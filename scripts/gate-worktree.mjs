@@ -14,6 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
 //
@@ -90,6 +91,7 @@ import {
   createLocalCiPassEvidenceValidity,
   projectReusedPassMetadata,
   readLocalCiGateState,
+  readReusedEvidenceValidity,
   supersedeLosingSlotRecords,
   writeLocalCiGateState,
 } from "./lib/local-ci-gate-state.mjs";
@@ -106,6 +108,35 @@ import {
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
+
+/**
+ * Append the gate identity behind one queued claim, for BI-D35B85BF Wanted 2.
+ *
+ * One JSONL line per queued claim, beside the queue observer records so the
+ * same reap clears both. Two lines for one wait with two different claimKeys
+ * name the component that moved; a single line is equally informative.
+ *
+ * Never throws: this is diagnostics, and a gate must not fail because a
+ * diagnostic file could not be written.
+ */
+function recordQueuedClaimIdentity({ directory, branch, sha, claimKey, leaseId, identity }) {
+  if (!directory) return;
+  try {
+    mkdirSync(directory, { recursive: true });
+    appendFileSync(
+      resolvePath(directory, "queued-claim-identity.jsonl"),
+      `${JSON.stringify({
+        at: new Date().toISOString(),
+        branch,
+        sha,
+        leaseId,
+        claimKey,
+        identity: identity ?? null,
+      })}\n`,
+    );
+  } catch { /* diagnostics must never take the gate down */ }
+}
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -215,6 +246,56 @@ function siblingSlotStateFiles({ currentSlotKey, rootClone, gitCommonDir, candid
       gitCommonDir,
       candidateGitDir,
     }).evidence.state);
+}
+
+/**
+ * BI-FFCFCCE0. `--finalize-evidence` runs BEFORE admission, so `currentSlotKey`
+ * is still the `slot-0` default and slot-0's evidence files carry no suffix.
+ * The finalize path therefore read the UNSLOTTED `dpf-local-ci-gate.json` while
+ * `pregate:status` reconciles across every `dpf-local-ci-gate-slot-*.json`, and
+ * the two disagreed about which record was authoritative: a genuine PASS
+ * recorded on slot-1 could not be finalized at all, only refused with
+ * `no exact published PASS is available to finalize at ...dpf-local-ci-gate.json`.
+ *
+ * Resolve the same way the reader does. A pending record wins over a published
+ * one: it names the exact run whose publication was deferred.
+ *
+ * @returns {{ manifest: object, searched: string[], matchedBy: "pending"|"published-pass"|"none" }}
+ */
+export function resolveFinalizeSlot({ branch, sha, rootClone, gitCommonDir, candidateGitDir, defaultSlotKey }) {
+  const manifests = LOCAL_CI_SLOT_KEYS.map((slotKey) => createLocalCiSlotManifest({
+    slotKey,
+    rootClone,
+    gitCommonDir,
+    candidateGitDir,
+  }));
+  const searched = [];
+  for (const manifest of manifests) {
+    searched.push(manifest.evidence.pending);
+    let pending = null;
+    try {
+      pending = JSON.parse(readFileSync(manifest.evidence.pending, "utf8"));
+    } catch {
+      // An absent or unreadable pending file simply means this slot is not it.
+    }
+    if (pending?.branch === branch && pending?.sha === sha) {
+      return { manifest, searched, matchedBy: "pending" };
+    }
+  }
+  for (const manifest of manifests) {
+    searched.push(manifest.evidence.state);
+    const state = readLocalCiGateState(manifest.evidence.state);
+    if (
+      state?.branch === branch
+      && state?.sha === sha
+      && state?.gatePassed === true
+      && state?.status === "passed"
+    ) {
+      return { manifest, searched, matchedBy: "published-pass" };
+    }
+  }
+  const fallback = manifests.find((manifest) => manifest.slotKey === defaultSlotKey) ?? manifests[0];
+  return { manifest: fallback, searched, matchedBy: "none" };
 }
 
 function retryDelayMs({ attempt, pollSeconds, retryAfterSeconds = 0 }) {
@@ -912,10 +993,10 @@ async function main() {
   const gitBin = process.env.DPF_GATE_GIT_BIN || "git";
   const allowStub = process.env.DPF_ALLOW_LOCAL_CI_STUB === "1";
 
-  const branch = options.branch || gitOrEmpty(gitBin, ["rev-parse", "--abbrev-ref", "HEAD"]);
-  if (branch === "HEAD") die("cannot gate detached HEAD");
-  const sha = options.sha || gitOrEmpty(gitBin, ["rev-parse", "HEAD"]);
   const worktreePath = options.worktree || gitOrEmpty(gitBin, ["rev-parse", "--show-toplevel"]);
+  const branch = options.branch || gitOrEmpty(gitBin, ["rev-parse", "--abbrev-ref", "HEAD"], worktreePath);
+  if (branch === "HEAD") die("cannot gate detached HEAD");
+  const sha = options.sha || gitOrEmpty(gitBin, ["rev-parse", "HEAD"], worktreePath);
   // BI-3A34D7A9: resolve WHO is gating from the calling client's own
   // environment. The provider is NOT required here — a dry run records nothing,
   // and demanding attribution before any side effect would break every
@@ -1045,6 +1126,19 @@ async function main() {
   }
 
   if (options.finalizeEvidence) {
+    const finalizeSlot = resolveFinalizeSlot({
+      branch,
+      sha,
+      rootClone,
+      gitCommonDir,
+      candidateGitDir,
+      defaultSlotKey: currentSlotKey,
+    });
+    slotManifest = finalizeSlot.manifest;
+    currentSlotKey = slotManifest.slotKey;
+    stateFile = slotManifest.evidence.state;
+    metadataFile = slotManifest.evidence.metadata;
+    pendingEvidenceFile = slotManifest.evidence.pending;
     if (!existsSync(pendingEvidenceFile)) {
       const state = readLocalCiGateState(stateFile);
       let metadata = null;
@@ -1062,7 +1156,10 @@ async function main() {
         || !state?.evidenceRecordId
         || metadata?.candidateSha !== sha
       ) {
-        die(`no exact published PASS is available to finalize at ${stateFile}`);
+        die(
+          `no exact published PASS is available to finalize for ${branch} @ ${sha}; searched `
+            + finalizeSlot.searched.join(", "),
+        );
       }
       const evidenceValidity = createLocalCiPassEvidenceValidity({
         issuedAt: state.evidenceValidity?.issuedAt || state.recordedAt,
@@ -1301,6 +1398,21 @@ async function main() {
     if (claimResponse?.success === true && admission?.status === "reused") {
       const evidenceId = admission.evidenceRecordId || claimResponse.entityId || "";
       const passed = admission.resultClass === "pass";
+      // BI-03E1139A: a reused PASS is stamped with the EVIDENCE's clock, never
+      // the lease's. Evidence validity runs for a day; a pool lease runs for
+      // minutes. Writing the lease expiry into the evidence field produced a
+      // record born expired — pregate:status read it as STALE and the author was
+      // told to re-run a gate that could only ever reuse the same verdict again.
+      const reusedValidity = readReusedEvidenceValidity(admission.evidenceValidity);
+      // A reuse with no stamp is a server that did not tell us how fresh this
+      // verdict is. Absent evidence of freshness is not evidence of freshness,
+      // so do the work rather than inventing a window.
+      if (passed && !reusedValidity) {
+        die(
+          `local-CI admission reused evidence ${evidenceId} without a validity stamp; `
+            + "refusing to date a verdict this gate cannot vouch for — re-run the gate",
+        );
+      }
       if (queueObserverPath) {
         releaseLocalQueueObserver({
           path: queueObserverPath,
@@ -1315,7 +1427,11 @@ async function main() {
         leaseId: canonicalLeaseId,
         evidenceId,
         status: passed ? "passed" : "failed",
-        expiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        expiresAt: reusedValidity?.expiresAt
+          || claimResponse?.data?.lease?.expiresAt
+          || expiresAt,
+        leaseExpiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        evidenceValidity: reusedValidity,
         resilience: null,
         leaseEvents: [
           ...leaseEvents,
@@ -1464,18 +1580,60 @@ async function main() {
         },
       });
       if (admission.resumeMode === "durable-task" && admission.taskRunId) {
+        // BI-D35B85BF. Exiting here used to strand the claim outright. The
+        // TaskRun projection this lease carries has no reader anywhere, so
+        // "durable-task" in practice meant "an AI session may or may not
+        // remember to re-run me" - 13 of 41 did. Hand the claim to a detached
+        // resumer FIRST and drop this process's observer record second, in that
+        // order, so the queued row is never left unbacked between the two.
+        const resume = spawnDurableWaitResumer({
+          runnerPath: resolvePath(SCRIPT_DIR, "local-ci-durable-wait-resumer.mjs"),
+          gateArgv: process.argv,
+          observerDirectory: queueObserverDirectory,
+          branch,
+          sha,
+          ownerSessionId,
+          cwd: worktreePath,
+        });
         if (queueObserverPath) {
           releaseLocalQueueObserver({ path: queueObserverPath, token: gateObserverIdentity.token });
           queueObserverPath = "";
         }
+        // BI-D35B85BF Wanted 2. A resumed wait was observed minting a SECOND
+        // queue row with a different server-derived gate:<hash>, orphaning the
+        // first for its full two-hour deadline. The server derives that hash
+        // from repository + integrationTreeSha + evidencePlanDigest +
+        // toolchainFingerprint, and the two claims are gone by the time anyone
+        // looks, so which component moved has never been established.
+        //
+        // This is deliberately observation, not a fix: if the integration tree
+        // genuinely changed, a new key is CORRECT and only the orphaned row is
+        // the defect. Appending the identity behind every queued claim makes the
+        // next real wait answer the question instead of inviting a guess.
+        recordQueuedClaimIdentity({
+          directory: queueObserverDirectory,
+          branch,
+          sha,
+          claimKey,
+          leaseId,
+          identity: preAdmissionGateIdentity,
+        });
         process.stderr.write(JSON.stringify({
           status: "queued",
           code: "local_ci_durable_wait",
           leaseId,
           taskRunId: admission.taskRunId,
           claimKey,
+          gateIdentity: preAdmissionGateIdentity ?? null,
           queuePosition: admission.queuePosition ?? null,
           resumeMode: "durable-task",
+          // Name the owner of the resume outright. A caller reading "caller"
+          // knows it must keep polling; one reading "detached-resumer" knows it
+          // must not. Leaving that to inference is what BI-D35B85BF "Wanted"
+          // item 1 asked to end.
+          resumeOwner: resume.spawned ? "detached-resumer" : "caller",
+          resumerPid: resume.pid,
+          ...(resume.spawned ? {} : { resumeUnavailableReason: resume.reason }),
           ...(closedReason ? { poolClosedReason: closedReason } : {}),
         }) + "\n");
         process.exit(75);
@@ -1977,6 +2135,8 @@ async function main() {
       content: contentMetadata,
       controlPlane: controlPlaneEvidence,
       gatePassed: outcome.gatePassed,
+      ...readFailureEvidenceBinding(sha, worktreePath),
+      completedAt: new Date().toISOString(),
       freshness,
       commands: [commandLabel],
       buildCommand: commandLabel,
@@ -2037,7 +2197,7 @@ async function main() {
         retryAfterSeconds: 30,
         recordArgs: evidenceArgs,
       });
-      writeState(stateFile, {
+      const starvationWrite = writeState(stateFile, {
         branch,
         sha,
         gatePassed: false,
@@ -2051,6 +2211,14 @@ async function main() {
         evidencePendingReason: evidenceError || "control_plane_unavailable",
       });
       process.stderr.write("gate-worktree: control-plane starvation evidence is preserved locally and pending portal recovery.\n");
+      // BI-FFCFCCE0: the record already held a PASS this gate reached for the
+      // same tree, so the starvation was appended as an observation and the
+      // verdict stands. Say so, or the exit code reads as a lost pass.
+      if (starvationWrite?.preservedPass) {
+        process.stderr.write(
+          `gate-worktree: the PASS already recorded for ${sha} still stands; this starvation is logged on it as an inconclusive observation, not a verdict.\n`,
+        );
+      }
       process.exit(5);
     }
     if (outcome.gatePassed && evidenceError === "portal_quiescing") {
@@ -2190,7 +2358,7 @@ function writeState(stateFile, {
   childExitCode = null,
   onPassWritten = null,
 }) {
-  writeLocalCiGateState(stateFile, {
+  const result = writeLocalCiGateState(stateFile, {
     branch,
     sha,
     gatePassed,
@@ -2221,6 +2389,7 @@ function writeState(stateFile, {
 `);
     }
   }
+  return result;
 }
 
 // A gate that silently skips main() exits 0 — a false "pass" — so the entry

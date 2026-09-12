@@ -113,9 +113,16 @@ export function getExclusionReasonV2(
   // Preserve the endpoint in the excluded trace so runtime-health previews
   // explain the incompatibility while a supported sibling model can win.
   if (ep.eligibilityExclusionReason) return ep.eligibilityExclusionReason;
-  const toolChoiceExclusion = contract.toolChoice === "required"
+  // A plain required tool call has no post-dispatch verification, so an adapter
+  // that cannot force it stays ineligible. A BOUND TERMINAL WRITER is different:
+  // the executor verifies the governed receipt after the turn, which is the
+  // server-verifiable mechanism, so a non-forcing adapter is dispatched under the
+  // receipt-verified contract instead of being excluded (BI-C35576A9,
+  // DI-48BC3C1F11A8). Excluding it here left subscription-only installs with no
+  // capable reviewer model at all — 276 such exclusions in one day on one install.
+  const toolChoiceExclusion = contract.toolChoice === "required" && !contract.terminalWriterToolName
     ? requiredToolChoiceExclusionReason(resolveDefaultExecutionAdapter(ep.providerId, contract.requiredModelClass)) : null;
-  if (toolChoiceExclusion) return `${contract.terminalWriterToolName ? "required-terminal-writer-not-enforceable: " : ""}${toolChoiceExclusion}`;
+  if (toolChoiceExclusion) return toolChoiceExclusion;
 
   // EP-AGENT-CAP-002: Agent capability floor — hard filter, non-negotiable.
   // Must run BEFORE status/graceful-degradation checks so a tool-incapable

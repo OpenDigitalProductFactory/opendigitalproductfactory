@@ -563,12 +563,27 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/evaluate.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/types.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -602,6 +617,9 @@
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
+    "apps/web/lib/build/pull-request-merged-signal.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/sandbox/sandbox.ts": [
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
@@ -617,6 +635,9 @@
     ],
     "apps/web/lib/change-management/register-change.ts": [
       "docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md"
+    ],
+    "apps/web/lib/change-review/failure-analysis.ts": [
+      "docs/architecture/failure-analysis-and-recovery.md"
     ],
     "apps/web/lib/change-review/semantic-change-review.ts": [
       "docs/architecture/agent-client-governance.md"
@@ -666,6 +687,9 @@
     "apps/web/lib/decision/golden-decisions.test.ts": [
       "docs/founder-kernel/AUTHORING.md"
     ],
+    "apps/web/lib/decision/option-input-contract.ts": [
+      "docs/architecture/principle-decide-mcda-identity.md"
+    ],
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -689,6 +713,12 @@
     ],
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
+    ],
+    "apps/web/lib/ea/table-growth.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/lib/evidence/bounded-output.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/explore/backlog.ts": [
       "docs/architecture/backlog-archetype-scope.md"
@@ -805,6 +835,9 @@
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/mcp/external-coworker-task-adapter.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/mcp/load-tools.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -813,6 +846,9 @@
     ],
     "apps/web/lib/mcp/packs/compliance-scope-pack.ts": [
       "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
+    ],
+    "apps/web/lib/mcp/packs/coworker-pack.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -867,6 +903,12 @@
     ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
+    ],
+    "apps/web/lib/operate/retention/declarations.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/lib/operate/retention/obligation-floors.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/operate/retention/policies.ts": [
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
@@ -1107,6 +1149,9 @@
     "apps/web/lib/tak/escalation-ladder.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/tak/initiative-readiness-tool-grants.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/tak/prompt-assembler.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/platform-usability-standards.md"
@@ -1137,6 +1182,9 @@
       "docs/architecture/context-engineering-standards.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/tools/integration-settings-href.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "apps/web/lib/ux-budget/budgets.ts": [
       "docs/platform-usability-standards.md"
     ],
@@ -1154,6 +1202,9 @@
     ],
     "apps/web/lib/work-capsules/delivery-task-hub.ts": [
       "docs/user-guide/build-studio/index.md"
+    ],
+    "apps/web/lib/work-capsules/governed-work-claim.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md",
@@ -1188,6 +1239,7 @@
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-shapes.ts": [
+      "docs/architecture/initiative-readiness-runbook.md",
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
@@ -1229,6 +1281,9 @@
     ],
     "apps/web/scripts/issue-edge-bootstrap-token.ts": [
       "docs/install/verification-runbook.md"
+    ],
+    "apps/web/scripts/offload-evidence-output.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "config/merge-readiness-policy.json": [
       "docs/testing/pr-health.md"
@@ -1313,6 +1368,9 @@
       "docs/architecture/platform-overview.md",
       "docs/operations/observability-coverage.md"
     ],
+    "packages/db/data/agent_registry.json": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "packages/db/data/platform-runtime-capabilities.json": [
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/architecture/platform-substrate-boundaries.md"
@@ -1334,6 +1392,9 @@
     ],
     "packages/db/prisma/schema/work-coordination.prisma": [
       "docs/architecture/dpf-patterns.md"
+    ],
+    "packages/db/scripts/apply-model-metadata-comments.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "packages/db/scripts/check-cada-readiness.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
@@ -1415,6 +1476,12 @@
       "docs/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong.md",
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
     ],
+    "packages/db/src/model-metadata.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "packages/db/src/performer-allocation.ts": [
+      "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md"
+    ],
     "packages/db/src/pg-graph.ts": [
       "docs/architecture/platform-overview.md"
     ],
@@ -1458,6 +1525,9 @@
     ],
     "packages/db/src/seed-platform-backup.ts": [
       "docs/operations/disaster-recovery.md"
+    ],
+    "packages/db/src/seed-retention-floor-obligations.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "packages/db/src/seed-skills.ts": [
       "docs/architecture/skill-surfaces-runbook.md"
@@ -1625,6 +1695,9 @@
     "scripts/check-design-grounding-decision.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/check-diagram-dependency-pins.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
+    ],
     "scripts/check-doc-links.mjs": [
       "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
       "docs/architecture/enforced-ci-gates.md"
@@ -1633,6 +1706,9 @@
       "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/check-docs-impact.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
+    "scripts/check-failure-readiness.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/check-guard-conformance-marks.mjs": [
@@ -1661,6 +1737,9 @@
     "scripts/check-mobile-jest-pin.mjs": [
       "docs/security/2026-05-24-shift-left-rollout.md",
       "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/check-model-metadata-tags.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-module-size.mjs": [
       "docs/architecture/mcp-tool-packs.md",
@@ -1704,6 +1783,9 @@
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/check-no-url-pathname-fs.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/check-override-comments.mjs": [
       "docs/architecture/contributor-procedure-runbook.md"
     ],
@@ -1732,6 +1814,7 @@
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
     ],
     "scripts/check-ux-fit-decision.mjs": [
+      "docs/architecture/portal-ux-evaluation-framework.md",
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/design/golden-triangle-design.md"
     ],
@@ -1847,6 +1930,9 @@
     "scripts/lib/hooks-dir.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/lib/host-available-memory.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/lib/junction-safe-worktree-remove.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
@@ -1863,6 +1949,10 @@
     "scripts/lib/mcp-client.mjs": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "scripts/lib/mermaid-renderer.mjs": [
+      "docs/architecture/dependency-reduction-routine.md",
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/lib/published-doc-roots.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
@@ -1870,6 +1960,9 @@
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/maintenance/staleness-report.md",
       "docs/operations/install.md"
+    ],
+    "scripts/local-ci-durable-wait-resumer.mjs": [
+      "docs/architecture/dpf-patterns.md"
     ],
     "scripts/local-ci-pilot-report.mjs": [
       "docs/operations/local-ci-sandbox-slots.md"
@@ -1906,6 +1999,9 @@
     ],
     "scripts/platform-substrate-runtime-baseline.json": [
       "docs/architecture/platform-substrate-boundaries.md"
+    ],
+    "scripts/portal-migrate-boot.sh": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/pr-health.mjs": [
       "docs/maintenance/staleness-report.md",
@@ -2417,6 +2513,7 @@
     "docs/architecture/build-gate-runbook.md": [
       "apps/web/lib/build/build-orchestrator.ts",
       "apps/web/lib/build/coding-agent.ts",
+      "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
       "scripts/check-build-script-policy.mjs",
@@ -2479,14 +2576,24 @@
       "packages/db/src/capability-maturity.ts"
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
+      "apps/web/lib/ea/table-growth.ts",
+      "apps/web/lib/evidence/bounded-output.ts",
+      "apps/web/lib/operate/retention/declarations.ts",
+      "apps/web/lib/operate/retention/obligation-floors.ts",
       "apps/web/lib/routes.ts",
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
       "apps/web/lib/shared/org-address.ts",
+      "apps/web/scripts/offload-evidence-output.ts",
       "packages/db/prisma/schema/resource-scheduling.prisma",
+      "packages/db/scripts/apply-model-metadata-comments.ts",
+      "packages/db/src/model-metadata.ts",
+      "packages/db/src/seed-retention-floor-obligations.ts",
+      "scripts/check-model-metadata-tags.mjs",
       "scripts/check-no-local-isrecord.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
-      "scripts/check-no-new-notactive-conventions.mjs"
+      "scripts/check-no-new-notactive-conventions.mjs",
+      "scripts/portal-migrate-boot.sh"
     ],
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
@@ -2513,6 +2620,8 @@
       ".github/dependabot.yml",
       "apps/web/lib/assurance/cyclonedx-generator.ts",
       "pnpm-lock.yaml",
+      "scripts/check-diagram-dependency-pins.mjs",
+      "scripts/lib/mermaid-renderer.mjs",
       "scripts/sbom/audit-provenance.mjs",
       "scripts/sbom/check-lockfile-release-age.mjs",
       "scripts/sbom/check-new-dependencies.mjs",
@@ -2527,7 +2636,8 @@
       "apps/web/lib/nonprod/host-resource-profiles.json",
       "packages/db/prisma/schema/build-delivery.prisma",
       "packages/db/prisma/schema/work-coordination.prisma",
-      "scripts/host-resource-runner.mjs"
+      "scripts/host-resource-runner.mjs",
+      "scripts/local-ci-durable-wait-resumer.mjs"
     ],
     "docs/architecture/enforced-ci-gates.md": [
       "apps/web/lib/docs-route-map.ts",
@@ -2544,21 +2654,40 @@
       "scripts/check-doc-links.mjs",
       "scripts/check-doc-reference-integrity.mjs",
       "scripts/check-docs-impact.mjs",
+      "scripts/check-failure-readiness.mjs",
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
+      "scripts/lib/mermaid-renderer.mjs",
       "scripts/lib/published-doc-roots.mjs"
+    ],
+    "docs/architecture/failure-analysis-and-recovery.md": [
+      "apps/web/lib/change-review/failure-analysis.ts"
     ],
     "docs/architecture/field-service-work-item.md": [
       "packages/validators/src/field-dispatch.ts"
     ],
     "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md": [
       "packages/db/scripts/generate-taxonomy-v3-json.ts",
+      "packages/db/src/performer-allocation.ts",
       "packages/db/src/reference-model-applicability.ts",
       "packages/db/src/seed-ea-reference-models.ts"
     ],
     "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md": [
       "packages/storefront-templates/src/archetypes/index.ts"
+    ],
+    "docs/architecture/initiative-readiness-runbook.md": [
+      "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
+      "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
+      "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
+      "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
+      "apps/web/lib/backlog/initiative-readiness/types.ts",
+      "apps/web/lib/mcp/external-coworker-task-adapter.ts",
+      "apps/web/lib/mcp/packs/coworker-pack.ts",
+      "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
+      "apps/web/lib/work-capsules/governed-work-claim.ts",
+      "apps/web/lib/work-management/room-shapes.ts",
+      "packages/db/data/agent_registry.json"
     ],
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
@@ -2625,6 +2754,12 @@
       "scripts/platform-substrate-baseline.json",
       "scripts/platform-substrate-manifest.json",
       "scripts/platform-substrate-runtime-baseline.json"
+    ],
+    "docs/architecture/portal-ux-evaluation-framework.md": [
+      "scripts/check-ux-fit-decision.mjs"
+    ],
+    "docs/architecture/principle-decide-mcda-identity.md": [
+      "apps/web/lib/decision/option-input-contract.ts"
     ],
     "docs/architecture/section-navigation.md": [
       "apps/web/components/shell/SectionNav.tsx",
@@ -2806,10 +2941,12 @@
       "docker-compose.linux.yml",
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
+      "scripts/check-no-url-pathname-fs.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
+      "scripts/lib/host-available-memory.mjs",
       "tests/release/pregate-node-gate-contract.test.mjs"
     ],
     "docs/install/scratch-install-rehearsal.md": [
@@ -3102,6 +3239,7 @@
       ".github/workflows/policy-guards-recheck.yml",
       "apps/web/lib/testing/degenerate-env/index.ts",
       "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts",
+      "apps/web/lib/tools/integration-settings-href.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
       "scripts/check-agent-principal-convergence-wired.mjs",

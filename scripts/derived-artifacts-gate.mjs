@@ -34,6 +34,7 @@ import { fileURLToPath } from "node:url";
 
 import { DERIVED_ARTIFACTS, affectedEntries, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
+import { availableMermaidRenderer } from "./lib/mermaid-renderer.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -152,6 +153,9 @@ function diffFiles(baseRef) {
 }
 
 function binaryAvailable(name) {
+  // The Mermaid renderer is a tool (local mermaid-cli OR the pinned Docker
+  // image), not a node_modules binary — ask the renderer module.
+  if (name === "mmdc") return availableMermaidRenderer() !== null;
   const envOverride = process.env[name.toUpperCase()];
   if (envOverride) return existsSync(envOverride);
   const candidates =

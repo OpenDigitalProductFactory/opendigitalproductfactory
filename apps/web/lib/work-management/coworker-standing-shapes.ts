@@ -648,4 +648,94 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
     reviewPoint: { everyDays: 90, description: "Quarterly." },
     collaborationShape: "craft-stewardship",
   },
+
+  // ── operate / correspondence ─────────────────────────────────────────────
+  // The Mailroom coordinator (AGT-WS-MAILROOM, design 2026-09-09) reads the
+  // mailboxes the business declared, gives each message a typed reason and an
+  // acknowledge window, and routes it to the queue that owns the reason. It
+  // never sends: a reply leaves the building only after the queue owner takes
+  // the governed decision on the item page (AC-MAIL-APPROVED-SEND).
+  "mailroom-triage-and-dispatch": {
+    key: "mailroom-triage-and-dispatch",
+    version: "1.0.0",
+    title: "Mailroom triage and dispatch",
+    description:
+      "New mail is read from every declared mailbox, given a typed reason and an acknowledge "
+      + "window from the archetype's Mailroom profile, routed to the queue that owns the reason, "
+      + "and chased when the window lapses. Replies are DRAFTED by the coordinator and SENT only "
+      + "on the queue owner's approval.",
+    triggers: ["cadence", "escalation"],
+    stages: [
+      {
+        key: "intake",
+        title: "Read new mail idempotently",
+        accountablePrincipalRef: "agent:mailroom-coordinator",
+        advance: {
+          kind: "status-change",
+          condition:
+            "Every message the provider returned since the cursor is stored once, keyed on its "
+            + "provider id or its deterministic synthetic id; the cursor advances only after the store.",
+        },
+        evidence: ["assurance-run"],
+      },
+      {
+        key: "triage-and-route",
+        title: "Assign a typed reason and route to its queue",
+        accountablePrincipalRef: "agent:mailroom-coordinator",
+        advance: {
+          kind: "status-change",
+          condition:
+            "Noise is set aside first, an untrusted sender is quarantined, and every remaining "
+            + "message carries a reason from the profile, an urgency, an acknowledge-by time and "
+            + "the queue room that owns it.",
+        },
+        evidence: ["assurance-finding"],
+      },
+      {
+        key: "chase",
+        title: "Chase what nobody acknowledged",
+        accountablePrincipalRef: "agent:mailroom-coordinator",
+        advance: {
+          kind: "status-change",
+          condition:
+            "Every routed item past its acknowledge-by time is on the queue owner's Needs-you "
+            + "surface with the reason and the time it has waited.",
+        },
+        evidence: ["assurance-finding"],
+      },
+      {
+        key: "approve-reply",
+        title: "Approve or amend the drafted reply",
+        // The coordinator drafts; a person sends. The draft goes through the
+        // existing outbound-approval decision on the item page.
+        accountablePrincipalRef: "role:customer-owner",
+        advance: {
+          kind: "governed-decision",
+          condition:
+            "The queue owner approves, amends or rejects the drafted reply on the Mailroom item "
+            + "page; only an approved draft is handed to the mail sender.",
+          decisionScope: "outbound-reply-approval",
+        },
+        evidence: ["decision-record"],
+      },
+    ],
+    stopConditions: [
+      { kind: "success", condition: "Every message read this cycle is noise, quarantined, or routed with an acknowledge-by time; every lapsed item is on a Needs-you surface." },
+      { kind: "failure", condition: "A mailbox cannot be read — the poll records the provider error on the mailbox and stops without moving the cursor, so nothing is skipped." },
+      { kind: "budget", condition: "More than 500 new messages from one mailbox in one cycle — the poll stops at the page limit and the rest wait for the next tick." },
+    ],
+    grants: ["tool:read", "tool:work_room_read", "tool:work_room_write"],
+    measures: [
+      { key: "messages-routed", description: "Messages given a reason and a queue in one cycle." },
+      { key: "acknowledged-in-window", description: "Share of routed items acknowledged before their acknowledge-by time." },
+    ],
+    budgets: [{ kind: "findings-per-run", limit: 500, unit: "messages" }],
+    reviewPoint: {
+      everyDays: 30,
+      description:
+        "Reviewed monthly against the reasons that were re-assigned by hand: a profile whose "
+        + "reasons keep being corrected is the signal to change the profile, not the coordinator.",
+    },
+    collaborationShape: "escalation",
+  },
 };

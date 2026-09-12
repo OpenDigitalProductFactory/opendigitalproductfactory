@@ -1,7 +1,10 @@
 // apps/web/lib/audit-classes.ts
 // Canonical audit class values for ToolExecution and future AuditEvent model.
 // These are enforced string values — do not add synonyms.
-// Phase 3 will add these as a DB column. Phase 1 just defines the constants.
+// Stored on ToolExecution.auditClass. The retention windows stated below are
+// ENFORCED per class by apps/web/lib/operate/retention/policies.ts
+// (BI-A55A651B); the writer in lib/governed-tool-audit.ts blanks the payload
+// of metrics_only rows at write time.
 
 export const AUDIT_CLASSES = ["ledger", "journal", "metrics_only"] as const;
 export type AuditClass = (typeof AUDIT_CLASSES)[number];

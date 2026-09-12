@@ -649,33 +649,6 @@
       "targetClassification": "universal-core"
     },
     {
-      "service": "dpf-stt",
-      "class": "capability-activated",
-      "capability": "runtime:local-speech",
-      "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-local-speech",
-        "tts"
-      ],
-      "ports": [
-        "127.0.0.1:8765:9000"
-      ],
-      "volumes": [
-        "dpf_stt_models:/app/models"
-      ],
-      "dependsOn": [],
-      "canonicalDataOwner": "none",
-      "backupPolicy": "excluded-rebuildable",
-      "healthSemantics": "compose-healthcheck",
-      "hostPlatforms": [
-        "windows",
-        "macos",
-        "linux"
-      ],
-      "targetClassification": "capability-activated"
-    },
-    {
       "service": "dpf-tts",
       "class": "capability-activated",
       "capability": "runtime:local-speech",

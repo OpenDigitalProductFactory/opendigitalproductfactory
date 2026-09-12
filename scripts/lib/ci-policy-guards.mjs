@@ -108,11 +108,22 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-D908DA0A: a parked claim says whether it waits behind work or behind
       // a closed pool; the two used to print identically.
       node("--test", "scripts/gate-worktree-pool-closed.test.mjs"),
+      // BI-FFCFCCE0: --finalize-evidence resolved its record before admission
+      // and so always read slot-0, while pregate:status reconciles every slot.
+      // A real pending PASS on slot-1 was unfinalizable. Registered here for the
+      // same reason as the tests above: in the allowlist it would never run.
+      node("--test", "scripts/gate-worktree-finalize-slot.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken
       // endpoint and hunts a connection fault that never happened.
       node("--test", "scripts/local-ci-control-plane-probe.test.mjs"),
+      // BI-D35B85BF: a queued gate hands its claim to a detached resumer, and
+      // the recursion guard on that spawn is the one thing that must never
+      // regress - without it every re-claim forks another waiter. Registered
+      // here rather than in ci-policy-test-inventory-allowlist.txt, where it
+      // would never run.
+      node("--test", "scripts/lib/durable-wait-resumer.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),
@@ -141,6 +152,22 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // out of the install dir must ship in the image's /dpf-release-assets.
       conformanceTest("scripts/check-release-asset-contract.test.mjs"),
       node("--test", "scripts/installer/local-model-policy-contract.test.mjs"),
+    ]),
+    // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
+    // drops every NULL row (SQL three-valued logic). It cost 29 epics their
+    // sync (#5007), was fixed file-by-file, and the SHAPE was never guarded -
+    // so the same defect was still live in a sibling federation module when
+    // this guard first ran.
+    guard("prisma-runtime-traps", "Prisma Runtime Traps", [
+      node("scripts/check-no-unguarded-not-contains.mjs"),
+      node("--test", "scripts/check-no-unguarded-not-contains.test.mjs"),
+      // BI-1281A164 drain: every DPF enum whose values carry hyphens declares
+      // members with underscores and @maps them. Prisma accepts only the
+      // MEMBER; the database spelling throws at runtime, and a mocked Prisma in
+      // a unit test does not enforce the enum - which is why declare_break_fix
+      // shipped completely broken with every test green (BI-D36E2916, #5185).
+      node("scripts/check-no-mapped-enum-database-value.mjs"),
+      node("--test", "scripts/check-no-mapped-enum-database-value.test.mjs"),
     ]),
     guard("db-commandment-coverage", "DB Commandment Coverage", [
       // The never-wipe-db commandment guarded two spellings and allowed three
@@ -216,6 +243,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/pr-health.test.mjs",
+        "scripts/check-failure-readiness.test.mjs",
         "scripts/check-ci-build-cache.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
         "scripts/lib/ci-observation.test.mjs",
@@ -233,6 +261,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
         "scripts/lib/host-available-memory.test.mjs",
+        "scripts/lib/host-available-memory-win32.test.mjs",
         "packages/dpf-skill-pack/hooks/claim-work-guidance.test.mjs",
         "packages/dpf-skill-pack/hooks/plan-coverage-guidance.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
@@ -251,6 +280,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest(
         "scripts/lib/dev-preview-migrate-converge.test.mjs",
         "scripts/pregate-exit-honesty.test.mjs",
+        "scripts/pregate-fence-safety.test.mjs",
+        "scripts/report-principle-vectors.test.mjs",
         "scripts/pre-push-gate-slot-contract.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
@@ -405,10 +436,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     // BI-873F3C48: every growth-shaped (event/log/telemetry) model must be
     // retention-enrolled (purge or retained) or deliberately allowlisted.
-    guard("retention-enrollment-guard", "Retention Enrollment Guard", [
-      node("--test", "scripts/check-retention-enrollment.test.mjs"),
-      node("scripts/check-retention-enrollment.mjs"),
-    ], { inputs: ["code"] }),
     // Diff-scoped by design: repo-wide, the pattern matches 255 fixtures across 125
     // files, nearly all legitimate (far-future sentinels, deliberately-expired rows).
     // Gating on that would need a 125-file baseline — the silent allowlist this is
@@ -416,6 +443,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("test-clock-bomb-guard", "Test Clock Bomb Guard", [
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
+    ], { inputs: ["code"] }),
+    // BI-5CC4159D: `new URL(..., import.meta.url).pathname` is "/D:/..." on
+    // Windows, so every filesystem call built on it fails on every Windows host
+    // while Linux CI stays green. Third recurrence (#4736, workroom-stall,
+    // #5247); the last one failed the local-CI gate for every branch on the
+    // host. Repo-wide, no baseline: the fix branch took the count to zero.
+    guard("no-url-pathname-fs-guard", "URL Pathname Filesystem Guard", [
+      node("--test", "scripts/check-no-url-pathname-fs.test.mjs"),
+      node("scripts/check-no-url-pathname-fs.mjs"),
     ], { inputs: ["code"] }),
     guard("work-unit-conformance-guard", "WorkUnit Conformance Guard", [
       node("--test", "scripts/check-work-unit-conformance.test.mjs"),
@@ -503,6 +539,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("singleton-safety-guard", "Singleton Safety Guard", [
       node("scripts/sbom/check-singleton-safety.mjs"),
     ]),
+    guard("model-metadata-tags", "Model Metadata Tags", [
+      node("--test", "scripts/check-model-metadata-tags.test.mjs"),
+      node("scripts/check-model-metadata-tags.mjs"),
+    ]),
     guard("doc-reference-integrity", "Doc Reference Integrity", [
       node("--test", "scripts/check-doc-reference-integrity.test.mjs"),
       node("scripts/check-doc-reference-integrity.mjs"),
@@ -563,13 +603,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/local-convergence-lock.test.mjs",
         "scripts/lib/sandbox-freshness.test.mjs",
         "scripts/sandbox-freshness-preflight.test.mjs",
-        "scripts/release/re-resolve-stt-digest.test.mjs",
         // BI-BBD60CF8: the re-pin SCRIPT was always correct and always
         // green; the workflow driving it aborted on the script's own
         // drift exit code, so the watch failed on every drift day and
         // never once completed a re-pin (#4823 fixed the wiring). This
         // guards the wiring, which is the part nothing tested.
-        "scripts/stt-digest-watch-workflow.test.mjs",
         "scripts/lib/ensure-pre-push-hook.test.mjs",
         // BI-5CBDC146: hook directories must resolve through fileURLToPath.
         // URL.pathname yields "/D:/..." on Windows, so the shim never
@@ -666,7 +704,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-docs-impact.mjs"),
     ]),
     guard("seed-fit-gate", "Seed Contribution Fit Gate", [
-      node("--test", "scripts/check-seed-fit-decision.test.mjs"),
+      node("--test", "scripts/check-seed-fit-decision.test.mjs", "scripts/lib/seed-fit-mechanism.test.mjs"),
       node("scripts/check-seed-fit-decision.mjs"),
     ]),
     guard("spec-plan-doc-gate", "Spec/Plan/Doc Gate", [

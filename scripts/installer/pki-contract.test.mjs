@@ -4,6 +4,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
@@ -136,7 +137,7 @@ test("join packages are short-lived, intended-peer-bound, and never require a CA
 test("Bash join rejects an expired package before Docker is invoked", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-expired-"));
   const packagePath = join(directory, "expired.dpfjoin");
-  const script = new URL("../bootstrap-organization-pki.sh", import.meta.url).pathname;
+  const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
 
   try {
     await writeFile(packagePath, [
@@ -164,7 +165,7 @@ test("Bash join rejects an expired package before Docker is invoked", async () =
 test("Bash join rejects a package intended for a different installation", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-peer-"));
   const packagePath = join(directory, "wrong-peer.dpfjoin");
-  const script = new URL("../bootstrap-organization-pki.sh", import.meta.url).pathname;
+  const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
 
   try {
     await writeFile(packagePath, [
@@ -191,7 +192,7 @@ test("Bash join rejects a package intended for a different installation", async 
 test("Bash join rejects a public CA origin before Docker is invoked", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-public-ca-"));
   const packagePath = join(directory, "public-ca.dpfjoin");
-  const script = new URL("../bootstrap-organization-pki.sh", import.meta.url).pathname;
+  const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
 
   try {
     await writeFile(packagePath, [
@@ -289,7 +290,7 @@ test("Caddy exposes a dedicated verified-client action listener and strips spoof
 });
 
 test("Bash bootstrap rejects public binds and argument injection before Docker", () => {
-  const script = new URL("../bootstrap-organization-pki.sh", import.meta.url).pathname;
+  const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
   const publicBind = spawnSync("bash", [script, "--hostname", "dpf.local", "--bind-address", "8.8.8.8"], { encoding: "utf8" });
   assert.equal(publicBind.status, 64);
   assert.match(publicBind.stderr, /private IPv4/i);

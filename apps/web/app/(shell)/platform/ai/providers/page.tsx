@@ -147,6 +147,7 @@ export default async function ProvidersPage() {
   }
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
+  const lastCatalogRefresh = freshJobs.find((j) => j.jobId === "model-discovery-refresh")?.lastRunAt;
 
   // F11 (BI-1A75E068): tie provider → blocked phase. Reuse the SAME resolver
   // runtime-health uses; for any phase blocked with `no-eligible-endpoint`, it
@@ -208,7 +209,7 @@ export default async function ProvidersPage() {
           <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Providers
           </div>
-          <ProviderCatalogStatus lastSyncAt={lastSync ?? null} />
+          <ProviderCatalogStatus lastSyncAt={lastCatalogRefresh ?? null} />
         </div>
 
         {aiProviders.length === 0 ? (

@@ -2,6 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import type { InitiativeReviewBinding } from "./mcp-task-review-contract";
 import { canonicalJson } from "./shared/canonical-json";
+import { formatInitiativeReviewObjective } from "./tak/initiative-review-objective";
 
 const OBJECTIVE_MAPPING_KEY_VERSION = 3;
 const LEGACY_OBJECTIVE_MAPPING_KEY_VERSION = 2;
@@ -211,6 +212,23 @@ function isLegacyInvalidBinding(binding: ObjectiveMappingRequestHistory["binding
   return binding.workroomRef === undefined || binding.eligibleEvidenceActivityIds === undefined;
 }
 
+/** Recognize the entire original producer template, never a fuzzy text rewrite. */
+function originalObjectiveTemplateMatches(packet: ObjectiveMappingRequestPacket,
+  historical: ObjectiveMappingRequestHistory): boolean {
+  if (historical.binding.workroomRef !== undefined || historical.binding.eligibleEvidenceActivityIds !== undefined) return false;
+  const ref = packet.binding.workroomRef;
+  const artifact = historical.binding.artifactRef;
+  if (artifact.commitSha !== ref.headSha
+    || historical.idempotencyKey !== `initiative-readiness:${packet.binding.itemId}:objective-mapping:${ref.headSha}`) return false;
+  const original = `For ${packet.binding.itemId} in ${ref.workroomId} on ${ref.repositoryFullName}#${ref.branchName} at ${ref.headSha}, address objective-mapping using record_initiative_evidence. Read ${artifact.path} at that commit with read_source_at_version, record a governed receipt only when the gate passes. Map every current OBJ-* and AC-* statement to post-baseline evidence and submit the proposal with record_initiative_evidence(operation='objective-mapping').`;
+  return historical.objective === original && packet.objective === formatInitiativeReviewObjective({
+    ...ref, itemId: packet.binding.itemId, gate: "objective-mapping",
+    toolName: packet.binding.writerToolName, independent: false,
+    artifact: packet.binding.artifactRef,
+    eligibleEvidenceActivityIds: [...packet.binding.eligibleEvidenceActivityIds].sort(),
+  });
+}
+
 function historicalRequestKeyIsValid(historical: ObjectiveMappingRequestHistory): boolean {
   if (isLegacyInvalidBinding(historical.binding)) return true;
   return validateHistoricalObjectiveMappingRequestKey({
@@ -276,18 +294,19 @@ export function authorizeObjectiveMappingRequestKeyEvolution(input: {
   }
 
   for (const historical of input.history) {
+    const originalObjectiveMatches = originalObjectiveTemplateMatches(input.packet, historical);
     // Structural authority is never relaxed by a provider disposition. The
     // disposition can release only the baseline/blob identity that the server
     // independently proved impossible; it cannot mask a different item, tool,
     // Workroom, repository, or path.
     if (historical.targetAgent !== input.packet.targetAgent.trim()
-      || historical.objective.trim() !== input.packet.objective.trim()
+      || (!originalObjectiveMatches && historical.objective.trim() !== input.packet.objective.trim())
       || historical.questionPacketSummary.trim() !== input.packet.questionPacketSummary.trim()
       || !exactToolNamesMatch(historical.requiredToolNames, input.packet.requiredToolNames)
       || historical.binding.itemId !== input.packet.binding.itemId
       || historical.binding.gate !== "objective-mapping"
       || historical.binding.writerToolName !== input.packet.binding.writerToolName
-      || !historicalWorkroomMatches(input.packet, historical)
+      || (!originalObjectiveMatches && !historicalWorkroomMatches(input.packet, historical))
       || !sameArtifactCorpus(input.packet.binding.artifactRef, historical.binding.artifactRef)
       || (!isLegacyInvalidBinding(historical.binding)
         && !exactToolNamesMatch(
@@ -331,7 +350,7 @@ export function authorizeObjectiveMappingRequestKeyEvolution(input: {
     // A writer from a packet that never carried the required evidence or
     // Workroom identity is retained for audit, but is not authoritative for
     // the now-valid packet. This is the exact BI-2B live fixture.
-    if ((providerProvenImpossibleLegacy || !isLegacyInvalidBinding(historical.binding))
+    if ((originalObjectiveMatches || providerProvenImpossibleLegacy || !isLegacyInvalidBinding(historical.binding))
       && historical.writerExecutions.some((execution) => execution.success || execution.hasReceipt)) {
       return { authorized: false, reason: "authoritative-output-exists", taskRunId: historical.taskRunId };
     }

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 699,
+  "pageCount": 704,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1132,7 +1132,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "build-gate-runbook"
+        "build-gate-runbook",
+        "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {
@@ -1325,7 +1326,11 @@
       "publishedPortal": false,
       "anchors": [
         "data-model-stewardship-runbook",
-        "record-lifecycle-convention"
+        "record-lifecycle-convention",
+        "model-metadata-lives-in-the-schema-and-the-catalog",
+        "the-steward-watches-growth-not-only-structure",
+        "retention-floors-come-from-the-obligations-that-bind-this-install",
+        "evidence-payloads-never-live-inline"
       ]
     },
     "docs/architecture/decision-vectors-by-archetype.md": {
@@ -1448,6 +1453,7 @@
         "axis-3-acquisition-control-the-new-dependency-gate",
         "why-this-shape-wwmd",
         "doctrine-rent-vs-own-and-validate-the-rent",
+        "build-time-tools-are-tools-not-workspace-dependencies",
         "hardening-the-rent-upgrade-validation",
         "dual-package-hazard-guard-singleton-safety",
         "schedules",
@@ -1564,6 +1570,16 @@
         "worked-example-bad",
         "related-backlog",
         "change-control"
+      ]
+    },
+    "docs/architecture/failure-analysis-and-recovery.md": {
+      "publicHref": "/architecture/failure-analysis-and-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "failure-analysis-and-recovery-evidence",
+        "deployment-and-protection"
       ]
     },
     "docs/architecture/field-service-work-item.md": {
@@ -1748,6 +1764,7 @@
         "four-portfolio-archetype-standard-profile-catalog",
         "1-purpose",
         "2-facet-registry",
+        "cross-workroom-review-application-informative",
         "21-commercial-and-public-value-facets",
         "22-delivery-topology-facets",
         "23-resource-asset-and-custody-facets",
@@ -1818,6 +1835,23 @@
         "core-assertion-set",
         "evidence-publication-guidance",
         "use-in-dpf"
+      ]
+    },
+    "docs/architecture/initiative-readiness-runbook.md": {
+      "publicHref": "/architecture/initiative-readiness-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "initiative-readiness-runbook-who-does-what-when-through-the-gates",
+        "0-two-shapes-do-not-conflate-them",
+        "1-the-lifecycle-sequence",
+        "2-the-gates-role-actor-evidence-feature-profile",
+        "3-how-a-gate-is-handed-to-the-right-coworker-the-recovery-packet",
+        "4-the-reviewer-roster-who-holds-which-grant",
+        "5-drive-to-completion-checklist",
+        "6-known-limitation-reviewer-dispatch-can-complete-without-writing-a-receipt",
+        "anti-patterns-observed"
       ]
     },
     "docs/architecture/job-specific-intelligence.md": {
@@ -2079,6 +2113,26 @@
         "what-success-means"
       ]
     },
+    "docs/architecture/portal-ux-evaluation-framework.md": {
+      "publicHref": "/architecture/portal-ux-evaluation-framework/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-page-and-flow-evaluation-framework",
+        "1-evaluate-a-job-not-a-screenshot",
+        "2-rubric-and-decision-rules",
+        "inspect-inside-every-item",
+        "3-measurement-protocol",
+        "4-workroom-centered-disclosure",
+        "archetype-sentinels-without-ia-forks",
+        "5-standing-ux-design-and-fit-gate",
+        "every-pr-review-and-convergence-of-existing-ux",
+        "september-8-delivery-reconciliation",
+        "6-architecture-decision-and-research",
+        "consolidation-and-dependency-review"
+      ]
+    },
     "docs/architecture/principle-decide-mcda-identity.md": {
       "publicHref": "/architecture/principle-decide-mcda-identity/",
       "portalHref": null,
@@ -2088,6 +2142,7 @@
         "principledecide-math-identity-mcda",
         "what-the-scorer-is",
         "what-it-is-not",
+        "option-set-input-contract-bi-9889566b",
         "autonomy-gate-bi-1d23ec26",
         "operator-surfaces",
         "design-grounding"
@@ -2464,7 +2519,9 @@
         "who-may-coordinate-authority-and-a-gate-with-no-key",
         "concurrent-execution-and-recorded-state",
         "the-brief-and-what-advances-a-stage",
-        "related-references"
+        "failing-closed-is-not-the-same-as-locking",
+        "related-references",
+        "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
       ]
     },
     "docs/architecture/workos-iam-equivalence-scorecard.md": {
@@ -3852,6 +3909,17 @@
         "decision-dimensions",
         "examples",
         "related"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": {
+      "publicHref": "/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply"
       ]
     },
     "docs/founder-kernel/wiki/principles/evidence-before-diagnosis.md": {
@@ -10709,6 +10777,21 @@
         "populated-performance-live-acceptance"
       ]
     },
+    "docs/testing/portal-ux-scorecard-template.md": {
+      "publicHref": "/testing/portal-ux-scorecard-template/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-page-flow-scorecard-template",
+        "identity-and-purpose",
+        "measures",
+        "rubric",
+        "task-and-state-evidence",
+        "disposition-and-refactoring",
+        "item-detail-and-dependency-inventory"
+      ]
+    },
     "docs/testing/pr-health.md": {
       "publicHref": "/testing/pr-health/",
       "portalHref": null,
@@ -10737,6 +10820,7 @@
         "what-runs-in-ci",
         "policy-guard-profiles",
         "re-evaluating-a-trailer-or-label-without-pushing",
+        "a-scoped-seed-fit-answer-names-its-mechanism",
         "where-ci-runs-it",
         "run-locally-before-pushing",
         "the-pre-push-gate-pregate-default-on",
@@ -10961,6 +11045,7 @@
         "how-oauth-works",
         "choosing-the-right-method",
         "business-safe-review",
+        "break-glass-accepting-a-risk-on-purpose",
         "openrouter-and-other-router-accounts",
         "finance-bridge",
         "where-to-review-it",
@@ -11018,6 +11103,7 @@
         "the-inheritance-chain",
         "profile-kinds",
         "the-profession-scope-wsid",
+        "ratifying-a-policy-once",
         "calling-the-gate",
         "the-voice-layer",
         "speech-to-text-input",

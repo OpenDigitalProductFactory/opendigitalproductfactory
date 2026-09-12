@@ -8,6 +8,9 @@
     ".": "./src/index.ts",
     "./bom-component-key": "./src/bom-component-key.ts",
     "./schema-source": "./src/schema-source.ts",
+    "./seed-retention-floor-obligations": "./src/seed-retention-floor-obligations.ts",
+    "./model-metadata": "./src/model-metadata.ts",
+    "./table-classification": "./src/table-classification.ts",
     "./reference-freshness": "./src/reference-freshness.ts",
     "./sysml-model-seed": "./src/sysml-model-seed.ts",
     "./coworker-service-catalog-seed": "./src/coworker-service-catalog-seed.ts",
@@ -46,6 +49,7 @@
     "./federated-record-sync": "./src/federated-record-sync.ts",
     "./discovery-triage": "./src/discovery-triage.ts",
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
+    "./mailroom-enums": "./src/mailroom-enums.ts",
     "./discovery-collectors-arp-scan": "./src/discovery-collectors/arp-scan.ts",
     "./discovery-collectors-snmp": "./src/discovery-collectors/snmp.ts",
     "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",
@@ -73,6 +77,7 @@
     "./workforce-portfolio": "./src/workforce-portfolio.ts",
     "./workforce-seed": "./src/workforce-seed.ts",
     "./agent-identity": "./src/agent-identity.ts",
+    "./persona-reachability": "./src/persona-reachability.ts",
     "./principal-sensitivity": "./src/principal-sensitivity.ts",
     "./agent-model-defaults": "./src/agent-model-defaults.ts",
     "./healthcare-patient-authority": "./src/healthcare-patient-authority.ts",
@@ -122,12 +127,12 @@
   "devDependencies": {
     "@types/pg": "^8.23.1",
     "@types/picomatch": "^4.0.2",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "picomatch": "^4.0.5",
     "prisma": "^7.9.1",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3",
     "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

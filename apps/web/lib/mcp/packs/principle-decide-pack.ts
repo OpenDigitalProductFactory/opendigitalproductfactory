@@ -22,10 +22,8 @@ import {
 import {
   DIMENSION_KEYS,
   buildFeaturesDescription,
-  validateOptionFeatures,
-  featureErrorRemedy,
-  type FeatureValidationError,
 } from "@/lib/decision/dimension-catalog";
+import { validateOptionInputs } from "@/lib/decision/option-input-contract";
 import {
   groundOptionsFromParams,
   buildScoredDecisionOptions,
@@ -53,8 +51,20 @@ const definitions: ToolDefinition[] = [
           items: {
             type: "object",
             properties: {
-              id: { type: "string", description: "Stable identifier for the option." },
-              description: { type: "string", description: "Short prose description." },
+              // Both are enforced at call time, not merely declared (BI-9889566B):
+              // an option with no id, or an id shared with another option,
+              // cannot be told apart in the scores, the recommendation or the
+              // evidence map, so the call is refused rather than scored.
+              id: {
+                type: "string",
+                description:
+                  "Stable identifier for the option. Required, non-empty, and DISTINCT across the option set — the scores, the recommendation and the `evidence` map are all keyed on it. A set with a missing or duplicated id is refused.",
+              },
+              description: {
+                type: "string",
+                description:
+                  "Short prose description. Required and non-empty — it is what the semantic path scores when an option carries no features.",
+              },
               features: {
                 type: "object",
                 description: buildFeaturesDescription(),
@@ -73,6 +83,7 @@ const definitions: ToolDefinition[] = [
         // Trust-envelope evidence grounding params (spec §2 Axis 1) — defined in
         // evidence-grounding.ts so this pack stays under the module-size ceiling.
         ...PRINCIPLE_DECIDE_EVIDENCE_SCHEMA,
+        decisionDomain: { type: "string", enum: ["org-business", "platform-development"], description: "Owning scope (BI-HDLEMP-01, BI-9C384562): org-business is answered by the organization WWWD profile, platform-development by the founder WWMD profile. Omitted, routing falls back to callingPopulation, which sends an in-platform coworker to the organization profile." },
         callingPopulation: {
           type: "string",
           enum: ["in_platform_coworker", "external_coding_agent", "human"],
@@ -141,11 +152,7 @@ export async function runPrincipleDecision(
 ): Promise<ToolResult> {
   // Pull in-scope commandments plus relevant core/contextual principles, run
   // the pure scoring math, and return its contribution ledger.
-  const validPopulations = new Set([
-    "in_platform_coworker",
-    "external_coding_agent",
-    "human",
-  ]);
+  const validPopulations = new Set(["in_platform_coworker", "external_coding_agent", "human"]);
   const callingPopulation = params["callingPopulation"];
   if (
     typeof callingPopulation !== "string" ||
@@ -167,36 +174,11 @@ export async function runPrincipleDecision(
     };
   }
 
-  // BI-E0151DB2. Validate option features against the closed dimension
-  // registry, the same way ringScope is validated below. An unknown key is NOT
-  // harmless: computeStructuredAlignment iterates the PRINCIPLE's dimensions
-  // and reads option.features[dim], so a key that is not a real dimension is
-  // never read and the axis the caller thought they scored silently counts as
-  // zero. Silent skip on bad input is the failure mode
-  // `make-silent-failures-observable` forbids.
-  const featureErrors: FeatureValidationError[] = [];
-  for (const raw of optionsParam) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const o = raw as Record<string, unknown>;
-    const f = o["features"];
-    if (typeof f !== "object" || f === null || Array.isArray(f)) continue;
-    featureErrors.push(
-      ...validateOptionFeatures(
-        String(o["id"] ?? "(unnamed option)"),
-        f as Record<string, unknown>,
-      ),
-    );
-  }
-  if (featureErrors.length > 0) {
-    return {
-      success: false,
-      message:
-        `principle_decide rejected ${featureErrors.length} option feature(s): ` +
-        featureErrors.map((e) => `[${e.optionId}] ${e.detail}`).join(" ") +
-        ` ${featureErrorRemedy()}`,
-      error: "Invalid option features",
-    };
-  }
+  // Option-set input contract (BI-9889566B / BI-E0151DB2): identity then
+  // features, both fail-fast. See option-input-contract.ts for why a silently
+  // accepted id-less option produced an option-invariant ranking.
+  const optionInputRejection = validateOptionInputs(optionsParam);
+  if (optionInputRejection) return { success: false, ...optionInputRejection };
 
   const { listPrinciplesByTier, prisma, PRINCIPLE_DECIDE_DEFAULTS } =
     await import("@dpf/db");
@@ -630,10 +612,10 @@ export async function runPrincipleDecision(
   // score to a cited source; when `requireEvidence` is set, drop features lacking
   // admissible evidence before scoring. Options are then embedded for the semantic
   // path (BI-3C1A6451). Both helpers live in evidence-grounding.ts (module-size).
-  const { groundedFeaturesById, ledgerArgs } = groundOptionsFromParams(params);
+  const { groundedFeaturesByIndex, ledgerArgs } = groundOptionsFromParams(params);
   const decisionOptions = await buildScoredDecisionOptions({
     optionsParam,
-    groundedFeaturesById,
+    groundedFeaturesByIndex,
     generateEmbedding,
   });
 
@@ -650,13 +632,13 @@ export async function runPrincipleDecision(
   // so agents/operators know which kernel weighed in. Additive — does not
   // change scoring yet; Gate-routed scoring + boundary enforcement is the
   // follow-on (C2b). callingPopulation was validated above.
-  const { resolveDecisionCallerContext } = await import(
-    "@/lib/decision/caller-context"
-  );
+  const { resolveDecisionCallerContext, resolveDecisionDomainParam } = await import("@/lib/decision/caller-context");
   const governingProfile = await resolveDecisionCallerContext({
     callingPopulation:
       callingPopulation as "in_platform_coworker" | "external_coding_agent" | "human",
     agentId: context?.agentId ?? null,
+    // BI-9C384562: a policy-projection consult is platform-development by construction.
+    decisionDomain: resolveDecisionDomainParam(params, Boolean(policyProjection)),
   });
 
   // BI-E0151DB2. The abstention must be impossible to mistake for a verdict.

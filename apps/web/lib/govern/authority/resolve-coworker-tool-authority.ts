@@ -4,9 +4,12 @@ import { prisma } from "@dpf/db";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 
 import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval-envelope";
+import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
 import { getGrantedCapabilities } from "@/lib/permissions";
+import type { EscalationSteering } from "./escalation-gate";
+import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
 import {
   parseInitiativeReviewBinding,
   type InitiativeReviewBinding,
@@ -225,6 +228,38 @@ export function deriveCoworkerApprovalPolicy(input: {
   return "none";
 }
 
+/**
+ * BI-6B3DA9DD — the ONLY producers of automated steering, both server-resolved.
+ *
+ * `independent-reviewer`: the call carries a server-validated immutable
+ * initiative-review binding. `resolveBoundInitiativeReviewBinding` fails closed
+ * on every mismatch and the writer lane refuses an author reviewing their own
+ * artifact, so separation of duties is already enforced as distinct principals
+ * by the time the binding exists — a human click adds nothing to it.
+ *
+ * `room-authority`: the turn runs in a Workroom the coworker participates in
+ * whose resolved action boundary is `preauthorized` — the room definition is
+ * the recorded decision (EP-WORK-POSTURE §8.2). `advise` and `propose` supply
+ * no steering, so a room can only ever narrow what a coworker may do alone.
+ */
+export function resolveSteering(input: {
+  initiativeReviewBinding: InitiativeReviewBinding | null;
+  roomAuthority: { actionBoundary?: string | null; memberOfRoom?: boolean } | null;
+}): EscalationSteering {
+  if (input.initiativeReviewBinding) return "independent-reviewer";
+  const room = input.roomAuthority;
+  if (room && room.memberOfRoom !== false && room.actionBoundary === "preauthorized") {
+    return "room-authority";
+  }
+  return "none";
+}
+
+/** A Work Case action the registry marks consequential elevates the call. */
+function isWorkCaseConsequential(workCase: { action: string }): boolean {
+  const action = getWorkCaseAction(workCase.action);
+  return action?.consequential === true;
+}
+
 export function deriveAllowedRouteContexts(
   screenSurface: string | undefined,
 ): readonly string[] | undefined {
@@ -349,6 +384,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       agent.governanceProfile?.updatedAt.toISOString(),
     ].filter((value): value is string => Boolean(value));
 
+    const roomAuthority = execution.context?.roomAuthority ?? null;
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
       organizationId: initiativeAuthority.organizationId,
@@ -356,6 +392,10 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         toolName: execution.toolName,
         requiredCapability: tool.requiredCapability,
         agentGrantAllowed,
+        roomAuthorityAllowed: roomAuthorizesTool(
+          execution.toolName,
+          roomAuthority?.authorizedGrants,
+        ),
         sideEffect: tool.sideEffect === true,
         executionMode: tool.executionMode ?? "immediate",
         routeContext: execution.context?.routeContext ?? null,
@@ -364,9 +404,24 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         policyProjectionAllowed:
           agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
         consequence: tool.consequence ?? null,
+        ...(execution.context?.workCase
+          ? { workCaseConsequential: isWorkCaseConsequential(execution.context.workCase) }
+          : {}),
         requiresDelegationChain: Boolean(execution.context?.delegationChainId),
       },
+      // BI-6B3DA9DD: what can decide this without a person. Recorded facts only.
+      steering: resolveSteering({
+        initiativeReviewBinding,
+        roomAuthority: execution.context?.roomAuthority ?? null,
+      }),
       subject: initiativeAuthority.subject,
+      room: roomAuthority
+        ? {
+            workroomId: roomAuthority.workroomId ?? "",
+            collaborationShape: roomAuthority.collaborationShape,
+            workShapeKey: roomAuthority.workShapeKey,
+          }
+        : null,
       delegation: delegation
         ? {
             chainId: delegation.chainId,
@@ -378,10 +433,12 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         : null,
       integration: {
         required: tool.requiresExternalAccess === true,
+        // Server-resolved (room + standing grant, BI-947780FE): an external
+        // tool the turn was not admitted to is "disconnected", never guessed.
         state: tool.requiresExternalAccess
           ? execution.context?.externalAccessEnabled === true
             ? "connected"
-            : "unknown"
+            : "disconnected"
           : "not-required",
       },
       dataPolicy: {

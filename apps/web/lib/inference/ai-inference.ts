@@ -26,9 +26,9 @@ import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
 import {
   parseExecutionAdapterSelector,
-  requiredToolChoiceExclusionReason,
   type ExecutionAdapterSelector,
 } from "../routing/execution-adapter-types";
+import { applyRequiredToolChoiceGuard } from "./terminal-writer-dispatch-guard";
 import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
 import { getCliPoolStatus } from "../routing/cli-pool-status";
 import {
@@ -69,10 +69,21 @@ export type ContentBlock =
   /**
    * Audio input for multimodal models (ASR / diarization / audio understanding).
    * OpenAI Chat Completions wire form (`input_audio` with base64 data + format).
-   * Verified on-machine (2026-06-15): local Gemma 4 12B transcribes a wav via
-   * Docker Model Runner through this exact block. Anthropic has no audio-input
-   * block, so this is OpenAI-compatible only — routing sends audio to an
-   * audio-capable endpoint via the `audioInput` floor, never to Anthropic.
+   * Anthropic has no audio-input block, so this is OpenAI-compatible only —
+   * routing sends audio to an audio-capable endpoint via the `audioInput`
+   * floor, never to Anthropic.
+   *
+   * NOTE (2026-09-09, BI-F7E9A541): this block is NOT the path voice input
+   * takes. `transcribe()` sets executionAdapter="transcription", which
+   * dispatches to transcription-adapter.ts and posts multipart audio to
+   * /v1/audio/transcriptions — a different API that the local model runner does
+   * not serve (404). A previous note here claimed a local Gemma 4 12B had
+   * transcribed a wav through Docker Model Runner on 2026-06-15; that model is
+   * no longer installed, and a direct retest returned "audio input is not
+   * supported ... you may need to provide the mmproj". Serving transcription
+   * from a local chat model needs an audio-capable model WITH a multimodal
+   * projector plus a dispatch branch that speaks chat rather than multipart.
+   * Do not assume this path works for speech without retesting it.
    */
   | { type: "input_audio"; input_audio: { data: string; format: "wav" | "mp3" } }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
@@ -471,7 +482,7 @@ export async function callProvider(
   // Resolve adapter enforceability before capacity or budget accounting. A
   // plan/adapter capability miss is not a provider request and must not consume
   // budget, wait on host capacity, or mutate provider health through fallback.
-  const effectivePlan: RoutedExecutionPlan = plan ?? {
+  let effectivePlan: RoutedExecutionPlan = plan ?? {
     providerId,
     modelId,
     recipeId: null,
@@ -492,22 +503,18 @@ export async function callProvider(
   }
   const isCliAdapter = selector !== null
     && (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
-  const toolChoiceExclusion = requiredToolChoiceExclusionReason(selector);
-  if (effectivePlan.toolPolicy.toolChoice === "required" && toolChoiceExclusion) {
-    const soleToolFunction = tools?.length === 1 ? tools[0]?.["function"] : undefined;
-    const soleToolName = soleToolFunction && typeof soleToolFunction === "object" && !Array.isArray(soleToolFunction)
-      ? (soleToolFunction as Record<string, unknown>)["name"]
-      : undefined;
-    const requiredTerminalWriter = typeof soleToolName === "string"
-      && effectivePlan.responsePolicy.terminalWriterToolName === soleToolName;
-    throw new InferenceError(
-      requiredTerminalWriter
-        ? `required-terminal-writer-not-enforceable: ${toolChoiceExclusion}`
-        : toolChoiceExclusion,
-      requiredTerminalWriter ? "required_terminal_writer_not_enforceable" : "provider_error",
-      providerId,
-    );
-  }
+  // Required tool choice on an adapter that cannot force it: refuse, or — for a
+  // bound terminal writer reachable through a governed MCP session — dispatch
+  // under the receipt-verified contract (BI-C35576A9). See the guard module.
+  const guard = applyRequiredToolChoiceGuard({
+    plan: effectivePlan,
+    selector,
+    tools,
+    providerId,
+    hasGovernedMcpSession: Boolean(mcpSession),
+  });
+  if (guard.kind === "refuse") throw new InferenceError(guard.message, guard.code, providerId);
+  effectivePlan = guard.plan;
 
   // Host capacity is a dispatch constraint, not a routing hint. Enforce it at
   // the shared adapter boundary so direct, agentic, evaluation and fallback

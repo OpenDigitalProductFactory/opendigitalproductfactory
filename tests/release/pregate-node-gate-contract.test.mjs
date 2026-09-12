@@ -13,10 +13,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { detectWorkingShell } from "../../scripts/pregate.mjs";
 
-const repoRoot = new URL("../..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const pregateScript = join(repoRoot, "scripts", "pregate.mjs");
 const gateScript = join(repoRoot, "scripts", "gate-worktree.mjs");
 const runnerScript = join(repoRoot, "scripts", "local-ci-runner.mjs");
@@ -40,6 +41,7 @@ function makeTempRepo() {
   writeFileSync(join(dir, "code.ts"), "export const x = 1;\n");
   g(["add", "."]);
   g(["commit", "-q", "-m", "base"]);
+  g(["update-ref", "refs/remotes/origin/main", "HEAD"]);
   return { dir, g };
 }
 
@@ -229,6 +231,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "documentation-evidence-lane.mjs"), join(temp, "scripts", "lib", "documentation-evidence-lane.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "semantic-review-gate.mjs"), join(temp, "scripts", "lib", "semantic-review-gate.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-integration-ci.mjs"), join(temp, "scripts", "lib", "local-integration-ci.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "host-command-invocation.mjs"), join(temp, "scripts", "lib", "host-command-invocation.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-failure-summary.mjs"), join(temp, "scripts", "lib", "local-ci-failure-summary.mjs"));
@@ -256,6 +259,11 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "git-fetch-shared-safe.mjs"), join(temp, "scripts", "lib", "git-fetch-shared-safe.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "entry-module.mjs"), join(temp, "scripts", "lib", "entry-module.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-integration-status.mjs"), join(temp, "scripts", "lib", "local-integration-status.mjs"));
+  // BI-D35B85BF: a queued gate hands its claim to a detached resumer, so
+  // gate-worktree.mjs now static-imports the spawn helper too. Same
+  // copies-scripts-by-name trap as the modules above - without this the temp
+  // tree dies on ERR_MODULE_NOT_FOUND before the stub-refusal path can run.
+  cpSync(join(repoRoot, "scripts", "lib", "durable-wait-resumer.mjs"), join(temp, "scripts", "lib", "durable-wait-resumer.mjs"));
   cpSync(
     join(repoRoot, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
     join(temp, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
@@ -846,6 +854,7 @@ test("gate-worktree.mjs carries content-addressed local integration metadata int
   const writerScript = join(temp, "write-metadata.mjs");
   writeFileSync(writerScript, `
 import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   schemaVersion: 2,
   bi: "BI-76551B2D",

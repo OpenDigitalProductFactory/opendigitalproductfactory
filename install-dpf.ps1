@@ -1835,25 +1835,12 @@ if (-not (Test-StepDone "started")) {
     Write-Action "Starting database and portal..."
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    # Non-critical sidecars (e.g. dpf-stt voice STT) pull from third-party
-    # registries whose mutable tags get pruned upstream: hwdsl2/whisper-server
-    # re-pushes :latest and prunes the prior index digest, so a pinned digest
-    # eventually 404s ("manifest unknown"). A single such failure would otherwise
-    # abort the WHOLE compose up, taking the portal/db/redis down with it (#1767).
-    # Pre-pull them with failure tolerated and, if one is unavailable, scale it to
-    # 0 so the core platform still comes up -- voice degrades, the install does
-    # not. Nothing depends_on these sidecars, so scaling to 0 is safe.
-    $scaleArgs = @()
-    if (@($capabilityProjection.requiredServices) -contains "dpf-stt") {
-        $svc = "dpf-stt"
-        docker compose @coreComposeArgs pull $svc 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "Optional sidecar '$svc' image is unavailable upstream; bringing up the platform without it."
-            Write-Action "  Voice features needing '$svc' stay inactive until its image returns; re-run the installer to retry."
-            $scaleArgs += @("--scale", "$svc=0")
-        }
-    }
-    docker compose @coreComposeArgs up -d @scaleArgs
+    # Speech-to-text is provider-managed (BI-F7E9A541): DPF ships no speech
+    # image, so there is no third-party sidecar whose pruned digest can abort
+    # the whole compose up and take the portal down with it (#1767). The
+    # defensive pre-pull and scale-to-0 dance that guarded against that is gone
+    # with it.
+    docker compose @coreComposeArgs up -d
     $ErrorActionPreference = $oldEAP
 
     # Voice / TTS sidecar. Spoken output uses the bundled dpf-tts container, but

@@ -1,14 +1,12 @@
 import { readFileSync } from "node:fs";
+
+import { getTableSensitivity } from "./table-classification";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 import { readCanonicalPrismaSchema } from "./schema-source";
 
 const schema = readCanonicalPrismaSchema();
-const tableClassification = readFileSync(
-  resolve(import.meta.dirname, "table-classification.ts"),
-  "utf8",
-);
 const migration = readFileSync(
   resolve(
     import.meta.dirname,
@@ -158,7 +156,8 @@ describe("Product Sold traceability schema", () => {
     } as const;
 
     for (const [name, sensitivity] of Object.entries(expected)) {
-      expect(tableClassification).toContain(`${name}: "${sensitivity}"`);
+      // Sensitivity is declared on the model (/// @dpf) or, for untagged models, in the registry; assert the resolved answer.
+      expect(getTableSensitivity(name)).toBe(sensitivity);
     }
   });
 });

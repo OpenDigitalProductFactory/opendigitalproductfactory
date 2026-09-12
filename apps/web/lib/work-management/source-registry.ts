@@ -13,6 +13,10 @@ import type {
   WorkCaseRoomToolGrant,
   WorkCaseRoomTrigger,
 } from "./room-definition-contract";
+import { MAILROOM_QUEUE_SOURCE_ENTRY } from "./source-registry-mailroom";
+import { OBSERVED_RECEIPT_POLICY, SCHEDULED_TRANSITIONS, STANDING_ROOM_PROJECTION } from "./source-registry-shared";
+
+export { STANDING_ROOM_PROJECTION } from "./source-registry-shared";
 
 export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "task-node",
@@ -24,6 +28,7 @@ export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "field-service-job",
   "data-control-operation",
   "bookkeeping-period",
+  "mailroom-queue",
 ] as const;
 
 export type WorkCaseWorkItemSourceType =
@@ -92,31 +97,8 @@ const APPROVAL_TRANSITIONS = [
   "cancel",
 ] as const satisfies readonly WorkCaseSupportedTransition[];
 
-const SCHEDULED_TRANSITIONS = [
-  "claim",
-  "pause",
-  "needs-input",
-  "resume",
-  "verify",
-  "complete",
-  "cancel",
-  "open-cycle",
-  "pause-cycle",
-  "verify-cycle",
-  "complete-cycle",
-  "carry-over",
-  "renew",
-  "split",
-  "archive",
-] as const satisfies readonly WorkCaseSupportedTransition[];
-
 const GOVERNED_RECEIPT_POLICY = {
   defaultReceiptKind: "governed-action",
-  receiptRequiredForConsequentialTransition: true,
-} as const satisfies WorkCaseReceiptPolicy;
-
-const OBSERVED_RECEIPT_POLICY = {
-  defaultReceiptKind: "observed-event",
   receiptRequiredForConsequentialTransition: true,
 } as const satisfies WorkCaseReceiptPolicy;
 
@@ -133,14 +115,6 @@ const APPROVAL_ROOM_PROJECTION = {
   cycleCarrierPrecedence: [],
   outcomePacket: {
     requiredCategories: ["decisions", "receipts", "evidence"],
-  },
-} as const satisfies WorkCaseRoomProjectionPolicy;
-
-export const STANDING_ROOM_PROJECTION = {
-  mode: "standing",
-  cycleCarrierPrecedence: ["work-item", "work-capsule", "task-run"],
-  outcomePacket: {
-    requiredCategories: ["receipts", "evidence"],
   },
 } as const satisfies WorkCaseRoomProjectionPolicy;
 
@@ -381,6 +355,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
       { key: "period-close-age", label: "Days the period has stayed open", bindingKey: "lead-time" },
     ],
   },
+  MAILROOM_QUEUE_SOURCE_ENTRY,
   {
     sourceKey: "engagement",
     definitionVersion: 2,

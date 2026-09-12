@@ -428,6 +428,39 @@ describe("terminal initiative recovery", () => {
     expect(result.escalations).toMatchObject([{ reason: "objective-mapping-identity-conflict" }]);
   });
 
+  // BI-7876699F: when the only unmet lane is RESEARCH_REQUIRED the packet used to
+  // fall through to the workroom/baseline chain and answer "baseline-not-found —
+  // complete independent spec approval". A delivery-small shape owes no
+  // OBJECTIVE_BASELINE_REQUIRED at all, so that route can never be taken: the
+  // item was unclosable by anyone. Research is author-satisfiable; say so.
+  it("routes an unmet research lane to the author's own writer, never to a baseline", async () => {
+    const ports = deps();
+    const researchOnly: InitiativeReadinessDecision = {
+      ...decision,
+      unmet: [readinessRequirement({
+        code: "RESEARCH_REQUIRED",
+        state: "missing",
+        accountableRole: "design-author",
+      })],
+    };
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: researchOnly,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.escalations).toMatchObject([{
+      reason: "research-evidence-required",
+      toolName: "record_initiative_evidence",
+      accountableRole: "design-author",
+    }]);
+    // It must not consult the baseline machinery at all for this lane.
+    expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
+    expect(ports.resolveRecovery).not.toHaveBeenCalled();
+  });
+
   it("fails closed when the current baseline has no eligible post-baseline passing evidence", async () => {
     const ports = deps();
     ports.loadEligibleEvidenceActivityIds.mockResolvedValue(ok({ activityIds: [] }));

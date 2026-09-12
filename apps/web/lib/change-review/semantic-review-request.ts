@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "@/lib/shared/canonical-json";
+import { failureAnalysisSchema } from "./failure-analysis";
 import { deriveSemanticReviewGateIdentity } from "@/lib/gates/gate-run-identity";
 import { resolveSemanticReviewCoordination, type SemanticChangeReviewOperationInput } from "./semantic-change-review-operation";
 
@@ -18,10 +19,13 @@ const inputSchema = z.object({
   surface: z.enum(["external", "build-studio"]), authorSurface: ref,
   artifactType: z.enum(REVIEW_ARTIFACT_TYPES), title: z.string().min(1).max(2_000),
   artifact: z.string().min(1), verificationEvidence: z.string().min(1),
+  failureAnalysis: failureAnalysisSchema.optional(),
+  resolvedFailureEvidence: z.array(z.object({ id: ref, capsuleId: ref, headTreeHash: ref, diffDigest: sha256,
+    status: ref, expected: z.string(), observed: z.string(), completedAt: ref }).strict()).optional(),
   changedFiles: z.array(z.string().min(1).max(2_000)).min(1).max(10_000),
   identity: z.object({ capsuleId: ref, baseTreeHash: z.string().regex(/^[a-f0-9]{40}$/),
     headTreeHash: z.string().regex(/^[a-f0-9]{40}$/), diffDigest: sha256,
-    policyVersion: ref, reviewerVersion: ref, specialistIds: z.array(ref).max(20) }).strict(),
+    policyVersion: ref, reviewerVersion: ref, specialistIds: z.array(ref).max(20), failureAnalysisDigest: sha256.optional(), sourceHeadSha: ref.optional() }).strict(),
   repairRound: z.number().int().min(0).max(100).optional(), risk: z.enum(REVIEW_RISKS),
   sensitivityFloor: z.enum(REVIEW_PROFILES).optional(), mode: z.enum(["shadow", "enforce"]).optional(),
 }).strict();

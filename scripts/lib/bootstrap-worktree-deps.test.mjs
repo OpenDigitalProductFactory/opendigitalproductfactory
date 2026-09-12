@@ -51,10 +51,12 @@ test("ignored-build readiness fails closed when pnpm reports an unclassified scr
   assert.deepEqual(classifyIgnoredBuilds("Automatically ignored builds during installation: None"), {
     ok: true,
     packages: [],
+    indeterminate: false,
   });
   assert.deepEqual(classifyIgnoredBuilds("Automatically ignored builds during installation:\n  sharp@1.2.3"), {
     ok: false,
     packages: ["sharp@1.2.3"],
+    indeterminate: false,
   });
 });
 
@@ -70,7 +72,7 @@ test("ignored-build parser ignores the Explicitly-ignored section and hint lines
     "Explicitly ignored package builds (via pnpm.ignoredBuiltDependencies):",
     "  @scarf/scarf",
   ].join("\n");
-  assert.deepEqual(classifyIgnoredBuilds(classified), { ok: true, packages: [] });
+  assert.deepEqual(classifyIgnoredBuilds(classified), { ok: true, packages: [], indeterminate: false });
 
   // Before classification: the build sits under "Automatically ignored" and pnpm
   // appends advisory "hint:" lines. Flag the package, never the hints.
@@ -80,7 +82,7 @@ test("ignored-build parser ignores the Explicitly-ignored section and hint lines
     "hint: To allow the execution of build scripts, add its name to \"pnpm.onlyBuiltDependencies\".",
     "hint: If you don't want to build a package, add it to the \"pnpm.ignoredBuiltDependencies\" list.",
   ].join("\n");
-  assert.deepEqual(classifyIgnoredBuilds(unclassified), { ok: false, packages: ["@scarf/scarf"] });
+  assert.deepEqual(classifyIgnoredBuilds(unclassified), { ok: false, packages: ["@scarf/scarf"], indeterminate: false });
 });
 
 test("a build denied by allowBuilds policy is classified, not unclassified (BI-6945BEEF)", () => {
@@ -100,16 +102,17 @@ test("a build denied by allowBuilds policy is classified, not unclassified (BI-6
   assert.deepEqual(classifyIgnoredBuilds(stdout), {
     ok: false,
     packages: ["puppeteer", "unrs-resolver", "protobufjs"],
+    indeterminate: false,
   });
 
   const denied = new Set(["puppeteer", "unrs-resolver", "protobufjs"]);
-  assert.deepEqual(classifyIgnoredBuilds(stdout, denied), { ok: true, packages: [] });
+  assert.deepEqual(classifyIgnoredBuilds(stdout, denied), { ok: true, packages: [], indeterminate: false });
 
   // A package with no recorded decision is still flagged even when siblings are
   // decided — the gate must not go blanket-permissive.
   assert.deepEqual(
     classifyIgnoredBuilds(`${stdout}\n  brand-new-dep`, denied),
-    { ok: false, packages: ["brand-new-dep"] },
+    { ok: false, packages: ["brand-new-dep"], indeterminate: false },
   );
 });
 
@@ -401,4 +404,72 @@ test("the install decision is driven by measured readiness, not by existsSync", 
     .filter((line) => !line.trimStart().startsWith("//") && !line.trimStart().startsWith("*"))
     .filter((line) => /if\s*\(\s*!exists\s*\(/.test(line));
   assert.deepEqual(offending, [], "bootstrapWorktreeDeps must gate its install on probeWorktreeReadiness, not existsSync");
+});
+
+test("pnpm saying it cannot answer is not a package nobody classified (BI-5318366C)", () => {
+  // pnpm prints this INSTEAD of a list when node_modules/.modules.yaml carries no
+  // `ignoredBuilds` key, which is what an install that links nothing new leaves
+  // behind. Read as a package name it invented a dependency called "Cannot
+  // identify as no node_modules found" and took every worktree sharing that
+  // node_modules to SOURCE-ONLY at once, with the fabricated name as the only clue.
+  const stdout = [
+    "Automatically ignored builds during installation:",
+    "  Cannot identify as no node_modules found",
+    "",
+    "Explicitly ignored package builds (via pnpm.ignoredBuiltDependencies):",
+    "  @scarf/scarf",
+    "  protobufjs",
+  ].join(String.fromCharCode(10));
+
+  const result = classifyIgnoredBuilds(stdout);
+
+  // Nothing to classify, and nobody to name.
+  assert.deepEqual(result.packages, []);
+  // Still fails closed: an unreadable record does not prove the tree is clean.
+  assert.equal(result.ok, false);
+  // But the caller can now say WHICH of the two it hit.
+  assert.equal(result.indeterminate, true);
+});
+
+test("an unreadable build record still flags a real unclassified build beside it", () => {
+  // Fail-closed must not become fail-blind: if pnpm manages to name a package,
+  // that package is still unclassified whatever else the section says.
+  const result = classifyIgnoredBuilds([
+    "Automatically ignored builds during installation:",
+    "  Cannot identify as no node_modules found",
+    "  brand-new-dep",
+  ].join(String.fromCharCode(10)));
+
+  assert.deepEqual(result.packages, ["brand-new-dep"]);
+  assert.equal(result.ok, false);
+  assert.equal(result.indeterminate, true);
+});
+
+test("readiness names an unreadable build record and its remedy, not a phantom package (BI-5318366C)", () => {
+  const sentinel = [
+    "Automatically ignored builds during installation:",
+    "  Cannot identify as no node_modules found",
+  ].join(String.fromCharCode(10));
+
+  const result = probeWorktreeReadiness("/wt", {
+    artifactDeps: { exists: () => true, readdir: () => ["something"] },
+    linkCheckDeps: { readdir: () => [], realpath: () => null },
+    execute: (cmd, args) => {
+      const arg = args?.[0] ?? "";
+      if (arg === "ignored-builds") return { ok: true, status: 0, stdout: sentinel, stderr: "" };
+      if (cmd === "git") return { ok: true, status: 0, stdout: "a".repeat(40), stderr: "" };
+      return { ok: true, status: 0, stdout: "10.33.2", stderr: "" };
+    },
+  });
+
+  // Fails closed, as it must: nothing here proves the tree is clean.
+  assert.equal(result.status, "source-only");
+  // But it names the state and the way out, instead of a dependency that does
+  // not exist. Reading the diagnostic as a package took a whole host to
+  // SOURCE-ONLY with a fabricated name as the only clue.
+  assert.match(result.reason, /^build_record_unreadable:/);
+  assert.match(result.reason, /install again/);
+  assert.deepEqual(result.checks.ignoredBuilds, []);
+  // And no dependency-policy review is raised for a decision nobody owes.
+  assert.deepEqual(result.checks.dependencyPolicyReviewKeys, []);
 });

@@ -24,6 +24,7 @@ import {
 } from "@/lib/work-capsules";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
+import { assertWorkroomPublishable } from "./publication-refusal";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import {
   CapsuleBranchOccupiedError,
@@ -48,7 +49,10 @@ import {
 
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
-export { WorkCapsuleCompletionDeniedError } from "./work-capsule-terminal-status";
+export {
+  WorkCapsuleCompletionDeniedError,
+  WorkCapsulePublicationRefusedError,
+} from "./work-capsule-terminal-status";
 export { recordWorkCapsuleEvidence } from "./work-capsule-activity-store";
 export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 
@@ -954,6 +958,7 @@ export async function updateWorkCapsuleStatus(args: {
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
 
   const hasGovernedLink = Boolean(capsule.backlogItemId || capsule.featureBuildId || capsule.taskRunId);
+  await assertWorkroomPublishable({ capsuleId: args.capsuleId, status: args.status, repositoryFullName: capsule.repositoryFullName });
   if (args.status === "complete" && hasGovernedLink) {
     return completeGovernedWorkCapsuleStatus({
       db: args.db,

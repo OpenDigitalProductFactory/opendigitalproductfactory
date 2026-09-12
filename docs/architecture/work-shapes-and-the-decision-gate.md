@@ -716,9 +716,64 @@ advance; a worker cannot advance itself, only leave evidence the drive reads.
 Evidence must name the stage, be of a kind the stage declared, and post-date the
 dispatch; anything short of that re-dispatches.
 
+The dispatch timestamp comes from the recorded agent dispatch for the room's
+current stage and cycle. Without that dispatch, evidence cannot complete the
+stage. Fresh evidence replaces a blocked receipt, and the earned receipt is
+persisted with the drive snapshot so subsequent ticks retain the completed
+stage. Concurrent completing receipts in the same cycle are preserved.
+
 `record_workroom_evidence` therefore takes an optional `stageKey`, and a
 schema/handler parity guard protects it — the same seam already shipped broken
 once when `workShape` was advertised and silently dropped.
+
+## Failing closed is not the same as locking
+
+`#5166` stopped a real defect: a stage that produced no completing receipt was
+re-dispatched every fifteen minutes, burning model capacity on work that never
+completed. Pausing instead of re-dispatching was correct.
+
+The latch it introduced was self-sustaining, though — the pause reason is itself
+one of the conditions that produces the pause:
+
+    alreadyTriedWriteback = ... || prior.reason === EXECUTOR_WRITEBACK_UNAVAILABLE
+
+so a room that entered the state never left it. The only exit is a completing
+receipt, and a room that never dispatches can never produce one. On this install
+that locked **12 of 24 rooms**, and they stayed locked after the defect causing
+the empty writeback was fixed and deployed. **A fix cannot reach a room that will
+not try again.**
+
+The latch is now bounded rather than permanent: it holds **within** a cycle and
+releases on the next, giving one attempt per cycle — daily for these shapes —
+instead of the 96 per day the guard was built to stop. The capacity protection is
+kept almost entirely (a 96x reduction); the deadlock is not.
+
+A **`blocked` receipt is bounded by its cycle too**. It records "this stage
+produced no writeback in THIS cycle" — not a finding that the stage is
+permanently unfit.
+
+That correction was itself a live defect. The first bounded latch returned early
+and unconditionally on a blocked receipt, reasoning that a recorded receipt
+outranks a prior-tick inference. It preserved the exact deadlock the bounded
+latch existed to remove, and preserved it precisely for the rooms already stuck:
+the cycle rolled from 2026-09-08 to 2026-09-09 and all twelve stayed locked,
+because every one of them carried `[{"kind":"blocked","stageKey":"sweep"}]`.
+Every predicate test passed while the estate did not move.
+
+**A guard that cannot be re-entered by the fix for its own cause is not a
+guard.** The test that catches this reproduces a real room's stored state — its
+receipts, its `lastCycleKey`, its pause reason — and asserts it dispatches
+through the real resolver.
+
+One case still holds unconditionally:
+
+- **An unknown cycle key on either side.** Reading "unknown" as "a new cycle"
+  would silently re-open the every-tick loop.
+
+The general lesson is worth stating plainly, because it applies to any
+fail-closed guard: a guard whose own output re-triggers its input has no
+recovery path, and the estate it protects can only degrade. Bound the latch to
+something that changes on its own.
 
 ## Related references
 
@@ -726,3 +781,11 @@ once when `workShape` was advertised and silently dropped.
 - [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI and the composition rule
 - [A Governance Gate on Consequential Tool Use](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) — the target architecture
 - [Work Rooms](../user-guide/workspace/work-rooms.md) — the end-user view
+
+## A shape must outlive the room that decided it (BI-82DCD601)
+
+`readBoundWorkShapeRef` read the `workShape` scope claim from the item's newest **live** Workroom. By completion that room is closed — its correct end state — so the shape became unreadable at exactly the moment the completion rule needed it.
+
+Measured on the development install 2026-09-09: **67 merged bug fixes stalled at completion, 0 with a live room, 0 with a readable shape.** `smallShapeAcceptance` — the clause that lets a small or break-fix item be accepted by a runtime check or a failing-to-passing test, with no spec, no plan and no reconciliation receipt — could therefore never fire for the population it was written to serve. Across the whole install only 46 of 353 live rooms carried a shape claim at all.
+
+A closed or completed room is now consulted as a **fallback**, newest first. A live room still wins, so an in-flight re-shape is honoured over a historical one. An `abandoned` or `superseded` room is still never consulted: abandoning the work is a statement that its shape claim no longer stands.

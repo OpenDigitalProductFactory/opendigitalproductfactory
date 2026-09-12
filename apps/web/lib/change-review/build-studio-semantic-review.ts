@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
+import { isRecord } from "@/lib/shared/coerce";
 import { prisma, type Prisma } from "@dpf/db";
 
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
@@ -65,7 +67,7 @@ export async function reviewBuildStudioAssembledChange(args: {
     orderBy: { updatedAt: "desc" },
   });
   if (!capsule) {
-    return { kind: "unavailable", reason: "Build Studio Work Capsule is missing.", mayContinue: mode === "shadow" };
+    return { kind: "unavailable", reason: "Build Studio Work Capsule is missing.", mayContinue: false };
   }
 
   const currency = args.sandboxState?.sourceCurrency;
@@ -74,7 +76,7 @@ export async function reviewBuildStudioAssembledChange(args: {
     return {
       kind: "unavailable",
       reason: "Assembled change does not yet have a clean committed base/head tree and exact diff.",
-      mayContinue: mode === "shadow",
+      mayContinue: false,
     };
   }
 
@@ -95,6 +97,7 @@ export async function reviewBuildStudioAssembledChange(args: {
     2,
   );
   const changedFiles = args.sandboxState?.sourceDiffstat.map((entry) => entry.path) ?? [];
+  const failureAnalysis = isRecord(args.build.verificationOut) ? args.build.verificationOut.failureAnalysis : undefined;
   const operationInput: Parameters<typeof runSemanticChangeReview>[0] = {
     surface: "build-studio",
     authorSurface: "build-studio",
@@ -102,6 +105,8 @@ export async function reviewBuildStudioAssembledChange(args: {
     title: args.build.title,
     artifact: diffPatch,
     verificationEvidence: JSON.stringify(args.build.verificationOut ?? {}, null, 2),
+    failureAnalysis,
+    resolvedFailureEvidence: await resolveFailureAnalysisEvidence(failureAnalysis, capsule.id),
     changedFiles,
     identity: {
       capsuleId: capsule.capsuleId,
@@ -109,6 +114,7 @@ export async function reviewBuildStudioAssembledChange(args: {
       headTreeHash: currency.headTreeSha,
       diffDigest: createHash("sha256").update(diffPatch).digest("hex"),
       specialistIds: [],
+      sourceHeadSha: args.sandboxState?.headSha ?? undefined,
     },
     priorReceipt,
     repairRound,
@@ -188,6 +194,8 @@ export async function reviewBuildStudioAssembledChange(args: {
         resultClass: outcome.receipt.result.decision === "fail" ? "fail" : "pass",
       }, store);
     }
+    const { publishFailureReadinessStatus } = await import("./failure-readiness-status");
+    await publishFailureReadinessStatus(capsule.capsuleId);
     return { kind: "reviewed", outcome };
   }
 
@@ -229,5 +237,7 @@ export async function reviewBuildStudioAssembledChange(args: {
     }, store);
   }
 
+  const { publishFailureReadinessStatus } = await import("./failure-readiness-status");
+  await publishFailureReadinessStatus(capsule.capsuleId);
   return { kind: "reviewed", outcome };
 }

@@ -200,6 +200,7 @@ model EdgeNodeCapability {
 // The CA private key remains in step-ca; the portal stores only lifecycle and
 // binding metadata needed to re-authorize every request after Caddy verifies
 // the organization-rooted certificate chain.
+/// @dpf lifecycle=security-audit retention=domain sensitivity=restricted categories=authorization,configuration,security-audit owner=platform-owner steward=data-steward
 model EdgeNodeCertificate {
   id                String    @id @default(cuid())
   certificateId     String    @unique
@@ -243,6 +244,8 @@ model EdgeNodeCertificate {
 // Slice 0 owns ingest + persistence only. Cross-source correlation, escalation
 // policies, on-call routing, and ML grouping are separate downstream slices
 // — see BI-9FE9D48D.
+/// Per-node edge telemetry events (SNMP/syslog/probe detections). Settled events past 6 months are disposable; open alerts are never swept regardless of age.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=createdAt
 model EdgeEvent {
   id              String    @id @default(cuid())
   // FK to EdgeNode.id (the cuid surrogate); distinct from EdgeNode.nodeId.
@@ -316,6 +319,8 @@ model EdgeEvent {
 // The portal route accepts the same EdgeEventEnvelope wire shape and
 // discriminates on `eventType`; `action` is required by the schema for
 // envelope uniformity but ignored for changes.
+/// Configuration/state change detections from edge nodes. One year of change history for estate forensics.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=telemetry timeAxis=createdAt
 model ChangeEvent {
   id            String   @id @default(cuid())
   // FK to EdgeNode.id (the cuid surrogate). Route fills this from the
@@ -435,6 +440,7 @@ model FederationLink {
 // Durable review candidates learned from one trusted introducer. This is not a
 // trust table: pairing still runs through FederationPairingSession and the only
 // durable relationship authority is FederationLink.
+/// @dpf lifecycle=operational retention=projection sensitivity=confidential categories=configuration,security-audit owner=platform-owner steward=data-steward
 model FederationIntroductionCandidate {
   id                     String    @id @default(cuid())
   introductionId         String    @unique

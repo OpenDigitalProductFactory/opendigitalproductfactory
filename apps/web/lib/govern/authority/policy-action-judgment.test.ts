@@ -95,10 +95,31 @@ describe("policy action judgment", () => {
     expect(routinePolicyActionEligibility(routine())).toEqual({ eligible: true });
   });
 
+  it("admits recording a grounded negative design review without granting a waiver", () => {
+    const input = routine({
+      decision: "fail",
+      findings: [{
+        issue: "The default page size is not selected from measured fixtures.",
+        severity: "important",
+        evidence: { blobId: artifactRef.providerBlobId, startLine: 79, endLine: 80,
+          quote: "Default page size and supported minimum transport budget must be selected from serialized fixtures before implementation approval." },
+      }],
+    });
+    input.action.toolName = "record_initiative_design_review";
+    input.task!.initiativeReviewBinding!.writerToolName = input.action.toolName;
+    input.task!.initiativeReviewBinding!.gate = "spec-approval";
+    expect(routinePolicyActionEligibility(input)).toEqual({ eligible: true });
+
+    input.rawParams.resolvedFindingRefs = ["finding-to-waive"];
+    expect(routinePolicyActionEligibility(input)).toEqual({ eligible: false, reason: "findings-present" });
+  });
+
   it.each([
     ["finding-bearing pass", { findings: [{ issue: "Unresolved", severity: "important" }] }, "findings-present"],
     ["failed review", { decision: "fail" }, "non-pass-decision"],
     ["not-applicable review", { decision: "not-applicable" }, "non-pass-decision"],
+    ["failure with missing findings", { decision: "fail", findings: undefined }, "findings-present"],
+    ["failure with malformed resolutions", { decision: "fail", findings: [{ issue: "Unresolved" }], resolvedFindingRefs: null }, "findings-present"],
   ])("escalates a %s", (_name, rawPatch, reason) => {
     expect(routinePolicyActionEligibility(routine(rawPatch))).toEqual({ eligible: false, reason });
   });
@@ -170,6 +191,7 @@ describe("policy action judgment", () => {
     });
     expect(request.params).toMatchObject({
       callingPopulation: "in_platform_coworker",
+      decisionDomain: "platform-development",
       stakes: "elevated",
       options: [
         { id: "proceed", features: expect.objectContaining({ governance_compliance: 1, evidence_density: 1 }) },

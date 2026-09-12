@@ -11,11 +11,15 @@ import { prisma as defaultPrisma, readCanonicalPrismaSchema, syncEaElement, sync
 
 import { parsePrismaSchema } from "../build/code-graph/extractors/prisma-schema-adapter";
 import { reconcileDataModelMirror, type MirrorPrismaClient, type MirrorResult } from "./data-model-mirror-apply";
+import { declarationsFromSchemaSource } from "./data-model-mirror";
 import { runDataArchitectureSteward, type StewardPrismaClient, type StewardResult } from "./data-architecture-steward-apply";
+import { runTableGrowthSteward, type GrowthPrismaClient, type GrowthResult } from "./table-growth-apply";
 
 export type DataModelMirrorRunResult = {
   mirror: MirrorResult;
   steward: StewardResult;
+  /** Growth / payload-anatomy pass (EP-A33A5C61 slice 5); null when skipped. */
+  growth: GrowthResult | null;
   neo4jSynced: number | null;
 };
 
@@ -27,6 +31,8 @@ type RunDeps = {
   /** Best-effort Neo4j projection of the mirrored elements (default true). */
   syncNeo4j?: boolean;
   createdById?: string | null;
+  /** Run the growth pass (default true when the client can run raw SQL). */
+  growth?: boolean;
 };
 
 /** Run a full data-architecture mirror + steward pass and return a combined result. */
@@ -38,6 +44,7 @@ export async function runDataModelMirror(deps: RunDeps = {}): Promise<DataModelM
   const mirror = await reconcileDataModelMirror({
     prisma: prisma as MirrorPrismaClient,
     facts,
+    declarations: declarationsFromSchemaSource(source),
     createdById: deps.createdById ?? null,
   });
 
@@ -45,13 +52,20 @@ export async function runDataModelMirror(deps: RunDeps = {}): Promise<DataModelM
     prisma: prisma as StewardPrismaClient,
     facts,
   });
+  // EP-A33A5C61 slice 5: growth and payload-anatomy detectors over pg_class,
+  // best-effort, after the structural pass. Skipped when the caller passes a
+  // fake client without a raw query surface (unit tests of the mirror).
+  const growth =
+    deps.growth !== false && typeof (prisma as { $queryRawUnsafe?: unknown }).$queryRawUnsafe === "function"
+      ? await runTableGrowthSteward({ prisma: prisma as GrowthPrismaClient })
+      : null;
 
   let neo4jSynced: number | null = null;
   if (deps.syncNeo4j !== false && mirror.status !== "blocked") {
     neo4jSynced = await projectMirrorToNeo4j(prisma).catch(() => null);
   }
 
-  return { mirror, steward, neo4jSynced };
+  return { mirror, steward, growth, neo4jSynced };
 }
 
 // Best-effort: sync the data-model view's mirrored elements + relationships into

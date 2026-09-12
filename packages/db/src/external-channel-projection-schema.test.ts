@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { TABLE_CLASSIFICATION } from "./table-classification";
+import { getTableSensitivity } from "./table-classification";
 
 const root = resolve(import.meta.dirname, "..");
 const schema = readFileSync(resolve(root, "prisma/schema/integrations.prisma"), "utf8");
@@ -40,6 +40,6 @@ describe("ExternalChannelProjection schema", () => {
   });
 
   it("classifies compact projection identity and drift metadata as internal", () => {
-    expect(TABLE_CLASSIFICATION.ExternalChannelProjection).toBe("internal");
+    expect(getTableSensitivity("ExternalChannelProjection")).toBe("internal");
   });
 });

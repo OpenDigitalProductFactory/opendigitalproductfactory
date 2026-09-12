@@ -185,6 +185,87 @@ function metadataDescribesAnotherRun(state, metadata) {
   return true;
 }
 
+/**
+ * BI-41C3E303. Everything a record whose gate did NOT pass can be: infrastructure
+ * that never graded the diff, bookkeeping from a slot that lost the race, a record
+ * about another commit, or a real failure.
+ *
+ * Extracted so the ONE thing it must never be — a pass — cannot be reached around
+ * it. `evidencePending` is a qualifier on a PASS, not a verdict of its own, and the
+ * old ordering tested it first, so any of these outcomes carrying pending evidence
+ * short-circuited into a PENDING headlined "gate passed".
+ */
+function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha }) {
+  // BI-51353470: a metadata candidateSha that is not HEAD is STALE in the
+  // headline, not FAIL with a buried metadata line. Observed: FAIL quoting
+  // a previous run's vitest command while gated claimed the current HEAD.
+  if (candidateSha && headSha && candidateSha !== headSha) {
+    return {
+      ...base,
+      verdict: "STALE",
+      reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — re-run pregate`,
+      staleness: "metadata-mismatch",
+    };
+  }
+  const status = String(state.status || "");
+  // BI-5529B5AC: another slot PASSED this branch+SHA and the gate rewrote this
+  // losing record to say so. Bookkeeping, not a verdict on the diff.
+  if (status === "superseded" || state.supersededBy) {
+    const winner = state.supersededBy?.slotKey || "another slot";
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      reason: `gate record superseded — ${winner} passed this SHA; this slot's ${state.supersededStatus || "prior"} record is not a verdict`,
+    };
+  }
+  if (UNFINISHED_GATE_STATUSES.has(status)) {
+    // BI-D908DA0A: a claim parked because the pool had NO admissible slot is
+    // host pressure, not a queue. Say so, or the operator waits behind nobody.
+    const closed = poolClosedReasonFromState(state);
+    if (closed) {
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record status ${status} — the local-CI pool was CLOSED (${closed}) when this claim was parked: no slot could admit anyone, so this is host pressure, not a queue and not a failure of the diff. Free host memory or wait for the pressure to pass, then re-run pregate.`,
+      };
+    }
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      reason: `gate record status ${status} — the gate did not run. This is not a failure of the diff. Re-run pregate.`,
+    };
+  }
+  if (BLOCKED_GATE_STATUSES.has(status) || status.startsWith("blocked_")) {
+    const stated = state?.failureReason || state?.error || "";
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      reason: stated
+        ? `gate record status ${status} — infrastructure, not a product verdict. ${stated}`
+        : `gate record status ${status} — infrastructure, not a product verdict. The run was blocked before it could grade the diff. Re-run when the host is quieter; do not treat this as a failure of the code.`,
+    };
+  }
+  return {
+    ...base,
+    verdict: "FAIL",
+    reason: describeFailure(state, metadata),
+    staleness: metadataDescribesAnotherRun(state, metadata) ? "metadata-describes-another-run" : "",
+  };
+}
+
+/**
+ * A run whose gate did not pass can still hold local evidence waiting to be
+ * published — `gate-worktree.mjs` preserves it across a control-plane outage on
+ * purpose. Say so, because the pending-evidence file is on disk and visible, but
+ * never let it read as a pass: --finalize-evidence has no published PASS to
+ * finalize and refuses, so it is deliberately not named here — the only real next
+ * action is to re-gate the SHA.
+ */
+function unpublishedEvidenceNote(state) {
+  const reason = state?.evidencePendingReason || "unknown";
+  return ` Local evidence from this run is preserved on disk and still unpublished (${reason}) — that is a pending PUBLICATION, not a pass, and publishing it cannot produce one. Re-run pregate on this SHA.`;
+}
+
 export function classifySlotRecord({ state, metadata, headSha, headBranch = "", now = Date.now() }) {
   const boundSha = String(state?.sha || "");
   const boundBranch = String(state?.branch || "");
@@ -218,69 +299,19 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
     };
   }
 
+  // The gate did not pass. Classify what actually happened FIRST — `evidencePending`
+  // qualifies a PASS and can never manufacture one (BI-41C3E303).
+  if (state.gatePassed !== true) {
+    const unpassed = classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha });
+    if (state.evidencePending !== true) return unpassed;
+    return { ...unpassed, reason: `${unpassed.reason}${unpublishedEvidenceNote(state)}` };
+  }
+
   if (state.evidencePending === true) {
     return {
       ...base,
       verdict: "PENDING",
       reason: `gate passed but evidence publication is pending (${state.evidencePendingReason || "unknown"}) — finish with: pnpm run pregate -- --finalize-evidence`,
-    };
-  }
-
-  if (state.gatePassed !== true) {
-    // BI-51353470: a metadata candidateSha that is not HEAD is STALE in the
-    // headline, not FAIL with a buried metadata line. Observed: FAIL quoting
-    // a previous run's vitest command while gated claimed the current HEAD.
-    if (candidateSha && headSha && candidateSha !== headSha) {
-      return {
-        ...base,
-        verdict: "STALE",
-        reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — re-run pregate`,
-        staleness: "metadata-mismatch",
-      };
-    }
-    const status = String(state.status || "");
-    // BI-5529B5AC: another slot PASSED this branch+SHA and the gate rewrote this
-    // losing record to say so. Bookkeeping, not a verdict on the diff.
-    if (status === "superseded" || state.supersededBy) {
-      const winner = state.supersededBy?.slotKey || "another slot";
-      return {
-        ...base,
-        verdict: "INCONCLUSIVE",
-        reason: `gate record superseded — ${winner} passed this SHA; this slot's ${state.supersededStatus || "prior"} record is not a verdict`,
-      };
-    }
-    if (UNFINISHED_GATE_STATUSES.has(status)) {
-      // BI-D908DA0A: a claim parked because the pool had NO admissible slot is
-      // host pressure, not a queue. Say so, or the operator waits behind nobody.
-      const closed = poolClosedReasonFromState(state);
-      if (closed) {
-        return {
-          ...base,
-          verdict: "INCONCLUSIVE",
-          reason: `gate record status ${status} — the local-CI pool was CLOSED (${closed}) when this claim was parked: no slot could admit anyone, so this is host pressure, not a queue and not a failure of the diff. Free host memory or wait for the pressure to pass, then re-run pregate.`,
-        };
-      }
-      return {
-        ...base,
-        verdict: "INCONCLUSIVE",
-        reason: `gate record status ${status} — the gate did not run. This is not a failure of the diff. Re-run pregate.`,
-      };
-    }
-    if (BLOCKED_GATE_STATUSES.has(status) || status.startsWith("blocked_")) {
-      const stated = state?.failureReason || state?.error || "";
-      return {
-        ...base,
-        verdict: "INCONCLUSIVE",
-        reason: stated
-          ? `gate record status ${status} — infrastructure, not a product verdict. ${stated}`
-          : `gate record status ${status} — infrastructure, not a product verdict. The run was blocked before it could grade the diff. Re-run when the host is quieter; do not treat this as a failure of the code.`,
-      };
-    }
-    return {
-      ...base,
-      verdict: "FAIL",
-      reason: describeFailure(state, metadata),
-      staleness: metadataDescribesAnotherRun(state, metadata) ? "metadata-describes-another-run" : "",
     };
   }
 

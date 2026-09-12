@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const RETIRED_STT_DIGEST =
-  "hwdsl2/whisper-server@sha256:29d01f2e47e4f72b5475ce36fc987bb369f53fa5e5cf6b5a924ada69e1820b3f";
-const CURRENT_STT_DIGEST =
-  "hwdsl2/whisper-server@sha256:257302e5ea7efb041546d1b5d8ee11bcba2235711ab94f08c4dcc54be074ac36";
 const MANIFEST_GUARD =
   "node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned";
 
@@ -13,11 +9,19 @@ function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 }
 
-test("default STT sidecar uses the current reachable multi-arch image digest", () => {
+test("shipped compose pins no third-party image by digest (BI-F7E9A541)", () => {
+  // Replaces a test that asserted the CURRENT whisper digest, and which had to
+  // be edited every time that publisher pruned their index digest. That
+  // maintenance burden is the thing this change removed: a digest-pinned
+  // third-party image is unreachable the moment its publisher prunes it, and
+  // because the manifest guard covers images behind optional profiles, one
+  // pruned pin froze the :latest pointer for every install.
   const compose = read("docker-compose.yml");
+  const pins = compose
+    .split("\n")
+    .filter((line) => line.includes("@sha256:") && !line.trimStart().startsWith("#"));
 
-  assert.match(compose, new RegExp(CURRENT_STT_DIGEST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.doesNotMatch(compose, new RegExp(RETIRED_STT_DIGEST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.deepEqual(pins, []);
 });
 
 test("release gates verify digest-pinned compose images before release install reaches compose up", () => {

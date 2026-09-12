@@ -39,7 +39,7 @@ export type RoutinePolicyActionEligibility =
   | { eligible: false; reason: RoutinePolicyActionIneligibility };
 
 /**
- * Admit only a finding-free platform receipt whose writer, backlog item,
+ * Admit bounded evidence recording whose writer, backlog item,
  * canonical blob and Workroom head are all fixed by server-validated TaskRun
  * metadata. This is deliberately narrower than generic coworker authority.
  */
@@ -94,20 +94,27 @@ export function routinePolicyActionEligibility(
   if (input.action.policyProjectionAllowed === false) {
     return { eligible: false, reason: "operator-policy-requires-approval" };
   }
-  if (input.rawParams.decision !== "pass") {
-    return { eligible: false, reason: "non-pass-decision" };
-  }
   const findings = input.rawParams.findings;
   const resolved = input.rawParams.resolvedFindingRefs;
   if (
     !Array.isArray(findings)
     || !Array.isArray(resolved)
-    || findings.length > 0
     || resolved.length > 0
   ) {
     return { eligible: false, reason: "findings-present" };
   }
-  return { eligible: true };
+  // Recording an unresolved failure produces evidence, not permission to
+  // proceed. The receipt writer validates the findings; readiness retains the
+  // failed gate. Waivers and finding resolutions never enter this class.
+  if (input.rawParams.decision === "fail" && findings.length > 0) {
+    return { eligible: true };
+  }
+  if (input.rawParams.decision !== "pass") {
+    return { eligible: false, reason: "non-pass-decision" };
+  }
+  return findings.length === 0
+    ? { eligible: true }
+    : { eligible: false, reason: "findings-present" };
 }
 
 /**
@@ -146,6 +153,9 @@ export function buildPolicyActionJudgmentRequest(
         `${approvalBinding.inputFingerprint}? Apply Mark's current promoted DPF principles. ` +
         "Proceed only when the bounded action is justified; defer on ambiguity and decline when policy opposes it.",
       callingPopulation: "in_platform_coworker",
+      // BI-9C384562: name the owning scope; the population heuristic alone routes
+      // an in-platform coworker to the organization profile.
+      decisionDomain: "platform-development",
       callingSurface: "policy-action-authority",
       consumerContexts: ["build-studio", "initiative-readiness"],
       ringScope: ["ring-2-workflow", "ring-4-sandbox-prod"],

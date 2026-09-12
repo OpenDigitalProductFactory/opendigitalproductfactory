@@ -44,7 +44,7 @@ const substrate = {
     service("promoter", "runtime:core", { class: "ephemeral-lifecycle", profiles: ["promote"], dependsOn: ["postgres"], backupPolicy: "included", healthSemantics: "consumer-observed" }),
     service("sandbox-init", "runtime:build", { class: "ephemeral-lifecycle", defaultRequired: true, profiles: [], dependsOn: ["postgres"], backupPolicy: "excluded-ephemeral", healthSemantics: "lifecycle-completion" }),
     service("sandbox", "runtime:build", { defaultRequired: true, profiles: [], dependsOn: ["sandbox-init"], backupPolicy: "excluded-ephemeral" }),
-    service("dpf-stt", "runtime:local-speech", { defaultRequired: true, profiles: [] }),
+    service("dpf-fixture-speech", "runtime:local-speech", { defaultRequired: true, profiles: [] }),
     service("dpf-tts", "runtime:local-speech", { profiles: ["local-speech"], backupPolicy: "separate-required" }),
     service("prometheus", "runtime:deep-observability", { defaultRequired: true, profiles: [], backupPolicy: "separate-required" }),
     service("grafana", "runtime:deep-observability", { profiles: ["observability-ui"], dependsOn: ["prometheus"], backupPolicy: "separate-required" }),
@@ -53,11 +53,11 @@ const substrate = {
 };
 
 const fixtures = {
-  core: { keys: ["runtime:core"], required: ["portal", "portal-init", "postgres"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox", "sandbox-init"], profiles: [], backup: ["portal", "portal-init", "postgres"], external: [] },
-  build: { keys: ["runtime:build"], required: ["portal", "portal-init", "postgres", "sandbox", "sandbox-init"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter"], profiles: [], backup: ["portal", "portal-init", "postgres"], external: [] },
-  "local-speech": { keys: ["runtime:local-speech"], required: ["dpf-stt", "dpf-tts", "portal", "portal-init", "postgres"], inactive: ["grafana", "prometheus", "promoter", "sandbox", "sandbox-init"], profiles: ["local-speech"], backup: ["dpf-tts", "portal", "portal-init", "postgres"], external: [] },
-  "deep-observability": { keys: ["runtime:deep-observability"], required: ["grafana", "portal", "portal-init", "postgres", "prometheus"], inactive: ["dpf-stt", "dpf-tts", "promoter", "sandbox", "sandbox-init"], profiles: ["observability-ui"], backup: ["grafana", "portal", "portal-init", "postgres", "prometheus"], external: [] },
-  "external-ai": { keys: ["runtime:external-ai"], required: ["portal", "portal-init", "postgres"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox", "sandbox-init"], profiles: [], backup: ["portal", "portal-init", "postgres"], external: ["openai"] },
+  core: { keys: ["runtime:core"], required: ["portal", "portal-init", "postgres"], inactive: ["dpf-fixture-speech", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox", "sandbox-init"], profiles: [], backup: ["portal", "portal-init", "postgres"], external: [] },
+  build: { keys: ["runtime:build"], required: ["portal", "portal-init", "postgres", "sandbox", "sandbox-init"], inactive: ["dpf-fixture-speech", "dpf-tts", "grafana", "prometheus", "promoter"], profiles: [], backup: ["portal", "portal-init", "postgres"], external: [] },
+  "local-speech": { keys: ["runtime:local-speech"], required: ["dpf-fixture-speech", "dpf-tts", "portal", "portal-init", "postgres"], inactive: ["grafana", "prometheus", "promoter", "sandbox", "sandbox-init"], profiles: ["local-speech"], backup: ["dpf-tts", "portal", "portal-init", "postgres"], external: [] },
+  "deep-observability": { keys: ["runtime:deep-observability"], required: ["grafana", "portal", "portal-init", "postgres", "prometheus"], inactive: ["dpf-fixture-speech", "dpf-tts", "promoter", "sandbox", "sandbox-init"], profiles: ["observability-ui"], backup: ["grafana", "portal", "portal-init", "postgres", "prometheus"], external: [] },
+  "external-ai": { keys: ["runtime:external-ai"], required: ["portal", "portal-init", "postgres"], inactive: ["dpf-fixture-speech", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox", "sandbox-init"], profiles: [], backup: ["portal", "portal-init", "postgres"], external: ["openai"] },
 };
 
 for (const [name, expected] of Object.entries(fixtures)) {
@@ -166,7 +166,7 @@ test("work guard values are closed and preserved in the catalog", () => {
 test("host projection excludes services unsupported by the target host", () => {
   const hostSpecific = {
     ...substrate,
-    services: substrate.services.map((entry) => entry.service === "dpf-stt"
+    services: substrate.services.map((entry) => entry.service === "dpf-fixture-speech"
       ? { ...entry, hostPlatforms: ["linux"] }
       : entry),
   };
@@ -174,8 +174,8 @@ test("host projection excludes services unsupported by the target host", () => {
   const fixtureCapabilities = capabilities.map((entry) => ({ ...entry, state: enabled.has(entry.capabilityId) ? "active" : "disabled" }));
   const windows = resolveCapabilityServiceProjection({ substrate: hostSpecific, capabilities: fixtureCapabilities, enabledRuntimeCapabilities: [...enabled], hostPlatform: "windows" });
   const linux = resolveCapabilityServiceProjection({ substrate: hostSpecific, capabilities: fixtureCapabilities, enabledRuntimeCapabilities: [...enabled], hostPlatform: "linux" });
-  assert.ok(!windows.requiredServices.includes("dpf-stt"));
-  assert.ok(linux.requiredServices.includes("dpf-stt"));
+  assert.ok(!windows.requiredServices.includes("dpf-fixture-speech"));
+  assert.ok(linux.requiredServices.includes("dpf-fixture-speech"));
   assert.throws(() => resolveCapabilityServiceProjection({ substrate, capabilities: fixtureCapabilities, enabledRuntimeCapabilities: [...enabled], hostPlatform: "plan9" }), /invalid_host_platform:plan9/);
 });
 

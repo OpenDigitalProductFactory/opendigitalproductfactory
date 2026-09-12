@@ -2,6 +2,7 @@ import { prisma, type Prisma } from "@dpf/db";
 
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { enqueueSemanticReview } from "@/lib/change-review/semantic-review-background";
+import { resolveFailureAnalysisEvidence } from "@/lib/change-review/failure-analysis-evidence";
 import { createSemanticReviewRequest, REVIEW_ARTIFACT_TYPES, REVIEW_RISKS, REVIEW_PROFILES } from "@/lib/change-review/semantic-review-request";
 import {
   runSemanticChangeReview,
@@ -26,6 +27,7 @@ import {
 import type { DeliberationArtifactType, StrategyProfile } from "@/lib/deliberation/external-review-activation";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isRecord } from "@/lib/shared/coerce";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
@@ -50,6 +52,7 @@ const definitions: ToolDefinition[] = [{
       title: { type: "string", description: "Human-readable committed change title" },
       artifact: { type: "string", description: "Exact committed diff or equivalent immutable assembled-change artifact" },
       verificationEvidence: { type: "string", description: "Tests, typecheck, build, migration, or scoped verification evidence available before publication" },
+      failureAnalysis: { type: "object", description: "Versioned failure analysis: design, scope, eliminated opportunities, scenarios with business effects and prevention/containment/detection/recovery, existing verification evidence IDs, accountable residual risks. See shared failure-analysis contract." },
       changedFiles: { type: "array", items: { type: "string" } },
       baseTreeHash: { type: "string", description: "Git base tree hash for the committed review identity" },
       headTreeHash: { type: "string", description: "Git head tree hash for the committed review identity" },
@@ -92,6 +95,9 @@ const definitions: ToolDefinition[] = [{
       falsePositiveFindingCount: { type: "number" },
       uniqueLocalFindingCount: { type: "number" },
       postPublicationMissCount: { type: "number" },
+      escapedFailureFollowUps: { type: "array", items: { type: "object", properties: {
+        scenarioKey: { type: "string" }, incidentReference: { type: "string" }, followUpReference: { type: "string" },
+      }, required: ["scenarioKey", "incidentReference", "followUpReference"] } },
       correctivePushCount: { type: "number" },
       timeToFirstSignalMs: { type: "number" },
       costUsd: { type: "number" },
@@ -146,7 +152,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
 
   const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
-    select: { id: true },
+    select: { id: true, headSha: true },
   });
   if (!capsule) {
     return { success: false, error: "capsule_not_found", message: `Work Capsule ${capsuleId} was not found.` };
@@ -169,6 +175,8 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     title,
     artifact,
     verificationEvidence,
+    failureAnalysis: params.failureAnalysis,
+    resolvedFailureEvidence: await resolveFailureAnalysisEvidence(params.failureAnalysis, capsule.id),
     changedFiles,
     identity: {
       capsuleId,
@@ -176,6 +184,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
       headTreeHash,
       diffDigest,
       specialistIds: [],
+      sourceHeadSha: capsule.headSha ?? undefined,
     },
     priorReceipt,
     repairRound: typeof params.repairRound === "number" ? params.repairRound : 0,
@@ -244,6 +253,8 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     const outcome = await runSemanticChangeReview({ ...operationInput, priorReceipt: existing.details }, {
       dispatch: async () => { throw new Error("Canonical semantic-review evidence is no longer fresh"); },
     });
+    const { publishFailureReadinessStatus } = await import("@/lib/change-review/failure-readiness-status");
+    await publishFailureReadinessStatus(capsuleId);
     return { success: true, entityId: singleFlight.evidenceRecordId,
       message: `Reused the fresh semantic review receipt for ${capsuleId}.`,
       data: { disposition: "reused", gateKey, taskRunId: singleFlight.taskRunId,
@@ -292,8 +303,11 @@ const recordSemanticReviewOutcome: ToolPackHandler = async (params, userId, cont
       target: receiptId,
     },
     select: { id: true, resultSummary: true, details: true },
+    orderBy: { createdAt: "desc" },
   });
-  if (priorOutcome) {
+  if (priorOutcome && isRecord(priorOutcome.details)
+    && (priorOutcome.details.postPublicationMissCount ?? null) === (params.postPublicationMissCount ?? null)
+    && JSON.stringify(priorOutcome.details.escapedFailureFollowUps ?? []) === JSON.stringify(params.escapedFailureFollowUps ?? [])) {
     return {
       success: true,
       entityId: priorOutcome.id,
@@ -316,7 +330,12 @@ const recordSemanticReviewOutcome: ToolPackHandler = async (params, userId, cont
     acceptedFindingCount: correlationStatus === "completed" ? nonNegativeNumber(params, "acceptedFindingCount") : 0,
     falsePositiveFindingCount: correlationStatus === "completed" ? nonNegativeNumber(params, "falsePositiveFindingCount") : 0,
     uniqueLocalFindingCount: correlationStatus === "completed" ? nonNegativeNumber(params, "uniqueLocalFindingCount") : 0,
-    postPublicationMissCount: correlationStatus === "completed" ? nonNegativeNumber(params, "postPublicationMissCount") : 0,
+    postPublicationMissCount: correlationStatus === "completed" && typeof params.postPublicationMissCount === "number"
+      && Number.isInteger(params.postPublicationMissCount) && params.postPublicationMissCount >= 0 ? params.postPublicationMissCount : null,
+    escapedFailureFollowUps: Array.isArray(params.escapedFailureFollowUps) ? params.escapedFailureFollowUps.filter(
+      (v): v is { scenarioKey: string; incidentReference: string; followUpReference: string } => Boolean(v && typeof v === "object"
+        && ["scenarioKey", "incidentReference", "followUpReference"].every(key => typeof v[key] === "string" && v[key].trim())),
+    ) : [],
     correctivePushCount: correlationStatus === "completed" ? nonNegativeNumber(params, "correctivePushCount") : 0,
     timeToFirstSignalMs: correlationStatus === "completed" && typeof params.timeToFirstSignalMs === "number"
       ? nonNegativeNumber(params, "timeToFirstSignalMs")

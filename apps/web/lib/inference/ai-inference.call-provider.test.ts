@@ -277,7 +277,7 @@ describe("callProvider", () => {
   it.each([
     ["anthropic-sub", "claude-sonnet-4-6", "claude-cli", "record_initiative_evidence"],
     ["codex", "gpt-5.4", "codex-cli", "record_initiative_design_review"],
-  ])("refuses %s/%s before inference when its CLI adapter cannot force the bound writer", async (
+  ])("dispatches %s/%s through its CLI adapter under the receipt-verified contract", async (
     providerId,
     modelId,
     executionAdapter,
@@ -291,7 +291,7 @@ describe("callProvider", () => {
       endpoint: null,
     });
 
-    const rejection = callProvider(
+    const dispatch = callProvider(
       providerId,
       modelId,
       [{ role: "user", content: "Record it." }],
@@ -312,13 +312,23 @@ describe("callProvider", () => {
       { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
     );
 
-    await expect(rejection).rejects.toMatchObject({
-      code: "required_terminal_writer_not_enforceable",
-      providerId,
-      message: expect.stringContaining("required-terminal-writer-not-enforceable"),
+    // BI-C35576A9: the writer is reachable through the governed MCP session, so
+    // the turn runs and the EXECUTOR verifies the receipt afterwards. The adapter
+    // receives best-effort tool choice with the writer still the sole tool.
+    mockAdapterExecute.mockResolvedValueOnce({
+      text: "",
+      toolCalls: [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+      inferenceMs: 1,
+      raw: {},
     });
-    expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
-    expect(mockAdapterExecute).not.toHaveBeenCalled();
+    await expect(dispatch).resolves.toBeDefined();
+    expect(mockAdapterExecute).toHaveBeenCalledTimes(1);
+    const executeArgs = mockAdapterExecute.mock.calls[0] ?? [];
+    const dispatched = JSON.stringify(executeArgs);
+    expect(dispatched).toContain('"toolChoice":"auto"');
+    expect(dispatched).not.toContain('"toolChoice":"required"');
+    expect(dispatched).toContain(writerToolName);
   });
 
   it("keeps a sole required writer available to a provider-native HTTP adapter", async () => {

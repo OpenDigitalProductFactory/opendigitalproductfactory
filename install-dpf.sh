@@ -962,28 +962,11 @@ if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
     ok "Stamping local build with DPF_PLATFORM_VERSION=$DPF_PLATFORM_VERSION"
   fi
 fi
-# Non-critical sidecars (e.g. dpf-stt voice STT) pull from third-party
-# registries whose mutable tags get pruned upstream: hwdsl2/whisper-server
-# re-pushes :latest and prunes the prior index digest, so a pinned digest
-# eventually 404s ("manifest unknown"). A single such failure would otherwise
-# abort the WHOLE `docker compose up`, taking the portal/db/redis down with it
-# (#1767). Pre-pull them with failure tolerated and, if one is unavailable,
-# scale it to 0 so the core platform still comes up — voice degrades, the
-# install does not. Nothing depends_on these sidecars, so scaling to 0 is safe.
-_noncritical_sidecars="dpf-stt"
-_scale_args=()
-for _svc in $_noncritical_sidecars; do
-  if dpf_capability_service_required "$_svc" && ! docker compose "${DPF_COMPOSE_FILES[@]}" pull "$_svc" >/dev/null 2>&1; then
-    warn "Optional sidecar '$_svc' image is unavailable upstream; bringing up the platform without it."
-    info "  Voice features needing '$_svc' stay inactive until its image returns; re-run install-dpf.sh to retry."
-    _scale_args+=(--scale "$_svc=0")
-  fi
-done
-if [ "${#_scale_args[@]}" -gt 0 ]; then
-  docker compose "${DPF_COMPOSE_FILES[@]}" up -d "${_scale_args[@]}"
-else
-  docker compose "${DPF_COMPOSE_FILES[@]}" up -d
-fi
+# Speech-to-text is provider-managed (BI-F7E9A541): DPF ships no speech image,
+# so there is no third-party sidecar whose pruned digest can abort the whole
+# `docker compose up` and take the portal down with it (#1767). The defensive
+# pre-pull and scale-to-0 dance that guarded against that is gone with it.
+docker compose "${DPF_COMPOSE_FILES[@]}" up -d
 ok "docker compose up returned"
 
 # 10b. Voice / TTS sidecar (Linux hosts with an NVIDIA GPU).

@@ -124,7 +124,14 @@ describe("CORE_MCP_TOOL_NAMES drift guard", () => {
 
   it("core is a strict, lean subset (well under the full surface)", () => {
     expect(CORE_MCP_TOOL_NAMES.size).toBeLessThan(PLATFORM_TOOLS.length);
-    expect(CORE_MCP_TOOL_NAMES.size).toBeLessThanOrEqual(30);
+    // Raised 30 -> 35 to admit the five names a session needs to COMPLETE
+    // governed work rather than only plan it: record_execution_evidence,
+    // update_backlog_item_status, trace_code_surface, and the
+    // claim/release lease pair. The ceiling exists to stop core drifting back
+    // toward the full surface, and 35 of ~400 keeps that intent intact.
+    // Raise it again only for a tool without which governed work cannot be
+    // finished — convenience belongs behind search_tool_marketplace.
+    expect(CORE_MCP_TOOL_NAMES.size).toBeLessThanOrEqual(35);
   });
 
   it("keeps the governed live-delivery workflow discoverable for non-Claude external agents", () => {
@@ -247,5 +254,26 @@ describe("Phase 2 — session-store pure helpers", () => {
 
   it("exposes the load_tools meta-tool name", () => {
     expect(LOAD_TOOLS_TOOL_NAME).toBe("load_tools");
+  });
+});
+
+describe("core can finish work, not only plan it", () => {
+  // The lean surface could create, triage, size and update a backlog item but
+  // not record that it finished or attach the evidence proving it — while
+  // AGENTS.md §5 requires exactly that on completion. A client that cannot
+  // close its own work reaches for `?tier=full` and pays the whole ~400-tool
+  // surface to recover two names.
+  it("carries the completion writers, not just the planning ones", () => {
+    expect([...CORE_MCP_TOOL_NAMES]).toEqual(
+      expect.arrayContaining(["update_backlog_item_status", "record_execution_evidence"]),
+    );
+  });
+
+  // A session that can take a shared lock but not give it back leaks it and
+  // blocks every other worktree plus the CI gate that share it.
+  it("keeps the shared-singleton lease claim and release together", () => {
+    const hasClaim = CORE_MCP_TOOL_NAMES.has("claim_nonprod_environment_lease");
+    const hasRelease = CORE_MCP_TOOL_NAMES.has("release_nonprod_environment_lease");
+    expect(hasClaim).toBe(hasRelease);
   });
 });

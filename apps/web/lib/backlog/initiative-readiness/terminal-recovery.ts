@@ -15,6 +15,7 @@ import {
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
+import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
 import { discoverCanonicalDesignArtifact } from "./canonical-artifact-discovery";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
@@ -35,6 +36,7 @@ export type TerminalRecoveryRoom = {
 
 export type TerminalRecoveryEscalationReason =
   | "acceptance-evidence-required"
+  | "research-evidence-required"
   | "workroom-not-found"
   | "workroom-ambiguous"
   | "workroom-identity-incomplete"
@@ -49,7 +51,10 @@ export type TerminalRecoveryEscalationReason =
   | "canonical-artifact-unavailable";
 
 type TerminalEscalation = {
-  accountableRole: "acceptance-reviewer" | "delivery-coordinator";
+  // design-author owns RESEARCH_REQUIRED on every shape that carries it
+  // (shape-requirements.ts small() and medium()), so the research lane's
+  // escalation is addressed to the author, not to a reviewer (BI-7876699F).
+  accountableRole: "acceptance-reviewer" | "delivery-coordinator" | "design-author";
   toolName: "record_initiative_evidence" | "record_execution_evidence";
   grant: "initiative_evidence_write" | "backlog_write";
   reason: TerminalRecoveryEscalationReason;
@@ -74,6 +79,34 @@ function smallShapeAcceptanceEscalation(): TerminalInitiativeRecovery {
       grant: "backlog_write",
       reason: "acceptance-evidence-required",
       nextAction: "This delivery shape is accepted by the runtime check on the live install or by the failing-to-passing test, not by objective mapping. Record it with record_execution_evidence (kind manual_check or ux_verified) inside the current completion window, then cite that activity id in completionEvidence.evidenceActivityIds. Do not re-claim the item to refresh readiness; a re-claim does not reopen the window.",
+    }],
+  };
+}
+
+/**
+ * BI-7876699F: research is satisfied by the AUTHOR, never by objective mapping.
+ *
+ * When RESEARCH_REQUIRED was the only unmet lane this function did not exist, so
+ * the packet fell through to the workroom/baseline chain and answered
+ * "baseline-not-found — complete independent spec approval". A delivery-small
+ * shape's requirement set contains no OBJECTIVE_BASELINE_REQUIRED at all, so that
+ * route could never legally be taken: the item was unclosable by anyone, and the
+ * packet was pointing at a gate its own policy said did not apply.
+ *
+ * Same principle as smallShapeAcceptanceEscalation above (BI-05F8860A): name the
+ * writer the accountable role can actually reach, and do not consult machinery
+ * this lane does not use.
+ */
+function researchLaneEscalation(): TerminalInitiativeRecovery {
+  return {
+    reviewerRoutes: [],
+    unroutable: [],
+    escalations: [{
+      accountableRole: "design-author",
+      toolName: "record_initiative_evidence",
+      grant: "initiative_evidence_write",
+      reason: "research-evidence-required",
+      nextAction: "Research is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect on a named ref (commit or branch + file + line) and the failing-to-passing proof. This lane needs no objective baseline and no independent spec approval — the delivery shape does not require one.",
     }],
   };
 }
@@ -204,34 +237,22 @@ async function defaultLoadLiveRooms(args: {
 }
 
 async function defaultLoadBaselinePayloads(itemId: string): Promise<unknown[]> {
-  const item = await prisma.backlogItem.findFirst({
-    where: { OR: [{ itemId }, { id: itemId }] },
-    select: { id: true },
-  });
-  if (!item) return [];
-  const rows = await prisma.backlogItemActivity.findMany({
-    where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
-    orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-    select: { payload: true },
-  });
-  return rows.map((row) => row.payload);
+  // BI-2515F779: a decomposed child inherits its parent's scope baseline for
+  // routing exactly as the projection already does for OBJECTIVE_BASELINE_REQUIRED.
+  const source = await loadBaselineSource(prisma as unknown as BaselineSourceDb, itemId);
+  return source ? source.baselineRows.map((row) => row.payload) : [];
 }
 
 async function defaultLoadEligibleEvidenceActivityIds(args: {
   itemId: string;
   baselineId: string;
 }): Promise<ActionResult<{ activityIds: string[] }>> {
-  const item = await prisma.backlogItem.findFirst({
-    where: { OR: [{ itemId: args.itemId }, { id: args.itemId }] },
-    select: { id: true, itemId: true },
-  });
-  if (!item) return err("baseline-row-unavailable");
-  const baselines = await prisma.backlogItemActivity.findMany({
-    where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
-    orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-    select: { recordedAt: true, payload: true },
-  });
-  const matchingBaselines = baselines.filter((row) => {
+  const source = await loadBaselineSource(prisma as unknown as BaselineSourceDb, args.itemId);
+  if (!source) return err("baseline-row-unavailable");
+  const item = { id: source.itemRowId, itemId: source.itemId };
+  // The window opens at the baseline the route bound — own or inherited — and
+  // the evidence inside it is always the subject's own (BI-2515F779).
+  const matchingBaselines = source.baselineRows.filter((row) => {
     if (!row.payload || typeof row.payload !== "object" || Array.isArray(row.payload)) return false;
     return (row.payload as Record<string, unknown>).baselineId === args.baselineId;
   });
@@ -367,6 +388,7 @@ export async function loadObjectiveMappingHistoryFromDb(db: ObjectiveMappingHist
     targetAgent: string;
     questionPacketSummary: string;
     requiredToolNames: string[];
+    objective: string;
   }> = [];
   for (const row of rows) {
     const metadata = row.a2aMetadata && typeof row.a2aMetadata === "object" && !Array.isArray(row.a2aMetadata)
@@ -378,10 +400,17 @@ export async function loadObjectiveMappingHistoryFromDb(db: ObjectiveMappingHist
     const questionPacketSummary = nonEmptyString(row.title);
     const requiredToolNames = parseHistoricalToolNames(row.authorityScope);
     const binding = parseHistoricalObjectiveMappingBinding(metadata?.initiativeReviewBinding);
-    if (!binding || !targetAgent || !questionPacketSummary || !requiredToolNames) {
+    // TaskRun.objective is a shortened display projection. Both recovery and
+    // action-time admission must compare the immutable request preserved by the
+    // submitter. Only older rows without that field may use the legacy value;
+    // key validation still verifies it against the original complete request.
+    const hasRequestObjective = metadata !== null
+      && Object.prototype.hasOwnProperty.call(metadata, "requestObjective");
+    const objective = nonEmptyString(hasRequestObjective ? metadata.requestObjective : row.objective);
+    if (!binding || !targetAgent || !questionPacketSummary || !requiredToolNames || !objective) {
       return err("objective-mapping-history-invalid");
     }
-    matching.push({ row, idempotencyKey, binding, targetAgent, questionPacketSummary, requiredToolNames });
+    matching.push({ row, idempotencyKey, binding, targetAgent, questionPacketSummary, requiredToolNames, objective });
   }
   const taskRunIds = matching.map((entry) => entry.row.taskRunId);
   const executions = taskRunIds.length === 0 ? [] : await db.toolExecution.findMany({
@@ -397,7 +426,7 @@ export async function loadObjectiveMappingHistoryFromDb(db: ObjectiveMappingHist
       taskRunId: entry.row.taskRunId,
       status: entry.row.status,
       targetAgent: entry.targetAgent,
-      objective: entry.row.objective,
+      objective: entry.objective,
       questionPacketSummary: entry.questionPacketSummary,
       idempotencyKey: entry.idempotencyKey,
       requiredToolNames: entry.requiredToolNames,
@@ -558,6 +587,15 @@ export async function resolveTerminalInitiativeRecovery(args: {
     .find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
   if (acceptanceLane && acceptanceLane.accountableRole === "delivery-coordinator") {
     return smallShapeAcceptanceEscalation();
+  }
+  // BI-7876699F: an unmet research lane is author-satisfiable on every shape.
+  // Checked after acceptance so the existing small-shape hint keeps precedence
+  // when both are open, and before the room/baseline chain because research
+  // does not use it.
+  const researchLane = [...args.decision.blockers, ...args.decision.unmet]
+    .find((entry) => entry.code === "RESEARCH_REQUIRED");
+  if (researchLane) {
+    return researchLaneEscalation();
   }
   const rooms = await ports.loadLiveRooms({
     itemId: args.decision.subject.id,

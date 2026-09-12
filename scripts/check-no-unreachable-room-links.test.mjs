@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -104,4 +106,64 @@ test("guard follows check-no convention and passes on the live tree", () => {
   );
   assert.equal(execution.status, 0, execution.stderr);
   assert.match(execution.stdout, /guard passed/i);
+});
+
+// BI-AB8FD9B9 — a scan that found nothing must not read as a clean tree. The
+// guard resolves its roots from the working directory and both walks swallow a
+// missing directory, so running it from anywhere but the repository root once
+// reported "OK (0 route dirs scanned)", called every baseline entry stale, and
+// offered an --update that deleted four grandfathered exemptions.
+const GUARD = fileURLToPath(new URL("./check-no-unreachable-room-links.mjs", import.meta.url));
+
+/** A minimal repo whose tree is real but holds no unreachable room link. */
+function cleanFixtureRepo(baselineEntries) {
+  const root = mkdtempSync(join(tmpdir(), "room-guard-"));
+  for (const dir of ["apps/web/app/(shell)/workspace", "apps/web/lib", "apps/web/components", "scripts"]) {
+    mkdirSync(join(root, dir), { recursive: true });
+  }
+  for (const file of ["apps/web/lib/ok.ts", "apps/web/components/Ok.tsx", "apps/web/app/page.tsx"]) {
+    writeFileSync(join(root, file), "export const ok = 1;\n");
+  }
+  writeFileSync(
+    join(root, "scripts/room-addressing-baseline.json"),
+    `${JSON.stringify({ version: 1, owner: "platform-architecture", expiry: "2026-12-07", unreachableLinks: baselineEntries }, null, 2)}\n`,
+  );
+  return root;
+}
+
+test("a run with no App Router tree refuses rather than reporting a clean scan", () => {
+  const empty = mkdtempSync(join(tmpdir(), "room-guard-empty-"));
+  const result = spawnSync(process.execPath, [GUARD], { cwd: empty, encoding: "utf8" });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stderr, /cannot run/);
+  assert.doesNotMatch(result.stdout, /OK/);
+});
+
+test("a scan root with no source files refuses too — a partial tree is not a pass", () => {
+  const root = cleanFixtureRepo([]);
+  rmSync(join(root, "apps/web/components/Ok.tsx"));
+  const result = spawnSync(process.execPath, [GUARD], { cwd: root, encoding: "utf8" });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stderr, /apps\/web\/components/);
+});
+
+test("--update refuses to erase a populated baseline when the scan found nothing", () => {
+  const entries = ["apps/web/lib/legacy.ts::/platform/tools/integrations/"];
+  const root = cleanFixtureRepo(entries);
+  const baselinePath = join(root, "scripts/room-addressing-baseline.json");
+  const before = readFileSync(baselinePath, "utf8");
+
+  const result = spawnSync(process.execPath, [GUARD, "--update"], { cwd: root, encoding: "utf8" });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stderr, /refusing to write an EMPTY baseline/);
+  assert.equal(readFileSync(baselinePath, "utf8"), before, "the baseline must be untouched");
+});
+
+test("--allow-empty is the deliberate way to record that every entry really is fixed", () => {
+  const root = cleanFixtureRepo(["apps/web/lib/legacy.ts::/platform/tools/integrations/"]);
+  const baselinePath = join(root, "scripts/room-addressing-baseline.json");
+
+  const result = spawnSync(process.execPath, [GUARD, "--update", "--allow-empty"], { cwd: root, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(baselinePath, "utf8")).unreachableLinks, []);
 });

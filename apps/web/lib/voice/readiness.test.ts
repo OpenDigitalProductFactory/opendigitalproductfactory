@@ -123,7 +123,7 @@ describe("getSpeechToTextReadiness", () => {
     expect(result.reason).not.toContain("ENOTFOUND");
   });
 
-  it("returns 'unhealthy' when the local sidecar does not advertise the selected model", async () => {
+  it("returns 'unhealthy' when the configured endpoint does not serve the selected model", async () => {
     mocks.fetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ data: [{ id: "tiny.en" }] }), { status: 200 }),
     );
@@ -144,7 +144,7 @@ describe("getSpeechToTextReadiness", () => {
     });
     const result = await getSpeechToTextReadiness();
     expect(result.status).toBe("unhealthy");
-    expect(result.reason).toMatch(/does not list model "base"/);
+    expect(result.reason).toMatch(/does not serve model "base"/);
   });
 
   it("returns 'unhealthy' when the perf row references a missing profile", async () => {

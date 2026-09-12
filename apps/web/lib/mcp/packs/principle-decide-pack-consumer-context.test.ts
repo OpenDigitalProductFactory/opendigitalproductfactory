@@ -66,7 +66,8 @@ vi.mock("@/lib/inference/embedding", () => ({
   generateEmbedding: (...a: unknown[]) => wiki.generateEmbedding(...a),
   isEmbeddingAvailable: (...a: unknown[]) => wiki.isEmbeddingAvailable(...a),
 }));
-vi.mock("@/lib/decision/caller-context", () => ({
+vi.mock("@/lib/decision/caller-context", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/decision/caller-context")>()),
   resolveDecisionCallerContext: (...a: unknown[]) => decision.resolveDecisionCallerContext(...a),
 }));
 vi.mock("@/lib/decision/kernel-consult-ledger", () => ({

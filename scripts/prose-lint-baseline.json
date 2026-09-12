@@ -237,7 +237,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 7
+    "textMass": 24
   },
   "apps/web/app/(shell)/admin/backups/RestoreHistorySection.tsx": {
     "vocabulary": 0,
@@ -725,7 +725,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 60
+    "textMass": 75
   },
   "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx": {
     "vocabulary": 0,
@@ -742,6 +742,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 13
+  },
+  "apps/web/app/(shell)/coworker-decisions/review/craft-consult-demand-list.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
   },
   "apps/web/app/(shell)/coworker-decisions/review/gap-answer-form.tsx": {
     "vocabulary": 0,
@@ -2398,6 +2406,22 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 30
+  },
+  "apps/web/app/(shell)/workspace/mailroom/items/[inboundId]/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/(shell)/workspace/mailroom/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 171
   },
   "apps/web/app/(shell)/workspace/page.tsx": {
     "vocabulary": 0,
@@ -4221,7 +4245,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 38
+    "textMass": 24
   },
   "apps/web/components/agent/CoworkerProfilePanel.tsx": {
     "vocabulary": 0,
@@ -6151,22 +6175,6 @@
     "longSentences": 0,
     "textMass": 60
   },
-  "apps/web/components/golden-triangle/CoworkerPriorityControl.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 30
-  },
-  "apps/web/components/golden-triangle/CoworkerPriorityDock.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 14
-  },
   "apps/web/components/golden-triangle/GoldenTriangleControl.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -6518,6 +6526,30 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 25
+  },
+  "apps/web/components/mailroom/MailboxConnectForm.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 71
+  },
+  "apps/web/components/mailroom/MailboxControls.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/mailroom/MailroomItemActions.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
   },
   "apps/web/components/monitoring/AiCoworkerHealthPanel.tsx": {
     "vocabulary": 0,
@@ -7327,6 +7359,14 @@
     "longSentences": 0,
     "textMass": 137
   },
+  "apps/web/components/platform/ProviderClearanceOverridePanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 81
+  },
   "apps/web/components/platform/ProviderCostSourcePanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -7485,7 +7525,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 60
+    "textMass": 38
   },
   "apps/web/components/platform/TokenSpendPanel.tsx": {
     "vocabulary": 0,
@@ -7654,6 +7694,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 7
+  },
+  "apps/web/components/platform/coworker-record/CoworkerPriorityNote.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
   },
   "apps/web/components/platform/coworker-record/CoworkerProactivityNote.tsx": {
     "vocabulary": 0,
@@ -9445,7 +9493,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 84
+    "textMass": 90
   },
   "apps/web/components/workspace/workroom/WorkroomPostureProvenance.tsx": {
     "vocabulary": 0,

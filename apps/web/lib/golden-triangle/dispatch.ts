@@ -12,14 +12,14 @@
 // It only FEEDS routing (the compiler never re-implements routing).
 import { compileGoldenTrianglePolicy } from "./compile";
 import { applyPostureToRouteContext, type AppliedPosture } from "./compose";
-import { getEffectivePostureForAgent, type GoldenTrianglePersistenceClient } from "./persistence";
-import type { GoldenTrianglePreset } from "./types";
+import { getEffectivePostureForAgent, type GoldenTrianglePersistenceClient, type ResolvedPosture } from "./persistence";
+import type { GoldenTrianglePreference, GoldenTrianglePreset } from "./types";
 import { prisma } from "@dpf/db";
 
 export interface DispatchPosture extends AppliedPosture {
   preset: GoldenTrianglePreset;
   /** Which scope supplied the posture — for telemetry/explanation, never routing. */
-  source: "agent" | "organization" | "platform";
+  source: "workroom" | "organization" | "platform";
 }
 
 /**
@@ -34,9 +34,19 @@ export async function resolveDispatchPosture(
   taskClass = "conversation",
   organizationId: string | null = null,
   db?: GoldenTrianglePersistenceClient,
+  overrides?: {
+    /**
+     * EP-WORK-POSTURE 8.2 (BI-7ADEBDC1): the Workroom's Cost/Quality/Time
+     * posture (declared on the room, or the shape default). Outranks org and
+     * platform — the room's expected outcome sets the posture, not identity.
+     */
+    workroomPriority?: GoldenTrianglePreference | null;
+  },
 ): Promise<DispatchPosture | null> {
   try {
-    const resolved = await getEffectivePostureForAgent(agentId, organizationId, db);
+    const resolved: ResolvedPosture | null = overrides?.workroomPriority
+      ? { preference: overrides.workroomPriority, source: "workroom" }
+      : await getEffectivePostureForAgent(agentId, organizationId, db);
     if (!resolved) return null;
     const decoded = compileGoldenTrianglePolicy({
       preference: resolved.preference,

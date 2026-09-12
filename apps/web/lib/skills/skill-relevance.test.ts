@@ -167,6 +167,10 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "evaluate-orchestrator": 7,
     "explore-orchestrator": 7,
     "finance-agent": 7,
+    // New identity (2026-09-09, BI-4F7BB48B): the six wildcard skills plus its
+    // one authored cadence skill, mailroom-acknowledgement-sweep. Same shape as
+    // soc-triage-analyst and finance-agent; nothing else is eligible for it.
+    "mailroom-coordinator": 7,
     "governance-orchestrator": 7,
     "integrate-orchestrator": 7,
     "operate-orchestrator": 7,

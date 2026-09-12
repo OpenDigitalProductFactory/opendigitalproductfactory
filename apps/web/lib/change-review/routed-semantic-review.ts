@@ -18,6 +18,7 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
   return {
     decision: inconclusive.length > 0 ? "inconclusive" : criticals > 0 ? "fail" : "pass",
     issues,
+    ...(results[0]?.failureAnalysisReview ? { failureAnalysisReview: results[0].failureAnalysisReview } : {}),
     summary: inconclusive.length > 0
       ? `${inconclusive.length} required semantic review branch${inconclusive.length === 1 ? " was" : "es were"} infrastructure-inconclusive; retry without treating capacity as a semantic finding.`
       : results.length === 1

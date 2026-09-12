@@ -9,6 +9,7 @@ model BrandingConfig {
   organization   Organization? @relation(fields: [organizationId], references: [id])
 }
 
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model PlatformCapability {
   id           String   @id @default(cuid())
   capabilityId String   @unique
@@ -53,6 +54,8 @@ model RuntimeCapabilityTransition {
 }
 
 /// Append-only governance audit for every terminal runtime transition outcome.
+/// Per-transition outcome events for runtime capability orchestration. Debugging value decays fast; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=security-audit owner=platform-owner steward=data-steward timeAxis=createdAt
 model RuntimeCapabilityTransitionEvent {
   id           String                      @id @default(cuid())
   transitionId String
@@ -183,6 +186,8 @@ model RuntimeAdvisory {
   generatedAt DateTime @default(now())
 }
 
+/// Read inbox items past 90 days. Unread notifications are preserved at any age.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=content timeAxis=createdAt
 model Notification {
   id        String   @id @default(cuid())
   userId    String
@@ -503,6 +508,7 @@ enum PerformanceMetricUnit {
 /// Tenant-scoped, definition-versioned historical metric read model. Source
 /// systems remain authoritative; this table exists so owner/manager reads never
 /// run historical aggregation on the operational hot path.
+/// @dpf lifecycle=business-record retention=projection sensitivity=internal categories=derived-analytic,operational,financial owner=founder-business-owner steward=data-steward
 model BusinessMetricRollup {
   id                String                     @id @default(cuid())
   organizationId    String
@@ -528,4 +534,28 @@ model BusinessMetricRollup {
   @@unique([organizationId, metricKey, periodStart, periodEnd, dimensionsHash, definitionVersion], map: "business_metric_rollup_identity")
   @@index([organizationId, periodStart, periodEnd])
   @@index([organizationId, metricKey, sourceWatermark])
+}
+
+/// Nightly size and growth sample per table, taken by the Data Architect steward from pg_class / pg_stat_user_tables (EP-A33A5C61 slice 5). Ninety days is enough to fit a 12-month projection and to tell a re-snapshot pattern from organic growth.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=telemetry owner=platform-architecture steward=data-steward timeAxis=sampledAt
+model TableGrowthSample {
+  id            String   @id @default(cuid())
+  /// Physical table name (pg_class.relname).
+  table         String
+  /// Prisma model name when the table carries a /// @dpf declaration, else null.
+  model         String?
+  sampledAt     DateTime @default(now())
+  totalBytes    BigInt
+  heapBytes     BigInt
+  indexBytes    BigInt
+  toastBytes    BigInt
+  liveRows      BigInt
+  deadRows      BigInt
+  /// Rows whose declared time axis falls in the 24 h before the sample; null when the table declares no time axis.
+  rowsLast24h   Int?
+  /// The retention disposition the schema declared at sample time (e.g. "365d", "retained", "reference") or null when untagged.
+  declaredRetention String?
+
+  @@index([table, sampledAt])
+  @@index([sampledAt])
 }

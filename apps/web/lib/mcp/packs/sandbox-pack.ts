@@ -417,7 +417,10 @@ async function runSandboxTestsTool(
     console.warn("[run_sandbox_tests] could not resolve changed files for scoping:", (err as Error)?.message);
   }
 
-  let results = await runSandboxTests(rstSandboxId, { changedFiles: rstChangedFiles });
+  // Verify the build's OWN tree, as build-pipeline.ts does. Omitting the workdir
+  // verified the shared root instead — silently (BI-CA6769FE).
+  const { resolveBuildWorkdir: rstWorkdir } = await import("@/lib/build/sandbox/build-branch");
+  let results = await runSandboxTests(rstSandboxId, { changedFiles: rstChangedFiles, workdir: rstWorkdir(buildId) });
   let fixAttempts = 0;
 
   // Auto-fix loop: diagnose failures, apply fixes via LLM, re-test

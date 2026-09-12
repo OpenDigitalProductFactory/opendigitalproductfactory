@@ -233,7 +233,32 @@ async function readSnapshotSource<T>(
     return [];
   }
 
-  const rows = row.snapshots.map((s) => s.payload as T);
+  // BI-BFFB9211: a run that found the source unchanged wrote no rows and points
+  // at the run that holds the current representation. Follow the pointer;
+  // freshness is still judged by THIS run, because this run proved the source
+  // current at its own startedAt.
+  let snapshotRows = row.snapshots;
+  const summary = (row.perSourceResult as Record<string, { snapshotRunId?: string }> | null)?.[source];
+  if (summary?.snapshotRunId && summary.snapshotRunId !== row.syncRunId) {
+    try {
+      const holder = (await db.contributorInventorySyncRun.findFirst({
+        where: { syncRunId: summary.snapshotRunId },
+        select: { snapshots: { where: { source }, select: { payload: true } } },
+      })) as { snapshots: SnapshotRowLike[] } | null;
+      if (holder) snapshotRows = holder.snapshots;
+    } catch (err) {
+      freshness.push({
+        source,
+        state: "error",
+        fetchedAt: now,
+        message: (err as Error).message ?? "snapshot read failed",
+        count: 0,
+      });
+      return [];
+    }
+  }
+
+  const rows = snapshotRows.map((s) => s.payload as T);
   const fetchedAt = row.completedAt ?? row.startedAt;
   const ageMs = now.getTime() - fetchedAt.getTime();
   const state: LaneReadModelFreshnessState = ageMs > staleThresholdMs ? "stale" : "ok";

@@ -1,69 +1,44 @@
 /**
  * Per-engine backup/restore specs (EP-8DC217EB BET-11, BI-B72328D5).
  *
- * Every real difference between the postgres/neo4j/qdrant runners lives here
- * as data + tiny hooks; the lifecycle itself lives once in managed-backup.ts
- * and managed-restore.ts. The runner files (postgres-backup-runner.ts etc.)
- * are thin wrappers that keep their historical export names so the Inngest
- * layer, server actions and self-upgrade rollback are untouched.
+ * Postgres-only after BET-5 (BI-A1E864A5) retired Neo4j and Qdrant onto
+ * Postgres (pg-graph.ts / pgvector-store.ts); the retired engines' specs and
+ * runner wrappers were deleted in BI-B1977CEE. The data + tiny-hook shape is
+ * kept so a future engine slots in as one more spec; the lifecycle itself
+ * lives once in managed-backup.ts and managed-restore.ts. The runner files
+ * (postgres-backup-runner.ts etc.) are thin wrappers that keep their
+ * historical export names so the Inngest layer, server actions and
+ * self-upgrade rollback are untouched.
  *
  * Metric handles reference the EXISTING objects in @/lib/operate/metrics —
  * no Prometheus metric name changes (dashboards depend on them).
- *
- * NOTE on the neo4j env builders: backups-host-path-relocation.test.ts
- * structurally pins the DPF_BACKUPS_HOST_PATH forwarding contract to
- * neo4j-backup-runner.ts / neo4j-restore-runner.ts, so those two builders are
- * defined (as hoisted function declarations — safe across the module cycle)
- * in their runner files and referenced from the specs here.
  */
 
 import type { Counter, Gauge, Histogram } from "prom-client";
 
 import {
-  neo4jBackupDurationSeconds,
-  neo4jBackupLastSuccessSeconds,
-  neo4jBackupRunsTotal,
-  neo4jBackupStorageBytes,
   postgresBackupDurationSeconds,
   postgresBackupLastSuccessSeconds,
   postgresBackupRunsTotal,
   postgresBackupStorageBytes,
   postgresRestoreDurationSeconds,
   postgresRestoreRunsTotal,
-  qdrantBackupDurationSeconds,
-  qdrantBackupLastSuccessSeconds,
-  qdrantBackupRunsTotal,
-  qdrantBackupStorageBytes,
 } from "@/lib/operate/metrics";
 
-import {
-  NEO4J_BACKUP_JOB_ID,
-  NEO4J_BACKUP_SCHEDULE,
-  POSTGRES_BACKUP_JOB_ID,
-  POSTGRES_BACKUP_SCHEDULE,
-  QDRANT_BACKUP_JOB_ID,
-  QDRANT_BACKUP_SCHEDULE,
-} from "./constants";
-import type {
-  BackupManifest,
-  BackupTarget,
-  Neo4jBackupManifest,
-  QdrantBackupManifest,
-} from "./types";
+import { POSTGRES_BACKUP_JOB_ID, POSTGRES_BACKUP_SCHEDULE } from "./constants";
+import type { BackupManifest, BackupTarget } from "./types";
 import type { PrismaLike } from "./managed-backup";
 import {
   postgresExtensionPreflight,
   type BackupPreflightResult,
 } from "./extension-preflight";
 import { RestoreIntegrityError } from "./managed-restore";
-import { buildNeo4jBackupScriptEnv } from "./neo4j-backup-runner";
-import { buildNeo4jRestoreScriptEnv } from "./neo4j-restore-runner";
 
-/** Union of the three engines' sidecar manifest shapes. */
-export type AnyBackupManifest =
-  | BackupManifest
-  | Neo4jBackupManifest
-  | QdrantBackupManifest;
+/**
+ * Union of every live engine's sidecar manifest shape. Postgres-only after
+ * BET-5; kept as a union alias so a future engine widens it in one place.
+ */
+export type AnyBackupManifest = BackupManifest;
 
 /** Inputs the shared backup engine hands to a spec's env builder. */
 export interface BackupScriptEnvContext {
@@ -85,7 +60,7 @@ export interface BackupEngineSpec {
   scriptName: string;
   /** Hard cap on script wall-clock time. */
   timeoutMs: number;
-  /** Console trace tag, e.g. "[backup-trace][neo4j]". */
+  /** Console trace tag, e.g. "[backup-trace]". */
   traceTag: string;
   /** Failure marker the shell script prints to stderr. */
   failureMarker: string;
@@ -139,16 +114,16 @@ export interface RestoreEngineSpec {
   target: BackupTarget;
   scriptName: string;
   timeoutMs: number;
-  /** Artifact file inside the run directory (dpf.dump / neo4j.dump / …). */
+  /** Artifact file inside the run directory (dpf.dump). */
   artifactFileName: string;
-  /** Console trace tag, e.g. "[restore-trace][qdrant]". */
+  /** Console trace tag, e.g. "[restore-trace]". */
   traceTag: string;
   failureMarker: string;
   failureStrip: RegExp;
   failureFallback: string;
   /**
-   * Engine-specific operator-facing texts. Wordings differ slightly between
-   * the original runners; they are preserved verbatim here.
+   * Engine-specific operator-facing texts, preserved verbatim from the
+   * original runner.
    * `wrongTarget` present ⇒ the target check is enforced (postgres predates
    * that check and intentionally omits it).
    */
@@ -168,7 +143,7 @@ export interface RestoreEngineSpec {
     backupsRoot: string;
     prisma: PrismaLike;
   }): Promise<{ runId: string; status: "ok" | "failed" }>;
-  /** Postgres-only restore metrics (neo4j/qdrant never emitted any). */
+  /** Restore metrics (optional so an engine without them can omit). */
   metrics?: {
     runsTotal: Counter<"status">;
     durationSeconds: Histogram<string>;
@@ -224,52 +199,6 @@ export const POSTGRES_BACKUP_SPEC: BackupEngineSpec = {
     return { pgVersion: (manifest as BackupManifest).pgVersion };
   },
   preflight: (ctx) => postgresExtensionPreflight(ctx),
-};
-
-export const NEO4J_BACKUP_SPEC: BackupEngineSpec = {
-  target: "neo4j",
-  jobId: NEO4J_BACKUP_JOB_ID,
-  schedule: NEO4J_BACKUP_SCHEDULE,
-  subdir: "neo4j",
-  scriptName: "backup-neo4j.sh",
-  timeoutMs: 10 * 60 * 1000, // 10-minute hard cap (Neo4j stop+dump+start)
-  traceTag: "[backup-trace][neo4j]",
-  failureMarker: "[backup-neo4j-trace] failed:",
-  failureStrip: /^.*\[backup-neo4j-trace\]\s*failed:\s*/,
-  failureFallback: "neo4j backup failed (no diagnostic captured)",
-  metrics: {
-    get runsTotal() { return neo4jBackupRunsTotal; },
-    get lastSuccessSeconds() { return neo4jBackupLastSuccessSeconds; },
-    get storageBytes() { return neo4jBackupStorageBytes; },
-    get durationSeconds() { return neo4jBackupDurationSeconds; },
-  },
-  buildEnv: (ctx) => buildNeo4jBackupScriptEnv(ctx),
-};
-
-export const QDRANT_BACKUP_SPEC: BackupEngineSpec = {
-  target: "qdrant",
-  jobId: QDRANT_BACKUP_JOB_ID,
-  schedule: QDRANT_BACKUP_SCHEDULE,
-  subdir: "qdrant",
-  scriptName: "backup-qdrant.sh",
-  timeoutMs: 30 * 60 * 1000, // 30-minute hard cap
-  traceTag: "[backup-trace][qdrant]",
-  failureMarker: "[backup-qdrant-trace] failed:",
-  failureStrip: /^.*\[backup-qdrant-trace\]\s*failed:\s*/,
-  failureFallback: "qdrant backup failed (no diagnostic captured)",
-  metrics: {
-    get runsTotal() { return qdrantBackupRunsTotal; },
-    get lastSuccessSeconds() { return qdrantBackupLastSuccessSeconds; },
-    get storageBytes() { return qdrantBackupStorageBytes; },
-    get durationSeconds() { return qdrantBackupDurationSeconds; },
-  },
-  buildEnv({ targetDir }) {
-    return {
-      ...process.env,
-      TARGET_DIR: targetDir,
-      DPF_QDRANT_URL: process.env.DPF_QDRANT_URL ?? "http://qdrant:6333",
-    };
-  },
 };
 
 // ─── Restore specs ──────────────────────────────────────────────────────────
@@ -403,83 +332,4 @@ export const POSTGRES_RESTORE_SPEC: RestoreEngineSpec = {
     await upsertBackupRunSnapshot(prisma, source);
     await upsertBackupRunSnapshot(prisma, preState as BackupRunSnapshot | null);
   },
-};
-
-export const NEO4J_RESTORE_SPEC: RestoreEngineSpec = {
-  target: "neo4j",
-  scriptName: "restore-neo4j.sh",
-  timeoutMs: 10 * 60 * 1000,
-  artifactFileName: "neo4j.dump",
-  traceTag: "[restore-trace][neo4j]",
-  failureMarker: "[restore-neo4j-trace] failed:",
-  failureStrip: /^.*\[restore-neo4j-trace\]\s*failed:\s*/,
-  failureFallback: "neo4j restore failed (no diagnostic captured)",
-  messages: {
-    statusNotOk: (_sourceId, status) =>
-      `Source BackupRun status=${status}; only successful backups can be restored.`,
-    pruned: (sourceId) =>
-      `Source BackupRun ${sourceId} has been pruned; file is gone.`,
-    wrongTarget: (actual) => `BackupRun target=${actual}; expected neo4j.`,
-    missingArtifact: (p) => `Source dump file is missing at ${p}.`,
-    checksumMismatch: (expected, actual) =>
-      `Source dump checksum mismatch — file may be corrupted (expected ${expected}, got ${actual}).`,
-    safetyFailed:
-      "Pre-restore safety dump failed; aborting restore so current state is not lost.",
-    safetyStartTrace: "writing pre-restore safety dump",
-    safetyOkTrace: (runId) => `safety dump ok runId=${runId}`,
-  },
-  buildEnv: (ctx) => buildNeo4jRestoreScriptEnv(ctx),
-  async takeSafetyBackup({ backupsRoot, prisma }) {
-    const { runNeo4jBackup } = await import("./neo4j-backup-runner");
-    return runNeo4jBackup({
-      trigger: "pre-restore-safety",
-      backupsRoot,
-      prismaClient: prisma,
-    });
-  },
-  // Neo4j's database is NOT wiped by the restore — it replaces the graph
-  // database in-place via neo4j-admin, so audit rows written to Postgres
-  // before the restore persist normally (no re-insert dance, no metrics —
-  // the original runner never emitted restore metrics).
-};
-
-export const QDRANT_RESTORE_SPEC: RestoreEngineSpec = {
-  target: "qdrant",
-  scriptName: "restore-qdrant.sh",
-  timeoutMs: 30 * 60 * 1000,
-  artifactFileName: "qdrant.snapshot",
-  traceTag: "[restore-trace][qdrant]",
-  failureMarker: "[restore-qdrant-trace] failed:",
-  failureStrip: /^.*\[restore-qdrant-trace\]\s*failed:\s*/,
-  failureFallback: "qdrant restore failed (no diagnostic captured)",
-  messages: {
-    statusNotOk: (_sourceId, status) =>
-      `Source BackupRun status=${status}; only successful backups can be restored.`,
-    pruned: (sourceId) =>
-      `Source BackupRun ${sourceId} has been pruned; file is gone.`,
-    wrongTarget: (actual) => `BackupRun target=${actual}; expected qdrant.`,
-    missingArtifact: (p) => `Source snapshot file is missing at ${p}.`,
-    checksumMismatch: (expected, actual) =>
-      `Source snapshot checksum mismatch — file may be corrupted (expected ${expected}, got ${actual}).`,
-    safetyFailed: "Pre-restore safety snapshot failed; aborting restore.",
-    safetyStartTrace: "writing pre-restore safety snapshot",
-    safetyOkTrace: (runId) => `safety snapshot ok runId=${runId}`,
-  },
-  buildEnv({ dumpPath }) {
-    return {
-      ...process.env,
-      DUMP_PATH: dumpPath,
-      DPF_QDRANT_URL: process.env.DPF_QDRANT_URL ?? "http://qdrant:6333",
-    };
-  },
-  async takeSafetyBackup({ backupsRoot, prisma }) {
-    const { runQdrantBackup } = await import("./qdrant-backup-runner");
-    return runQdrantBackup({
-      trigger: "pre-restore-safety",
-      backupsRoot,
-      prismaClient: prisma,
-    });
-  },
-  // Qdrant restore is fully online (POST /snapshots/upload) — Postgres is
-  // unaffected, so no re-insert dance; no restore metrics existed.
 };

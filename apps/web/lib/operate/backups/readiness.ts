@@ -60,7 +60,7 @@ async function getReadinessForTarget(
       // The trial restore writes BackupRestore rows with trigger='trial-verification'
       // (BI-31C9FBDF). We join through sourceBackup to scope by target — a
       // trial-restore validates a specific BackupRun, so the target is the
-      // sourceBackup's target. Postgres-only today; neo4j+qdrant are slice-2.
+      // sourceBackup's target. Postgres-only (BET-5 retired the other stores).
       target === "postgres"
         ? prisma.backupRestore.findFirst({
             where: {

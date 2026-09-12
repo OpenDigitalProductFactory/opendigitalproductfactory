@@ -548,3 +548,62 @@ unavailable or truncated sources explicitly. Share recorded-state classification
 with recovery and the heartbeat threshold with the worker; use canonical JSON guards.
 These changes plus the boundary regression pass 104 affected source tests. Live
 navigation and scenario acceptance still depend on canonical deployment.
+
+The Pet Rescue closure trace adds an exact historical reviewer format to the
+same recovery work (BI-06AE6833, downstream BI-7A38F667). Preserve TaskRun
+`993C47DEE56A` unchanged and use the existing deterministic successor contract.
+The old whole objective uses `at <head>` and `at that commit`; the current
+producer requires `at Workroom head <head>` and explicit finite evidence. Freeze
+the exact fixture and identity/authority mismatch cases, share current objective
+formatting with the producer, and recognize only the complete prior template.
+Verify key evolution, producer, terminal recovery, repository admission and
+external-task idempotency before protected publication. A canonical live receipt
+and product closure are separate required acceptance, not implied by these tests.
+
+## September 8 served navigation follow-up
+
+### Immutable objective recovery readback (BI-06AE6833)
+
+The accepted Pet Rescue successor `66484EEC63EE` preserves its 1236-character
+request in `a2aMetadata.requestObjective`; `TaskRun.objective` is a 1000-character
+display projection. The terminal history reader incorrectly compares that
+projection with the immutable replay. Repair the existing history reader, under
+WC-5C67495F, independently of navigation PR #5235. First reproduce accepted
+submission, missing terminal writer, and unchanged same-task replay through the
+action-time admission guard. Prefer valid full metadata; legacy fallback applies
+only when the metadata field is absent, and existing authenticated request-key
+validation must still prove the complete identity. Present invalid metadata must
+fail closed. Test genuine objective, identity, evidence and authority conflicts.
+Preserve all historical tasks and receipts. After protected release, resume only
+the accepted successor and require a real writer receipt before product closure.
+Consolidate history parsing at its existing shared loader; both recovery and
+submission admission consume it. No schema, UI or policy change is required.
+
+Normal upgrade SUR-3B5A6D60 succeeded on ed7cf82c501f; live readiness returned
+CAN-TEST. Creation-key retry reuses WC-9CECAF46, and governed adoption preserves
+all 120 unrelated path claims and the versioned delivery shape. These are bounded
+acceptance results, not completion of the broader objective.
+
+The served EA coordination link now opens the Workroom, but its canonical-case
+redirect drops operation and process query context. Preserve the query through
+that existing redirect, including repeated filter values, using the canonical
+case helper. The selected-step screenshot also exposes 21 concatenated source
+identities under affected work. Reuse report-kit's CollapsibleList for a short
+preview and full inspectable identities; explicitly distinguish linked records
+from established impact. Do not invent dependency effects or receipt correlation.
+
+UX fit: fits-with-guardrails, within Workspace's existing case inspector for the
+operator tracing actual work. Only local navigation and disclosure change; no
+coworker dispatch or authority mutation. Retain the existing progressive-inspector
+decision, theme tokens, six questions and unknown states. Verify redirect query
+round-trip, full reference disclosure, keyboard/list selection, protected route
+budgets and served navigation. Team bindings, actual nesting, step-linked runtime
+receipts and the seven live recovery scenarios remain outstanding.
+
+The protected sweep for PR #5235 measured all 213 eligible routes. Its only
+blocking result was the intentional paragraph/list structure added for linked
+records on the Workroom route; no numeric budget regressed. The reviewed failure
+screenshot and prescribed fresh measurement 34294055045 both show 369 arrival
+words. Update only that route's measured accessibility snapshot, retaining every
+numeric limit and every other route. The fresh measurement passed; the amended
+commit still requires independent review and protected CI.

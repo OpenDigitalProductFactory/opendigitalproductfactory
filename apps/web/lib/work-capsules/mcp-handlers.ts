@@ -1,6 +1,9 @@
 import { normalizePersistedScope, parseScopeInput } from "./scope-input";
 import { prisma } from "@dpf/db";
-import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule-workitem-anchor.server";
+import {
+  anchorCapsuleByIdNonFatal,
+  ensureCapsuleWorkItemAnchorNonFatal,
+} from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -44,11 +47,13 @@ import {
   recordAgentActivity,
   updateWorkCapsuleStatus,
   WorkCapsuleCompletionDeniedError,
+  WorkCapsulePublicationRefusedError,
   ScopeOverlapError,
   type CapsuleDb,
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
+import { publicationRefusedToolResult } from "./publication-refusal";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
@@ -352,6 +357,9 @@ export async function updateWorkCapsuleStatusTool(
         message: `Work Capsule completion is blocked by ${error.result.code}.`,
         data: { code: error.result.code, readiness: error.result.decision, recovery },
       };
+    }
+    if (error instanceof WorkCapsulePublicationRefusedError) {
+      return publicationRefusedToolResult(error, { capsuleId, status });
     }
     throw error;
   }
@@ -723,6 +731,11 @@ export async function startExternalWorkTool(
     repositoryFullName: stringParam(params, "repositoryFullName"),
     baseBranch: stringParam(params, "baseBranch"),
   });
+  // Both branches of ensureExternalSessionCapsule create the room without its
+  // WorkItem anchor — the dominant producer of the 289 unreachable rooms
+  // measured on the live install (BI-A5EEB5D1). Anchor it here, the way the
+  // adopt handler does.
+  await anchorCapsuleByIdNonFatal(capsuleId, "started");
 
   return {
     success: true,

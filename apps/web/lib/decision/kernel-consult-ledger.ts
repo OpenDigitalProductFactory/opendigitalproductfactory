@@ -297,6 +297,13 @@ export async function recordKernelConsultInteraction(input: {
 
     const evaluation: DecisionPerspectiveEvaluationResult = {
       outcomeType,
+      // BI-F302B80E: the kernel's pick belongs in its own indexed column, not
+      // only in outcomePayload. It was being written to the JSON blob and the
+      // seal payload while this column stayed NULL, so 152 recorded
+      // recommendations were unqueryable — and agreement cannot be measured
+      // against a value nothing can select. `coverageGap` below already tracks
+      // the absence of a recommendation, so null here means "none was made".
+      recommendedOptionId: input.result.recommendation?.optionId ?? null,
       selectedProfileId: profile.profileId,
       fallbackProfileId: null,
       profileVersionId: version.versionId,

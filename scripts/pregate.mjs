@@ -15,6 +15,7 @@
 // focused debugging. This keeps lease/fence safety in one implementation.
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
@@ -65,6 +66,55 @@ export function isRecordExemptInvocation(args) {
   );
 }
 
+/** The flag that forces a re-gate of a HEAD that already passed (BI-1669E08A). */
+export const FORCE_RERUN_FLAG = "--force-rerun";
+
+/**
+ * BI-1669E08A. Should this invocation reuse the PASS already recorded for HEAD
+ * instead of starting a second run?
+ *
+ * A second run of an identical tree cannot add information — its verdict is
+ * either the same or wrong — but it can destroy some, because a run takes the
+ * record the moment it starts. Both observed erasures on this install ran that
+ * way: 2026-09-10 a waiting loop re-invoked pregate and a 0xC0000142 launch
+ * failure ate the PASS; 2026-09-12 nothing re-invoked anything at all — the
+ * durable-wait detached resumer gated to a PASS and the original queued claim
+ * was then also admitted, wrote `running` over it, and died on starvation.
+ *
+ * Deliberately keyed on the SAME reconciled verdict the exit-honesty rule uses,
+ * so "already passed" cannot mean one thing to the wrapper's entry and another
+ * to its exit. Anything but PASS runs the gate, and an unreadable record runs it
+ * too: corroboration that cannot be read is not corroboration (BI-A9CF0D69).
+ *
+ * @returns {{ reuse: boolean, reason: string }}
+ */
+export function shouldReuseExistingPass({ args = [], verdictAtHead = "" } = {}) {
+  if (isRecordExemptInvocation(args)) {
+    return { reuse: false, reason: "record-exempt invocation — it acts on the record rather than reading it" };
+  }
+  if (args.includes(FORCE_RERUN_FLAG)) {
+    return { reuse: false, reason: `${FORCE_RERUN_FLAG} was passed — re-gating a HEAD that already has a verdict` };
+  }
+  if (verdictAtHead !== "PASS") {
+    return {
+      reuse: false,
+      reason: verdictAtHead
+        ? `verdict at HEAD is ${verdictAtHead}, not PASS`
+        : "verdict at HEAD is unreadable",
+    };
+  }
+  return { reuse: true, reason: "a passing local-CI gate record already covers this HEAD" };
+}
+
+/**
+ * Drop the wrapper-only force flag before the gate sees it — gate-worktree.mjs
+ * dies on an unknown option, so forwarding it would turn a deliberate re-gate
+ * into a crash (BI-1669E08A).
+ */
+export function stripForceRerunFlag(args = []) {
+  return args.filter((arg) => arg !== FORCE_RERUN_FLAG);
+}
+
 // Pure exit-code policy so the honesty rules are unit-testable without a gate:
 // timedOut (admission window elapsed, nothing gated) and status-0-without-a-
 // corroborating-PASS both map to ABANDONED_OR_UNRECORDED_EXIT_CODE; a genuine
@@ -75,6 +125,57 @@ export function resolveWrapperExitCode({ status, timedOut, recordExempt, verdict
   if (recordExempt) return 0;
   return verdictAtHead === "PASS" ? 0 : ABANDONED_OR_UNRECORDED_EXIT_CODE;
 }
+// A gate is single-tenant per worktree: run, resume and --finalize-evidence all
+// claim the same fence. Taking it while one is mid-flight kills the running
+// gate — observed 2026-09-05, where a --finalize-evidence issued on a stale
+// pregate:status line (that line had read an OLDER slot's record) killed a gate
+// that was exporting its image. The record became blocked_wrapper_exited and
+// the lease release failed as nonprod_lease_not_owner.
+//
+// pregate:status text is not scoped to the slot currently running, so it cannot
+// be the thing a caller checks. The build record can: its own metadata says
+// whether THIS worktree has a gate in flight. Refuse on that, not on prose.
+export function shouldRefuseWhileGateRunning({ args = [], buildRecord = null } = {}) {
+  if (args.includes("--help") || args.includes("-h")) return { refuse: false };
+  if (buildRecord?.status !== "running") return { refuse: false };
+  const slot = buildRecord.slot ? ` in ${buildRecord.slot}` : "";
+  const sha = buildRecord.sha ? ` @ ${String(buildRecord.sha).slice(0, 12)}` : "";
+  return {
+    refuse: true,
+    reason:
+      `a gate is already running in this worktree${slot}${sha}. Every pregate entry point — run, `
+      + "resume and --finalize-evidence — claims the same fence, so this invocation would kill it. "
+      + "While a gate runs here the only safe commands are read-only: git, ls, and reading "
+      + "dpf-local-ci-output*.log / dpf-local-ci-gate*.json under .git/worktrees/<name>/. "
+      + "Use --finalize-evidence only after the running gate prints its own "
+      + "\"rerun --finalize-evidence after quiescence clears\" line.",
+  };
+}
+
+// The gate record is keyed to the SHA captured when the LEASE is claimed, not to
+// the code the build actually compiled. Start a gate on a dirty tree and the
+// record keys to the base commit while the build gates your uncommitted code;
+// the pre-push hook then compares HEAD against that stale key and refuses, so a
+// full lease plus Docker build is burned on a record nothing will accept.
+// Confirmed 2026-07-29. The hook is right; the fix is to commit first.
+export function shouldRefuseDirtyTree({ args = [], porcelain = "" } = {}) {
+  if (isRecordExemptInvocation(args)) return { refuse: false };
+  const dirty = String(porcelain)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (dirty.length === 0) return { refuse: false };
+  return {
+    refuse: true,
+    reason:
+      `the working tree has ${dirty.length} uncommitted change(s). The gate record is keyed to the `
+      + "SHA at lease claim, so a gate started now records the BASE commit and the pre-push hook "
+      + "will refuse the push even though the build gated your code. Commit first, then run pregate "
+      + "— a second run is a full lease and Docker build, and a contended slot can queue for 20 "
+      + "minutes. Do not reach for the push override; the hook is correct.",
+  };
+}
+
 const DEFAULT_LEASE_WAIT_SECONDS = 7200;
 
 // Host-side guard parity preflight (BI-D35433FB): run the deterministic CI
@@ -578,8 +679,14 @@ export async function recoverInterruptedGate({
       const releaseText = recovered.releaseSucceeded
         ? "released the lease"
         : `could not release the lease (${recovered.releaseError || "unknown error"})`;
+      // BI-FFCFCCE0: the record this path writes is `blocked_wrapper_exited`,
+      // which BI-D088D06D introduced precisely so an interrupted wrapper stops
+      // reading as a grade on the diff. This line kept the pre-BI-D088D06D
+      // wording and said "failed" anyway — the record told the truth while the
+      // one sentence an operator actually reads did not.
       stderr.write(
-        `pregate: recovered interrupted local-CI gate for ${context.branch} @ ${context.sha}; ${releaseText}; marked the local gate state failed.\n`,
+        `pregate: recovered interrupted local-CI gate for ${context.branch} @ ${context.sha}; ${releaseText}; `
+          + "recorded blocked_wrapper_exited: the run was interrupted before it could grade the diff, so this is NOT a verdict on your changes. Re-run pregate on the same SHA.\n",
       );
       return recovered;
     }
@@ -643,6 +750,30 @@ export async function runGateWithQueuedRevival({
   }
 }
 
+// Thin, failure-tolerant readers for the two safety guards above. Both fail
+// OPEN by returning a shape the guard treats as "nothing to refuse on": a guard
+// that cannot measure must not block a legitimate gate. The guards themselves
+// stay pure so the policy is unit-testable without a git tree.
+function readWorktreeBuildRecord() {
+  try {
+    const path = gitText(["rev-parse", "--git-path", ".build.json"]);
+    if (!path) return null;
+    return JSON.parse(readFileSync(resolvePath(process.cwd(), path), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function readWorkingTreePorcelain() {
+  try {
+    const result = spawnSync("git", ["status", "--porcelain"], { encoding: "utf8" });
+    if (result.error || result.status !== 0) return "";
+    return String(result.stdout || "");
+  } catch {
+    return "";
+  }
+}
+
 async function main() {
   // BI-B1065D41: `pnpm run pregate | head -5` must survive head exiting. Both
   // this wrapper and the gate it spawns need the tolerance — the gate inherits
@@ -654,6 +785,36 @@ async function main() {
   if (!diskCheck.ok) {
     process.stderr.write(`pregate: ${diskCheck.message}\n`);
     process.exit(1);
+  }
+
+  const fenceSafety = shouldRefuseWhileGateRunning({
+    args,
+    buildRecord: readWorktreeBuildRecord(),
+  });
+  if (fenceSafety.refuse) {
+    process.stderr.write(`pregate: ${fenceSafety.reason}
+`);
+    process.exit(1);
+  }
+
+  const treeSafety = shouldRefuseDirtyTree({ args, porcelain: readWorkingTreePorcelain() });
+  if (treeSafety.refuse) {
+    process.stderr.write(`pregate: ${treeSafety.reason}
+`);
+    process.exit(1);
+  }
+
+  // BI-1669E08A: check BEFORE the preflight. A tree that already has a passing
+  // record for this exact HEAD needs neither the three-minute guard parity run
+  // nor a lease; starting either can only cost time and risk the record.
+  const reuse = shouldReuseExistingPass({ args, verdictAtHead: readReconciledVerdictAtHead() });
+  if (reuse.reuse) {
+    process.stdout.write(
+      `pregate: ${reuse.reason} — not starting a second run.\n`
+        + `pregate: a second run of an identical tree can only repeat or contradict that verdict, and it takes the record the moment it starts.\n`
+        + `pregate: read it with  pnpm run pregate:status  — re-gate anyway with  pnpm run pregate -- ${FORCE_RERUN_FLAG}\n`,
+    );
+    process.exit(0); // exit-0: a PASS record bound to current HEAD already exists; this run reused it and gated nothing
   }
 
   if (shouldRunPreflight(args)) {
@@ -695,7 +856,7 @@ async function main() {
   }
 
   const useShell = shouldUseShell();
-  const { result, timedOut } = await runGateWithQueuedRevival({ args, useShell });
+  const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
   if (result?.error) {
     process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
     process.exit(1);

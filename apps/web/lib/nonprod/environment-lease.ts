@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
-import { planEnvironmentAdmission, type AdmissionLease } from "./environment-lease-admission";
+import {
+  ABANDONED_QUEUE_ROW_AFTER_MS,
+  planEnvironmentAdmission,
+  type AdmissionLease,
+} from "./environment-lease-admission";
 import { type LocalCiHostPressure, type ResolvedLocalCiPoolPolicy } from "./local-ci-pool-policy";
 import type { LocalCiCapacityBroker } from "./local-ci-capacity-broker";
 import {
@@ -15,7 +19,7 @@ import { assertRenewalSlotBinding, type NonprodSlotBinding } from "./environment
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
-import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
+import { isImmutableGateClaimKey, type LocalCiEvidenceValidity } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead } from "./durable-wait";
@@ -153,6 +157,7 @@ async function reconcileEnvironmentInTransaction(input: {
   /** BI-B1CB7EC3: only these rows may take a slot on this pass. */
   admissibleLeaseIds?: string[];
   livenessWindowMs?: number;
+  abandonedWaiterAfterMs?: number;
 }): Promise<{
   expiredLeaseIds: string[];
   admittedLeaseIds: string[];
@@ -178,6 +183,7 @@ async function reconcileEnvironmentInTransaction(input: {
     slotKeys: input.slotKeys,
     admissibleLeaseIds: input.admissibleLeaseIds,
     livenessWindowMs: input.livenessWindowMs,
+    abandonedWaiterAfterMs: input.abandonedWaiterAfterMs,
   });
 
   if (plan.expiredLeaseIds.length > 0) {
@@ -229,7 +235,7 @@ export type ClaimNonprodEnvironmentLeaseResult =
   | { status: "queued"; lease: LeaseRow; queuePosition: number; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "terminal"; lease: LeaseRow; reason: "released" | "expired" | "cancelled"; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "subscribed"; lease: LeaseRow; executionStatus: "admitted" | "queued"; poolPolicy: ResolvedNonprodPoolPolicy }
-  | { status: "reused"; lease: LeaseRow; evidenceRecordId: string; resultClass: "pass" | "fail"; poolPolicy: ResolvedNonprodPoolPolicy }
+  | { status: "reused"; lease: LeaseRow; evidenceRecordId: string; resultClass: "pass" | "fail"; evidenceValidity: LocalCiEvidenceValidity | null; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "blocked"; lease: LeaseRow; reason: "missing-evidence" | "mismatched-evidence" | "expired-evidence"; poolPolicy: ResolvedNonprodPoolPolicy };
 
 type ResolvedNonprodPoolPolicy = ResolvedLocalCiPoolPolicy | ResolvedHostResourcePoolPolicy;
@@ -452,6 +458,9 @@ export async function claimNonprodEnvironmentLease(input: {
       livenessWindowMs: selfAdmitting
         ? admittedLeaseTtlMs(input.environmentKey, ttlMs)
         : undefined,
+      // Only a self-admitting environment has a known re-claim cadence, so it is
+      // the only one where silence is evidence of abandonment (BI-D35B85BF).
+      abandonedWaiterAfterMs: selfAdmitting ? ABANDONED_QUEUE_ROW_AFTER_MS : undefined,
     });
     admittedNow = reconciliation.admittedLeaseIds.includes(lease.id);
     queueDepth = reconciliation.queueDepth;

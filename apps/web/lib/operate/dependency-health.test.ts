@@ -18,13 +18,24 @@ describe("dependency-health probes", () => {
     vi.unstubAllEnvs()
   })
 
-  it("probeStt hits the Speaches /v1/models endpoint", async () => {
+  it("probes a self-hosted STT endpoint when the operator has configured one", async () => {
+    vi.stubEnv("STT_BASE_URL", "http://my-whisper:9000")
     global.fetch = vi.fn(async () => new Response("[]", { status: 200 })) as typeof fetch
     expect(await probeStt()).toBe(true)
     expect(global.fetch).toHaveBeenCalledWith(
-      "http://dpf-stt:9000/v1/models",
+      "http://my-whisper:9000/v1/models",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
+  })
+
+  it("reports no local STT dependency when none is configured (BI-F7E9A541)", async () => {
+    // Speech is provider-managed: DPF ships no speech container, so there is no
+    // default address to probe. null means "not applicable", which must not be
+    // confused with "down".
+    vi.stubEnv("STT_BASE_URL", "")
+    global.fetch = vi.fn(async () => new Response("[]", { status: 200 })) as typeof fetch
+    expect(await probeStt()).toBeNull()
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 
   it("probeModelRunner probes the local /models list", async () => {
@@ -34,14 +45,16 @@ describe("dependency-health probes", () => {
     expect(String(calledUrl)).toMatch(/\/models$/)
   })
 
-  it("returns false when a probe is unreachable", async () => {
+  it("returns false when a configured probe is unreachable", async () => {
+    vi.stubEnv("STT_BASE_URL", "http://my-whisper:9000")
     global.fetch = vi.fn(async () => {
       throw new Error("ECONNREFUSED")
     }) as typeof fetch
     expect(await probeStt()).toBe(false)
   })
 
-  it("refreshDependencyMetrics sets dpf_dependency_up for every service", async () => {
+  it("sets dpf_dependency_up for every applicable service", async () => {
+    vi.stubEnv("STT_BASE_URL", "http://my-whisper:9000")
     global.fetch = vi.fn(async () => new Response("ok", { status: 200 })) as typeof fetch
     await refreshDependencyMetrics()
     expect(await gaugeValue("model-runner")).toBe(1)
@@ -53,5 +66,16 @@ describe("dependency-health probes", () => {
     await refreshDependencyMetrics()
     expect(await gaugeValue("model-runner")).toBe(0)
     expect(await gaugeValue("stt")).toBe(0)
+  })
+
+  it("publishes no stt gauge at all when no local STT is configured", async () => {
+    // The failure this prevents: a permanent 0 reading as an outage of a
+    // dependency this install never deployed.
+    dependencyUp.reset()
+    vi.stubEnv("STT_BASE_URL", "")
+    global.fetch = vi.fn(async () => new Response("ok", { status: 200 })) as typeof fetch
+    await refreshDependencyMetrics()
+    expect(await gaugeValue("model-runner")).toBe(1)
+    expect(await gaugeValue("stt")).toBeUndefined()
   })
 })

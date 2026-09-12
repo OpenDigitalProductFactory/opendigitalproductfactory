@@ -10,16 +10,17 @@ import { loadPrismaWorkroomParticipants } from "@/lib/work-management/room-parti
 import { loadWorkroomPostureContext } from "@/lib/work-management/room-posture.server";
 import { resolveWorkroomStructureForCase } from "@/lib/work-management/room-structure.server";
 import { decodeWorkCaseKey } from "@/lib/work-management/case-key";
-import { resolveCanonicalWorkCaseKey } from "@/lib/work-management/canonical-case-key";
+import { canonicalWorkCaseHref, resolveCanonicalWorkCaseKey } from "@/lib/work-management/canonical-case-key";
 import { loadRoomWorkforce } from "@/lib/work-management/room-workforce.server";
 import { loadWorkspaceWorkCaseDetail } from "@/lib/work-management/workspace-case-loader";
 import { loadWorkroomOnlyCaseDetail } from "@/lib/work-management/workroom-only-case-projection";
 
 type Props = {
   params: Promise<{ caseKey: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function WorkspaceCaseDetailPage({ params }: Props) {
+export default async function WorkspaceCaseDetailPage({ params, searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
@@ -38,7 +39,7 @@ export default async function WorkspaceCaseDetailPage({ params }: Props) {
   // to, not a second one. Send it to the canonical key so every surface that
   // links a room by capsule id lands on the one case (BI-EBEB77E2).
   const canonicalKey = await resolveCanonicalWorkCaseKey(prisma, caseKey);
-  if (canonicalKey) redirect(`/workspace/cases/${canonicalKey}`);
+  if (canonicalKey) redirect(canonicalWorkCaseHref(canonicalKey, await searchParams));
 
   const detail = await loadWorkspaceWorkCaseDetail({
     prismaClient: prisma,

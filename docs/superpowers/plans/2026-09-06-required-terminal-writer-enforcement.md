@@ -104,6 +104,13 @@ surface change is expected.
 | --- | --- | --- | --- | --- | --- | --- |
 | `required-terminal-writer-enforcement` | BI-8B8731EE | no | OBJ-BI8B-001, OBJ-BI8B-002, OBJ-BI8B-003, OBJ-BI8B-004 | adapter-enforceability, immutable-taskrun, terminal-writer, approval-and-receipt | writer-only-dispatch, fallback-candidate-selection, typed-taskrun-refusal | AC-BI8B-001, AC-BI8B-002, AC-BI8B-003, AC-BI8B-004, AC-BI8B-005 |
 
+## Supersession note (2026-09-09)
+
+Step 4's CLI exclusion is superseded for BOUND terminal writers by BI-C35576A9
+(kernel DI-48BC3C1F11A8, operator-ratified): CLI adapters are dispatched under a
+`receipt-verified` contract and the executor's receipt check is the guarantee. The
+plain required-tool path is unchanged. See §7 of the design this plan implements.
+
 ## Risks and rollback
 
 The principal risk is rejecting a CLI that later gains a genuinely enforceable

@@ -1,3 +1,4 @@
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model EaNotation {
   id                String               @id @default(cuid())
   slug              String               @unique
@@ -121,6 +122,7 @@ model EaReferenceProposal {
   @@index([sourceArtifactId])
 }
 
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model EaElementType {
   id                     String               @id @default(cuid())
   notationId             String
@@ -146,6 +148,7 @@ model EaElementType {
   @@unique([notationId, slug])
 }
 
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model EaRelationshipType {
   id            String               @id @default(cuid())
   notationId    String
@@ -160,6 +163,7 @@ model EaRelationshipType {
   @@unique([notationId, slug])
 }
 
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model EaRelationshipRule {
   id                 String             @id @default(cuid())
   fromElementTypeId  String
@@ -172,6 +176,7 @@ model EaRelationshipRule {
   @@unique([fromElementTypeId, toElementTypeId, relationshipTypeId])
 }
 
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model EaDqRule {
   id             String         @id @default(cuid())
   notationId     String
@@ -235,6 +240,7 @@ model EaElement {
 // Universal append-only lifecycle transition log. Generalises DocumentLifecycleEvent to
 // every governed thing. Identity-bearing actors resolve through Principal (AGENTS.md §11),
 // not a new actor table.
+/// @dpf lifecycle=legal-evidence retention=domain sensitivity=confidential categories=security-audit,identity,content owner=enterprise-architect steward=data-steward
 model LifecycleEvent {
   id                String         @id @default(cuid())
   governedThingKind String // GovernedThingKind (apps/web/lib/governed-thing-ref.ts)
@@ -261,6 +267,7 @@ model LifecycleEvent {
 // Membership of a governed thing in a Plateau (a relatively stable architecture state —
 // ArchiMate Plateau element type, already seeded). The baseline (current-state) plateau is
 // populated by the projector with membershipSource="projected"; target plateaus are curated.
+/// @dpf lifecycle=operational retention=projection sensitivity=internal categories=derived-analytic,configuration,operational owner=enterprise-architect steward=data-steward
 model PlateauMembership {
   id                String    @id @default(cuid())
   plateauElementId  String // EaElement with elementType.slug = "plateau"
@@ -289,6 +296,7 @@ model PlateauMembership {
 // pointer; work status is read from BacklogItem/Epic/FeatureBuild. Plateau/work-package/
 // ea-gap/backlog references are plain id columns (no FK, like EaElement.infraCiKey) to keep
 // EaElement and BacklogItem free of four back-relations; the app layer validates them.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=derived-analytic,operational owner=enterprise-architect steward=data-steward
 model LifecycleGap {
   id                   String    @id @default(cuid())
   gapKey               String    @unique // stable dedup key (dimension+thing+signal identity)
@@ -502,6 +510,7 @@ model EaViewElement {
   @@index([parentViewElementId]) // FK-leading (tree parent): view-element tree traversal, apps/web/lib/actions/ea.ts:651
 }
 
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model EaStructureRule {
   id                      String        @id @default(cuid())
   notationId              String
@@ -543,6 +552,7 @@ model EaConformanceIssue {
   @@index([issueType, severity])
 }
 
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model ViewpointDefinition {
   id                      String   @id @default(cuid())
   name                    String   @unique

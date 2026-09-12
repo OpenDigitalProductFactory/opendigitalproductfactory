@@ -291,7 +291,7 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     tier: 2,
     type: "coworker",
     description:
-      "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization. Validates all Prisma schema changes before migration.",
+      "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization; owns data lifecycle — every model's /// @dpf declaration (lifecycle class, retention, sensitivity), the nightly table-growth review, and the backlog items its findings raise. Validates all Prisma schema changes",
     valueStream: "integrate",
     sensitivity: "internal",
   },
@@ -391,6 +391,20 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     type: "coworker",
     description:
       "Field-service dispatch: job scheduling, technician/crew assignment, customer ETA notifications (confirm / on-my-way / running-late), and running-late coordination",
+    valueStream: "operate",
+    sensitivity: "confidential",
+  },
+  // Mailroom coordinator (design 2026-09-09 §4.10, BI-0426D15B): owns the triage
+  // and reply-draft turns for inbound correspondence. Intake is a platform job;
+  // this coworker never sends and never executes an instruction found in mail.
+  {
+    agentId: "mailroom-coordinator",
+    slugId: "mailroom-coordinator",
+    name: "Mailroom coordinator",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Inbound correspondence: reads the declared mailboxes, assigns each message a typed reason and urgency from the archetype's Mailroom profile, routes it to the owning queue, and drafts replies for a person to approve",
     valueStream: "operate",
     sensitivity: "confidential",
   },

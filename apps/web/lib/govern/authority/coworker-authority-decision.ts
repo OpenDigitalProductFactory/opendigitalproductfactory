@@ -10,6 +10,11 @@ import {
   canAccessAuthoritySubject,
   type AuthoritySubject,
 } from "./authority-subject";
+import {
+  resolveEscalation,
+  type EscalationDecision,
+  type EscalationSteering,
+} from "./escalation-gate";
 
 export const COWORKER_AUTHORITY_OUTCOMES = [
   "allow",
@@ -30,6 +35,7 @@ export type CoworkerAuthorityReasonCode =
   | "agent-identity-missing"
   | "human-capability-denied"
   | "agent-grant-denied"
+  | "room-authority-denied"
   | "delegation-inactive"
   | "delegation-origin-mismatch"
   | "delegation-agent-mismatch"
@@ -70,6 +76,13 @@ export type CoworkerAuthorityInput = {
     toolName: string;
     requiredCapability: string | null;
     agentGrantAllowed: boolean;
+    /**
+     * False when the Workroom the call runs in declares an activity shape whose
+     * authorized surface does not carry this tool (BI-F114354D). Undefined or
+     * true when the turn is unroomed or the room does not narrow the surface.
+     * A room may only NARROW the coworker's grants; it never widens them.
+     */
+    roomAuthorityAllowed?: boolean;
     sideEffect: boolean;
     executionMode: "proposal" | "immediate";
     routeContext: string | null;
@@ -78,9 +91,24 @@ export type CoworkerAuthorityInput = {
     /** False when an explicit operator policy forbids policy projection. */
     policyProjectionAllowed?: boolean;
     consequence?: ToolConsequence | null;
+    /** A Work Case may elevate an otherwise ordinary mutation to consequential. */
+    workCaseConsequential?: boolean;
     requiresDelegationChain?: boolean;
   };
+  /**
+   * BI-6B3DA9DD: what can decide this action without a person, server-resolved.
+   * Absent means `none` — nothing recorded can steer it. See escalation-gate.ts:
+   * a trust tier is a ceiling on what a coworker may attempt, never a reason to
+   * put a non-damaging, steered action in front of a human.
+   */
+  steering?: EscalationSteering;
   subject?: CoworkerAuthoritySubject | null;
+  /** The Workroom the call runs in, for the receipt; null when unroomed. */
+  room?: {
+    workroomId: string;
+    collaborationShape: string | null;
+    workShapeKey: string | null;
+  } | null;
   delegation?: {
     chainId: string;
     status: string;
@@ -136,6 +164,8 @@ type CoworkerAuthorityAllowDecision = {
   reasonCode: "authorized";
   explanation: string;
   nextAction: "execute";
+  /** Which escalation branch decided; recorded on the authority evidence. */
+  escalation?: EscalationDecision;
 };
 
 type CoworkerAuthorityDenyDecision = {
@@ -154,6 +184,8 @@ type CoworkerAuthorityApprovalDecision = {
   explanation: string;
   nextAction: "request-approval";
   approvalBinding: CoworkerApprovalBinding;
+  /** Which escalation branch decided; recorded on the authority evidence. */
+  escalation?: EscalationDecision;
 };
 
 export type CoworkerAuthorityDecision =
@@ -171,6 +203,8 @@ const EXPLANATIONS: Record<CoworkerAuthorityReasonCode, string> = {
     "You do not have authority for this action.",
   "agent-grant-denied":
     "This coworker is not assigned the tool authority required for this action.",
+  "room-authority-denied":
+    "This coworker's role in this Workroom does not authorize this action. The room's owner can widen the room's activity shape, or approve this action explicitly.",
   "delegation-inactive": "The delegated authority chain is no longer active.",
   "delegation-origin-mismatch":
     "The delegated action is not rooted in your authority.",
@@ -266,11 +300,33 @@ function deny(
   };
 }
 
-function requiresApproval(input: CoworkerAuthorityInput): boolean {
-  if (input.action.executionMode === "proposal") return true;
-  if (!input.action.sideEffect) return false;
-  return input.action.approvalPolicy === "all"
-    || input.action.approvalPolicy === "side-effects";
+/**
+ * BI-6B3DA9DD — escalation is a property of the decision, not of the actor.
+ *
+ * This used to be `requiresApproval`, which asked only whether the acting
+ * coworker's HITL tier said "approve side effects" and minted a human envelope
+ * for any side effect if it did. That escalated the specialist reviewers' own
+ * governance receipts to a person, which is what the founder's ruling forbids.
+ *
+ * The operator's standing configuration is carried through unchanged as
+ * `operatorRequiresApproval`; the gate only decides, among the actions that
+ * configuration would have escalated, which ones genuinely need a person.
+ */
+function escalationFor(input: CoworkerAuthorityInput): EscalationDecision {
+  return resolveEscalation({
+    operatorRequiresApproval: input.action.approvalPolicy === "all"
+      || input.action.approvalPolicy === "side-effects",
+    action: {
+      sideEffect: input.action.sideEffect,
+      executionMode: input.action.executionMode,
+      consequence: input.action.consequence ?? null,
+      ...(input.action.workCaseConsequential !== undefined
+        ? { workCaseConsequential: input.action.workCaseConsequential }
+        : {}),
+    },
+    dataPolicy: { sensitivity: input.dataPolicy.sensitivity },
+    steering: input.steering ?? "none",
+  });
 }
 
 function sameBinding(
@@ -308,6 +364,12 @@ export function evaluateCoworkerAuthority(
 
   if (!input.action.agentGrantAllowed) {
     return deny("agent-grant-denied", "request-authority");
+  }
+  // EP-WORK-POSTURE §8.2: the room is a term in the TAK intersection. A chat
+  // message asking for the action is a request, not authority — only the room
+  // definition or an explicit approval can carry it.
+  if (input.action.roomAuthorityAllowed === false) {
+    return deny("room-authority-denied", "request-authority");
   }
 
   const delegation = input.delegation;
@@ -366,12 +428,14 @@ export function evaluateCoworkerAuthority(
     return deny("policy-version-stale");
   }
 
-  if (!requiresApproval(input)) {
+  const escalation = escalationFor(input);
+  if (escalation.verdict === "automated") {
     return {
       outcome: "allow",
       reasonCode: "authorized",
       explanation: EXPLANATIONS.authorized,
       nextAction: "execute",
+      escalation,
     };
   }
 
@@ -383,6 +447,7 @@ export function evaluateCoworkerAuthority(
       explanation: EXPLANATIONS["approval-required"],
       nextAction: "request-approval",
       approvalBinding: currentBinding,
+      escalation,
     };
   }
   if (input.approval.status !== "approved") {
@@ -400,5 +465,6 @@ export function evaluateCoworkerAuthority(
     reasonCode: "authorized",
     explanation: EXPLANATIONS.authorized,
     nextAction: "execute",
+    escalation,
   };
 }

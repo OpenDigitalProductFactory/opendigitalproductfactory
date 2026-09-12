@@ -8,6 +8,11 @@
 // wrappers behind gateAtEntry.
 
 import { cron } from "inngest";
+import {
+  driveOutcomeNeedsOwner,
+  resolveDriveConclusion,
+} from "@/lib/work-management/drive-conclusion";
+import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 import type { PrismaClient } from "@dpf/db";
 import { inngest } from "../inngest-client";
 import {
@@ -21,6 +26,7 @@ import { buildStageBrief, stageEvidenceKinds } from "@/lib/work-management/stage
 import {
   loadCoordinationBindings,
   loadRecordedEvidence,
+  loadStageDispatchTimes,
   reconcileCoordinationBindings,
   reconcileStandingRoomNesting,
 } from "./workroom-drive-data";
@@ -55,7 +61,7 @@ import {
   priorDriveFromStored,
   readStoredWorkroomDriveState,
 } from "@/lib/work-management/workroom-drive-state";
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { appendCompletingWorkroomDriveReceipt, WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
 
 export type WorkroomDriveRoom = {
   id: string;
@@ -85,6 +91,16 @@ export type WorkroomDriveRoom = {
 };
 
 export type WorkroomDriveEffects = {
+  /**
+   * BI-12A083B4: who answers for this room, asked ONLY when a tick ends in a
+   * blockage. Resolving it walks the room's containment lineage, so the drive
+   * does not pay for that on work that is moving or finished.
+   *
+   * Optional so existing callers and tests keep working. When it is absent the
+   * conclusion records `unconcluded` with the reason, which is the honest
+   * answer: nobody was asked, so nobody is named.
+   */
+  resolveAccountability?: (roomId: string) => Promise<EffectiveHumanAccountability>;
   persist: (input: {
     roomId: string;
     snapshot: Record<string, unknown>;
@@ -145,6 +161,45 @@ function postureLevelOf(scopeClaims: unknown): ProactivityLevel | null {
   return "balanced";
 }
 
+/**
+ * The answer when nobody was asked, because the tick did not need an owner.
+ * Never reaches a recorded blockage: driveOutcomeNeedsOwner gates the call.
+ */
+const NOT_ASKED_ACCOUNTABILITY: EffectiveHumanAccountability = {
+  state: "setup-required",
+  reason: "no-organization-owner-recorded",
+  message: "Accountability was not resolved because this tick needed no owner.",
+  atWorkroomId: null,
+};
+
+async function resolveAccountabilityForConclusion(
+  roomId: string,
+  effects: WorkroomDriveEffects,
+): Promise<EffectiveHumanAccountability> {
+  if (!effects.resolveAccountability) {
+    return {
+      state: "setup-required",
+      reason: "no-organization-owner-recorded",
+      message:
+        "This drive was composed without an accountability resolver, so no owner could be named. "
+        + "Wire resolveAccountability into the drive's effects.",
+      atWorkroomId: roomId,
+    };
+  }
+  try {
+    return await effects.resolveAccountability(roomId);
+  } catch (error) {
+    // A failed lookup must not swallow the blockage. Record that the owner is
+    // unknown and why, which is still louder than stopping silently.
+    return {
+      state: "setup-required",
+      reason: "no-organization-owner-recorded",
+      message: `Accountability could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      atWorkroomId: roomId,
+    };
+  }
+}
+
 export async function applyDrivePlan(input: {
   room: WorkroomDriveRoom;
   plan: DrivePlan;
@@ -162,11 +217,32 @@ export async function applyDrivePlan(input: {
   ) {
     receipts.push({ stageKey: plan.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND });
   }
+  // BI-12A083B4 — no work stops without a conclusion. Every tick records which
+  // of the three legitimate states it reached: the outcome is met, work
+  // continues, or a blockage is named with an owner and the event that clears
+  // it. A tick that concluded none of those records `unconcluded`, which is a
+  // defect surfaced rather than a room left silently waiting on nobody.
+  const needsOwner = driveOutcomeNeedsOwner({
+    action: plan.action,
+    reason: plan.reason,
+    attentionPrincipalRef: plan.attentionPrincipalRef,
+  });
+  const accountability: EffectiveHumanAccountability = needsOwner
+    ? await resolveAccountabilityForConclusion(room.id, effects)
+    : NOT_ASKED_ACCOUNTABILITY;
+  const conclusion = resolveDriveConclusion({
+    action: plan.action,
+    reason: plan.reason,
+    attentionPrincipalRef: plan.attentionPrincipalRef,
+    accountability,
+  });
+
   const snapshot = {
     kind: "workroom-drive",
     version: 1,
     action: plan.action,
     reason: plan.reason,
+    conclusion,
     stageKey: plan.stageKey,
     taskId: plan.taskId,
     lastRunAt: now.toISOString(),
@@ -329,9 +405,11 @@ export async function runWorkroomDriveJob(
     // Stage-scoped evidence is the ONLY thing a completing receipt is earned
     // from, so a room that arrives without it can never advance.
     const evidenceByRoom = await loadRecordedEvidence(rooms.map((room) => room.capsuleId));
+    const dispatchByRoom = await loadStageDispatchTimes(rooms.map((room) => room.capsuleId));
     rooms = rooms.map((room) => ({
       ...room,
       recordedEvidence: evidenceByRoom.get(room.capsuleId) ?? [],
+      stageDispatchedAt: dispatchByRoom.get(room.capsuleId) ?? null,
     }));
   }
   const effects = deps?.effects ?? createWorkroomDriveEffects();
@@ -344,6 +422,13 @@ export async function runWorkroomDriveJob(
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
     const stored = readStoredWorkroomDriveState(room.workspaceState);
+    const receipts = earnEvidenceReceipts({
+      stageKey: room.currentStageKey ?? stored.currentStageKey,
+      declaredKinds: stageEvidenceKinds(shape ? readWorkShapeDefinitionContract(shape) : null, room.currentStageKey ?? stored.currentStageKey),
+      evidence: room.recordedEvidence ?? [],
+      dispatchedAt: room.stageDispatchedAt ?? null,
+      existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
+    }) as { stageKey: string; kind: string }[];
     const plan = resolveDrivePlan({
       roomId: room.capsuleId,
       definition: shape ? readWorkShapeDefinitionContract(shape) : null,
@@ -356,16 +441,7 @@ export async function runWorkroomDriveJob(
       currentStageKey: room.currentStageKey ?? stored.currentStageKey,
       // Earned from governed, stage-scoped evidence only — never from a run's
       // self-reported completion (BI-76B35820).
-      receipts: earnEvidenceReceipts({
-        stageKey: room.currentStageKey ?? stored.currentStageKey,
-        declaredKinds: stageEvidenceKinds(
-          shape ? readWorkShapeDefinitionContract(shape) : null,
-          room.currentStageKey ?? stored.currentStageKey,
-        ),
-        evidence: room.recordedEvidence ?? [],
-        dispatchedAt: room.stageDispatchedAt ?? null,
-        existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
-      }) as { stageKey: string; kind: string }[],
+      receipts,
       budgetUsage: room.budgetUsage.length > 0 ? room.budgetUsage : stored.budgetUsage,
       stopConditionHits: room.stopConditionHits.length > 0 ? room.stopConditionHits : stored.stopConditionHits,
       reviewDue: room.reviewDue || stored.reviewDue,
@@ -381,7 +457,7 @@ export async function runWorkroomDriveJob(
       reason: plan.reason,
       taskId: plan.taskId,
     });
-    const outcome = await applyDrivePlan({ room, plan, now, effects });
+    const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects });
     if (outcome === "dispatched") dispatched += 1;
     else if (outcome === "attention") attention += 1;
     else if (outcome === "stopped") stopped += 1;
@@ -550,6 +626,20 @@ export function createWorkroomDriveEffects(
   clock: () => Date = () => new Date(),
 ): WorkroomDriveEffects {
   return {
+    // BI-12A083B4: the drive asks this only when a tick ends stuck, so a
+    // blockage can name who clears it instead of waiting on nobody. Composed
+    // from the same lineage walk the room workforce read uses, so the two
+    // cannot disagree about who answers for a room.
+    async resolveAccountability(roomId) {
+      const prisma = await loadDb();
+      const { resolveRoomAccountabilityFromDb } = await import(
+        "@/lib/work-management/room-workforce.server"
+      );
+      return resolveRoomAccountabilityFromDb(
+        prisma as unknown as Parameters<typeof resolveRoomAccountabilityFromDb>[0],
+        { workroomId: roomId },
+      );
+    },
     async persist(input) {
       const prisma = await loadDb();
       const activity = await prisma.$transaction(async (tx) => {
@@ -559,6 +649,17 @@ export function createWorkroomDriveEffects(
             select: { workspaceState: true, updatedAt: true },
           });
           if (!current) return null;
+          const currentDrive = asRecord(asRecord(current.workspaceState)?.workroomDrive);
+          let snapshot = input.snapshot;
+          if (currentDrive && currentDrive.lastCycleKey === input.snapshot.lastCycleKey) {
+            let receipts = readStoredWorkroomDriveState({ workroomDrive: snapshot }).receipts;
+            for (const receipt of readStoredWorkroomDriveState(current.workspaceState).receipts) {
+              if (receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) continue;
+              const merged = appendCompletingWorkroomDriveReceipt(receipts, receipt);
+              if (merged.ok) receipts = merged.data;
+            }
+            snapshot = { ...snapshot, receipts };
+          }
           const updated = await tx.workroom.updateMany({
             where: {
               id: input.roomId, updatedAt: current.updatedAt, archivedAt: null, status: { notIn: [...TERMINAL] },
@@ -567,7 +668,7 @@ export function createWorkroomDriveEffects(
                 AND: [{ leaseExpiresAt: { gt: clock() } }],
               } : {}),
             },
-            data: { workspaceState: { ...asRecord(current.workspaceState), workroomDrive: input.snapshot } as object },
+            data: { workspaceState: { ...asRecord(current.workspaceState), workroomDrive: snapshot } as object },
           });
           if (updated.count !== 1) return null;
         }

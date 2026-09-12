@@ -72,6 +72,41 @@ describe("MCP progressive-disclosure bootstrap contract", () => {
     });
   });
 
+  // BI-7876699F: the author-satisfiable writer must not be classified as
+  // reviewer-routed. `record_initiative_evidence` is the ONLY record_initiative_*
+  // lane declared `independent: false`, with design-author among its accountable
+  // roles — so a name-prefix test is wrong for exactly the tool an author needs
+  // to close a delivery-small item, and it also masks the real reason by sitting
+  // above the not-granted branch.
+  it("does NOT call the author-satisfiable evidence writer reviewer-routed", () => {
+    const known = new Set(["get_backlog_item", "record_initiative_evidence"]);
+    const granted = new Set(["get_backlog_item", "record_initiative_evidence"]);
+    const res = classifyLoadToolsNoMatch(
+      { names: ["record_initiative_evidence"] }, known, granted, 0,
+    );
+    expect(res?.reason).not.toBe("reviewer-route-required");
+  });
+
+  it("reports not-granted, not reviewer-route-required, when the author lacks the evidence grant", () => {
+    const known = new Set(["get_backlog_item", "record_initiative_evidence"]);
+    const granted = new Set(["get_backlog_item"]);
+    const res = classifyLoadToolsNoMatch(
+      { names: ["record_initiative_evidence"] }, known, granted, 0,
+    );
+    // The operator must be told the truth: the grant is missing. Saying
+    // "reviewer-route-required" sends them to a packet that issues no route.
+    expect(res?.reason).toBe("not-granted");
+  });
+
+  it("still calls a genuinely independent reviewer writer reviewer-routed", () => {
+    const known = new Set(["get_backlog_item", "record_initiative_design_review"]);
+    const granted = new Set(["get_backlog_item"]);
+    const res = classifyLoadToolsNoMatch(
+      { names: ["record_initiative_design_review"] }, known, granted, 0,
+    );
+    expect(res?.reason).toBe("reviewer-route-required");
+  });
+
   it("returns no no-match reason when discovery selected a tool", () => {
     expect(classifyLoadToolsNoMatch(
       { names: ["get_backlog_item"] }, new Set(["get_backlog_item"]), new Set(["get_backlog_item"]), 1,

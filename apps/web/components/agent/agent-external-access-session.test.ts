@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  buildExternalAccessContinuationPrompt,
-  getExternalAccessSessionKey,
-  loadExternalAccessSessionState,
-  saveExternalAccessSessionState,
-} from "./agent-external-access-session";
+import { loadCoworkerMode, saveCoworkerMode } from "./agent-external-access-session";
 
 const store = new Map<string, string>();
 
@@ -18,8 +13,9 @@ const sessionStorageMock = {
   },
 };
 
-describe("agent external access session", () => {
+describe("coworker mode session state", () => {
   beforeEach(() => {
+    Object.defineProperty(globalThis, "window", { value: globalThis, configurable: true });
     Object.defineProperty(globalThis, "sessionStorage", {
       value: sessionStorageMock,
       configurable: true,
@@ -27,32 +23,20 @@ describe("agent external access session", () => {
     sessionStorageMock.clear();
   });
 
-  it("defaults to disabled for a user and route", () => {
-    expect(loadExternalAccessSessionState("user-1", "/admin")).toBe(false);
+  it("defaults to advise for a user and route", () => {
+    expect(loadCoworkerMode("user-1", "/admin")).toBe("advise");
   });
 
-  it("stores state by user and route for the current session", () => {
-    saveExternalAccessSessionState("user-1", "/admin", true);
-
-    expect(loadExternalAccessSessionState("user-1", "/admin")).toBe(true);
-    expect(loadExternalAccessSessionState("user-1", "/ops")).toBe(false);
-    expect(loadExternalAccessSessionState("user-2", "/admin")).toBe(false);
+  it("stores the mode by user and route for the current session", () => {
+    saveCoworkerMode("user-1", "/admin", "act");
+    expect(loadCoworkerMode("user-1", "/admin")).toBe("act");
+    expect(loadCoworkerMode("user-1", "/ops")).toBe("advise");
+    expect(loadCoworkerMode("user-2", "/admin")).toBe("advise");
   });
 
-  it("uses a session-scoped storage key", () => {
-    expect(getExternalAccessSessionKey("user-1", "/admin")).toBe(
-      "agent-external-access-session:user-1:/admin",
-    );
-  });
-
-  it("builds a continuation prompt from the latest External Access request", () => {
-    expect(
-      buildExternalAccessContinuationPrompt([
-        { role: "user", content: "Research official sales tax authority guidance." },
-        { role: "assistant", content: "External Access is off. Please enable External Access so I can verify official sources." },
-      ]),
-    ).toBe(
-      "External Access is now enabled for this page. Continue the previous request: Research official sales tax authority guidance.",
-    );
+  it("no longer exposes a per-session web-access state (EP-WORK-POSTURE 8.2)", async () => {
+    const mod = await import("./agent-external-access-session");
+    expect("loadExternalAccessSessionState" in mod).toBe(false);
+    expect("buildExternalAccessContinuationPrompt" in mod).toBe(false);
   });
 });

@@ -129,7 +129,24 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "initiative_design_review",
     "initiative_domain_review",
   ],
-  "data-architect": ["file_read", "sandbox_execute", "architecture_read", "registry_read", "tool_script_exec"],
+  // EP-A33A5C61 slice 7: the Data Architect owns data lifecycle, not only
+  // schema structure — it reads growth/conformance findings and telemetry,
+  // the EA data-model graph and policy, validates governance, and files or
+  // updates the backlog items its nightly findings raise.
+  "data-architect": [
+    "file_read",
+    "sandbox_execute",
+    "architecture_read",
+    "registry_read",
+    "tool_script_exec",
+    "backlog_read",
+    "backlog_write",
+    "telemetry_read",
+    "ea_graph_read",
+    "data_governance_validate",
+    "policy_read",
+    "spec_plan_read",
+  ],
   "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
   coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config", "thread_write"],
   "doc-specialist": ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
@@ -182,6 +199,9 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // Reads field-service jobs and customer contact data, updates job status, and
   // proposes customer notifications for approval.
   dispatcher: ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],
+  // Mailroom coordinator (design 2026-09-09 §4.10): reads items, records triage
+  // overrides and drafts replies on the queue rooms; never sends.
+  "mailroom-coordinator": ["work_room_read", "work_room_write", "registry_read"],
   "farm-ranch-steward": [
     "registry_read",
     "backlog_read",

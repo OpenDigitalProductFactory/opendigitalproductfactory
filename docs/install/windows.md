@@ -277,10 +277,15 @@ DPF_LLM_PROVIDER=external
 DPF coworkers support voice **input** (speech-to-text) and voice
 **output** (text-to-speech).
 
-**Speech-to-text (STT) — works out of the box.** The bundled `dpf-stt`
-container (faster-whisper) is profile-free, so it starts on a plain
-install and the coworker mic button works immediately. CPU-friendly; no
-GPU required.
+**Speech-to-text (STT) — connect a provider.** DPF ships no speech
+container. Voice input becomes available as soon as you configure a
+provider that can transcribe, under **Platform Tools → Communications**.
+Any provider serving an OpenAI-compatible `/v1/audio/transcriptions`
+endpoint works, including OpenAI and Groq. If you would rather audio
+never left your own network, run your own speech server — speaches and
+whisper.cpp server are both MIT-licensed — and give DPF its address under
+the self-hosted speech provider. DPF stopped bundling one so that a third
+party's registry housekeeping could no longer block platform releases.
 
 **Text-to-speech (TTS) — automatic on an NVIDIA GPU.** Spoken output
 uses the bundled `dpf-tts` container (Chatterbox — self-hosted, no API
@@ -342,13 +347,6 @@ is skipped, and the installer no longer leaks a raw `docker: 'model' is not
 a docker command` error. Update Docker Desktop and re-run the installer to
 pull the model, or point the portal at an external LLM provider under
 Admin → Providers.
-
-**Install log says an "optional sidecar … image is unavailable upstream".**
-The bundled voice speech-to-text sidecar (`dpf-stt`) is pulled from a
-third-party registry that occasionally prunes its image tag. When that
-happens the installer brings the platform up *without* voice input rather
-than failing the whole install — everything else works. Re-run the
-installer later to pick the image up once it's available again.
 
 **`install-dpf.bat` closed instantly / "running scripts is disabled".**
 Run it from an elevated prompt; the `.bat` launcher passes
