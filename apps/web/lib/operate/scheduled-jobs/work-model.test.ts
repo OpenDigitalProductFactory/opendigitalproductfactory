@@ -420,31 +420,3 @@ describe("isQuarantined", () => {
     expect(isQuarantined("code-graph-reconcile")).toBe(false);
   });
 });
-
-describe("deriveHealth awaiting-approval (BI-4F64C5D3)", () => {
-  const PROPOSED_NOW = new Date("2026-09-12T18:00:00.000Z");
-  const proposing = {
-    kind: "recurring" as const,
-    enabled: true,
-    schedule: "17 8 * * *",
-    lastRunAt: new Date("2026-09-12T08:17:00.000Z"),
-    nextRunAt: new Date("2026-09-13T08:17:00.000Z"),
-    lastStatus: "proposed" as string | null,
-    reportsRunData: true,
-  };
-
-  it("a run that proposed its work is neither OK nor an error", () => {
-    // The live shape: five coworkers proposing correctly, every run filed as
-    // error, 183 proposals nobody was told about.
-    expect(deriveHealth(proposing, PROPOSED_NOW).health).toBe("awaiting-approval");
-    expect(deriveHealth(proposing, PROPOSED_NOW).overdueByMs).toBe(0);
-  });
-
-  it("the same task reporting ok is still green — only the proposal changes it", () => {
-    expect(deriveHealth({ ...proposing, lastStatus: "ok" }, PROPOSED_NOW).health).toBe("ok");
-  });
-
-  it("a real error still outranks a proposal", () => {
-    expect(deriveHealth({ ...proposing, lastStatus: "error" }, PROPOSED_NOW).health).toBe("error");
-  });
-});

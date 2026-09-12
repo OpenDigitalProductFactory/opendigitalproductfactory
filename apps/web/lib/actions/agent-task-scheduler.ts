@@ -19,7 +19,7 @@ import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-ste
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
-  classifyScheduledRequiredTools,
+  classifyScheduledRequiredTools, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
   detectScheduledRunFailure,
   type ScheduledTaskRunRef,
@@ -623,15 +623,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     });
     if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
-    // BI-4F64C5D3: the run's required mutation may have been DIVERTED to an
-    // AgentActionProposal because this run's actionBoundary is "propose"
-    // (BI-80532D5C). That is the run doing its job, so it is not a failure —
-    // but it is not "ok" either, because delivery now waits on an owner
-    // decision. Recording it as ok is how 183 proposals accumulated unseen.
-    const requiredTools = classifyScheduledRequiredTools({
-      prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools,
-    });
-
+    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools });
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
     const playbookRunStatus =
@@ -693,9 +685,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { taskId },
       data: {
         lastRunAt: now,
-        lastStatus: requiredTools.kind === "proposed"
-          ? "proposed"
-          : preparedPlaybook && playbookRunStatus === "partial" ? "partial" : "ok",
+        lastStatus: scheduledRunLastStatus(requiredTools, preparedPlaybook, playbookRunStatus),
         lastError: null,
         lastThreadId: thread.id,
         taskRunId: taskRunRef.taskRunId,
@@ -747,10 +737,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { jobId: taskId },
       data: {
         lastRunAt: now,
-        // Mirrors the ScheduledAgentTask verdict above, including "proposed".
-        lastStatus: requiredTools.kind === "proposed"
-          ? "proposed"
-          : preparedPlaybook && playbookRunStatus === "partial" ? "partial" : "ok",
+        lastStatus: scheduledRunLastStatus(requiredTools, preparedPlaybook, playbookRunStatus),
         lastError: null,
         nextRunAt,
       },

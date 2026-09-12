@@ -174,3 +174,21 @@ export async function createTaskRunForScheduledTask(input: {
     delegatedPosture: input.delegatedPosture,
   });
 }
+
+/**
+ * The lastStatus a completed scheduled run earns.
+ *
+ * "proposed" is the third verdict (BI-4F64C5D3): the run's required mutation is
+ * parked on a human decision, so it neither succeeded nor failed. It carries no
+ * lastError and must not enter the retry cadence — re-asking for an approval
+ * already pending is how 183 proposals and 139 envelopes accumulated unseen.
+ */
+export function scheduledRunLastStatus(
+  requiredTools: ScheduledRequiredToolOutcome,
+  isPlaybookRun: unknown,
+  playbookRunStatus?: string | null,
+): "proposed" | "partial" | "ok" {
+  if (requiredTools.kind === "proposed") return "proposed";
+  if (isPlaybookRun && playbookRunStatus === "partial") return "partial";
+  return "ok";
+}
