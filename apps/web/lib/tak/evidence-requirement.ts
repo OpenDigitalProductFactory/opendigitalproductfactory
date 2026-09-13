@@ -15,7 +15,7 @@
 // live-state tools) plus a live-state question cue. Phase 2 (the IntentClassifier)
 // replaces the heuristic; the enforcement guard is permanent.
 
-import { classifyTaskClass, isSuppliedSourceAnalysis } from "./intent-taxonomy";
+import { classifyTaskClass, isSuppliedSourceAnalysis, LIVE_STATE_CUES } from "./intent-taxonomy";
 
 /** What the user is shown when a live-data answer could not be tool-verified. */
 export const INV5_UNVERIFIED_MESSAGE =
@@ -44,24 +44,6 @@ export const INV5_WITHHELD_HEADING = "Unverified draft (no tool evidence — do 
  *  operational answer. Below this it is a terse acknowledgement, not a claim. */
 export const SUBSTANTIVE_REPLY_MIN_CHARS = 80;
 
-/**
- * Words that signal a question about CURRENT operational state — the class of
- * answer that must be backed by a live tool call, not the model's memory. Kept
- * deliberately small and high-precision for Phase 1.
- */
-const LIVE_STATE_CUES: readonly RegExp[] = [
-  /\bresolved\b/i,
-  /\bstatus\b/i,
-  /\bhow many\b/i,
-  /\bhow much\b/i,
-  /\bcount\b/i,
-  /\bcurrent(ly)?\b/i,
-  /\b(still )?(open|pending|outstanding|in[- ]progress|blocked|overdue|done|closed|completed)\b/i,
-  /\bany (new|updates?|changes?)\b/i,
-  /\bwhat('?s| is| are)\b.*\b(left|remaining|happening|going on)\b/i,
-  /\blatest\b/i,
-  /\bright now\b/i,
-];
 
 export interface EvidenceRequirement {
   required: boolean;

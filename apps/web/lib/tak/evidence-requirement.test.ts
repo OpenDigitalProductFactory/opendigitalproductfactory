@@ -27,6 +27,8 @@ describe("classifyEvidenceRequirement", () => {
     "Read the diff. Does the build pass now?",
     "Explain the patch. Which deployment failed?",
     "Summarize the diff. Current build status please.",
+    "Review the attached diff. Any new failures?",
+    "Read the patch. Pending builds?",
   ])("retains live evidence for mixed or tool-free wording: %s", (request) => {
     expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
       message: `${request}\n${artifact}`,
@@ -48,6 +50,18 @@ describe("classifyEvidenceRequirement", () => {
   it("does not accept an artifact label without supplied source as evidence", () => {
     expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
       message: "Read the source diff. What is the current status?",
+    }).required).toBe(true);
+  });
+
+  it("keeps an unterminated repeated-fence tail available for live evidence matching", () => {
+    expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
+      message: `Review the attached diff.\n${artifact}\n\n\`\`\`js\n${"\`\`\` not a closing fence\n".repeat(10000)}Did the latest build pass?`,
+    }).required).toBe(true);
+  });
+
+  it("requires a matching closing fence before classifying source analysis", () => {
+    expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
+      message: "Explain this code snippet.\n````js\n```\nDid the latest build pass?",
     }).required).toBe(true);
   });
   it("flags the Scrum Master incident question as evidence-required (BI-B5C358B1)", () => {
