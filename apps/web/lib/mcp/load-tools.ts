@@ -7,6 +7,7 @@
 // write stay in the route/store — this module is presentation + payload shaping.
 
 import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
+import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
@@ -45,11 +46,12 @@ export function classifyLoadToolsNoMatch(
     ? args.names.filter((name): name is string => typeof name === "string")
     : [];
   if (requestedNames.length > 0) {
-    const reason = requestedNames.some((name) => !knownNames.has(name))
+    const canonicalNames = requestedNames.map(canonicalWorkroomToolName);
+    const reason = canonicalNames.some((name) => !knownNames.has(name))
       ? "unknown-tool-name"
-      : requestedNames.some(isReviewerOnlyWriter)
+      : canonicalNames.some(isReviewerOnlyWriter)
         ? "reviewer-route-required"
-        : requestedNames.some((name) => !grantedNames.has(name))
+        : canonicalNames.some((name) => !grantedNames.has(name))
           ? "not-granted"
           : "intent-no-match";
     return { reason, requestedNames };

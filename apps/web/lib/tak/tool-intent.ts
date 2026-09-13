@@ -1,4 +1,5 @@
 /** Shared, dependency-light intent matching for progressive tool disclosure. */
+import { canonicalWorkroomToolName } from "./workroom-tool-aliases";
 
 export const LOAD_TOOLS_TOOL_NAME = "load_tools";
 export const LOAD_TOOLS_BATCH_MAX = 16;
@@ -52,7 +53,7 @@ export function selectLoadableTools<T extends ToolIntentCandidate>(
   const requestedNames = new Set(
     (Array.isArray(request.names) ? request.names : [])
       .filter((name): name is string => typeof name === "string")
-      .map((name) => name.trim())
+      .map((name) => canonicalWorkroomToolName(name.trim()))
       .filter(Boolean),
   );
   const selected = new Map<string, T>();

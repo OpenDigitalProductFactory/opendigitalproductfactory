@@ -15,6 +15,13 @@ import {
 } from "./tool-tier";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 
+it("loads only the authorized canonical definition for held Workroom aliases", () => {
+  const granted = [{ name: "list_workrooms" }];
+  expect(resolveLoadToolsSelection(granted, { names: ["list_work_capsules"] })).toEqual(granted);
+  expect(resolveLoadToolsSelection(granted, { names: ["list_work_capsules", "list_workrooms"] })).toEqual(granted);
+  expect(resolveLoadToolsSelection([], { names: ["list_work_capsules"] })).toEqual([]);
+});
+
 describe("resolveMcpToolTier", () => {
   it("defaults to full (back-compat) for absent/unknown values", () => {
     expect(resolveMcpToolTier(undefined)).toBe("full");

@@ -46,6 +46,7 @@ import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/m
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
+import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import {
   resolveListingAuthorityForToken,
   filterListableTools,
@@ -503,7 +504,7 @@ async function handleToolsCall(
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
   }
-  const toolName = params["name"];
+  const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:

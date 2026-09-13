@@ -8,6 +8,11 @@ import {
 } from "./load-tools";
 
 describe("MCP progressive-disclosure bootstrap contract", () => {
+  it("reports a known alias without grants as not-granted", () => {
+    expect(classifyLoadToolsNoMatch(
+      { names: ["list_work_capsules"] }, new Set(["list_workrooms"]), new Set(), 0,
+    )).toEqual({ reason: "not-granted", requestedNames: ["list_work_capsules"] });
+  });
   it("keeps the complete recovery workflow in the first 512 initialize characters", () => {
     const preamble = MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS.slice(0, 512);
 
