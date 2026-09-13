@@ -1,4 +1,9 @@
-import { CROSS_DOMAIN_MATERIAL_TAG, DECISION_DOMAIN_CLASSES, type DecisionDomainClass } from "./types";
+import {
+  CROSS_DOMAIN_MATERIAL_TAG,
+  DECISION_DOMAIN_CLASSES,
+  type DecisionDomainClass,
+  type MaterialDecidability,
+} from "./types";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import type {
   DecisionAutonomyPolicy,
@@ -501,4 +506,105 @@ export async function resolveProfileMaterialForOrg(input: {
   });
 
   return { ...resolved, orgProfileSelected: orgProfileId !== null };
+}
+
+/**
+ * Can this material set reach the recommendation band at all — and if not, what
+ * is holding it down (BI-5843CD9C)?
+ *
+ * THE PROBLEM THIS SOLVES. `effectiveWeight` is a product of five factors, so a
+ * single low factor caps every material in the set at the same value. Confidence
+ * is the MEAN of those weights minus a risk penalty, which means adding more
+ * material of the same provenance moves nothing. A consult in that state returns
+ * an ordinary-looking escalation with a plausible rationale, and neither the
+ * caller nor the operator can tell it apart from a considered judgement.
+ *
+ * Measured live under BI-0F3D5F94: five acumens holding 3 to 12 material rows
+ * each returned exactly 0.35 at medium risk and 0.2 at high. A 4x spread in
+ * volume changing nothing is the tell — the value was structural.
+ *
+ * The dominant real cause is promotion state. Seeded doctrine lands as
+ * `candidate`, weighted 0.45, so its ceiling is 0.45 minus the risk penalty and
+ * a 0.7 band is unreachable by roughly half. No amount of authoring fixes that;
+ * only promotion does. Reporting "material below confidence" there sends an
+ * operator to write more material, which is the one thing that cannot help.
+ */
+export function computeMaterialDecidability(input: {
+  materials: PerspectiveMaterial[];
+  riskPenalty: number;
+  recommendationBand: number;
+}): MaterialDecidability {
+  const scored = input.materials.map((m) => scorePerspectiveMaterial(m));
+  const usable = scored.filter((s) => s.effectiveWeight > 0);
+
+  if (usable.length === 0) {
+    return {
+      ceiling: 0,
+      recommendationBand: input.recommendationBand,
+      canReachRecommendation: false,
+      bindingFactor: null,
+      remedy: "No usable material — every source is contradicted, superseded, rejected or revoked.",
+    };
+  }
+
+  // The ceiling is the best MEAN this set can produce as it stands. Because the
+  // mean cannot exceed the largest member, the strongest single material bounds
+  // it — a set cannot be lifted above its best source by adding more of the same.
+  const bestWeight = Math.max(...usable.map((s) => s.effectiveWeight));
+  const ceiling = Number((bestWeight - input.riskPenalty).toFixed(4));
+  const canReachRecommendation = ceiling >= input.recommendationBand;
+
+  if (canReachRecommendation) {
+    return {
+      ceiling,
+      recommendationBand: input.recommendationBand,
+      canReachRecommendation: true,
+      bindingFactor: null,
+      remedy: null,
+    };
+  }
+
+  // Name the factor doing the most damage on the strongest material, since that
+  // is the one whose ceiling the set inherits. Ordered by how commonly each is
+  // the real blocker and how differently each is remedied.
+  const best = usable.find((s) => s.effectiveWeight === bestWeight)!;
+  const candidates: Array<{ factor: MaterialDecidability["bindingFactor"]; value: number; remedy: string }> = [
+    {
+      factor: "promotion",
+      value: best.promotionFactor,
+      remedy:
+        "The strongest material is still a candidate, not promoted. Promotion is what raises the ceiling here — authoring more candidate material cannot.",
+    },
+    {
+      factor: "review",
+      value: best.reviewFactor,
+      remedy: "The strongest material is unapproved. Review and approve it rather than adding more.",
+    },
+    {
+      factor: "freshness",
+      value: best.freshnessFactor,
+      remedy: "The strongest material is stale. Refresh or re-confirm it rather than adding more.",
+    },
+    {
+      factor: "evidence",
+      value: best.evidenceFactor,
+      remedy:
+        "The strongest material is weakly evidenced. This needs better-sourced material, not more of the same grade.",
+    },
+    {
+      factor: "confidence",
+      value: best.confidenceWeight,
+      remedy: "The strongest material carries a low authored confidence weight.",
+    },
+  ];
+
+  const binding = candidates.reduce((lowest, c) => (c.value < lowest.value ? c : lowest));
+
+  return {
+    ceiling,
+    recommendationBand: input.recommendationBand,
+    canReachRecommendation: false,
+    bindingFactor: binding.factor,
+    remedy: binding.remedy,
+  };
 }

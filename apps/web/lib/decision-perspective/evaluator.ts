@@ -1,9 +1,17 @@
 import {
+  computeMaterialDecidability,
   isMaterialApplicable,
   resolveProfileMaterial,
   resolveProfileMaterialForOrg,
   scorePerspectiveMaterial,
 } from "./material";
+
+/**
+ * Confidence a consult must reach before it may recommend rather than escalate.
+ * Named because BI-5843CD9C measures material ceilings against it — an inline
+ * 0.7 cannot be compared to anything.
+ */
+const RECOMMENDATION_BAND = 0.7;
 import { createDecisionInteractionId, findExistingDecisionInteraction, persistDecisionInteraction } from "./persistence";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
@@ -16,6 +24,7 @@ import { contentAwareDirectionalOutcome } from "./directional-outcome";
 // Re-exported for existing importers; owned by ./override-count (BI-ACF0D6D4).
 export { RECENT_OVERRIDE_WINDOW_DAYS } from "./override-count";
 import {
+  RISK_PENALTY,
   hasPrincipleConflict,
   orderedProfileChain,
   riskWithin,
@@ -105,7 +114,17 @@ export function evaluateDecisionPerspective(
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 
+  // BI-5843CD9C: report whether this material COULD have recommended, not only
+  // what it decided. An escalation from weighed evidence and an escalation from
+  // an unreachable ceiling look identical without this.
+  const decidability = computeMaterialDecidability({
+    materials: selectedCoverage.applicableMaterials,
+    riskPenalty: RISK_PENALTY[input.riskTier],
+    recommendationBand: RECOMMENDATION_BAND,
+  });
+
   const baseResult = {
+    decidability,
     selectedProfileId: selectedProfile.profileId,
     fallbackProfileId,
     profileVersionId: selectedProfile.currentVersion.versionId,
@@ -192,12 +211,25 @@ export function evaluateDecisionPerspective(
     };
   }
 
-  if (confidence < 0.7) {
+  if (confidence < RECOMMENDATION_BAND) {
+    // Distinguish "more or better material would help" from "this material can
+    // never clear the band". Both escalate; only one is worth acting on by
+    // authoring more, and conflating them sends operators to do the one thing
+    // that cannot work.
     return {
       ...baseResult,
       outcomeType: "escalate",
-      rationale:
-        `Escalate because profile confidence ${confidence} is below the recommendation band.`,
+      ...(decidability.canReachRecommendation
+        ? {
+            gapReason: "material-below-confidence" as const,
+            rationale:
+              `Escalate because profile confidence ${confidence} is below the recommendation band of ${RECOMMENDATION_BAND}.`,
+          }
+        : {
+            gapReason: "ceiling-below-recommendation-band" as const,
+            rationale:
+              `Escalate because this material cannot reach the recommendation band at ${input.riskTier} risk: its ceiling is ${decidability.ceiling} against a band of ${RECOMMENDATION_BAND}. ${decidability.remedy ?? ""}`.trim(),
+          }),
     };
   }
 
