@@ -319,6 +319,7 @@ export async function loadOperationsMapData(
         policyRulesApplied: true,
         fallbackChain: true,
         fallbacksUsed: true,
+        inferenceDataScreenReceipt: true,
         shadowMode: true,
         createdAt: true,
         selectedModelId: true,

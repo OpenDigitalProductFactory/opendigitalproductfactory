@@ -126,14 +126,8 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
-    mockResolveModelSelectionByPhase.mockResolvedValue({
-      generatedAt: "2026-06-28T20:00:00.000Z",
-      phases: [],
-    });
 
     const data = await loadOperationsMapData();
 
@@ -164,7 +158,6 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
 
@@ -186,7 +179,6 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
 
@@ -304,6 +296,9 @@ describe("loadOperationsMapData", () => {
         expect.objectContaining({ providerId: "anthropic", state: "active" }),
       ]),
     );
+    expect(data.routingEvidence.coverage.screenCoveredDecisions).toBe(1);
+    expect(data.routingEvidence.coverage.screenCoverageRate).toBe(1);
+    expect(JSON.stringify(data)).not.toContain("must-not-leak");
     expect(data.routingTopology.routes).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ providerId: "scheduled" }),
@@ -332,6 +327,7 @@ describe("loadOperationsMapData", () => {
       select: expect.objectContaining({
         actorKind: true,
         actorId: true,
+        inferenceDataScreenReceipt: true,
       }),
     }));
     expect(prisma.modelProvider.findMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -387,7 +383,6 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([makeModelProviderRow()] as never);
     vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([makeModelProfileRow()] as never);
     vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
 
@@ -680,7 +675,6 @@ function mockEmptySources() {
   vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
-  vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
 }
@@ -814,6 +808,12 @@ function makeRouteDecisionRowBase() {
     shadowMode: false,
     createdAt: new Date("2026-05-10T12:04:00.000Z"),
     selectedModelId: "claude-sonnet",
+    inferenceDataScreenReceipt: {
+      schemaVersion: "inference-data-screen/v1", screenId: "screen-test",
+      routeEffect: "allow", transformation: "none",
+      classifiedDataClasses: ["source-code"], rawPayloadStored: false,
+      rawPrompt: "must-not-leak", inputHash: "must-not-leak-hash",
+    },
   };
 }
 
