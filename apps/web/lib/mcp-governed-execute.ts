@@ -37,6 +37,7 @@ import {
   type ToolResult,
 } from "./mcp-tools";
 import { coerceMcpToolArgs } from "./mcp-arg-coercion";
+import { canonicalWorkroomToolName } from "./tak/workroom-tool-aliases";
 import {
   setGovernedToolAuditOverridesForTests,
   updateGovernedToolAudit as updateAudit,
@@ -414,6 +415,7 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
 export async function governedExecuteTool(
   args: GovernedExecuteArgs,
 ): Promise<GovernedExecuteResult> {
+  args = { ...args, toolName: canonicalWorkroomToolName(args.toolName) };
   let approvedAuthorityEnvelopeId: string | null = null;
   let authorityDecisionId: string | undefined;
   let alignmentDecision: AlignmentGateDecision | null = null;

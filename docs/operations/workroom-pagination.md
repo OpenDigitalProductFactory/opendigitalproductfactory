@@ -9,6 +9,11 @@ status: draft
 the typed pagination change is installed; an older response without `page` does
 not prove that a complete population was enumerated.
 
+Legacy names resolve to their canonical Workroom name before token scope,
+quiescence, governance and dispatch checks. `load_tools` accepts a legacy name
+and returns its authorized canonical definition. Listings and execution audit
+names remain canonical; aliases do not add grants or extra advertised tools.
+
 Start with your filters and an optional `limit`. The default is five rows and the
 maximum request is 100. The actual page may contain fewer rows because the full
 serialized result must fit 4,000 UTF-16 units and 4,000 UTF-8 bytes. Long summaries
