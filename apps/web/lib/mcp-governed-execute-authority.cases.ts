@@ -222,6 +222,15 @@ export function registerCoworkerAuthorityCases(
         },
       },
     });
+
+    // BI-7561687F: the model must tell a wait apart from a refusal. When it
+    // could not, coworkers filed tech debt asking for tools that already exist —
+    // record_initiative_evidence had 139 successful executions at the time.
+    expect(result.message).toContain("waiting for a person to approve it");
+    expect(result.message).toContain("ENV-1");
+    expect(result.message).toContain("is available to you");
+    expect(result.message).toContain("calling it again will not advance it");
+    expect(result.message).not.toContain("rejected:");
     expect(harness.executeMock()).not.toHaveBeenCalled();
     expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledOnce();
     expect(JSON.stringify(result)).not.toContain("private title");

@@ -9,6 +9,7 @@
 
 import { prisma } from "@dpf/db";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
+import { approvalPendingResult } from "./govern/authority/approval-pending-result";
 import type { CoworkerAuthorityDecision } from "./govern/authority/coworker-authority-decision";
 import {
   enforceCoworkerToolAuthority,
@@ -512,11 +513,13 @@ export async function governedExecuteTool(
     );
     if (authorityGate.outcome === "reject") {
       const result: GovernedExecuteResult = {
-        ...rejectionResult(
-          args.toolName,
-          authorityGate.rejection,
-          authorityGate.message,
-        ),
+        ...(authorityGate.rejection === "approval_required"
+          ? approvalPendingResult(args.toolName, authorityGate.message, authorityGate.data)
+          : rejectionResult(
+            args.toolName,
+            authorityGate.rejection,
+            authorityGate.message,
+          )),
         ...(authorityGate.data ? { data: authorityGate.data } : {}),
         governance: {
           rejected: authorityGate.rejection,
