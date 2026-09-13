@@ -15,7 +15,7 @@ import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
 import { validateFailureAnalysis } from "./failure-analysis";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
-const MAX_DISPATCH_ATTEMPTS = 3;
+import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget } from "./semantic-review-recovery-policy";
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -133,9 +133,10 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   if (!["input-required", "stalled"].includes(row.status)) throw new Error("semantic-review-not-awaiting-recovery");
   const packet = await requestFor(row);
   if (!packet) throw new Error("semantic-review-request-unavailable");
-  if (Date.now() >= Date.parse(packet.deadlineAt)) throw new Error("semantic-review-deadline-exhausted");
   const previousAttempt = state(row).recoveryAttempt ?? 0;
-  if (typeof previousAttempt !== "number" || !Number.isSafeInteger(previousAttempt) || previousAttempt < 0 || previousAttempt >= MAX_DISPATCH_ATTEMPTS) throw new Error("semantic-review-recovery-exhausted");
+  const budget = semanticReviewRecoveryBudget(packet.deadlineAt, previousAttempt);
+  if (budget === "expired") throw new Error("semantic-review-deadline-exhausted");
+  if (budget !== "available" || typeof previousAttempt !== "number") throw new Error("semantic-review-recovery-exhausted");
   const attempt = previousAttempt + 1;
   if (!(await verifySemanticReviewAuthority(packet, taskRunId))) throw new Error("semantic-review-recovery-authority-denied");
   const { getQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");

@@ -53,6 +53,7 @@ export const OPERATIONS_RUN_SELECT = {
   startedAt: true,
   completedAt: true,
   a2aMetadata: true,
+  progressPayload: true,
   repeatedPatternKey: true,
 } satisfies Prisma.TaskRunSelect;
 
