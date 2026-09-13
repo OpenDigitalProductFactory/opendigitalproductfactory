@@ -15,7 +15,7 @@
 // live-state tools) plus a live-state question cue. Phase 2 (the IntentClassifier)
 // replaces the heuristic; the enforcement guard is permanent.
 
-import { classifyTaskClass } from "./intent-taxonomy";
+import { classifyTaskClass, isSuppliedSourceAnalysis } from "./intent-taxonomy";
 
 /** What the user is shown when a live-data answer could not be tool-verified. */
 export const INV5_UNVERIFIED_MESSAGE =
@@ -88,6 +88,7 @@ export function classifyEvidenceRequirement(params: {
 }): EvidenceRequirement {
   const message = (params.message ?? "").trim();
   if (message.length === 0) return { required: false, taskClass: null };
+  if (isSuppliedSourceAnalysis(message)) return { required: false, taskClass: null };
 
   // Phase 2: data-driven task-class classification.
   const tc = classifyTaskClass({ routeContext: params.routeContext, message });

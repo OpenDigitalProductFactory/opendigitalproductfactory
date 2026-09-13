@@ -73,6 +73,51 @@ export interface TaskClassification {
 }
 
 /**
+ * A supplied source artifact is evidence for what that source says, not for the
+ * running system. Keep quoted code out of intent matching and preserve any live
+ * request outside it. This narrows classification only; it grants no tool or
+ * writer authority and does not accept 'do not use tools' as an exemption.
+ */
+export function isSuppliedSourceAnalysis(message: string): boolean {
+  let suppliedSource = false;
+  const withoutFences = message.replace(/```[^\n]*\n[\s\S]*?```/g, () => {
+    suppliedSource = true;
+    return "\n";
+  });
+  let inDiff = false;
+  let oldLines = 0;
+  let newLines = 0;
+  const request = withoutFences.split(/\r?\n/).filter((line) => {
+    if (/^diff --git a\/.+ b\//.test(line)) {
+      suppliedSource = true;
+      inDiff = true;
+      oldLines = newLines = 0;
+      return false;
+    }
+    if (!inDiff) return true;
+    const hunk = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(line);
+    if (hunk) {
+      oldLines = Number(hunk[1] ?? 1);
+      newLines = Number(hunk[2] ?? 1);
+      return false;
+    }
+    if ((oldLines > 0 || newLines > 0) && /^[ +\-]/.test(line)) {
+      if (line[0] !== "+") oldLines--;
+      if (line[0] !== "-") newLines--;
+      return false;
+    }
+    if (/^(?:--- a\/|--- \/dev\/null|\+\+\+ b\/|\+\+\+ \/dev\/null|index |(?:new|deleted) file mode |(?:old|new) mode |(?:similarity|dissimilarity) index |(?:rename|copy) (?:from|to) |\\ No newline)/.test(line)) return false;
+    if (line.trim() === "") return false;
+    inDiff = false;
+    return true;
+  }).join("\n");
+  if (!suppliedSource || !/\b(?:read|summari[sz]e|explain|review|analy[sz]e|compare)\b[^.!?\n]{0,160}\b(?:diff|patch|source code|code snippet)\b/i.test(request)) return false;
+  // Mixed source/live questions still owe live evidence, wherever they appear.
+  return !/\b(?:check|verify|query|fetch|show|report|tell|give|count|is|are|has|have|did|does|do|was|were|when|which|what|how)\b[^.!?\n]{0,120}\b(?:current(?:ly)?|latest|live|running|deployed|production|now|today|status|health|queue|completed|resolved|open|pending|remaining|pass(?:ed)?|fail(?:ed)?)\b/i.test(request)
+    && !/\b(?:current|latest|live|running|today['’]s)\b[^.!?\n]{0,80}\b(?:build|status|queue|provider|backlog|workroom|deployment)\b/i.test(request);
+}
+
+/**
  * Classify a turn's task class from its route + message. Returns the best-matching
  * class when the route matches a class AND the message reads like a live-state
  * question (a cue hit or a literal '?'). Returns null for turns no class covers —
@@ -86,6 +131,7 @@ export function classifyTaskClass(params: {
   const routeContext = params.routeContext ?? "";
   const message = (params.message ?? "").trim();
   if (message.length === 0) return null;
+  if (isSuppliedSourceAnalysis(message)) return null;
   const isQuestion = message.includes("?");
 
   let best: { def: TaskClassDef; prefixLen: number } | null = null;
