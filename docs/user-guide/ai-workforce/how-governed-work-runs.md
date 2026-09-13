@@ -253,6 +253,13 @@ Four surfaces read that trail, each answering a different question:
   *awaiting a person* are deliberately different marks — a decline is a settled answer to act
   on, an open question is not.
 
+The coworker is told the same difference, in the same words. When a call needs approval it is
+told the work is waiting, which approval request it is waiting on and until when, and that the
+tool is available to it — not that the call was rejected. That wording is load-bearing: while
+the two read alike, coworkers concluded the capability was missing and proposed work to build
+tools that already existed. They are also told that calling again will not advance it, so the
+honest response to a wait is to report it rather than retry.
+
 Where the audit trail has nothing to say, these surfaces say so rather than guessing. A stage
 with no records reads **No records yet**. A room with no posture of its own reads **Running on
 defaults**. That is deliberate: a picture that never disagrees with the ledger is worth more
