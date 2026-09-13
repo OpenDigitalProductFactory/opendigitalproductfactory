@@ -385,6 +385,49 @@ function rejectionResult(
   };
 }
 
+/**
+ * A call parked on a human decision, worded so the model can tell it apart from
+ * a refusal (BI-7561687F).
+ *
+ * `rejectionResult` renders every gate outcome as "<tool> rejected: ...", and a
+ * coworker reading that about an approval gate cannot distinguish "a person has
+ * not answered yet" from "this tool is not available to me". On the reference
+ * install it consistently drew the second conclusion and proposed tech debt to
+ * add tools that already exist: five pending proposals asked for
+ * record_initiative_evidence and get_backlog_item, the former having 139
+ * successful executions at the time. A fabricated finding is worse than
+ * silence — it looks like signal and survives review.
+ *
+ * So this says three things the old message did not: the call is waiting, on
+ * what, and that the capability is present. The last clause also removes the
+ * incentive to retry, which is what turned one decision into fifty-five cards.
+ *
+ * `error` stays "approval_required" — callers and the run-verdict classifier
+ * (BI-4F64C5D3) key on it, and this is a wording contract, not a control-flow
+ * change.
+ */
+function approvalPendingResult(
+  toolName: string,
+  detail: string,
+  data: Record<string, unknown> | undefined,
+): GovernedExecuteResult {
+  const envelopeId = typeof data?.["envelopeId"] === "string" ? data["envelopeId"] : null;
+  const expiresAt = typeof data?.["expiresAt"] === "string" ? data["expiresAt"] : null;
+  const message = [
+    `${toolName} is waiting for a person to approve it.`,
+    envelopeId ? `Approval request ${envelopeId}${expiresAt ? `, which expires ${expiresAt}` : ""}.` : null,
+    detail,
+    `${toolName} is available to you — this is not a missing tool or a denied grant,`,
+    "and calling it again will not advance it. Report that the work is awaiting approval.",
+  ].filter(Boolean).join(" ");
+  return {
+    success: false,
+    error: "approval_required",
+    message,
+    governance: { rejected: "approval_required" },
+  };
+}
+
 async function runPreToolHooks(event: ToolLifecycleEvent): Promise<GovernedExecuteResult | null> {
   for (const hook of _lifecycleHooks) {
     const decision = await hook.onPreToolUse?.(event);
@@ -510,11 +553,13 @@ export async function governedExecuteTool(
     );
     if (authorityGate.outcome === "reject") {
       const result: GovernedExecuteResult = {
-        ...rejectionResult(
-          args.toolName,
-          authorityGate.rejection,
-          authorityGate.message,
-        ),
+        ...(authorityGate.rejection === "approval_required"
+          ? approvalPendingResult(args.toolName, authorityGate.message, authorityGate.data)
+          : rejectionResult(
+            args.toolName,
+            authorityGate.rejection,
+            authorityGate.message,
+          )),
         ...(authorityGate.data ? { data: authorityGate.data } : {}),
         governance: {
           rejected: authorityGate.rejection,
