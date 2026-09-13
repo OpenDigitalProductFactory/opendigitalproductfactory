@@ -647,3 +647,9 @@ list so changing a filter does not erase navigation context. No cached state or
 inferred completion is introduced. Verify query bounds, terminal reviewer
 projection without a recovery action, deduplication, and filter navigation.
 Protected CI and live portal verification remain required before completion.
+
+## September 13 recovery readback (WC-958DA760, BI-06AE6833)
+
+Live review TR-GATE-17CAD3AAE52422739C8CFF11 expired but still offers Resume review. Consolidate deadline/retry-budget evaluation into one pure policy used by the existing server recovery guard and existing inspector. Preserve server-side requester, immutable packet, consent, authority, quiescence and compare-and-swap checks. Load only the existing progress fields needed to explain the budget; unknown or malformed evidence must not imply permission. Show the recorded deadline, attempt count and unavailable reason, retaining history navigation. Re-evaluate at the deadline and before confirmation. Tests first: future/expired/invalid deadlines, exhausted/malformed counters, missing projection evidence, and no retry dispatch after expiry. This is an existing-inspector repair using shared primitives and theme tokens; no new route or control. Record source verification separately from later deployed acceptance. Approximately one fifth of this repair consolidates recovery policy and projection logic.
+
+UX-fit decision DI-DDD94F1471A4 selected existing-inspector-explanation over a dedicated recovery-detail route (high confidence, autonomy eligible, no commandment conflict). The committed propose-n-pick manifest points to that canonical decision; estimates used in option scoring are not claimed as measured visual metrics. Deployed acceptance remains separate.

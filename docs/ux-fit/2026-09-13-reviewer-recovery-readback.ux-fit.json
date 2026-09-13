@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "existing-inspector-explanation",
+  "decisionInteractionId": "DI-DDD94F1471A4",
+  "scope": {
+    "files": ["apps/web/components/platform/StalledTaskRecoveryActions.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["existing-inspector-explanation", "dedicated-recovery-detail"]
+  }
+}

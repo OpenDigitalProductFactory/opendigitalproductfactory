@@ -77,7 +77,7 @@ vi.mock("@/lib/inference/phase-model-resolution", () => ({
 }));
 
 import { prisma } from "@dpf/db";
-import { OPERATIONS_REVIEW_WHERE } from "./operations-run-read-model";
+import { OPERATIONS_REVIEW_WHERE, OPERATIONS_RUN_SELECT } from "./operations-run-read-model";
 import {
   RECENT_TOOL_LIMIT,
   WINDOWED_SOURCE_LIMIT,
@@ -206,19 +206,7 @@ describe("loadOperationsMapData", () => {
       },
       orderBy: { startedAt: "desc" },
       take: 40,
-      select: {
-        id: true,
-        taskRunId: true,
-        status: true,
-        source: true,
-        currentAgentId: true,
-        routeContext: true,
-        title: true,
-        startedAt: true,
-        completedAt: true,
-        a2aMetadata: true,
-        repeatedPatternKey: true,
-      },
+      select: OPERATIONS_RUN_SELECT,
     });
     expect(prisma.toolExecutionReceipt.findMany).toHaveBeenCalledWith({
       where: {},
