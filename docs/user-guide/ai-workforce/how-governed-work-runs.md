@@ -217,6 +217,13 @@ Denials come back as named reasons — a missing decision interaction, a missing
 tripped stop condition, a missing verification receipt — not as a generic refusal. A denial
 tells you what to fix.
 
+**A request for approval has a deadline, and a missed deadline is its own answer.** When a
+call needs a person, the approval request carries a window. If it closes with nobody
+answering, the request is settled as **expired** — not cancelled, which would say somebody
+decided, and not left sitting as though it were still live. The difference is what makes
+"how many decisions lapsed unanswered" a question the platform can answer at all, and an
+expired request is final: re-asking mints a new one rather than reviving it.
+
 ### The floors nothing crosses
 
 Two hold at every posture, every autonomy level, and every proactivity setting:
