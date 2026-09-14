@@ -145,6 +145,20 @@ document is not a coverage receipt.
 
 ## Risks, documentation and rollback
 
+### Semantic-review caller extension — 2026-09-14
+
+The coordinating task authorized applying the same verified contract correction
+to `routed-semantic-review.ts`. This caller bypasses the autonomous agentic loop:
+its primary reviewer and specialists parse a completed response from
+`routeAndCall`. They must explicitly request `requiresStreaming: false` while
+retaining `interactionMode: sync`. A regression exercises all five supported
+review branches and their effective request contracts. No capability, clearance,
+checkpoint, recovery budget or author/reviewer separation is changed.
+
+Every changed tree requires fresh canonical CI evidence and protected review.
+A recovered receipt for the earlier tree cannot authorize this extension. An
+uncertain provider outcome remains subject to supported operator recovery only.
+
 ### Authorized evidence-reuse recovery extension — 2026-09-14
 
 The operator's coordinating task explicitly authorized repairing the newly

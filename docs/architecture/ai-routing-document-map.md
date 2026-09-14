@@ -22,8 +22,8 @@ document, or seeded row does not override those sources.
 
 `RouteAndCallOptions.requiresStreaming` expresses token-streaming demand; it
 does not change `interactionMode` or authorize asynchronous result handles.
-Autonomous agentic loops set it to `false` because they consume completed text
-and tool results. Omitted values retain the existing sync-chat/background
+Autonomous agentic loops and semantic-review branches set it to `false` because
+they consume completed results. Omitted values retain the existing sync-chat/background
 defaults; explicit `true` still requires a streaming-capable endpoint.
 Tool capability, sensitive-data screening, provider policy and receipt checks
 continue to constrain eligible routes independently.
