@@ -711,7 +711,7 @@ strictly better than silent false progress.
 
 The receipt is earned instead from a governed write the worker had to make
 through MCP — `record_workroom_evidence`, a sanctioned mutator requiring
-`work_capsule_write` — carrying the stage it belongs to. The drive still owns the
+`workroom_evidence_write` (implied by `work_capsule_write`) — carrying the stage it belongs to. The drive still owns the
 advance; a worker cannot advance itself, only leave evidence the drive reads.
 Evidence must name the stage, be of a kind the stage declared, and post-date the
 dispatch; anything short of that re-dispatches.

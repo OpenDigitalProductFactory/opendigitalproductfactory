@@ -422,7 +422,7 @@ export const workCapsulesPack: ToolPack = {
     heartbeat_workroom: ["work_capsule_write"],
     update_workroom_status: ["work_capsule_write"],
     release_workroom_scope: ["work_capsule_write"],
-    record_workroom_evidence: ["work_capsule_write"],
+    record_workroom_evidence: ["workroom_evidence_write"],
     reassign_workroom_executor: ["work_capsule_write"],
     start_external_work: ["work_capsule_adopt"],
     record_agent_activity: ["work_capsule_write"],
@@ -435,7 +435,7 @@ export const workCapsulesPack: ToolPack = {
     heartbeat_capsule: ["work_capsule_write"],
     update_work_capsule_status: ["work_capsule_write"],
     release_capsule_scope: ["work_capsule_write"],
-    record_capsule_evidence: ["work_capsule_write"],
+    record_capsule_evidence: ["workroom_evidence_write"],
     reassign_capsule_executor: ["work_capsule_write"],
   },
 };

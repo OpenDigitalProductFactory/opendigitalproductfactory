@@ -110,7 +110,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The advisory source or the dependency manifest cannot be read — the run stops and reports, and does NOT raise findings from an empty read." },
       { kind: "budget", condition: "More than 100 findings would be raised in one run — the run stops and escalates rather than burying the ledger." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "advisories-reviewed", description: "Advisories correlated against the manifest in one run." },
       { key: "findings-raised", description: "Findings opened for advisories reaching this estate." },
@@ -167,7 +167,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The forge is unreachable or the declared policy is absent — the run stops and reports, and does NOT infer a drift from a failed read." },
       { kind: "budget", condition: "More than 50 drift findings in one run — the run stops and escalates." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "repositories-read", description: "Repositories whose enforced policy was read." },
       { key: "drifts-found", description: "Differences between enforced and declared policy." },
@@ -215,7 +215,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The credential inventory cannot be read — the run stops and reports, and never reports an unread credential as healthy." },
       { kind: "budget", condition: "More than 50 credentials would be reported in one run — the run stops and escalates." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "credentials-reported", description: "Credentials whose age and exposure status were reported." },
     ],
@@ -272,7 +272,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The forge is unreachable or returns no pull requests where the repository is known to have them — the run stops and reports rather than declaring the queue clear." },
       { kind: "budget", condition: "More than 100 pull requests in one run — the run stops and escalates." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "changes-classified", description: "Open pull requests classified in one run." },
       { key: "stalled-changes", description: "Changes found stalled past their threshold." },
@@ -330,7 +330,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The issue source or the backlog cannot be read — the run stops and reports, and never proposes items from an unread backlog." },
       { kind: "budget", condition: "More than 50 proposals in one run — the run stops and escalates rather than flooding triage." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "issues-classified", description: "Issues classified in one run." },
       { key: "duplicates-found", description: "Issues matched to an existing backlog item." },
@@ -387,7 +387,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The gate evidence store cannot be read — the run stops and reports, and never records an unread gate as satisfied." },
       { kind: "budget", condition: "More than 20 release candidates assessed in one run — the run stops and escalates." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "gates-evidenced", description: "Required gates with evidence collected." },
       { key: "gates-missing", description: "Required gates recorded as missing." },
@@ -436,7 +436,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The inquiry store cannot be read — the run stops and reports, and never drafts a reply to an inquiry it could not read." },
       { kind: "budget", condition: "More than 25 drafts in one run — the run stops and escalates rather than generating a queue nobody can review." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "inquiries-drafted", description: "Waiting inquiries given a grounded draft reply." },
       { key: "oldest-inquiry-age-days", description: "Age of the longest-waiting unanswered inquiry." },
@@ -493,7 +493,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The adopter records cannot be read — the run stops and reports, and never reports an unread relationship as healthy." },
       { kind: "budget", condition: "More than 100 relationships assessed in one run — the run stops and escalates." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "relationships-read", description: "Adopter relationships read in one run." },
       { key: "at-risk-relationships", description: "Relationships reported as needing attention." },
@@ -552,7 +552,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The finance substrate cannot be read — the run stops and reports, and NEVER presents an absent amount as zero." },
       { kind: "budget", condition: "More than 100 obligations reported in one run — the run stops and escalates." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "obligations-reported", description: "Bills and commitments reported inside the horizon." },
       { key: "unrecorded-gaps", description: "Named gaps where an obligation is expected but not recorded." },
@@ -608,7 +608,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "Supplier records cannot be read — the run stops and reports, and never infers a renewal from an unread agreement." },
       { kind: "budget", condition: "More than 50 agreements assessed in one run — the run stops and escalates." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "agreements-read", description: "Supplier agreements read in one run." },
       { key: "renewals-in-horizon", description: "Renewals falling inside the look-ahead window." },
@@ -666,7 +666,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The contribution history cannot be read — the run stops and reports, and never records a contributor it could not observe." },
       { kind: "budget", condition: "More than 200 contributors reconciled in one run — the run stops and escalates." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "contributors-reconciled", description: "Contributors reconciled against observed history." },
       { key: "missing-signoff", description: "Contributors flagged for a missing sign-off or licence fact." },
@@ -724,7 +724,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The coworker registry cannot be read — the run stops and reports, and never reports an unread coworker as fit." },
       { kind: "budget", condition: "More than 100 coworkers assessed in one run — the run stops and escalates." },
     ],
-    grants: ["tool:read"],
+    grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
       { key: "coworkers-measured", description: "Coworkers whose capability state was measured." },
       { key: "open-gaps", description: "Unresolved capability gaps reported." },

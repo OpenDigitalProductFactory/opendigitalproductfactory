@@ -163,6 +163,7 @@ export const PUBLIC_SCOPE_TO_GRANTS: Record<PublicScope, readonly string[]> = {
     "work_engagement_write",
     "work_room_write",
     "workbook_write",
+    "workroom_evidence_write",
   ],
   "dpf.build": [
     "build_evidence",
