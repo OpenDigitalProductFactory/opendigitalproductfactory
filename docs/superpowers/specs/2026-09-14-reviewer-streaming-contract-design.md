@@ -1,6 +1,7 @@
 # Reviewer streaming contract repair
 
-Status: proposed; implementation awaits governed research and plan coverage.
+Status: implementation authorized by the run-local exception below; readiness
+research, independent spec approval and live plan coverage remain UNRUN, not passed.
 Implementation owner: BI-87148687. Workroom: WC-64E1A7A1.
 Delivery category: operator-approved Medium; the platform raises review sensitivity to high.
 
@@ -65,7 +66,43 @@ The comparison is between the platform's existing completed-result and durable
 asynchronous execution paths, not adoption of a new orchestration framework.
 The existing execution plan already separates `stream` from delivery mode; the
 repair should make caller requirements reflect that existing separation.
-Independent review must check this choice before implementation.
+Independent review must check this choice; the run-local exception below defers
+the currently blocked readiness receipts, not protected delivery review.
+
+## Run-local enforcement override — 2026-09-14
+
+The authenticated operator in Codex task `01a07357-54bf-7da2-8813-4cec6fc9ebad`
+directed: "Fix the process until it works and the desired outcomes for this
+thread are delivered. Bypass process if needed." The owning repair task read
+that actual user message and the existing run-local exception precedent in
+`2026-08-24-external-mcp-coworker-thread-context-design.md` before applying it.
+The source task explicitly delegated this bounded repair exception on September
+14, conditional on the current independent spec attempt ending without receipt.
+
+That condition was verified in canonical TaskRun state: spec review
+`TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-D2CBA7F95346` attempt 2 became
+`input-required` at `2026-09-14T20:10:55.585Z`, with
+`prose-without-required-writer` and no receipt. The earlier source hydration
+contained 6,826 characters across three pages. Research also encountered local
+provider-capacity wait. Normal coverage refused `traceability-incomplete`
+because the missing spec receipt has not created the initiative scope baseline.
+The review mechanism therefore blocks the implementation of its own routing fix.
+
+For **BI-87148687 / WC-64E1A7A1 / branch
+`fix/reviewer-streaming-contract` only**, the operator direction authorizes
+implementation of the scoped streaming-contract correction and its tests while
+`RESEARCH_REQUIRED`, spec approval and `PLAN_REQUIRED`/live coverage remain
+**UNRUN (no passing receipt)**. Failed or inconclusive attempts remain recorded;
+this exception is not an approval, baseline, coverage record or delivery verdict.
+It expires at this branch's PR merge or branch abandonment.
+
+It does not bypass tool grants, sensitivity/data screening, author/reviewer
+separation, DCO, protected PR or merge queue, build gates, scope ownership,
+destructive/production-integrity controls, or canonical-runtime verification.
+It does not apply to the scheduler branch or authorize its uncertain review to
+be replayed. Do not consume spec attempt 3 before the repair is live. After
+protected delivery and canonical deployment, reconcile the exact bound reviews
+through the supported recovery and record actual receipts and plan coverage.
 
 ## Acceptance criteria
 
