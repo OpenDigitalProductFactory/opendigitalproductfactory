@@ -155,6 +155,14 @@ defaults to interactive admission, whose wait budget is two minutes instead of
 the bounded autonomous budget. The source-local regression reproduced both
 review branches observing `interactive` origin.
 
+Canonical database readback for recovery attempt 2 confirms the timing on
+2026-09-14 (UTC): the Change Reviewer adapter started at 20:54:44.635 and
+finished successfully at 20:59:25.756, taking 281,121 ms. The task had already
+become `input-required` / `provider-outcome-uncertain` at 20:56:44.645, only
+120,010 ms after the first adapter started; both review nodes remained running.
+This corroborates the second branch's interactive admission timeout while the
+first branch was still executing successfully, not a failed provider response.
+
 Bind the existing `withInferenceOrigin("autonomous", ...)` around semantic
 review execution after authority, evidence and generation checks. Both primary
 and specialist branches inherit the tag; unrelated callers remain interactive.
