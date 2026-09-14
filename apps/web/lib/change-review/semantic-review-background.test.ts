@@ -24,6 +24,7 @@ vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: 
 vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus: vi.fn() }));
 import { createSemanticReviewRequest } from "./semantic-review-request";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
+import { currentInferenceOrigin } from "@/lib/inference/inference-admission";
 
 const result = { decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Exact diff reviewed." };
 let row: Record<string, unknown>;
@@ -77,6 +78,25 @@ beforeEach(() => {
 });
 
 describe("durable semantic review worker", () => {
+  it("propagates autonomous inference origin through concurrent reviewer branches without leaking it", async () => {
+    const origins: string[] = [];
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
+      await Promise.all(["change-reviewer", "AGT-181"].map((agentId) => branch(agentId, async () => {
+        await Promise.resolve();
+        origins.push(currentInferenceOrigin());
+        return result;
+      })));
+      return result;
+    });
+    expect(currentInferenceOrigin()).toBe("interactive");
+    const pending = executePersistedSemanticReview("TR-1");
+    expect(currentInferenceOrigin()).toBe("interactive");
+    await pending;
+    expect(origins).toEqual(["autonomous", "autonomous"]);
+    expect(row.status).toBe("completed");
+    expect(currentInferenceOrigin()).toBe("interactive");
+  });
+
   it("requires the original requester and explicit uncertain-inference confirmation", async () => {
     row.status = "input-required";
     await expect(retryPersistedSemanticReview("TR-1", "other-user", true)).rejects.toThrow("authority");
