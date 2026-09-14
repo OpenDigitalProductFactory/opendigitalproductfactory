@@ -76,9 +76,9 @@ export async function createExpenseClaim(input: CreateExpenseClaimInput) {
 // ─── getExpenseClaim ──────────────────────────────────────────────────────────
 
 export async function getExpenseClaim(id: string) {
-  await requireUser();
+  const user = await requireUser();
 
-  return prisma.expenseClaim.findUnique({
+  const claim = await prisma.expenseClaim.findUnique({
     where: { id },
     include: {
       items: { orderBy: { sortOrder: "asc" } },
@@ -90,6 +90,28 @@ export async function getExpenseClaim(id: string) {
       },
     },
   });
+  if (!claim) return null;
+
+  // Same bar as listExpenseClaims: manage_finance sees any claim, everyone else
+  // sees only their own. Without this, requireUser alone let any signed-in user
+  // read any claim (BI-D43F1516).
+  const isManager = can(
+    { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+    "manage_finance",
+  );
+
+  if (isManager) return claim;
+
+  const employeeProfile = await prisma.employeeProfile.findFirst({
+    where: { userId: user.id },
+  });
+  if (!employeeProfile || employeeProfile.id !== claim.employeeId) return null;
+
+  // The claimant may read their own claim, never its approvalToken: the token IS
+  // the approval capability — respondToExpenseApproval accepts it with no
+  // session check, by design, for the emailed approver link. Serialising it into
+  // a page the claimant can load would let them approve their own expense.
+  return { ...claim, approvalToken: null };
 }
 
 // ─── listExpenseClaims ────────────────────────────────────────────────────────
