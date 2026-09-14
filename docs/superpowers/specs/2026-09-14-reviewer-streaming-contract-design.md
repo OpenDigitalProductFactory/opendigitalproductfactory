@@ -145,6 +145,26 @@ document is not a coverage receipt.
 
 ## Risks, documentation and rollback
 
+### Durable reviewer inference-origin extension — 2026-09-14
+
+The coordinating task authorized repairing the durable worker's missing
+inference-origin context after a second supported recovery returned uncertain.
+`executePersistedSemanticReview` dispatches concurrent reviewer branches without
+passing through the autonomous work runner. Its untagged async subtree therefore
+defaults to interactive admission, whose wait budget is two minutes instead of
+the bounded autonomous budget. The source-local regression reproduced both
+review branches observing `interactive` origin.
+
+Bind the existing `withInferenceOrigin("autonomous", ...)` around semantic
+review execution after authority, evidence and generation checks. Both primary
+and specialist branches inherit the tag; unrelated callers remain interactive.
+Do not alter semaphore capacity, interactive priority, deadlines, checkpoint
+fences or recovery budgets. The regression checks propagation across concurrent
+async branches and absence of context leakage. Existing inference-admission
+tests cover priority, timeout and release behavior. The remaining recovery
+attempt must not be spent on the old runtime, and no earlier receipt authorizes
+the changed tree.
+
 ### Semantic-review caller extension — 2026-09-14
 
 The coordinating task authorized applying the same verified contract correction

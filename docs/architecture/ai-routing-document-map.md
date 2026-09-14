@@ -31,6 +31,11 @@ continue to constrain eligible routes independently.
 Durable background operations remain a separate delivery contract. A caller
 must support their operation handles before selecting background mode.
 
+Durable semantic review binds autonomous inference origin around its reviewer
+execution subtree. Concurrent primary and specialist calls use the shared
+autonomous admission budget while interactive callers retain priority. This
+origin tag does not change synchronous result delivery or the review deadline.
+
 Reviewer delivery evidence remains bound to an immutable change and its
 Workroom. Canonical local-CI reuse can reconcile a missing Workroom link after
 executor identity is corrected, using only the recorded branch, commit and
