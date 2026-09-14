@@ -1,0 +1,15 @@
+{
+  "kind": "operator-authorized-bootstrap-readiness-disposition",
+  "backlogItemId": "BI-87148687",
+  "workroomId": "WC-E87250F6",
+  "branch": "fix/reviewer-origin-bootstrap",
+  "scope": "Only durable semantic-review autonomous inference origin and its regression test.",
+  "authorization": "Operator-directed coordinating task explicitly authorized the origin-only bootstrap and a checked-in readiness disposition on the verified circular dependency.",
+  "refusal": "IRD-ACDB631EF31E: initiative_not_ready; RESEARCH_REQUIRED, PLAN_REQUIRED",
+  "unrunObligations": ["research readiness receipt", "plan coverage receipt"],
+  "reason": "The current reviewer runtime cannot finish concurrent reviewer branches because its second branch inherits the interactive admission timeout. This minimal bootstrap repairs that runtime while retaining an independent single-primary review of these exact bytes before publication.",
+  "protectedRequirements": ["independent exact-tree failure review", "canonical integration gate", "DCO", "PR protection", "merge queue", "grants and sensitivity clearance", "canonical self-upgrade"],
+  "expiresWhen": "This bootstrap PR merges or the branch is abandoned.",
+  "docsImpact": "The full follow-up repair on fix/reviewer-streaming-contract at ac05ff847d71f2fdc00b51c2de2e1c96e828b573 already owns the architecture documentation and design with verified timing evidence. Deliver those immediately after bootstrap deployment; this bootstrap does not claim documentation or the original objective complete.",
+  "next": "Run regression checks and canonical exact-tree CI, wait for no nonprod leases, obtain one independent primary review, then protected PR/queue/self-upgrade and live verification. Do not spend the old uncertain run's remaining recovery attempt on the old runtime."
+}
