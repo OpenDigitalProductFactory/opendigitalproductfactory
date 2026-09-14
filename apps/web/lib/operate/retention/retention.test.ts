@@ -40,6 +40,7 @@ import {
   INDUSTRY_RETENTION_FLOORS,
 } from "./industry-floors";
 import { runRetentionSweep } from "./execute";
+import { retentionRunError, retentionRunStatus } from "./run";
 import { SCHEDULED_JOB_CATALOG } from "../scheduled-jobs/catalog";
 
 describe("retention registry invariants", () => {
@@ -204,7 +205,7 @@ function makeFakeModel(
   name: string,
   remaining: number,
   sharedLog: string[],
-  opts: { throwOn?: "findMany" | "deleteMany" } = {},
+  opts: { throwOn?: "findMany" | "deleteMany"; stallDeletes?: boolean } = {},
 ) {
   const state: FakeModelState = { remaining, log: sharedLog, calls: [] };
   let counter = 0;
@@ -221,6 +222,9 @@ function makeFakeModel(
       state.calls.push({ op: "deleteMany", where });
       sharedLog.push(`${name}.deleteMany`);
       if (opts.throwOn === "deleteMany") throw new Error(`${name} deleteMany boom`);
+      // Reproduces the incident: the statement returns having removed nothing
+      // while the rows stay eligible (an unindexed cascade that cannot finish).
+      if (opts.stallDeletes) return { count: 0 };
       const idClause = where?.id as { in?: string[] } | undefined;
       if (idClause?.in) {
         const n = idClause.in.length;
@@ -241,13 +245,17 @@ function makeFakeModel(
 
 function makeFakePrisma(
   models: Record<string, number>,
-  opts: { throwOn?: Record<string, "findMany" | "deleteMany"> } = {},
+  opts: {
+    throwOn?: Record<string, "findMany" | "deleteMany">;
+    stallDeletes?: Record<string, boolean>;
+  } = {},
 ) {
   const sharedLog: string[] = [];
   const built: Record<string, ReturnType<typeof makeFakeModel>> = {};
   for (const [name, remaining] of Object.entries(models)) {
     built[name] = makeFakeModel(name, remaining, sharedLog, {
       throwOn: opts.throwOn?.[name],
+      stallDeletes: opts.stallDeletes?.[name],
     });
   }
   const prisma = {
@@ -433,4 +441,117 @@ describe("legal hold (BI-90A8D153 GAP 2)", () => {
     expect(legalHoldExclusion("patientProfile")).toEqual({ legalHold: { not: true } });
     expect(legalHoldExclusion("toolExecution")).toEqual({});
   });
+});
+
+describe("retention verifies its own promise (residue assertion)", () => {
+  const NOW = new Date("2026-06-14T04:00:00.000Z");
+
+  // A declared window is a promise. The sweep used to report ok whenever nothing
+  // THREW -- so a purge that deleted zero rows while thousands stayed eligible
+  // looked healthy for months. These pin the difference between "I ran" and
+  // "I did what my policy says".
+
+  it("reports a policy that ran, deleted nothing, and still has eligible rows as STALLED", async () => {
+    const prisma = makeFakePrisma({ tokenUsage: 5 }, { stallDeletes: { tokenUsage: true } });
+
+    const report = await runRetentionSweep({
+      prisma, now: NOW, dryRun: false, industryKey: null,
+      policies: POLICIES, onlyModels: ["tokenUsage"], batchSize: 1000, perPolicyCap: 100_000,
+    });
+
+    expect(report.results[0].affected).toBe(0);
+    expect(report.results[0].residualEligible).toBe(5);
+    expect(report.hasStalledPolicy).toBe(true);
+    expect(report.incompletePolicies).toEqual([
+      { model: "tokenUsage", residualEligible: 5, affected: 0, capped: false, stalled: true },
+    ]);
+    // errorCount is still 0 — nothing threw. That is exactly the blind spot.
+    expect(report.errorCount).toBe(0);
+    expect(retentionRunStatus(report)).toBe("error");
+    expect(retentionRunError(report)).toContain("tokenUsage purged 0 rows but 5 remain eligible");
+  });
+
+  it("does NOT call a capped policy stalled — catching up is the designed behaviour", async () => {
+    const prisma = makeFakePrisma({ toolExecution: 2300 });
+
+    const report = await runRetentionSweep({
+      prisma, now: NOW, dryRun: false, industryKey: null,
+      policies: POLICIES, onlyModels: ["toolExecution"], batchSize: 1000, perPolicyCap: 1000,
+    });
+
+    expect(report.results[0].affected).toBe(1000);
+    expect(report.results[0].capped).toBe(true);
+    expect(report.results[0].residualEligible).toBe(1300);
+    expect(report.incompletePolicies[0].stalled).toBe(false);
+    expect(report.hasStalledPolicy).toBe(false);
+    // A fresh install with years of logs catches up over several nights.
+    expect(retentionRunStatus(report)).toBe("ok");
+    expect(retentionRunError(report)).toBeNull();
+  });
+
+  it("reports a fully drained policy as clean, with zero residue", async () => {
+    const prisma = makeFakePrisma({ toolExecution: 2300 });
+
+    const report = await runRetentionSweep({
+      prisma, now: NOW, dryRun: false, industryKey: null,
+      policies: POLICIES, onlyModels: ["toolExecution"], batchSize: 1000, perPolicyCap: 100_000,
+    });
+
+    expect(report.results[0].affected).toBe(2300);
+    expect(report.results[0].residualEligible).toBe(0);
+    expect(report.incompletePolicies).toEqual([]);
+    expect(retentionRunStatus(report)).toBe("ok");
+  });
+
+  it("records unknown rather than clean when a policy threw", async () => {
+    const prisma = makeFakePrisma({ tokenUsage: 10 }, { throwOn: { tokenUsage: "deleteMany" } });
+
+    const report = await runRetentionSweep({
+      prisma, now: NOW, dryRun: false, industryKey: null,
+      policies: POLICIES, onlyModels: ["tokenUsage"], batchSize: 1000, perPolicyCap: 100_000,
+    });
+
+    // "I could not check" must never be recorded as "nothing left".
+    expect(report.results[0].residualEligible).toBeNull();
+    expect(report.incompletePolicies).toEqual([]);
+    expect(report.errorCount).toBe(1);
+    expect(retentionRunStatus(report)).toBe("error");
+  });
+
+  it("does not measure residue on a dry run, which has deleted nothing", async () => {
+    const prisma = makeFakePrisma({ tokenUsage: 42 });
+
+    const report = await runRetentionSweep({
+      prisma, now: NOW, dryRun: true, industryKey: null,
+      policies: POLICIES, onlyModels: ["tokenUsage"],
+    });
+
+    expect(report.results[0].residualEligible).toBeNull();
+    expect(report.incompletePolicies).toEqual([]);
+    expect(retentionRunStatus(report)).toBe("ok");
+  });
+});
+
+describe("retention purge loop terminates", () => {
+  const NOW = new Date("2026-06-14T04:00:00.000Z");
+
+  it("stops instead of spinning when a full page deletes nothing", async () => {
+    // Without the no-progress guard this never returns: findMany keeps handing
+    // back a full page of the same undeletable ids and `deleted` never advances
+    // toward the cap, so the sweep hangs and every later policy is stranded.
+    const prisma = makeFakePrisma(
+      { tokenUsage: 50_000 },
+      { stallDeletes: { tokenUsage: true } },
+    );
+
+    const report = await runRetentionSweep({
+      prisma, now: NOW, dryRun: false, industryKey: null,
+      policies: POLICIES, onlyModels: ["tokenUsage"], batchSize: 1000, perPolicyCap: 100_000,
+    });
+
+    expect(report.results[0].affected).toBe(0);
+    // Exactly one attempt, then stop — not a loop.
+    expect(prisma.sharedLog.filter((l) => l === "tokenUsage.deleteMany")).toHaveLength(1);
+    expect(report.hasStalledPolicy).toBe(true);
+  }, 10_000);
 });
