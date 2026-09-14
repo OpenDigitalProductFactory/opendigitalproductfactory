@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "Index-only change: no field is added, removed, retyped or repurposed, so every field resolution below is an empty set by construction and no data subject, provenance or policy vector changes. Adds four btree indexes on foreign-key columns the Estate Discovery retention purge cascades through: DiscoveredRelationship.fromDiscoveredItemId and .toDiscoveredItemId (ON DELETE CASCADE from DiscoveredItem, both previously unindexed) and InventoryEntity/InventoryRelationship.lastConfirmedRunId (ON DELETE SET NULL from DiscoveryRun). Postgres must locate referencing children before deleting a parent; with no leading-column index it seq-scanned the 566k-row DiscoveredRelationship table once per deleted DiscoveredItem, so the nightly 04:00 UTC retention sweep pinned two cores for 74+ minutes and deleted zero rows. DATA EFFECT: this change RESTORES the declared 30d retention window on DiscoveryRun (@dpf retention=30d, telemetry-bounded) which was silently not being enforced — the raw discovery log had grown unbounded, the exact defect BI-BFFB9211 records. The first successful sweep after this lands will purge the accumulated backlog (measured at the time of writing: 1,051 eligible runs, 90,537 DiscoveredItem rows, ~7.5% of the table) via the existing, unchanged cascade. That deletion is the declared policy finally executing, not new data loss: nothing reads these raw rows back (InventoryEntity/InventoryRelationship is the deduplicated truth), runs that are in-flight or last-confirming are excluded by RETENTION_OVERRIDES, and legal-hold rows are excluded by legalHoldExclusion. Migration 20260914060000_discovery_cascade_fk_indexes is additive and idempotent (IF NOT EXISTS), alters no column, constraint or row, and applies cleanly against any existing data state.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "DiscoveredRelationship",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "InventoryEntity",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "InventoryRelationship",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    }
+  ]
+}
