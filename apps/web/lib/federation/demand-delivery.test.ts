@@ -307,3 +307,75 @@ describe("retryDelayMs", () => {
     expect(retryDelayMs(20, () => 0.5)).toBe(30 * 60_000);
   });
 });
+
+describe("dispatchDueDemand queue churn (BI-5993AE7F)", () => {
+  // The legacy-mirror bridge used to call ensureFederationDeliveryJob for EVERY
+  // pending mirror on EVERY sweep, and each of those re-upserted the same single
+  // WorkQueue row. Against a backlog that cannot drain while the peer is offline
+  // that measured ~708 writes/sec on a five-row table. These pin both halves of
+  // the fix: resolve the queue once, and bridge only mirrors that lack a job.
+  function churnDb(pendingMirrorIds: string[], alreadyBridged: string[]) {
+    const workQueueUpsert = vi.fn().mockResolvedValue({ id: "queue-db-id" });
+    const workItemUpsert = vi.fn().mockResolvedValue({ itemId: "job-x" });
+    const workItemFindMany = vi.fn()
+      // 1st: the bridge's "which of these mirrors already have a job" probe.
+      .mockResolvedValueOnce(alreadyBridged.map((sourceId) => ({
+        itemId: `job-${sourceId}`, sourceId, attemptCount: 0,
+        createdAt: new Date("2026-07-20T06:00:00.000Z"), claimedAt: null,
+      })))
+      // 2nd: the due-jobs query. Nothing due — this test is about the bridge.
+      .mockResolvedValueOnce([]);
+    return {
+      db: {
+        workQueue: { upsert: workQueueUpsert },
+        workItem: {
+          upsert: workItemUpsert, update: vi.fn().mockResolvedValue({}),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }), findMany: workItemFindMany,
+        },
+        federationLink: { findMany: vi.fn().mockResolvedValue([]) },
+        federatedRecordMirror: {
+          findMany: vi.fn()
+            .mockResolvedValueOnce(pendingMirrorIds.map((mirrorId) => ({ mirrorId })))
+            .mockResolvedValue([]),
+          update: vi.fn().mockResolvedValue({}), findUnique: vi.fn(), create: vi.fn(),
+        },
+      } as unknown as DemandDeliveryDb,
+      workQueueUpsert,
+      workItemUpsert,
+    };
+  }
+
+  const now = new Date("2026-07-20T06:10:00.000Z");
+
+  it("never touches the queue row when every pending mirror already has a job", async () => {
+    const { db, workQueueUpsert, workItemUpsert } = churnDb(["m1", "m2", "m3"], ["m1", "m2", "m3"]);
+
+    await dispatchDueDemand(db, { now });
+
+    // Steady state with an unreachable peer: the backlog cannot drain, so this
+    // path runs every sweep forever. It must cost zero writes.
+    expect(workQueueUpsert).not.toHaveBeenCalled();
+    expect(workItemUpsert).not.toHaveBeenCalled();
+  });
+
+  it("resolves the queue once, not once per unbridged mirror", async () => {
+    const { db, workQueueUpsert, workItemUpsert } = churnDb(["m1", "m2", "m3"], []);
+
+    await dispatchDueDemand(db, { now });
+
+    expect(workQueueUpsert).toHaveBeenCalledTimes(1);
+    expect(workItemUpsert).toHaveBeenCalledTimes(3);
+  });
+
+  it("bridges only the mirrors that are missing a job", async () => {
+    const { db, workQueueUpsert, workItemUpsert } = churnDb(["m1", "m2", "m3"], ["m1", "m3"]);
+
+    await dispatchDueDemand(db, { now });
+
+    expect(workQueueUpsert).toHaveBeenCalledTimes(1);
+    expect(workItemUpsert).toHaveBeenCalledTimes(1);
+    expect(workItemUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { sourceKey: "federation-demand:m2" },
+    }));
+  });
+});
