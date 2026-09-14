@@ -12,13 +12,14 @@ import { describe, expect, it } from "vitest";
 import {
   COORDINATOR_ROLES,
   planCoordinatorAppointment,
+  rolesAfterStandDown,
   type AppointCoordinatorDb,
 } from "./appoint-room-coordinator";
 
 function db(opts: {
   room?: { id: string; capsuleId: string } | null;
   principal?: { id: string; displayName: string } | null;
-  participants?: Array<{ principalId: string; roles: string[] }>;
+  participants?: Array<{ id?: string; principalId: string; roles: string[] }>;
 }): AppointCoordinatorDb {
   return {
     workroom: {
@@ -30,7 +31,12 @@ function db(opts: {
         opts.principal === undefined ? { id: "pid-1", displayName: "Security Engineer" } : opts.principal,
     },
     workroomParticipant: {
-      findMany: async () => opts.participants ?? [],
+      findMany: async () =>
+        (opts.participants ?? []).map((participant, i) => ({
+          id: participant.id ?? `wcp-${i}`,
+          principalId: participant.principalId,
+          roles: participant.roles,
+        })),
     },
   };
 }
@@ -90,6 +96,79 @@ describe("planCoordinatorAppointment", () => {
       replaceExisting: true,
     });
     expect(plan.ok).toBe(true);
+  });
+
+  // BI-061B2BC0: replaceExisting used to authorize the appointment and then the
+  // caller wrote ONLY the appointee, so a "hand-over" produced a room with two
+  // active coordinators — which conformance treats as blocking. The plan must
+  // name who to stand down, or the caller cannot complete the hand-over.
+  it("names the incumbent to stand down on an explicit hand-over", async () => {
+    const plan = await planCoordinatorAppointment({
+      db: db({
+        participants: [{ id: "wcp-old", principalId: "other", roles: ["coordinator"] }],
+      }),
+      ...base,
+      replaceExisting: true,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.data.standDown).toEqual([
+      { participantId: "wcp-old", principalId: "other", roles: ["coordinator"] },
+    ]);
+  });
+
+  it("stands down every incumbent when a room already carries several", async () => {
+    // The repair case: a room that already went wrong must converge to one.
+    const plan = await planCoordinatorAppointment({
+      db: db({
+        participants: [
+          { id: "wcp-a", principalId: "a", roles: ["coordinator"] },
+          { id: "wcp-b", principalId: "b", roles: ["coordinator", "reviewer"] },
+        ],
+      }),
+      ...base,
+      replaceExisting: true,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.data.standDown.map((p) => p.participantId)).toEqual(["wcp-a", "wcp-b"]);
+  });
+
+  it("stands nobody down when re-appointing the principal who already owns it", async () => {
+    const plan = await planCoordinatorAppointment({
+      db: db({ participants: [{ principalId: "pid-1", roles: ["coordinator"] }] }),
+      ...base,
+      replaceExisting: true,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.data.standDown).toEqual([]);
+  });
+
+  it("names nobody to stand down when the room had no coordinator", async () => {
+    const plan = await planCoordinatorAppointment({ db: db({}), ...base });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.data.standDown).toEqual([]);
+  });
+});
+
+describe("rolesAfterStandDown", () => {
+  it("keeps the principal in the room as a contributor when coordinator was their only role", () => {
+    // Demote, do not evict: they were working in the room and usually still are,
+    // and a participant with an empty role set is not a state the roster models.
+    expect(rolesAfterStandDown(["coordinator"])).toEqual(["contributor"]);
+  });
+
+  it("keeps every other role they held", () => {
+    expect(rolesAfterStandDown(["coordinator", "reviewer", "approver"])).toEqual([
+      "reviewer",
+      "approver",
+    ]);
+  });
+
+  it("is a no-op for someone who was never coordinator", () => {
+    expect(rolesAfterStandDown(["reviewer"])).toEqual(["reviewer"]);
   });
 
   it("is idempotent for the principal who already owns the room", async () => {
