@@ -53,7 +53,12 @@ export async function claimFederationDeliveryJob(
   return true;
 }
 
-async function ensureQueue(db: FederationDeliveryQueueDb): Promise<{ id: string }> {
+/** Resolve (or create) the single federation delivery queue row.
+ *  Exported so a sweep can resolve it ONCE rather than once per item — see
+ *  ensureFederationDeliveryJob's queueId parameter (BI-5993AE7F). */
+export async function ensureFederationDeliveryQueue(
+  db: FederationDeliveryQueueDb,
+): Promise<{ id: string }> {
   return db.workQueue.upsert({
     where: { queueId: FEDERATION_DELIVERY_QUEUE_ID },
     create: {
@@ -73,8 +78,12 @@ export async function ensureFederationDeliveryJob(
   db: FederationDeliveryQueueDb,
   mirrorId: string,
   now = new Date(),
+  /** Pass a queue id already resolved for this sweep. Without it every call
+   *  re-upserts the same single queue row — ~708 writes/sec was measured on a
+   *  ~2,000-item backlog (BI-5993AE7F). */
+  queueId?: string,
 ): Promise<{ itemId: string }> {
-  const queue = await ensureQueue(db);
+  const queue = queueId ? { id: queueId } : await ensureFederationDeliveryQueue(db);
   return db.workItem.upsert({
     where: { sourceKey: `federation-demand:${mirrorId}` },
     create: {
@@ -99,7 +108,7 @@ export async function scheduleFederationDeliveryJob(
   now = new Date(),
   telemetry: TelemetryWriter = recordQueueTransition,
 ): Promise<{ itemId: string }> {
-  const queue = await ensureQueue(db);
+  const queue = await ensureFederationDeliveryQueue(db);
   const item = await db.workItem.upsert({
     where: { sourceKey: `federation-demand:${mirrorId}` },
     create: {

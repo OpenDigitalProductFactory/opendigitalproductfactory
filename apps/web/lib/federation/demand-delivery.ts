@@ -19,6 +19,7 @@ import { decryptPeerToken } from "./outbound";
 import { incrementVersionVector, isVersionVector, type VersionVector } from "./version-vector";
 import {
   ensureFederationDeliveryJob,
+  ensureFederationDeliveryQueue,
   claimFederationDeliveryJob,
   finishFederationDeliveryJob,
   scheduleFederationDeliveryJob,
@@ -265,16 +266,40 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   sendPosture?: SendPosture;
 } = {}): Promise<{ attempted: number; delivered: number; deferred: number; deadLettered: number }> {
   const now = options.now ?? new Date();
+  if (!db.workItem.findMany) throw new Error("Federation delivery queue reader is unavailable.");
   // Safe rolling migration: every legacy pending mirror gets one idempotent
   // canonical queue job. Existing jobs retain their own retry clock.
+  //
+  // BI-5993AE7F: this bridge used to call ensureFederationDeliveryJob for EVERY
+  // pending mirror on EVERY sweep, and each call re-upserted the same single
+  // WorkQueue row. Against a backlog that cannot drain while the peer is offline
+  // (~2,000 items) that measured ~708 writes/sec on a five-row table and ~1,800
+  // txn/sec, enough to pin two cores. Two changes make it a true one-shot:
+  // resolve the queue ONCE per sweep, and only bridge mirrors that do not
+  // already have a job — so in steady state the loop below is empty.
   const pendingMirrors = await db.federatedRecordMirror.findMany({
     where: {
       recordType: { in: [...FEDERATION_OUTBOX_RECORD_TYPES] }, canonicalSide: "local", syncStatus: "pending",
     },
     select: { mirrorId: true },
   });
-  for (const row of pendingMirrors) await ensureFederationDeliveryJob(db, row.mirrorId, now);
-  if (!db.workItem.findMany) throw new Error("Federation delivery queue reader is unavailable.");
+  if (pendingMirrors.length > 0) {
+    const bridged = await db.workItem.findMany({
+      where: {
+        sourceType: "federation-demand-delivery",
+        sourceId: { in: pendingMirrors.map((row) => row.mirrorId) },
+      },
+      select: { sourceId: true },
+    });
+    const haveJob = new Set(bridged.flatMap((row) => (row.sourceId ? [row.sourceId] : [])));
+    const unbridged = pendingMirrors.filter((row) => !haveJob.has(row.mirrorId));
+    if (unbridged.length > 0) {
+      const queue = await ensureFederationDeliveryQueue(db);
+      for (const row of unbridged) {
+        await ensureFederationDeliveryJob(db, row.mirrorId, now, queue.id);
+      }
+    }
+  }
   const jobs = await db.workItem.findMany({
     where: {
       sourceType: "federation-demand-delivery",
