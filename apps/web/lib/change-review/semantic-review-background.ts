@@ -13,6 +13,7 @@ import { runSemanticChangeReview } from "./semantic-change-review-operation";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
 import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
 import { validateFailureAnalysis } from "./failure-analysis";
+import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
 import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget } from "./semantic-review-recovery-policy";
@@ -191,7 +192,7 @@ export async function executePersistedSemanticReview(taskRunId: string) {
     progressPayload: progress(row, { state: "executing", generation }) });
   if (!owned) return { taskRunId, status: "duplicate" };
   return withHeartbeatTicker(taskRunId, async () => {
-    const outcome = await runSemanticChangeReview(packet.input, { dispatch: (prompt, context) =>
+    const outcome = await withInferenceOrigin("autonomous", () => runSemanticChangeReview(packet.input, { dispatch: (prompt, context) =>
       dispatchRoutedSemanticReview(prompt, context, async (agentId, execute) => {
         try { return await checkpointBranch(row, packet, generation, agentId, execute); }
         catch (error) {
@@ -200,7 +201,7 @@ export async function executePersistedSemanticReview(taskRunId: string) {
               reason: "provider-outcome-uncertain", action: "Reconcile the recorded branch before authorizing recovery." }) } });
           throw error;
         }
-      }) });
+      }) }));
     const persisted = await prisma.$transaction(async (tx) => {
       if (Date.now() >= Date.parse(packet.deadlineAt)) {
         await tx.taskRun.updateMany({ where: fence(taskRunId, generation), data: {
