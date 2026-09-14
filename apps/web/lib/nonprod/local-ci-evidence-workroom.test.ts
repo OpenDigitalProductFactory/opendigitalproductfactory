@@ -14,7 +14,7 @@ const evidence = { id: "evidence-1", operationType: "local_integration_ci",
 const tx = { externalEvidenceRecord: { findUnique: vi.fn(), updateMany: vi.fn() },
   workroom: { findMany: vi.fn() }, nonProductionEnvironmentLease: { update: vi.fn() } };
 const settle = () => settleTerminalGateLease({ tx: tx as never, lease: lease as never,
-  claimKey: lease.claimKey, now, ttlMs: 60_000 });
+  claimKey: lease.claimKey, now: now, ttlMs: 60_000 });
 
 describe("canonical CI reuse Workroom reconciliation", () => {
   beforeEach(() => {
