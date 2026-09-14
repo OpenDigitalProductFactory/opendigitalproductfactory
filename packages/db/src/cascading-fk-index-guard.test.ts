@@ -109,45 +109,11 @@ function cascadingRelations(model: string, body: string[]): RelationField[] {
  * backlog; delete an entry here in the same PR that adds its index.
  */
 const KNOWN_GAPS = new Set<string>([
-  "AccountInvite.accountId", // Cascade · core-identity.prisma
-  "Application.currentStageId", // SetNull · workforce.prisma
-  "AssuranceRun.releaseBundleId", // SetNull · build-delivery.prisma
-  "AuthorizationDecisionLog.patientSubjectPrincipalId", // SetNull · core-identity.prisma
-  "BeautyResourceService.itemId", // Cascade · verticals-beauty-hospitality.prisma
-  "BomDocument.artifactRevisionId", // SetNull · build-delivery.prisma
-  "BomDocument.assuranceRunId", // SetNull · build-delivery.prisma
-  "BookingHold.itemId", // Cascade · verticals-storefront.prisma
-  "BookingHold.providerId", // Cascade · verticals-storefront.prisma
-  "CatalogPriceListEntry.catalogItemId", // Cascade · product-portfolio.prisma
-  "CatalogPromotionItem.catalogItemId", // Cascade · product-portfolio.prisma
-  "ContributorInventorySnapshot.syncRunId", // Cascade · build-delivery.prisma
-  "DiscoveryFingerprintObservation.approvedRuleId", // SetNull · asset-intelligence.prisma
-  "DocumentTag.documentId", // Cascade · knowledge-docs.prisma
-  "EaReferenceAssessment.modelElementId", // Cascade · ea-architecture.prisma
-  "EdgeNode.subscriptionId", // SetNull · edge-federation.prisma
-  "EpicPortfolio.epicId", // Cascade · work-coordination.prisma
-  "IdentityResolutionLog.fingerprintRuleId", // SetNull · asset-intelligence.prisma
-  "InventoryRelationship.toEntityId", // Cascade · asset-intelligence.prisma
-  "KnowledgeArticlePortfolio.articleId", // Cascade · knowledge-docs.prisma
-  "KnowledgeArticleProduct.articleId", // Cascade · knowledge-docs.prisma
-  "MemberEquityEntry.memberAccountId", // Cascade · verticals-community.prisma
-  "PatientAuthority.revokedByPrincipalId", // SetNull · verticals-care.prisma
-  "PatientAuthority.verifiedByPrincipalId", // SetNull · verticals-care.prisma
-  "PatientConsentDirective.revokedByPrincipalId", // SetNull · verticals-care.prisma
-  "PatientConsentDirective.verifiedByPrincipalId", // SetNull · verticals-care.prisma
-  "PatientProfile.recordedByPrincipalId", // SetNull · verticals-care.prisma
-  "PatientProfile.verifiedByPrincipalId", // SetNull · verticals-care.prisma
-  "RentalAgreement.storefrontItemId", // Cascade · verticals-storefront.prisma
-  "RuntimeVerification.gitPromotionCandidateId", // SetNull · build-delivery.prisma
-  "ScheduledInterview.stageId", // SetNull · workforce.prisma
-  "Scorecard.interviewId", // SetNull · workforce.prisma
-  "TaxLiabilityEntry.periodId", // SetNull · finance.prisma
-  "WeightAdjustmentProposal.ruledByUserId", // SetNull · decision-governance.prisma
-  "WikiPageLink.fromPageId", // Cascade · knowledge-docs.prisma
-  "WikiPageSource.pageId", // Cascade · knowledge-docs.prisma
-  "WorkbookRow.createdById", // SetNull · knowledge-docs.prisma
-  "WorkbookShare.userId", // Cascade · knowledge-docs.prisma
-  "WorkbookView.createdById", // SetNull · knowledge-docs.prisma
+  // EMPTY, and it should stay that way (BI-402CB8FE closed all 39 original
+  // entries). The invariant now holds with no exemptions: a new cascading FK
+  // must arrive with a leading-column index. If you are about to add an entry
+  // here, add the index instead -- the cost is one btree, and the alternative
+  // is a seq scan of the whole child table once per deleted parent row.
 ]);
 
 interface RawViolation {

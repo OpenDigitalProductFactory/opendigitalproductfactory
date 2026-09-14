@@ -291,6 +291,7 @@ model RuntimeVerification {
   @@index([featureBuildId, kind, status])
   @@index([workCapsuleId, kind, status])
   @@index([kind, status])
+  @@index([gitPromotionCandidateId])
 }
 
 // Per-run audit row for the contributor-inventory-sync Inngest cron. Mirrors
@@ -353,6 +354,7 @@ model ContributorInventorySnapshot {
   @@unique([source, sourceKey, syncRunId])
   @@index([source, syncRunId])
   @@index([source, fetchedAt])
+  @@index([syncRunId])
 }
 
 model CodeGraphIndexState {
@@ -705,6 +707,7 @@ model AssuranceRun {
   @@index([buildId, startedAt(sort: Desc)])
   @@index([digitalProductId, startedAt(sort: Desc)])
   @@index([adapterKey, status])
+  @@index([releaseBundleId])
 }
 
 model BomDocument {
@@ -738,6 +741,8 @@ model BomDocument {
   @@index([digitalProductId, generatedAt(sort: Desc)])
   @@index([digest])
   @@index([status])
+  @@index([artifactRevisionId])
+  @@index([assuranceRunId])
 }
 
 model BomComponent {

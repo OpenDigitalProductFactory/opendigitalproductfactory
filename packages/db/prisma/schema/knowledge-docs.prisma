@@ -124,6 +124,7 @@ model DocumentTag {
 
   @@id([documentId, tag])
   @@index([tag])
+  @@index([documentId])
 }
 
 model DocumentAccessGrant {
@@ -277,6 +278,7 @@ model KnowledgeArticleProduct {
 
   @@id([articleId, digitalProductId])
   @@index([digitalProductId]) // FK-leading (join table): product-side lookups; @@id only covers articleId
+  @@index([articleId])
 }
 
 model KnowledgeArticlePortfolio {
@@ -287,6 +289,7 @@ model KnowledgeArticlePortfolio {
 
   @@id([articleId, portfolioId])
   @@index([portfolioId]) // FK-leading (join table): portfolio-side lookups; @@id only covers articleId
+  @@index([articleId])
 }
 
 // ─── EP-WIKI-001: Platform Kernel Wiki + Per-Org Overlay ─────────────────────
@@ -478,6 +481,7 @@ model WikiPageLink {
 
   @@id([fromPageId, toPageId])
   @@index([toPageId])
+  @@index([fromPageId])
 }
 
 model WikiPageSource {
@@ -488,6 +492,7 @@ model WikiPageSource {
 
   @@id([pageId, sourceId])
   @@index([sourceId]) // FK-leading (join table): source-side lookups; @@id only covers pageId
+  @@index([pageId])
 }
 
 /// Knowledge-base ingest audit. Operational; 90 days.
@@ -561,6 +566,7 @@ model WorkbookShare {
   updatedAt  DateTime @updatedAt
 
   @@unique([workbookId, userId])
+  @@index([userId])
 }
 
 model WorkbookTable {
@@ -618,6 +624,7 @@ model WorkbookRow {
   updatedAt   DateTime           @updatedAt
 
   @@index([tableId, position])
+  @@index([createdById])
 }
 
 model WorkbookCell {
@@ -681,6 +688,7 @@ model WorkbookView {
   updatedAt   DateTime      @updatedAt
 
   @@index([tableId, createdById])
+  @@index([createdById])
 }
 
 /// BET-5 (BI-A1E864A5): pgvector-backed vector storage, replacing Qdrant. The `embedding`

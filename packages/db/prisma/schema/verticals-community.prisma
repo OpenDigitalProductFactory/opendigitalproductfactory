@@ -110,4 +110,5 @@ model MemberEquityEntry {
 
   @@index([organizationId, memberAccountId])
   @@index([organizationId, fiscalYear])
+  @@index([memberAccountId])
 }
