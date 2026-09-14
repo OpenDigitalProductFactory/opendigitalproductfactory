@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Reviewer streaming contract repair
 
 Status: implementation authorized by the run-local exception below; readiness
