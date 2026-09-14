@@ -299,17 +299,22 @@ as named reasons from `policy-envelope.ts` — including `missing_decision_inter
 
 ### Where the declared shapes live ⟦runtime: 2026-09-02⟧
 
-The shape registry spans three modules, merged into `ALL_SHAPES` at runtime:
+The shape registry spans SEVEN modules, merged into `ALL_SHAPES` at runtime:
 
 | module | holds |
 |---|---|
 | `work-shapes.ts` | the contract — types, validation, cycle projection — and the anchor compliance shape |
 | `standing-operations-shapes.ts` | the standing operations a BUSINESS runs |
 | `coworker-standing-shapes.ts` | the standing work the platform's own coworkers run |
+| `coworker-standing-shapes-operate.ts` | coworker standing work in the `operate` stream — split when the file above reached its 800-LOC ceiling |
+| `coworker-standing-shapes-craft.ts` | the read-and-propose craft roles, whose shapes all close on a human gate because their grants withhold the write |
 | `delivery-shapes.ts` | the five delivery shapes: size and what each owes before it is done (BI-B90F7CBB) |
 | `orchestration-shapes.ts` | one cycle per IT4IT value stream, for the value-stream orchestrators |
 
-A static reader must consult all four. The capability measure read only the first
+A static reader must consult all seven. (This sentence and the count above have
+themselves drifted twice — the table said "three" while listing five. That is the
+same failure the paragraph below describes, in the doc that describes it, which is
+why the count is now a guarded list rather than prose.) The capability measure read only the first
 for a period and reported seven fully-bounded agents as having no declared work
 shape at all — an unbounded coworker is what that reads as, so the under-report was
 the more dangerous direction. `SHAPE_SOURCE_FILES` in

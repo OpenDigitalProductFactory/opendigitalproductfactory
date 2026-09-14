@@ -23,6 +23,8 @@
 
 import type { WorkroomShapeKey } from "./room-shapes";
 import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
+import { COWORKER_STANDING_SHAPES_CRAFT } from "./coworker-standing-shapes-craft";
+import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-operate";
 import { DELIVERY_SHAPES } from "./delivery-shapes";
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
@@ -223,6 +225,8 @@ const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...SHAPES,
   ...STANDING_SHAPES,
   ...COWORKER_STANDING_SHAPES,
+  ...COWORKER_STANDING_SHAPES_OPERATE,
+  ...COWORKER_STANDING_SHAPES_CRAFT,
   ...DELIVERY_SHAPES,
   ...ORCHESTRATION_SHAPES,
 };

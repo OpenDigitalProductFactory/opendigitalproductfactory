@@ -69,7 +69,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Identity | 1 | 3 | 0 | 39 | 8 | 40 | 40/87 |
 | Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 87 | 87/87 |
-| Shape | 1 | 2 | 48 | 0 | 39 | 0 | 39/87 |
+| Shape | 1 | 2 | 43 | 0 | 44 | 0 | 44/87 |
 | Cadence | 1 | 3 | 52 | 0 | 3 | 32 | 32/87 |
 | Tools + Skills | 2 | 3 | 0 | 45 | 5 | 37 | 37/87 |
 | Evidence | 1 | 2 | 39 | 1 | 47 | 0 | 47/87 |
@@ -186,20 +186,20 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-R2D-PB` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-S2P-PFB` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-S2P-POL` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-906` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
-| `AGT-907` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
-| `AGT-WS-INTEGRATION` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
-| `AGT-WS-TIME-OFF` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `AGT-904` | declared-only | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
+| `AGT-906` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
+| `AGT-907` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
+| `AGT-WS-INTEGRATION` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
 | `AGT-WS-SECURITY` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
+| `AGT-WS-TIME-OFF` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
 | `AGT-WS-REVIEW` | active-roster | 72% | 67% | 3 | 3 | 3 | 2 | 0 | 1 | 2 |
 | `AGT-ORCH-000` | defined-roster | 76% | 70% | 2 | 3 | 3 | 0 | 0 | 3 | 2 |
 | `AGT-WS-FARM-RANCH` | defined-roster | 76% | 70% | 2 | 3 | 3 | 0 | 0 | 3 | 2 |
-| `AGT-WS-MARKET-RESEARCH` | defined-roster | 76% | 70% | 2 | 3 | 3 | 0 | 0 | 3 | 2 |
 | `AGT-WS-ONBOARD` | active-roster | 76% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
 | `AGT-WS-BUILD` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 0 | 2 | 2 |
 | `AGT-WS-CUSTOMER` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 0 | 2 | 2 |
 | `AGT-WS-FINANCE` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 2 | 1 | 2 |
+| `AGT-WS-MARKET-RESEARCH` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-MARKETING` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 2 | 2 | 2 |
 | `AGT-WS-PORTFOLIO` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-SOC-IR-LEAD` | active-roster | 92% | 85% | 3 | 3 | 3 | 0 | 3 | 3 | 2 |
