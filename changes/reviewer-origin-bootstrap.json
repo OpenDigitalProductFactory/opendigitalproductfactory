@@ -4,12 +4,23 @@
   "workroomId": "WC-E87250F6",
   "branch": "fix/reviewer-origin-bootstrap",
   "scope": "Only durable semantic-review autonomous inference origin and its regression test.",
-  "authorization": "Operator-directed coordinating task explicitly authorized the origin-only bootstrap and a checked-in readiness disposition on the verified circular dependency.",
+  "authorization": "Operator-directed coordinating task explicitly authorized the origin-only bootstrap and a checked-in readiness disposition on the verified circular dependency. On 2026-09-14 the operator additionally authorized bypassing process if needed; the coordinating task scoped that authorization to skipping only the semantic-pass publication condition after two infrastructure-inconclusive attempts. This file records that exception under AGENTS.md section 1, not a review approval.",
   "refusal": "IRD-ACDB631EF31E: initiative_not_ready; RESEARCH_REQUIRED, PLAN_REQUIRED",
-  "unrunObligations": ["research readiness receipt", "plan coverage receipt"],
-  "reason": "The current reviewer runtime cannot finish concurrent reviewer branches because its second branch inherits the interactive admission timeout. This minimal bootstrap repairs that runtime while retaining an independent single-primary review of these exact bytes before publication.",
-  "protectedRequirements": ["independent exact-tree failure review", "canonical integration gate", "DCO", "PR protection", "merge queue", "grants and sensitivity clearance", "canonical self-upgrade"],
+  "unrunObligations": ["research readiness receipt", "plan coverage receipt", "semantic-pass publication condition: SKIPPED; prior review attempts INCONCLUSIVE, never passed"],
+  "reason": "The current reviewer runtime cannot finish concurrent reviewer branches because its second branch inherits the interactive admission timeout. Two single-primary reviews of the minimal repair then completed adapter execution but returned unparseable responses at 4096 output tokens. The appended bounded-output instruction did not resolve the second attempt. No third attempt is authorized. Token-limit truncation is suspected, not proven from raw output.",
+  "semanticPublicationException": {
+    "status": "SKIPPED/INCONCLUSIVE; NOT PASSED",
+    "scope": "Only the semantic-pass publication condition for this origin-only bootstrap branch. No policy, receipt, checkpoint, Workroom authority, or database state may be rewritten to manufacture approval.",
+    "reviewedSourceSha": "99c9c2a3cef0364d65353aaf75ebdee316ee9c63",
+    "attempts": [
+      {"taskRunId": "TR-GATE-413521A5284318DB27D232C0", "receiptId": "cmu1qt0l15sj401ml27zjiw4w", "decision": "inconclusive", "parseError": true, "inconclusiveReason": "unparseable-review-response", "adapterStatus": "success", "outputTokens": 4096, "durationMs": 232973},
+      {"taskRunId": "TR-GATE-AD46E71E00C110B2A99F16A9", "receiptId": "cmu1r3wkn5ycy01mlp4nwkjj8", "decision": "inconclusive", "parseError": true, "inconclusiveReason": "unparseable-review-response", "adapterStatus": "success", "outputTokens": 4096, "durationMs": 217999}
+    ],
+    "freshness": "The base refresh and this signed amendment change HEAD. Prior CI is stale; rerun canonical exact-tree CI for the final commit. Neither prior review receipt is a pass or an approval of the new tree.",
+    "stopCondition": "If an actual protected check refuses publication or merge, stop and report it. Do not bypass it through shell flags, policy changes, Workroom mutation, or direct database writes."
+  },
+  "protectedRequirements": ["canonical exact-tree integration gate on final SHA", "DCO", "GitHub PR protection", "merge queue", "grants and sensitivity clearance", "destructive and production-integrity controls", "canonical self-upgrade", "live verification before claiming repair"],
   "expiresWhen": "This bootstrap PR merges or the branch is abandoned.",
   "docsImpact": "The full follow-up repair on fix/reviewer-streaming-contract at ac05ff847d71f2fdc00b51c2de2e1c96e828b573 already owns the architecture documentation and design with verified timing evidence. Deliver those immediately after bootstrap deployment; this bootstrap does not claim documentation or the original objective complete.",
-  "next": "Run regression checks and canonical exact-tree CI, wait for no nonprod leases, obtain one independent primary review, then protected PR/queue/self-upgrade and live verification. Do not spend the old uncertain run's remaining recovery attempt on the old runtime."
+  "next": "Run source-local checks and canonical exact-tree CI on the amended final SHA, then normal push and ready PR with this exception conspicuous. Run pr:health mechanically and request the merge queue only if actual GitHub protections accept the change. After merge, use canonical self-upgrade and live verification. Do not start a third review or spend the old uncertain run's remaining recovery attempt on the old runtime."
 }
