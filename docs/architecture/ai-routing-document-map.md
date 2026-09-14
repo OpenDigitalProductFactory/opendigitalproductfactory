@@ -31,6 +31,12 @@ continue to constrain eligible routes independently.
 Durable background operations remain a separate delivery contract. A caller
 must support their operation handles before selecting background mode.
 
+Reviewer delivery evidence remains bound to an immutable change and its
+Workroom. Canonical local-CI reuse can reconcile a missing Workroom link after
+executor identity is corrected, using only the recorded branch, commit and
+session. Ambiguous or foreign links are refused; reconciliation never changes
+the test verdict, expiry, lease or evidence contents.
+
 ## Approved adjacent delivery contract
 
 [Pre-dispatch sensitive LLM routing](../superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md)

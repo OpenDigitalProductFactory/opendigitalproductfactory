@@ -145,6 +145,31 @@ document is not a coverage receipt.
 
 ## Risks, documentation and rollback
 
+### Authorized evidence-reuse recovery extension — 2026-09-14
+
+The operator's coordinating task explicitly authorized repairing the newly
+observed CI-evidence binding blocker on this same branch. The first real gate
+passed, but its evidence had a null Workroom link because the room used a custom
+executor label instead of the app task ID. Correcting that identity through
+`reassign_workroom_executor` succeeded; the documented re-run reused the same
+unlinked evidence. No result or database row was manually rewritten.
+
+The actual reuse boundary is `settleTerminalGateLease`, inside the existing
+lease transaction, before the result recorder is called. Extend that boundary,
+not a client workaround: use the canonical evidence's stored branch, SHA and
+external session to find exactly one non-archived Workroom with that identity.
+Attach only a null link with a compare-and-set update. Refuse multiple matches,
+a foreign existing link or a lost update. Missing legacy identity or no matching
+Workroom remains unlinked and does not acquire review authority. Do not change
+the verdict, output, expiry, gate identity or lease owner.
+
+Sequence: write failing admission-reuse regression tests; add the narrow
+transactional reconciliation; prove same-link idempotency and refusal cases;
+rerun affected tests, types and the canonical gate on the new immutable SHA;
+obtain protected independent review before publication; verify real reuse and
+reviewer receipts after canonical deployment. This extension shares BI-87148687
+and the branch-only readiness exception, not a protected-review exception.
+
 The shared inference boundary affects more than the originating reviewer.
 Defaults must remain backward-compatible. An execution-plan recipe must not
 silently re-enable streaming against a non-streaming contract. Re-run existing
