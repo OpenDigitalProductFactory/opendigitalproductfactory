@@ -128,6 +128,8 @@ function normalizeProviderIds(providerIds: string[]): string[] {
 export type RequestRouteContext = {
   sensitivity?: RequestContract["sensitivity"];
   interactionMode?: RequestContract["interactionMode"];
+  /** Explicit token-streaming demand, without changing result delivery mode. */
+  requiresStreaming?: boolean;
   maxLatencyMs?: number;
   budgetClass?: RequestContract["budgetClass"];
   residencyPolicy?: RequestContract["residencyPolicy"];
@@ -160,7 +162,8 @@ export async function inferContract(
     RequestContract["interactionMode"];
 
   // ── Streaming: default true for sync chat, false for non-chat/background ──
-  const requiresStreaming = interactionMode === "sync" && !routeContext?.requiredModelClass && !TASK_MODEL_CLASS[taskType];
+  const requiresStreaming = routeContext?.requiresStreaming
+    ?? (interactionMode === "sync" && !routeContext?.requiredModelClass && !TASK_MODEL_CLASS[taskType]);
 
   // ── Capability requirements ────────────────────────────────────────────
   //

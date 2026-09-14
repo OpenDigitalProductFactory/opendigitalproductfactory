@@ -1204,13 +1204,13 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // Budget gate is advisory — never block a turn on it.
   }
 
-  // Build routeAndCall options once (reused every iteration)
   const routeOptions: RouteAndCallOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
     ...(messageOrigins?.length ? { messageOrigins } : {}),
     taskType: turnRoute.taskType,
     ...effectiveConfig,
+    requiresStreaming: interactionMode === "autonomous" ? false : undefined,
     ...(requireTools ? { requireTools: true } : {}),
     ...(agentDisplayName ? { agentDisplayName } : {}),
     // EP-AGENT-CAP-002: Capability floor — passed through to pipeline Stage 1
