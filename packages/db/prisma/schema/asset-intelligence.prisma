@@ -308,6 +308,11 @@ model DiscoveredRelationship {
 
   @@unique([discoveryRunId, relationshipKey])
   @@index([relationshipType])
+  // Both FKs below are ON DELETE CASCADE from DiscoveredItem. Unindexed, every
+  // single deleted DiscoveredItem row seq-scans this whole table twice to find
+  // referencing edges, so the 30d DiscoveryRun purge could never finish.
+  @@index([fromDiscoveredItemId])
+  @@index([toDiscoveredItemId])
 }
 
 model InventoryEntity {
@@ -384,6 +389,10 @@ model InventoryEntity {
   @@index([customerAccountId])
   @@index([customerSiteId])
   @@index([mergedIntoId])
+  // ON DELETE SET NULL from DiscoveryRun. Unindexed, each purged run
+  // seq-scans this table to null the reference. See the DiscoveredRelationship
+  // note above — same defect class, smaller table.
+  @@index([lastConfirmedRunId])
 }
 
 model InventoryRelationship {
@@ -427,6 +436,10 @@ model InventoryRelationship {
   @@index([customerAccountId])
   @@index([customerSiteId])
   @@index([mergedIntoId])
+  // ON DELETE SET NULL from DiscoveryRun. Unindexed, each purged run
+  // seq-scans this table to null the reference. See the DiscoveredRelationship
+  // note above — same defect class, smaller table.
+  @@index([lastConfirmedRunId])
 }
 
 model PortfolioQualityIssue {
