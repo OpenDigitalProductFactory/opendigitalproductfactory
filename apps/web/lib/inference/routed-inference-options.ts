@@ -26,6 +26,8 @@ export interface RouteAndCallOptions {
   taskType?: string;
   preferredProviderId?: string;
   preferredModelId?: string;
+  /** BI-7F2FBDA3: lineage of the preferred model, so an unavailable pin can find its family successor. */
+  preferredModelFamily?: string | null;
   requiresCodeExecution?: boolean;
   requiresWebSearch?: boolean;
   requiresComputerUse?: boolean;
