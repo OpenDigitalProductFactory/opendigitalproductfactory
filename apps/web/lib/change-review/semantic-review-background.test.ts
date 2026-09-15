@@ -212,6 +212,32 @@ describe("durable semantic review worker", () => {
     expect(providerCalls).toBe(0);
     expect(mocks.evidence).not.toHaveBeenCalled();
   });
+  it("records an inconclusive review as a wait, not a failed run (BI-FF63D266)", async () => {
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+      providerCalls += 1;
+      return { decision: "inconclusive", issues: [], summary: "Provider could not determine a verdict.",
+        inconclusiveReason: "provider-capacity-exhausted" };
+    }));
+    await executePersistedSemanticReview("TR-1");
+    // AGENTS.md §4: a gate that could not run is recorded as inconclusive and
+    // re-runs on the same SHA — never a FAIL against the diff.
+    expect(providerCalls).toBe(1);
+    expect(row.status).toBe("input-required");
+    // A non-verdict is not terminal, so it must not be stamped complete. The
+    // previous write marked an inconclusive run both failed AND completed.
+    expect(row.completedAt).toBeUndefined();
+    // The review still produced a receipt; its evidence is durable regardless.
+    expect(mocks.evidence).toHaveBeenCalled();
+    const payload = row.progressPayload as { resultClass?: string; semanticReview: Record<string, unknown> };
+    expect(payload.resultClass).toBe("inconclusive");
+    expect(payload.semanticReview.state).toBe("input-required");
+    expect(payload.semanticReview.reason).toBe("provider-capacity-exhausted");
+  });
+  it("still completes and stamps a decided review", async () => {
+    await executePersistedSemanticReview("TR-1");
+    expect(row.status).toBe("completed");
+    expect(row.completedAt).toBeInstanceOf(Date);
+  });
   it("refuses a missing immutable request and revoked authority before dispatch", async () => {
     mocks.db.taskArtifact.findUnique.mockResolvedValue(null);
     await executePersistedSemanticReview("TR-1");

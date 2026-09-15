@@ -6,7 +6,17 @@ status: draft
 
 **Spec:** [`docs/superpowers/specs/2026-09-15-third-state-is-typed-addendum-design.md`](../specs/2026-09-15-third-state-is-typed-addendum-design.md) (§10 addendum to the 2026-06-05 unified-delivery-surfaces spec)
 **Backlog:** `EP-A480A6F7` — filed 2026-09-15. Phase 2.1 `BI-FF63D266`, 2.2 `BI-C77D920A`, 2.3 `BI-09D11444`; phase 3 `BI-9F6AFFA0`; phase 4 `BI-174DB909`, `BI-77CFC7BF`, `BI-AF9E4906`. See the spec's §9 for the full table.
-**Status:** phase 1 delivered; phases 2–4 not started.
+**Status:** phase 1 delivered (#5364). Phase 2.1, 2.2 and the two mechanical parts of phase 4 delivered in one change (see below). Phase 2.3, phase 3 and the work-shape half of phase 4 not started.
+
+| Phase | Item | State |
+| --- | --- | --- |
+| 2.1 semantic review | `BI-FF63D266` | **delivered** — `inconclusive` persists as `input-required`, and `completedAt` is no longer stamped on a non-terminal outcome |
+| 2.2 lease pool | `BI-C77D920A` | **delivered** — the admission's own status and disposition are carried through instead of collapsed to a boolean |
+| 2.3 phase gate | `BI-09D11444` | not started — largest piece, widest blast radius, deliberately last |
+| 3 run-status enum | `BI-9F6AFFA0` | not started — a forward-only migration belongs in its own revert unit |
+| 4 readiness maps | `BI-174DB909` | **delivered** — three classification maps total over `ReadinessCode`, `null` as an explicit decision |
+| 4 refusal codes | `BI-AF9E4906` | **delivered** — derived from `GOVERNED_REJECTION_DISPOSITION`, so it cannot go stale |
+| 4 work-shape stops | `BI-77CFC7BF` | not started |
 
 ## Phase 1 — declare the vocabulary, make it expressible (delivered)
 

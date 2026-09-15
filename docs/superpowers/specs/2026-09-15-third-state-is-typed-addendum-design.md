@@ -136,7 +136,7 @@ Three non-verdicts, not one, because they route differently: `awaiting-person` m
 
 ## 5. Substrate to extend, not rebuild
 
-Nothing here is new substrate. `gate-shaping.ts` is the reference implementation and does not change. The seven vocabularies in §2.3 keep their local names and gain a total mapping to the canonical disposition — a subsystem that already distinguishes correctly is conformant by declaration, not by rewrite. `2026-08-21-three-band-decision-verdict.md` (draft) makes this same argument on the decision-engine axis (`proceed | uncertain | decline`); it is the same mechanic in another plane and should be reconciled into this vocabulary rather than landed separately.
+Nothing here is new substrate. `gate-shaping.ts` is the reference implementation and does not change. The seven vocabularies in §2.3 keep their local names and gain a total mapping to the canonical disposition — a subsystem that already distinguishes correctly is conformant by declaration, not by rewrite. `2026-08-21-three-band-decision-verdict.md` (draft) makes this same argument on the decision-engine axis (`proceed | uncertain | decline`); it is the same mechanic in another plane. **Reconciled (BI-2B96E1B9):** that spec now carries the mapping onto this union in its "Reconciliation with the canonical disposition" section, keeping its band names and splitting `uncertain` three ways — bounded retry, exhausted budget, and a corpus/coverage gap that re-runs rather than spending a human turn. No second union was landed.
 
 ## 6. Phasing
 

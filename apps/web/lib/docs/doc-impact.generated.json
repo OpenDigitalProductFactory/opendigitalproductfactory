@@ -1561,6 +1561,9 @@
       "docs/founder-kernel/AUTHORING.md",
       "docs/founder-kernel/SCHEMA.md"
     ],
+    "packages/db/src/workforce-staffing-posture.test.ts": [
+      "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md"
+    ],
     "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs": [
       "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md"
     ],
@@ -2407,7 +2410,8 @@
       "scripts/check-application-boundaries.mjs"
     ],
     "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md": [
-      "apps/web/lib/tak/decision-routing-governance-hook.ts"
+      "apps/web/lib/tak/decision-routing-governance-hook.ts",
+      "packages/db/src/workforce-staffing-posture.test.ts"
     ],
     "docs/architecture/2026-08-20-governed-autonomy-architecture.md": [
       "apps/web/lib/work-management/room-cycle-adapter.ts",

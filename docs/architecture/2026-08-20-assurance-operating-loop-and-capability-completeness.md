@@ -218,6 +218,52 @@ introduced it. Precedent exists: `measure-doc-staleness-coverage.mjs` is already
 coverage ratchet, so this is a known shape in this codebase, not a new kind of
 gate.
 
+## 3A. Staffing posture: a hole, or a decision? ⟦runtime: 2026-09-16⟧
+
+The contract above grades every declared identity against the seven planes. It
+originally had no way to say that a role is **deliberately** not staffed, so a
+declared-but-unstaffed role scored the same as one somebody had started and
+abandoned. With 39 such roles that produced 194 of 235 gaps, and the platform
+read as four-fifths broken when it was not.
+
+Most of those roles are a standards-derived catalogue: each `AGT-1xx` entry
+cites the IT4IT sections and MUST requirements it realises and names a human
+supervisor. They were authored as a conformance map, not a hiring plan.
+
+Two posture states now live on the registry entry as `staffing_posture`:
+
+| state | means | gaps count as open? |
+|---|---|---|
+| `superseded` | the work is done by another **active** identity, named in the posture | no — the capability is not missing, it is under a different id |
+| `deliberately-unstaffed` | declared, consciously not staffed, with a reason and a review date | no — it is a decision, not a defect |
+
+**Nothing is hidden.** Every identity still appears with its gaps listed; what
+changes is whether they count as OPEN. The measure now reports all three numbers
+(`gaps.listed`, `gaps.open`, `gaps.postured`), and the ratchet tracks the open
+count so a standards catalogue nobody staffed cannot freeze the baseline at its
+own size.
+
+**A posture expires.** Every entry carries `reviewBy`, and
+`packages/db/src/workforce-staffing-posture.test.ts` fails the build once a
+review date passes. When it fails, the answer is to re-decide the parked roles
+with the operator — never to push the date out because the build is red. The
+guard also refuses a posture on an `active` role, so a working coworker can
+never be classified out of the count, and refuses a `superseded` target that is
+not itself active, so a gap cannot be moved rather than closed.
+
+**Only two genuine duplicates were found** (`AGT-904` → `AGT-WS-DOC`,
+`AGT-BUILD-DA` → `AGT-WS-DATA-ARCHITECT`), both confirmed by reading each side's
+`capability_domain`. An earlier pass guessed from role NAMES that ~110 of the
+194 were duplicates and was wrong by an order of magnitude; names are not
+evidence.
+
+**Six roles are deliberately NOT parked.** `AGT-150/151/152` (service offer
+definition, catalog publication, subscription management) and `AGT-160/161/162`
+(consumer onboarding, order fulfillment, service support) sit directly on the
+objectives the business funds against — supporting existing customers and
+winning new ones. Parking those is an operator decision, not an engineering one,
+so they keep reporting as open gaps until someone makes it.
+
 ## 4. What changes, concretely
 
 Only two genuinely new concepts. Everything else is a registry entry, a grant, or

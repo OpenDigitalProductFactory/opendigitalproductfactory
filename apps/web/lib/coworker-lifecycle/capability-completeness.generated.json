@@ -122,7 +122,9 @@
       "active-registry-only": "Active in the canonical registry but absent from the workforce roster.",
       "roster-only": "On the workforce roster but absent from the canonical agent registry.",
       "defined-roster": "Declared in the canonical registry (not active) and seeded onto the roster.",
-      "declared-only": "Declared in the canonical registry and never seeded anywhere."
+      "declared-only": "Declared in the canonical registry and never seeded anywhere.",
+      "superseded": "Declared, but the work is done by another ACTIVE identity named in its posture.",
+      "deliberately-unstaffed": "Declared and consciously not staffed, with a recorded reason and review date."
     }
   },
   "summary": {
@@ -155,10 +157,26 @@
         "medianAttainablePct": 68
       },
       "declared-only": {
-        "count": 39,
+        "count": 6,
         "meaning": "Declared in the canonical registry and never seeded anywhere.",
         "medianAttainablePct": 48
+      },
+      "superseded": {
+        "count": 2,
+        "meaning": "Declared, but the work is done by another ACTIVE identity named in its posture.",
+        "medianAttainablePct": 64
+      },
+      "deliberately-unstaffed": {
+        "count": 31,
+        "meaning": "Declared and consciously not staffed, with a recorded reason and review date.",
+        "medianAttainablePct": 48
       }
+    },
+    "gaps": {
+      "listed": 231,
+      "open": 67,
+      "postured": 164,
+      "posturedAgents": 33
     },
     "atFullAttainable": 30,
     "medianAttainablePct": 68,
@@ -363,7 +381,7 @@
     {
       "key": "AGT-100",
       "displayName": "policy-enforcement-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "policy-enforcement-agent"
       ],
@@ -500,7 +518,7 @@
     {
       "key": "AGT-101",
       "displayName": "strategy-alignment-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "strategy-alignment-agent"
       ],
@@ -637,7 +655,7 @@
     {
       "key": "AGT-102",
       "displayName": "portfolio-backlog-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "portfolio-backlog-agent"
       ],
@@ -773,7 +791,7 @@
     {
       "key": "AGT-110",
       "displayName": "portfolio-rationalization-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "portfolio-rationalization-agent"
       ],
@@ -910,7 +928,7 @@
     {
       "key": "AGT-111",
       "displayName": "investment-analysis-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "investment-analysis-agent"
       ],
@@ -1050,7 +1068,7 @@
     {
       "key": "AGT-112",
       "displayName": "gap-analysis-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "gap-analysis-agent"
       ],
@@ -1189,7 +1207,7 @@
     {
       "key": "AGT-113",
       "displayName": "scope-agreement-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "scope-agreement-agent"
       ],
@@ -1325,7 +1343,7 @@
     {
       "key": "AGT-120",
       "displayName": "product-backlog-prioritization-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "product-backlog-prioritization-agent"
       ],
@@ -1461,7 +1479,7 @@
     {
       "key": "AGT-121",
       "displayName": "architecture-definition-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "architecture-definition-agent"
       ],
@@ -1600,7 +1618,7 @@
     {
       "key": "AGT-122",
       "displayName": "roadmap-assembly-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "roadmap-assembly-agent"
       ],
@@ -1737,7 +1755,7 @@
     {
       "key": "AGT-130",
       "displayName": "release-planning-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "release-planning-agent"
       ],
@@ -1873,7 +1891,7 @@
     {
       "key": "AGT-131",
       "displayName": "sbom-management-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "sbom-management-agent"
       ],
@@ -2017,7 +2035,7 @@
     {
       "key": "AGT-132",
       "displayName": "release-acceptance-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "release-acceptance-agent"
       ],
@@ -2154,7 +2172,7 @@
     {
       "key": "AGT-140",
       "displayName": "deployment-planning-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "deployment-planning-agent"
       ],
@@ -2291,7 +2309,7 @@
     {
       "key": "AGT-141",
       "displayName": "resource-reservation-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "resource-reservation-agent"
       ],
@@ -2427,7 +2445,7 @@
     {
       "key": "AGT-142",
       "displayName": "iac-execution-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "iac-execution-agent"
       ],
@@ -3382,7 +3400,7 @@
     {
       "key": "AGT-170",
       "displayName": "monitoring-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "monitoring-agent"
       ],
@@ -3518,7 +3536,7 @@
     {
       "key": "AGT-171",
       "displayName": "incident-detection-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "incident-detection-agent"
       ],
@@ -3655,7 +3673,7 @@
     {
       "key": "AGT-172",
       "displayName": "incident-resolution-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "incident-resolution-agent"
       ],
@@ -3792,7 +3810,7 @@
     {
       "key": "AGT-180",
       "displayName": "constraint-validation-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "constraint-validation-agent"
       ],
@@ -3928,7 +3946,7 @@
     {
       "key": "AGT-181",
       "displayName": "architecture-guardrail-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "architecture-guardrail-agent"
       ],
@@ -4067,7 +4085,7 @@
     {
       "key": "AGT-182",
       "displayName": "evidence-chain-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "evidence-chain-agent"
       ],
@@ -4203,7 +4221,7 @@
     {
       "key": "AGT-190",
       "displayName": "security-auditor-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "security-auditor-agent"
       ],
@@ -4346,7 +4364,7 @@
     {
       "key": "AGT-901",
       "displayName": "architecture-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "architecture-agent"
       ],
@@ -4484,7 +4502,7 @@
     {
       "key": "AGT-902",
       "displayName": "data-governance-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "data-governance-agent"
       ],
@@ -4625,7 +4643,7 @@
     {
       "key": "AGT-BUILD-DA",
       "displayName": "build-data-architect",
-      "identityClass": "declared-only",
+      "identityClass": "superseded",
       "handles": [
         "build-data-architect"
       ],
@@ -4762,7 +4780,7 @@
     {
       "key": "AGT-BUILD-FE",
       "displayName": "build-frontend-engineer",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "build-frontend-engineer"
       ],
@@ -4899,7 +4917,7 @@
     {
       "key": "AGT-BUILD-QA",
       "displayName": "build-qa-engineer",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "build-qa-engineer"
       ],
@@ -5035,7 +5053,7 @@
     {
       "key": "AGT-BUILD-SE",
       "displayName": "build-software-engineer",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "build-software-engineer"
       ],
@@ -5172,7 +5190,7 @@
     {
       "key": "AGT-R2D-PB",
       "displayName": "product-backlog-specialist",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "product-backlog-specialist"
       ],
@@ -5308,7 +5326,7 @@
     {
       "key": "AGT-S2P-PFB",
       "displayName": "portfolio-backlog-specialist",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "portfolio-backlog-specialist"
       ],
@@ -5444,7 +5462,7 @@
     {
       "key": "AGT-S2P-POL",
       "displayName": "policy-specialist",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "policy-specialist"
       ],
@@ -5583,7 +5601,7 @@
     {
       "key": "AGT-904",
       "displayName": "documentation-specialist",
-      "identityClass": "declared-only",
+      "identityClass": "superseded",
       "handles": [
         "documentation-specialist"
       ],
