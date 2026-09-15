@@ -45,10 +45,10 @@ export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.
 type LeaseModel = typeof prisma.nonProductionEnvironmentLease;
 type LeaseTx = Pick<
   typeof prisma,
-  "$executeRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord"
+  "$executeRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
 >;
 type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pick<
-  typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord"
+  typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord" | "workroom"
 >>;
 type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>>;
 

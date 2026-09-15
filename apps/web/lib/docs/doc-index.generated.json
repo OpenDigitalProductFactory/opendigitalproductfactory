@@ -866,6 +866,7 @@
       "anchors": [
         "ai-routing-document-map",
         "current-authority",
+        "streaming-versus-result-delivery",
         "approved-adjacent-delivery-contract",
         "proposed-architecture",
         "historical-records",

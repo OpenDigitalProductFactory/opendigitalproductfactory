@@ -63,6 +63,8 @@ export interface RouteAndCallOptions {
   minimumDimensions?: Record<string, number>;
   requiredModelClass?: ModelClass;
   interactionMode?: "sync" | "background";
+  /** Token-streaming capability demand; independent of completed vs async delivery. */
+  requiresStreaming?: boolean;
   /**
    * Semantic authority for a durable async route. The server resolves this to
    * the exact TaskRun/Workroom row; callers cannot pass an internal scope key.
