@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 711,
+  "pageCount": 712,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9268,6 +9268,26 @@
         "standards",
         "primary-vendor-sources",
         "re-evaluation-triggers"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-09-15-bmad-method.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-15-bmad-method/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "bmad-method-tool-evaluation",
+        "executive-decision",
+        "what-bmad-is",
+        "where-dpf-already-stands",
+        "the-decisive-conflict",
+        "security-findings-cosai",
+        "compliance",
+        "architecture-fit",
+        "integration-test",
+        "what-dpf-should-harvest",
+        "conditions-and-re-evaluation",
+        "sources"
       ]
     },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
