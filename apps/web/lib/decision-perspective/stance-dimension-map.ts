@@ -134,6 +134,86 @@ export const STANCE_DIMENSION_MAP = {
         "COST axis. 'Without making the customer fight for it' and 'not the argument' are demands to keep the operations-to-resolution low, so the stance pulls against effort.",
     },
   ],
+  // BI-7728C3B7. Three vectors onboarding now seeds, so the classes that
+  // actually reached the owner unanswered are projected like the rest.
+  "data-handling": [
+    {
+      dimension: "data_privacy",
+      weight: 0.4,
+      rationale:
+        "The stance is data minimisation stated directly — 'the least personal information the job actually needs', used 'only for the purpose it was given for'. This is the axis it speaks on, so it carries the ceiling weight.",
+    },
+    {
+      dimension: "governance_compliance",
+      weight: 0.35,
+      rationale:
+        "'No longer than the work and the law require' and 'the lawful basis is resolved for the jurisdiction we are actually in' are obligation-satisfaction, not preference.",
+    },
+    {
+      dimension: "customer_consent_state",
+      weight: 0.3,
+      rationale:
+        "Purpose limitation is consent breadth: data may be used for what it was given for, and 'any new purpose for data we already hold is a fresh decision' refuses to widen standing approval by implication.",
+    },
+    {
+      dimension: "blast_radius",
+      weight: -0.3,
+      rationale:
+        "COST axis. 'Scope access to the people doing the work rather than the whole organization' and keeping derived results over raw personal data both pull deliberately against exposure reach.",
+    },
+  ],
+  "routine-operations": [
+    {
+      dimension: "speed_to_value",
+      weight: 0.35,
+      rationale:
+        "The whole point of the stance is that routine work 'proceeds without asking' — it exists to remove a wait state from ordinary operations.",
+    },
+    {
+      dimension: "operator_effort",
+      weight: -0.35,
+      rationale:
+        "COST axis. 'Asking about these wastes the owner's attention' is an explicit instruction to lower operations-to-outcome, so the stance pulls against effort rather than exhibiting it.",
+    },
+    {
+      dimension: "human_cognitive_load",
+      weight: -0.3,
+      rationale:
+        "COST axis. Pre-authorising the ordinary is how the owner's decision queue is kept for decisions; routing routine work to a human is the load this stance is written to remove.",
+    },
+    {
+      dimension: "reversibility",
+      weight: 0.3,
+      rationale:
+        "The boundary of 'routine' is drawn at undoability — anything that 'commits money or a promise, or is hard to undo' is excluded, so the stance only ever pre-authorises reversible work.",
+    },
+  ],
+  "decision-scope": [
+    {
+      dimension: "evidence_density",
+      weight: 0.35,
+      rationale:
+        "'A question we cannot answer yet because the facts are missing needs the research first, not a decision' — the stance refuses to convert absent evidence into a ruling.",
+    },
+    {
+      dimension: "governance_compliance",
+      weight: 0.3,
+      rationale:
+        "Routing a question to the authority that owns it is an obligation under decisions-belong-to-their-scope, not a stylistic preference; deciding outside our scope is the violation.",
+    },
+    {
+      dimension: "legibility_of_consequence",
+      weight: 0.3,
+      rationale:
+        "Naming whose call a question is, before answering it, is what lets the owner foresee who is accountable for the outcome — 'the answer is to route it, not to guess'.",
+    },
+    {
+      dimension: "human_cognitive_load",
+      weight: -0.25,
+      rationale:
+        "COST axis. Questions that are not this business's to decide are exactly what buries the ones that are, so the stance pulls against load on the owner rather than adding to it.",
+    },
+  ],
   "pricing-integrity": [
     {
       dimension: "gtm_fit",

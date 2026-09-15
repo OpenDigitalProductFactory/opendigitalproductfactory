@@ -17,7 +17,10 @@
 // deepen a specific business model. Keep entries to broad, true, editable
 // starters — do not encode brittle specifics that read as fabricated.
 
-import { NONPROFIT_STANCE_VECTORS } from "./archetype-stance-presentation";
+import {
+  NONPROFIT_STANCE_VECTORS,
+  SOFTWARE_PLATFORM_STANCE_VECTORS,
+} from "./archetype-stance-presentation";
 
 export { resolveStanceAuthoringExamples } from "./archetype-stance-presentation";
 export type { StanceAuthoringExamples } from "./archetype-stance-presentation";
@@ -446,6 +449,16 @@ export const STANCE_VECTOR_KEYS = [
   "growth-vs-stability",
   "quality-bar",
   "spend-authority",
+  // BI-7728C3B7. The five vectors above cover money and quality. Measured on
+  // the customer 0 install, the decisions that actually reached the owner
+  // unanswered were none of those: they were personal-data handling (6 of 19
+  // open reviews), routine operations the business would never have wanted to
+  // be asked about, and questions that were not this business's to decide at
+  // all. A business cannot begin operating on a corpus that is silent on all
+  // three, so onboarding now seeds them.
+  "data-handling",
+  "routine-operations",
+  "decision-scope",
 ] as const;
 export type StanceVectorKey = (typeof STANCE_VECTOR_KEYS)[number];
 
@@ -488,6 +501,21 @@ export const GENERIC_STANCE_VECTORS: ArchetypeStanceVectors = {
     stance:
       "Routine, budgeted purchases that keep the business running can proceed without the owner, up to the spend ceiling per purchase. Anything novel, recurring, or above the ceiling goes to the owner first.",
     ceilingUsd: 250,
+  },
+  "data-handling": {
+    title: "Personal information we hold",
+    stance:
+      "We collect the least personal information the job actually needs, tell people what we hold and why, and use it only for the purpose it was given for. We keep it no longer than the work and the law require, and share it outside the business only when someone is entitled to it. Any new purpose for data we already hold is a fresh decision, not an extension of the old one.",
+  },
+  "routine-operations": {
+    title: "What the team just gets on with",
+    stance:
+      "Routine work that keeps the business running proceeds without asking: scheduling, ordinary record-keeping, internal reporting, and the normal steps of a job already agreed with a customer. Asking about these wastes the owner's attention. Anything that reaches a customer or a third party for the first time, commits money or a promise, or is hard to undo is not routine.",
+  },
+  "decision-scope": {
+    title: "Which decisions are ours to make",
+    stance:
+      "We decide what this business owns: what we sell, who we serve, what we charge, what we promise, and how we treat customers and their data. Questions of professional or legal craft go to the person qualified in that craft, and questions about how a supplier's product works go to that supplier. When a question is not ours, the answer is to route it, not to guess — and a question we cannot answer yet because the facts are missing needs the research first, not a decision.",
   },
 };
 
@@ -670,19 +698,7 @@ const INDUSTRY_STANCE_VECTORS: Record<string, Partial<ArchetypeStanceVectors>> =
       ceilingUsd: 150,
     },
   },
-  "software-platform": {
-    "customer-goodwill": {
-      title: "When our product or billing fails a customer",
-      stance:
-        "Outages, bugs, and billing errors on our side are credited or refunded without friction within the ceiling, and we say plainly what went wrong. A long-time customer harmed by our mistake is restored first, reconciled second.",
-      ceilingUsd: 200,
-    },
-    "growth-vs-stability": {
-      title: "New features vs reliability",
-      stance:
-        "Reliability and existing-customer success outrank new-feature velocity — churn from broken trust costs more than a delayed launch. We ship new capability at the pace uptime and support quality allow.",
-    },
-  },
+  "software-platform": SOFTWARE_PLATFORM_STANCE_VECTORS,
   "education-training": {
     "customer-goodwill": {
       title: "When we fail a learner or family",

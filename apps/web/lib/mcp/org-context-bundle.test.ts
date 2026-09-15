@@ -60,7 +60,7 @@ describe("buildOrgContextBundle (BI-HDLEMP-02)", () => {
     // not the generic profile).
     expect(bundle!.businessProfile.howWeDecide).toMatch(/clinical|patient/i);
     // All five stance vectors are present.
-    expect(Object.keys(bundle!.stanceVectors)).toHaveLength(5);
+    expect(Object.keys(bundle!.stanceVectors)).toHaveLength(8);
   });
 
   it("falls back industry to BusinessContext.industry when no archetype category", async () => {

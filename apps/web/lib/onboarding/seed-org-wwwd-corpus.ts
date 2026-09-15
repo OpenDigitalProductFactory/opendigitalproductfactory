@@ -68,6 +68,13 @@ export const STANCE_VECTOR_BUNDLES: Record<StanceVectorKey, DecisionDomainClass[
   "growth-vs-stability": ["plan-readiness"],
   "quality-bar": ["professional-practice"],
   "spend-authority": ["risk-assessment", "architecture-tradeoff"],
+  // BI-7728C3B7. Data handling is weighed as risk and as craft practice;
+  // routine operations decide plan-readiness ("may this just proceed?");
+  // decision-scope is consulted wherever the gate must first ask whether the
+  // question is this business's to answer at all.
+  "data-handling": ["risk-assessment", "professional-practice"],
+  "routine-operations": ["plan-readiness", "risk-assessment"],
+  "decision-scope": ["plan-readiness", "professional-practice", "architecture-tradeoff"],
 };
 
 /** Org-overlay slug for a stance vector page (shown under /coworker-decisions/stance). */

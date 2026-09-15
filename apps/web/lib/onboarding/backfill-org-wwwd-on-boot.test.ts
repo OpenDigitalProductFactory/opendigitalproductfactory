@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { STANCE_VECTOR_KEYS } from "./archetype-business-context";
 
 const prismaMock = vi.hoisted(() => ({
   organizationFindMany: vi.fn(),
@@ -69,7 +70,7 @@ describe("backfillOrgWwwdOnBoot", () => {
     resolveOrgProfileIdMock.mockResolvedValue("org-perspective-org-1");
     // First count = all overlay pages, second (slug-filtered) = vector pages.
     prismaMock.wikiPageCount.mockImplementation(async (args: any) =>
-      args?.where?.slug ? 5 : 9,
+      args?.where?.slug ? STANCE_VECTOR_KEYS.length : 9,
     );
 
     const res = await backfillOrgWwwdOnBoot(silent);
@@ -78,6 +79,24 @@ describe("backfillOrgWwwdOnBoot", () => {
     expect(runSeedsMock).not.toHaveBeenCalled();
     // Presence path must not even consult the setup-progress guard.
     expect(prismaMock.setupProgressFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("re-seeds an install carrying only the pre-BI-7728C3B7 vector set", async () => {
+    // The upgrade path that matters for EVERY existing install: the presence
+    // check counts against STANCE_VECTOR_KEYS, so an org seeded with the
+    // original five vectors is not "present" once three more are declared —
+    // it re-runs the idempotent chain once and converges on its own.
+    prismaMock.organizationFindMany.mockResolvedValue([{ id: "org-1" }]);
+    resolveOrgProfileIdMock.mockResolvedValue("org-perspective-org-1");
+    prismaMock.wikiPageCount.mockImplementation(async (args: any) =>
+      args?.where?.slug ? 5 : 9,
+    );
+    prismaMock.setupProgressFindFirst.mockResolvedValue({ id: "setup-1" });
+
+    const res = await backfillOrgWwwdOnBoot(silent);
+
+    expect(res).toEqual({ seeded: 1, present: 0, skipped: 0 });
+    expect(runSeedsMock).toHaveBeenCalledWith("org-1");
   });
 
   it("re-seeds a pre-stance-vector install (profile + old pages, but no vector pages)", async () => {
