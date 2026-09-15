@@ -6,17 +6,17 @@ status: draft
 
 **Spec:** [`docs/superpowers/specs/2026-09-15-third-state-is-typed-addendum-design.md`](../specs/2026-09-15-third-state-is-typed-addendum-design.md) (§10 addendum to the 2026-06-05 unified-delivery-surfaces spec)
 **Backlog:** `EP-A480A6F7` — filed 2026-09-15. Phase 2.1 `BI-FF63D266`, 2.2 `BI-C77D920A`, 2.3 `BI-09D11444`; phase 3 `BI-9F6AFFA0`; phase 4 `BI-174DB909`, `BI-77CFC7BF`, `BI-AF9E4906`. See the spec's §9 for the full table.
-**Status:** phase 1 delivered (#5364). Phase 2.1, 2.2 and the two mechanical parts of phase 4 delivered in one change (see below). Phase 2.3, phase 3 and the work-shape half of phase 4 not started.
+**Status:** every phase now has landed work. Phase 1 (#5364), then 2.1/2.2 and the two map-totalling parts of phase 4 (#5389), then 2.3 and the work-shape half of phase 4. Phase 3 landed its database half; its type-level half is re-scoped — see the row.
 
 | Phase | Item | State |
 | --- | --- | --- |
 | 2.1 semantic review | `BI-FF63D266` | **delivered** — `inconclusive` persists as `input-required`, and `completedAt` is no longer stamped on a non-terminal outcome |
 | 2.2 lease pool | `BI-C77D920A` | **delivered** — the admission's own status and disposition are carried through instead of collapsed to a boolean |
-| 2.3 phase gate | `BI-09D11444` | not started — largest piece, widest blast radius, deliberately last |
-| 3 run-status enum | `BI-9F6AFFA0` | not started — a forward-only migration belongs in its own revert unit |
+| 2.3 phase gate | `BI-09D11444` | **delivered** — `PhaseGateResult` gains `requirement` (the closed `GateRequirement` union, reused as the typed reason code) and `disposition`; `GATE_REQUIREMENT_DISPOSITION` is total, so a new requirement cannot be added unclassified |
+| 3 run-status enum | `BI-9F6AFFA0` | **partly delivered** — both columns are closed sets in Postgres with parity tests, and the two rows 2.1 mis-wrote are corrected. NOT the Prisma enum: hyphenated values need `@map`, which renames every literal across 431 sites in 155 files, so the type-level half is re-scoped on the item rather than reported as done |
 | 4 readiness maps | `BI-174DB909` | **delivered** — three classification maps total over `ReadinessCode`, `null` as an explicit decision |
 | 4 refusal codes | `BI-AF9E4906` | **delivered** — derived from `GOVERNED_REJECTION_DISPOSITION`, so it cannot go stale |
-| 4 work-shape stops | `BI-77CFC7BF` | not started |
+| 4 work-shape stops | `BI-77CFC7BF` | **partly delivered** — `WorkShapeStopCondition` gains an optional `disposition`, and the 15 delivery-shape stops are classified by hand. ~150 in six other files stay unclassified deliberately: most of their `failure` exits read "the substrate cannot be read", which is inconclusive rather than refused, and deriving them from `kind` would mass-misclassify the distinction the field exists to record |
 
 ## Phase 1 — declare the vocabulary, make it expressible (delivered)
 
@@ -59,6 +59,20 @@ Forward-only migration, inline backfill. Must land after phase 2.1 or in the sam
 - Every map keyed by `ReadinessCode` is `Partial<Record<…>>` (27-member union; `readiness-guidance.ts:161,199`, `initiative-readiness-tool-grants.ts:434,447`), so a new code compiles silently. Making them total is mechanical and is what turns §9's guarantee from a convention back into a compile error.
 - `WorkShapeStopCondition.kind` gains a disposition, and the existing prose — "stops and escalates", "the room stops for reshaping", "refused; the lane is WIP 1" — migrates from the free-text `condition` into it.
 - `refusal-codes.ts`'s `ReadonlySet<string>` becomes a total map over the governed rejection union, so it cannot go stale.
+
+## What phase 4 taught, worth keeping
+
+`kind` does not determine disposition, and the delivery shapes prove it in both
+directions: two `budget` stops are `refused` (the WIP-1 break-fix lane, the epic
+cap) while two others are `awaiting-input` (reshape), and a `failure` that says
+"reshape to large" is not a refusal at all. Any future attempt to derive the
+field from `kind` should start by re-reading those four.
+
+The same reading of the other six shape files suggests most of their `failure`
+exits are `inconclusive` — "the run stops and reports, and does NOT raise
+findings from an empty read" is AGENTS.md §4's fail-open-on-infrastructure,
+written in prose. If that holds when they are classified, then the shapes have
+been carrying the epic's own thesis as documentation all along.
 
 ## Non-goals
 

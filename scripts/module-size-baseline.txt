@@ -36,9 +36,8 @@ apps/web/lib/actions/promotions.ts	982
 apps/web/lib/actions/tax-remittance.test.ts	1084
 apps/web/lib/actions/tax-remittance.ts	971
 apps/web/lib/ai-operations-map/load-map-data.test.ts	915
-apps/web/lib/deliberation/orchestrator.ts	812
-apps/web/lib/explore/build-process-matrix.ts	831
-apps/web/lib/explore/feature-build-types.ts	1093
+apps/web/lib/explore/build-process-matrix.ts	842
+apps/web/lib/explore/feature-build-types.ts	1102
 apps/web/lib/finance/ai-provider-finance.ts	1309
 apps/web/lib/inference/ai-provider-internals.ts	1167
 apps/web/lib/marketing.ts	1369
@@ -58,7 +57,6 @@ apps/web/lib/tak/agent-grants.test.ts	940
 apps/web/lib/tak/agent-grants.ts	989
 apps/web/lib/tak/agent-routing.ts	1191
 apps/web/lib/tak/agentic-loop.test.ts	2472
-apps/web/lib/tak/agentic-loop.ts	2640
 apps/web/lib/tak/agentic-loop.ts	2625
 apps/web/lib/tak/route-context-map.ts	1440
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1239

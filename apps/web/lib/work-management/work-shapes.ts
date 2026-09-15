@@ -1,3 +1,4 @@
+import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // apps/web/lib/work-management/work-shapes.ts
 //
 // Declared work shapes — TAK §8.11 ("Governed Activity Shapes and Triggers").
@@ -65,6 +66,25 @@ export type WorkShapeStopCondition = {
   /** A shape MUST declare its failure exit, not only its successful one. */
   kind: "success" | "failure" | "budget";
   condition: string;
+  /**
+   * WHAT KIND of stop this is, in the canonical vocabulary (BI-77CFC7BF).
+   *
+   * `kind` says whether the shape ended well, badly, or out of budget. It does
+   * NOT say what happens next, and the authors needed that — so they wrote it
+   * as English inside `condition`: "the run stops and escalates", "the room
+   * stops for reshaping", "refused; the lane is WIP 1". Those are
+   * awaiting-person, awaiting-input and refused: §9's vocabulary exactly,
+   * written in prose because the type could not hold it.
+   *
+   * Deliberately OPTIONAL, and deliberately NOT derived from `kind`. A default
+   * would be wrong far more often than it is right: most `failure` exits in the
+   * tree read "the substrate cannot be read — the run stops and reports", which
+   * is INCONCLUSIVE (fail open on infrastructure, AGENTS.md §4), not a refusal.
+   * Guessing those from `kind` would mass-misclassify the very distinction this
+   * field exists to record. Absent therefore means NOT YET CLASSIFIED, which is
+   * an honest state; it never means "no disposition".
+   */
+  disposition?: OutcomeDisposition;
 };
 
 /** Allowed tools/capabilities this activity may consume. Empty is a declaration. */

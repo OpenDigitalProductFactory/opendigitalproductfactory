@@ -1,3 +1,4 @@
+import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // apps/web/lib/explore/build-process-matrix.ts
 //
 // Right-sizing matrix for Build Studio. Maps (work-type, work-size) -> a
@@ -88,6 +89,9 @@ export const GATE_REQUIREMENTS = [
   "happyPathIntake-ready",
 ] as const;
 export type GateRequirement = (typeof GATE_REQUIREMENTS)[number];
+
+import { GATE_REQUIREMENT_DISPOSITION } from "./phase-gate-disposition";
+export { GATE_REQUIREMENT_DISPOSITION }; // classification lives there (module-size ratchet)
 
 // ─── Lifecycle policy ───────────────────────────────────────────────────────
 
@@ -634,7 +638,7 @@ import type { FixContext, ReviewResult } from "./feature-build-types";
 
 type GateEvidence = Record<string, unknown>;
 
-export type RequirementResult = { allowed: true } | { allowed: false; reason: string };
+export type RequirementResult = { allowed: true } | { allowed: false; reason: string; disposition?: OutcomeDisposition };
 
 function missingHappyPathAnchorsFromState(state: ReturnType<typeof normalizeHappyPathState>): string[] {
   const missing: string[] = [];
@@ -665,6 +669,7 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
           reason: isFix
             ? "Fix review failed. Revise the diagnosis and re-run the review before advancing."
             : describeDesignReviewFailure(review),
+          disposition: "refused", // a review that RAN and said no is a verdict
         };
       }
       return { allowed: true };
@@ -676,6 +681,7 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
         return {
           allowed: false,
           reason: "Fix review failed. Revise the diagnosis and re-run the review before advancing.",
+          disposition: "refused",
         };
       }
       return { allowed: true };
@@ -697,7 +703,7 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       const planReview = evidence.planReview as ReviewResult | undefined;
       if (!planReview) return { allowed: false, reason: "Plan review is required before building." };
       if ((planReview as { decision?: string }).decision === "fail") {
-        return { allowed: false, reason: describePlanReviewFailure(planReview) };
+        return { allowed: false, reason: describePlanReviewFailure(planReview), disposition: "refused" };
       }
       return { allowed: true };
     }
@@ -733,7 +739,8 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       const status = evidence.uxVerificationStatus as
         | "running" | "complete" | "failed" | "skipped" | null | undefined;
       if (status === "running") {
-        return { allowed: false, reason: "UX verification is still running. Retry in a moment." };
+        // Not finished, so nothing was determined: re-run unchanged (AGENTS.md §4).
+        return { allowed: false, reason: "UX verification is still running. Retry in a moment.", disposition: "inconclusive" };
       }
       return { allowed: true };
     }
@@ -824,7 +831,11 @@ export function checkPhaseGate(
 
   for (const req of required) {
     const result = checkRequirement(req, evidenceWithVerb);
-    if (!result.allowed) return result;
+    if (!result.allowed) {
+      // The branch's own answer wins where it knows more; otherwise the
+      // requirement's declared kind, which is total by construction.
+      return { ...result, requirement: req, disposition: result.disposition ?? GATE_REQUIREMENT_DISPOSITION[req] };
+    }
   }
   return { allowed: true };
 }
