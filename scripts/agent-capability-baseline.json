@@ -71,7 +71,6 @@
       "AGT-R2D-PB",
       "AGT-S2P-PFB",
       "AGT-S2P-POL",
-      "AGT-SOC-IR-LEAD",
       "AGT-WS-BUILD",
       "AGT-WS-CUSTOMER",
       "AGT-WS-FARM-RANCH",
@@ -92,7 +91,7 @@
       "identity": 47,
       "corpus": 0,
       "governance": 0,
-      "shape": 43,
+      "shape": 39,
       "cadence": 55,
       "toolsAndSkills": 50,
       "evidence": 40

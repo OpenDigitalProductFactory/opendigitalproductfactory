@@ -275,4 +275,100 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
     },
     collaborationShape: "change-consequential",
   },
+
+  // ── Onboarding COO (AGT-WS-ONBOARD) ───────────────────────────────────────
+  //
+  // Belongs with the read-and-propose roles for the reason its own system
+  // prompt gives (tak/agent-routing.ts "/setup"): it learns how the business
+  // actually operates "one question at a time, in plain language", captures the
+  // answer with record_org_business_answer, and then —
+  //
+  //   "captured knowledge waits for their review before anything treats it as
+  //    settled. Never capture speculation or your own inferences — only what
+  //    the operator actually said."
+  //
+  // That is the shape's load-bearing constraint, the same shape of rule as the
+  // Bookkeeper's "never fabricate a transaction". Setup is where the platform's
+  // whole understanding of a business is seeded, so an inference captured here
+  // propagates into every downstream judgement as though the owner had said it.
+  "setup-business-understanding": {
+    key: "setup-business-understanding",
+    version: "1.0.0",
+    title: "Setup business understanding",
+    description:
+      "Builds the platform's first understanding of a new organisation from the owner's own words: "
+      + "asked one question at a time, captured verbatim, and settled only by the owner's review. "
+      + "Nothing inferred is ever captured as something they said.",
+    triggers: ["claim"],
+    stages: [
+      {
+        key: "ask",
+        title: "Ask one question at a time, in plain language",
+        accountablePrincipalRef: "agent:onboarding-coo",
+        advance: {
+          kind: "status-change",
+          condition:
+            "A question about how this business actually operates has been asked and answered in "
+            + "the owner's own words. An unanswered question does not become an assumption.",
+        },
+        evidence: ["conversation-turn"],
+      },
+      {
+        key: "capture",
+        title: "Capture only what was actually said",
+        accountablePrincipalRef: "agent:onboarding-coo",
+        advance: {
+          kind: "status-change",
+          condition:
+            "The captured answer is what the owner said, paired with the question asked. "
+            + "Speculation and the coworker's own inferences are NOT captured — the prompt's rule "
+            + "is a gate here, not advice.",
+        },
+        evidence: ["org-business-answer"],
+      },
+      {
+        key: "settle",
+        title: "Settle it",
+        // Captured is not settled. Until the owner reviews, nothing downstream
+        // may treat an answer as the organisation's position.
+        accountablePrincipalRef: "role:owner",
+        advance: {
+          kind: "governed-decision",
+          condition:
+            "The owner reviews each captured answer and confirms, corrects, or withdraws it. Only a "
+            + "confirmed answer becomes the organisation's stated position.",
+          decisionScope: "org-business-answer-confirmation",
+        },
+        evidence: ["decision-record"],
+      },
+    ],
+    stopConditions: [
+      { kind: "success", condition: "The owner has reviewed every captured answer, and the confirmed set is the organisation's stated position." },
+      {
+        kind: "failure",
+        condition:
+          "The owner cannot answer and no grounded source exists. Setup records the gap as unknown "
+          + "rather than filling it — an invented answer at setup is inherited by every later judgement.",
+      },
+      {
+        kind: "budget",
+        condition:
+          "More than 40 questions in one setup pass — stop and let the owner return. Onboarding that "
+          + "exhausts the owner produces agreement, not understanding.",
+      },
+    ],
+    grants: ["tool:record_org_business_answer", "tool:setup_email", "tool:request_coworker", "tool:registry_read"],
+    measures: [
+      { key: "answers-confirmed", description: "Captured answers the owner confirmed rather than corrected or withdrew." },
+      { key: "unknowns-recorded", description: "Questions recorded as unknown instead of filled — the honesty signal for this role." },
+    ],
+    budgets: [{ kind: "findings-per-run", limit: 40, unit: "questions" }],
+    reviewPoint: {
+      everyDays: 90,
+      description:
+        "Quarterly. A setup flow whose answers are mostly corrected on review is asking its "
+        + "questions badly, and that is visible only in the confirm rate.",
+    },
+    collaborationShape: "approval-sign-off",
+  },
 };
