@@ -46,7 +46,21 @@ export const PREGATE_VERDICTS = Object.freeze([
 ]);
 
 /** Statuses that mean the gate was never admitted / never finished. Not FAIL. */
-const UNFINISHED_GATE_STATUSES = new Set(["queued", "cancelled"]);
+const UNFINISHED_GATE_STATUSES = new Set(["queued", "cancelled", "running"]);
+
+/**
+ * "running" is here deliberately. The gate writes status "running" the moment it
+ * starts the long stage and only overwrites it when the stage returns a verdict,
+ * so a record left at "running" means one of exactly two things: the run is still
+ * in flight, or it was released/killed before it could grade anything. Neither is
+ * evidence about the diff.
+ *
+ * It used to fall through to FAIL. On a contended host that turned "your run was
+ * preempted" into "your code is broken" — the precise inversion AGENTS.md §4
+ * forbids ("a gate that could not run is not a verdict"), and it blocked pushes
+ * for branches whose own logs recorded no failing command.
+ */
+const RUNNING_GATE_STATUS = "running";
 
 /**
  * The pool policy the gate recorded with a parked claim (BI-D908DA0A). Read from
@@ -227,6 +241,17 @@ function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha }
         ...base,
         verdict: "INCONCLUSIVE",
         reason: `gate record status ${status} — the local-CI pool was CLOSED (${closed}) when this claim was parked: no slot could admit anyone, so this is host pressure, not a queue and not a failure of the diff. Free host memory or wait for the pressure to pass, then re-run pregate.`,
+      };
+    }
+    if (status === RUNNING_GATE_STATUS) {
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason:
+          `gate record status ${status} — the run started and has not recorded a verdict. `
+          + "It is either still in flight or was released before it could grade the diff; "
+          + "either way this is not a failure of the code. Check for a live runner, "
+          + "then re-run pregate on this SHA.",
       };
     }
     return {
