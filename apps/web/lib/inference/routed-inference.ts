@@ -159,6 +159,9 @@ function endpointPreferencesFromOptions(
     ...(options?.preferredModelId
       ? { preferredModelId: options.preferredModelId }
       : {}),
+    ...(options?.preferredModelFamily
+      ? { preferredModelFamily: options.preferredModelFamily }
+      : {}),
   };
 }
 

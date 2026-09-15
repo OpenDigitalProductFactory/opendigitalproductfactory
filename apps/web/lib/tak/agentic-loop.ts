@@ -37,6 +37,7 @@ import {
   resolveTurnMinimumCapabilities,
 } from "@/lib/routing/agent-capability-types";
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
+import { lookupPinnedModelFamily } from "@/lib/routing/model-successor";
 import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 import type { UserContext } from "@/lib/permissions";
 import {
@@ -53,7 +54,8 @@ import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store"
 import { estimateContextTokens, classifyContextPressure, compactAgenticMessages } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
-import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
+import { applyEscalationLadderGuard } from "./escalation-ladder";
+import { buildDowngradedFabricationMessage, buildLocalToolCallFailureMessage } from "./provider-failure-messages";
 import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import {
@@ -229,6 +231,8 @@ type AgentRouteConfig = {
   budgetClass?: "minimize_cost" | "balanced" | "quality_first";
   preferredProviderId?: string;
   preferredModelId?: string;
+  /** BI-7F2FBDA3: lineage of the pinned model, looked up even when it has retired. */
+  preferredModelFamily?: string | null;
   allowedProviders?: string[];
   deniedProviders?: string[];
   residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
@@ -483,29 +487,6 @@ function buildFabricationFailureMessage(params: {
  * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
  * See spec docs/specs/routing-resilience-and-failure-observability-spec.md §4.5.
  */
-function buildDowngradedFabricationMessage(): string {
-  return (
-    "My usual AI provider was unavailable, so I worked through a backup that "
-    + "couldn't fully complete this — nothing was left half-saved on your side. "
-    + "Please try again (the primary connection may have recovered), or break "
-    + "the request into a smaller step."
-  );
-}
-
-function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): string {
-  // Respects IDENTITY_BLOCK rule #5 — no infrastructure names, model ids, or
-  // routing architecture; engineers get those from RoutedInferenceResult.
-  // Copy must stay honest (G2, 2026-05-23): an earlier version promised a
-  // re-route the loop never performs.
-  // Rung 4 (BI-33F1EA72): connecting a provider is work only the human can do,
-  // so this hands off rather than apologizing — steps, then the resumption.
-  return buildHumanHandoff({
-    blocker: "I'm on the local AI here, and it couldn't carry this one through.",
-    steps: ["Open Platform > AI > Providers.", "Connect a stronger provider — Claude, Gemini, or OpenAI."],
-    verify: "confirm the stronger provider is live",
-  });
-}
-
 type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult; modelEvidenceTruncated?: boolean };
 
 function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
@@ -1174,6 +1155,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     turnToolPosture,
   );
   effectiveConfig.minimumDimensions = turnRoute.minimumDimensions;
+
+  // BI-7F2FBDA3: a pinned model is a preference with lineage; routing moves to
+  // the family successor rather than to whatever ranked first.
+  effectiveConfig.preferredModelFamily ??= await lookupPinnedModelFamily(prisma, effectiveConfig.preferredProviderId, effectiveConfig.preferredModelId);
 
   // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
   // per turn and, when it is near the budget, bias the routing budget class

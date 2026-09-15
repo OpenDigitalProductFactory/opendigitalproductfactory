@@ -42,6 +42,8 @@ import {
 import { selectRecipeWithExploration } from "./champion-challenger";
 import {
   selectEndpointPreference,
+  toPreferenceCandidate,
+  withInferredPreferenceFamily,
   type EndpointPreferences,
 } from "./preference-finalization";
 import {
@@ -668,18 +670,15 @@ export async function routeEndpointV2(
   // Persisted endpoint pins and per-coworker provider/model assignments are
   // preferences, never authority. They can select only from the set that has
   // cleared override blocks, policy, contract, cooldown, and capacity fences.
+  // BI-7F2FBDA3: lineage travels with the candidates so an unavailable
+  // preferred model can move to its family successor (preference-finalization).
   const preferenceSelection = selectEndpointPreference(
-    ranked.map((entry) => ({
-      endpointId: entry.endpoint.id,
-      providerId: entry.endpoint.providerId,
-      modelId: entry.endpoint.modelId,
-      entry,
-    })),
+    ranked.map((entry) => toPreferenceCandidate(entry.endpoint, entry)),
     {
       ...(pinnedOverride
         ? { pinnedEndpointId: pinnedOverride.endpointId }
         : {}),
-      ...(opts?.preferences ?? {}),
+      ...withInferredPreferenceFamily(endpoints, opts?.preferences ?? {}),
     },
   );
   const winner = preferenceSelection.winner.entry;
