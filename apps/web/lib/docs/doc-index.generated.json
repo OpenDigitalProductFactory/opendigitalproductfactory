@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 712,
+  "pageCount": 713,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1581,6 +1581,19 @@
       "anchors": [
         "failure-analysis-and-recovery-evidence",
         "deployment-and-protection"
+      ]
+    },
+    "docs/architecture/federation-outbox-runbook.md": {
+      "publicHref": "/architecture/federation-outbox-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "federation-outbox-reading-a-backlog-correctly",
+        "the-two-shapes-of-failure-and-why-they-must-not-share-a-budget",
+        "reading-the-queue-health-line",
+        "link-quarantine",
+        "when-you-get-back-on-the-peers-network"
       ]
     },
     "docs/architecture/field-service-work-item.md": {

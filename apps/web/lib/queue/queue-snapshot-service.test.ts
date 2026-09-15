@@ -32,6 +32,39 @@ describe("assessQueueHealth", () => {
   it("is idle when nothing waiting or flowing", () => {
     expect(assessQueueHealth(view()).health).toBe("idle");
   });
+  // Observed 2026-09-15: a federation outbox held 2,011 items whose last delivery
+  // attempt was 12 days earlier. It reported "no completions with backlog" — the
+  // same phrase a queue produces when its consumer is running and being refused.
+  // The operator was travelling and read the backlog as expected queuing, which
+  // it was; the stopped consumer underneath it was not.
+  it("names a stopped consumer separately from a blocked one", () => {
+    const twelveDaysAgo = new Date(Date.now() - 12 * 24 * 3_600_000).toISOString();
+    const a = assessQueueHealth(view({ depth: 2011, throughput: 0, lastAttemptAt: twelveDaysAgo }));
+
+    expect(a.health).toBe("at-risk");
+    expect(a.reasons.some((r) => r.includes("no attempt in 12d"))).toBe(true);
+    expect(a.reasons.some((r) => r.includes("consumer may have stopped"))).toBe(true);
+  });
+
+  it("does not call a queue stalled while its consumer is attempting and failing", () => {
+    // The away-from-peer case: work piling up, attempts still being made every
+    // cycle. That is a wait, not a fault, and must not read as a stopped consumer.
+    const justNow = new Date(Date.now() - 60_000).toISOString();
+    const a = assessQueueHealth(view({ depth: 2011, throughput: 0, lastAttemptAt: justNow }));
+
+    expect(a.reasons.some((r) => r.includes("consumer may have stopped"))).toBe(false);
+    // Still at-risk on depth alone — the backlog is real either way.
+    expect(a.health).toBe("at-risk");
+  });
+
+  it("stays quiet when a queue holds nothing, however long since the last attempt", () => {
+    const longAgo = new Date(Date.now() - 30 * 24 * 3_600_000).toISOString();
+    const a = assessQueueHealth(view({ depth: 0, throughput: 0, lastAttemptAt: longAgo }));
+
+    expect(a.reasons.some((r) => r.includes("consumer may have stopped"))).toBe(false);
+    expect(a.health).toBe("idle");
+  });
+
   it("is healthy when flowing with good metrics", () => {
     const a = assessQueueHealth(view({ throughput: 5, firstPassYield: 0.95, depth: 2 }));
     expect(a.health).toBe("healthy");
