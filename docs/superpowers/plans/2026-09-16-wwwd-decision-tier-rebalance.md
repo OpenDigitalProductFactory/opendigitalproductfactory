@@ -275,20 +275,46 @@ decision classes approaches the WWMD baseline (~8%, not 0% — genuine novel and
 
 A regression guard asserts that ambiguous criteria extraction does not change `outcomeType`.
 
-## 6. Cross-surface leak (operator question 5)
+## 6. Cross-surface leak (operator question 5) — measured
 
-The decision ledger is measured precisely above. On the wider "79 items waiting for the owner":
-`apps/web/lib/attention/sources/ai-decision.ts` projects `DecisionInteraction` rows with
-`outcomeType` escalate/defer and `humanOutcome IS NULL` into the owner's attention feed, filtered
-by `isFounderActionable` — so **this same defect leaks into the attention surface**, it is not
-confined to the decision-review hub.
+Founder-actionable unresolved `DecisionInteraction` rows (escalate/defer, `humanOutcome` null,
+`gateKey != profession`): **53**. By question:
 
-Founder-actionable residue by gate (unresolved): `org-business` 63, `build-studio` 21,
-unattributed 12 — `profession` (124 defer / 26 escalate) and `kernel-consult` (18) are filtered
-out as advisory / agent-internal.
+| Rows | Question |
+|---:|---|
+| **39** | `"run hive scout ingest: "` |
+| 5 | `Should we fund "Governed appointment of a Workroom…` |
+| 5 | `Overlap scan (kernel-evolution discipline §4.3) fo…` |
+| 2 | `For the two newly structured … partner prospects…` |
+| 2 | *(empty question)* |
+| 2 | `Choose the lowest-cognitive-load placement for fou…` |
+
+**One question is 39 of the 53**, left pending by the defect fixed on 2026-09-09.
+
+### Why the owner sees ~79 but the review hub shows 19
+
+The two owner-facing surfaces read the same rows and only one of them collapses duplicates:
+
+- `founder-review/queue.ts` `dedupeFounderReviewCandidates()` collapses by (perspective,
+  profileLabel, normalised question) — hence 19 on the review hub.
+- `attention/sources/ai-decision.ts` `loadAiDecisionItems()` did a plain `findMany(… take: 50)`
+  with **no dedupe**, so it rendered the 39 identical rows as 39 separate cards.
+
+So roughly three quarters of the owner's attention list was one obsolete question. Two distinct
+defects sit behind that, and they need different fixes:
+
+1. **No retraction** (owned by BI-13C38318). When `run_hive_scout_ingest` was reclassified
+   `consequenceScope: "platform"`, every pending row it had produced became a question the gate
+   would no longer ask. Nothing retracts them, so they are pending forever. This is the correct
+   fix, at the ledger.
+2. **Dedupe was not single-sourced** (fixed). The same rows, two surfaces, two behaviours. The
+   normaliser is now exported from the review queue and imported by the attention source. The flood
+   also exposed a **starvation** bug: `take: 50` was the render limit applied in SQL, so a genuine
+   decision ranked below 50 identical rows was never loaded at all — not merely buried. The loader
+   now reads a wide window, filters to actionable, collapses, then caps, and a collapsed card says
+   how many times the question was asked so repeated demand stays visible.
 
 **Not separately measured:** the attention feed aggregates ~20 non-decision sources
-(`apps/web/lib/attention/sources/`) and is computed live rather than stored, so the exact
-composition of the 79 was not reproduced from the database in this pass. The decision-derived
-contribution is the 63 above; the remainder is backlog-readiness, approvals and the other
-attention sources, which this plan does not size. Sizing those is a separate measurement task.
+(`apps/web/lib/attention/sources/`) and is computed live rather than stored, so backlog-readiness,
+approvals and the rest of the 79 were not sized in this pass. The decision-derived contribution is
+the 53 rows above.
