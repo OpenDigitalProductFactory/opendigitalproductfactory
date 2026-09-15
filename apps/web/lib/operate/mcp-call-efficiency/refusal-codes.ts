@@ -13,46 +13,106 @@
 // conflation, and each one costs the next agent a pass to discover there is
 // nothing to fix.
 //
-// The classification is deliberately CONSERVATIVE: a code is treated as a refusal
-// only when it is listed here. An unknown code counts as a failure, so a genuinely
-// broken tool is never silently excused by a gap in this list. The cost of being
+// The classification stays deliberately CONSERVATIVE: a code counts as governed
+// only when it is classified here. An unknown code counts as a failure, so a
+// genuinely broken tool is never silently excused by a gap. The cost of being
 // wrong runs one way — a missed finding is re-detected on the next scan, while a
 // wrongly-excused fault goes unreported.
+//
+// BI-AF9E4906: this used to be a `ReadonlySet<string>`, which was correct for its
+// purpose and structurally unable to stay current — nothing told its author when a
+// new code appeared, and it labelled `approval_required` (a WAIT on a person) and
+// `branch_occupied` (a settled REFUSAL) identically. Both are fixed by classifying
+// through the canonical disposition instead of by membership:
+//
+//   * the governed-execute seam's own rejections are DERIVED from
+//     `GOVERNED_REJECTION_DISPOSITION`, which is already total over
+//     `GovernedExecuteRejection` — so a new rejection is classified here the
+//     moment it is classified there, and cannot go stale;
+//   * the remaining codes are tool-level error strings that never pass through
+//     that seam, so they carry their own total map keyed by a closed union.
+//     Adding one without deciding what kind of answer it is does not compile.
+
+import { GOVERNED_REJECTION_DISPOSITION } from "@/lib/govern/authority/governed-rejection-disposition";
+import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 
 /**
- * Error codes where the tool worked and a policy declined the action.
- *
- * Add a code here only when the refusal means "the system correctly said no",
- * never merely "this call did not succeed".
+ * Governed outcomes that are reported as tool errors but never reach the
+ * governed-execute seam, so they are absent from `GovernedExecuteRejection`.
  */
-export const GOVERNED_REFUSAL_CODES: ReadonlySet<string> = new Set([
-  // Readiness / completion policy declined the transition.
-  "initiative_not_ready",
-  "gate_evidence_blocked",
-  "traceability-incomplete",
-  "plan-artifact-invalid",
-  // The action needs a human or a higher authority first.
-  "approval_required",
-  "alignment_escalation_required",
-  "insufficient_token_scope",
-  "AUTHORIZATION_DENIED",
-  // Another holder owns the resource; declining is the correct answer.
-  "branch_occupied",
-  "scope_conflict",
-  "nonprod_lease_not_owner",
-  "lease_terminal",
-  // The request duplicates work already recorded.
-  "idempotency_conflict",
-]);
+export type ToolLevelGovernedCode =
+  | "initiative_not_ready"
+  | "gate_evidence_blocked"
+  | "traceability-incomplete"
+  | "plan-artifact-invalid"
+  | "insufficient_token_scope"
+  | "AUTHORIZATION_DENIED"
+  | "branch_occupied"
+  | "scope_conflict"
+  | "nonprod_lease_not_owner"
+  | "lease_terminal"
+  | "idempotency_conflict";
 
 /**
- * Whether a failed ToolExecution was a governed refusal rather than a fault.
+ * What kind of answer each tool-level governed code is — total by construction.
+ */
+const TOOL_LEVEL_GOVERNED_DISPOSITION: Record<ToolLevelGovernedCode, OutcomeDisposition> = {
+  // The caller holds the missing input and may supply it, bounded. Readiness
+  // refusals name exactly what to record, so they are shapeable, not settled.
+  initiative_not_ready: "awaiting-input",
+  gate_evidence_blocked: "awaiting-input",
+  "traceability-incomplete": "awaiting-input",
+  "plan-artifact-invalid": "awaiting-input",
+
+  // Settled no. Nothing the caller supplies changes the answer on this call.
+  insufficient_token_scope: "refused",
+  AUTHORIZATION_DENIED: "refused",
+  branch_occupied: "refused",
+  scope_conflict: "refused",
+  nonprod_lease_not_owner: "refused",
+  lease_terminal: "refused",
+
+  // The work already exists; the duplicate call is answered, not denied.
+  idempotency_conflict: "proceed",
+};
+
+/**
+ * Every governed code and what kind of answer it is.
+ *
+ * The seam's rejections come from the single home that already classifies them,
+ * so the two cannot drift apart.
+ */
+export const GOVERNED_CODE_DISPOSITION: Readonly<Record<string, OutcomeDisposition>> = {
+  ...GOVERNED_REJECTION_DISPOSITION,
+  ...TOOL_LEVEL_GOVERNED_DISPOSITION,
+};
+
+/** Retained for callers that only need "governed or fault". */
+export const GOVERNED_REFUSAL_CODES: ReadonlySet<string> = new Set(
+  Object.keys(GOVERNED_CODE_DISPOSITION),
+);
+
+/**
+ * What kind of answer a failed ToolExecution carried, or null when the code is
+ * unclassified — which stays a fault, deliberately.
+ *
+ * Callers that must tell a wait from a refusal read this rather than the boolean:
+ * `awaiting-person` must not be retried, `awaiting-input` may be retried once the
+ * named input exists, and `inconclusive` re-runs unchanged.
+ */
+export function governedRefusalDisposition(result: unknown): OutcomeDisposition | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const code = (result as { error?: unknown }).error;
+  if (typeof code !== "string") return null;
+  return GOVERNED_CODE_DISPOSITION[code] ?? null;
+}
+
+/**
+ * Whether a failed ToolExecution was a governed outcome rather than a fault.
  *
  * Reads the tool's own error code out of its result payload. A result with no
- * code cannot be shown to be a refusal, so it stays a failure.
+ * code cannot be shown to be governed, so it stays a failure.
  */
 export function isGovernedRefusal(result: unknown): boolean {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return false;
-  const code = (result as { error?: unknown }).error;
-  return typeof code === "string" && GOVERNED_REFUSAL_CODES.has(code);
+  return governedRefusalDisposition(result) !== null;
 }

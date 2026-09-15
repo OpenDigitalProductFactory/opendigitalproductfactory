@@ -196,6 +196,24 @@ enables, not this work. Also out: the WWWD relevance-normalisation defect
 Slice 1 before everything: the current ledger cannot answer whether any of the rest
 helped.
 
+## Reconciliation with the canonical disposition (BI-2B96E1B9)
+
+This spec and [`2026-09-15-third-state-is-typed-addendum-design.md`](2026-09-15-third-state-is-typed-addendum-design.md) §10 make the same argument on two axes — this one on the decision engine, that one on the delivery plane. Landing both as written would give DPF **two parallel outcome vocabularies for the same platform**, which is the AGENTS.md §1 defect reproduced at spec altitude by the work meant to remove it.
+
+**The §10 five-member union is the canonical vocabulary.** This spec keeps its own band names — they are the right words for a scoring engine, and §10 §5 is explicit that a subsystem keeps its domain names and declares a mapping rather than being rewritten. The mapping is the contract:
+
+| Band here | Canonical disposition | Retry posture |
+| --- | --- | --- |
+| `proceed` | `proceed` | none |
+| `decline` (including a commandment conflict, which this spec's §1 table already makes a decline with a named reason) | `refused` | none |
+| `uncertain`, attempts remain and the caller can change an input | `awaiting-input` | bounded — this spec's §3 retry edge, and §9's shaping budget are the same mechanism |
+| `uncertain`, attempts exhausted | `awaiting-person` | never — §9 rule 3: budget exhaustion converts to escalate, never to a hard no |
+| `uncertain` because the corpus or coverage had nothing to judge on | `inconclusive` | same-input — nothing was determined, so the input is not in question |
+
+**`uncertain` is the band that splits, and this spec already knew it.** Its Decomposition slice 2 asks for "Decline / uncertain / corpus-gap / coverage-gap as distinct outcomes, each with its next step", and its framing line — *"escalate is three states wearing one label"* — is §10's thesis in one sentence. The canonical union supplies the names; this spec supplies the scoring that decides which one applies. A corpus gap routing to `inconclusive` rather than to a human is the concrete win: it re-runs when the corpus improves instead of spending a turn asking someone who also cannot answer.
+
+**What this does NOT change.** No band edge, no tie margin, no acceptance criterion here moves. This is a naming and routing contract, so the two planes can be read together — not a change to what any decision decides.
+
 ## Related
 
 - [Work shapes and the decision gate](../../architecture/work-shapes-and-the-decision-gate.md) — where this gate sits inside a work shape

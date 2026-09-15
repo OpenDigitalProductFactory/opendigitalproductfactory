@@ -210,9 +210,20 @@ export async function executePersistedSemanticReview(taskRunId: string) {
         } });
         return null;
       }
-      const terminalStatus = outcome.receipt.result.decision === "inconclusive" ? "failed" : "completed";
+      // BI-FF63D266. An inconclusive review determined nothing, so it is not a
+      // verdict on the diff: AGENTS.md §4 requires it be recorded as inconclusive
+      // and re-run on the same SHA, "never a FAIL against the diff" (fail closed
+      // on safety, fail open on infrastructure). "input-required" is the A2A
+      // status this file already parks unresolved runs in — five lines above for
+      // a late result, and at settle()'s call sites — and it is the status
+      // retryPersistedSemanticReview admits, so the operator recovery route is
+      // the existing one rather than a new one. completedAt is stamped only for a
+      // terminal outcome, matching settle(); the previous write marked an
+      // inconclusive run both failed AND completed.
+      const inconclusive = outcome.receipt.result.decision === "inconclusive";
+      const recordedStatus = inconclusive ? "input-required" : "completed";
       const accepted = await tx.taskRun.updateMany({ where: fence(taskRunId, generation),
-        data: { status: terminalStatus, completedAt: new Date() } });
+        data: { status: recordedStatus, ...(inconclusive ? {} : { completedAt: new Date() }) } });
       if (accepted.count !== 1) return null; // Cancellation or another generation wins.
       const capsule = await tx.workroom.findUnique({ where: { capsuleId: packet.input.identity.capsuleId }, select: { id: true } });
       if (!capsule) throw new Error("semantic-review-workroom-missing");
@@ -228,10 +239,11 @@ export async function executePersistedSemanticReview(taskRunId: string) {
       });
       await tx.taskRun.update({ where: { taskRunId }, data: { progressPayload: json({
         ...object(row.progressPayload), evidenceRecordId: evidence.id, resultClass: outcome.receipt.result.decision,
-        semanticReview: { ...state(row), generation, state: terminalStatus, requestDigest: packet.digest,
+        semanticReview: { ...state(row), generation, state: recordedStatus, requestDigest: packet.digest,
+          ...(inconclusive ? { reason: outcome.receipt.result.inconclusiveReason ?? "semantic-review-inconclusive" } : {}),
           evidenceRecordId: evidence.id, mayPublish: outcome.mayPublish, nextAction: outcome.nextAction },
       }) } });
-      return { evidenceRecordId: evidence.id, status: terminalStatus, capsuleId: capsule.id, activityId: activity.id };
+      return { evidenceRecordId: evidence.id, status: recordedStatus, capsuleId: capsule.id, activityId: activity.id };
     });
     if (!persisted) {
       const current = await prisma.taskRun.findUnique({ where: { taskRunId }, select: { status: true } });
