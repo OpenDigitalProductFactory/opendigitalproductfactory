@@ -5,7 +5,10 @@
   "metrics": {
     "defaultRequiredServiceCount": {
       "direction": "non-increasing",
-      "value": 7
+      "value": 7,
+      "owner": "platform-architecture",
+      "expiry": "2026-12-31",
+      "contraction": "EP-8B9B50D5"
     },
     "directInngestImportCount": {
       "direction": "non-increasing",
