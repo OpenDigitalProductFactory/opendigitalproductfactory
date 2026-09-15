@@ -1942,6 +1942,9 @@
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
     ],
+    "scripts/lib/gate-exit-classification.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/lib/hooks-dir.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -2535,6 +2538,7 @@
       "scripts/check-build-script-policy.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
+      "scripts/lib/gate-exit-classification.mjs",
       "scripts/pre-push-dco-check.mjs",
       "scripts/pre-push-gate-slot-contract.test.mjs",
       "scripts/pregate-preflight.mjs",

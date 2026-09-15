@@ -23,6 +23,7 @@
     "dco:check": "node scripts/pre-push-dco-check.mjs",
     "review:semantic-gate": "node scripts/semantic-review-gate.mjs",
     "gate:context": "node scripts/gate-context.mjs",
+    "gate:wait": "node scripts/gate-wait.mjs",
     "build": "node scripts/host-resource-runner.mjs --class next-build -- pnpm --filter web build",
     "test": "node scripts/host-resource-runner.mjs --class vitest -- pnpm -r --if-present --workspace-concurrency=1 --no-bail test",
     "test:e2e": "playwright test",
