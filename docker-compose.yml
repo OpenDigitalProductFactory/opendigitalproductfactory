@@ -782,10 +782,21 @@ services:
   # Captures EVERY container's stdout/stderr with 14-day retention so errors
   # stop scrolling out of the ephemeral Docker buffer unseen.
   loki:
-    profiles: ["runtime-deep-observability", "observability-ui"]
+    # NOT profile-gated (BI-F8024A9D). This pair reads container logs through
+    # the Docker socket with no host-path bind mount, so it runs identically on
+    # macOS/Windows Docker Desktop and native Linux. Gating it made the capture
+    # layer dark on every install and reproduced the exact log-flood blind spot
+    # the Tier 2 spec was written to close. cadvisor/node-exporter stay gated
+    # below because they genuinely need Linux-only host paths.
     image: grafana/loki:3.4.3
     restart: unless-stopped
     logging: *default-logging
+    # BI-4F3AB6B3: born-bounded always-on ceiling (config/install-resource-budgets.json).
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
     ports:
       - "127.0.0.1:3100:3100"   # localhost-only; portal + grafana reach it via dpf-network DNS
     volumes:
@@ -802,10 +813,15 @@ services:
     # scrapes it and the portal's log-issues panel talks to its API.
 
   alloy:
-    profiles: ["runtime-deep-observability", "observability-ui"]
     image: grafana/alloy:v1.7.5
     restart: unless-stopped
     logging: *default-logging
+    # BI-4F3AB6B3: born-bounded always-on ceiling (config/install-resource-budgets.json).
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
     volumes:
       - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro   # discovers + tails all containers
