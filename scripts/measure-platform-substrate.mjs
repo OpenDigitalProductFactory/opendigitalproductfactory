@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { validateBudget } from "./lib/baseline-budget.mjs";
 import {
   buildStaticRatchetMetrics,
   collectRepositoryMeasurements,
@@ -53,6 +54,68 @@ export async function atomicWriteFile(targetPath, content, injectedIo={}) {
   }
 }
 
+
+/**
+ * Carry per-metric budgets across a baseline rewrite (BI-24A1264B).
+ *
+ * The platform already owns the instrument for frozen debt — owner + expiry,
+ * enforced by check-no-expired-baseline-budgets.mjs, which exists because "a
+ * baseline with no owner and no expiry converts debt we intend to burn down
+ * into debt we have legitimized forever, silently". This file was exempt from
+ * it as a "generated measurement snapshot", which is true of its informational
+ * rows and false of its ratchets: a `non-increasing` metric becomes owned debt
+ * the moment it is RAISED.
+ *
+ * The rule is deliberately asymmetric, because the expansion/contraction cycle
+ * should be cheap to run in one direction only:
+ *   RAISED    -> requires owner + expiry + the contraction obligation that owns
+ *                folding it back in. Expansion is never anonymous.
+ *   UNCHANGED -> carries its existing budget forward untouched.
+ *   LOWERED   -> drops the budget. The debt was discharged by the contraction;
+ *                leaving a marker would invite re-freezing at the new floor.
+ *
+ * It measures whether a RAISE is still justified. It never asserts that lower
+ * is always better — a ratchet resting at its natural floor carries nothing.
+ */
+export function reconcileMetricBudgets({priorMetrics={},metrics,budget={},today}) {
+  const failures=[];
+  const out={};
+  for (const [name,row] of Object.entries(metrics)) {
+    const prior=priorMetrics[name];
+    const carried=prior?.owner||prior?.expiry||prior?.contraction
+      ? {owner:prior.owner,expiry:prior.expiry,contraction:prior.contraction}
+      : null;
+    const raised=row.direction==="non-increasing" && typeof prior?.value==="number" && row.value>prior.value;
+    if (!raised) {
+      const lowered=typeof prior?.value==="number" && row.value<prior.value;
+      out[name]=lowered||!carried ? {...row} : {...row,...carried};
+      continue;
+    }
+    const supplied={owner:budget.owner,expiry:budget.expiry};
+    const problems=validateBudget(supplied,{label:name,...(today?{today}:{})});
+    if (problems.length) {
+      failures.push(
+        `${name}: ${prior.value} -> ${row.value} is a RAISE of a non-increasing ratchet. ` +
+        `Supply --owner <team> --expiry <YYYY-MM-DD> --contraction <BI-…>; ` +
+        problems.map((p)=>p.replace(`${name}: `,"")).join(" "),
+      );
+      out[name]={...row};
+      continue;
+    }
+    if (typeof budget.contraction!=="string" || !budget.contraction.trim()) {
+      failures.push(
+        `${name}: ${prior.value} -> ${row.value} is a RAISE with no contraction obligation. ` +
+        `Pass --contraction <BI-…/EP-…> naming the work that folds it back in; an expansion nobody owns ` +
+        `reducing is the freeze this gate exists to stop.`,
+      );
+      out[name]={...row};
+      continue;
+    }
+    out[name]={...row,owner:budget.owner,expiry:budget.expiry,contraction:budget.contraction.trim()};
+  }
+  return {metrics:out,failures};
+}
+
 export async function runSubstrateMeasurement(options={}) {
   const repoRoot=resolve(options.repoRoot ?? scriptRoot);
   const paths={...defaults(repoRoot),...Object.fromEntries(Object.entries(options).filter(([key])=>key.endsWith("Path")))};
@@ -71,7 +134,18 @@ export async function runSubstrateMeasurement(options={}) {
     const measurements=await collectRepositoryMeasurements({repoRoot,manifest,...provenance});
     const metrics=buildStaticRatchetMetrics(measurements);
     if (options.update) {
-      const payload={version:1,manifestVersion:manifest.version,...provenance,metrics};
+      // BI-24A1264B: a RAISED non-increasing ratchet is owned debt from the
+      // moment it moves, so --update refuses to record one anonymously. See
+      // reconcileMetricBudgets for the asymmetry and why it points this way.
+      let priorMetrics={};
+      try { priorMetrics=(await json(paths.baselinePath,"substrate baseline")).metrics ?? {}; } catch { priorMetrics={}; }
+      const reconciled=reconcileMetricBudgets({
+        priorMetrics,
+        metrics,
+        budget:{owner:options.owner,expiry:options.expiry,contraction:options.contraction},
+      });
+      if (reconciled.failures.length) throw new Error(`Refusing to raise a substrate ratchet without a budget:\n${reconciled.failures.map((f)=>`- ${f}`).join("\n")}`);
+      const payload={version:1,manifestVersion:manifest.version,...provenance,metrics:reconciled.metrics};
       await atomicWriteFile(paths.baselinePath,stableSerialize(payload),options.io);
       return {exitCode:0,stdout:options.json?stableSerialize(payload):`Updated substrate baseline: ${paths.baselinePath}\n`,stderr:""};
     }
@@ -94,6 +168,9 @@ function parseArgs(argv) {
   for(let i=0;i<argv.length;i++) {
     if(argv[i]==="--json") options.json=true;
     else if(argv[i]==="--update") options.update=true;
+    else if(argv[i]==="--owner" && argv[i+1]) options.owner=argv[++i];
+    else if(argv[i]==="--expiry" && argv[i+1]) options.expiry=argv[++i];
+    else if(argv[i]==="--contraction" && argv[i+1]) options.contraction=argv[++i];
     else if(keys[argv[i]] && argv[i+1]) options[keys[argv[i]]]=resolve(argv[++i]);
     else throw new Error(`Unknown or incomplete argument: ${argv[i]}`);
   }
