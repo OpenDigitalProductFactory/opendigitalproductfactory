@@ -88,13 +88,13 @@
       "AGT-WS-TIME-OFF"
     ],
     "maxOpenGapsByPlane": {
-      "identity": 47,
+      "identity": 14,
       "corpus": 0,
       "governance": 0,
-      "shape": 39,
-      "cadence": 55,
-      "toolsAndSkills": 50,
-      "evidence": 40
+      "shape": 6,
+      "cadence": 22,
+      "toolsAndSkills": 18,
+      "evidence": 7
     }
   }
 }
