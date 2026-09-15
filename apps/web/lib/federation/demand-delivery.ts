@@ -62,6 +62,8 @@ export interface DemandDeliveryDb extends FederationDeliveryQueueDb {
       peerTokenEnc: string | null;
       role: string;
     }>>;
+    /** Quarantine a link the peer itself is refusing (see quarantineRejectedLink). */
+    updateMany?(args: unknown): Promise<{ count: number }>;
   };
   federatedRecordMirror: {
     findUnique(args: unknown): Promise<Partial<DemandOutboxRow> & { mirrorId: string; version: bigint; syncStatus: string; payload: unknown; versionVector?: unknown } | null>;
@@ -244,6 +246,41 @@ const BASE_RETRY_MS = 30_000;
 const MAX_RETRY_MS = 30 * 60_000;
 const MAX_ATTEMPTS = 8;
 
+/**
+ * Why a delivery attempt failed, in the only two shapes that should be treated
+ * differently: the peer was never reached, or the peer answered and refused.
+ *
+ * `postToPeer` already encodes this — `status: 0` is set on BOTH the transport
+ * catch and the SSRF-guard reject, and any other status is a real HTTP reply —
+ * so this is a reading of existing evidence, not new plumbing.
+ *
+ * The distinction is load-bearing (BI observed 2026-09-15). Both kinds shared one
+ * retry budget: MAX_ATTEMPTS 8 with a 30s..30m backoff exhausts in about an hour,
+ * so an install that simply could not see its peer — a laptop away from the home
+ * LAN for a few days — dead-lettered every queued item roughly an hour after it
+ * was enqueued. Distance was being recorded as permanent failure.
+ *
+ * Meanwhile the opposite error was also wrong: a peer answering 401/403 is a
+ * settled "no" that retrying cannot change, and that path burned 1,083 attempts
+ * across the same outbox without ever quarantining the link.
+ */
+export type DeliveryFailureKind = "unreachable" | "rejected-auth" | "rejected-other";
+
+export function classifyDeliveryFailure(status: number): DeliveryFailureKind {
+  // postToPeer returns 0 for a network error and for a URL the SSRF guard
+  // refused to dial. Neither reached the peer, so neither is evidence about it.
+  if (status === 0) return "unreachable";
+  if (status === 401 || status === 403) return "rejected-auth";
+  return "rejected-other";
+}
+
+/**
+ * Prior attempts an item must already carry before an auth rejection quarantines
+ * its link. One, so a token caught mid-rotation gets exactly one retry, and a
+ * standing refusal stops the outbox on the next pass rather than after hundreds.
+ */
+export const AUTH_REJECTION_QUARANTINE_MIN_ATTEMPTS = 1;
+
 export function retryDelayMs(attempt: number, random: () => number = Math.random): number {
   const bounded = Math.min(MAX_RETRY_MS, BASE_RETRY_MS * 2 ** Math.max(0, attempt - 1));
   return Math.round(bounded * (0.5 + random()));
@@ -257,6 +294,32 @@ export const FEDERATION_OUTBOX_RECORD_TYPES = [
   "demand-envelope", "demand-response", "demand-disposition", "operational-posture",
 ] as const;
 
+/**
+ * Stop dialing a link whose peer is actively refusing us.
+ *
+ * `FederationLink.quarantinedAt` already exists and the drain's own selector
+ * already excludes a quarantined link — but nothing ever set it. On the observed
+ * install eight links had accumulated 1,083 consecutive 401/403 rejections and
+ * not one was quarantined, so every cycle re-dialed peers that had already
+ * settled the question. The column was a mechanism with no trigger.
+ *
+ * Idempotent and narrow: it only ever moves a link that is currently trusted and
+ * unquarantined, so a concurrent cycle cannot double-apply it and it can never
+ * resurrect or revoke anything.
+ */
+export async function quarantineRejectedLink(
+  db: DemandDeliveryDb,
+  linkId: string,
+  now: Date,
+): Promise<boolean> {
+  if (!db.federationLink.updateMany) return false;
+  const { count } = await db.federationLink.updateMany({
+    where: { linkId, linkState: "trusted", quarantinedAt: null },
+    data: { quarantinedAt: now },
+  });
+  return count > 0;
+}
+
 export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   now?: Date;
   limit?: number;
@@ -264,7 +327,16 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   decryptToken?: typeof decryptPeerToken;
   send?: SendDemand;
   sendPosture?: SendPosture;
-} = {}): Promise<{ attempted: number; delivered: number; deferred: number; deadLettered: number }> {
+} = {}): Promise<{
+  attempted: number;
+  delivered: number;
+  deferred: number;
+  deadLettered: number;
+  /** Attempts that never reached the peer — held, never aged out. */
+  unreachable: number;
+  /** Links quarantined this cycle because the peer itself refused us. */
+  quarantinedLinks: string[];
+}> {
   const now = options.now ?? new Date();
   if (!db.workItem.findMany) throw new Error("Federation delivery queue reader is unavailable.");
   // Safe rolling migration: every legacy pending mirror gets one idempotent
@@ -327,6 +399,8 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   const linkById = new Map(links.map((link) => [link.linkId, link]));
   const deliverableRows = rows.filter((row) => linkById.has(row.federationLinkId));
   let delivered = 0;
+  let unreachable = 0;
+  const quarantinedLinks: string[] = [];
   let deferred = 0;
   let deadLettered = 0;
   for (const row of deliverableRows) {
@@ -397,6 +471,45 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
 
     const attempts = job.attemptCount + 1;
     const error = (result.error ?? `peer responded ${result.status}`).slice(0, 1_000);
+    const failureKind = classifyDeliveryFailure(result.status);
+
+    // A peer we never reached tells us nothing about the payload, so it must not
+    // spend the dead-letter budget. An install away from its peer for days holds
+    // its outbox intact and drains it on return; previously the same budget
+    // covered both kinds and everything queued was written off within the hour.
+    if (failureKind === "unreachable") {
+      unreachable++;
+      await finishFederationDeliveryJob(db, {
+        itemId: job.itemId,
+        // The attempt is still counted — one was genuinely made — so the backoff
+        // keeps widening and the row records how long the peer has been out of
+        // contact. What changes is that this count can no longer reach the
+        // dead-letter branch above: an unreachable peer defers forever rather
+        // than aging the item out.
+        attemptCount: job.attemptCount,
+        outcome: "retry",
+        error,
+        now,
+        nextAttemptAt: new Date(now.getTime() + retryDelayMs(attempts, options.random)),
+      });
+      continue;
+    }
+
+    // A peer answering 401/403 has settled the question; retrying cannot change
+    // a credential decision. Quarantine the link so the whole outbox stops
+    // dialing it, and surface ONE fault instead of thousands of identical ones.
+    if (failureKind === "rejected-auth" && job.attemptCount >= AUTH_REJECTION_QUARANTINE_MIN_ATTEMPTS) {
+      // Persisted state, not an in-memory tally. A cycle usually carries one item
+      // per link, so counting within a single invocation would never reach a
+      // threshold across cycles — the first draft of this did exactly that and
+      // could not have fired. `attemptCount` is the durable record of "we have
+      // already tried this at least once", so a token caught mid-rotation gets
+      // its retry while a standing refusal quarantines on the next pass.
+      if (await quarantineRejectedLink(db, link.linkId, now)) {
+        quarantinedLinks.push(link.linkId);
+      }
+    }
+
     if (attempts >= MAX_ATTEMPTS) {
       deadLettered++;
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
@@ -415,5 +528,8 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
       });
     }
   }
-  return { attempted: deliverableRows.length, delivered, deferred, deadLettered };
+  return {
+    attempted: deliverableRows.length, delivered, deferred, deadLettered, unreachable,
+    quarantinedLinks,
+  };
 }
