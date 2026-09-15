@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # WWWD decision over-escalation — diagnosis and rebalance plan
 
 **Date:** 2026-09-16
