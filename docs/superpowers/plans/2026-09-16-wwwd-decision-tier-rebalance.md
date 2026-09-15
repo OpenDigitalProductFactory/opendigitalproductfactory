@@ -20,24 +20,47 @@ the right person, not a generic queue."
 
 **No step in the WWWD initiation path performs that naming.** Two doors let anything in:
 
-**Door A — consequence is used as if it were scope.** `tak/alignment-tool-gate.ts`
-`runTakAlignmentGate()` routes *every* governed tool call classified consequential into
-`evaluateOrgBusinessDecisionGate`, with hardcoded `options: ["Proceed","Decline"]`,
-`domainClass: "plan-readiness"`, `riskTier: "medium"`, and a question composed mechanically by
-`alignmentStatement()` from the tool name and params. The gated set is
-`deriveConsequentialToolNames()` — any tool with `sideEffect && consequence`. That test answers
-"does this need governance?"; it says nothing about *whose judgment governs it*. So platform
-development lands in the owner's business queue: DI-0AE6533B5AD4 (`/tool/create_portal_pr`),
-DI-03E1EB6A75C2 (`/platform/ai/operations`), DI-7A0E1390EE95 (`/ops/demand`). Opening a pull
-request is a WWMD decision.
+**Door A — consequence used as if it were scope. ALREADY FIXED; corrected 2026-09-16.**
+`runTakAlignmentGate()` routed *every* consequential tool call into
+`evaluateOrgBusinessDecisionGate`, with hardcoded `options: ["Proceed","Decline"]` and a question
+composed mechanically from the tool name. That was real, and **BI-63B14D4B / PR #5260**
+(`95f80bdc2`, 2026-09-09) closed it: `ToolDefinition.consequenceScope` is declared with the
+consequence, and `consequential-tool-policy.ts` `alignmentRequiredFor()` skips the WWWD gate for
+`consequenceScope: "platform"`. Its doc comment cites decisions-belong-to-their-scope by name.
 
-**Door B — authored questions get no scope test either.** The six field-service decisions arrived
-via `/coworker-business` asking about employee-location capture, evidence-photo PII and lawful
-basis per jurisdiction — on a **field-service** product surface, asked of a **software-platform**
-org's business stance. They are craft/compliance (WSID), or platform/product (WWMD), or a
-customer's own archetype — not "what would this software-platform business do." The operator's own
-ruling on DI-F1666B2E39BA says so directly: the question *"required proper research into laws and
-contracts that are established for the specific business"* — it was not yet a decision.
+Verified on the live DB: **zero** org-business decisions from any platform tool after 2026-09-09.
+An earlier draft of this plan presented those rows as a live defect; they are residue from a fixed
+one. The concept and substrate already exist and work.
+
+What that leaves is **residue**, and it is the dominant queue problem. Unresolved org-business
+escalations by route:
+
+| routeContext | unresolved | last |
+|---|---|---|
+| `/platform/ai/operations` | **37** | 2026-09-09 |
+| `/ops/demand` | 10 | 2026-09-06 |
+| `/coworker-business` | 3 | 2026-09-01 |
+| `/ops/workrooms` | 1 | 2026-09-07 |
+| `/tool/create_portal_pr` | 1 | 2026-09-07 |
+| `/tool/run_hive_scout_ingest` | 1 | 2026-08-31 |
+
+**39 of 53 are residue from the now-fixed defect** — 37 of them the identical question
+"run hive scout ingest: " from a scheduled task. Nobody will ever answer them, and they bury the
+genuine items. The platform has no notion of **retracting a pending decision whose routing basis no
+longer holds**: when a tool was reclassified, every pending row it produced became a question the
+gate would no longer ask. A fix that stops producing bad rows but leaves the old ones is half a fix.
+
+**Door B — authored questions get no scope test. LIVE.** The six field-service decisions arrived
+via `/coworker-business` asking about employee-location capture, evidence-photo PII and lawful basis
+per jurisdiction — on a **field-service** product surface, asked of a **software-platform** org's
+business stance. They are craft/compliance (WSID), or platform/product (WWMD), or a customer's own
+archetype — not "what would this software-platform business do." The operator's own ruling on
+DI-F1666B2E39BA says so directly: the question *"required proper research into laws and contracts
+that are established for the specific business"* — it was not yet a decision.
+
+Those rulings are now `ruled`-tier stance material in a software-platform org's WWWD corpus,
+describing field-service privacy. That is the conflation hardening into doctrine, which is exactly
+why D4 authors criteria before answers.
 
 **The archetype substrate exists and is simply not consulted.** `StorefrontArchetype` /
 `storefrontConfig.archetype` is already surfaced to coworkers (`mcp/org-context-bundle.ts:170`,
@@ -156,23 +179,32 @@ One BI, one branch, one PR each.
 
 | Key | BI | Deliverable | Depends on |
 |---|---|---|---|
-| `admission` | **BI-13C38318** | Name the scope before initiating; decouple consequential-tool governance from the org-business gate; refuse rather than guess when scope is unestablished | — |
+| `retract` | **BI-13C38318** (pt 1) | Retract pending decisions whose routing basis no longer holds; backfill the 39 obsolete rows | — |
+| `admission` | **BI-13C38318** (pt 2) | Name the scope for authored questions before the org-business gate asserts authority; refuse rather than guess | — |
 | `criteria` | **BI-7728C3B7** (pt 1) | Elicit, per archetype, the criteria for initiating WWWD at all | `admission` |
 | `veto` | **BI-9E1E1939** | Constitutional alignment stops force-escalating: corpus-grounded criteria extraction; ambiguity abstains instead of vetoing | `admission` |
 | `settledness` | **BI-F5F2869D** | Settledness by absolute question↔ruling similarity rather than rank within the scored set | `veto` |
 | `posture` | **BI-B8DF2861** | Routine-op pre-authorization posture + semantic duplicate/pending-match suppression | `admission` |
 | `priming` | **BI-7728C3B7** (pt 2) | Baseline WWWD stance corpus, only for classes `criteria` admits | `criteria`, `posture` |
 
-### D0 — `admission` (BI-13C38318) — root, do first
+### D0 — `retract` + `admission` (BI-13C38318) — root, do first
 
-1. Classify every decision WWMD / WWWD / WSID **before** any gate asserts authority; route to the
+**Part 1 — retract obsolete pending decisions.** When the routing basis changes (a tool reclassified
+to `consequenceScope: "platform"`), retract the pending WWWD rows that basis produced, recording
+why, and backfill the 39 existing ones. Never silently delete — retract with a reason the owner can
+see. This is the largest single reduction in the owner's queue and needs none of Part 2.
+
+**Part 2 — name the scope for authored questions.**
+
+1. Classify WWMD / WWWD / WSID **before** the org-business gate asserts authority; route to the
    owning scope's corpus and the owning scope's human.
-2. Consequential ≠ WWWD. A consequential platform tool needs governance, and its governance is
-   WWMD or the existing consult-before-consequential-act window — not the owner's business stance.
-3. When scope cannot be established, return "not established as a business decision — here is what
+2. When scope cannot be established, return "not established as a business decision — here is what
    is missing", rather than an escalate card in the owner's business queue.
-4. **Never default an unclassified decision into WWWD.** Default-into-WWWD *is* the conflation.
-5. Consult the existing archetype substrate rather than adding one.
+3. **Never default an unclassified authored question into WWWD.** Default-into-WWWD *is* the
+   conflation.
+4. Consult the existing archetype substrate (`StorefrontArchetype`) rather than adding one.
+5. Declare `consequenceScope` explicitly on the 8 outward tools that currently default to
+   `business`, so the classification is a claim rather than an omission.
 
 Guard: no decision reaches the org-business gate without a recorded scope classification.
 
