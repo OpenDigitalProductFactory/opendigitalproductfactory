@@ -113,6 +113,31 @@ plain required-tool path is unchanged. See §7 of the design this plan implement
 
 ## Risks and rollback
 
+## Terminal truncation repair (2026-09-15)
+
+BI-8B8731EE / WC-00D415A4 adds one atomic correction on
+`fix/local-terminal-writer-contract`: distinguish output-token exhaustion from
+completed prose before judging a required writer. The run-specific research/plan
+review disposition is `changes/local-terminal-writer-exception.json`;
+SKIPPED/INCONCLUSIVE is not a passing receipt or coverage claim.
+
+1. Reproduce a truncated writer-only response in the real loop with mocked
+   inference; assert continuation retains the sole writer and required choice.
+2. Bound continuation to the existing two-turn truncation allowance. Exhaustion
+   preserves missing-receipt failure but names output truncation, not provider
+   noncompliance. A successful writer must never execute twice.
+3. Prove the durable TaskRun projection does not tag that exhausted response as
+   prose noncompliance, so the automatic noncompliance replay cannot admit it.
+4. Run graph-linked and colocated loop, terminal-policy, TaskRun, background
+   recovery, and adapter tests, typecheck and normal guards. Publish DCO-signed
+   through the protected queue and canonical upgrade. Only then may the owner
+   resume the original review and verify its actual persisted receipt.
+
+No named-function tool-choice change, model pin, grant, migration, writer
+argument, approval, or receipt validation change is included. Runtime truncation
+is a hypothesis supported by the 4096-token log; the ordering defect is confirmed
+in source. Tests prove the correction, not that every local-model failure is fixed.
+
 The principal risk is rejecting a CLI that later gains a genuinely enforceable
 mechanism. Enforcement is therefore decided from the adapter kind at the shared
 boundary, not guessed from output, prompts, tool grants, or token capability. A

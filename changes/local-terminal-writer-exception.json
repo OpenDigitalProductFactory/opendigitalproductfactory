@@ -1,0 +1,23 @@
+{
+  "kind": "operator-authorized-research-plan-review-exception",
+  "backlogItemId": "BI-8B8731EE",
+  "workroomId": "WC-00D415A4",
+  "branch": "fix/local-terminal-writer-contract",
+  "sessionRef": "01a05b0a-e892-7481-9a17-0706a12b7597",
+  "authorization": "2026-09-15: operator-directed coordinator task 01a07357-54bf-7da2-8813-4cec6fc9ebad explicitly authorized the AGENTS.md section 1 checked-in exception for this bounded process repair.",
+  "scope": "Research and plan review for the terminal-response truncation ordering repair only. The required reviewer writer is the broken path being repaired; direct writer access remains correctly not-granted.",
+  "reviewStatus": "SKIPPED/INCONCLUSIVE; NOT PASSED",
+  "taskRunId": "TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-DB6DE2FB860B",
+  "servedSha": "74ef95628b5dc1320baeb842c33ed530564d10fb",
+  "sourceBase": "71d7212d0",
+  "evidence": [
+    "DMR failed writer turn ended 2026-09-15T20:41:22.759Z after 4096 decoded tokens; exact raw response was not persisted in TaskMessage or TaskNode.",
+    "agentic-loop.ts terminal-policy exit at lines 1704-1720 precedes result.truncated recovery at line 1731 on sourceBase.",
+    "Coordinator reports automatic attempt ended input-required at 20:54:43Z with no writer execution; no further replay authorized before deployment.",
+    "Named tool_choice is unproven and is not part of this repair."
+  ],
+  "protectedRequirements": ["DCO", "PR protection and merge queue", "normal source and build gates", "grant intersection", "immutable artifact and receipt checks", "destructive and production-integrity controls", "canonical self-upgrade", "live functional verification"],
+  "prohibited": ["fabricating research or plan receipts", "direct database receipt writes", "impersonating a reviewer", "changing the frozen TaskRun", "weakening residency or grants"],
+  "expiresWhen": "This repair PR merges or its branch is abandoned. Unrelated or subsequent substantive work needs fresh authority.",
+  "completion": "No acceptance, passing review, or delivery is asserted by this exception."
+}

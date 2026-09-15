@@ -44,6 +44,14 @@ the test verdict, expiry, lease or evidence contents.
 
 ## Approved adjacent delivery contract
 
+Governed reviewer responses cut off at the output-token limit use at most two
+in-turn continuations before the missing-receipt result is returned. Continuation
+preserves the current tool surface and immutable writer binding; it does not
+rotate a provider merely for truncation. Exhaustion reports the output budget,
+not completed-prose noncompliance, and therefore does not enter automatic
+prose-recovery replay. A writer already recorded or awaiting approval is not
+called again. Receipt verification remains the completion authority.
+
 [Pre-dispatch sensitive LLM routing](../superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md)
 defines the implementation sequence for classifying governed payloads, evaluating
 the data PDP/PEP, enforcing masking/tokenization obligations, constraining provider
