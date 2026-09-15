@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 712,
+  "pageCount": 713,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -866,6 +866,7 @@
       "anchors": [
         "ai-routing-document-map",
         "current-authority",
+        "streaming-versus-result-delivery",
         "approved-adjacent-delivery-contract",
         "proposed-architecture",
         "historical-records",
@@ -1580,6 +1581,19 @@
       "anchors": [
         "failure-analysis-and-recovery-evidence",
         "deployment-and-protection"
+      ]
+    },
+    "docs/architecture/federation-outbox-runbook.md": {
+      "publicHref": "/architecture/federation-outbox-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "federation-outbox-reading-a-backlog-correctly",
+        "the-two-shapes-of-failure-and-why-they-must-not-share-a-budget",
+        "reading-the-queue-health-line",
+        "link-quarantine",
+        "when-you-get-back-on-the-peers-network"
       ]
     },
     "docs/architecture/field-service-work-item.md": {
@@ -2520,6 +2534,7 @@
         "concurrent-execution-and-recorded-state",
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
+        "a-named-governed-writer-must-be-attached-not-discovered",
         "related-references",
         "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
       ]

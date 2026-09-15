@@ -83,7 +83,7 @@ import {
 } from "./route-decision-attribution";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 import { serializeActivityHarnessAudit } from "./activity-harness-audit";
-import { codexSubscriptionModelExclusionReason } from "./codex-subscription-model-eligibility";
+import { authEligibilityExclusionReason } from "./model-auth-eligibility";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -217,10 +217,13 @@ function profileToManifest(
   statusOverride?: EndpointManifest["status"],
   riskAcceptedByProvider?: Map<string, SensitivityLevel[]>,
 ): EndpointManifest {
-  const eligibilityExclusionReason = codexSubscriptionModelExclusionReason({
+  // BI-7F2FBDA3: learned per-auth-mode eligibility first; the checked-in Codex
+  // subscription set is only the seed when nothing has been learned yet.
+  const eligibilityExclusionReason = authEligibilityExclusionReason({
     providerId: mp.providerId,
     authMethod: mp.provider.authMethod,
     modelId: mp.modelId,
+    capabilityOverrides: mp.capabilityOverrides,
   });
 
   return {

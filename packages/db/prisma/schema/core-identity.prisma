@@ -121,6 +121,7 @@ model AccountInvite {
   usedBy    String?
   createdAt DateTime        @default(now())
   account   CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@index([accountId])
 }
 
 model PasswordResetToken {
@@ -384,6 +385,7 @@ model AuthorizationDecisionLog {
   @@index([organizationId, patientSubjectPrincipalId, createdAt])
   @@index([patientAuthorityId])
   @@index([patientConsentDirectiveId])
+  @@index([patientSubjectPrincipalId])
 }
 
 model Organization {

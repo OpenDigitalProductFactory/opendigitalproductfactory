@@ -571,6 +571,7 @@ model EpicPortfolio {
 
   @@id([epicId, portfolioId])
   @@index([portfolioId]) // FK-leading (join table): portfolio-side lookups; @@id only covers epicId
+  @@index([epicId])
 }
 
 model ImprovementProposal {

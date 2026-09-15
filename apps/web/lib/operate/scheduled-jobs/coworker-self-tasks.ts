@@ -21,7 +21,6 @@ import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import {
   PROACTIVITY_FACT_CATEGORY,
   PROACTIVITY_OVERRIDE_FACT_PREFIX,
-  persistProactivityFact,
 } from "@/lib/proactivity/proactivity-override-preferences";
 import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
 import { occupiedTicks, deconflictCron } from "@/lib/operate/scheduled-jobs/scheduling-allocator";
@@ -658,38 +657,20 @@ export function inferLevelFromSelfTaskSchedule(schedule: string): ProactivityLev
   return fields[4] === "*" ? "assertive" : "balanced";
 }
 
-/** Write (or refresh) the manual Proactivity fact for a coworker to `level`. */
-async function backfillProactivityFact(
-  userId: string,
-  agentId: string,
-  level: ProactivityLevel,
-): Promise<void> {
-  const now = new Date();
-  const value = JSON.stringify({
-    scope: "agent",
-    scopeKey: `agent:${agentId}`,
-    level,
-    source: "reconcile-backfill",
-    acknowledgedByUserId: userId,
-    acknowledgedAt: now.toISOString(),
-  });
-  await persistProactivityFact(userId, {
-    category: PROACTIVITY_FACT_CATEGORY,
-    key: `${PROACTIVITY_AGENT_KEY_PREFIX}${agentId}`,
-    value,
-    sourceRoute: "/platform/ai",
-    sourceAgentId: agentId,
-    lastValidatedAt: now,
-  });
-}
-
 export type ReconcileAllSelfTasksResult = {
   /** Missing self-tasks created for an active non-quiet fact (Direction A). */
   created: number;
   /** Live self-tasks stood down because the toggle is now quiet (Direction A). */
   deactivated: number;
-  /** Orphaned live self-tasks whose toggle was restored from cadence (Direction B). */
-  backfilledFacts: number;
+  /**
+   * Live self-tasks running with no backing fact (Direction B).
+   *
+   * OBSERVED, NOT REPAIRED — see the Direction B block. Under the room-owned
+   * ruling (DI-81E47BDA59F1) an agent-scoped proactivity fact is no longer a
+   * source of truth, so minting one to "repair" an orphan would manufacture
+   * inert data. The task is left running and counted.
+   */
+  orphansObserved: number;
 };
 
 /**
@@ -699,7 +680,7 @@ export type ReconcileAllSelfTasksResult = {
  * it never perturbs the schedule of a task that is already correctly active.
  */
 export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfTasksResult> {
-  const result: ReconcileAllSelfTasksResult = { created: 0, deactivated: 0, backfilledFacts: 0 };
+  const result: ReconcileAllSelfTasksResult = { created: 0, deactivated: 0, orphansObserved: 0 };
 
   // Direction A — every active Proactivity fact for a REGISTERED coworker should
   // have a matching self-task (create when missing; stand down when quiet).
@@ -746,21 +727,38 @@ export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfT
     }
   }
 
-  // Direction B — an active self-task with no backing active fact is an orphan
-  // (the toggle desynced from the task). Restore the toggle from the task's
-  // cadence so the UI tells the truth, rather than stopping the coworker.
+  // Direction B — an active self-task with no backing active fact.
+  //
+  // This block used to MINT a fresh `aiCoworkerProactivity:agent:*` fact from
+  // the task's cron, "so the UI tells the truth". There is no such UI:
+  // BI-87C9C91C removed the per-coworker Proactivity control, deleted its save
+  // path, removed the `agent:` scope from the resolver ladder, and recorded
+  // that existing agent-scoped facts are "left untouched and inert". This
+  // reconciler kept reading and WRITING them anyway — hourly — so the inert
+  // population grew after the migration that declared it inert, and a
+  // coworker's cadence was governed by a fact no operator could change
+  // (BI-4CE4F52F).
+  //
+  // Ruling: cadence is room-owned (DI-81E47BDA59F1, margin 1.67, high
+  // confidence). An agent-scoped fact is therefore not a source of truth, and
+  // minting one repairs nothing — it manufactures data no surface can act on.
+  //
+  // The orphan is COUNTED and LEFT RUNNING. Deactivating it here would freeze
+  // or silence standing work on the strength of a missing fact that is no
+  // longer authoritative, which BI-4CE4F52F explicitly warns against. Removing
+  // Direction A's dependence on these facts is the next slice; this one stops
+  // the growth without changing who runs.
   const liveSelfTasks = await prisma.scheduledAgentTask.findMany({
     where: { isActive: true, taskId: { startsWith: "self-" } },
     select: { taskId: true, agentId: true, ownerUserId: true, schedule: true },
   });
   for (const task of liveSelfTasks) {
     if (desiredActive.has(task.taskId)) continue;
-    const level = inferLevelFromSelfTaskSchedule(task.schedule);
-    await backfillProactivityFact(task.ownerUserId, task.agentId, level);
-    result.backfilledFacts++;
+    result.orphansObserved++;
     console.info(
-      "[coworker-self-tasks] restored missing Proactivity toggle from orphaned self-task",
-      { taskId: task.taskId, agentId: task.agentId, level },
+      "[coworker-self-tasks] self-task running with no backing proactivity fact — "
+        + "observed, not repaired (BI-4CE4F52F; cadence is room-owned per DI-81E47BDA59F1)",
+      { taskId: task.taskId, agentId: task.agentId },
     );
   }
 

@@ -26,8 +26,10 @@ import {
   LocalProviderCapacityDeferredError,
 } from "./local-provider-capacity";
 import { invalidateRoutingLoaderCache } from "./loader";
+import { isModelRefusalError, recordAuthEligibility } from "./model-auth-eligibility";
 import { recordRouteOutcome } from "./route-outcome";
-import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
+import { autoDiscoverAndProfile, requestProviderCatalogRefresh } from "@/lib/ai-provider-internals";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   ProviderReconciliationRequiredError,
   shouldDegradeModelForInterfaceDrift,
@@ -438,8 +440,29 @@ export async function callWithFallbackChain(
         attempts.push({ endpointId: entry.providerId, error: e.reason });
         continue;
       }
-      const errMsg = e instanceof Error ? e.message : String(e);
+      const errMsg = getErrorMessage(e);
       attempts.push({ endpointId: entry.providerId, error: errMsg });
+      // BI-7F2FBDA3: a provider refusing THIS model under THIS account is a
+      // fact about the catalog, not about the request. Learn it (benched for a
+      // day, audited), drop the loader cache so the next route excludes it, and
+      // ask for an on-demand re-discovery so the successor is known before 03:10.
+      if (isModelRefusalError(errMsg)) {
+        await recordAuthEligibility(prisma, {
+          providerId: entry.providerId,
+          modelId: entry.modelId,
+          authMethod: provider.authMethod,
+          supported: false,
+          source: "runtime-refusal",
+          reason: errMsg.slice(0, 200),
+        }).catch((err: unknown) =>
+          console.warn(`[callWithFallbackChain] could not record refusal for ${entry.providerId}/${entry.modelId}: ${getErrorMessage(err)}`),
+        );
+        invalidateRoutingLoaderCache();
+        void requestProviderCatalogRefresh({
+          providerId: entry.providerId,
+          reason: `provider refused ${entry.modelId}: ${errMsg.slice(0, 120)}`,
+        });
+      }
       if (e instanceof InferenceError && e.code === "required_terminal_writer_not_enforceable") {
         if (i === 0) selectedAdapterCannotEnforceRequiredTerminalWriter = true;
         console.info(`[callWithFallbackChain] ${entry.providerId} adapter cannot enforce the required terminal writer; trying the next candidate.`);

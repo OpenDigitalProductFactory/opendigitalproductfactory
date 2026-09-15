@@ -382,6 +382,7 @@ model TaxLiabilityEntry {
   @@index([registrationId, periodId])
   @@index([sourceType, sourceId])
   @@index([decisionSnapshotId])
+  @@index([periodId])
 }
 
 /// What a period total MEANS for the family of tax that produced it.

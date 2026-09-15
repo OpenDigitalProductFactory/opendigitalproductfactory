@@ -84,6 +84,8 @@ export async function dispatchRoutedSemanticReview(
         agentDisplayName: branch.displayName,
         effort: context.strategyProfile === "document-authority" ? "max" : "high",
         interactionMode: "sync",
+        // Review parses a completed response; token streaming is not required.
+        requiresStreaming: false,
       },
     );
     return parseSemanticReviewResponse(response.content);

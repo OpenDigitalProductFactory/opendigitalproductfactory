@@ -72,6 +72,57 @@ export type ScheduledRequiredToolOutcome =
  * caller records the third verdict instead of collapsing it into one of the
  * other two.
  */
+/**
+ * The governed writers this prompt names — the tools the run MUST reach.
+ *
+ * Same rule `classifyScheduledRequiredTools` judges by, hoisted so it can be
+ * applied BEFORE the model runs instead of only after. A prompt that names a
+ * side-effecting tool is declaring a dependency on it; ranking that tool out of
+ * the attachment budget turns the dependency into a discovery problem the model
+ * has to solve at runtime, and it cannot.
+ *
+ * ⟦Live evidence, WC-A69BCABB on 2026-09-15: the coworker reported
+ * "Tools mismatch — the tools you listed don't match what's actually available
+ * to me", having tried load_tools and several surface_* names, and the run was
+ * then failed for `record_workroom_evidence executed zero times`. The tool was
+ * granted (workroom_evidence_write) and authorized; it was simply not attached,
+ * and the marketplace lookup did not find it. One function now decides what is
+ * required, and both the pin and the verdict read it.⟧
+ */
+export function scheduledRequiredToolNames(input: {
+  prompt: string;
+  authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
+}): string[] {
+  const prompt = input.prompt.toLowerCase();
+  return [
+    ...new Set(
+      input.authorizedTools
+        .filter((tool) => tool.sideEffect && prompt.includes(tool.name.toLowerCase()))
+        .map((tool) => tool.name),
+    ),
+  ].sort();
+}
+
+/**
+ * The governed writers this prompt names that are authorized but NOT attached.
+ *
+ * Returns an empty list when nothing needs pinning, so the caller re-resolves
+ * only when a required tool would otherwise have to be discovered at runtime.
+ */
+export function scheduledToolsNeedingPin(input: {
+  prompt: string;
+  attached: Array<{ name: string; sideEffect?: boolean }>;
+  deferred: Array<{ name: string; sideEffect?: boolean }>;
+}): string[] {
+  const required = scheduledRequiredToolNames({
+    prompt: input.prompt,
+    authorizedTools: [...input.attached, ...input.deferred],
+  });
+  if (required.length === 0) return [];
+  const deferredNames = new Set(input.deferred.map((tool) => tool.name));
+  return required.some((name) => deferredNames.has(name)) ? required : [];
+}
+
 export function classifyScheduledRequiredTools(input: {
   prompt: string;
   authorizedTools: Array<{ name: string; sideEffect?: boolean }>;

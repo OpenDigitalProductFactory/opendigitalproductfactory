@@ -46,6 +46,7 @@ model BeautyResourceService {
 
   @@unique([resourceId, itemId])
   @@index([storefrontId, itemId])
+  @@index([itemId])
 }
 
 /// Recurring or dated availability/block window for a fixed beauty resource.
