@@ -66,14 +66,39 @@ export type BudgetEventKind =
   | "downgrade";
 
 /**
- * Persists an AgentBudgetEvent row. Fire-and-forget — a DB error here must
- * never block an inference call.
+ * True when the provider's usage is funded by a subscription or prepaid
+ * commitment rather than billed per token. Unknown providers are treated as
+ * metered, so a missing finance profile can never silently zero out real spend.
  */
+async function isCommitmentFunded(providerId: string): Promise<boolean> {
+  try {
+    const finance = await prisma.aiProviderFinanceProfile.findUnique({
+      where: { providerId },
+      select: { valuationMethod: true },
+    });
+    return finance?.valuationMethod === "commitment_first";
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Resolve the blended per-token cost for a given model/provider pair.
- * Prefers ModelProfile.inputPricePerMToken when available; falls back to
- * ModelProvider.inputPricePerMToken; falls back to $3/MTok blended average.
- * Returns cost-per-token (not per-million-token).
+ * Resolve the blended per-token CASH cost for a given model/provider pair.
+ *
+ * `AgentBudgetEvent.amountUsd` means money leaving the business, so the
+ * published per-token rate is only the answer when we are billed per token.
+ * Under a subscription or prepaid commitment the tokens are already bought:
+ * the marginal call costs nothing extra, and charging it the list rate
+ * invents spend that no invoice will ever show. The install records which
+ * regime a provider is on in `AiProviderFinanceProfile.valuationMethod`
+ * (`metered` vs `commitment_first`), so consult that before pricing.
+ *
+ * The list rate still matters — it is what routing ranks models on, and what
+ * tells us whether a commitment is earning its keep — but that is a different
+ * question from cash, and it is not this field.
+ *
+ * Prefers ModelProfile prices; falls back to ModelProvider; falls back to
+ * $3/MTok blended average. Returns cost-per-token, not per-million-token.
  */
 async function resolveBlendedCostPerToken(
   providerId: string | undefined,
@@ -81,6 +106,10 @@ async function resolveBlendedCostPerToken(
 ): Promise<number> {
   const FALLBACK_PER_MTOKEN = 3; // $3/MTok — conservative blended average
   try {
+    if (providerId && (await isCommitmentFunded(providerId))) {
+      // Already paid for under a plan — no incremental cash for this call.
+      return 0;
+    }
     if (providerId && modelId) {
       const profile = await prisma.modelProfile.findUnique({
         where: { providerId_modelId: { providerId, modelId } },
