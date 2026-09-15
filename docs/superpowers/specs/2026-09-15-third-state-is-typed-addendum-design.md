@@ -3,7 +3,7 @@ title: The third state is typed — a non-verdict may never be persisted as a ve
 slug: 2026-09-15-third-state-is-typed-addendum-design
 status: draft
 authoredAt: 2026-09-15
-backlog_item: none — the DPF MCP plane was unreachable when this was authored; see §9
+backlog_item: EP-A480A6F7 (epic); phase items filed 2026-09-15 — see §9
 addendum_to: 2026-06-05-unified-delivery-surfaces-execution-alignment-design.md §9
 ---
 
@@ -160,6 +160,21 @@ Nothing here is new substrate. `gate-shaping.ts` is the reference implementation
 
 ## 9. Open
 
-No backlog item is filed. The DPF MCP plane was unreachable from the authoring session (`ConnectionRefused` on `127.0.0.1:3000/api/mcp/v1`), so `create_backlog_item` could not be called. This spec needs live backlog coverage before phase 2 begins, per AGENTS.md §5.
+**Backlog coverage — filed 2026-09-15, closing this section's original gap.** This spec was authored while the DPF MCP plane was unreachable (`ConnectionRefused` on `127.0.0.1:3000/api/mcp/v1`), so `create_backlog_item` could not be called and §5 coverage was owed before phase 2 could begin. It is now filed.
+
+Epic **`EP-A480A6F7`** — *Delivery outcomes carry their kind, not just their success* — owns this addendum. Its overlap check is recorded on the epic: no existing epic owned delivery-outcome typing across the plane (`EP-0AF96937` owns the §9 directive but is scoped to the workroom chokepoint, `EP-WORK-CONVERGENCE` to the work-graph substrate, `EP-ABB3AC9D` to latency tiering).
+
+| Phase | Item | Title |
+| --- | --- | --- |
+| 2.1 | `BI-FF63D266` | An inconclusive review is not a failed review |
+| 2.2 | `BI-C77D920A` | A queued lease is not a blocked lease |
+| 2.3 | `BI-09D11444` | A phase gate says which kind of no it is |
+| 3 | `BI-9F6AFFA0` | A run status is an enum |
+| 4 | `BI-174DB909` | A readiness code cannot be added unclassified |
+| 4 | `BI-77CFC7BF` | A work shape declares how it stops, not just that it stopped |
+| 4 | `BI-AF9E4906` | The call-efficiency refusal set cannot go stale |
+| §5 | `BI-2B96E1B9` | One verdict vocabulary across gates and decisions |
+
+Phase 1 landed as #5364. Its sibling contract — that `approvalPendingResult`'s wording is load-bearing because the scheduled-run verdict classifier keys on `error === "approval_required"` — is `BI-4F64C5D3`, which merged as #5335 but held **no live backlog row** until it was restored on 2026-09-15; merged code was citing an id the coordination plane could not see, and `check-doc-anchor-existence.mjs` caught it only because a changed doc cited it.
 
 `gate-shaping.ts:29` cites its spec as `2026-08-23-decision-concierge-design.md §4.7`. That section is "Guardrails" for the decision panel and says nothing about dispositions; the real owner is §9 of the unified-delivery-surfaces spec. Corrected in the companion change.
