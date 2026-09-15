@@ -51,6 +51,14 @@ const ARTIFACT = path.join(
 );
 const BASELINE = path.join(REPO_ROOT, "scripts", "agent-capability-baseline.json");
 
+/**
+ * Identity classes whose gaps are NOT actionable holes: the work is done by
+ * another identity (superseded), or not staffing it is a recorded decision with
+ * a review date (deliberately-unstaffed). Defined once because the check and
+ * the --update writer must count identically or the gate oscillates.
+ */
+const POSTURED_IDENTITY_CLASSES = new Set(["superseded", "deliberately-unstaffed"]);
+
 function readBaseline() {
   if (!fs.existsSync(BASELINE)) return null;
   return JSON.parse(fs.readFileSync(BASELINE, "utf8"));
@@ -117,7 +125,11 @@ export function findCompletenessRatchetFailures(report, baseline, options = {}) 
       failures.push(`capability-completeness baseline has no open-gap maximum for ${plane}`);
       continue;
     }
+    // MUST match the --update side's counting exactly, or the check and the
+    // baseline it writes disagree and the gate oscillates. Both exclude roles
+    // carrying a staffing posture; see the note beside maxOpenGapsByPlane.
     const current = (report.agents ?? []).filter((agent) => {
+      if (POSTURED_IDENTITY_CLASSES.has(agent.identityClass)) return false;
       const state = agent.planes?.[plane];
       return state && Number(state.level) < Number(state.ceiling);
     }).length;
@@ -193,10 +205,17 @@ function nextCompletenessRatchet(report, baseline) {
     ))
     .map((agent) => agent.key)
     .sort();
+  // OPEN gaps only. A role carrying a staffing posture — superseded, or
+  // deliberately unstaffed with a recorded reason and review date — is not an
+  // actionable hole, and ratcheting against it would freeze the count at the
+  // size of a standards catalogue nobody staffed. Those roles are not
+  // unprotected: workforce-staffing-posture.test.ts fails the build when a
+  // posture's review date passes, so a parking cannot quietly become permanent.
   const maxOpenGapsByPlane = Object.fromEntries(
     CAPABILITY_PLANES.map((plane) => [
       plane,
       (report.agents ?? []).filter((agent) => {
+        if (POSTURED_IDENTITY_CLASSES.has(agent.identityClass)) return false;
         const state = agent.planes?.[plane];
         return state && Number(state.level) < Number(state.ceiling);
       }).length,
