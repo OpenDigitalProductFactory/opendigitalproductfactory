@@ -83,7 +83,10 @@ describe("scheduledRequiredToolNames", () => {
       authorizedTools,
       executedTools: [],
     });
-    expect(verdict.status).not.toBe("satisfied");
+    // Nothing executed, so the verdict must name the tool as absent — and the
+    // pin must be attaching that same tool.
+    expect(verdict.kind).toBe("absent");
+    if (verdict.kind === "executed") throw new Error("expected an absent verdict");
     expect(pinned).toContain(verdict.toolName);
   });
 });
