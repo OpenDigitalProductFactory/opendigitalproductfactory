@@ -267,6 +267,18 @@ the two read alike, coworkers concluded the capability was missing and proposed 
 tools that already existed. They are also told that calling again will not advance it, so the
 honest response to a wait is to report it rather than retry.
 
+That difference is now carried by the result itself, not only by its wording. Every governed
+call comes back saying which kind of answer it is: the work went through, a person has to rule
+on it, an input is missing that the coworker can supply, the check could not run at all, or the
+platform said no. Only the last one is a refusal. The middle three are not answers about the
+request, and nothing downstream may file them as failures.
+
+The one you will notice is **the check could not run**. If the platform cannot record the
+authority evidence a call needs, or cannot reserve its receipt, the coworker is told the check
+itself was unavailable and the call can be retried unchanged — not that it was rejected. That is
+an outage on our side, and reading it as a refusal is how a coworker talks itself out of work it
+was entitled to do.
+
 Where the audit trail has nothing to say, these surfaces say so rather than guessing. A stage
 with no records reads **No records yet**. A room with no posture of its own reads **Running on
 defaults**. That is deliberate: a picture that never disagrees with the ledger is worth more
