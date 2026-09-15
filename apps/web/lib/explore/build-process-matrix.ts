@@ -20,7 +20,7 @@ import type { BacklogItemWithRelations } from "./backlog";
 import { deliveryShapeSize } from "@/lib/work-management/delivery-shapes";
 import { BACKLOG_EFFORT_SIZES } from "./backlog";
 import type { BuildPhase, FeatureBuildKind } from "./feature-build-types";
-import { checkVerificationDepthSatisfied } from "./verification-depth-requirement";
+import { checkVerificationDepthRequirement } from "./verification-depth-requirement";
 import {
   FEATURE_BUILD_KIND_VALUES,
 } from "./feature-build-types";
@@ -708,7 +708,7 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       return { allowed: true };
     }
     case "verification-depth-satisfied":
-      return checkVerificationDepthSatisfied(evidence);
+      return checkVerificationDepthRequirement(evidence);
     case "acceptance-evaluated": {
       if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };
       return { allowed: true };
