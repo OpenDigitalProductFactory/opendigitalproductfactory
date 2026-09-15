@@ -723,6 +723,9 @@
     "apps/web/lib/explore/backlog.ts": [
       "docs/architecture/backlog-archetype-scope.md"
     ],
+    "apps/web/lib/explore/build-process-matrix.ts": [
+      "docs/security/tool-evaluations/2026-09-15-bmad-method.md"
+    ],
     "apps/web/lib/explore/feature-build-types.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -3144,6 +3147,9 @@
     ],
     "docs/security/tool-evaluations/2026-08-23-authentik.md": [
       "apps/web/lib/govern/auth.ts"
+    ],
+    "docs/security/tool-evaluations/2026-09-15-bmad-method.md": [
+      "apps/web/lib/explore/build-process-matrix.ts"
     ],
     "docs/specs/device-identification-and-portfolio-placement-spec.md": [
       "apps/web/lib/queue/functions/hive-scout-ingest.ts",
