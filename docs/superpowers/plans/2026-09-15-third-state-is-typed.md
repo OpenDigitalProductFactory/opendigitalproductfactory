@@ -5,7 +5,7 @@ status: draft
 # Plan — the third state is typed
 
 **Spec:** [`docs/superpowers/specs/2026-09-15-third-state-is-typed-addendum-design.md`](../specs/2026-09-15-third-state-is-typed-addendum-design.md) (§10 addendum to the 2026-06-05 unified-delivery-surfaces spec)
-**Backlog:** not filed — the DPF MCP plane was unreachable when this was authored (`ConnectionRefused` on `127.0.0.1:3000/api/mcp/v1`). Needs live coverage before phase 2.
+**Backlog:** `EP-A480A6F7` — filed 2026-09-15. Phase 2.1 `BI-FF63D266`, 2.2 `BI-C77D920A`, 2.3 `BI-09D11444`; phase 3 `BI-9F6AFFA0`; phase 4 `BI-174DB909`, `BI-77CFC7BF`, `BI-AF9E4906`. See the spec's §9 for the full table.
 **Status:** phase 1 delivered; phases 2–4 not started.
 
 ## Phase 1 — declare the vocabulary, make it expressible (delivered)
