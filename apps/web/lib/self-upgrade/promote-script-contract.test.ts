@@ -354,6 +354,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       "step=sha-verify",
       "step=content-verify",
       "step=sandbox-refresh",
+      "step=service-reconcile",
       "step=cleanup",
     ] as const;
 
@@ -492,7 +493,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
     // sandbox-refresh runs AFTER the portal is fully verified (content-verify)
     // and BEFORE cleanup, so a sandbox failure never reverts a promoted portal
     // and cleanup still sweeps any dangling sandbox image last.
-    it("steps appear in order: prepare → backup → docker-build → migrate → docker-up → health → sha-verify → content-verify → sandbox-refresh → cleanup", () => {
+    it("steps appear in order: prepare → backup → docker-build → migrate → docker-up → health → sha-verify → content-verify → sandbox-refresh → service-reconcile → cleanup", () => {
       const positions = STEPS.map((s) => dryRunResult.stdout.indexOf(s));
       for (let i = 1; i < positions.length; i++) {
         expect(positions[i]).toBeGreaterThan(positions[i - 1]);

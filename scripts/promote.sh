@@ -1069,6 +1069,54 @@ if [[ $_dry_run -eq 0 ]]; then
   fi
 fi
 
+# --- Step 7d: service-reconcile ---
+# BI-D011EBE2: every OTHER `up` in this script is `up -d --no-deps --force-recreate
+# <named service>` — portal, sandbox, a postgres override. That recreates services
+# the install ALREADY has and can never create one it does not. install-dpf.sh runs a
+# full `docker compose up -d`, so a fresh install gets every service the shipped
+# compose file declares while an upgraded install keeps the service set it was born
+# with. The two never converge: any service added in any release reaches zero existing
+# installs, while the upgrade reports success. (The mirror case — a service REMOVED
+# from compose is never torn down — is BI-922EBB99, handled for the legacy stores by
+# step 7c above.)
+#
+# Reconcile against `requiredServices` from the capability projection, NOT a blind
+# `compose up -d`: that projection is the platform's own declaration of what this
+# install should run, already filtered by host platform and enabled capabilities, and
+# it is the same source step 7b uses to decide whether the sandbox applies here.
+#
+# Only services with NO container at all are created. `docker compose ps -a --services`
+# lists every service that has a container in any state, so a service an operator
+# deliberately stopped stays stopped — this step adds what was never delivered, it does
+# not fight the operator. `--no-recreate` means nothing already running is disturbed,
+# including dependencies pulled in by the services being created.
+#
+# Fail-LOUD but NOT fail-ABORT, exactly like sandbox-refresh (7b) and
+# decommission-legacy-stores (7c): the portal swap already succeeded and has been
+# verified, so a docker hiccup here must never mislabel a good upgrade. A service left
+# uncreated is a recoverable degraded state — the next upgrade retries it.
+emit_step service-reconcile
+if [[ $_dry_run -eq 0 ]]; then
+  _reconcile_required="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requiredServices.join("\n")))')"
+  _reconcile_existing="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+    "${_f_args[@]}" ps -a --services 2>/dev/null || true)"
+  _reconcile_missing=()
+  while IFS= read -r _reconcile_svc; do
+    [[ -z "$_reconcile_svc" ]] && continue
+    printf '%s\n' "$_reconcile_existing" | grep -qxF "$_reconcile_svc" || _reconcile_missing+=("$_reconcile_svc")
+  done <<< "$_reconcile_required"
+  if [[ ${#_reconcile_missing[@]} -gt 0 ]]; then
+    printf 'step=service-reconcile-creating target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")"
+    if ! docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" up -d --no-recreate "${_reconcile_missing[@]}"; then
+      printf 'step=service-reconcile-failed target=%s\n' "$_built_sha"
+      printf 'warning: could not create newly-required service(s) %s after a successful portal promotion — the portal upgrade stands, but this install is missing capability services the release ships. Retries on the next upgrade, or run `docker compose up -d` on the install (BI-D011EBE2)\n' "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")" >&2
+    fi
+  else
+    printf 'step=service-reconcile-current target=%s\n' "$_built_sha"
+  fi
+fi
+
 # --- Step 8: cleanup ---
 # A successful swap leaves the PREVIOUS portal image untagged (dangling) plus BuildKit
 # cache layers from step 3's rebuild. Nothing else sweeps them, so across upgrades they
