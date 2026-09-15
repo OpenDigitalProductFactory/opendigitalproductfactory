@@ -78,6 +78,7 @@ describe("createMcpSessionToken", () => {
     const verified = await verifyMcpSessionToken(token);
     expect(verified).not.toBeNull();
     expect(verified!.userId).toBe("user-1");
+    expect(verified!.taskRunId).toBeNull();
     expect(verified!.agentId).toBe("build-specialist");
     expect(verified!.threadId).toBe("thread-abc");
     expect(verified!.routeContext).toBe("/build");
@@ -203,5 +204,34 @@ describe("verifyMcpSessionToken", () => {
 
     const result = await verifyMcpSessionToken(noScopes);
     expect(result).toBeNull();
+  });
+});
+
+describe("taskRunId round-trip (BI-B949993E)", () => {
+  it("carries the governed TaskRun id so the route can resolve its review binding", async () => {
+    const token = await createMcpSessionToken({
+      userId: "user-1",
+      agentId: "AGT-WS-REVIEW",
+      threadId: "thread-abc",
+      routeContext: "/build",
+      taskRunId: "TR-MCP-abc-123",
+      scopes: ["backlog_read", "initiative_design_review"],
+      capability: "write",
+    });
+    const verified = await verifyMcpSessionToken(token);
+    expect(verified?.taskRunId).toBe("TR-MCP-abc-123");
+  });
+
+  it("reads a non-string taskRunId claim as absent", async () => {
+    const token = await new SignJWT({ scopes: ["backlog_read"], capability: "read", taskRunId: 42 })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject("user-1")
+      .setIssuer("dpf-mcp-internal")
+      .setAudience("dpf-mcp-server")
+      .setIssuedAt()
+      .setExpirationTime("60s")
+      .sign(new TextEncoder().encode(TEST_SECRET));
+    const verified = await verifyMcpSessionToken(token);
+    expect(verified?.taskRunId).toBeNull();
   });
 });
