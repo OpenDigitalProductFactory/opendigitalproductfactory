@@ -115,6 +115,11 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
   let degradationEmitted = false;
   let budgetHalted = false;
   let branchBudgetUsed = 0;
+  /** Each branch's parsed position, keyed by node id, for the synthesizer. */
+  const branchPositions = new Map<string, import("@/lib/deliberation/branch-execution").BranchPosition>();
+  const runMeta = (run.metadata ?? {}) as { brief?: unknown; subject?: unknown };
+  const runBrief = typeof runMeta.brief === "string" ? runMeta.brief : null;
+  const runSubject = typeof runMeta.subject === "string" ? runMeta.subject : null;
 
   // Sort: worker branches (everyone except adjudicator/summarizer) first.
   const workerBranches = run.branchNodes.filter(
@@ -226,15 +231,50 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
         });
       }
 
+      // Routing chose WHERE this branch runs. Now run it: a branch that is
+      // routed but never called produces no position, and a panel of silent
+      // branches can only ever synthesize "insufficient evidence".
+      const { buildBranchTurn, parseBranchPosition } = await import(
+        "@/lib/deliberation/branch-execution"
+      );
+      const { routeAndCall } = await import("@/lib/inference/routed-inference");
+
+      const turn = buildBranchTurn({
+        role: roleId,
+        persona: personaFor(roleId),
+        brief: runBrief,
+        subject: runSubject,
+      });
+
+      const called = await routeAndCall(turn.messages, turn.systemPrompt, "internal", {
+        taskType: contract.taskType,
+        ...(providerId ? { preferredProviderId: providerId } : {}),
+        ...(modelId ? { preferredModelId: modelId } : {}),
+      });
+
+      const position = parseBranchPosition(called.content);
+
       await prisma.taskNode.update({
         where: { id: branch.id },
         data: {
           status: "completed",
           completedAt: new Date(),
           routeDecision: JSON.parse(JSON.stringify(decision)),
+          outputSnapshot: {
+            recommendation: position.recommendation,
+            rationale: position.rationale,
+            raw: position.raw,
+            providerId: called.providerId,
+            modelId: called.modelId,
+            inputTokens: called.inputTokens,
+            outputTokens: called.outputTokens,
+          },
         },
       });
-      branchBudgetUsed += 0; // real cost surfaces post-call; tracked elsewhere.
+      branchPositions.set(branch.id, position);
+      // Budget is enforced on observed usage rather than a placeholder, so a
+      // cap actually halts a panel instead of reading as free.
+      branchBudgetUsed += estimateBranchCostUsd(called.inputTokens, called.outputTokens);
 
       await pushThreadProgress(input.threadId, input.taskRunId, {
         type: "deliberation:branch_completed",
@@ -306,6 +346,12 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
     branchNodeId: b.id,
     role: reverseRoleFromWorkerRole(b.workerRole),
     completed: b.status === "completed",
+    ...(branchPositions.get(b.id)?.recommendation
+      ? { recommendation: branchPositions.get(b.id)!.recommendation! }
+      : {}),
+    ...(branchPositions.get(b.id)?.rationale
+      ? { rationale: branchPositions.get(b.id)!.rationale! }
+      : {}),
     failureReason:
       b.status === "failed"
         ? "dispatch failed"
@@ -430,3 +476,44 @@ export const deliberationRun = inngest.createFunction(
     return { ok: true };
   },
 );
+
+
+/**
+ * Persona guidance for a role, when the install has seeded none.
+ *
+ * `DeliberationRoleProfile` is empty on every install checked, so a panel that
+ * waited for seeded personas would never speak. These are deliberately terse:
+ * the role's job, not a character sketch.
+ */
+function personaFor(roleId: string): string | null {
+  switch (roleId) {
+    case "debater":
+      return "You are a domain specialist on a review panel. Argue the reading your profession would give this question, and commit to a recommendation even when the evidence is partial.";
+    case "skeptic":
+      return "You are the skeptic on a review panel. Name the strongest reason the obvious answer is wrong, then give the recommendation you would still stand behind.";
+    case "reviewer":
+      return "You are a reviewer. Judge the proposal on its merits and recommend accept, change, or reject.";
+    case "author":
+      return "You are the author. State the case for the proposal as clearly as you can, including what would change your mind.";
+    case "adjudicator":
+      return "You are the adjudicator. Weigh the branch positions and give the single recommendation the panel stands behind.";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Cost of one branch, in USD, from observed token usage.
+ *
+ * A blended rate, not a per-model price book: this exists so `budgetUsd`
+ * actually halts a panel. It previously accumulated zero, which made every cap
+ * unreachable and every panel read as free.
+ */
+const BLENDED_INPUT_USD_PER_1K = 0.003;
+const BLENDED_OUTPUT_USD_PER_1K = 0.015;
+
+function estimateBranchCostUsd(inputTokens: number, outputTokens: number): number {
+  const inTok = Number.isFinite(inputTokens) ? Math.max(0, inputTokens) : 0;
+  const outTok = Number.isFinite(outputTokens) ? Math.max(0, outputTokens) : 0;
+  return (inTok / 1000) * BLENDED_INPUT_USD_PER_1K + (outTok / 1000) * BLENDED_OUTPUT_USD_PER_1K;
+}
