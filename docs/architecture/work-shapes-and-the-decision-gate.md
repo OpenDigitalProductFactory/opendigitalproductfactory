@@ -309,7 +309,7 @@ The shape registry spans SEVEN modules, merged into `ALL_SHAPES` at runtime:
 | `coworker-standing-shapes-operate.ts` | coworker standing work in the `operate` stream — split when the file above reached its 800-LOC ceiling |
 | `coworker-standing-shapes-craft.ts` | the read-and-propose craft roles, whose shapes all close on a human gate because their grants withhold the write |
 | `delivery-shapes.ts` | the five delivery shapes: size and what each owes before it is done (BI-B90F7CBB) |
-| `orchestration-shapes.ts` | one cycle per IT4IT value stream, for the value-stream orchestrators |
+| `orchestration-shapes.ts` | one cycle per IT4IT value stream, plus the two cross-cutting shapes that sit ACROSS the streams (the COO standup and the finance position) |
 
 A static reader must consult all seven. (This sentence and the count above have
 themselves drifted twice — the table said "three" while listing five. That is the
