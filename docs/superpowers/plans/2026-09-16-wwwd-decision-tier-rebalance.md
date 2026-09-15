@@ -7,6 +7,48 @@
 
 ---
 
+## 0. Root cause, established 2026-09-16 — WWWD has no scope-admission test
+
+Operator direction raised this to priority: *"all installs of this platform will have a conflated
+starting point that will cause endless confusion until mitigated properly."* It is upstream of
+everything in §2–§4, and it reframes them.
+
+[decisions-belong-to-their-scope](../../founder-kernel/wiki/principles/decisions-belong-to-their-scope.md)
+(core tier) requires: **"Before deciding, name which scope owns the question"** — platform/build to
+WWMD, the organization's own business call to WWWD, craft to WSID — and "a deferred decision goes to
+the right person, not a generic queue."
+
+**No step in the WWWD initiation path performs that naming.** Two doors let anything in:
+
+**Door A — consequence is used as if it were scope.** `tak/alignment-tool-gate.ts`
+`runTakAlignmentGate()` routes *every* governed tool call classified consequential into
+`evaluateOrgBusinessDecisionGate`, with hardcoded `options: ["Proceed","Decline"]`,
+`domainClass: "plan-readiness"`, `riskTier: "medium"`, and a question composed mechanically by
+`alignmentStatement()` from the tool name and params. The gated set is
+`deriveConsequentialToolNames()` — any tool with `sideEffect && consequence`. That test answers
+"does this need governance?"; it says nothing about *whose judgment governs it*. So platform
+development lands in the owner's business queue: DI-0AE6533B5AD4 (`/tool/create_portal_pr`),
+DI-03E1EB6A75C2 (`/platform/ai/operations`), DI-7A0E1390EE95 (`/ops/demand`). Opening a pull
+request is a WWMD decision.
+
+**Door B — authored questions get no scope test either.** The six field-service decisions arrived
+via `/coworker-business` asking about employee-location capture, evidence-photo PII and lawful
+basis per jurisdiction — on a **field-service** product surface, asked of a **software-platform**
+org's business stance. They are craft/compliance (WSID), or platform/product (WWMD), or a
+customer's own archetype — not "what would this software-platform business do." The operator's own
+ruling on DI-F1666B2E39BA says so directly: the question *"required proper research into laws and
+contracts that are established for the specific business"* — it was not yet a decision.
+
+**The archetype substrate exists and is simply not consulted.** `StorefrontArchetype` /
+`storefrontConfig.archetype` is already surfaced to coworkers (`mcp/org-context-bundle.ts:170`,
+`tak/route-context/providers/compliance.ts:65`). Extend it; do not build a parallel store.
+
+**Why this is upstream.** A decision that should never have entered WWWD then hits the
+constitutional-ambiguity veto (§2 — a tool name carries no market/product/motion criteria by
+construction), can never be settled by a ruling (D2 — wrong corpus), and would poison the baseline
+corpus if primed against (D4). Fixing admission first shrinks what the rest must cover.
+
+
 ## 1. The gap, measured
 
 WWMD auto-resolves; WWWD escalates almost everything it touches. 30-day `DecisionInteraction`
@@ -114,10 +156,25 @@ One BI, one branch, one PR each.
 
 | Key | BI | Deliverable | Depends on |
 |---|---|---|---|
-| `veto` | **BI-9E1E1939** | Constitutional alignment stops force-escalating: corpus-grounded criteria extraction; ambiguity abstains instead of vetoing; never overwrite a measured `stanceAlignment` | — |
-| `settledness` | **BI-F5F2869D** | Settledness by absolute question↔ruling similarity rather than rank within the scored set; a matching owner ruling clears the threshold | `veto` |
-| `posture` | **BI-B8DF2861** | Routine-op pre-authorization posture + semantic duplicate/pending-match suppression | `veto` |
-| `priming` | **BI-7728C3B7** | Baseline WWWD stance corpus per archetype, software-platform (customer 0) first | `posture` |
+| `admission` | **BI-13C38318** | Name the scope before initiating; decouple consequential-tool governance from the org-business gate; refuse rather than guess when scope is unestablished | — |
+| `criteria` | **BI-7728C3B7** (pt 1) | Elicit, per archetype, the criteria for initiating WWWD at all | `admission` |
+| `veto` | **BI-9E1E1939** | Constitutional alignment stops force-escalating: corpus-grounded criteria extraction; ambiguity abstains instead of vetoing | `admission` |
+| `settledness` | **BI-F5F2869D** | Settledness by absolute question↔ruling similarity rather than rank within the scored set | `veto` |
+| `posture` | **BI-B8DF2861** | Routine-op pre-authorization posture + semantic duplicate/pending-match suppression | `admission` |
+| `priming` | **BI-7728C3B7** (pt 2) | Baseline WWWD stance corpus, only for classes `criteria` admits | `criteria`, `posture` |
+
+### D0 — `admission` (BI-13C38318) — root, do first
+
+1. Classify every decision WWMD / WWWD / WSID **before** any gate asserts authority; route to the
+   owning scope's corpus and the owning scope's human.
+2. Consequential ≠ WWWD. A consequential platform tool needs governance, and its governance is
+   WWMD or the existing consult-before-consequential-act window — not the owner's business stance.
+3. When scope cannot be established, return "not established as a business decision — here is what
+   is missing", rather than an escalate card in the owner's business queue.
+4. **Never default an unclassified decision into WWWD.** Default-into-WWWD *is* the conflation.
+5. Consult the existing archetype substrate rather than adding one.
+
+Guard: no decision reaches the org-business gate without a recorded scope classification.
 
 ### D1 — `veto` (BI-9E1E1939)
 
@@ -156,13 +213,21 @@ clear the threshold.
    Seven of the 19 open rows are near-identical funding-sweep questions.
 3. Resolution of a joined row resolves all instances. Never suppress against *resolved* rows.
 
-### D4 — `priming` (BI-7728C3B7)
+### D4 — `criteria` + `priming` (BI-7728C3B7)
 
-Author a baseline WWWD stance corpus per archetype, mirroring WWMD's altitude (a baseline stance
-is doctrine, not an instance), covering the decision classes the live queue actually shows:
+**Part 1 (blocking) — establish the initiation criteria.** Per archetype, elicit what makes a
+decision a WWWD decision for this business: which classes it owns (vs WWMD, vs WSID, vs a
+customer's archetype), what context must already be established before the question is answerable,
+what it pre-authorizes as routine operation, and who owns it when it is not WWWD. This is
+elicitation (`dpf-elicit-tacit-knowledge`), not authoring — ask the owner enough to establish the
+criteria; do not infer them.
+
+**Part 2 — baseline corpus**, only for classes Part 1 admits. Mirror WWMD's altitude (a baseline
+stance is doctrine, not an instance). Candidate classes from the live queue, subject to Part 1:
 
 - funding / prioritization posture (7 of 19 open rows)
-- data-handling & privacy defaults (6 of 19 open rows — the field-service cluster)
+- data-handling & privacy defaults — **note: the 6 field-service rows are the conflation case
+  (§0) and are likely WSID/WWMD, not WWWD for this archetype; Part 1 decides**
 - customer-goodwill ceilings
 - partner / outreach rails (DI-AB432BFF8956)
 - routine-op pre-authorization (consumes D3's posture)
