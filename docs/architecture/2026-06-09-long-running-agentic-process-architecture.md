@@ -231,6 +231,23 @@ A single pattern that every long-horizon process is an instance of. It is mostly
 
 **Implemented async delivery projection (2026-09-04):** the Delivery task hub reads authorized durable async-operation handles through their server-owned `TaskRun` or Workroom binding. One event-only function registered in `queue/functions/index.ts` consumes committed async transition locators, re-reads canonical state, writes a deterministic `status-changed` activity to the existing Workroom ledger, and wakes the bounded list stream. Recent terminal transitions may also create one deduplicated semantic notification. The event payload never supplies status, Workroom, recipient, result, or notification authority, and this projection adds neither a scheduler nor a second execution or task ledger.
 
+**Deliberation branches execute (2026-09-15):** the runner was durable and
+resumable from the start, but it only ever *routed* a branch — `routeEndpointV2`
+chose a provider and model, the choice was recorded, and the node was marked
+complete without a call. Every branch finished in zero seconds, so the
+synthesizer found no positions to merge and every run on every pattern returned
+"Insufficient evidence to produce a recommendation" (measured: review 1207/1210,
+debate 198/198, governance-triage 263/275 — one distinct outcome between them).
+Branches now dispatch through `routeAndCall`, the canonical route-and-execute
+entry point, carrying the role's persona and the run's `brief`; the reply is
+persisted to `TaskNode.outputSnapshot` and parsed into the `BranchArtifact`
+fields the synthesizer already consumed. `OrchestrateDeliberationInput` gained
+`brief` / `subject`, because the engine previously had no channel for what it
+was deliberating about. Budget accounting moved from a `+= 0` placeholder to
+observed token usage, so `budgetUsd` now actually halts a panel. The durable
+execution properties described above are unchanged — this fills the dispatch
+step inside them.
+
 **What is deliberately *not* adopted:** Temporal/Restate/DBOS as a new engine. DPF already runs Inngest, which provides the same journaling/retry/resume semantics. Adding a second durable engine would violate single-source-of-truth and the simplicity principle. The lesson from Cursor is *"put the agent loop on durable execution,"* not *"use Temporal specifically."*
 
 ---

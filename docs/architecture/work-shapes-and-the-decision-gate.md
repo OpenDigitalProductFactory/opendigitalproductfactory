@@ -780,6 +780,42 @@ fail-closed guard: a guard whose own output re-triggers its input has no
 recovery path, and the estate it protects can only degrade. Bound the latch to
 something that changes on its own.
 
+## A named governed writer must be attached, not discovered
+
+The chain above — owner, authority, brief, evidence receipt — was complete and
+deployed, and the estate still performed no work. The coworker's own transcript
+says why. `WC-A69BCABB`, 2026-09-15, after a full 64-message agent loop:
+
+> **Status: Tools mismatch — the tools you listed don't match what's actually
+> available to me.** I attempted to call `surface_list`, `surface_snapshot`,
+> `surface_open`, `surface_query`, `surface_act`, `load_tools`, and
+> `search_knowledge` — none of …
+
+The run was then failed for `record_workroom_evidence executed zero times`. The
+grant existed (`workroom_evidence_write`), the tool was authorized, and it was
+never attached: it fell below the attachment budget and the marketplace lookup
+did not surface it. Zero tool calls was never a model declining to act.
+
+**A prompt that NAMES a governed writer is declaring a dependency on it.**
+`scheduledRequiredToolNames` applies the rule the post-hoc verdict already used —
+a side-effecting tool whose name appears in the prompt is required — *before* the
+model runs, and pins it through `requiredToolNames`. One rule, two uses, asserted
+equal by test: otherwise a run can be failed for a tool the pin never attached,
+which is precisely the live defect.
+
+Pinning stays narrow. Read-only tools are not pinned (they load on demand
+safely), unnamed side-effecting tools are not pinned (that would defeat the
+budget), and nothing unauthorized is pinned — authorization remains upstream.
+
+**The richer brief made the failure worse before it made it better.** Given the
+full objective and definition of done but still no reachable tools, the same
+coworker stopped erroring and started answering: *"Sweep completed — 0
+vulnerability findings, 0 CISA KEV exposures, 0 end-of-life components, estate is
+clean."* Specific counts, no tool call, entirely invented. A brief that presses
+for an answer without the means to obtain one converts an honest failure into a
+confident falsehood — which is why the governed-evidence requirement is the load
+-bearing guard here, not the prompt.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer

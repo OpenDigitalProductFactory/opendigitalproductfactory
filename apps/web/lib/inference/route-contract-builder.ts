@@ -19,6 +19,7 @@ export function buildInitialRouteContext(input: {
     ...(posture?.routeContext ?? {}),
     sensitivity: input.sensitivity,
     interactionMode: options?.interactionMode,
+    requiresStreaming: options?.requiresStreaming,
     requiresCodeExecution: options?.requiresCodeExecution,
     requiresWebSearch: options?.requiresWebSearch,
     requiresComputerUse: options?.requiresComputerUse,

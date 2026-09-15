@@ -135,6 +135,15 @@ export async function runGovernanceTriagePanel(input: {
   try {
     const run = await orchestrateDeliberation({
       userId: input.userId,
+      // The panel's whole case. Without it the branches convene with nothing
+      // in front of them and the run can only report insufficient evidence —
+      // which is exactly what 263 completed panels did.
+      brief: buildPanelBrief({
+        subject: input.subject,
+        plan: input.plan,
+        optionIds: input.optionIds,
+      }),
+      subject: input.subject.question,
       patternSlug: "governance-triage",
       artifactType: "policy",
       triggerSource: "risk",
