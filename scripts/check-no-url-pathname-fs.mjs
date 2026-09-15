@@ -57,51 +57,12 @@ const SKIP_DIRS = new Set([
   "generated", ".pnpm-store",
 ]);
 
-/**
- * Strip comments so an explanatory mention of the trap is not a finding.
- *
- * Deliberately lexical, not a parser: `//` inside a string literal is the only
- * false strip that matters here, and a string that contains both `//` and
- * `import.meta.url).pathname` on the same line is not a shape this repo has.
- * Line structure is preserved so findings report the real line number.
- */
-export function stripComments(source) {
-  let out = "";
-  let index = 0;
-  const text = String(source);
-  while (index < text.length) {
-    const two = text.slice(index, index + 2);
-    if (two === "//") {
-      while (index < text.length && text[index] !== "\n") index += 1;
-      continue;
-    }
-    if (two === "/*") {
-      const close = text.indexOf("*/", index + 2);
-      const end = close === -1 ? text.length : close + 2;
-      out += text.slice(index, end).replace(/[^\n]/g, " ");
-      index = end;
-      continue;
-    }
-    const char = text[index];
-    if (char === '"' || char === "'" || char === "`") {
-      // Copy the literal verbatim so a `//` inside it is not read as a comment.
-      let cursor = index + 1;
-      while (cursor < text.length) {
-        if (text[cursor] === "\\") { cursor += 2; continue; }
-        if (text[cursor] === char) break;
-        if (char !== "`" && text[cursor] === "\n") break;
-        cursor += 1;
-      }
-      const end = Math.min(cursor + 1, text.length);
-      out += text.slice(index, end);
-      index = end;
-      continue;
-    }
-    out += char;
-    index += 1;
-  }
-  return out;
-}
+// BI-6EBA0A00: the scanner moved to scripts/lib/strip-comments.mjs so the
+// One-ActionResult ratchet could share it instead of growing a fifth copy.
+// Re-exported here because this guard's own test imports it from this module.
+import { stripComments } from "./lib/strip-comments.mjs";
+// Re-exported because this guard's own test imports it from this module.
+export { stripComments };
 
 /**
  * The whole rule, as a pure function of one file's source. Exported so the

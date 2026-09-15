@@ -7,6 +7,46 @@ import {
 
 const GiB = 1024 ** 3;
 
+describe("host admission keeps its kind (BI-C77D920A)", () => {
+  const host = { totalMemoryBytes: 64 * GiB, availableMemoryBytes: 24 * GiB, inferenceResident: true };
+
+  it("tells a queued wait apart from a permanent block, though both have zero capacity", () => {
+    const queued = resolveHostResourcePoolPolicy({
+      resourceClass: "vitest",
+      expectedMemoryBytes: 8 * GiB,
+      hostResource: host,
+      activeReservations: [{ resourceClass: "next-build", expectedMemoryBytes: 16 * GiB }],
+    });
+    const blocked = resolveHostResourcePoolPolicy({
+      resourceClass: "next-build",
+      expectedMemoryBytes: 8 * GiB,
+      hostResource: { ...host, availableMemoryBytes: Number.NaN },
+      activeReservations: [],
+    });
+
+    // Both collapse to no capacity — that part was never wrong.
+    expect(queued.effectiveCapacity).toBe(0);
+    expect(blocked.effectiveCapacity).toBe(0);
+
+    // What was lost: "wait, capacity frees" vs "this will never be admitted".
+    expect(queued.admissionStatus).toBe("queued");
+    expect(queued.disposition).toBe("awaiting-person");
+    expect(blocked.admissionStatus).toBe("blocked");
+    expect(blocked.disposition).toBe("refused");
+  });
+
+  it("carries proceed for an admitted claim", () => {
+    const admitted = resolveHostResourcePoolPolicy({
+      resourceClass: "next-build",
+      expectedMemoryBytes: 16 * GiB,
+      hostResource: { ...host, availableMemoryBytes: 30 * GiB },
+      activeReservations: [],
+    });
+    expect(admitted.admissionStatus).toBe("admitted");
+    expect(admitted.disposition).toBe("proceed");
+  });
+});
+
 describe("resolveHostResourcePoolPolicy", () => {
   it("projects an admitted request into the existing lease capacity contract", () => {
     expect(resolveHostResourcePoolPolicy({

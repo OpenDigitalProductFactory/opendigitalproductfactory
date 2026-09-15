@@ -31,6 +31,7 @@
 //   node scripts/check-no-local-action-result.mjs --update   # retighten
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { stripComments } from "./lib/strip-comments.mjs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -89,7 +90,10 @@ export function findLocalAliases(files) {
   const out = [];
   for (const { path, source } of files) {
     if (path === CANONICAL_MODULE) continue;
-    if (ALIAS_RES.some((re) => re.test(source))) out.push(path);
+    // ALIAS_RES is anchored `^\s*`, so an ordinary comment already misses it —
+    // but commented-out code inside a /* */ block does not, so both checks read
+    // stripped source rather than only the count.
+    if (ALIAS_RES.some((re) => re.test(stripComments(source)))) out.push(path);
   }
   return out.sort();
 }
@@ -99,7 +103,8 @@ export function countInlineOkTrue(files) {
   let total = 0;
   for (const { path, source } of files) {
     if (path === CANONICAL_MODULE) continue;
-    total += (source.match(OK_TRUE_RE) ?? []).length;
+    // Prose about `ok: true` is not a use of it (BI-6EBA0A00).
+    total += (stripComments(source).match(OK_TRUE_RE) ?? []).length;
   }
   return total;
 }
