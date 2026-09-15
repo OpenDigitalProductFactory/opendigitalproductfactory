@@ -133,6 +133,7 @@ import {
 } from "./data-control-operation";
 import { indexIntegritySweep } from "./index-integrity-sweep";
 import { localModelInstall } from "./local-model-install";
+import { providerCatalogRefresh } from "./provider-catalog-refresh";
 import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
 import {
   mcpTaskRunDispatchReconciliation,
@@ -226,6 +227,7 @@ export const eventFunctions = [
   pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
   localModelInstall,
+  providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
   mcpCatalogSync,
   codeGraphReconcileEvent,

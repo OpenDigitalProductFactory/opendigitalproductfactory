@@ -20,6 +20,8 @@ import {
   canQueueBackgroundModelEvals,
 } from "@/lib/routing/provider-eligibility";
 import { seedKnownModels } from "@/lib/inference/known-model-seeding";
+import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligibility";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
@@ -455,6 +457,30 @@ export async function upsertDiscoveredModels(
   return newRows.length;
 }
 
+// BI-7F2FBDA3: what a provider lists under THIS account is the truth about what
+// it supports; re-admit each listed model (clearing any runtime refusal). Advisory.
+async function readmitListedModels(providerId: string, authMethod: string, modelIds: string[]): Promise<void> {
+  await recordDiscoveredAuthEligibility(prisma, { providerId, authMethod, modelIds })
+    .catch((err: unknown) => console.warn(`[discovery] auth-eligibility re-admission skipped for ${JSON.stringify(providerId)}: ${getErrorMessage(err)}`));
+}
+
+export const PROVIDER_CATALOG_REFRESH_EVENT = "inference/provider-catalog-refresh.requested";
+
+/**
+ * BI-7F2FBDA3: ask for an on-demand re-discovery of one provider (handled by
+ * the `inference/provider-catalog-refresh` queue function, debounced there).
+ * Fire-and-forget: a failure to enqueue never fails the inference that noticed
+ * the refusal.
+ */
+export async function requestProviderCatalogRefresh(request: { providerId: string; reason: string }): Promise<void> {
+  try {
+    const { inngest } = await import("@/lib/queue/inngest-client");
+    await inngest.send({ name: PROVIDER_CATALOG_REFRESH_EVENT, data: request });
+  } catch (err) {
+    console.warn(`[provider-catalog-refresh] could not enqueue refresh for ${JSON.stringify(request.providerId)}: ${getErrorMessage(err)}`);
+  }
+}
+
 export async function discoverModelsInternal(
   providerId: string,
 ): Promise<{ discovered: number; newCount: number; modelIds?: string[]; error?: string }> {
@@ -467,6 +493,7 @@ export async function discoverModelsInternal(
       const models = await discoverCodexCliModels(providerId);
       const newCount = await upsertDiscoveredModels(providerId, models);
       await reconcileDiscoveredModelPresence(providerId, new Set(models.map((model) => model.modelId)));
+      await readmitListedModels(providerId, provider.authMethod, models.map((model) => model.modelId));
       return { discovered: models.length, newCount, modelIds: models.map((model) => model.modelId) };
     } catch (err) {
       return { discovered: 0, newCount: 0, error: err instanceof Error ? err.message : "Codex CLI discovery failed" };
@@ -996,128 +1023,7 @@ export async function profileModelsInternal(
 }
 
 
-/**
- * EP-INF-003: Backfill ModelCard fields for all existing ModelProfiles.
- * Reads all DiscoveredModel records and re-extracts ModelCard data using
- * the adapter registry, then writes the card fields to the corresponding
- * ModelProfile rows. Safe to run repeatedly — uses updateMany.
- */
-export async function backfillModelCards(): Promise<number> {
-  const discovered = await prisma.discoveredModel.findMany();
-  let updated = 0;
-  for (const dm of discovered) {
-    const card = extractModelCardWithFallback(dm.providerId, dm.modelId, dm.rawMetadata as Record<string, unknown>);
-    await prisma.modelProfile.updateMany({
-      where: { providerId: dm.providerId, modelId: dm.modelId },
-      data: {
-        modelFamily: card.modelFamily,
-        modelClass: card.modelClass,
-        maxInputTokens: card.maxInputTokens,
-        inputModalities: card.inputModalities as any,
-        outputModalities: card.outputModalities as any,
-        capabilities: (dm.providerId === "local" || dm.providerId === "ollama")
-          ? { ...card.capabilities, streaming: true } as any
-          : card.capabilities as any,
-        pricing: card.pricing as any,
-        supportedParameters: card.supportedParameters as any,
-        metadataSource: card.metadataSource,
-        metadataConfidence: card.metadataConfidence,
-        lastMetadataRefresh: new Date(),
-        rawMetadataHash: card.rawMetadataHash,
-      },
-    });
-    updated++;
-  }
-  return updated;
-}
-
-
-/**
- * EP-INF-007: Seed execution recipes for all active/degraded model profiles.
- * Creates champion seed recipes for each contract family, skipping any that
- * already exist. Safe to run repeatedly — idempotent.
- */
-export async function seedAllRecipes(): Promise<number> {
-  const { buildSeedRecipe } = await import("../routing/recipe-seeder");
-  const { inferContract } = await import("../routing/request-contract");
-
-  const profiles = await prisma.modelProfile.findMany({
-    where: { modelStatus: { in: ["active", "degraded"] } },
-    include: { provider: true },
-  });
-
-  // Chat/reasoning contract families (for chat/reasoning/code model classes)
-  const chatContractFamilies = [
-    "sync.greeting", "sync.status-query", "sync.summarization",
-    "sync.reasoning", "sync.data-extraction", "sync.code-gen",
-    "sync.web-search", "sync.creative", "sync.tool-action",
-  ];
-
-  // EP-INF-009c: Non-chat contract families keyed by modelClass
-  const nonChatContractFamilies: Record<string, string[]> = {
-    image_gen: ["sync.image-gen"],
-    embedding: ["sync.embedding"],
-    audio: ["sync.transcription"],
-  };
-
-  let seeded = 0;
-  for (const profile of profiles) {
-    // Select contract families based on model class
-    const modelClass = (profile.modelClass as string) ?? "chat";
-    const contractFamilies = nonChatContractFamilies[modelClass] ?? chatContractFamilies;
-
-    for (const family of contractFamilies) {
-      // Check if recipe already exists
-      const existing = await prisma.executionRecipe.findFirst({
-        where: {
-          providerId: profile.providerId,
-          modelId: profile.modelId,
-          contractFamily: family,
-          status: "champion",
-        },
-      });
-      if (existing) continue;
-
-      // Create a minimal contract for seeding
-      const taskType = family.split(".")[1] ?? "reasoning";
-      const contract = await inferContract(
-        taskType,
-        [{ role: "user", content: "seed" }],
-      );
-
-      const modelCard = {
-        capabilities: (profile.capabilities as unknown as import("../routing/model-card-types").ModelCardCapabilities) ?? {},
-        maxOutputTokens: profile.maxOutputTokens,
-        modelClass: (profile.modelClass as string) ?? "chat",
-      };
-
-      const recipe = buildSeedRecipe(
-        profile.providerId,
-        profile.modelId,
-        family,
-        modelCard,
-        contract,
-      );
-
-      await prisma.executionRecipe.create({
-        data: {
-          providerId: profile.providerId,
-          modelId: profile.modelId,
-          contractFamily: family,
-          version: 1,
-          status: "champion",
-          origin: "seed",
-          executionAdapter: recipe.executionAdapter,
-          providerSettings: recipe.providerSettings as object,
-          toolPolicy: recipe.toolPolicy as object,
-          responsePolicy: recipe.responsePolicy as object,
-        },
-      });
-      seeded++;
-    }
-  }
-  return seeded;
-}
+export { backfillModelCards, seedAllRecipes } from "./model-card-maintenance";
 
 /** Discover and profile after activation; failures never break activation. */
 export async function autoDiscoverAndProfile(providerId: string): Promise<{
