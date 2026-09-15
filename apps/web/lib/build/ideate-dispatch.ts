@@ -435,6 +435,65 @@ async function gatherCodeGraphContext(
   }
 }
 
+/**
+ * The directory ideate research runs FROM inside the sandbox.
+ *
+ * Deliberately NOT /workspace. `claude` discovers CLAUDE.md (which imports the
+ * whole AGENTS.md rulebook), settings and hooks by walking UP from cwd, so
+ * running from the repo root turned this single-shot "return a design document"
+ * call into a continuing agentic session that replied with session
+ * meta-commentary instead — surfacing to the operator as "Could not parse
+ * design document from research output".
+ */
+export const IDEATE_WORKING_DIR = "/tmp/ideate-cwd";
+
+/** The repository, handed to the CLI as an allowed directory rather than as its project root. */
+export const IDEATE_SOURCE_DIR = "/workspace";
+
+/**
+ * Build the sandbox runner script for one ideate dispatch engine.
+ *
+ * Pure and exported so the cwd/source-access contract can be asserted without
+ * standing up a sandbox: this is the line that decides whether research reads
+ * the repository or inherits it as a project, and those are not the same thing.
+ */
+export function buildIdeateRunnerScript(
+  engine: "claude" | "grok" | "codex",
+  opts: {
+    model?: string | null;
+    claudeAuthExport?: string;
+    /** Auth-mode flag fragment from ensureClaudeAuth; empty for OAuth. */
+    claudeBareFlag?: string;
+    providerId?: string;
+  },
+): string {
+  if (engine === "claude") {
+    const modelFlag = opts.model ? `--model ${opts.model}` : "";
+    return [
+      "#!/bin/sh",
+      `mkdir -p ${IDEATE_WORKING_DIR}`,
+      `cd ${IDEATE_WORKING_DIR}`,
+      `export ${opts.claudeAuthExport ?? ""}`,
+      `claude ${opts.claudeBareFlag ?? ""}-p - --dangerously-skip-permissions --add-dir ${IDEATE_SOURCE_DIR} --output-format json ${modelFlag} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
+    ].join("\n");
+  }
+  if (engine === "grok") {
+    const modelFlag = opts.model ? `--model ${opts.model}` : "";
+    return [
+      "#!/bin/sh",
+      `cd ${IDEATE_SOURCE_DIR}`,
+      `export XAI_API_KEY=$(cat /tmp/grok-key-${opts.providerId ?? ""}.txt 2>/dev/null || echo '')`,
+      `grok ${modelFlag} --prompt-file /tmp/ideate-prompt.txt --always-approve`,
+    ].join("\n");
+  }
+  const modelFlag = opts.model ? `-m ${opts.model}` : "";
+  return [
+    "#!/bin/sh",
+    `cd ${IDEATE_SOURCE_DIR}`,
+    `exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`,
+  ].join("\n");
+}
+
 export async function dispatchIdeateResearch(params: {
   featureTitle: string;
   featureDescription: string;
@@ -572,50 +631,18 @@ export async function dispatchIdeateResearch(params: {
     // node user (after their auth temp files are written); codex runs as root via
     // its auth.json injection.
     const runnerScript = "/tmp/ideate-run.sh";
-    let runAsNode: boolean;
-    if (dispatchEngine === "claude") {
-      const modelFlag = model ? `--model ${model}` : "";
-      // Write a runner script that handles auth env var expansion inside the sandbox.
-      // Tee output to a file so we can recover it if the process is killed on timeout.
-      const script = [
-        "#!/bin/sh",
-        `cd /workspace`,
-        `export ${claudeAuthEnv.replace(/\\\$/g, "$")}`,
-        `claude ${claudeBareFlag}-p - --dangerously-skip-permissions --output-format json ${modelFlag} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
-      ].join("\n");
-      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
-      runAsNode = true;
-    } else if (dispatchEngine === "grok") {
-      // Grok (xAI) specific path for Ideate research dispatch (distinct from the full
-      // specialist task dispatch in grok-dispatch.ts used by Build Studio orchestrator).
-      //
-      // Unique aspects (parity maintained with main dispatch):
-      // - Auth: Simple XAI_API_KEY env var (no auth.json or OAuth refresh like Claude/Codex).
-      // - Invocation: the SAME headless form grok-dispatch.ts proved against grok
-      //   0.2.32 — `--prompt-file <file> --always-approve`. The old
-      //   `-p - --no-auto-update < file` form passed "-" as the literal prompt and
-      //   ignored the file (and `--no-auto-update` is not a valid flag), so this
-      //   ideate path never actually ran — a latent failure now fixed. (BI-OPT-DISPATCH)
-      // - Strengths: Real-time knowledge for research-oriented Ideate flows.
-      const modelFlag = model ? `--model ${model}` : "";
-      const script = [
-        "#!/bin/sh",
-        `cd /workspace`,
-        `export XAI_API_KEY=$(cat /tmp/grok-key-${providerId}.txt 2>/dev/null || echo '')`,
-        `grok ${modelFlag} --prompt-file /tmp/ideate-prompt.txt --always-approve`,
-      ].join("\n");
-      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
-      runAsNode = true;
-    } else {
-      const modelFlag = model ? `-m ${model}` : "";
-      const script = [
-        "#!/bin/sh",
-        `cd /workspace`,
-        `exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`,
-      ].join("\n");
-      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
-      runAsNode = false;
-    }
+    // The cwd/source-access contract lives in buildIdeateRunnerScript above —
+    // one definition, asserted by test, rather than three inline copies that
+    // drift apart. Only the claude branch runs from a neutral directory today;
+    // see that function for why, and for what is still unmeasured on the others.
+    const runAsNode = dispatchEngine !== "codex";
+    const script = buildIdeateRunnerScript(dispatchEngine, {
+      model,
+      claudeAuthExport: claudeAuthEnv.replace(/\\\$/g, "$"),
+      claudeBareFlag,
+      providerId,
+    });
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
 
     // Shared spawn-docker-exec loop (streams stderr for progress, matching the
     // main dispatchers). Resolves on close when exit==0 OR stdout is non-empty.
