@@ -904,6 +904,9 @@
       "docs/architecture/dpf-patterns.md",
       "docs/user-guide/contributing/agent-dev-environments.md"
     ],
+    "apps/web/lib/observability/monitor-source-reachability.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
@@ -1502,6 +1505,9 @@
     ],
     "packages/db/src/provider-compliance-source-registry.ts": [
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
+    ],
+    "packages/db/src/quality-issue-registry.ts": [
+      "docs/operations/observability-coverage.md"
     ],
     "packages/db/src/reference-model-applicability.ts": [
       "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md"
@@ -3032,10 +3038,12 @@
       "apps/mobile/eas.json"
     ],
     "docs/operations/observability-coverage.md": [
+      "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
       "docker-compose.macos.yml",
-      "monitoring/prometheus/prometheus.yml"
+      "monitoring/prometheus/prometheus.yml",
+      "packages/db/src/quality-issue-registry.ts"
     ],
     "docs/operations/oss-repo-identity-hygiene.md": [
       "scripts/check-no-private-identity.mjs"

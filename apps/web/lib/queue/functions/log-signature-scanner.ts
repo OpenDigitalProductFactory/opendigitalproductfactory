@@ -23,6 +23,8 @@ import {
   severityForCount,
 } from "@/lib/observability/log-signature";
 import { queryLokiErrorLines } from "@/lib/observability/loki-query";
+import { recordMonitorSourceReachability } from "@/lib/observability/monitor-source-reachability";
+import type { MonitorIssueDb } from "@/lib/observability/monitor-issue-writer";
 
 const LOOKBACK_MIN = Number(process.env.DPF_LOG_SCAN_LOOKBACK_MIN ?? 20);
 // Only file for signatures seen at least this many times in the window. 1 =
@@ -61,9 +63,31 @@ export async function runLogSignatureScan(opts?: {
   } catch (err) {
     // Loki not running (e.g. monitoring stack down) — do not fail the job, do
     // not create false reports. The next cycle retries.
+    //
+    // But do NOT return a clean-looking result either (BI-ADB574AB): with the
+    // capture layer dark this scanner finds nothing on every run, and a silent
+    // no-op is indistinguishable from a healthy platform. File the blindness as
+    // its own issue so the operator sees the monitor is down, not the noise
+    // floor. The row resolves itself on the first run that reaches Loki.
     console.error("[log-signature-scanner] Loki unreachable; skipping scan", err);
+    await recordMonitorSourceReachability(prisma as unknown as MonitorIssueDb, {
+      monitorId: "ops/log-signature-scanner",
+      sourceId: "loki",
+      reached: false,
+      blindTo:
+        "novel container error signatures are not being detected — no log line from any container is reaching the platform",
+      error: err,
+    });
     return { scanned: 0, signatures: 0, reportsCreated: 0, skippedExisting: 0, lokiUnreachable: true };
   }
+
+  // Reached it — clear any standing blindness row from an earlier outage.
+  await recordMonitorSourceReachability(prisma as unknown as MonitorIssueDb, {
+    monitorId: "ops/log-signature-scanner",
+    sourceId: "loki",
+    reached: true,
+    blindTo: "",
+  });
 
   const buckets = clusterBySignature(lines).filter((b) => b.count >= MIN_COUNT);
   let reportsCreated = 0;

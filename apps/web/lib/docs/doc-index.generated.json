@@ -5955,7 +5955,9 @@
         "platform-split-linux-vs-windows-hostinfra-alerts",
         "status-decisions-2026-06-25-objective-completed",
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
-        "alert-delivery"
+        "alert-delivery",
+        "log-capture-runs-by-default-bi-f8024a9d",
+        "a-monitor-that-cannot-see-must-say-so-bi-adb574ab"
       ]
     },
     "docs/operations/oss-repo-identity-hygiene.md": {
