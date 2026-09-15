@@ -9,6 +9,7 @@
 
 import { prisma } from "@dpf/db";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
+import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
 import { approvalPendingResult } from "./govern/authority/approval-pending-result";
 import type { CoworkerAuthorityDecision } from "./govern/authority/coworker-authority-decision";
 import {
@@ -378,11 +379,14 @@ function rejectionResult(
   rejection: GovernedExecuteRejection,
   detail: string,
 ): GovernedExecuteResult {
-  const message = `${toolName} rejected: ${detail}`;
+  // Only a settled no is worded "rejected"; see governed-rejection-disposition.
+  const disposition = GOVERNED_REJECTION_DISPOSITION[rejection];
+  const message = rejectionMessage(toolName, detail, disposition);
   return {
     success: false,
     error: rejection,
     message,
+    disposition,
     governance: { rejected: rejection },
   };
 }

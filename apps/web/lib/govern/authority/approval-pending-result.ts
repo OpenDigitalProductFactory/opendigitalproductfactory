@@ -47,6 +47,12 @@ export function approvalPendingResult(
     success: false,
     error: "approval_required",
     message,
+    // The wording above is what a model reads; this is what code reads. Before
+    // §10 the distinction existed only in the prose, so anything downstream that
+    // branched on `success` — the scheduler's run verdict, the call-efficiency
+    // scan, the operations map — had to re-derive "this is a wait" from an error
+    // string, and each did it differently.
+    disposition: "awaiting-person",
     governance: { rejected: "approval_required" },
   };
 }
