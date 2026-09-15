@@ -149,7 +149,13 @@ export function isAgentInternalFounderReviewNoise(row: Pick<
   return !isFounderActionable(row);
 }
 
-function normalizeFounderReviewQuestion(question: string): string {
+/**
+ * The canonical form used to decide that two decision rows are asking the SAME
+ * question. Exported because more than one owner-facing surface has to collapse
+ * duplicates and they must collapse identically — the attention feed rendered
+ * 39 cards for a question this queue had always shown once (BI-13C38318).
+ */
+export function normalizeFounderReviewQuestion(question: string): string {
   return question.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
