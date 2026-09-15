@@ -176,6 +176,7 @@ model IdentityResolutionLog {
   @@index([catalogIdentityId])
   @@index([resolutionType])
   @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+  @@index([fingerprintRuleId])
 }
 
 /// Raw fingerprint evidence feeding rule approval. Approved rules are the durable output; observations disposable after 6 months.
@@ -219,6 +220,7 @@ model DiscoveryFingerprintObservation {
   @@index([inventoryEntityId])
   @@index([discoveryRunId])
   @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+  @@index([approvedRuleId])
 }
 
 model DiscoveryFingerprintReview {
@@ -440,6 +442,7 @@ model InventoryRelationship {
   // seq-scans this table to null the reference. See the DiscoveredRelationship
   // note above — same defect class, smaller table.
   @@index([lastConfirmedRunId])
+  @@index([toEntityId])
 }
 
 model PortfolioQualityIssue {

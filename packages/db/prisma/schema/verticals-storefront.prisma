@@ -331,6 +331,8 @@ model BookingHold {
   @@index([storefrontId, slotStart, slotEnd])
   @@index([hospitalityResourceId, slotStart, slotEnd])
   @@index([expiresAt])
+  @@index([itemId])
+  @@index([providerId])
 }
 
 /// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Sales/financial_record_retention minYears=7
@@ -476,6 +478,7 @@ model RentalAgreement {
   @@index([rentableUnitId, status])
   @@index([periodStart, periodEnd])
   @@index([customerEmail])
+  @@index([storefrontItemId])
 }
 
 model RentalConditionRecord {

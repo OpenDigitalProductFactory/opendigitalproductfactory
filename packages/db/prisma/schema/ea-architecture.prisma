@@ -101,6 +101,7 @@ model EaReferenceAssessment {
 
   @@unique([scopeId, modelElementId])
   @@index([modelId, coverageStatus])
+  @@index([modelElementId])
 }
 
 model EaReferenceProposal {

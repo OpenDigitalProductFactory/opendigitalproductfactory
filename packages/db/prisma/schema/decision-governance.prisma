@@ -672,6 +672,7 @@ model WeightAdjustmentProposal {
 
   @@index([profileId, domainClass, status])
   @@index([status, createdAt])
+  @@index([ruledByUserId])
 }
 
 // ── Voice Layer ───────────────────────────────────────────────────────────────
