@@ -46,6 +46,32 @@ demand is: the cron plus a trusted same-organization link.
 - Register the peer's runtime targets as summary rows so
   `get_runtime_coordination_map` reflects both installs.
 
+## Traceability
+
+Objective ids and acceptance ids are the scope baseline declared in the design
+(`OBJ-OCP-001` … `OBJ-OCP-004`, `AC-OCP-001` … `AC-OCP-006`). Each deliverable
+names its objectives, its contract modules, the flow it realises, and the
+acceptance ids it proves.
+
+| Deliverable | Objectives | Contract modules | Flow | Acceptance |
+|---|---|---|---|---|
+| Slice 2.1 — posture record type and minimized projection (BI-0585906E, landed) | OBJ-OCP-002 | `packages/db/src/federated-operational-posture-contract.ts` | FLOW-OCP-PROJECT: projectEstatePayload minimizes the capture and assertNoExcludedEgress refuses hostnames, IPs, node ids and raw findings | AC-OCP-001 |
+| Phase A — Slice 2.2 posture flows (BI-27B578C7) | OBJ-OCP-001, OBJ-OCP-002 | `apps/web/lib/federation/operational-posture-capture.ts`, `apps/web/lib/federation/operational-posture-delivery.ts`, `apps/web/lib/federation/operational-posture-exchange.ts`, `apps/web/lib/queue/functions/demand-reconciliation.ts` | FLOW-OCP-REPORT: cron step project-operational-posture writes the local-canonical outbox row, dispatchDueDemand delivers it to the peer inbox, the peer persists a peer-canonical mirror under the version predicate | AC-OCP-001, AC-OCP-006 |
+| Phase B — Slice 3 paired-estate surface (BI-27B578C7) | OBJ-OCP-001 | `apps/web/lib/federation/operational-posture-read-model.ts`, `apps/web/lib/federation/operational-posture-peer-targets.ts`, `apps/web/components/ops/PairedEstatePosturePanel.tsx` | FLOW-OCP-RENDER: the read model places the local capture beside every peer-canonical mirror with basis and age, the panel renders one card per installation on /ops/installation, and cron step reflect-peer-runtime-targets registers RT-PEER targets for the coordination map | AC-OCP-002 |
+| Edge-node self-healing — stale enrollment supersession and janitor (BI-D4F79CE2, landed in #5148) | OBJ-OCP-004 | `apps/web/lib/edge-node/revoke.ts`, `apps/web/lib/edge-node/stale-supersession.ts`, `apps/web/lib/queue/functions/edge-node-janitor.ts` | FLOW-OCP-HEAL: enrollment of a live installer-managed node supersedes the stale one and the hourly janitor revokes stragglers, so selectMainInstallationNode resolves to exactly one node | AC-OCP-005 |
+| Slice 4 — governed control channel (BI-67219237, gated on the WWWD control-scope stance) | OBJ-OCP-003 | `apps/web/lib/federation/operational-action-record.ts` (to be designed once the stance is recorded) | FLOW-OCP-ACT: a peer operational action is a discrete dual-approved record on the trusted link, exposed only after the org WWWD control-scope stance admits control | AC-OCP-003, AC-OCP-004 |
+
+## Backlog coverage
+
+- Decision: decomposed
+- Parent: `BI-648F01A0`
+- Slice 2.1 posture record type and projection -> `BI-0585906E`
+- Phase A Slice 2.2 posture flows -> `BI-27B578C7`
+- Phase B Slice 3 paired-estate surface -> `BI-27B578C7`
+- Edge-node self-healing -> `BI-D4F79CE2`
+- Slice 4 governed control channel -> `BI-67219237`
+- Receipt: blocked-by: the coverage receipt is minted by record_plan_backlog_coverage against this plan's immutable blob once this commit is pushed; recorded on BI-648F01A0 by session 5c69eda4
+
 ## Not in this plan
 
 Slice 4 (governed action channel) — blocked on the org's WWWD control-scope
