@@ -7,6 +7,7 @@
 import { Prisma } from "@dpf/db";
 import type { prisma } from "@dpf/db";
 import { isFounderActionable, normalizeFounderReviewQuestion } from "@/lib/founder-review/queue";
+import { retractionOf } from "@/lib/decision-perspective/retract-superseded";
 import type { AttentionItem, AttentionRiskClass, ResidueReason } from "../types";
 
 type Db = typeof prisma;
@@ -27,6 +28,8 @@ export type DecisionInteractionRow = {
   /** Governance gate that produced the row — 'profession' rows are advisory. */
   gateKey: string | null;
   createdAt: Date;
+  /** The gate's own record of how it resolved, including any retraction marker. */
+  outcomePayload?: unknown;
   /** Open drafted resolutions for this decision (at most one is live). */
   resolutionProposals?: { summary: string }[];
 };
@@ -171,6 +174,8 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
       domainClass: true,
       gateKey: true,
       createdAt: true,
+      // Needed to spot a retraction marker (BI-13C38318).
+      outcomePayload: true,
       // The open drafted resolution, when one exists (BI-C62127B9). Read here
       // rather than in a second pass so the inbox cannot show "needs your
       // judgment" for a decision that already has an answer waiting.
@@ -182,9 +187,12 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
     },
   });
   // Keep only rows a human should actually decide; drop agent-internal consults
-  // and fail-open advisories (BI-6EC1EE25). Filter BEFORE collapsing so a
-  // non-actionable row can never become the representative of its group.
-  const actionable = rows.filter((row) => isFounderActionable(row));
+  // and fail-open advisories (BI-6EC1EE25), and retracted rows whose routing
+  // basis no longer holds (BI-13C38318). Filter BEFORE collapsing so a row that
+  // should not be here cannot become the representative of its group — a
+  // retracted row standing in for a live one would hide a real decision behind
+  // a question nobody still has.
+  const actionable = rows.filter((row) => isFounderActionable(row) && !retractionOf(row.outcomePayload));
   return dedupeDecisionRows(actionable)
     .slice(0, DECISION_RENDER_LIMIT)
     .map(({ row, occurrences }) =>

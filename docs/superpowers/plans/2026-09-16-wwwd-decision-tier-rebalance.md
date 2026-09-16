@@ -198,6 +198,22 @@ to `consequenceScope: "platform"`), retract the pending WWWD rows that basis pro
 why, and backfill the 39 existing ones. Never silently delete — retract with a reason the owner can
 see. This is the largest single reduction in the owner's queue and needs none of Part 2.
 
+**Representation, decided.** The marker lives in `outcomePayload`, not `humanOutcome`.
+`persistence.ts` reads `clearsGate` from `humanOutcome` to decide whether a *person* released the
+gate, so writing a machine cleanup there would forge an owner ruling nobody made — the exact failure
+the rest of this plan exists to prevent. A retracted row keeps `humanOutcome` null forever, and it is
+honest for it to stay that way: no human ever answered it, it simply stops queueing for an answer.
+The payload is merged rather than replaced, because the gate's confidence and alignment are the
+evidence for why the row exists, and erasing them would destroy the audit trail the cleanup closes.
+
+**Supersession is judged only by a scope reclassification** read from the live tool catalog. A tool
+merely *absent* from the catalog is not retracted: absence is ambiguous (a rename, a partial load, a
+pack not registered in this context), and retracting on ambiguity would repeat BI-9E1E1939's error
+of acting on a failed lookup. Tool identity comes from the `/tool/<name>` route or the question
+prefix `alignmentStatement()` wrote, matched against real catalog names longest-first — derived
+vocabulary, never a fixture list. Planning is pure and separate from the write, with a `dryRun` that
+reports the plan without touching anything.
+
 **Part 2 — name the scope for authored questions.**
 
 1. Classify WWMD / WWWD / WSID **before** the org-business gate asserts authority; route to the

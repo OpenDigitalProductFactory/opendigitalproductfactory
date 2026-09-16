@@ -1,4 +1,5 @@
 import { perspectiveForProfile } from "@/lib/decision-perspective/canvas";
+import { retractionOf } from "@/lib/decision-perspective/retract-superseded";
 import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
 
 export type FounderReviewUnresolvedReason =
@@ -124,7 +125,12 @@ export function isBlankFounderReviewQuestion(row: Pick<DecisionInteractionQueueR
 export function isFounderActionable(row: Pick<
   DecisionInteractionQueueRow,
   "buildId" | "taskRunId" | "routeContext" | "domainClass" | "gateKey"
->): boolean {
+> & { outcomePayload?: unknown }): boolean {
+  // A retracted row is not a question anyone still has to answer: the rule that
+  // routed it here changed, so the gate would not ask it today (BI-13C38318).
+  // It stays in the ledger, and its humanOutcome stays null, because no human
+  // ever answered it — it simply stops queueing for one.
+  if (retractionOf(row.outcomePayload)) return false;
   if ((row.gateKey ?? "").trim().toLowerCase() === "profession") return false;
 
   const linked = Boolean(row.buildId || row.taskRunId);
