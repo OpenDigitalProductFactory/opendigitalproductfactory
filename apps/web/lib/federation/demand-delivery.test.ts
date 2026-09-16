@@ -22,6 +22,9 @@ const source = {
   workType: "feature",
   occurrenceCount: 2,
   product: "dpf-portal",
+  scopeKind: "platform",
+  archetypeCategories: [],
+  archetypeIds: [],
   createdAt: new Date("2026-07-20T06:00:00.000Z"),
   updatedAt: new Date("2026-07-20T06:05:00.000Z"),
 };
