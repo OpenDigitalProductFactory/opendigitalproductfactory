@@ -15,7 +15,8 @@ import { BUSINESS_STANCE_SLUG_PREFIX } from "@/lib/wiki/business-stance";
 import {
   resolveStanceVectors,
   resolveStanceAuthoringExamples,
-  STANCE_VECTOR_KEYS,
+  seededStanceVectorKeys,
+  type StanceVectorKey,
 } from "@/lib/onboarding/archetype-business-context";
 import { stanceVectorSlug } from "@/lib/onboarding/seed-org-wwwd-corpus";
 import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
@@ -58,6 +59,7 @@ export default async function BusinessStancePage() {
   // shown until the owner confirms them. Confirmed = the vector's primary
   // material sits at the owner-confirmed tier (A / >=0.9).
   let cards: StanceCard[] = [];
+  let seededVectorKeys: StanceVectorKey[] = [];
   let authoringExamples = resolveStanceAuthoringExamples({ industry: null });
   if (organizationId) {
     const [storefront, profileId] = await Promise.all([
@@ -66,14 +68,16 @@ export default async function BusinessStancePage() {
       }),
       resolveOrgProfileId({ db: prisma, organizationId }),
     ]);
+    const industry = storefront?.archetype?.category ?? null;
+    // Only the vectors this archetype is actually seeded (BI-0902BAE9): a
+    // software platform is never shown a card about conduct in someone's home.
+    seededVectorKeys = seededStanceVectorKeys({ industry });
     const defaults = resolveStanceVectors({
       archetypeId: storefront?.archetypeId ?? null,
-      industry: storefront?.archetype?.category ?? null,
+      industry,
     });
-    authoringExamples = resolveStanceAuthoringExamples({
-      industry: storefront?.archetype?.category ?? null,
-    });
-    const vectorSlugs = STANCE_VECTOR_KEYS.map((key) => stanceVectorSlug(key));
+    authoringExamples = resolveStanceAuthoringExamples({ industry });
+    const vectorSlugs = seededVectorKeys.map((key) => stanceVectorSlug(key));
     const [vectorPages, vectorMaterials] = await Promise.all([
       prisma.wikiPage.findMany({
         where: { organizationId, slug: { in: vectorSlugs } },
@@ -89,7 +93,7 @@ export default async function BusinessStancePage() {
     const pageBySlug = new Map(vectorPages.map((page) => [page.slug, page]));
     const materialById = new Map(vectorMaterials.map((m) => [m.materialId, m]));
 
-    cards = STANCE_VECTOR_KEYS.map((key) => {
+    cards = seededVectorKeys.map((key) => {
       const slug = stanceVectorSlug(key);
       const page = pageBySlug.get(slug);
       const material = profileId ? materialById.get(`${profileId}:${slug}`) : undefined;
@@ -110,6 +114,9 @@ export default async function BusinessStancePage() {
       };
     });
   }
+
+  // Slugs already summarised as a card above, so the list does not repeat them.
+  const cardSlugs = new Set(cards.map((c) => stanceVectorSlug(c.key as StanceVectorKey)));
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
@@ -174,7 +181,11 @@ export default async function BusinessStancePage() {
                     </Link>
                   )}
                 </div>
-                {s.abstract && (
+                {/* A stance shown as a card above is already summarised there;
+                    repeating its lead here is the same sentence twice on
+                    arrival, which is how this page drifted past its word budget
+                    as vectors were added (BI-0902BAE9). */}
+                {s.abstract && !cardSlugs.has(s.slug) && (
                   <p className="text-xs text-[var(--dpf-muted)] mt-1 line-clamp-2">
                     {stanceLead(s.abstract)}
                   </p>
