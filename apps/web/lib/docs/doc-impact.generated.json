@@ -717,7 +717,7 @@
     "apps/web/lib/ea/table-growth.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
-    "apps/web/lib/evidence/bounded-output.ts": [
+    "apps/web/lib/evidence/bounded-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/explore/backlog.ts": [
@@ -2603,7 +2603,7 @@
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
       "apps/web/lib/ea/table-growth.ts",
-      "apps/web/lib/evidence/bounded-output.ts",
+      "apps/web/lib/evidence/bounded-evidence-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
       "apps/web/lib/operate/retention/obligation-floors.ts",
       "apps/web/lib/routes.ts",
