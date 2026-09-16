@@ -388,23 +388,36 @@ That gate is itself the pattern this section describes: a standard that would ot
 
 ## 9. Backlog coverage
 
-Umbrella: **BI-D0DEEFE9** (triaged build, xlarge). Each phase is an independently shippable item.
+Umbrella: **BI-D0DEEFE9**. Class carrier: **BI-F6B8BADD**.
 
-| Phase | Item | Shape | Depends on |
+**Operator direction 2026-09-16: re-open the funded carriers rather than re-file work already paid for.** Six items that delivered these mechanisms were closed on a merged SHA while the mechanism never fired; they are re-opened with their measured live state and a liveness observable. Three items filed earlier in this session were retired as duplicates of them.
+
+### Re-opened carriers (work already funded; the last mile is what remains)
+
+| Item | Size | Was | Liveness observable for closure |
 |---|---|---|---|
-| 0 — Instrumentation (blocks all; no behavior change) | **BI-731F7FA2** | medium | — |
-| 1a — Turn on the ExecutionPlan anchor | **BI-430AFB90** | medium | — |
-| 1b — Promote constraints/decisions to `UserFact` at the turn | **BI-B6010A93** | medium | — |
-| 2 — Bound the fold; loud failures; backfill wedged threads | **BI-AF12ACF5** | small | — |
-| 3 — Record-first pipeline; atomic tool-call groups | **BI-ACB7E4B1** | large | BI-731F7FA2, BI-AF12ACF5 |
-| 4a — Retention for append-only thread storage | **BI-9D051BA2** | medium | — |
-| 4b — Time-to-first-token | **BI-2AC095DC** | medium | BI-731F7FA2 |
-| 5 — Cache-aware ordering (frontier-only) | **BI-45F9FA46** | small | BI-731F7FA2, BI-ACB7E4B1 |
+| **BI-2AC48661** `ExecutionPlan` | large | done | `executionPlan` non-null for planned turns; objective survives a restart |
+| **BI-FDECBE0A** compaction fold | medium | done | the 1,126-message thread reaches `compactedTurnCount` > 1,000; prune non-zero |
+| **BI-CCF1ACBB** cost ledger | small | done | `getThreadSpend` returns a plausible non-zero for a real thread |
+| **BI-1772D0B7** two-scope memory | large | done | constraint stated in turn 3 still enforced past turn 200 and past a fold |
+| **BI-153F7E4A** expiry + prune | medium | done | prune returns non-zero for a folded thread *(blocked on BI-FDECBE0A)* |
+| **BI-A9052DCB** session briefings | large | done | a non-null briefing observed on a real session start *(liveness to be established, not yet proven dark)* |
 
+### New work (no funded carrier exists)
 
-**Coverage receipt status — blocked, condition recorded here rather than cited by id.** `record_plan_backlog_coverage` refuses this table with `traceability-incomplete`. Blocking condition: **no initiative scope baseline exists for BI-D0DEEFE9.** A baseline requires an `implementation` claim routed through a spec-approval packet that binds `record_initiative_design_review` to this immutable design and an **independent reviewer coworker** — which is §7's argument arriving as an enforced gate rather than as advice: the plan does not get governed coverage until a named reviewer, not its author, has approved the design it covers. Note also that BI-D0DEEFE9 is sized **xlarge**, and an xlarge item never enters implementation — so the umbrella is expected to stay a design/decomposition carrier and the phase items are what get claimed. Until the baseline exists, **this table in the plan is the coverage artifact**; the receipt is recorded when the review lands.
+| Item | Shape | Depends on |
+|---|---|---|
+| **BI-731F7FA2** — instrument TTFT, cache tokens, `contextTrace`, tool-to-turn link | medium | — |
+| **BI-ACB7E4B1** — record-first pipeline; atomic tool-call groups | large | BI-731F7FA2, BI-FDECBE0A |
+| **BI-9D051BA2** — retention for append-only storage (`ToolExecution` 890 MB, `scheduled:*`) | medium | — |
+| **BI-2AC095DC** — time-to-first-token | medium | BI-731F7FA2 |
+| **BI-45F9FA46** — cache-aware ordering (frontier-only) | small | BI-731F7FA2, BI-ACB7E4B1 |
 
-**BI-AF12ACF5** (the silent fold failure) and **BI-B6010A93** (one live constraint install-wide) are the two that address the reported symptom directly. **BI-731F7FA2** blocks anything whose success claim depends on a measurement.
+### Retired as duplicates
+
+**BI-430AFB90** → BI-2AC48661 · **BI-AF12ACF5** → BI-FDECBE0A · **BI-B6010A93** → BI-1772D0B7. Each was filed as new before the backlog behind the inert mechanism was checked.
+
+**Coverage receipt status — blocked, condition recorded here rather than cited by id.** `record_plan_backlog_coverage` refuses with `traceability-incomplete`: **no initiative scope baseline exists for BI-D0DEEFE9.** A baseline needs a spec-approval packet binding `record_initiative_design_review` to an independent reviewer coworker; both reviewer routes were dispatched verbatim and both returned `prose-without-required-writer` with `executedToolCount: 0` and no receipt (**BI-EC82C48B**). Per the gate's own instruction, this table is the coverage artifact until a review lands.
 
 ## 10. Scope & non-goals
 
