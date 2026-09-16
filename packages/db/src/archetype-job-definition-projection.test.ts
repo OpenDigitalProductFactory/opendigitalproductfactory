@@ -173,11 +173,12 @@ describe("what it derives", () => {
 });
 
 describe("what it refuses to invent", () => {
-  it("leaves authority, qualifications, context and supervision unanswered", () => {
-    // The OVSM knows what a role is accountable for. It cannot know what tools
-    // that role needs, what it may decide alone, what it must have read, or who
-    // it reports to. A projection that filled those with a plausible sentence
-    // would defeat the contract more quietly than the old door ever did.
+  it("leaves authority, qualifications and supervision unanswered", () => {
+    // The OVSM knows what a role is accountable for and what constraints its
+    // stages impose. It cannot know what tools that role needs, what it may
+    // decide alone, or who it reports to. A projection that filled those with a
+    // plausible sentence would defeat the contract more quietly than the old
+    // door ever did.
     const set = buildArchetypeJobDefinitions(
       ovsm([
         stage({
@@ -192,9 +193,19 @@ describe("what it refuses to invent", () => {
     expect(unansweredAxesFor(set.definitions[0]!)).toEqual([
       "authority",
       "qualifications",
-      "context",
       "supervision",
     ]);
+  });
+
+  it("leaves CONTEXT unanswered when the stages impose nothing to know", () => {
+    // Priming is derived, not invented. A stage carrying no gate and no domain
+    // gives the role nothing specific to hold, and saying otherwise would be
+    // the plausible sentence this projection exists to avoid.
+    const set = buildArchetypeJobDefinitions(
+      ovsm([stage({ key: "a", responsibleRole: "R" })]),
+    );
+    expect(set.definitions[0]!.axes.context).toBeUndefined();
+    expect(set.definitions[0]!.requiredContext).toEqual({ constraints: [], domains: [] });
   });
 
   it("does not treat a gate binding as an authority answer", () => {
@@ -283,5 +294,51 @@ describe("roles live on LANES, and that is where most of them are", () => {
   it("tolerates an OVSM with no lanes at all", () => {
     const set = buildArchetypeJobDefinitions(ovsm([stage({ key: "a", responsibleRole: "R" })]));
     expect(set.definitions).toHaveLength(1);
+  });
+});
+
+describe("priming — what a role must know before it acts", () => {
+  it("derives the constraints its own stages impose", () => {
+    // Measured across the live catalogue: 23 distinct trust gates. A gate named
+    // clinical-adjacent-no-advice is not a checkbox to tick afterwards — it is
+    // something the role must hold BEFORE its first turn, or the first turn is
+    // the incident.
+    const set = buildArchetypeJobDefinitions(
+      ovsm([
+        stage({ key: "triage", responsibleRole: "Intake coordinator", trustGateKeys: ["clinical-adjacent-no-advice", "crisis-routing"] }),
+      ]),
+    );
+    const def = set.definitions[0]!;
+    expect(def.requiredContext.constraints).toEqual(["clinical-adjacent-no-advice", "crisis-routing"]);
+    const context = def.axes.context as { evidence: string };
+    expect(context.evidence).toContain("before acting");
+    expect(context.evidence).toContain("clinical-adjacent-no-advice");
+  });
+
+  it("derives the business domains its stages work in", () => {
+    const set = buildArchetypeJobDefinitions(
+      ovsm([
+        stage({ key: "a", responsibleRole: "R", capabilityBindings: ["billing-readiness"] as never }),
+        stage({ key: "b", order: 2, responsibleRole: "R", capabilityBindings: ["service-operations"] as never }),
+      ]),
+    );
+    expect(set.definitions[0]!.requiredContext.domains).toEqual(["billing-readiness", "service-operations"]);
+  });
+
+  it("answers context from a domain alone, with no gate present", () => {
+    const set = buildArchetypeJobDefinitions(
+      ovsm([stage({ key: "a", responsibleRole: "R", capabilityBindings: ["rental-fleet"] as never })]),
+    );
+    expect(set.definitions[0]!.axes.context?.state).toBe("satisfied");
+  });
+
+  it("says the corpus supplies craft knowledge, and this supplies the local part", () => {
+    // The corpus plane already measures whether a coworker can REACH its
+    // profession corpus, and every identity sits at level 3 there. Priming is a
+    // different question: what is specific to THIS business.
+    const set = buildArchetypeJobDefinitions(
+      ovsm([stage({ key: "a", responsibleRole: "R", trustGateKeys: ["safeguarding"] })]),
+    );
+    expect((set.definitions[0]!.axes.context as { evidence: string }).evidence).toContain("THIS business");
   });
 });

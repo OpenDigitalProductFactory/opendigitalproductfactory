@@ -243,4 +243,26 @@ supervision — UNANSWERED, because the OVSM cannot know what tools a role needs
 alone, what it must have read, or who it reports to. A projection that filled those with a
 plausible sentence would defeat the contract more quietly than the old door ever did.
 
-Slices 4–5 are not started. They are tracked on `BI-2D0063DF`.
+**Slice 4 is delivered** — priming. The `context` axis was the one with no establishment input at
+all; it is now derived from the stages a role owns:
+
+- **constraints** — the `trustGateKeys` its stages impose. This is the load-bearing half. A gate
+  named `clinical-adjacent-no-advice` or `regulated-no-advice` is not a checkbox to tick
+  afterwards; it is something the role must hold BEFORE its first turn, or the first turn is the
+  incident. The live catalogue declares 23 distinct gates.
+- **domains** — the `capabilityBindings` its stages work in. 394 of 877 stages carry one.
+
+Measured across the catalogue: **112 of 116 derived jobs now have the context axis answered**, up
+from zero, and 40 carry explicit constraints. A worked example — `dental-practice` / Business
+operator: constraints `clinical-adjacent-no-advice, strict-estate-separation`; domains
+`billing-readiness, integrations, lifecycle-signals, service-operations`.
+
+This is deliberately the LOCAL half of priming. The corpus plane already measures whether a
+coworker can reach its profession's craft corpus, and every identity sits at level 3 there; what
+was missing was what is specific to THIS business. A role whose stages impose nothing still gets
+`context` unanswered rather than a reassuring sentence.
+
+Three axes remain deliberately underivable — authority, qualifications, supervision. The OVSM
+cannot know what a role may decide alone, what tools it needs, or who it reports to.
+
+Slice 5 is not started. It is tracked on `BI-2D0063DF`.
