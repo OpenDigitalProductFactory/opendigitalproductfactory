@@ -296,19 +296,36 @@ Gentlest-first, with the record ahead of the summarizer:
 ### Phase 5 — Cache-aware ordering (frontier-only, secondary)
 With `cachedInputTokens` recorded, P8 becomes verifiable rather than *[REVIEW]*. Injected blocks (plan, checkpoint, briefing) belong behind `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`, ordered stable-first, so compaction does not rewrite the cached prefix each turn. **Last deliberately:** it only benefits workrooms that have opted into frontier capacity (§1, D2), so it must not shape the architecture the local path depends on. Joins BI-4761F54E.
 
-## 7. Scope & non-goals
+## 7. Backlog coverage
+
+Umbrella: **BI-D0DEEFE9** (triaged build, xlarge). Each phase is an independently shippable item.
+
+| Phase | Item | Shape | Depends on |
+|---|---|---|---|
+| 0 — Instrumentation (blocks all; no behavior change) | **BI-731F7FA2** | medium | — |
+| 1a — Turn on the ExecutionPlan anchor | **BI-430AFB90** | medium | — |
+| 1b — Promote constraints/decisions to `UserFact` at the turn | **BI-B6010A93** | medium | — |
+| 2 — Bound the fold; loud failures; backfill wedged threads | **BI-AF12ACF5** | small | — |
+| 3 — Record-first pipeline; atomic tool-call groups | **BI-ACB7E4B1** | large | BI-731F7FA2, BI-AF12ACF5 |
+| 4a — Retention for append-only thread storage | **BI-9D051BA2** | medium | — |
+| 4b — Time-to-first-token | **BI-2AC095DC** | medium | BI-731F7FA2 |
+| 5 — Cache-aware ordering (frontier-only) | **BI-45F9FA46** | small | BI-731F7FA2, BI-ACB7E4B1 |
+
+**BI-AF12ACF5** (the silent fold failure) and **BI-B6010A93** (one live constraint install-wide) are the two that address the reported symptom directly. **BI-731F7FA2** blocks anything whose success claim depends on a measurement.
+
+## 8. Scope & non-goals
 
 - **Not** a new compaction engine. Every change lands in `thread-checkpoint.ts`, `compaction-digest.ts`, the telemetry writer, or the nightly sweep.
 - **Not** a change to what the interactive window sends today (8 messages / 2,000 tokens). That bound is already aggressive; if anything Phase 0's measurements may argue for *widening* it once the checkpoint is reliable.
 - **Not** a memory-model change. `UserFact` scope, sensitivity, and supersession are untouched.
 - **Not** a Build Studio / CLI-surface change. In-turn `compactAgenticMessages` behavior is unchanged.
 
-## 8. Risks
+## 9. Risks
 
 - **Phase 0 may reveal the problem is elsewhere.** That is the point of sequencing it first, and it is a cheap phase.
 - **Backfilling wedged threads spends inference.** The 1,126-message thread costs ~113 summarizer calls at a 10-message batch. Run it on the nightly sweep, not interactively, and cap per-run work.
 - **`useUnified` may be off on this install**, which would mean the arbitrator path itself is inert — a materially larger finding than this spec assumes. Phase 0 resolves it.
 
-## 9. Open question for the operator
+## 10. Open question for the operator
 
 D3 established that `scheduled:*` threads dispatch no history, so their unbounded growth is storage, not tokens. If the reported symptom was observed on a **scheduled or workroom coworker** rather than an interactive chat panel, the causal chain is different from the one in D1 and Phase 4 (retention) outranks Phase 1. Worth confirming which surface the symptom was seen on before implementation starts.
