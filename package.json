@@ -112,7 +112,9 @@
     "merge-policy:check": "node scripts/merge-readiness-policy.mjs check",
     "merge-policy:audit": "node scripts/merge-readiness-policy.mjs audit",
     "merge-policy:apply": "node scripts/merge-readiness-policy.mjs apply",
-    "postinstall": "node scripts/set-hooks-path.mjs"
+    "postinstall": "node scripts/set-hooks-path.mjs",
+    "audit:job-definitions": "tsx scripts/audit-coworker-job-definitions.ts",
+    "audit:job-definitions:test": "tsx --test scripts/audit-coworker-job-definitions.test.ts"
   },
   "engines": {
     "node": ">=20",
