@@ -71,6 +71,37 @@ export function buildArchetypeRefs(source: {
   return [...new Set(refs)];
 }
 
+/** Inverse of {@link buildArchetypeRefs} — decode namespaced refs back into the
+ *  three dimensions they were built from.
+ *
+ *  Lives beside the encoder on purpose: the ref grammar is one contract, and a
+ *  decoder in another module would drift the moment either side changed.
+ *  Unknown prefixes are ignored rather than guessed at, so a newer peer may add
+ *  a dimension without breaking an older receiver. */
+export function parseArchetypeRefs(refs: string[] | undefined | null): {
+  scopeKind: string | null;
+  archetypeCategories: string[];
+  archetypeIds: string[];
+} {
+  const categories: string[] = [];
+  const ids: string[] = [];
+  let scopeKind: string | null = null;
+
+  for (const ref of refs ?? []) {
+    const value = typeof ref === "string" ? ref.trim() : "";
+    const separator = value.indexOf(":");
+    if (separator <= 0) continue;
+    const prefix = value.slice(0, separator);
+    const rest = value.slice(separator + 1).trim();
+    if (!rest) continue;
+    if (prefix === "scope") scopeKind ??= rest;
+    else if (prefix === "category") categories.push(rest);
+    else if (prefix === "archetype") ids.push(rest);
+  }
+
+  return { scopeKind, archetypeCategories: [...new Set(categories)], archetypeIds: [...new Set(ids)] };
+}
+
 /** Assemble the applicability block, omitting it entirely when nothing is known
  *  rather than emitting an empty object that reads as "applies to nothing".
  *

@@ -6,6 +6,7 @@ import { rateRecovery } from "./rate-recovery";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
+import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
 import { backlogTriageDrain } from "./backlog-triage-drain";
@@ -156,6 +157,7 @@ export const scheduledFunctions = [
   infraPrune,
   codeGraphReconcileScheduled,
   issueReportTriage,
+  ecosystemInboundTriage,
   backlogTriageDrain,
   coworkerRegressionDetect,
   agentTaskDispatch,
