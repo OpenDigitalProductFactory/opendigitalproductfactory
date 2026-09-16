@@ -1730,6 +1730,9 @@
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/check-guard-diff-honesty.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/check-guards.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/testing/pre-pr-gate.md"
@@ -1944,6 +1947,9 @@
     ],
     "scripts/lib/gate-exit-classification.mjs": [
       "docs/architecture/build-gate-runbook.md"
+    ],
+    "scripts/lib/git-changed-files.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/lib/hooks-dir.mjs": [
       "docs/testing/pre-pr-gate.md"
@@ -2675,9 +2681,11 @@
       "scripts/check-doc-reference-integrity.mjs",
       "scripts/check-docs-impact.mjs",
       "scripts/check-failure-readiness.mjs",
+      "scripts/check-guard-diff-honesty.mjs",
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
+      "scripts/lib/git-changed-files.mjs",
       "scripts/lib/mermaid-renderer.mjs",
       "scripts/lib/published-doc-roots.mjs"
     ],

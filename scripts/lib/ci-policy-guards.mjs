@@ -137,6 +137,17 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-guard-conformance-marks.test.mjs"),
       node("scripts/check-guard-conformance-marks.mjs"),
     ]),
+    // BI-FACB7C05 / BI-B6433DC6. `git diff <base>...HEAD` exits 128 with EMPTY
+    // stdout when the base cannot be resolved, so a guard whose wrapper collapses
+    // a failed git call into "" reports "nothing changed" — a clean line from a
+    // guard that never saw the diff. The class was closed by hand four times and
+    // came back each time, most recently on two --diff-filter=AM holdouts the
+    // ten-guard sweep missed while claiming completeness. This guard detects the
+    // shape statically so the next one cannot land.
+    guard("guard-diff-honesty", "Guard Diff Honesty", [
+      node("--test", "scripts/check-guard-diff-honesty.test.mjs"),
+      node("scripts/check-guard-diff-honesty.mjs"),
+    ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
       // Drives the real POSIX guard under bash: a cached binary path goes stale on
