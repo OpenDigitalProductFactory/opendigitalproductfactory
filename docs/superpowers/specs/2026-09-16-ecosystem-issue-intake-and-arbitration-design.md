@@ -259,7 +259,7 @@ An install on `quiet` gets tier 1 and 2 in-app and nothing else. An install on `
 | **B** — `BI-B423912F` | Federation transport for issue submission, so a linked install's issue is votable rather than opaque. | A |
 | **C** — `BI-F47386ED` ✅ **delivered** | Inbound read path (GitHub issues + demand mirrors) → BacklogItem with submitter provenance. the upstream install can finally *see* the queue. | — (parallel with A) |
 | **F** — `BI-7ED79807` ✅ **delivered** | **Prerequisite.** Populate `applicability` (archetype, capability, platform range) on projection. Until this lands every envelope is archetype-blind and no ballot can be scoped. | — |
-| **G** — `BI-4D924DB4` | Generalise the tri-state applicability evaluator; assemble the consent-gated, three-tier ballot per install. | C, F |
+| **G** — `BI-4D924DB4` ✅ **delivered** | Generalise the tri-state applicability evaluator; assemble the consent-gated, three-tier ballot per install. | C, F |
 | **H** — `BI-784D20FD` | `ecosystem-participation` proactivity family; the weekly two-directional watchdog in the derived room. | G |
 | **D** — `BI-4D1CAD69` | Vote budget, quadratic weighting, tally → `DemandScoreInputs`. Votes start moving the score. | B, C, G |
 | **E** — `BI-4C8A83AB` | Arbitration ordering + capacity draw + disposition writeback to every submitter. Closes the loop. | D |
@@ -300,6 +300,33 @@ ignored so a newer peer may add a dimension without breaking an older receiver.
 
 The cron is registered in `SCHEDULED_JOB_CATALOG`; the drift guard caught the
 omission, and an uncatalogued cron runs invisibly.
+
+### 5.2 Implementation notes — Phase G, delivered 2026-09-16
+
+**The two gates run in a fixed order, and the order is the point.** Consent is
+evaluated *before* relevance. An item that is relevant here but whose owner never
+granted forwarding consent is withheld — testing that exact combination is what
+stops the ordering from silently regressing into a single "relevance filter"
+that leaks.
+
+**A withheld item is a count, never a payload.** `withheld.{notRelevant,noConsent}`
+carry numbers only; the assembled ballot contains no trace of an item the reader
+may not see, which is asserted directly.
+
+**`review` is load-bearing in both directions.** An item is `reference` — hidden —
+only when *both* sides declared an archetype and they disagree. If the
+*submission* declares no scope, or if *this installation* has not declared its
+own archetype, the verdict is `review`, not `reference`: hiding a submission
+because the receiver forgot to declare itself would silence it for the wrong
+reason.
+
+**An unscored item sorts last, not as zero.** "Not scored" is not "scored zero",
+and coercing null to 0 would let unscored work outrank genuinely low-scored work.
+Ballot ordering consumes the score the demand engine already computed and never
+recomputes one.
+
+**Tier 1 bypasses the consent gate deliberately.** An install may always see what
+it itself submitted, whatever forwarding it granted others.
 
 ## 6. Verification
 
