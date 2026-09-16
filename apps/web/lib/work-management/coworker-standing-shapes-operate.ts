@@ -119,21 +119,18 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
     stopConditions: [
       {
         kind: "success",
-        condition: "The period is closed by the owner with a reconciliation and an Outcome Packet.",
-      },
+        condition: "The period is closed by the owner with a reconciliation and an Outcome Packet.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "A required statement cannot be read. The cycle stops and reports the gap rather than "
           + "reconciling against inferred rows — the config's 'never fabricate a transaction' rule "
-          + "is a stop condition, not advice.",
-      },
+          + "is a stop condition, not advice.", disposition: "inconclusive" },
       {
         kind: "budget",
         condition:
           "More than 500 unmatched exceptions in one period — the cycle stops and escalates rather "
-          + "than handing the owner a review nobody can finish.",
-      },
+          + "than handing the owner a review nobody can finish.", disposition: "awaiting-person" },
     ],
     grants: ["tool:banking_read", "tool:banking_write", "tool:document_read", "tool:enrichment_write", "tool:crm_read"],
     measures: [
@@ -210,14 +207,13 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The published policy matches applied practice, or every remaining divergence is one a human declined to change." },
+      { kind: "success", condition: "The published policy matches applied practice, or every remaining divergence is one a human declined to change.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "The applicable jurisdiction cannot be established. The cycle stops rather than drafting "
-          + "leave rules against the wrong statute.",
-      },
-      { kind: "budget", condition: "More than 25 divergences in one cycle — stop and escalate; that is a policy rewrite, not a currency check." },
+          + "leave rules against the wrong statute.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 25 divergences in one cycle — stop and escalate; that is a policy rewrite, not a currency check.", disposition: "awaiting-person" },
     ],
     grants: ["tool:policy_read", "tool:policy_write", "tool:consumer_read", "tool:registry_read"],
     measures: [
@@ -310,19 +306,17 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The incident is closed by the customer with an authorization record and named residual risk." },
+      { kind: "success", condition: "The incident is closed by the customer with an authorization record and named residual risk.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "Telemetry or asset context cannot be read. Command stops and reports rather than "
-          + "declaring a scope from an empty read — an unfounded blast radius is worse than none.",
-      },
+          + "declaring a scope from an empty read — an unfounded blast radius is worse than none.", disposition: "inconclusive" },
       {
         kind: "budget",
         condition:
           "More than 40 proposed response actions in one incident — stop and escalate; that is a "
-          + "programme of work, not an incident response the customer can review.",
-      },
+          + "programme of work, not an incident response the customer can review.", disposition: "awaiting-person" },
     ],
     grants: ["tool:siem_read", "tool:siem_investigate", "tool:incident_respond", "tool:registry_read"],
     measures: [
@@ -393,14 +387,13 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every filed item has an operator decision against it." },
+      { kind: "success", condition: "Every filed item has an operator decision against it.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "The operating calendar cannot be read. The watch stops and says so rather than inferring "
-          + "a season from the date — the wrong hemisphere is a plausible-looking answer.",
-      },
-      { kind: "budget", condition: "More than 30 filed items in one cycle — stop and escalate rather than burying the operator." },
+          + "a season from the date — the wrong hemisphere is a plausible-looking answer.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 30 filed items in one cycle — stop and escalate rather than burying the operator.", disposition: "awaiting-person" },
     ],
     grants: ["tool:registry_read", "tool:backlog_read", "tool:backlog_write", "tool:consumer_read", "tool:web_search", "tool:file_read"],
     measures: [
