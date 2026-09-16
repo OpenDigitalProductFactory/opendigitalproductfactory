@@ -659,6 +659,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // reads the repository's own hook files, so it is a conformance assertion
       // and must not be stripped from the host-side preflight (BI-7B249AFE).
       conformanceTest("scripts/hooks/converge-git-hooks.test.mjs"),
+      // BI-9A46E89C. CONFORMANCE, not a plain self-test: one case asserts on the
+      // live hook source (that it never fetches at SessionStart), so stripping it
+      // host-side would remove the only check of a contract that protects session
+      // startup. The hook is also the only thing that tells a session its RULEBOOK
+      // is stale -- a condition the session cannot detect itself, because the
+      // stale AGENTS.md does not know it is stale. 6s.
+      conformanceTest("scripts/hooks/worktree-freshness.test.mjs"),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
     ]),
   ]),
