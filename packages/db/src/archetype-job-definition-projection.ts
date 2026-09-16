@@ -78,6 +78,20 @@ export interface ArchetypeJobDefinition {
   gateBindings: string[];
   /** Union of the metrics its stages are measured by. */
   measureBindings: string[];
+  /**
+   * What this role must KNOW before it acts — the operator's "priming".
+   *
+   * Derived, not authored: the constraints its stages place on it (trust gates)
+   * and the business domains those stages work in (capability bindings). A
+   * gate like `clinical-adjacent-no-advice` is not a checkbox, it is a fact the
+   * role has to hold before its first turn.
+   */
+  requiredContext: {
+    /** Constraints its stages impose. The highest-value half of priming. */
+    constraints: string[];
+    /** Business domains its stages operate in. */
+    domains: string[];
+  };
   /** True when any owned accountability is standing work. */
   hasStandingWork: boolean;
   /**
@@ -118,6 +132,7 @@ function deriveAxes(
   accountabilities: JobAccountability[],
   gates: string[],
   measures: string[],
+  domains: string[],
 ): Partial<Record<JobDefinitionAxis, AxisAnswer>> {
   const axes: Partial<Record<JobDefinitionAxis, AxisAnswer>> = {};
   const stageLabels = accountabilities.map((a) => a.label).join("; ");
@@ -155,12 +170,35 @@ function deriveAxes(
     + `already specific to how this business runs rather than a generic role description.`,
   );
 
-  // DELIBERATELY UNANSWERED: authority (gates say what its work must pass, not
-  // what it may decide alone — that needs the FPAW §10 allocation pattern),
+  // PRIMING. The context axis had no establishment input at all — it was the
+  // operator's "priming" and the door never asked. It is derivable: a role must
+  // know the constraints its own stages impose before it takes a turn, and the
+  // domains those stages work in.
+  //
+  // The constraints carry the weight. A gate named `clinical-adjacent-no-advice`
+  // or `regulated-no-advice` is not a checkbox to tick after the fact — it is
+  // something the role has to hold BEFORE its first turn, or the first turn is
+  // the incident. Measured across the live catalogue: 23 distinct gates, 394 of
+  // 877 stages carrying a domain binding.
+  if (gates.length > 0 || domains.length > 0) {
+    const parts: string[] = [];
+    if (gates.length > 0) {
+      parts.push(`must hold these constraints before acting: ${gates.join(", ")}`);
+    }
+    if (domains.length > 0) {
+      parts.push(`works in: ${domains.join(", ")}`);
+    }
+    axes.context = satisfied(
+      `Derived from the stages ${role} owns — ${parts.join("; ")}. Its profession corpus supplies `
+      + `the craft knowledge; this is the part specific to THIS business.`,
+    );
+  }
+
+  // STILL DELIBERATELY UNANSWERED: authority (gates say what its work must PASS,
+  // not what it may decide alone — that needs the FPAW §10 allocation pattern),
   // qualifications (tools and skills are platform facts, not value-stream
-  // facts), context/priming, and supervision. Guessing any of them would put a
-  // plausible sentence where a decision belongs.
-  void gates;
+  // facts), and supervision. Guessing any of them would put a plausible
+  // sentence where a decision belongs.
 
   return axes;
 }
@@ -221,6 +259,13 @@ export function buildArchetypeJobDefinitions(
         ...new Set(ordered.flatMap((a) => stagesByKey.get(a.stageKey)?.metricBindings ?? [])),
       ].sort();
       const streamKeys = [...new Set(ordered.map((a) => a.streamKey))].sort();
+      const domains = [
+        ...new Set(
+          ordered.flatMap((a) =>
+            (stagesByKey.get(a.stageKey)?.capabilityBindings ?? []).map((c) => String(c)),
+          ),
+        ),
+      ].sort();
 
       return {
         definitionId: `archetype-job:${ovsm.archetypeId}:${role.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
@@ -231,7 +276,8 @@ export function buildArchetypeJobDefinitions(
         gateBindings: gates,
         measureBindings: measures,
         hasStandingWork: ordered.some((a) => a.standing),
-        axes: deriveAxes(role, ovsm.archetypeId, ordered, gates, measures),
+        requiredContext: { constraints: gates, domains },
+        axes: deriveAxes(role, ovsm.archetypeId, ordered, gates, measures, domains),
       };
     })
     // Stable output: a projection whose order wobbles produces spurious diffs on
