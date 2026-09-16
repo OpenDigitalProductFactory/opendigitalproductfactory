@@ -226,6 +226,23 @@ reports the plan without touching anything.
 5. Declare `consequenceScope` explicitly on the 8 outward tools that currently default to
    `business`, so the classification is a claim rather than an omission.
 
+**Part 2, as built.** Scope is **declared, derived, or refused** — never inferred from the question
+text. Inferring it is precisely what turned `extractAlignmentCriteria` into a fixture regex
+(§2), so the same mistake is not repeated one layer up. `evaluate_org_business_decision` gains a
+`decisionScope` parameter:
+
+- `wwwd` → answered as before.
+- `wwmd` / `wsid` → refused with `decision_scope_mismatch`, naming the owning authority and the
+  tool to use instead. **No ledger row is written**, so a question this business cannot answer never
+  becomes a card in the owner's queue.
+- omitted → refused with `decision_scope_required` and the three-scope pick list, mirroring the
+  `work_shape_required` contract: put the list to the owner and re-call, never guess.
+- A governed tool call still derives `wwwd` from its declared `consequenceScope`, so the
+  tool-originated path is unchanged.
+
+Malformed parameters are still reported before the scope is asked for, so a caller is not told to
+name a scope when the real problem is a bad `domainClass`.
+
 Guard: no decision reaches the org-business gate without a recorded scope classification.
 
 ### D1 — `veto` (BI-9E1E1939)
