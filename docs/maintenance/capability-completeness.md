@@ -123,9 +123,9 @@ _Its work has declared stages and gates._
 
 _Something makes it run without being asked._
 
-- **0** — No recurring trigger — any Proactivity setting is a silent no-op.
+- **0** — No recurring trigger — nothing makes this coworker act unasked.
 - **1** — Named by a scheduled job, but owns no self-task of its own.
-- **2** — Has a COWORKER_SELF_TASKS entry driven by its Proactivity setting.
+- **2** — Declares a self-task entry, so a rhythm exists to be driven.
 - **3** — Self-task PLUS a cadence declared on the skill itself.
 
 ### Tools + Skills  ·  weight 2  ·  ceiling 3
