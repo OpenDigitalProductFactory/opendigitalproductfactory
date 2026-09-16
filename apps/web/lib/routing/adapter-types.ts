@@ -33,6 +33,14 @@ export interface AdapterMcpSession {
   agentId?: string | null;
   threadId?: string | null;
   routeContext?: string | null;
+  /**
+   * BI-B949993E: the governed TaskRun this turn executes for, when any. The
+   * MCP route resolves the TaskRun's server-validated initiativeReviewBinding
+   * from it, so a governed writer called natively from the CLI is admitted on
+   * the same terms as one executed in-process — never from caller-supplied
+   * binding data.
+   */
+  taskRunId?: string | null;
 }
 
 /** Input to an execution adapter */

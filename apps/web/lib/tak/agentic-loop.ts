@@ -1210,7 +1210,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
     // adapters ignore the field. The agentic loop is the only place with
     // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext },
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two

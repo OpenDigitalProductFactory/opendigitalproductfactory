@@ -427,6 +427,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
           agentId: mcpSession!.agentId ?? null,
           threadId: mcpSession!.threadId ?? null,
           routeContext: mcpSession!.routeContext ?? null,
+          taskRunId: mcpSession!.taskRunId ?? null,
           scopes: scopesForJwt,
           capability: capabilityForJwt,
         });
