@@ -61,7 +61,7 @@ Every instrument specified to answer "what did this turn cost, and why" is dark:
 
 | Instrument | Specified by | Live state |
 |---|---|---|
-| `AgentMessage.contextTrace` | BI-3E218D80 | **0 of 3,543 rows populated** |
+| `AgentMessage.contextTrace` | its own schema comment on `AgentMessage` | **0 of 3,543 rows populated** |
 | `AdapterRunTelemetry.threadId` | BI-CCF1ACBB | **NULL on all 73,326 rows** |
 | `AdapterRunTelemetry.firstEventLatencyMs` | — | **NULL on all rows** |
 | `AdapterRunTelemetry.cachedInputTokens` | P8 | **NULL on all rows** |
