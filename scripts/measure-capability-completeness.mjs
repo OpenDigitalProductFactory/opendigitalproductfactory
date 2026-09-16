@@ -159,9 +159,23 @@ export const PLANE_CONTRACT = {
     ceiling: 3,
     blocker: null,
     criteria: {
-      0: "No recurring trigger — any Proactivity setting is a silent no-op.",
+      // These rungs described a PER-COWORKER "Proactivity setting" that
+      // BI-87C9C91C removed: it deleted the control, deleted the save path, and
+      // took the `agent:` scope out of the resolver ladder. Proactivity is
+      // room-owned (DI-81E47BDA59F1). The rungs still grade the same substrate
+      // — a self-task entry, then a cadence on the skill — but they no longer
+      // name a control that does not exist.
+      //
+      // WHY LEVEL 2 IS STILL WORTH REACHING, AND WHY IT IS NOT SUFFICIENT: an
+      // entry DECLARES that this coworker holds standing work at a rhythm.
+      // Whether that work can be switched on is a separate, open defect
+      // (BI-4CE4F52F): the reconciler still selects its level from
+      // `aiCoworkerProactivity:agent:*` facts no operator can write. Declaring
+      // entries before that is fixed would raise this plane while changing
+      // nothing about whether anything runs.
+      0: "No recurring trigger — nothing makes this coworker act unasked.",
       1: "Named by a scheduled job, but owns no self-task of its own.",
-      2: "Has a COWORKER_SELF_TASKS entry driven by its Proactivity setting.",
+      2: "Declares a self-task entry, so a rhythm exists to be driven.",
       3: "Self-task PLUS a cadence declared on the skill itself.",
     },
   },
