@@ -211,4 +211,14 @@ pinning seven axes onto the measure's own plane names so this cannot drift into 
 about completeness. Twelve tests, including the one that matters: a waiver fails the build the day
 its review falls due.
 
-Slices 2–5 are not started. They are tracked on `BI-2D0063DF`.
+**Slice 2 is delivered** — the door demands it. `establish_coworker` now requires a
+`jobDefinition` and refuses on `missing_job_definition` or `incomplete_job_definition` BEFORE the
+Agent row is written, so a half-hired coworker is not a state the system can be left in. Every
+unanswered axis is reported at once rather than one per round trip. `definitionChecklist` no longer
+contains the word "Optionally": that line named the job, and making the job optional is why the
+measure keeps finding wired, idle coworkers. Seventeen tests on the door, 1111 across the lifecycle
+and MCP packs.
+
+Existing coworkers are untouched, per §5.1 — this governs the door from here on.
+
+Slices 3–5 are not started. They are tracked on `BI-2D0063DF`.

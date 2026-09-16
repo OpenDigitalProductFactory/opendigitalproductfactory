@@ -16,13 +16,30 @@ vi.mock("@/lib/identity/principal-linking", () => ({
 import { prisma } from "@dpf/db";
 import { establishCoworker, promoteCoworker, definitionChecklist } from "./establish-coworker";
 
+import { JOB_DEFINITION_AXES } from "@dpf/db/coworker-job-definition";
+
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
+
+/**
+ * A complete job definition (BI-2D0063DF). Every axis answered, because the door
+ * now refuses a coworker that has no job — which is what it used to create.
+ */
+const COMPLETE_JOB = {
+  agentId: "field-safety-auditor",
+  axes: Object.fromEntries(
+    JOB_DEFINITION_AXES.map((axis) => [
+      axis,
+      { state: "satisfied" as const, evidence: `${axis} is answered by a named, checkable piece of substrate.` },
+    ]),
+  ),
+};
 
 const VALID_INPUT = {
   agentId: "field-safety-auditor",
   name: "Field Safety Auditor",
   description: "Audits field-service jobs for safety compliance.",
   grants: ["backlog_read", "registry_read"],
+  jobDefinition: COMPLETE_JOB,
 };
 
 beforeEach(() => {
@@ -182,5 +199,76 @@ describe("definitionChecklist", () => {
     ]) {
       expect(checklist).toContain(surface);
     }
+  });
+
+  // ── The contract the door now enforces (BI-2D0063DF) ──────────────────────
+
+  it("refuses to establish a coworker with no job definition at all", async () => {
+    const { jobDefinition: _omitted, ...noJob } = VALID_INPUT;
+    const result = await establishCoworker(noJob as never, "usr-1");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("missing_job_definition");
+    // The message must name the axes, so the caller learns the contract from
+    // the refusal rather than having to go read it.
+    expect(result.message).toContain("cadence");
+    expect(result.message).toContain("measures");
+  });
+
+  it("refuses a partial job definition and names every unanswered axis at once", async () => {
+    const result = await establishCoworker(
+      {
+        ...VALID_INPUT,
+        jobDefinition: {
+          agentId: "field-safety-auditor",
+          axes: { purpose: { state: "satisfied", evidence: "Audits field jobs for safety compliance, per the archetype stage." } },
+        },
+      },
+      "usr-1",
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("incomplete_job_definition");
+    // Eight remaining axes, all reported together — one round of findings, not
+    // eight round trips.
+    expect(result.message).toContain("accountabilities");
+    expect(result.message).toContain("tailoring");
+  });
+
+  it("refuses an expired waiver rather than hiring against a lapsed decision", async () => {
+    const axes = { ...COMPLETE_JOB.axes } as Record<string, unknown>;
+    axes.cadence = { state: "waived", reason: "Deferred until the room that carries this drive exists.", reviewBy: "2020-01-01" };
+    const result = await establishCoworker(
+      { ...VALID_INPUT, jobDefinition: { agentId: "field-safety-auditor", axes: axes as never } },
+      "usr-1",
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toContain("re-decide");
+  });
+
+  it("accepts a waived axis that is still in date", async () => {
+    const axes = { ...COMPLETE_JOB.axes } as Record<string, unknown>;
+    axes.cadence = { state: "waived", reason: "Advisory-only role; it answers when asked and holds no standing work.", reviewBy: "2099-01-01" };
+    const result = await establishCoworker(
+      { ...VALID_INPUT, jobDefinition: { agentId: "field-safety-auditor", axes: axes as never } },
+      "usr-1",
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("no longer tells the author the job is optional", async () => {
+    const result = await establishCoworker(VALID_INPUT, "usr-1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The line this replaced read "Optionally: curated golden journey,
+    // service-catalog offer, COWORKER_SELF_TASKS entry." Making the job
+    // optional is why the measure keeps finding wired, idle coworkers.
+    expect(result.checklist.join("\n")).not.toContain("Optionally");
+    expect(result.checklist.join("\n")).toContain("Land what the job definition promised");
   });
 });
