@@ -252,7 +252,7 @@ Nothing here should be tuned against an install that reports zeros.
 - **Link tool executions to their turn.** `ToolExecution.chatMessageId` is NULL on all 329,398 rows; populating it is what makes §3's record-based reconstruction span-accurate.
 - **Populate `ToolExecution.inputTokens`** going forward (not retroactively — 329k rows).
 
-*Acceptance:* a thread's spend, per-turn input tokens, TTFT and cache-hit rate are readable for a real thread. **No behavior change ships in this phase.**
+*Acceptance:* a thread's spend, per-turn input tokens, TTFT and cache-hit rate are readable for a real thread. **No behavior change ships in this phase.** Phase 0 exit also sets the numeric target and review date for every downstream item whose outcome is baseline-relative (§7).
 
 ### Phase 1 — Turn on the transaction anchor, and start promoting constraints
 The cheapest move in the plan (§4, §5): both artifacts exist, are durable, are unit-tested, and are unused.
@@ -296,7 +296,61 @@ Gentlest-first, with the record ahead of the summarizer:
 ### Phase 5 — Cache-aware ordering (frontier-only, secondary)
 With `cachedInputTokens` recorded, P8 becomes verifiable rather than *[REVIEW]*. Injected blocks (plan, checkpoint, briefing) belong behind `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`, ordered stable-first, so compaction does not rewrite the cached prefix each turn. **Last deliberately:** it only benefits workrooms that have opted into frontier capacity (§1, D2), so it must not shape the architecture the local path depends on. Joins BI-4761F54E.
 
-## 7. Backlog coverage
+## 7. The same principle one level up: decomposition is how a broad goal gets a context small enough to deliver
+
+§5 said a constraint that stays prose gets destroyed by the fold, so promote it into a gate. The identical argument applies to a **goal**. A broad objective held as prose in one thread is unreliable for the same reason a constraint held as prose is unreliable: it has to survive a window, compete with everything else, and be re-derived by the model each turn.
+
+The reliable form is the same shape — **historical prose compiled down into increasingly granular gates, tools, and room-scoped prose that produces a specific result.** Decomposition into nested workrooms, each staffed by a specific coworker, is what that compilation looks like for work.
+
+### This is not project management — it is the architectural answer to unbounded context
+
+A 1,126-message thread is the signature of a goal that was never decomposed. One room holding a broad objective must hold *everything* — every constraint, every action, every deliverable — and its context therefore grows with the goal's whole surface area.
+
+**Nested workrooms are context partitioning expressed as org structure.** Each room carries only its own objective, its own constraints, and its own slice of the record. The parent holds the **outcome**, not the transcript. That is what makes the context bounded by construction rather than by a summarizer working after the fact — and it is why this section belongs in a compaction spec at all: nesting removes the pressure that §6's pipeline exists to relieve.
+
+A specific coworker per room compounds it. That coworker's job profile and profession corpus are already granular and already retrieved per-room, so the room gets the *specific* prose its work needs instead of one general assistant carrying every domain's doctrine in a shared window.
+
+### Live state: the structure exists and is essentially unused
+
+The same pattern as every other finding in this spec — built, then not switched on:
+
+| Substrate | Live |
+|---|---|
+| `WorkCapsule` (workrooms) | **491** rooms, 395 bound to a backlog item |
+| `WorkCapsuleRelation` (nesting) | **13** relations |
+| `WorkCapsuleParticipant` (staffing) | **20** participants across **19 of 491** rooms |
+
+491 rooms and 13 nesting relations means decomposition is essentially flat. 19 of 491 rooms have any named participant, so rooms are also largely unstaffed — the "specific coworker" half of the mechanism is not happening either.
+
+**This spec's own decomposition reproduces the defect.** §8 maps eight phase items flat under one umbrella, with no nesting and no coworker assigned to any of them. It is an inventory, not a delivery structure. Correcting that is part of the work, not a footnote to it.
+
+### SMART outcomes, applied honestly
+
+Each decomposed unit should own a SMART outcome, and the discipline is worth stating precisely because the middle letters are where this usually fails.
+
+Auditing §8 against it, **four of eight items are not Measurable**, and **none is Time-bound**:
+
+| Item | Specific | Measurable | Verdict |
+|---|---|---|---|
+| BI-AF12ACF5 | yes | `compactedTurnCount` > 1,000; prune non-zero | **SMART** |
+| BI-B6010A93 | yes | constraint enforced past turn 200 and a fold | **SMART** |
+| BI-731F7FA2 | yes | four fields readable for a real thread | **SMART** |
+| BI-430AFB90 | yes | "input tokens stop tracking turn count" — no threshold | weak |
+| BI-ACB7E4B1 | yes | "measured reduction" — no target | **not measurable** |
+| BI-2AC095DC | yes | "measured improvement" — no target | **not measurable** |
+| BI-9D051BA2 | yes | "bounded growth" — no target | **not measurable** |
+| BI-45F9FA46 | partly | "rate reported" — reporting is not an outcome | **not measurable** |
+
+The fix is **not** to invent numbers now. Every missing target is relative to a baseline that does not exist yet, because Phase 0 is the phase that creates it — and a fabricated "30% reduction" would be a worse failure than an absent one (§1, never fabricate).
+
+So SMART lands in two stages, which is the honest application:
+
+- **Now:** every item is Specific, Relevant, and Achievable, and carries a named measurement *instrument* even where it cannot yet carry a number.
+- **At Phase 0 exit — a gate, not a hope:** each downstream item's target and review date are set from the observed baseline before that item is claimed. An item whose target is still unset at claim time is refused, the same way an unshaped claim is refused today.
+
+That gate is itself the pattern this section describes: a standard that would otherwise live as prose ("write good acceptance criteria") compiled into a granular check at a specific transition.
+
+## 8. Backlog coverage
 
 Umbrella: **BI-D0DEEFE9** (triaged build, xlarge). Each phase is an independently shippable item.
 
@@ -313,19 +367,19 @@ Umbrella: **BI-D0DEEFE9** (triaged build, xlarge). Each phase is an independentl
 
 **BI-AF12ACF5** (the silent fold failure) and **BI-B6010A93** (one live constraint install-wide) are the two that address the reported symptom directly. **BI-731F7FA2** blocks anything whose success claim depends on a measurement.
 
-## 8. Scope & non-goals
+## 9. Scope & non-goals
 
 - **Not** a new compaction engine. Every change lands in `thread-checkpoint.ts`, `compaction-digest.ts`, the telemetry writer, or the nightly sweep.
 - **Not** a change to what the interactive window sends today (8 messages / 2,000 tokens). That bound is already aggressive; if anything Phase 0's measurements may argue for *widening* it once the checkpoint is reliable.
 - **Not** a memory-model change. `UserFact` scope, sensitivity, and supersession are untouched.
 - **Not** a Build Studio / CLI-surface change. In-turn `compactAgenticMessages` behavior is unchanged.
 
-## 9. Risks
+## 10. Risks
 
 - **Phase 0 may reveal the problem is elsewhere.** That is the point of sequencing it first, and it is a cheap phase.
 - **Backfilling wedged threads spends inference.** The 1,126-message thread costs ~113 summarizer calls at a 10-message batch. Run it on the nightly sweep, not interactively, and cap per-run work.
 - **`useUnified` may be off on this install**, which would mean the arbitrator path itself is inert — a materially larger finding than this spec assumes. Phase 0 resolves it.
 
-## 10. Open question for the operator
+## 11. Open question for the operator
 
 D3 established that `scheduled:*` threads dispatch no history, so their unbounded growth is storage, not tokens. If the reported symptom was observed on a **scheduled or workroom coworker** rather than an interactive chat panel, the causal chain is different from the one in D1 and Phase 4 (retention) outranks Phase 1. Worth confirming which surface the symptom was seen on before implementation starts.
