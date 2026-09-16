@@ -124,13 +124,33 @@ That is why this is invisible rather than alarming. Nothing is failing; the item
 
 The tempting answer is a standing liveness guard that watches for inert mechanisms. **That answer is a trap**, and the table above is the reason: a new guard would be a ninth mechanism, built, unit-tested, merged, closed — and then inert, detected by nothing. A class of failure whose signature is "mechanisms ship and never fire" cannot be fixed by shipping another mechanism.
 
-The resolution is to move where the investment stops:
+The resolution is to move where the investment stops — and to move it *without* putting a new blocker in the construction path.
 
-- **Extend the closing investment to liveness.** A backlog item closes against an observable on a live install — this row count non-zero, this column populated, this flag reached by a caller — not against a merged SHA. This is a change to what *closing* costs, which is an investment decision, not a build.
-- **Re-open against the evidence, don't re-file.** The six `done` items above are the correct carriers; their closure was premature. Re-opening each with its measured live state is cheaper and more honest than filing new items that duplicate work already paid for.
-- **Spend on the last mile of what is built, before building more.** `ExecutionPlan` is a *large* item already delivered; making it fire is a flag and a status-derivation rule. The marginal cost of collecting the return is a fraction of what was spent producing it — which makes this the highest-yield investment available in this area, and it is the same argument for all six.
+### Verification is decoupled from delivery, or it takes delivery hostage
 
-**BI-F6B8BADD** carries this. The phases in §7 remain correct and still ship — the fold really is broken — but they are instances, and several of them are more accurately *re-openings* of work already closed.
+The naive form of "close against a live observable" is a precondition: *prove it fires before you may close.* **That form is wrong, and this session demonstrated why in practice.** Getting a governed receipt for this very spec required a reviewer coworker; both reviewer routes returned `prose-without-required-writer` with `executedToolCount: 0`; and every downstream path — including the small phase item — froze behind the same broken writer. Construction and delivery were held hostage by a validation step. A definition of done that makes liveness a blocking gate would reproduce that on every item.
+
+It is also frequently *impossible* as a precondition. Most of the observables in §9 cannot be evaluated at merge time on principle, not by accident:
+
+- `compactedTurnCount > 1,000` needs the nightly sweep to run repeatedly — **asynchronous by construction**.
+- "a constraint stated in turn 3 still enforced past turn 200" needs 200 real turns — **asynchronous, and needs real usage**.
+- "a non-null briefing on a real session start" needs **a person to start a session** — not doable without external input at all.
+
+So the standing last step of delivery is **registering the probe, not passing it**:
+
+- **Delivery owes a declared, machine-checkable liveness probe** — the observable expressed as a query, not as prose acceptance criteria. An item closes when the code is merged *and* its probe is registered. Nothing waits.
+- **The probe runs independently and asynchronously** on the install, on its own clock, owned by no one's branch. It is an observer, not a gate: it blocks nothing and can therefore never hold construction hostage.
+- **A probe that stays zero past its expected-first-fire window re-opens the item automatically**, with the measured evidence attached. This inverts the burden: instead of *prove it is live before you close*, it is *close, and the probe will come find you.* Everything in the §2 table would have been re-opened months ago under this rule.
+- **A probe that cannot run yields no verdict.** Where liveness needs external input or real usage that has not happened, the honest state is *inconclusive* — never a pass, and never a failure charged against the diff. This is already DPF doctrine (`report-only-the-verdict-you-reached`, `AGENTS.md` §4: fail closed on safety, fail open on infrastructure); it simply has not been applied to delivery claims.
+- **Each improvement is measurable on its own.** One probe per mechanism, independently falsifiable. Six mechanisms bundled into an epic marked *done* is exactly how these six disappeared — EP-8C706944 and EP-27FD96BC are both closed.
+
+### What this changes in practice
+
+- **Extend the closing investment to probe registration.** A change to what *closing* costs — an investment decision, not a build, and one that adds no blocking step.
+- **Re-open against the evidence, don't re-file.** The six items above are the correct carriers; their closure was premature. Re-opening each with its measured live state is cheaper and more honest than filing new items that duplicate work already paid for.
+- **Spend on the last mile of what is built, before building more.** `ExecutionPlan` is a *large* item already delivered; making it fire is a flag and a status-derivation rule. The marginal cost of collecting the return is a fraction of what was spent producing it — the highest-yield investment available here, and the same holds for all six.
+
+**BI-F6B8BADD** carries this. The phases in §7 remain correct and still ship — the fold really is broken — but they are instances, and several are more accurately *re-openings* of work already closed. The observables listed against each item in §9 are **probes, not gates**: none of them blocks its item from closing.
 
 ## 3. Research & Benchmarking (required by AGENTS.md §7)
 
@@ -394,7 +414,7 @@ Umbrella: **BI-D0DEEFE9**. Class carrier: **BI-F6B8BADD**.
 
 ### Re-opened carriers (work already funded; the last mile is what remains)
 
-| Item | Size | Was | Liveness observable for closure |
+| Item | Size | Was | Liveness probe (observer, not a gate) |
 |---|---|---|---|
 | **BI-2AC48661** `ExecutionPlan` | large | done | `executionPlan` non-null for planned turns; objective survives a restart |
 | **BI-FDECBE0A** compaction fold | medium | done | the 1,126-message thread reaches `compactedTurnCount` > 1,000; prune non-zero |
