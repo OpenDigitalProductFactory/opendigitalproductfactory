@@ -265,4 +265,34 @@ was missing was what is specific to THIS business. A role whose stages impose no
 Three axes remain deliberately underivable — authority, qualifications, supervision. The OVSM
 cannot know what a role may decide alone, what tools it needs, or who it reports to.
 
-Slice 5 is not started. It is tracked on `BI-2D0063DF`.
+**Slice 5 is delivered** — the estate is run through the contract.
+`scripts/audit-coworker-job-definitions.ts` (`pnpm audit:job-definitions`) derives each existing
+coworker's job-definition state from the grader rather than guessing it: `AXIS_TO_CAPABILITY_PLANE`
+already pins seven axes onto the measure's planes, so a plane AT its ceiling answers its axis and a
+plane below it leaves the axis open. The two ungraded axes are read from the registry —
+`escalates_to` for supervision, `value_stream` for tailoring.
+
+First run against the live estate:
+
+```
+54 coworker(s) in scope; 33 postured and excluded.
+complete job definitions: 30/54
+
+ 22  cadence           when does it work without being asked?
+ 18  qualifications    what tools and skills does it need?
+ 14  purpose           why does this role exist?
+  7  measures          how would anyone know it worked?
+  6  accountabilities  what outcomes does it own?
+```
+
+The six worst are exactly the six customer-facing roles §4 deliberately declined to park
+(`AGT-150/151/152`, `AGT-160/161/162`) — five open axes each. That consistency is the check that
+the audit and the posture work are reading the same estate.
+
+This reports the same 67 open gaps the ratchet already tracks, re-expressed as the job questions
+they answer. A coworker missing a work shape is not "failing plane 4"; it is a hire nobody wrote
+accountabilities for. Converting a compliance number into a worklist a person can act on is the
+whole point of the re-framing.
+
+Remediation itself — landing substrate or recording waivers per axis — is the ongoing work this
+audit now scopes.
