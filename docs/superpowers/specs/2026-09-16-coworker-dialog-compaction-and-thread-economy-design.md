@@ -365,6 +365,9 @@ Umbrella: **BI-D0DEEFE9** (triaged build, xlarge). Each phase is an independentl
 | 4b — Time-to-first-token | **BI-2AC095DC** | medium | BI-731F7FA2 |
 | 5 — Cache-aware ordering (frontier-only) | **BI-45F9FA46** | small | BI-731F7FA2, BI-ACB7E4B1 |
 
+
+**Coverage receipt status — blocked, condition recorded here rather than cited by id.** `record_plan_backlog_coverage` refuses this table with `traceability-incomplete`. Blocking condition: **no initiative scope baseline exists for BI-D0DEEFE9.** A baseline requires an `implementation` claim routed through a spec-approval packet that binds `record_initiative_design_review` to this immutable design and an **independent reviewer coworker** — which is §7's argument arriving as an enforced gate rather than as advice: the plan does not get governed coverage until a named reviewer, not its author, has approved the design it covers. Note also that BI-D0DEEFE9 is sized **xlarge**, and an xlarge item never enters implementation — so the umbrella is expected to stay a design/decomposition carrier and the phase items are what get claimed. Until the baseline exists, **this table in the plan is the coverage artifact**; the receipt is recorded when the review lands.
+
 **BI-AF12ACF5** (the silent fold failure) and **BI-B6010A93** (one live constraint install-wide) are the two that address the reported symptom directly. **BI-731F7FA2** blocks anything whose success claim depends on a measurement.
 
 ## 9. Scope & non-goals
