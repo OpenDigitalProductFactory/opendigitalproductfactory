@@ -103,3 +103,44 @@ describe("attention decision dedupe", () => {
     expect(items.map((i) => i.id)).toEqual(["ai-decision:DI-actionable"]);
   });
 });
+
+describe("retracted decisions leave the inbox", () => {
+  const retracted = {
+    retraction: {
+      retractedAt: "2026-09-16T00:00:00.000Z",
+      reason: "superseded",
+      supersededByTool: "run_hive_scout_ingest",
+    },
+  };
+
+  it("drops a retracted row — the gate would not ask it today", async () => {
+    const db = {
+      decisionInteraction: {
+        findMany: async () => [
+          { ...row({ interactionId: "DI-retracted" }), outcomePayload: retracted },
+          row({ interactionId: "DI-live" }),
+        ],
+      },
+    } as never;
+    const items = await loadAiDecisionItems(db);
+    expect(items.map((i) => i.id)).toEqual(["ai-decision:DI-live"]);
+  });
+
+  it("never lets a retracted row represent a group of live ones", async () => {
+    // Newest-first ordering would otherwise make the retracted row the card,
+    // hiding a question that is still genuinely open behind a dead one.
+    const db = {
+      decisionInteraction: {
+        findMany: async () => [
+          { ...row({ interactionId: "DI-retracted" }), outcomePayload: retracted },
+          row({ interactionId: "DI-live-1" }),
+          row({ interactionId: "DI-live-2" }),
+        ],
+      },
+    } as never;
+    const items = await loadAiDecisionItems(db);
+    expect(items).toHaveLength(1);
+    expect(items[0]!.id).toBe("ai-decision:DI-live-1");
+    expect(items[0]!.context).toContain("Asked 2 times");
+  });
+});
