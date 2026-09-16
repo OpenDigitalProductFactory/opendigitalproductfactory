@@ -96,38 +96,41 @@ That distinction matters for the plan: the scheduled threads are a **retention**
 
 But `firstEventLatencyMs` is NULL on every row, so **there is no measurement of time-to-first-token anywhere on this install.** Optimizing this path before instrumenting it would be guesswork. Phase 0 exists for exactly this reason.
 
-## 2. The systematic finding: DPF ships mechanisms and never proves them live
+## 2. The systematic finding: `done` means merged, not live
 
-Everything measured for this spec has the **same shape**, and that shape — not compaction — is the real finding. Each mechanism below was designed, built, unit-tested, reviewed and merged. Each is dark or inert in production. None of them failed loudly enough for anyone to notice.
+Everything measured for this spec has the **same shape**, and that shape — not compaction — is the real finding. Each mechanism below was captured as a backlog item, scoped, sized, funded, built, unit-tested, reviewed, merged, and **closed**. Each is dark or inert in production.
 
-| Mechanism | Built | Live state |
-|---|---|---|
-| Thread checkpoint fold | unit-tested, dependency-injected | `folded = 0` on the 1,126 / 839 / 156-message threads; fails silently, forever |
-| `AgentMessage.contextTrace` | schema + writer + health page | **0 of 3,543** rows |
-| Per-thread cost ledger | pure summarizer + indexed runner | joins on `threadId` (NULL on all 73,326 telemetry rows) and token columns (NULL on all 329,398 tool rows) — **structurally always zero** |
-| `ExecutionPlan` | crash-durable, unit-tested, compaction-proof by construction | `enableExecutionPlan` set by **no caller**; **0 of 1,000** threads |
-| `UserFact` constraint channel | closed enum, system-prompt injection, supersession | **1 live constraint, 0 live decisions** across 3,543 messages |
-| Workroom nesting + staffing | relations + participants tables | **13** relations and **20** participants across **491** rooms |
-| Reviewer writer contract | receipt-verified dispatch | two coworkers, two gates, `executedToolCount: 0`, **no receipt** |
+| Mechanism | Its backlog item | Status | Live state |
+|---|---|---|---|
+| `ExecutionPlan` | BI-2AC48661 (large) | **done** | `enableExecutionPlan` set by **no caller**; **0 of 1,000** threads |
+| Thread compaction summaries + re-injection | BI-FDECBE0A (medium) | **done** | `folded = 0` on the 1,126 / 839 / 156-message threads; fails silently, forever |
+| Per-thread token/cost ledger | BI-CCF1ACBB (small) | **done** | joins on `threadId` (NULL on all 73,326 telemetry rows) and token columns (NULL on all 329,398 tool rows) — **structurally always zero** |
+| Two-scope memory | BI-1772D0B7 (large) | **done** | **1 live constraint, 0 live decisions** across 3,543 messages |
+| Session-start projection briefings | BI-A9052DCB (large) | **done** | — |
+| Usage-based expiry + retention pruning | BI-153F7E4A (medium) | **done** | the prune no-ops: it is gated on a watermark the wedged fold never sets |
+| `contextTrace` | *no live backlog item* | — | **0 of 3,543** rows (the doc-anchor gate caught the dead citation) |
+| Workroom nesting + staffing | — | — | **13** relations and **20** participants across **491** rooms |
+| Reviewer writer contract | BI-EC82C48B (filed here) | open | two coworkers, two gates, `executedToolCount: 0`, **no receipt** |
 
-**The class of failure: "unit-tested and merged" is being treated as "working."** Nothing on this install asserts that a shipped mechanism is actually *exercised*. A feature can pass every gate in § 4 of `AGENTS.md`, merge, and then never fire once — and the platform will report nothing, because the thing that would have reported it is itself one of the inert mechanisms.
+### The catch-all worked. The closing investment did not.
 
-The recursion is the proof. The reason nobody caught the wedged fold is that the instruments were dark (D2 below); the instruments being dark is itself another instance of the same class. **A failure mode that disables its own detection will always look like an absence of problems.**
+The backlog **is** the platform's catch-all for systematic failure, and it did its job — every one of these was captured, shaped and funded. Three were sized *large*. The defect is not detection and not capture:
 
-### The systematic resolution
+> **`done` currently means the code exists. It does not mean the mechanism fires.** The investment to close a backlog item terminates at *merged*, and the last mile — proving the thing runs on a real install — is unfunded.
 
-Eight phase fixes would repair eight instances and leave the class intact — the ninth would arrive next quarter by exactly the same route. The resolution has to be a standing control, and it is the same move this spec makes twice more at lower altitudes (§6: a constraint becomes a gate, not prose; §8: a decomposition standard becomes a check at a transition):
+That is why this is invisible rather than alarming. Nothing is failing; the items are closed, the tests are green, the epics (EP-8C706944, EP-27FD96BC) are marked done. The platform has **already paid** for every capability in that table and is receiving none of them.
 
-> **Every governed mechanism declares the observable that proves it is live, and an automated guard fails when that observable is zero.**
+### The resolution is investment, not a ninth mechanism
 
-- **Declared at build time, not audited later.** A mechanism ships with its liveness observable the way a migration ships with its backfill — "this row count, this column, this counter is non-zero when I am working."
-- **Inertness is a failure state, not a silence.** A writer whose column is 100% NULL, a flag set by no caller, a channel holding one row install-wide: each is a *defect*, reported as such, not an absence of news.
-- **It runs on the install, not in CI.** Unit tests already pass for every row in that table. The gap is between green CI and a live install, so the check has to live where the install is.
-- **The seven rows above are its first test set.** A guard that cannot detect all seven known-inert mechanisms is not yet a guard.
+The tempting answer is a standing liveness guard that watches for inert mechanisms. **That answer is a trap**, and the table above is the reason: a new guard would be a ninth mechanism, built, unit-tested, merged, closed — and then inert, detected by nothing. A class of failure whose signature is "mechanisms ship and never fire" cannot be fixed by shipping another mechanism.
 
-Filed as **BI-F6B8BADD**, with the reviewer-contract instance as **BI-EC82C48B**.
+The resolution is to move where the investment stops:
 
-This is the parent problem. The phases in §7 remain correct and still ship — the fold really is broken and really must be fixed — but they are instances, and the standing control is what stops the next one.
+- **Extend the closing investment to liveness.** A backlog item closes against an observable on a live install — this row count non-zero, this column populated, this flag reached by a caller — not against a merged SHA. This is a change to what *closing* costs, which is an investment decision, not a build.
+- **Re-open against the evidence, don't re-file.** The six `done` items above are the correct carriers; their closure was premature. Re-opening each with its measured live state is cheaper and more honest than filing new items that duplicate work already paid for.
+- **Spend on the last mile of what is built, before building more.** `ExecutionPlan` is a *large* item already delivered; making it fire is a flag and a status-derivation rule. The marginal cost of collecting the return is a fraction of what was spent producing it — which makes this the highest-yield investment available in this area, and it is the same argument for all six.
+
+**BI-F6B8BADD** carries this. The phases in §7 remain correct and still ship — the fold really is broken — but they are instances, and several of them are more accurately *re-openings* of work already closed.
 
 ## 3. Research & Benchmarking (required by AGENTS.md §7)
 
