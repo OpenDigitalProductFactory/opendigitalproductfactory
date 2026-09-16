@@ -22,7 +22,7 @@
 import {
   resolveBusinessProfile,
   resolveStanceVectors,
-  STANCE_VECTOR_KEYS,
+  seededStanceVectorKeys,
   type ArchetypeBusinessProfile,
   type ArchetypeStanceVectors,
 } from "@/lib/onboarding/archetype-business-context";
@@ -157,7 +157,10 @@ export function formatOrgContextInstructions(
     .filter(Boolean)
     .join(" · ");
 
-  const stances = STANCE_VECTOR_KEYS.map((key) => {
+  // Only the vectors this archetype is actually seeded (BI-0902BAE9). Telling a
+  // software platform's coworkers how to behave in a customer's home would be
+  // noise at best; at worst it invites a stance nobody here has a view on.
+  const stances = seededStanceVectorKeys({ industry: bundle.industry }).map((key) => {
     const s = bundle.stanceVectors[key];
     const ceiling =
       typeof s.ceilingUsd === "number" ? ` (authority ceiling ~$${s.ceilingUsd})` : "";

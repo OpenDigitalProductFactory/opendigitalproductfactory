@@ -150,6 +150,9 @@ describe("resolveStanceVectors (BI-70ADC71F)", () => {
       "data-handling",
       "decision-scope",
       "growth-vs-stability",
+      // BI-0902BAE9: activity-triggered, resolved for every archetype but
+      // seeded only where the activity is derived (see seededStanceVectorKeys).
+      "on-site-work-conduct",
       "pricing-integrity",
       "quality-bar",
       "routine-operations",

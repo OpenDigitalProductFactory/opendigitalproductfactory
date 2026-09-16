@@ -242,7 +242,9 @@ describe("seedOrgWwwdCorpus", () => {
 
     const result = await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
 
-    expect(result.materialCount).toBe(20);
+    // 22, not 20: healthcare-wellness derives workers-at-customer-sites (home
+    // visits), so the on-site conduct vector seeds two more materials.
+    expect(result.materialCount).toBe(22);
     const mission = fake.wikiPages.find((p) => p.slug === "org-mission");
     expect(mission).toBeDefined();
     expect(mission!.body.trim().length).toBeGreaterThan(20);

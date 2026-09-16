@@ -18,8 +18,13 @@
 // starters — do not encode brittle specifics that read as fabricated.
 
 import {
-  NONPROFIT_STANCE_VECTORS,
-  SOFTWARE_PLATFORM_STANCE_VECTORS,
+  deriveActivity,
+  seedsForActivity,
+  type BusinessActivity,
+} from "./archetype-activities";
+import {
+  INDUSTRY_STANCE_VECTORS,
+  ON_SITE_CONDUCT_BY_INDUSTRY,
 } from "./archetype-stance-presentation";
 
 export { resolveStanceAuthoringExamples } from "./archetype-stance-presentation";
@@ -459,6 +464,10 @@ export const STANCE_VECTOR_KEYS = [
   "data-handling",
   "routine-operations",
   "decision-scope",
+  // BI-0902BAE9. Activity-triggered: seeded only where the archetype actually
+  // sends people to a customer's place. A software platform never sees it; a
+  // trades business gets it without being asked whether its people travel.
+  "on-site-work-conduct",
 ] as const;
 export type StanceVectorKey = (typeof STANCE_VECTOR_KEYS)[number];
 
@@ -469,6 +478,18 @@ export type StanceVectorDefault = {
   stance: string;
   /** Authority ceiling in whole USD (goodwill / pricing / spend vectors). */
   ceilingUsd?: number;
+};
+
+/**
+ * Which stance vectors only exist because of an activity (BI-0902BAE9).
+ *
+ * A vector absent from this map is universal and always seeds. One listed here
+ * seeds only where the archetype is derived as having the activity — so the
+ * question never reaches a business for whom it is meaningless, and never has
+ * to be confirmed by a business for whom it obviously applies.
+ */
+export const STANCE_VECTOR_ACTIVITY: Partial<Record<StanceVectorKey, BusinessActivity>> = {
+  "on-site-work-conduct": "workers-at-customer-sites",
 };
 
 export type ArchetypeStanceVectors = Record<StanceVectorKey, StanceVectorDefault>;
@@ -517,210 +538,14 @@ export const GENERIC_STANCE_VECTORS: ArchetypeStanceVectors = {
     stance:
       "We decide what this business owns: what we sell, who we serve, what we charge, what we promise, and how we treat customers and their data. Questions of professional or legal craft go to the person qualified in that craft, and questions about how a supplier's product works go to that supplier. When a question is not ours, the answer is to route it, not to guess — and a question we cannot answer yet because the facts are missing needs the research first, not a decision.",
   },
+  "on-site-work-conduct": {
+    title: "Our people working at a customer's place",
+    stance:
+      "When our people are at a customer's home or site they are guests, and how they behave there is the business the customer actually experiences. We know where a job is and who is on it while they are on the clock and on that job — enough to dispatch, to prove we turned up, and to keep someone safe working alone — and not otherwise. Off shift we do not track anyone. Photos and notes taken on a job document the work, go no further than the people doing and billing it, and are not turned to any new purpose without a fresh decision. Anything we learn about the customer's household while we are in it stays there.",
+  },
 };
 
 /** Industry overrides — only the vectors where the posture genuinely differs. */
-const INDUSTRY_STANCE_VECTORS: Record<string, Partial<ArchetypeStanceVectors>> = {
-  "healthcare-wellness": {
-    "customer-goodwill": {
-      title: "When a patient's experience goes wrong",
-      stance:
-        "A failure in a patient's experience gets a same-day response and a genuine fix — rebook first, waive or comp where we fell short, and tell the owner the same day. Never argue with a patient over a fee we caused.",
-      ceilingUsd: 150,
-    },
-    "quality-bar": {
-      title: "Our care standard",
-      stance:
-        "Patient safety and clinical quality are never traded for speed or margin. If care or service slips below our standard, we correct it at our cost and say so plainly.",
-    },
-    "spend-authority": {
-      title: "Spending without asking",
-      stance:
-        "Recurring clinical and office supplies reorder without the owner up to the ceiling per purchase — a stock-out can delay care. New equipment, new vendors, or anything above the ceiling goes to the owner.",
-      ceilingUsd: 500,
-    },
-  },
-  "food-hospitality": {
-    "customer-goodwill": {
-      title: "When a guest's visit goes wrong",
-      stance:
-        "Fix the visit while the guest is still at the table: remake or comp the dish, not the argument. Staff resolve it on the spot within the ceiling; a comped meal that wins the next three visits is cheap.",
-      ceilingUsd: 60,
-    },
-    "quality-bar": {
-      title: "What leaves the pass",
-      stance:
-        "Food safety and cleanliness are never negotiable. If a plate isn't right, it doesn't leave the pass — and if it did, we remake it without debate.",
-    },
-  },
-  "retail-goods": {
-    "customer-goodwill": {
-      title: "Returns, damage, and our mistakes",
-      stance:
-        "If we shipped it wrong, late, or broken, we replace or refund without friction within the ceiling — the customer should not pay for our mistake. Habitual-abuse cases go to the owner rather than becoming policy.",
-      ceilingUsd: 75,
-    },
-    "spend-authority": {
-      title: "Restocking without asking",
-      stance:
-        "Reorders of proven sellers within budget proceed without the owner up to the ceiling per order. New lines, new suppliers, or bulk buys above it are the owner's call — stock ties up cash.",
-      ceilingUsd: 200,
-    },
-  },
-  "professional-services": {
-    "customer-goodwill": {
-      title: "When our work misses the mark",
-      stance:
-        "When our advice or work falls short, we remediate with more of our own work first, a credit second, and a refund only when trust demands it. The relationship compounds over years; the fix should protect it.",
-      ceilingUsd: 250,
-    },
-    "pricing-integrity": {
-      title: "Fees, scope, and discounts",
-      stance:
-        "We honor quoted fees and absorb our own estimating mistakes on the current engagement while correcting them for the next one. We do not discount below the cost of doing the work well — a cheap engagement done badly costs the reputation.",
-    },
-  },
-  "banking-financial-services": {
-    "customer-goodwill": {
-      title: "When we make an account error",
-      stance:
-        "Fees or charges caused by our error are reversed promptly within the ceiling and documented. Anything touching disclosures, rates, or regulated terms goes to the owner — goodwill never bends compliance.",
-      ceilingUsd: 100,
-    },
-    "pricing-integrity": {
-      title: "Rates, terms, and exceptions",
-      stance:
-        "Rate and term claims always match what we actually offer, and required disclosures stay attached. There are no improvised pricing exceptions — every exception is an owner decision with a record.",
-    },
-  },
-  "trades-maintenance": {
-    "customer-goodwill": {
-      title: "Callbacks and our mistakes",
-      stance:
-        "A callback on our own work is priority scheduling and free within the ceiling — we stand behind the work. If the fault is genuinely not ours, we say so honestly and quote the real job.",
-      ceilingUsd: 150,
-    },
-    "spend-authority": {
-      title: "Parts and van stock without asking",
-      stance:
-        "Parts and materials needed to finish a booked job proceed without the owner up to the ceiling — a second trip costs more than the part. Tools, equipment, and new suppliers are the owner's call.",
-      ceilingUsd: 300,
-    },
-  },
-  "fabric-care-services": {
-    "customer-goodwill": {
-      title: "When a garment order goes wrong",
-      stance:
-        "If we lose, damage, delay, or misroute a customer's garment through our mistake, we respond quickly, explain plainly, and make it right with redo, repair, credit, or refund within the ceiling. Anything involving a high-value or sentimental item goes to the owner.",
-      ceilingUsd: 150,
-    },
-    "growth-vs-stability": {
-      title: "New volume vs ready promises",
-      stance:
-        "Existing claim tickets and ready promises get first call on plant capacity. We take new volume at the pace the plant and workroom can process accurately, not faster.",
-    },
-    "quality-bar": {
-      title: "Our garment-care standard",
-      stance:
-        "A garment does not leave below our standard. If cleaning, pressing, folding, repair, tagging, or packaging is wrong, we fix it before handoff or tell the customer early.",
-    },
-    "spend-authority": {
-      title: "Spending without asking",
-      stance:
-        "Routine cleaning supplies, tags, hangers, bags, and urgent minor equipment fixes can proceed without the owner up to the ceiling. New equipment, new vendors, or anything above it goes to the owner.",
-      ceilingUsd: 300,
-    },
-  },
-  "agriculture-ranching": {
-    "customer-goodwill": {
-      title: "When our product or handling falls short",
-      stance:
-        "If our description, handling, timing, or quality is wrong, we say so promptly and offer a practical correction within the ceiling. Animal-welfare, food-safety, title, or high-value disputes go to the owner immediately.",
-      ceilingUsd: 250,
-    },
-    "pricing-integrity": {
-      title: "Quotes in a moving market",
-      stance:
-        "We state what a quote covers, how long it is valid, and which weight, grade, quality, delivery, or market facts can change it. We do not hide uncertainty or rewrite agreed terms after the fact.",
-      ceilingUsd: 250,
-    },
-    "growth-vs-stability": {
-      title: "More acres or animals vs resilient capacity",
-      stance:
-        "Land condition, feed and water, animal care, labor, equipment, cash, and outside-service capacity set the safe growth rate. We do not add production faster than those systems can carry it through a poor-weather year.",
-    },
-    "quality-bar": {
-      title: "Our stewardship and welfare standard",
-      stance:
-        "Animal welfare, label compliance, traceable records, safe equipment, and honest product condition are never traded for speed or a sale. Stop and escalate when the record, label, withdrawal interval, forecast, or qualified advice is missing.",
-    },
-    "spend-authority": {
-      title: "Routine seasonal spending without asking",
-      stance:
-        "Budgeted feed, seed, consumables, routine parts, and scheduled animal or equipment care may proceed within the ceiling. New chemicals, major repairs, new vendors, capital equipment, and unbudgeted commitments go to the owner.",
-      ceilingUsd: 500,
-    },
-  },
-  "manufacturing": {
-    "customer-goodwill": {
-      title: "When our product or delivery falls short",
-      stance:
-        "We contain the issue, protect the customer's operation, and preserve the evidence before debating fault. Routine freight, replacement, or rework remedies may proceed within the ceiling; safety, systemic, or material warranty exposure goes to the owner and quality authority.",
-      ceilingUsd: 500,
-    },
-    "pricing-integrity": {
-      title: "Quotes, configurations, and change control",
-      stance:
-        "A quote states configuration, quantity, lead time, validity, exclusions, and acceptance basis. Scope or revision changes become an explicit change, never a quiet reduction in what was promised.",
-    },
-    "growth-vs-stability": {
-      title: "New orders vs released capacity",
-      stance:
-        "Released customer commitments get first call on qualified material, people, equipment, and test capacity. We accept new demand at the rate the constraint and quality system can carry, not the rate the order book can hide.",
-    },
-    "quality-bar": {
-      title: "Our release standard",
-      stance:
-        "Nonconforming work is identified, contained, and dispositioned by authorized people. Missing, stale, or uncertain evidence is not a pass, and schedule pressure never authorizes an unrecorded deviation.",
-    },
-    "spend-authority": {
-      title: "Routine production spending without asking",
-      stance:
-        "Approved replenishment, ordinary consumables, calibration, and routine maintenance may proceed within budget and the ceiling. New suppliers, tooling, capital equipment, design changes, and unplanned commitments go to the owner.",
-      ceilingUsd: 1000,
-    },
-  },
-  "automotive-services": {
-    "customer-goodwill": {
-      title: "When our repair doesn't hold",
-      stance:
-        "If our part or work fails, we return and make it right free within the ceiling, at the customer's location, at the next available slot. Safety-related comebacks jump the queue.",
-      ceilingUsd: 150,
-    },
-  },
-  "software-platform": SOFTWARE_PLATFORM_STANCE_VECTORS,
-  "education-training": {
-    "customer-goodwill": {
-      title: "When we fail a learner or family",
-      stance:
-        "If we cancel, misschedule, or under-deliver, we make the learner whole first — a make-up session or credit within the ceiling — and tell the family before they ask.",
-      ceilingUsd: 100,
-    },
-  },
-  "public-sector": {
-    "customer-goodwill": {
-      title: "When we get it wrong with a resident",
-      stance:
-        "Errors are corrected through the published process, equally for every resident — fee waivers and remedies follow the schedule, not discretion. Transparency about the mistake is part of the remedy.",
-    },
-    "pricing-integrity": {
-      title: "Fees and charges",
-      stance:
-        "Fees are set in public session and applied uniformly. There are no discounts or improvised exceptions — changing a fee is a public decision, not a service gesture.",
-    },
-  },
-  "nonprofit-community": NONPROFIT_STANCE_VECTORS,
-};
 
 /**
  * Resolve the stance-vector defaults for an org: industry overrides merged
@@ -733,11 +558,31 @@ export function resolveStanceVectors(input: {
   industry?: string | null;
 }): ArchetypeStanceVectors {
   const overrides = (input.industry ? INDUSTRY_STANCE_VECTORS[input.industry] : undefined) ?? {};
+  const onSite = input.industry ? ON_SITE_CONDUCT_BY_INDUSTRY[input.industry] : undefined;
   const merged = {} as Record<StanceVectorKey, StanceVectorDefault>;
   for (const key of STANCE_VECTOR_KEYS) {
-    merged[key] = overrides[key] ?? GENERIC_STANCE_VECTORS[key];
+    merged[key] =
+      (key === "on-site-work-conduct" ? onSite : undefined)
+      ?? overrides[key]
+      ?? GENERIC_STANCE_VECTORS[key];
   }
   return merged;
+}
+
+/**
+ * The vectors to SEED for an install: the universal ones, plus any
+ * activity-triggered vector whose activity this archetype is derived as having
+ * (BI-0902BAE9). Nothing here is confirmed with the owner — a trades business
+ * is not asked whether its people visit customers.
+ */
+export function seededStanceVectorKeys(input: {
+  industry?: string | null;
+}): StanceVectorKey[] {
+  return STANCE_VECTOR_KEYS.filter((key) => {
+    const activity = STANCE_VECTOR_ACTIVITY[key];
+    if (!activity) return true;
+    return seedsForActivity(deriveActivity({ industry: input.industry, activity }).confidence);
+  });
 }
 
 /**

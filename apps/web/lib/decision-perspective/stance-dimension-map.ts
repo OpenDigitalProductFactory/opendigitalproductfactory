@@ -214,6 +214,43 @@ export const STANCE_DIMENSION_MAP = {
         "COST axis. Questions that are not this business's to decide are exactly what buries the ones that are, so the stance pulls against load on the owner rather than adding to it.",
     },
   ],
+  // BI-0902BAE9. Activity-triggered: only an archetype whose people go to a
+  // customer's place ever carries this, so the axes are the ones that stance
+  // actually trades between.
+  //
+  // `public_safety` is deliberately ABSENT despite lone-working safety being
+  // named in the wording ("so someone alone in a stranger's home can be
+  // reached"). That is the tempting case kernel ruling DI-A01830820221 refuses:
+  // safety weight comes from the profession corpora and the kernel, never from
+  // an owner-authored commercial stance, so no org can manufacture or dilute it
+  // by how it words this card. Encoding it even at weight 0 would still derive
+  // it — the guard is right to reject that.
+  "on-site-work-conduct": [
+    {
+      dimension: "data_privacy",
+      weight: 0.4,
+      rationale:
+        "'While they are on the clock and on that job — and not otherwise', 'off shift we do not track anyone', and keeping what is seen of a household inside it are all minimisation stated directly. It is the axis this stance speaks on.",
+    },
+    {
+      dimension: "customer_consent_state",
+      weight: 0.3,
+      rationale:
+        "A customer admits us to their home for a job, and the stance holds the work to what that admission covers — evidence 'is not turned to any new purpose without a fresh decision'. That is consent breadth, not preference.",
+    },
+    {
+      dimension: "legibility_of_consequence",
+      weight: 0.3,
+      rationale:
+        "Telling people what is captured and when — and that off-shift tracking does not happen — is what lets a worker and a customer foresee what the business will do with what it sees.",
+    },
+    {
+      dimension: "blast_radius",
+      weight: -0.3,
+      rationale:
+        "COST axis. Evidence going 'no further than the people doing and billing it' pulls deliberately against how far what we capture can reach.",
+    },
+  ],
   "pricing-integrity": [
     {
       dimension: "gtm_fit",

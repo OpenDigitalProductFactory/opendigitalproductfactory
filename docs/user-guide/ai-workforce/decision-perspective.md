@@ -123,6 +123,20 @@ starting positions the owner edits — never a ruling attributed to the owner.
 | `routine-operations` | What the team just gets on with |
 | `decision-scope` | Which decisions are ours to make |
 
+Some stances only exist because of what a business actually *does*. "Under what conditions may we
+capture an employee's location?" is a real question for a business whose people drive to customer
+homes, and meaningless for one whose people never leave the office.
+
+So the activity decides whether the stance is seeded, and **the activity is derived from your
+business type, never asked**. A plumbing firm is not asked whether its engineers visit customers; a
+software platform is never handed a posture about behaviour in someone's home. Where a business type
+is genuinely mixed — professional services, some veterinary and care work — the stance is still
+seeded with a sensible default you can edit, because an editable default costs you one card and a
+missing one costs you an unanswerable question later.
+
+You will not find a setup question asking which activities apply. If we can work it out, asking you
+is a tax rather than a check.
+
 The last three exist because the first five cover money and quality, and the decisions that actually
 reached owners unanswered were none of those — they were personal-data handling, routine operations
 nobody wanted to be asked about, and questions that were not the business's to decide at all. A
