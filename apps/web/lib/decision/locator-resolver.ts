@@ -95,7 +95,7 @@ export function createRepoLocatorResolver(options: RepoLocatorResolverOptions): 
 
     let content: string;
     try {
-      content = await readFile(absolute, "utf8");
+      content = await readFile(/*turbopackIgnore: true*/ absolute, "utf8");
     } catch {
       // Missing, unreadable, or a directory — all fail-closed.
       return UNRESOLVED;
