@@ -192,13 +192,47 @@ function bundledQwen38Prior(): Omit<LocalModelCapabilityPrior, "supportsVision" 
     supportsToolUse: true,
     reasoning: 85,
     codegen: 85,
-    toolFidelity: 85,
+    // BI-3CF78C8E, decided by DI-3F200ED58DFF ("the prior must match the
+    // thinking default"). This was 85 — above the qwen family's own 80, i.e.
+    // asserting best-in-class tool calling. Nothing measured that.
+    //
+    // What IS measured (Qwen3.8 tiering plan, phase 2, 2026-08-16, 9 cases,
+    // THINKING DISABLED): tool SELECTION at 15 attached tools is 100%. That is
+    // real and is why this stays well clear of TOOL_USE_MIN_FIDELITY (35), the
+    // line the eval runner draws between "fabricates" and "actually calls
+    // tools". The model can pick a tool.
+    //
+    // What is NOT measured is task COMPLETION, which that plan says in as many
+    // words its harness "cannot see" — and this model ships with thinking mode
+    // ON by default, the configuration the platform's own magistral prior (30)
+    // describes as emitting <think> monologue "rather than emit a tool_call".
+    // Observed on the reference install: governed readiness reviewers attached
+    // 15 tools, executed ZERO, and ended in ~22ms, which stalled every
+    // implementation claim because those reviewers gate initiative readiness.
+    //
+    // 50 is the calibrated anchor for "weakest genuinely tool-calling tier"
+    // (mistral/llama). It says what the evidence says: this model really does
+    // call tools, and nothing has yet shown it completes an agentic sequence.
+    // The activation eval measures and corrects this; the prior only governs
+    // routing until it runs.
+    toolFidelity: 50,
     instructionFollowingScore: 78,
     structuredOutputScore: 85,
     conversational: 75,
     contextRetention: 70,
-    bestFor: ["reasoning", "coding", "tool-use", "general"],
-    avoidFor: [],
+    // "tool-use" leaves bestFor for the same reason: single-call selection is
+    // proven, multi-step agentic completion is not. avoidFor names the observed
+    // failure specifically rather than banning tool use outright — magistral
+    // avoids both, this one avoids only the multi-step case.
+    //
+    // Be clear about what carries weight: toolFidelity is the only field here
+    // that routing reads (pipeline-v2's quality preference, eval-runner's
+    // TOOL_USE_MIN_FIDELITY). bestFor/avoidFor are declarative — today their
+    // only consumer is an Array.isArray shape check in ai-profiling. They are
+    // corrected here so the record is not false, not because they change
+    // routing. Wiring them into routing is separate work, not this change.
+    bestFor: ["reasoning", "coding", "general"],
+    avoidFor: ["agentic-tasks"],
   };
 }
 
