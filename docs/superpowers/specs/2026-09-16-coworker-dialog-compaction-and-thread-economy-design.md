@@ -1,6 +1,10 @@
+---
+status: draft
+---
+
 # Coworker Dialog Compaction & Thread Economy
 
-**Status:** DESIGN — research complete, implementation not started.
+**Status:** draft (see frontmatter) — research complete, implementation not started; awaiting independent spec approval.
 **Date:** 2026-09-16
 **Standard:** `docs/architecture/context-engineering-standards.md` (P1, P6, P8, P11, P12).
 **Prior art this extends (not replaces):** EP-8C706944 (Memory & Context Architecture, closed), EP-27FD96BC (Reasoning Economy, closed), `2026-06-20-compaction-digest-design.md` (R9a, in-turn digest), `2026-04-03-context-budget-arbitration-design.md` (EP-CTX-001).
