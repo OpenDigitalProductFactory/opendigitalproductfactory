@@ -96,7 +96,40 @@ That distinction matters for the plan: the scheduled threads are a **retention**
 
 But `firstEventLatencyMs` is NULL on every row, so **there is no measurement of time-to-first-token anywhere on this install.** Optimizing this path before instrumenting it would be guesswork. Phase 0 exists for exactly this reason.
 
-## 2. Research & Benchmarking (required by AGENTS.md §7)
+## 2. The systematic finding: DPF ships mechanisms and never proves them live
+
+Everything measured for this spec has the **same shape**, and that shape — not compaction — is the real finding. Each mechanism below was designed, built, unit-tested, reviewed and merged. Each is dark or inert in production. None of them failed loudly enough for anyone to notice.
+
+| Mechanism | Built | Live state |
+|---|---|---|
+| Thread checkpoint fold | unit-tested, dependency-injected | `folded = 0` on the 1,126 / 839 / 156-message threads; fails silently, forever |
+| `AgentMessage.contextTrace` | schema + writer + health page | **0 of 3,543** rows |
+| Per-thread cost ledger | pure summarizer + indexed runner | joins on `threadId` (NULL on all 73,326 telemetry rows) and token columns (NULL on all 329,398 tool rows) — **structurally always zero** |
+| `ExecutionPlan` | crash-durable, unit-tested, compaction-proof by construction | `enableExecutionPlan` set by **no caller**; **0 of 1,000** threads |
+| `UserFact` constraint channel | closed enum, system-prompt injection, supersession | **1 live constraint, 0 live decisions** across 3,543 messages |
+| Workroom nesting + staffing | relations + participants tables | **13** relations and **20** participants across **491** rooms |
+| Reviewer writer contract | receipt-verified dispatch | two coworkers, two gates, `executedToolCount: 0`, **no receipt** |
+
+**The class of failure: "unit-tested and merged" is being treated as "working."** Nothing on this install asserts that a shipped mechanism is actually *exercised*. A feature can pass every gate in § 4 of `AGENTS.md`, merge, and then never fire once — and the platform will report nothing, because the thing that would have reported it is itself one of the inert mechanisms.
+
+The recursion is the proof. The reason nobody caught the wedged fold is that the instruments were dark (D2 below); the instruments being dark is itself another instance of the same class. **A failure mode that disables its own detection will always look like an absence of problems.**
+
+### The systematic resolution
+
+Eight phase fixes would repair eight instances and leave the class intact — the ninth would arrive next quarter by exactly the same route. The resolution has to be a standing control, and it is the same move this spec makes twice more at lower altitudes (§6: a constraint becomes a gate, not prose; §8: a decomposition standard becomes a check at a transition):
+
+> **Every governed mechanism declares the observable that proves it is live, and an automated guard fails when that observable is zero.**
+
+- **Declared at build time, not audited later.** A mechanism ships with its liveness observable the way a migration ships with its backfill — "this row count, this column, this counter is non-zero when I am working."
+- **Inertness is a failure state, not a silence.** A writer whose column is 100% NULL, a flag set by no caller, a channel holding one row install-wide: each is a *defect*, reported as such, not an absence of news.
+- **It runs on the install, not in CI.** Unit tests already pass for every row in that table. The gap is between green CI and a live install, so the check has to live where the install is.
+- **The seven rows above are its first test set.** A guard that cannot detect all seven known-inert mechanisms is not yet a guard.
+
+Filed as **BI-F6B8BADD**, with the reviewer-contract instance as **BI-EC82C48B**.
+
+This is the parent problem. The phases in §7 remain correct and still ship — the fold really is broken and really must be fixed — but they are instances, and the standing control is what stops the next one.
+
+## 3. Research & Benchmarking (required by AGENTS.md §7)
 
 Three current leaders, compared against what DPF already does.
 
@@ -117,7 +150,7 @@ Evicted messages are summarized **together with the prior summary**, so older co
 
 **Standards check:** nothing here proposes a parallel utility. Every adoption lands inside `thread-checkpoint.ts`, the existing telemetry writer, or the existing nightly sweep.
 
-## 3. The differentiator: DPF has a system of record, so compaction need not be generative
+## 4. The differentiator: DPF has a system of record, so compaction need not be generative
 
 Every system benchmarked in §2 summarizes **prose**, because prose is all they have. An agent framework's transcript is the only evidence that anything happened; if the span is dropped without an LLM summary, the work is genuinely lost. That constraint is why Letta recursively summarizes and why Anthropic's clearing leaves a placeholder rather than a fact.
 
@@ -139,7 +172,7 @@ This reframes the design. It elevates the R9a principle — *preserve actions, n
 
 **Benchmark position:** none of Microsoft Agent Framework, Anthropic context editing, or Letta can do this, and not because they chose otherwise — they have no system of record to read. This is a genuine DPF advantage, and the plan below should spend it rather than reimplementing their generative approach.
 
-## 4. What the local path actually needs: a transactional dialog
+## 5. What the local path actually needs: a transactional dialog
 
 A raw local model gets no server-side context management, no cached prefix, and ~24,576 tokens. Feeding it a growing dialogue is the wrong shape regardless of how well that dialogue is compacted, because **the context grows with the conversation instead of with the work.** Compaction alone only slows that down.
 
@@ -186,7 +219,7 @@ A 27B Q4 local model cannot be trusted to faithfully call `update_execution_plan
 
 **Therefore step status must be derived from the record wherever it can be.** A step whose completion corresponds to an observable action (a tool executed successfully, an artifact written, a governed transition recorded) is marked from `ToolExecution` / the work record, not from the model's self-report. The model proposes the plan; the record settles what is done. Self-reported status is the fallback for steps with no observable correlate, and should be marked as such so a reader can grade it.
 
-## 5. Why instructions stop being followed: everything in a thread is treated as equally losable
+## 6. Why instructions stop being followed: everything in a thread is treated as equally losable
 
 The most common complaint about LLMs — *they don't follow instructions properly* — shows up here as a specific, measurable failure: on a long thread, truncation and compaction destroy critical detail. Those are the same problem. A constraint stated in turn 3 competes for window space with everything since, then becomes summarizer input, then becomes a clause in a paragraph, then is gone. The model is not disobeying a rule; **the rule stopped being present.**
 
@@ -225,7 +258,7 @@ Three classes, each with a home that already exists:
 |---|---|---|---|
 | **Constraint / instruction** | Behavior changes — the visible "doesn't follow instructions" failure | **Never compactible.** Promote out of the transcript; enforce deterministically where it has a mechanical correlate | `UserFact` (`constraint` / `decision`), system prompt, kernel gate (P10) |
 | **Activity / evidence** | Detail is destroyed; audit is broken | **Demoted, not destroyed** — exact, retrievable by query | `ToolExecution` (§3) |
-| **Prose / intent** | Tolerable — gist suffices | **Compactible** — the LLM fold | `compactedSummary` (§6 Phase 3) |
+| **Prose / intent** | Tolerable — gist suffices | **Compactible** — the LLM fold | `compactedSummary` (§7 Phase 3) |
 
 Today all three are one undifferentiated `AgentMessage` array, compacted uniformly. Every finding in this spec is downstream of that single flattening.
 
@@ -237,7 +270,7 @@ It also sets the honest acceptance test for this whole effort, which is not a to
 
 > **State a constraint in turn 3. Run the thread past 200 turns and past a compaction fold. The constraint is still enforced — and it is enforced because it was promoted out of the dialogue, not because a summarizer happened to keep the sentence.**
 
-## 6. Design
+## 7. Design
 
 Six phases. Phase 0 is a precondition; Phases 1–3 are what the request actually asks for; 4 and 5 are the durable economy. The ordering follows §4: **the local path sets the architecture, and the frontier-only optimization comes last.**
 
@@ -296,9 +329,9 @@ Gentlest-first, with the record ahead of the summarizer:
 ### Phase 5 — Cache-aware ordering (frontier-only, secondary)
 With `cachedInputTokens` recorded, P8 becomes verifiable rather than *[REVIEW]*. Injected blocks (plan, checkpoint, briefing) belong behind `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`, ordered stable-first, so compaction does not rewrite the cached prefix each turn. **Last deliberately:** it only benefits workrooms that have opted into frontier capacity (§1, D2), so it must not shape the architecture the local path depends on. Joins BI-4761F54E.
 
-## 7. The same principle one level up: decomposition is how a broad goal gets a context small enough to deliver
+## 8. The same principle one level up: decomposition is how a broad goal gets a context small enough to deliver
 
-§5 said a constraint that stays prose gets destroyed by the fold, so promote it into a gate. The identical argument applies to a **goal**. A broad objective held as prose in one thread is unreliable for the same reason a constraint held as prose is unreliable: it has to survive a window, compete with everything else, and be re-derived by the model each turn.
+§6 said a constraint that stays prose gets destroyed by the fold, so promote it into a gate. The identical argument applies to a **goal**. A broad objective held as prose in one thread is unreliable for the same reason a constraint held as prose is unreliable: it has to survive a window, compete with everything else, and be re-derived by the model each turn.
 
 The reliable form is the same shape — **historical prose compiled down into increasingly granular gates, tools, and room-scoped prose that produces a specific result.** Decomposition into nested workrooms, each staffed by a specific coworker, is what that compilation looks like for work.
 
@@ -322,13 +355,13 @@ The same pattern as every other finding in this spec — built, then not switche
 
 491 rooms and 13 nesting relations means decomposition is essentially flat. 19 of 491 rooms have any named participant, so rooms are also largely unstaffed — the "specific coworker" half of the mechanism is not happening either.
 
-**This spec's own decomposition reproduces the defect.** §8 maps eight phase items flat under one umbrella, with no nesting and no coworker assigned to any of them. It is an inventory, not a delivery structure. Correcting that is part of the work, not a footnote to it.
+**This spec's own decomposition reproduces the defect.** §9 maps eight phase items flat under one umbrella, with no nesting and no coworker assigned to any of them. It is an inventory, not a delivery structure. Correcting that is part of the work, not a footnote to it.
 
 ### SMART outcomes, applied honestly
 
 Each decomposed unit should own a SMART outcome, and the discipline is worth stating precisely because the middle letters are where this usually fails.
 
-Auditing §8 against it, **four of eight items are not Measurable**, and **none is Time-bound**:
+Auditing §9 against it, **four of eight items are not Measurable**, and **none is Time-bound**:
 
 | Item | Specific | Measurable | Verdict |
 |---|---|---|---|
@@ -350,7 +383,7 @@ So SMART lands in two stages, which is the honest application:
 
 That gate is itself the pattern this section describes: a standard that would otherwise live as prose ("write good acceptance criteria") compiled into a granular check at a specific transition.
 
-## 8. Backlog coverage
+## 9. Backlog coverage
 
 Umbrella: **BI-D0DEEFE9** (triaged build, xlarge). Each phase is an independently shippable item.
 
@@ -370,19 +403,19 @@ Umbrella: **BI-D0DEEFE9** (triaged build, xlarge). Each phase is an independentl
 
 **BI-AF12ACF5** (the silent fold failure) and **BI-B6010A93** (one live constraint install-wide) are the two that address the reported symptom directly. **BI-731F7FA2** blocks anything whose success claim depends on a measurement.
 
-## 9. Scope & non-goals
+## 10. Scope & non-goals
 
 - **Not** a new compaction engine. Every change lands in `thread-checkpoint.ts`, `compaction-digest.ts`, the telemetry writer, or the nightly sweep.
 - **Not** a change to what the interactive window sends today (8 messages / 2,000 tokens). That bound is already aggressive; if anything Phase 0's measurements may argue for *widening* it once the checkpoint is reliable.
 - **Not** a memory-model change. `UserFact` scope, sensitivity, and supersession are untouched.
 - **Not** a Build Studio / CLI-surface change. In-turn `compactAgenticMessages` behavior is unchanged.
 
-## 10. Risks
+## 11. Risks
 
 - **Phase 0 may reveal the problem is elsewhere.** That is the point of sequencing it first, and it is a cheap phase.
 - **Backfilling wedged threads spends inference.** The 1,126-message thread costs ~113 summarizer calls at a 10-message batch. Run it on the nightly sweep, not interactively, and cap per-run work.
 - **`useUnified` may be off on this install**, which would mean the arbitrator path itself is inert — a materially larger finding than this spec assumes. Phase 0 resolves it.
 
-## 11. Open question for the operator
+## 12. Open question for the operator
 
 D3 established that `scheduled:*` threads dispatch no history, so their unbounded growth is storage, not tokens. If the reported symptom was observed on a **scheduled or workroom coworker** rather than an interactive chat panel, the causal chain is different from the one in D1 and Phase 4 (retention) outranks Phase 1. Worth confirming which surface the symptom was seen on before implementation starts.
