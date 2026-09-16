@@ -64,6 +64,36 @@ const EXPLANATIONS: Readonly<Record<string, FailureReasonExplanation>> = {
       "There are unsaved local edits on this install, so the update stopped rather than risk losing them.",
     retryable: false,
   },
+  "turbopack-nft-duplicate-asset": {
+    title: "The update's build produced conflicting files",
+    detail:
+      "While packaging the new version, the build wrote two different files to the same name and stopped. Nothing was installed and the platform kept running the version you already had. This usually clears on the next version, so retrying is worth a try.",
+    retryable: true,
+  },
+  "host-docker-hoist-divergence": {
+    title: "The update was missing one of its components",
+    detail:
+      "The build couldn't find a piece of software it needed, so it stopped before installing anything. This one needs a developer — retrying on its own is unlikely to help.",
+    retryable: false,
+  },
+  "bundle-boundary-static-import": {
+    title: "The update mixed up two parts of the platform",
+    detail:
+      "Code that is only meant to run behind the scenes got pulled into the part of the platform that serves pages, and the build stopped. Nothing was installed. A developer needs to separate them.",
+    retryable: false,
+  },
+  "database-unreachable": {
+    title: "The database couldn't be reached",
+    detail:
+      "The update couldn't contact the platform's database to apply its changes. This is usually temporary — the platform kept running the version you already had.",
+    retryable: true,
+  },
+  "promoter-timeout": {
+    title: "The update took too long and was stopped",
+    detail:
+      "The installer exceeded its time limit and was halted deliberately. Nothing was installed and the platform is untouched.",
+    retryable: true,
+  },
   "no-target": {
     title: "No update could be identified",
     detail:
