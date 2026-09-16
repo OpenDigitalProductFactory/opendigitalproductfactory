@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitStanceLead } from "@/components/onboarding/HowYouDecideCards";
+import { splitStanceLead } from "@/lib/onboarding/stance-lead";
 import { GENERIC_STANCE_VECTORS, STANCE_VECTOR_KEYS } from "@/lib/onboarding/archetype-business-context";
 
 describe("splitStanceLead", () => {

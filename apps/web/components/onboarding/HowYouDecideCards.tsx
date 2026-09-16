@@ -19,6 +19,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { confirmStanceVectors } from "@/lib/actions/stance-confirm";
+import { splitStanceLead } from "@/lib/onboarding/stance-lead";
 
 export type StanceCard = {
   key: string;
@@ -28,19 +29,6 @@ export type StanceCard = {
   /** True when this vector's material already sits at confirmed/ruled tier. */
   confirmed: boolean;
 };
-
-/**
- * Split a stance into the sentence that carries the decision and the rest.
- * A stance shorter than the threshold has no "rest" — collapsing a single
- * sentence would hide nothing and cost a click.
- */
-export function splitStanceLead(stance: string): { lead: string; rest: string } {
-  const trimmed = stance.trim();
-  if (trimmed.length <= 160) return { lead: trimmed, rest: "" };
-  const match = trimmed.match(/^(.*?[.!?])\s+(.*)$/s);
-  if (!match) return { lead: trimmed, rest: "" };
-  return { lead: match[1]!.trim(), rest: match[2]!.trim() };
-}
 
 /** Curated ceiling choices (DoA-style levels, never a raw numeric input). */
 const CEILING_CHOICES = [25, 50, 75, 100, 150, 200, 250, 300, 500, 1000];
