@@ -221,4 +221,26 @@ and MCP packs.
 
 Existing coworkers are untouched, per §5.1 — this governs the door from here on.
 
-Slices 3–5 are not started. They are tracked on `BI-2D0063DF`.
+**Slice 3 is delivered** — `packages/db/src/archetype-job-definition-projection.ts`, the third
+projection, pure and side-effect free like its sibling's `buildArchetypeRoomDefinitions`.
+
+**A correction §4 needed.** The design said `responsibleRole` on a stage was the join. Probed
+against the live catalogue of 107 archetypes, that field is null on **861 of 877 stages**, and
+reading it alone derived **9 jobs**. The role actually lives on the OVSM's LANES (`streams`), whose
+`responsibleRole` is non-nullable and populated on **110 of 110** lanes. Resolving lane-then-stage
+— the lane owns its stages, a stage that names its own owner overrides it — derives **116 jobs
+across all 107 archetypes with zero unowned stages**. The room projection reads only the stage
+field, so its `requiredParticipantRole` is empty on almost every room; that is a pre-existing gap
+this surfaced and did not fix.
+
+**A caveat worth recording.** The catalogue currently declares only FOUR distinct lane roles
+("Business operator", "Intake coordinator", "Animal care lead", "Adoption lead"), so most
+archetypes derive a single coarse job. The projection is correct; the archetype data is thin. Richer
+jobs need richer lanes, which is archetype authoring, not projection work.
+
+The projection answers five axes and deliberately leaves four — authority, qualifications, context,
+supervision — UNANSWERED, because the OVSM cannot know what tools a role needs, what it may decide
+alone, what it must have read, or who it reports to. A projection that filled those with a
+plausible sentence would defeat the contract more quietly than the old door ever did.
+
+Slices 4–5 are not started. They are tracked on `BI-2D0063DF`.
