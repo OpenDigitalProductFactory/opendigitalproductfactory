@@ -16,6 +16,11 @@
 // derived facts, not stored stages).
 
 import { prisma } from "@dpf/db";
+import {
+  JOB_DEFINITION_AXES,
+  validateJobDefinition,
+  type CoworkerJobDefinition,
+} from "@dpf/db/coworker-job-definition";
 import { COWORKER_AGENT_SEEDS } from "@dpf/db/workforce-seed";
 import { knownGrantKeys } from "@/lib/tak/agent-grants";
 import { loadCertificationStates } from "./certification-status";
@@ -31,6 +36,19 @@ export type EstablishCoworkerInput = {
   sensitivity?: "internal" | "confidential" | "restricted";
   grants?: string[];
   minimumTier?: string;
+  /**
+   * The job this coworker is being hired to do (BI-2D0063DF).
+   *
+   * Required. Every one of the nine axes must be SATISFIED or WAIVED — the
+   * door's historical failure was never a bad answer, it was no question, and
+   * that is why the measure finds 52 coworkers with no cadence and 39 with no
+   * declared shape.
+   *
+   * Establishing an EXISTING coworker is unaffected: this governs the door from
+   * here on. The estate is run through the same contract deliberately, not by
+   * breaking the build (design section 5.1).
+   */
+  jobDefinition: CoworkerJobDefinition;
 };
 
 export type EstablishCoworkerResult =
@@ -49,7 +67,13 @@ export function definitionChecklist(agentId: string): string[] {
     `Bind ${agentId} to a route: ROUTE_AGENT_MAP persona in apps/web/lib/tak/agent-routing.ts + sensitivity mirror in route-context-map.ts (LIFE-003/LIFE-007).`,
     `Add a model floor row to AGENT_MODEL_CONFIG_DEFAULTS in packages/db/src/agent-model-defaults.ts (LIFE-005).`,
     `Map ${agentId} to a profession family in docs/professions/registry.json (seed.test.ts invariant).`,
-    `Optionally: curated golden journey in apps/web/lib/coworker-lifecycle/golden-journeys.ts, service-catalog offer, COWORKER_SELF_TASKS entry.`,
+    // The line this replaces read: "Optionally: curated golden journey,
+    // service-catalog offer, COWORKER_SELF_TASKS entry." Those are the JOB, and
+    // making them optional is why the measure keeps finding coworkers that are
+    // wired and idle. The job definition is now validated at the door above;
+    // these are the code-side landings each answered axis implies.
+    `Land what the job definition promised: a declared work shape for the accountabilities axis (coworker-standing-shapes*.ts), the room posture that carries its cadence (cadence is ROOM-owned per DI-81E47BDA59F1), the skills its qualifications axis names, and a golden journey or certification for its measures axis.`,
+    `Any axis WAIVED at establishment carries a reason and a reviewBy date. When that date falls due the waiver fails validation, and the answer is to re-decide the axis — never to extend the date.`,
     `The coworker-definition-conformance CI gate (apps/web/lib/coworker-lifecycle/) fails on any missing axis. After the definition lands and the nightly certification sweep passes, promote with establish_coworker action="promote".`,
   ];
 }
@@ -74,6 +98,33 @@ export async function establishCoworker(
       ok: false,
       code: "invalid_tier",
       message: `minimumTier must be one of: frontier, strong, adequate, basic.`,
+    };
+  }
+
+  // A coworker without a job is the defect this door existed to create. Refuse
+  // BEFORE the Agent row is written, so a half-hired coworker is not a state
+  // the system can be left in.
+  if (!input.jobDefinition) {
+    return {
+      ok: false,
+      code: "missing_job_definition",
+      message:
+        `A job definition is required. Answer each of the nine axes as satisfied or waived: `
+        + `${JOB_DEFINITION_AXES.join(", ")}.`,
+    };
+  }
+  const jobProblems = validateJobDefinition({
+    ...input.jobDefinition,
+    agentId,
+  });
+  if (jobProblems.length > 0) {
+    return {
+      ok: false,
+      code: "incomplete_job_definition",
+      message:
+        `The job definition is incomplete — hiring without one is what produced coworkers that are `
+        + `wired and idle:\n`
+        + jobProblems.map((problem) => `  - ${problem.detail}`).join("\n"),
     };
   }
 

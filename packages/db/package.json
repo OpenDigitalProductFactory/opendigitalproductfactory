@@ -90,7 +90,8 @@
     "./portfolio-sources/vertical-incumbents-manifest": "./src/portfolio-sources/vertical-incumbents-manifest.ts",
     "./portfolio-sources/absorption-posture": "./src/portfolio-sources/absorption-posture.ts",
     "./portfolio-sources/incumbent-coverage": "./src/portfolio-sources/incumbent-coverage.ts",
-    "./patch": "./src/patch/index.ts"
+    "./patch": "./src/patch/index.ts",
+    "./coworker-job-definition": "./src/coworker-job-definition.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",
