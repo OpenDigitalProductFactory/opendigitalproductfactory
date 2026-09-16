@@ -69,22 +69,29 @@ export type WorkShapeStopCondition = {
   /**
    * WHAT KIND of stop this is, in the canonical vocabulary (BI-77CFC7BF).
    *
-   * `kind` says whether the shape ended well, badly, or out of budget. It does
-   * NOT say what happens next, and the authors needed that — so they wrote it
-   * as English inside `condition`: "the run stops and escalates", "the room
-   * stops for reshaping", "refused; the lane is WIP 1". Those are
-   * awaiting-person, awaiting-input and refused: §9's vocabulary exactly,
-   * written in prose because the type could not hold it.
+   * NOW REQUIRED. All 141 stop conditions across the seven shape files carry
+   * one, so a new shape cannot declare a stop without deciding what happens
+   * next — §9's mechanic, total by construction rather than by the author
+   * remembering. It was optional while the back-classification was in flight.
    *
-   * Deliberately OPTIONAL, and deliberately NOT derived from `kind`. A default
-   * would be wrong far more often than it is right: most `failure` exits in the
-   * tree read "the substrate cannot be read — the run stops and reports", which
-   * is INCONCLUSIVE (fail open on infrastructure, AGENTS.md §4), not a refusal.
-   * Guessing those from `kind` would mass-misclassify the very distinction this
-   * field exists to record. Absent therefore means NOT YET CLASSIFIED, which is
-   * an honest state; it never means "no disposition".
+   * `kind` says whether the shape ended well, badly or out of budget. It does
+   * NOT say what happens next, and is not a proxy for this field. Counted
+   * across all seven files:
+   *
+   *   failure -> inconclusive 37, awaiting-person 5, refused 3, awaiting-input 2
+   *   budget  -> awaiting-person 42, awaiting-input 3, refused 2
+   *
+   * 37 of the 47 `failure` exits are not refusals at all: they read "the
+   * substrate cannot be read — the run stops and reports", which is AGENTS.md
+   * §4's fail-open-on-infrastructure. The authors had been writing that
+   * distinction as English inside `condition` because the type could not hold
+   * it. Do not derive this field from `kind`.
+   *
+   * Budget stops anchor on §9 rule 3 — exhaustion converts to escalate, never
+   * to a hard no — and the two that say "refused" in their own words are read
+   * from the condition, not the kind.
    */
-  disposition?: OutcomeDisposition;
+  disposition: OutcomeDisposition;
 };
 
 /** Allowed tools/capabilities this activity may consume. Empty is a declaration. */
@@ -215,9 +222,9 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "No obligation, control review, or licence reference remains inside the horizon unfindinged." },
-      { kind: "failure", condition: "The sweep cannot read the compliance substrate (no profile, no obligations, or a query error) — it stops and reports, and does NOT raise findings from an empty read." },
-      { kind: "budget", condition: "More than 200 findings would be raised in one run — the run stops and escalates, rather than burying the ledger." },
+      { kind: "success", condition: "No obligation, control review, or licence reference remains inside the horizon unfindinged.", disposition: "proceed" },
+      { kind: "failure", condition: "The sweep cannot read the compliance substrate (no profile, no obligations, or a query error) — it stops and reports, and does NOT raise findings from an empty read.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 200 findings would be raised in one run — the run stops and escalates, rather than burying the ledger.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read"],
     measures: [

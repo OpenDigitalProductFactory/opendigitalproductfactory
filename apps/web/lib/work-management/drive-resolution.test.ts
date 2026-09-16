@@ -50,9 +50,9 @@ const definition: WorkShapeDefinitionContract = {
     },
   ],
   stopConditions: [
-    { kind: "success", condition: "findings dispositioned" },
-    { kind: "failure", condition: "scan failed" },
-    { kind: "budget", condition: "findings-per-run exhausted" },
+    { kind: "success", condition: "findings dispositioned", disposition: "proceed" },
+    { kind: "failure", condition: "scan failed", disposition: "inconclusive" },
+    { kind: "budget", condition: "findings-per-run exhausted", disposition: "awaiting-person" },
   ],
   grants: ["tool:read"],
   measures: [{ key: "findings-raised", description: "Findings raised this run" }],

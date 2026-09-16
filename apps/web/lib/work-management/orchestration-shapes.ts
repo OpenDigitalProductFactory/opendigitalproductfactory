@@ -64,9 +64,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -124,9 +124,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -184,9 +184,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -244,9 +244,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -304,9 +304,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -364,9 +364,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -424,9 +424,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -484,9 +484,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -533,9 +533,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The position is reported with knowns and unknowns distinguished." },
-      { kind: "failure", condition: "Finance records cannot be read — it reports that, and never presents an absent number as zero." },
-      { kind: "budget", condition: "More than 50 findings in one run." },
+      { kind: "success", condition: "The position is reported with knowns and unknowns distinguished.", disposition: "proceed" },
+      { kind: "failure", condition: "Finance records cannot be read — it reports that, and never presents an absent number as zero.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 50 findings in one run.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read"],
     measures: [{ key: "unknowns-named", description: "Figures reported as unknown with the record that would resolve them." }],
@@ -607,19 +607,17 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every stall and unowned item has an owner decision, including a decision to accept it." },
+      { kind: "success", condition: "Every stall and unowned item has an owner decision, including a decision to accept it.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "Portfolio or backlog state cannot be read. The standup reports that and never presents "
-          + "an unread stream as a healthy one.",
-      },
+          + "an unread stream as a healthy one.", disposition: "inconclusive" },
       {
         kind: "budget",
         condition:
           "More than 60 stalls in one run — stop and escalate. A standup that hands the owner "
-          + "everything has told them nothing.",
-      },
+          + "everything has told them nothing.", disposition: "awaiting-person" },
     ],
     grants: ["tool:portfolio_read", "tool:registry_read", "tool:backlog_read", "tool:backlog_write", "tool:agent_control_read"],
     measures: [

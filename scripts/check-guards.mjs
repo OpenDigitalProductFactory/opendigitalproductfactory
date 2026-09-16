@@ -88,7 +88,16 @@ export function classifySpawnResult(result) {
     return { outcome: SPAWN_OUTCOME.RUNNER_FAILURE, detail };
   }
   if (result.status === 0) return { outcome: SPAWN_OUTCOME.OK, detail: "exit 0" };
-  return { outcome: SPAWN_OUTCOME.VIOLATION, detail: `exit ${result.status}` };
+  // BI-C5FFCCDA: carry the child's own output with the verdict. A violation that
+  // names only a FILE cannot be root-caused — a self-test that fails
+  // intermittently under host load is indistinguishable from one that is simply
+  // wrong, and the assertion that actually failed is not recoverable from the
+  // run that observed it. Absent when the caller spawned with stdio inherit.
+  const output = [result.stdout, result.stderr]
+    .map((s) => (typeof s === "string" ? s : ""))
+    .join("")
+    .trim();
+  return { outcome: SPAWN_OUTCOME.VIOLATION, detail: `exit ${result.status}`, ...(output ? { output } : {}) };
 }
 
 // Spawn `argv`, retrying only while the outcome is a RUNNER failure. `spawn` is
@@ -112,6 +121,19 @@ export function discoverGuardFiles(entries) {
   };
 }
 
+// Render a failing child's own output beneath the verdict that cites it, so the
+// summary is self-contained (BI-C5FFCCDA). Trimmed to the tail, which is where
+// node --test puts the failing assertion.
+export const CHILD_OUTPUT_LINE_LIMIT = 20;
+
+export function formatChildOutput(output, limit = CHILD_OUTPUT_LINE_LIMIT) {
+  if (typeof output !== "string" || !output.trim()) return "";
+  const lines = output.trim().split(/\r?\n/);
+  const tail = lines.slice(-limit);
+  const elided = lines.length > tail.length ? `    … ${lines.length - tail.length} earlier line(s)\n` : "";
+  return `\n${elided}${tail.map((l) => `    ${l}`).join("\n")}`;
+}
+
 // Pure orchestrator: run every guard (and its self-test) through the injected
 // `spawn`, sorting outcomes into genuine violations vs runner failures. No
 // process I/O, so tests can inject killed/errored/violating spawn results.
@@ -129,7 +151,7 @@ export function runGuards({ guards, tests, spawn, maxRetries = DEFAULT_SPAWN_RET
         continue; // couldn't run the self-test; don't run the guard on this pass
       }
       if (t.outcome === SPAWN_OUTCOME.VIOLATION) {
-        violations.push(`${testFile} (guard self-test)`);
+        violations.push(`${testFile} (guard self-test)${formatChildOutput(t.output)}`);
         continue; // don't run a guard whose own logic is broken
       }
     }
@@ -177,8 +199,13 @@ export function main() {
     process.exit(1);
   }
 
+  // Self-tests are PIPED so a failure can be replayed under its own verdict
+  // (BI-C5FFCCDA); guards keep stdio inherit, because their output IS the
+  // finding and operators read it live.
   const spawn = (argv) =>
-    spawnSync(process.execPath, argv, { cwd: REPO_ROOT, stdio: "inherit" });
+    argv[0] === "--test"
+      ? spawnSync(process.execPath, argv, { cwd: REPO_ROOT, encoding: "utf8" })
+      : spawnSync(process.execPath, argv, { cwd: REPO_ROOT, stdio: "inherit" });
 
   const { violations, runnerFailures } = runGuards({ guards, tests, spawn });
   const { exitCode, lines } = summarizeGuardRun({ guards, tests, violations, runnerFailures });

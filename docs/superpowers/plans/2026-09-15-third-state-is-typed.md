@@ -6,7 +6,7 @@ status: draft
 
 **Spec:** [`docs/superpowers/specs/2026-09-15-third-state-is-typed-addendum-design.md`](../specs/2026-09-15-third-state-is-typed-addendum-design.md) (§10 addendum to the 2026-06-05 unified-delivery-surfaces spec)
 **Backlog:** `EP-A480A6F7` — filed 2026-09-15. Phase 2.1 `BI-FF63D266`, 2.2 `BI-C77D920A`, 2.3 `BI-09D11444`; phase 3 `BI-9F6AFFA0`; phase 4 `BI-174DB909`, `BI-77CFC7BF`, `BI-AF9E4906`. See the spec's §9 for the full table.
-**Status:** every phase now has landed work. Phase 1 (#5364), then 2.1/2.2 and the two map-totalling parts of phase 4 (#5389), then 2.3 and the work-shape half of phase 4. Phase 3 landed its database half; its type-level half is re-scoped — see the row.
+**Status:** phases 1, 2 and 4 delivered. Phase 3 landed its database half; its type-level half is decided (`DI-0E674E44224F`) and re-scoped — see the row.
 
 | Phase | Item | State |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ status: draft
 | 3 run-status enum | `BI-9F6AFFA0` | **partly delivered** — both columns are closed sets in Postgres with parity tests, and the two rows 2.1 mis-wrote are corrected. NOT the Prisma enum: hyphenated values need `@map`, which renames every literal across 431 sites in 155 files, so the type-level half is re-scoped on the item rather than reported as done |
 | 4 readiness maps | `BI-174DB909` | **delivered** — three classification maps total over `ReadinessCode`, `null` as an explicit decision |
 | 4 refusal codes | `BI-AF9E4906` | **delivered** — derived from `GOVERNED_REJECTION_DISPOSITION`, so it cannot go stale |
-| 4 work-shape stops | `BI-77CFC7BF` | **partly delivered** — `WorkShapeStopCondition` gains an optional `disposition`, and the 15 delivery-shape stops are classified by hand. ~150 in six other files stay unclassified deliberately: most of their `failure` exits read "the substrate cannot be read", which is inconclusive rather than refused, and deriving them from `kind` would mass-misclassify the distinction the field exists to record |
+| 4 work-shape stops | `BI-77CFC7BF` | **delivered** — all 141 stop conditions across the seven shape files are classified by hand, and `disposition` is now **required**, so a new shape cannot declare a stop without deciding what happens next. The counts are the finding: `failure` splits 37 inconclusive / 5 awaiting-person / 3 refused / 2 awaiting-input, and `budget` splits 42 / 3 / 2 — `kind` is not a proxy for disposition in either direction |
 
 ## Phase 1 — declare the vocabulary, make it expressible (delivered)
 
@@ -62,17 +62,34 @@ Forward-only migration, inline backfill. Must land after phase 2.1 or in the sam
 
 ## What phase 4 taught, worth keeping
 
-`kind` does not determine disposition, and the delivery shapes prove it in both
-directions: two `budget` stops are `refused` (the WIP-1 break-fix lane, the epic
-cap) while two others are `awaiting-input` (reshape), and a `failure` that says
-"reshape to large" is not a refusal at all. Any future attempt to derive the
-field from `kind` should start by re-reading those four.
+`kind` does not determine disposition, and the classification proves it in both
+directions. Counted across all seven shape files:
 
-The same reading of the other six shape files suggests most of their `failure`
-exits are `inconclusive` — "the run stops and reports, and does NOT raise
-findings from an empty read" is AGENTS.md §4's fail-open-on-infrastructure,
-written in prose. If that holds when they are classified, then the shapes have
-been carrying the epic's own thesis as documentation all along.
+| `kind` | proceed | awaiting-person | awaiting-input | inconclusive | refused |
+| --- | --- | --- | --- | --- | --- |
+| success | 47 | | | | |
+| failure | | 5 | 2 | **37** | 3 |
+| budget | | 42 | 3 | | 2 |
+
+**37 of the 47 `failure` exits are not refusals.** They read "the substrate
+cannot be read — the run stops and reports, and does NOT raise findings from an
+empty read", which is AGENTS.md §4's fail-open-on-infrastructure. The shape
+authors had been carrying this addendum's own thesis as prose for months,
+because the type could not hold it. That is the strongest single piece of
+evidence for §10 in the tree, and it was sitting in `condition` strings.
+
+Budget stops anchor on §9 rule 3 — exhaustion converts to escalate, never to a
+hard no — so 42 are `awaiting-person`. The two that say "refused" in their own
+words (the break-fix WIP-1 lane, the epic cap) are read from the condition, not
+the kind, and are the reason this was not automated.
+
+**It was attempted by regex once, and it corrupted the data.** Several
+conditions are multi-line string concatenations; a regex anchored on
+`condition: "..."` spliced the new field into the middle of the expression and
+silently truncated the text at the `+`. Making the field required turned that
+into compile errors, which is the only reason it did not reach review. Anyone
+extending this should brace-match, and should not trust a flat regex over these
+files — the test's own extractor had the same bug in reverse.
 
 ## Non-goals
 

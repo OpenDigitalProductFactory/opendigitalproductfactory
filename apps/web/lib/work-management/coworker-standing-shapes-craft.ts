@@ -82,19 +82,17 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every finding is adjudicated by a human, accepted or rejected." },
+      { kind: "success", condition: "Every finding is adjudicated by a human, accepted or rejected.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "The surface cannot be rendered or the corpus cannot be read. The pass stops rather than "
-          + "critiquing from memory — an ungrounded critic is the thing this role must not become.",
-      },
+          + "critiquing from memory — an ungrounded critic is the thing this role must not become.", disposition: "inconclusive" },
       {
         kind: "budget",
         condition:
           "More than 30 findings in one pass — stop and escalate. An unbounded finding list is how "
-          + "a UX signal gets ignored, which is the outcome this shape exists to prevent.",
-      },
+          + "a UX signal gets ignored, which is the outcome this shape exists to prevent.", disposition: "awaiting-person" },
     ],
     grants: ["tool:browser_read", "tool:coworker_screen_read", "tool:document_read", "tool:document_write", "tool:spec_plan_read", "tool:backlog_read"],
     measures: [
@@ -168,14 +166,13 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The owner has a cited brief and has decided what, if anything, it changes." },
+      { kind: "success", condition: "The owner has a cited brief and has decided what, if anything, it changes.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "The question cannot be grounded in a decision the owner actually faces. Stop and ask "
-          + "rather than returning research nobody will use.",
-      },
-      { kind: "budget", condition: "More than 40 external sources in one brief — stop and narrow the question." },
+          + "rather than returning research nobody will use.", disposition: "awaiting-person" },
+      { kind: "budget", condition: "More than 40 external sources in one brief — stop and narrow the question.", disposition: "awaiting-person" },
     ],
     grants: ["tool:web_search", "tool:crm_read", "tool:registry_read"],
     measures: [
@@ -252,14 +249,13 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every drifted or unreachable exposure has an owner decision against it." },
+      { kind: "success", condition: "Every drifted or unreachable exposure has an owner decision against it.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "The live registry cannot be read. The review stops rather than reporting a surface "
-          + "inventory assembled from documentation, which is the drift it exists to detect.",
-      },
-      { kind: "budget", condition: "More than 60 drifted exposures in one cycle — stop and escalate; that is a migration, not a review." },
+          + "inventory assembled from documentation, which is the drift it exists to detect.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 60 drifted exposures in one cycle — stop and escalate; that is a migration, not a review.", disposition: "awaiting-person" },
     ],
     grants: ["tool:registry_read", "tool:tool_script_exec", "tool:document_read", "tool:backlog_read"],
     measures: [
@@ -343,19 +339,17 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The owner has reviewed every captured answer, and the confirmed set is the organisation's stated position." },
+      { kind: "success", condition: "The owner has reviewed every captured answer, and the confirmed set is the organisation's stated position.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "The owner cannot answer and no grounded source exists. Setup records the gap as unknown "
-          + "rather than filling it — an invented answer at setup is inherited by every later judgement.",
-      },
+          + "rather than filling it — an invented answer at setup is inherited by every later judgement.", disposition: "inconclusive" },
       {
         kind: "budget",
         condition:
           "More than 40 questions in one setup pass — stop and let the owner return. Onboarding that "
-          + "exhausts the owner produces agreement, not understanding.",
-      },
+          + "exhausts the owner produces agreement, not understanding.", disposition: "awaiting-person" },
     ],
     grants: ["tool:record_org_business_answer", "tool:setup_email", "tool:request_coworker", "tool:registry_read"],
     measures: [
