@@ -19,6 +19,7 @@ import {
 } from "@/lib/onboarding/archetype-business-context";
 import { stanceVectorSlug } from "@/lib/onboarding/seed-org-wwwd-corpus";
 import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
+import { stanceLead } from "@/lib/onboarding/stance-lead";
 
 export const dynamic = "force-dynamic";
 
@@ -175,7 +176,7 @@ export default async function BusinessStancePage() {
                 </div>
                 {s.abstract && (
                   <p className="text-xs text-[var(--dpf-muted)] mt-1 line-clamp-2">
-                    {s.abstract}
+                    {stanceLead(s.abstract)}
                   </p>
                 )}
               </li>

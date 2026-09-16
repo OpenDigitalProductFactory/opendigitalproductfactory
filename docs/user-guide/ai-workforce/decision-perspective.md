@@ -103,6 +103,48 @@ The `DecisionPerspectiveProfile` model supports several profile kinds today. Eac
 
 The non-negotiable boundary: a customer profile **must not** inherit platform-specific business judgment as authority by default. DPF product doctrine can be advisory product guidance for any profile; the customer's own WWWD profile becomes authoritative for its business context once that profile exists.
 
+## What Onboarding Seeds for WWWD
+
+A brand-new organization has no recorded stance, so every business question would go to the owner.
+Onboarding avoids that by seeding a **starting** WWWD corpus from the captured mission and the chosen
+business archetype: four identity pages, a "what great looks like" page, and eight **stance vectors**.
+
+Each vector is a plain-language question with a default answer, worded for the archetype. They are
+starting positions the owner edits — never a ruling attributed to the owner.
+
+| Vector | The question it answers |
+|---|---|
+| `customer-goodwill` | When something goes wrong on our side |
+| `pricing-integrity` | Prices, quotes, and discounts |
+| `growth-vs-stability` | New opportunities vs existing commitments |
+| `quality-bar` | Our quality standard |
+| `spend-authority` | Spending without asking |
+| `data-handling` | Personal information we hold |
+| `routine-operations` | What the team just gets on with |
+| `decision-scope` | Which decisions are ours to make |
+
+The last three exist because the first five cover money and quality, and the decisions that actually
+reached owners unanswered were none of those — they were personal-data handling, routine operations
+nobody wanted to be asked about, and questions that were not the business's to decide at all. A
+corpus silent on those sends all three to the owner, which is the input the seeding exists to avoid.
+
+`decision-scope` is the one to read first if your queue is noisy: it states which questions this
+business owns and which route to a qualified craft or to a supplier, and that a question whose facts
+are not yet established needs the research rather than a ruling. That reflects
+[decisions belong to their scope](../../founder-kernel/wiki/principles/decisions-belong-to-their-scope.md)
+— the organization's business stance has no authority over a craft or platform question, and
+answering one anyway is the failure mode, not a shortcut.
+
+Each vector lands as an org-scoped wiki page under `stances/<vector>` plus `PerspectiveMaterial`
+rows in the decision classes that consult it, so the gate can find it. Seeded defaults land
+unconfirmed and carry no decisive weight on their own; confirming them in **How you decide** during
+onboarding is what promotes them.
+
+Existing installs converge without operator action: the boot backfill counts the stance pages an org
+holds against the current vector set, so an install seeded before a vector was added re-runs the
+idempotent seeding chain once on its next boot and picks it up. Owner-confirmed and owner-ruled
+material is never downgraded by that re-run.
+
 ## The Profession Scope (WSID)
 
 WWMD answers "what would the founder/platform do?" and WWWD answers "what would this organization do?" — but a coworker doing a specialist's job has no governed source for **what a competent professional in that role should do**. The data-architect coworker has no DAMA-DMBOK grounding; the finance coworker has no GAAP doctrine; the marketing specialist has no marketing body of knowledge. Without WSID, that professional judgment is whatever the underlying LLM happens to produce — ungoverned, unauditable, and inconsistent across model routings.
