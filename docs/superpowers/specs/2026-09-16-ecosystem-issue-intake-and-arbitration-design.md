@@ -257,8 +257,8 @@ An install on `quiet` gets tier 1 and 2 in-app and nothing else. An install on `
 |---|---|---|
 | **A** — `BI-96EFB042` | Automated submission sweep + standing consent prompt; non-coding installs stop depending on a human remembering. | §4.1 |
 | **B** — `BI-B423912F` | Federation transport for issue submission, so a linked install's issue is votable rather than opaque. | A |
-| **C** — `BI-F47386ED` | Inbound read path (GitHub issues + demand mirrors) → BacklogItem with submitter provenance. the upstream install can finally *see* the queue. | — (parallel with A) |
-| **F** — `BI-7ED79807` | **Prerequisite.** Populate `applicability` (archetype, capability, platform range) on projection. Until this lands every envelope is archetype-blind and no ballot can be scoped. | — |
+| **C** — `BI-F47386ED` ✅ **delivered** | Inbound read path (GitHub issues + demand mirrors) → BacklogItem with submitter provenance. the upstream install can finally *see* the queue. | — (parallel with A) |
+| **F** — `BI-7ED79807` ✅ **delivered** | **Prerequisite.** Populate `applicability` (archetype, capability, platform range) on projection. Until this lands every envelope is archetype-blind and no ballot can be scoped. | — |
 | **G** — `BI-4D924DB4` | Generalise the tri-state applicability evaluator; assemble the consent-gated, three-tier ballot per install. | C, F |
 | **H** — `BI-784D20FD` | `ecosystem-participation` proactivity family; the weekly two-directional watchdog in the derived room. | G |
 | **D** — `BI-4D1CAD69` | Vote budget, quadratic weighting, tally → `DemandScoreInputs`. Votes start moving the score. | B, C, G |
@@ -269,6 +269,37 @@ C is independent of A/B and is the highest-value single slice: it is the half of
 **F is small and blocks everything downstream of it.** It is a few lines in one projector, and until it lands the ballot cannot be scoped, the watchdog has nothing to be relevant about, and votes cannot be prioritised by relevance. It should land first or alongside C.
 
 ---
+
+### 5.1 Implementation notes — Phase C, delivered 2026-09-16
+
+Four decisions taken while building it that the design did not pre-empt:
+
+1. **Pull requests must be filtered out of the issue read.** GitHub returns pull
+   requests from the issues endpoint — every PR is an issue in that API — so an
+   unfiltered read ingests the project's own pull requests as if they were
+   ecosystem submissions. The `pull_request` key is the discriminator, and
+   **pagination is driven by the raw page length**, because a page that is
+   entirely PRs still means more pages and stopping on the filtered count would
+   silently truncate the sweep.
+2. **Inbound items are filed as `source: "user-request"`, not
+   `automated-detection`.** The origin really is a person at another install
+   asking for something; it merely *arrives* by automation. Recording it as an
+   automated detection would erase the submitter that §4.2's arbitration depends
+   on. The install pseudonym is recovered from the body the issue bridge stamps.
+3. **The sweep no-ops unless the installation's purpose is `evolve-dpf`.** On an
+   operate-organization install it would fill a customer's own backlog with other
+   installs' defects — not merely useless, actively wrong.
+4. **A failed read is reported, never folded into an empty sweep.** "Nothing
+   inbound" and "could not look" are different verdicts, and a failing issue read
+   must not drop the peer-demand transport with it.
+
+`parseArchetypeRefs` — the inverse of Phase F's encoder — lives beside it rather
+than in the ecosystem module: the ref grammar is one contract, and a decoder in
+another module would drift the moment either side changed. Unknown prefixes are
+ignored so a newer peer may add a dimension without breaking an older receiver.
+
+The cron is registered in `SCHEDULED_JOB_CATALOG`; the drift guard caught the
+omission, and an uncatalogued cron runs invisibly.
 
 ## 6. Verification
 

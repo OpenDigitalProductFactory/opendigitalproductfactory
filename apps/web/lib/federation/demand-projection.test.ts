@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
 
-import { buildDemandEnvelope, type ProjectableDemandSource } from "./demand-projection";
+import {
+  buildArchetypeRefs,
+  buildDemandEnvelope,
+  parseArchetypeRefs,
+  type ProjectableDemandSource,
+} from "./demand-projection";
 
 const source: ProjectableDemandSource = {
   localRecordRef: "BI-PRIVATE-123",
@@ -129,5 +134,41 @@ describe("buildDemandEnvelope applicability (BI-7ED79807)", () => {
       "scope:archetype-category",
       "category:logistics",
     ]);
+  });
+});
+
+describe("parseArchetypeRefs (BI-F47386ED)", () => {
+  it("round-trips whatever buildArchetypeRefs produced", () => {
+    const scope = {
+      scopeKind: "archetype-category",
+      archetypeCategories: ["trades-maintenance", "logistics"],
+      archetypeIds: ["cold-storage"],
+    };
+    expect(parseArchetypeRefs(buildArchetypeRefs(scope))).toEqual(scope);
+  });
+
+  it("round-trips a platform-scoped item to universal applicability", () => {
+    const refs = buildArchetypeRefs({ scopeKind: "platform", archetypeCategories: [], archetypeIds: [] });
+    expect(parseArchetypeRefs(refs)).toEqual({
+      scopeKind: "platform",
+      archetypeCategories: [],
+      archetypeIds: [],
+    });
+  });
+
+  it("ignores unknown prefixes so a newer peer cannot break an older receiver", () => {
+    expect(parseArchetypeRefs(["category:logistics", "sector:maritime", "nonsense"])).toEqual({
+      scopeKind: null,
+      archetypeCategories: ["logistics"],
+      archetypeIds: [],
+    });
+  });
+
+  it("returns empty scope for absent refs rather than throwing", () => {
+    expect(parseArchetypeRefs(undefined)).toEqual({
+      scopeKind: null,
+      archetypeCategories: [],
+      archetypeIds: [],
+    });
   });
 });

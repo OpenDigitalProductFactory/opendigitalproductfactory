@@ -344,6 +344,21 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "ecosystem-inbound-issue-triage",
+    inngestId: "ecosystem/inbound-issue-triage",
+    honorsEnabledGate: true,
+    name: "Ecosystem: inbound issue triage",
+    purpose:
+      "Reads what the ecosystem submitted — upstream issues filed by the relay and peer "
+      + "federated demand — and files it into the backlog with the submitter preserved. "
+      + "No-ops unless the installation's purpose is evolve-dpf.",
+    cron: "17 6 * * 1",
+    cadence: "Weekly (Mondays, 06:17)",
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: null,
+  },
+  {
     jobId: "backlog-triage-drain",
     inngestId: "ops/backlog-triage-drain",
     honorsEnabledGate: true,
