@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 713,
+  "pageCount": 714,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3548,6 +3548,25 @@
         "examples",
         "regulatory-interoperability-boundaries",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes.md": {
+      "publicHref": "/founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "value-is-the-net-and-that-is-what-makes-it-a-proof",
+        "where-work-should-move-human-then-ai-then-code",
+        "this-is-the-return-on-investment-criterion-for-the-backlog",
+        "humancognitiveload-is-a-required-measure-not-an-optional-axis",
+        "scope-and-propagation",
+        "examples",
+        "related-principles"
       ]
     },
     "docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md": {
