@@ -43,6 +43,8 @@ The 100x weight is not arithmetic, it is a statement about who the platform is f
 
 **This delta is one of the platform's differentiators, so it is a positioning claim as well as an internal measure.** What makes the platform more useful than an alternative is not a longer feature list but a lower intervention cost for the same outcome — a capability a customer can actually reach without a technician is worth more than a richer one they cannot. A comparison against an alternative should therefore be argued on steps required for a given outcome, and that argument is only available if the number is kept (see the two ledgers above).
 
+**A delta needs a baseline, and the baseline is research.** The number is only real if the current way the work is done has been observed and counted first — the as-is. This is what research is for here, and it is the lineage this principle comes from: **value stream mapping**, where the current-state map is what makes waste visible and improvement arguable. Without a measured as-is, a claimed reduction is an assertion about a process nobody counted. See [[principles/design-research-required]].
+
 Counting matters because judgement alone does not hold. `human_cognitive_load` and `operator_effort` are already decision axes, but a score is supplied by whoever authors the option, so a proposal can assert it is low-effort and nothing can contradict it. Steps enumerated from a flow can be checked against the claim, which makes the claim falsifiable and makes a reduction reportable as value.
 
 ## How to apply
