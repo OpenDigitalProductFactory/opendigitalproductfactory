@@ -28,6 +28,7 @@ import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
 import { isSideEffectingGrant } from "./grant-capability";
+import { toCliParsedUsage, type CliParsedUsage, type CliUsagePayload } from "./cli-usage";
 
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -126,7 +127,7 @@ interface CliStreamEvent {
   id?: string;
   input?: Record<string, unknown>;
   result?: string;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: CliUsagePayload;
   // tool_use events may have these at top level
   tool_use_id?: string;
 }
@@ -157,7 +158,7 @@ export function extractMentionedPlatformToolNames(text: string): string[] {
 export function parseCliStreamOutput(output: string): {
   text: string;
   toolCalls: ToolCallEntry[];
-  usage: { inputTokens: number; outputTokens: number };
+  usage: CliParsedUsage;
   /**
    * mcp__dpf__* tool calls that the CLI's MCP client already executed before
    * we saw the output. Filtered out of `toolCalls` (so the agentic loop does
@@ -172,8 +173,7 @@ export function parseCliStreamOutput(output: string): {
   const textParts: string[] = [];
   const toolCalls: ToolCallEntry[] = [];
   const cliPreExecutedNames: string[] = [];
-  let inputTokens = 0;
-  let outputTokens = 0;
+  let usage: CliParsedUsage = { inputTokens: 0, outputTokens: 0 };
 
   for (const line of output.split("\n")) {
     const trimmed = line.trim();
@@ -204,8 +204,7 @@ export function parseCliStreamOutput(output: string): {
         textParts.push(event.result);
       }
       if (event.usage) {
-        inputTokens = event.usage.input_tokens ?? 0;
-        outputTokens = event.usage.output_tokens ?? 0;
+        usage = toCliParsedUsage(event.usage);
       }
     }
   }
@@ -225,7 +224,7 @@ export function parseCliStreamOutput(output: string): {
   return {
     text: finalText,
     toolCalls,
-    usage: { inputTokens, outputTokens },
+    usage,
     cliPreExecutedNames,
   };
 }
@@ -237,7 +236,7 @@ export function parseCliStreamOutput(output: string): {
 export function parseCliJsonOutput(output: string): {
   text: string;
   toolCalls: ToolCallEntry[];
-  usage: { inputTokens: number; outputTokens: number };
+  usage: CliParsedUsage;
   /** See parseCliStreamOutput.cliPreExecutedNames for the contract. */
   cliPreExecutedNames: string[];
 } {
@@ -267,7 +266,7 @@ export function parseCliJsonOutput(output: string): {
       }
     }
 
-    const usage = parsed.usage as { input_tokens?: number; output_tokens?: number } | undefined;
+    const usage = parsed.usage as CliUsagePayload | undefined;
 
     // Same rescue as parseCliStreamOutput: tool_use may appear in the text
     // instead of in a content-block tool_use entry.
@@ -281,10 +280,7 @@ export function parseCliJsonOutput(output: string): {
     return {
       text,
       toolCalls,
-      usage: {
-        inputTokens: usage?.input_tokens ?? 0,
-        outputTokens: usage?.output_tokens ?? 0,
-      },
+      usage: toCliParsedUsage(usage),
       cliPreExecutedNames,
     };
   } catch {
