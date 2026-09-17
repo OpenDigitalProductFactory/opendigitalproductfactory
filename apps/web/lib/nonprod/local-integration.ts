@@ -39,7 +39,7 @@ type LocalIntegrationDependencies = {
    * blob store. Defaults to the real writer; tests inject a fake. Small outputs
    * never reach it.
    */
-  writeEvidenceBlob?: import("@/lib/evidence/bounded-output").EvidenceBlobWriter;
+  writeEvidenceBlob?: import("@/lib/evidence/bounded-evidence-output").EvidenceBlobWriter;
 };
 
 export async function recordLocalIntegrationResult(
@@ -75,7 +75,7 @@ export async function recordLocalIntegrationResult(
   // keeps a head+tail excerpt (still a string, so every existing reader works)
   // plus {sha256, storageKey, sizeBytes}; the bytes live once in the
   // content-addressed blob store, shared with the ToolExecution ledger copy.
-  const { offloadEvidenceOutput } = await import("@/lib/evidence/bounded-output");
+  const { offloadEvidenceOutput } = await import("@/lib/evidence/bounded-evidence-output");
   const boundedEvidence = await offloadEvidenceOutput(input.evidence, {
     ...(dependencies.writeEvidenceBlob ? { writeBlob: dependencies.writeEvidenceBlob } : {}),
   });
