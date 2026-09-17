@@ -580,6 +580,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-no-unattributable-deferral.mjs"),
     ], { inputs: ["code"] }),
     guard("janitor-tests", "Janitor Tests", [
+      // BI-062F5687: a guard-run git fixture must never inherit the hook's
+      // GIT_DIR; runs the janitor freshness fixture under one, against the live
+      // tree, and proves the inherited repository is untouched.
+      conformanceTest("scripts/lib/git-hook-env.test.mjs"),
       node(
         "--test",
         "scripts/lib/runtime-artifact-janitor.test.mjs",

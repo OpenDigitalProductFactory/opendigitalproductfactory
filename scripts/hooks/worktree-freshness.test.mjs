@@ -17,6 +17,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { scrubGitRepoLocationEnv } from "../lib/git-hook-env.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const HOOK = join(here, "worktree-freshness.sh");
 const PRINCIPLES = "docs/founder-kernel/wiki/principles";
@@ -26,7 +28,9 @@ function git(cwd, ...args) {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@e.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@e.com" },
+    // BI-062F5687: never inherit GIT_DIR from a hook — with it set, every
+    // command below would act on the REAL repository, not this fixture.
+    env: { ...scrubGitRepoLocationEnv(process.env), GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@e.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@e.com" },
   });
 }
 

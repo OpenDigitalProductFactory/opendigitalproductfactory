@@ -597,3 +597,19 @@ test("every guard declared code-only has an import closure that references no do
   }
   assert.deepEqual(offenders, [], "declared code-only guards reference docs inputs:\n" + offenders.join("\n"));
 });
+
+// ── hook environment hygiene (BI-062F5687) ───────────────────────────────────
+
+test("createDefaultExecute hands guards an environment without git's repository-locating variables", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const execute = createDefaultExecute({
+    ...process.env,
+    GIT_DIR: "/definitely/not/a/repo/.git",
+    GIT_WORK_TREE: "/definitely/not/a/repo",
+    GIT_INDEX_FILE: "/definitely/not/a/repo/.git/index",
+  });
+  const probe = 'const bad=["GIT_DIR","GIT_WORK_TREE","GIT_INDEX_FILE"].filter((k)=>k in process.env);process.stdout.write(JSON.stringify(bad));';
+  const result = execute("node", ["-e", probe]);
+  assert.equal(result.exitCode, 0, result.output);
+  assert.equal(result.output.trim(), "[]");
+});
