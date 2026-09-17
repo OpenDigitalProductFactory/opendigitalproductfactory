@@ -99,6 +99,20 @@ export async function completeBacklogItemTransitionTool(args: {
     }
   }
 
+  // BI-AE9FCB4C: the item's hive mirror (and its epic's, when the epic just
+  // auto-closed) is closed after the local write commits. Best-effort; the
+  // periodic sweep in instrumentation.ts catches anything that fails here.
+  void (async () => {
+    try {
+      const { closeUpstreamIssueInBackground } = await import("@/lib/build/issue-bridge");
+      const row = await prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true, epicId: true } });
+      if (row) closeUpstreamIssueInBackground({ kind: "backlog", id: row.id });
+      if (row?.epicId) closeUpstreamIssueInBackground({ kind: "epic", id: row.epicId });
+    } catch (error) {
+      console.warn(`[issue-bridge] upstream close dispatch failed for ${args.itemId}: ${getErrorMessage(error)}`);
+    }
+  })();
+
   void (async () => {
     try {
       const { bridgeBacklogItemToWorkItem } = await import("@/lib/queue/bridges/backlog-bridge");

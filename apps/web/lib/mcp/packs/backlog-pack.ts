@@ -516,6 +516,18 @@ async function updateBacklogItemStatus(
       }
     })();
   }
+  // BI-AE9FCB4C: a retired item's hive mirror closes with its reason. (done
+  // goes through the terminal adapter, which dispatches its own close.)
+  if (updated.status === "retired") {
+    void (async () => {
+      try {
+        const { closeUpstreamIssueInBackground } = await import("@/lib/build/issue-bridge");
+        closeUpstreamIssueInBackground({ kind: "backlog", id: item.id });
+      } catch (err) {
+        console.warn(`[issue-bridge] upstream close dispatch failed for ${updated.itemId}: ${getErrorMessage(err)}`);
+      }
+    })();
+  }
   return {
     success: true,
     entityId: updated.itemId,
