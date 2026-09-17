@@ -19,7 +19,6 @@ import {
   tokenEndpointFor,
 } from "./mcp-credential.mjs";
 
-const NO_CREDS = { [""]: "" };
 
 test("tokenEndpointFor derives the install's token endpoint from the MCP URL", () => {
   assert.equal(tokenEndpointFor("http://127.0.0.1:3000/api/mcp/v1?tier=full"), "http://127.0.0.1:3000/api/oauth/token");

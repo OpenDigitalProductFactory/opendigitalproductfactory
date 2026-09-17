@@ -63,9 +63,11 @@ shellContractTest("gate-worktree.sh exposes push-before-lease only as an explici
   assert.match(result.stdout, /pushBeforeLease=true/);
 });
 
-shellContractTest("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () => {
-  const env = { ...process.env };
+shellContractTest("gate-worktree.sh exits non-zero when no MCP credential is configured (BI-78B653D5)", () => {
+  const env = { ...process.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: join(tmpdir(), "dpf-no-such-credentials.json") };
   delete env.DPF_MCP_BEARER_TOKEN;
+  delete env.DPF_MCP_CLIENT_ID;
+  delete env.DPF_MCP_CLIENT_SECRET;
   env.DPF_ALLOW_LOCAL_CI_STUB = "1";
   const result = runGate([
     "--branch",
@@ -78,7 +80,7 @@ shellContractTest("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is 
   ], { env });
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /DPF_MCP_BEARER_TOKEN is required/);
+  assert.match(result.stderr, /No MCP credential is configured/);
 });
 
 shellContractTest("gate-worktree.sh discovers the checked-in default runner when DPF_LOCAL_CI_COMMAND is unset (BI-157DC9B2)", () => {
