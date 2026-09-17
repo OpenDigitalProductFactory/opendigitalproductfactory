@@ -48,6 +48,12 @@ export interface MemoryConsolidationResult {
   checkpointThreadsChecked: number;
   checkpointAdvanceAttempts: number;
   checkpointAdvanceFailures: number;
+  // BI-FDECBE0A: the sweep is the backfill path for wedged threads; report the
+  // fold work it did and whether the per-run cap stopped it early.
+  checkpointFoldsPerformed: number;
+  checkpointMessagesFolded: number;
+  checkpointMessagesSkipped: number;
+  checkpointFoldBudgetExhausted: boolean;
 }
 
 /**
@@ -75,6 +81,10 @@ export async function runMemoryConsolidationSweep(): Promise<MemoryConsolidation
     checkpointThreadsChecked: 0,
     checkpointAdvanceAttempts: 0,
     checkpointAdvanceFailures: 0,
+    checkpointFoldsPerformed: 0,
+    checkpointMessagesFolded: 0,
+    checkpointMessagesSkipped: 0,
+    checkpointFoldBudgetExhausted: false,
   };
 
   // BI-4B0A1C1F: acquire role-local coworker memory from completed work before
@@ -97,6 +107,10 @@ export async function runMemoryConsolidationSweep(): Promise<MemoryConsolidation
     result.checkpointThreadsChecked += checkpoint.threadsChecked;
     result.checkpointAdvanceAttempts += checkpoint.advanceAttempts;
     result.checkpointAdvanceFailures += checkpoint.advanceFailures;
+    result.checkpointFoldsPerformed += checkpoint.foldsPerformed;
+    result.checkpointMessagesFolded += checkpoint.messagesFolded;
+    result.checkpointMessagesSkipped += checkpoint.messagesSkipped;
+    result.checkpointFoldBudgetExhausted = checkpoint.foldBudgetExhausted;
   } catch (err) {
     console.warn("[autoDream] thread checkpoint sweep failed:", err);
   }

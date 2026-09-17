@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Durable rolling compaction checkpoint — implementation plan
 
 - **BI:** BI-FDECBE0A (EP-8C706944 — AI Coworker Memory & Context Architecture, Phase 1)
@@ -35,3 +39,15 @@ A persisted running summary of every turn **older than the recency window**, adv
 
 - Unit: `thread-checkpoint.test.ts` — no-thread/not-enough no-ops, exact fold boundary, incremental (watermark-respecting) fold, summary cap, non-fatal summarizer failure, message formatting.
 - Runtime (post-merge, canonical install): a >30-turn chat thread accumulates a non-null `compactedSummary`, `compactionWatermarkAt` advances monotonically, and the fold LLM call fires once per batch (not per turn).
+
+## Addendum 2026-09-17 — the fold is bounded (BI-FDECBE0A re-opened, D1)
+
+The item was re-opened on 2026-09-16 because the mechanism above never fired on the threads it exists for: the advance loaded every message newer than the watermark with no `take` and offered all of them to the summarizer in one call, so a 1,100-message thread failed on every attempt, silently, forever, and the prune stayed gated on a watermark that was never set. Design of record: [`2026-09-16-coworker-dialog-compaction-and-thread-economy-design.md`](../specs/2026-09-16-coworker-dialog-compaction-and-thread-economy-design.md) §1 D1 and §7 Phase 2. What changed:
+
+- **`loadMessagesAfter` takes a `take`.** One advance loads `checkpointLoadTake(keepRecentCount)` = `CHECKPOINT_FOLD_BATCH + keepRecentCount` rows: a full page proves a batch has aged out of the window; a short page is the whole remaining span.
+- **`CHECKPOINT_FOLD_BATCH` (10) is a real batch size.** One advance folds at most one batch and moves the watermark to the end of *that* batch; `AdvanceResult.moreEligible` tells a caller another batch is probably waiting. A long thread converges across calls instead of failing once.
+- **Summarizer input is bounded in estimated tokens.** `CHECKPOINT_FOLD_TOKEN_BUDGET` (6,000, chars/4 on the shared estimator) over whole messages, oldest-first; the per-message 800-char head truncation is gone because the budget is now the bound. A message that could never fit is skipped, announced in the transcript as omitted, and the watermark still passes it — so no single message can wedge a thread. The observed largest message (17,027 chars) fits whole.
+- **A failed fold is visible.** `AdvanceResult` carries the failing stage (`load-state` / `load-messages` / `summarize` / `save`) and message; `AdvanceDeps.recordFoldOutcome` writes an `ImprovementSignal` (`sourceType` `thread_checkpoint_fold_failed` keyed `threadId:stage`, or `thread_checkpoint_message_skipped` keyed `threadId`), so failures dedupe, count recurrence, and file into the backlog when they persist. The `catch` stays: a failed fold never breaks a coworker turn.
+- **The nightly sweep is the backfill path.** `runThreadCheckpointSweep` keeps advancing a thread while `moreEligible` holds, under `maxFoldsPerRun` (60) and `maxFoldsPerThread` (60) caps, counts `reason: "error"` results as failures (an advance never throws, so they were invisible), and reports folds, messages folded and messages skipped on the nightly result.
+
+Liveness probe (registered at delivery, not awaited — BI-F6B8BADD): the `scheduled:discovery-taxonomy-gap-triage-daily` thread reaches a non-null `compactedSummary` with `compactedTurnCount` > 1,000 across repeated sweeps, and `pruneSummarizedThreadMessages` becomes non-zero for it. Tests: `thread-checkpoint.test.ts` (bounded take, one batch per advance, convergence over 1,100 messages, token budget, recorded skip, stage-attributed failure) and `memory-acquisition-runner.test.ts` (loop-to-convergence, both caps, error counting).
