@@ -57,13 +57,23 @@ The vector is deliberately narrow: strong reductions in `human_cognitive_load` (
 
 `speed_to_value` and `product_fit` were removed on purpose. With them the principle read as an argument for whatever ships soonest and drove the canonical `quick-vs-proper-normal` decision below its margin floor — the quick fix gaining on the proper seed fix. That is the inverse of the intent: a shortcut usually *raises* lifetime intervention cost by leaving a defect for a human to work around. `principleWeight` is 0.3 for the same reason (AUTHORING.md: vector magnitude is scale-invariant, weight is the only real knob). This principle compares two sound options; it never argues against doing the sound thing.
 
+## `human_cognitive_load` is a required measure, not an optional axis
+
+Any decision that descends from this principle **must score `human_cognitive_load`**. Not "may", and not "where relevant": a decision taken under this doctrine that does not state its effect on human attention has not been evaluated against the doctrine, and its result is not a valid answer under it.
+
+This closes the gap that makes the principle otherwise unfalsifiable. The kernel's closed key set already rejects an *unknown* axis, but nothing today requires a *known* one — so an option can simply omit the axis this principle is about and score well on speed and fit alone. Omission is the failure mode, not mis-scoring: a wrong score is visible and arguable, an absent one is silent.
+
+Scoring it is also not satisfied by asserting zero. A decision that genuinely does not touch human attention says so with a rationale; `0` supplied to clear a field is the same omission wearing a number.
+
+⟦situational: no guard enforces this yet — the requirement is prose, and prose is exactly what this platform has repeatedly found does not hold. Until a deterministic check refuses an unscored decision descending from this principle, treat every such decision as unverified against it. Review at BI-AB039FA5.⟧
+
 ## Scope and propagation
 
 This is authored as platform-development doctrine (**WWMD**), because the first thing it governs is how DPF builds, deploys and evolves itself: the workrooms that own the platform's own delivery are where an intervention cost is either designed out or shipped to every install. A manual step in DPF's own build or upgrade path becomes a manual step for every operator who runs it.
 
 But the philosophy does not stop at the platform boundary — it is the same claim one scope down. A customer organization's operating doctrine (**WWWD**) inherits the standard: work the business would otherwise do by hand is what its coworkers exist to absorb, and its value streams are judged the same way. An individual's professional judgement (**WSID**) inherits it again, at the altitude of a single task.
 
-The cascade is **inheritance of the standard, not of the decision**. Each scope still owns its own answers — see [[principles/decisions-belong-to-their-scope]]: a customer's business question is not settled by platform judgement, and a counted intervention cost in DPF's delivery path says nothing about which steps that customer's business should keep. What propagates is the obligation to count, to weight a technical step at 100, and to be able to show what an automation removed.
+The cascade is **inheritance of the standard, not of the decision**. Each scope still owns its own answers — see [[principles/decisions-belong-to-their-scope]]: a customer's business question is not settled by platform judgement, and a counted intervention cost in DPF's delivery path says nothing about which steps that customer's business should keep. What propagates is the obligation to count, to weight a technical step at 100, to score `human_cognitive_load` on every descending decision, and to be able to show what an automation removed.
 
 ## Examples
 
