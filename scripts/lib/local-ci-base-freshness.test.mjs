@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { scrubGitRepoLocationEnv } from "./git-hook-env.mjs";
 
 import {
   LOCAL_CI_BASE_FRESHNESS,
@@ -17,7 +18,8 @@ function git(cwd, args, env = {}) {
     cwd,
     encoding: "utf8",
     env: {
-      ...process.env,
+      // BI-062F5687: a hook-inherited GIT_DIR would point every command at the real repository.
+      ...scrubGitRepoLocationEnv(process.env),
       GIT_AUTHOR_NAME: "DPF Test",
       GIT_AUTHOR_EMAIL: "dpf-test@example.invalid",
       GIT_COMMITTER_NAME: "DPF Test",
