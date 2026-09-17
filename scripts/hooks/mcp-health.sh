@@ -59,6 +59,26 @@ case "$url" in
     ;;
 esac
 
+# BI-46B636B0: the client authorizes over OAuth only on https, and a pinned
+# Authorization header disables OAuth. So on a plain-http endpoint the
+# ${DPF_MCP_BEARER_TOKEN} header reference in .mcp.json is the ONLY credential
+# path, and on https it must be absent. Diagnose the config at session start
+# instead of at the first refused tool call.
+has_header=0
+if [ -f "$cfg" ] && grep -q '"Authorization"' "$cfg" 2>/dev/null; then has_header=1; fi
+case "$url" in
+  https://*)
+    if [ "$has_header" = "1" ]; then
+      printf '%s\n' "NOTE: DPF MCP -- .mcp.json pins headers.Authorization on an https endpoint; that disables the client's OAuth fallback. Re-run the toolchain bootstrap (it omits the header for https) or remove it by hand. Runbook: $runbook."
+    fi
+    ;;
+  *)
+    if [ "$has_header" != "1" ]; then
+      printf '%s\n' "WARNING: DPF MCP -- .mcp.json points dpf at plain-http '$url' with NO headers.Authorization. The client refuses OAuth over http, so this config cannot authenticate by ANY path (BI-46B636B0). Fix: re-run the toolchain bootstrap (scripts/dpf-bootstrap-agent-toolchain.sh) to restore the \${DPF_MCP_BEARER_TOKEN} header fallback, or serve the portal over https (docker-compose.tls.yml) and point .mcp.json at it. Runbook: $runbook."
+    fi
+    ;;
+esac
+
 if [ -z "${DPF_MCP_BEARER_TOKEN:-}" ]; then
   printf '%s\n' "NOTE: DPF MCP -- DPF_MCP_BEARER_TOKEN is not set in this environment; the dpf server cannot authenticate. Set the user env var, then restart the client. Runbook: $runbook (Token rotation). Silence: DPF_SKIP_MCP_HEALTH=1."
   exit 0

@@ -100,6 +100,9 @@ describe("buildSetupSnippets", () => {
   it("constructs the url from a non-localhost baseUrl", () => {
     const { claudeCode, runtimeRefreshPowerShell } = buildSetupSnippets(TOKEN, "https://dpf.example.com");
     expect(claudeCode).toContain("https://dpf.example.com/api/mcp/v1");
+    // BI-46B636B0: over https the client authorizes itself; a pinned header
+    // would switch that off, so the snippet carries none.
+    expect(claudeCode).not.toContain("Authorization");
     expect(runtimeRefreshPowerShell).toContain("https://dpf.example.com/api/mcp/token/refresh");
   });
 

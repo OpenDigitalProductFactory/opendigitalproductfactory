@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { planMcpClientConfig } from "../mcp-client-config";
 
 const REPO = "/Users/dev/dpf";
@@ -23,6 +26,25 @@ describe("planMcpClientConfig", () => {
     expect(parsed.mcpServers.dpf.url).toBe(FULL_ENDPOINT);
     expect(parsed.mcpServers.dpf.headers.Authorization).toBe("Bearer ${DPF_MCP_BEARER_TOKEN}");
     expect(mcp.content).not.toMatch(/dpfmcp_/);
+  });
+
+  // BI-46B636B0: the header is the only credential path over plain http; over
+  // https it would disable the client's OAuth, so it is omitted there.
+  it("omits the bearer header for an https endpoint so OAuth takes over", () => {
+    const plan = planMcpClientConfig(REPO, "https://dpf.example.com/api/mcp/v1", null, null);
+    const mcp = JSON.parse(plan.writes.find((w) => w.path.endsWith("/.mcp.json"))!.content) as Record<string, any>;
+    const vs = JSON.parse(plan.writes.find((w) => w.path.endsWith("/.vscode/mcp.json"))!.content) as Record<string, any>;
+    expect(mcp.mcpServers.dpf.url).toBe("https://dpf.example.com/api/mcp/v1?tier=full");
+    expect("headers" in mcp.mcpServers.dpf).toBe(false);
+    expect("headers" in vs.servers.dpf).toBe(false);
+  });
+
+  it("the tracked .mcp.json is exactly what the planner writes for the default endpoint (no drift in either direction)", () => {
+    // #5416 hand-edited the tracked file; the planner then disagreed and the
+    // next bootstrap would have silently rewritten it. Pin them together.
+    const tracked = readFileSync(join(__dirname, "..", "..", "..", "..", "..", ".mcp.json"), "utf8");
+    const plan = planMcpClientConfig(REPO, ENDPOINT, tracked, null);
+    expect(plan.writes.map((w) => w.path)).toEqual(["/Users/dev/dpf/.vscode/mcp.json"]);
   });
 
   it(".vscode/mcp.json uses servers (not mcpServers) and the env: form", () => {
