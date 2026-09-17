@@ -4,6 +4,8 @@ import { RescueCockpit, type RescueArea } from "./RescueCockpit";
 import { auth } from "@/lib/auth";
 import { loadRescueCockpitData, resolveRescueOrganizationScope } from "@/lib/animal-welfare/cockpit-loader";
 import { loadIntakeWorkspace } from "@/lib/animal-welfare/intake-workspace";
+import { loadDailyCareBoard, topUpCareRoutines } from "@/lib/animal-welfare/daily-care";
+import { rescueDayWindow } from "@/lib/animal-welfare/cockpit-loader";
 import { parseRescueFilter } from "@/lib/animal-welfare/cockpit";
 import { EmptyState } from "@/components/ui/report-kit";
 import { can } from "@/lib/govern/permissions";
@@ -29,7 +31,9 @@ export async function RescueRoutePage({
     );
   }
   const canOperate = can(session.user, "operate_animal_welfare");
-  const [data, intake] = await Promise.all([
+  const now = new Date();
+  const day = rescueDayWindow(now, scope.timeZone);
+  const [data, intake, care] = await Promise.all([
     loadRescueCockpitData(scope.organizationId, {
       area,
       filter,
@@ -39,6 +43,12 @@ export async function RescueRoutePage({
     area === "intake" && canOperate
       ? loadIntakeWorkspace({ organizationId: scope.organizationId }).catch(() => null)
       : Promise.resolve(null),
+    area === "care" && canOperate
+      ? topUpCareRoutines({ organizationId: scope.organizationId, now })
+          .catch(() => null)
+          .then(() => loadDailyCareBoard({ organizationId: scope.organizationId, dayStart: day.start, dayEnd: day.end, now }))
+          .catch(() => null)
+      : Promise.resolve(null),
   ]);
-  return <RescueCockpit area={area} filter={filter} data={data} intake={intake} />;
+  return <RescueCockpit area={area} filter={filter} data={data} intake={intake} care={care} />;
 }

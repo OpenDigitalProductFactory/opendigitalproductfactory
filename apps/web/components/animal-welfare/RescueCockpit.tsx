@@ -6,6 +6,8 @@ import { Surface } from "@/components/ui/Surface";
 import type { loadRescueCockpitData } from "@/lib/animal-welfare/cockpit-loader";
 import type { IntakeWorkspace } from "@/lib/animal-welfare/intake-workspace";
 import { IntakeOperations } from "./IntakeOperations";
+import { DailyCareOperations } from "./DailyCareOperations";
+import type { DailyCareBoard } from "@/lib/animal-welfare/daily-care-vocabulary";
 import { formatInstant } from "@/lib/datetime";
 import { formatMoney } from "@/lib/org-locale/org-locale";
 import type {
@@ -272,12 +274,15 @@ export function RescueCockpit({
   area = "overview",
   filter = "all",
   intake = null,
+  care = null,
 }: {
   data: RescueCockpitData;
   area?: RescueArea;
   filter?: RescueFilter;
   /** The operator's intake workspace; null when the viewer cannot operate intake or it could not load. */
   intake?: IntakeWorkspace | null;
+  /** Today's care board; null when the viewer cannot operate care or it could not load. */
+  care?: DailyCareBoard | null;
 }) {
   const unavailable = Object.entries(data.sources).filter(([, source]) => source.state === "unavailable");
   const title = area === "overview" ? "Rescue operations" : NAV.find((item) => item.key === area)?.label ?? "Rescue operations";
@@ -301,6 +306,7 @@ export function RescueCockpit({
       <FilterNavigation area={area} filter={filter} />
       <AreaBody area={area} data={data} />
       {area === "intake" && intake ? <IntakeOperations workspace={intake} /> : null}
+      {area === "care" && care ? <DailyCareOperations board={care} timeZone={data.presentation.timeZone} /> : null}
       <QueuePanel queue={data.queue} timeZone={data.presentation.timeZone} />
       {area === "overview" ? (
         <Surface as="section" className="mt-5">
