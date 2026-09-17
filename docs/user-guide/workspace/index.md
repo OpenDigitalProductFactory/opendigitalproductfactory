@@ -128,6 +128,26 @@ animal journey as a whole. The workspace follows three connected value streams:
 Use **Animals**, **Intake**, **Housing**, **Daily care**, **Adoptions**, and
 ## When the ward is full
 
+### Admitting an animal
+
+**Intake** admits an animal in one step: identity, the intake source (stray,
+owner relinquished, transfer, born in care, return, or seizure), an optional
+legal or policy hold, and the housing it goes into. The admission either houses
+the animal or refuses with the reason, so custody without a place, or a place
+without custody, cannot exist.
+
+Each animal in intake shows its checklist: identity and microchip check, intake
+examination, weight, vaccination, parasite treatment, sterilization, behaviour
+assessment, and housing. Every item is satisfied by a dated record with the
+person or provider who did the work. A note that an animal "is spayed" does not
+count; the sterilization record does, and it holds the animal back until its
+recovery date has passed.
+
+The page explains, in words, why an animal is not yet placement-ready. A hold is
+released by a person with a reason. **Verify placement readiness** appears only
+when every reason is gone, and it re-checks the same facts before the animal
+moves on to Adoptions.
+
 If every place is taken, the board adds a review. It is the only time it appears.
 
 The review lists the animals that have waited longest with nobody waiting for
