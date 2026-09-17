@@ -29,6 +29,8 @@ Every manual step a human must take to make the platform work is a cost, it is c
 - An in-product step — a button click, a phrase typed into a chat, a field that must be filled — costs **1**.
 - A step that requires a **non-technical** user to edit a file or run a terminal command costs **100**.
 
+**The measure is the change, and it is kept on two ledgers.** An absolute count answers little; what is scoreable is the **delta** a change makes to the human steps required — steps added, steps removed — recorded both for **the effort we go through** to build and run the platform, and for **what we build for others to use**. Every change can therefore state a number on each side, and a change that removes steps from our own delivery while adding them for the customer is not an improvement, it is a transfer.
+
 An investment in software or automation is judged by the intervention cost it removes. This is the standard that **all planning and investment** is held to, not a UX nicety applied after a feature is designed.
 
 Proactivity and AI coworkers exist for this reason. They were introduced into an otherwise non-AI platform to do what a human would otherwise have to do by hand. An automation that does not lower intervention cost has not earned its cost, however sophisticated it is.
