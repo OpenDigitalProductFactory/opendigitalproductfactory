@@ -1098,12 +1098,11 @@ export async function register() {
         // Same boot + periodic net for the provider ↔ default-connection status
         // split (BI-04E4F111): routing filters on AiProviderConnection.status
         // while the UI renders ModelProvider.status — see the module header.
-        const { reconcileProviderConnectionState } = await import(
-          "@/lib/inference/provider-connection-reconcile"
-        );
+        const { reconcileProviderConnectionState } = await import("@/lib/inference/provider-connection-reconcile");
         await reconcileProviderConnectionState().catch(() => {});
         setInterval(() => void reconcileProviderConnectionState().catch(() => {}), 20 * 60 * 1000);
       })();
+      void import("@/lib/build/issue-bridge-sweep").then((m) => m.startUpstreamClosureSweep());
     }
 
     // Backfill the operational value stream (OVSM) EA view for any storefront

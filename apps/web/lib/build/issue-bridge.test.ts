@@ -4,8 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@dpf/db", () => ({
   prisma: {
     platformDevConfig: { findUnique: vi.fn() },
-    backlogItem: { findUnique: vi.fn(), update: vi.fn() },
-    epic: { findUnique: vi.fn(), update: vi.fn() },
+    backlogItem: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+    epic: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     platformIssueReport: { findUnique: vi.fn(), update: vi.fn() },
     credentialEntry: { findUnique: vi.fn() },
   },
@@ -36,6 +36,11 @@ import {
   buildIssueTitle,
   parseGitHubRepo,
   escalateToUpstreamIssue,
+  buildClosureComment,
+  closeReasonForStatus,
+  closeUpstreamIssueForTerminal,
+  isUpstreamClosureCandidate,
+  sweepUpstreamIssueClosures,
 } from "./issue-bridge";
 
 const mockBacklogFind = vi.mocked(prisma.backlogItem.findUnique);
@@ -45,6 +50,11 @@ const mockIssueReportFind = vi.mocked(prisma.platformIssueReport.findUnique);
 const mockConfigFind = vi.mocked(prisma.platformDevConfig.findUnique);
 
 const PSEUDONYM = "dpf-agent-a1b2c3d4";
+
+/** A successful fetch response carrying a JSON body — the one place the mock shape is spelled out. */
+function jsonResponse(status: number, body: unknown) {
+  return { ok: true, status, headers: { get: () => null }, json: async () => body };
+}
 
 function seededConfig(
   overrides: Partial<{ contributionMode: string; upstreamRemoteUrl: string | null }> = {},
@@ -291,14 +301,10 @@ describe("escalateToUpstreamIssue", () => {
     mockConfigFind.mockResolvedValue(seededConfig());
     mockBacklogUpdate.mockResolvedValue({} as never);
 
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 201,
-      json: async () => ({
-        number: 123,
-        html_url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/123",
-      }),
-    });
+    fetchMock.mockResolvedValue(jsonResponse(201, {
+      number: 123,
+      html_url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/123",
+    }));
 
     const result = await escalateToUpstreamIssue({ kind: "backlog", id: "cuid-42" });
 
@@ -389,14 +395,10 @@ describe("escalateToUpstreamIssue", () => {
     mockConfigFind.mockResolvedValue(seededConfig());
     vi.mocked(prisma.platformIssueReport.update).mockResolvedValue({} as never);
 
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 201,
-      json: async () => ({
-        number: 501,
-        html_url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/501",
-      }),
-    });
+    fetchMock.mockResolvedValue(jsonResponse(201, {
+      number: 501,
+      html_url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/501",
+    }));
 
     const result = await escalateToUpstreamIssue({
       kind: "issue-report",
@@ -408,5 +410,176 @@ describe("escalateToUpstreamIssue", () => {
     expect(sentBody.body).toContain("## Error context");
     expect(sentBody.body).toContain("Error: unhandled");
     expect(sentBody.labels).toContain("severity:critical");
+  });
+});
+
+
+// ─── Terminal closure (BI-AE9FCB4C) ─────────────────────────────────────────
+
+const T0 = new Date("2026-09-01T00:00:00Z");
+const T1 = new Date("2026-09-10T00:00:00Z");
+
+function terminalRow(overrides: Partial<Parameters<typeof isUpstreamClosureCandidate>[0]> = {}) {
+  return {
+    id: "cuid-9",
+    humanId: "BI-0996913C",
+    status: "retired",
+    triageOutcome: "discard",
+    resolution: "Delivered on main by PRs #4571 and #4603.",
+    completedAt: T1,
+    upstreamIssueNumber: 4496,
+    upstreamSyncedAt: T0,
+    ...overrides,
+  };
+}
+
+describe("isUpstreamClosureCandidate", () => {
+  it("selects a terminal row whose mirror was last synced before it completed", () => {
+    expect(isUpstreamClosureCandidate(terminalRow())).toBe(true);
+    expect(isUpstreamClosureCandidate(terminalRow({ status: "done" }))).toBe(true);
+    expect(isUpstreamClosureCandidate(terminalRow({ upstreamSyncedAt: null }))).toBe(true);
+  });
+
+  it("ignores rows that are open, deferred, unmirrored, unanchored, or already synced", () => {
+    expect(isUpstreamClosureCandidate(terminalRow({ status: "deferred" }))).toBe(false);
+    expect(isUpstreamClosureCandidate(terminalRow({ status: "open" }))).toBe(false);
+    expect(isUpstreamClosureCandidate(terminalRow({ upstreamIssueNumber: null }))).toBe(false);
+    expect(isUpstreamClosureCandidate(terminalRow({ completedAt: null }))).toBe(false);
+    expect(isUpstreamClosureCandidate(terminalRow({ upstreamSyncedAt: new Date("2026-09-11T00:00:00Z") }))).toBe(false);
+  });
+});
+
+describe("closeReasonForStatus / buildClosureComment", () => {
+  it("maps done to completed and retired to not_planned", () => {
+    expect(closeReasonForStatus("done")).toBe("completed");
+    expect(closeReasonForStatus("retired")).toBe("not_planned");
+  });
+
+  it("quotes the redacted resolution and names the local reference", () => {
+    const text = buildClosureComment(terminalRow({ resolution: "Fixed on DESKTOP-AB12CD by hand." }));
+    expect(text).toContain("`BI-0996913C` was retired (discard)");
+    expect(text).toContain("> Fixed on");
+    expect(text).not.toContain("DESKTOP-AB12CD");
+  });
+
+  it("omits the resolution block when there is none", () => {
+    const text = buildClosureComment(terminalRow({ status: "done", resolution: null }));
+    expect(text).toContain("was completed on the filing install");
+    expect(text).not.toContain("Resolution recorded");
+  });
+});
+
+describe("closeUpstreamIssueForTerminal", () => {
+  const fetchMock = vi.fn();
+  const issueJson = (state: string) => ({ number: 4496, html_url: "https://github.com/o/r/issues/4496", state });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  it("comments with the resolution, closes with the status reason, and stamps the sync time", async () => {
+    mockBacklogFind.mockResolvedValue({ ...terminalRow(), itemId: "BI-0996913C" } as never);
+    mockConfigFind.mockResolvedValue(seededConfig());
+    mockBacklogUpdate.mockResolvedValue({} as never);
+    fetchMock.mockImplementation(async (_url: string, init: { method?: string }) =>
+      init.method === "POST" ? jsonResponse(201, { id: 1 }) : jsonResponse(200, issueJson(init.method === "PATCH" ? "closed" : "open")),
+    );
+
+    const result = await closeUpstreamIssueForTerminal({ kind: "backlog", id: "cuid-9" });
+
+    expect(result).toEqual({ status: "closed", issueNumber: 4496, outcome: "closed" });
+    const methods = fetchMock.mock.calls.map(([, init]) => init.method);
+    expect(methods).toEqual(["GET", "POST", "PATCH"]);
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body).body).toContain("Delivered on main by PRs #4571");
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body)).toEqual({ state: "closed", state_reason: "not_planned" });
+    expect(mockBacklogUpdate).toHaveBeenCalledWith({
+      where: { id: "cuid-9" },
+      data: { upstreamSyncedAt: expect.any(Date) },
+    });
+  });
+
+  it("skips a row that is not a candidate without touching GitHub", async () => {
+    mockBacklogFind.mockResolvedValue({ ...terminalRow({ status: "deferred" }), itemId: "BI-0996913C" } as never);
+    const result = await closeUpstreamIssueForTerminal({ kind: "backlog", id: "cuid-9" });
+    expect(result.status).toBe("skipped");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+  });
+
+  it("skips on a private install", async () => {
+    mockBacklogFind.mockResolvedValue({ ...terminalRow(), itemId: "BI-0996913C" } as never);
+    mockConfigFind.mockResolvedValue(seededConfig({ contributionMode: "fork_only" }));
+    const result = await closeUpstreamIssueForTerminal({ kind: "backlog", id: "cuid-9" });
+    expect(result).toMatchObject({ status: "skipped", reason: expect.stringContaining("private") });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves the row unsynced when GitHub fails, so the sweep retries it", async () => {
+    mockBacklogFind.mockResolvedValue({ ...terminalRow(), itemId: "BI-0996913C" } as never);
+    mockConfigFind.mockResolvedValue(seededConfig());
+    fetchMock.mockResolvedValue({ ok: false, status: 502, headers: { get: () => null }, json: async () => ({ message: "Bad gateway" }) });
+    const result = await closeUpstreamIssueForTerminal({ kind: "backlog", id: "cuid-9" });
+    expect(result).toMatchObject({ status: "failed", error: expect.stringContaining("Bad gateway") });
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+  });
+
+  it("closes an epic mirror with the completed reason", async () => {
+    mockEpicFind.mockResolvedValue({
+      id: "epic-1", epicId: "EP-5102F494", status: "done", completedAt: T1, upstreamIssueNumber: 4549, upstreamSyncedAt: T0,
+    } as never);
+    mockConfigFind.mockResolvedValue(seededConfig());
+    vi.mocked(prisma.epic.update).mockResolvedValue({} as never);
+    fetchMock.mockImplementation(async (_url: string, init: { method?: string }) =>
+      jsonResponse(200, { number: 4549, html_url: "https://github.com/o/r/issues/4549", state: init.method === "PATCH" ? "closed" : "open" }),
+    );
+    const result = await closeUpstreamIssueForTerminal({ kind: "epic", id: "epic-1" });
+    expect(result).toMatchObject({ status: "closed", issueNumber: 4549 });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toEqual({ state: "closed", state_reason: "completed" });
+    expect(prisma.epic.update).toHaveBeenCalledWith({ where: { id: "epic-1" }, data: { upstreamSyncedAt: expect.any(Date) } });
+  });
+});
+
+describe("sweepUpstreamIssueClosures", () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  it("closes every unsynced terminal mirror and reports the counts", async () => {
+    vi.mocked(prisma.backlogItem.findMany).mockResolvedValue([
+      { id: "a", itemId: "BI-A", status: "done", completedAt: T1, upstreamIssueNumber: 1, upstreamSyncedAt: T0 },
+      { id: "b", itemId: "BI-B", status: "retired", completedAt: T1, upstreamIssueNumber: 2, upstreamSyncedAt: new Date("2026-09-12T00:00:00Z") },
+    ] as never);
+    vi.mocked(prisma.epic.findMany).mockResolvedValue([] as never);
+    mockBacklogFind.mockImplementation((async (args: { where: { id?: string } }) => {
+      const id = args.where.id ?? "";
+      return { id, itemId: `BI-${id.toUpperCase()}`, status: "done", triageOutcome: null, resolution: null, completedAt: T1, upstreamIssueNumber: 1, upstreamSyncedAt: T0 };
+    }) as never);
+    mockConfigFind.mockResolvedValue(seededConfig());
+    mockBacklogUpdate.mockResolvedValue({} as never);
+    fetchMock.mockResolvedValue(jsonResponse(200, { number: 1, html_url: "https://github.com/o/r/issues/1", state: "closed" }));
+
+    const summary = await sweepUpstreamIssueClosures();
+
+    expect(summary).toEqual({ candidates: 1, closed: 1, failed: 0, skipped: 0 });
+    expect(mockBacklogFind).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops after the first skip when the install cannot reach upstream at all", async () => {
+    vi.mocked(prisma.backlogItem.findMany).mockResolvedValue([
+      { id: "a", itemId: "BI-A", status: "done", completedAt: T1, upstreamIssueNumber: 1, upstreamSyncedAt: null },
+      { id: "b", itemId: "BI-B", status: "done", completedAt: T1, upstreamIssueNumber: 2, upstreamSyncedAt: null },
+    ] as never);
+    vi.mocked(prisma.epic.findMany).mockResolvedValue([] as never);
+    mockBacklogFind.mockResolvedValue({ ...terminalRow({ upstreamSyncedAt: null }), itemId: "BI-A" } as never);
+    mockConfigFind.mockResolvedValue(seededConfig({ contributionMode: "fork_only" }));
+
+    const summary = await sweepUpstreamIssueClosures();
+
+    expect(summary).toEqual({ candidates: 2, closed: 0, failed: 0, skipped: 1 });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
