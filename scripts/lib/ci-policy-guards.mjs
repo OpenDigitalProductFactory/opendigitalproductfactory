@@ -299,6 +299,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
+      // BI-78B653D5: the gate's credential resolution (client_credentials
+      // first, PAT until retirement, actionable refusal) against a loopback
+      // stub authorization server.
+      node("--test", "scripts/lib/mcp-credential.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
