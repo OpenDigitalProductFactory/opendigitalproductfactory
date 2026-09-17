@@ -45,6 +45,8 @@ The 100x weight is not arithmetic, it is a statement about who the platform is f
 
 **A delta needs a baseline, and the baseline is research.** The number is only real if the current way the work is done has been observed and counted first — the as-is. This is what research is for here, and it is the lineage this principle comes from: **value stream mapping**, where the current-state map is what makes waste visible and improvement arguable. Without a measured as-is, a claimed reduction is an assertion about a process nobody counted. See [[principles/design-research-required]].
 
+The baseline has two modes, and they are not interchangeable. Where the platform **already does something referenceable**, the as-is is that behaviour, observed and counted — a real measurement. Where the work is **net-new**, there is no as-is to count, and the baseline comes from **pure research**: how the work is done today outside the platform, by whatever means people currently use. Both give a number to improve against; only the first is a measurement of this platform.
+
 Counting matters because judgement alone does not hold. `human_cognitive_load` and `operator_effort` are already decision axes, but a score is supplied by whoever authors the option, so a proposal can assert it is low-effort and nothing can contradict it. Steps enumerated from a flow can be checked against the claim, which makes the claim falsifiable and makes a reduction reportable as value.
 
 ## How to apply
@@ -62,6 +64,32 @@ Three distinctions decide whether a count is honest:
 The vector is deliberately narrow: strong reductions in `human_cognitive_load` (-0.9) and `operator_effort` (-0.9) — cost axes, where lower is better — plus `operational_independence` (0.6), the customer operating without reaching for a technician. `legibility_of_consequence` stays mildly positive (0.4) rather than neutral: removing steps must not remove the operator's sight of what an action will do, which is this principle's most likely misapplication.
 
 `speed_to_value` and `product_fit` were removed on purpose. With them the principle read as an argument for whatever ships soonest and drove the canonical `quick-vs-proper-normal` decision below its margin floor — the quick fix gaining on the proper seed fix. That is the inverse of the intent: a shortcut usually *raises* lifetime intervention cost by leaving a defect for a human to work around. `principleWeight` is 0.3 for the same reason (AUTHORING.md: vector magnitude is scale-invariant, weight is the only real knob). This principle compares two sound options; it never argues against doing the sound thing.
+
+## Value is the net, and that is what makes it a proof
+
+The proof of value is **not** that a new capability or interface exists — building one is, by itself, more work and more steps. The proof is the **net**: cost removed minus cost added.
+
+An interface that introduces five in-product steps costs 5. If it retires a step where a human was editing a file or running a command by hand — the 100x class — the change is worth **95**, and that subtraction is the claim. Stated the other way: a feature is not justified by existing, it is justified by what it stops a human from having to do.
+
+This is also why a gross count misleads in both directions. A change can add steps and still be strongly positive; a change can add no steps and be worth nothing.
+
+## Where work should move: human, then AI, then code
+
+The ledger has three tiers, and improvement means moving work **down** it:
+
+| Tier | Cost unit | Character |
+|---|---|---|
+| **Human** | steps, weighted 1 / 100 | attention and judgement; the scarcest and most expensive |
+| **AI coworker** | tokens, plus interpretive burden | absorbs manual work, but non-deterministic and interpretive |
+| **Code** | negligible per execution, paid once in maintenance | deterministic, repeatable, composable |
+
+**Human to AI coworker** removes human steps. This is what proactivity and coworkers are for.
+
+**AI coworker to code** removes *AI* cognitive load, and it is a real improvement for the same reason the first move is: work that a coworker currently reasons through step by step becomes something it no longer has to hold. AI is interpretive and non-deterministic; code is neither. So this move buys determinism as well as cost — which is the same argument the platform already makes for enforcing non-negotiables in a gate rather than a prompt. Code here is not a replacement for the coworker: it is the substrate that supports and optimises what the coworker does, and lets it reach outcomes with less carried burden, while remaining able to interpret, judge, and work with other agents and tools where that is what the task needs.
+
+This is why human-resource and AI-resource management sit side by side in the platform rather than in separate worlds: the transition between tiers is the thing being managed, and it can only be measured if both sides are on one ledger. **Every tier has a cost of use — cost of human, cost of AI tokens, cost of maintaining code** — so a move down the ladder must show the cost it removes exceeds the cost it takes on. Pushing everything into code is not free; it trades token spend and interpretive reach for maintenance and rigidity, and a task that genuinely needs judgement should stay where judgement lives.
+
+*Resolver note: the AI side of this ledger needs per-thread and per-run token and cost attribution to be real. That machinery exists and is currently inert — see BI-CCF1ACBB, where the per-thread cost ledger joins on columns nothing populates, so it has never reported a number. This measure is unavailable on the AI tier until it does.*
 
 ## `human_cognitive_load` is a required measure, not an optional axis
 
