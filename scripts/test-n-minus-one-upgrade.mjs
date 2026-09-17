@@ -252,6 +252,23 @@ async function ensureNMinusOneHostEnvironment(workspace, project) {
   return env;
 }
 
+/**
+ * The Compose labels that make the N-1 health sentinel a first-class `portal`
+ * service container of `project`, so the promoter's `compose up --force-recreate
+ * portal` replaces it instead of colliding with its name (BI-BC7AE37B).
+ */
+export function sentinelComposeLabels(project) {
+  return [
+    "--label", `com.docker.compose.project=${project}`,
+    "--label", "com.docker.compose.service=portal",
+    "--label", "com.docker.compose.container-number=1",
+    "--label", "com.docker.compose.oneoff=False",
+    // Any value Compose will never compute for the real service config: it only
+    // has to DIFFER so the candidate is recreated, never adopted as current.
+    "--label", "com.docker.compose.config-hash=dpf-n1-sentinel",
+  ];
+}
+
 export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }, deps = {}) {
   assertSafeHarnessConfig({ ...workspace, project });
   const run = deps.run ?? execFile;
@@ -270,9 +287,20 @@ export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }
   // evidence and can exceed bounded hosted-runner leases. A Compose-labelled
   // health sentinel occupies the exact portal identity until the governed
   // promoter replaces it with the real candidate image.
+  //
+  // BI-BC7AE37B: for Compose to REPLACE the sentinel rather than try to create a
+  // second container of the same name, it must recognise it as this project's
+  // `portal` service container. Compose selects service containers by
+  // project + service + `oneoff=False`, and decides recreate-vs-keep from
+  // `config-hash`; without those two labels `up --force-recreate portal`
+  // filtered the sentinel out, tried to create `<project>-portal-1` afresh and
+  // the daemon refused with a name Conflict — every acceptance step after the
+  // baseline was skipped. Measured on Compose v5.5.1: project+service+number
+  // alone conflicts; adding `oneoff=False` alone still conflicts; adding
+  // `oneoff=False` + `config-hash` makes Compose adopt the sentinel and
+  // recreate it with the candidate image. `version` is not required.
   await run("docker", ["run", "-d", "--name", `${project}-portal-1`, "--network", `${project}_default`,
-    "--label", `com.docker.compose.project=${project}`, "--label", "com.docker.compose.service=portal",
-    "--label", "com.docker.compose.container-number=1", "-p", "3000:3000", "node:24-alpine", "node", "-e",
+    ...sentinelComposeLabels(project), "-p", "3000:3000", "node:24-alpine", "node", "-e",
     "require('http').createServer((_,r)=>{r.writeHead(200);r.end('ok')}).listen(3000)"], { cwd: workspace.source, env });
   let lastStatus = 0;
   for (let attempt = 0; attempt < 90; attempt += 1) {
