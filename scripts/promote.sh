@@ -1135,9 +1135,34 @@ fi
 #     Capping reclaims runaway disk without making every future upgrade rebuild cold.
 # Volumes are NEVER touched here — operator DB/state lives in volumes.
 emit_step cleanup
+# BI-DC04048A: every sweep below is BOUNDED and NAMED. The acceptance harness
+# watched a promotion complete every verify and then die inside this step with
+# nine silent minutes after `step=cleanup` — no way to tell which sweep hung,
+# and no bound to stop it taking the run with it. A sweep is a disk-hygiene
+# courtesy; it may never hold a finished upgrade hostage. Each one gets its own
+# step line (so the trail names the hang) and a busybox/coreutils `timeout`
+# (so the hang ends). A sweep that times out is reported and skipped; the
+# upgrade stands either way, exactly as `|| true` already promised.
+_sweep_timeout="${PROMOTE_CLEANUP_SWEEP_TIMEOUT_SECONDS:-300}"
+[[ "$_sweep_timeout" =~ ^[0-9]+$ ]] || _sweep_timeout=300
+_bounded_sweep() {
+  # usage: _bounded_sweep <name> <command...>
+  local _name="$1"; shift
+  emit_step "cleanup-${_name}"
+  local _rc=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 10 "$_sweep_timeout" "$@" >/dev/null 2>&1 || _rc=$?
+  else
+    "$@" >/dev/null 2>&1 || _rc=$?
+  fi
+  if [[ $_rc -eq 124 || $_rc -eq 137 || $_rc -eq 143 ]]; then
+    printf 'warning: cleanup sweep %s did not finish within %ss and was stopped — skipped; the upgrade stands (BI-DC04048A)\n' "$_name" "$_sweep_timeout" >&2
+  fi
+  return 0
+}
 if [[ $_dry_run -eq 0 ]]; then
-  docker image prune -f >/dev/null 2>&1 || true
-  docker builder prune -f --keep-storage "${PROMOTE_BUILD_CACHE_KEEP:-10GB}" >/dev/null 2>&1 || true
+  _bounded_sweep image-prune docker image prune -f
+  _bounded_sweep builder-prune docker builder prune -f --keep-storage "${PROMOTE_BUILD_CACHE_KEEP:-10GB}"
   # BI-9B7FC928: `image prune` above only removes DANGLING images. The TAGGED
   # throwaway images left by Build Studio's content-verify / main-compare /
   # local-integration flows (dpf-*-build-test:*, dpf-*-build-compare:*,
@@ -1149,7 +1174,8 @@ if [[ $_dry_run -eq 0 ]]; then
   # fails the upgrade. Volumes are still never touched.
   for _ref in 'dpf-*-build-test' 'dpf-*-build-compare' 'dpf-*:verify'; do
     _imgs="$(docker images --filter "reference=${_ref}" -q 2>/dev/null | sort -u)"
-    [[ -n "${_imgs}" ]] && docker rmi -f ${_imgs} >/dev/null 2>&1 || true
+    # shellcheck disable=SC2086 # image ids are whitespace-separated by construction
+    [[ -n "${_imgs}" ]] && _bounded_sweep "ephemeral-images" docker rmi -f ${_imgs}
   done
   # BI-1172E86A: the two sweeps above still leave every SUPERSEDED
   # version tag alive. Each upgrade tags a fresh dpf-portal / dpf-postgres /
@@ -1182,14 +1208,15 @@ if [[ $_dry_run -eq 0 ]]; then
       if (( _kept < _keep )); then _kept=$((_kept + 1)); continue; fi
       _chunk+=("$_tagged")
       if (( ${#_chunk[@]} >= 50 )); then
-        docker rmi "${_chunk[@]}" >/dev/null 2>&1 || true
+        _bounded_sweep "superseded-tags-${_repo}" docker rmi "${_chunk[@]}"
         _chunk=()
       fi
     done < <(docker images --filter "reference=${_ref}:v*" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)
     if (( ${#_chunk[@]} > 0 )); then
-      docker rmi "${_chunk[@]}" >/dev/null 2>&1 || true
+      _bounded_sweep "superseded-tags-${_repo}" docker rmi "${_chunk[@]}"
     fi
   done
+  emit_step cleanup-done
 fi
 
 # Terminal success marker — emitted only after every verify AND the cleanup sweep, so

@@ -22,6 +22,7 @@ import {
   runNMinusOneUpgrade,
   buildPromoterPromotionDockerArgs,
   execFileWithLiveOutput,
+  lastStepIn,
   buildPromoterReadinessDockerArgs,
   normalizePromoterReadiness,
   prepareNMinusOneBaseline,
@@ -45,8 +46,29 @@ test("long promotion commands stream progress while retaining evidence", async (
     stdout: { write: (chunk) => { forwarded.stdout += chunk; } },
     stderr: { write: (chunk) => { forwarded.stderr += chunk; } },
   });
-  assert.deepEqual(result, { stdout: "captured stdout", stderr: "captured stderr" });
+  assert.deepEqual(result, { stdout: "captured stdout", stderr: "captured stderr", lastStep: "docker-build" });
   assert.deepEqual(forwarded, { stdout: "step=docker-build\n", stderr: "build progress\n" });
+});
+
+test("a promoter stopped by a signal is reported with the last step it reached (BI-DC04048A)", async () => {
+  const launch = (_command, _args, options, callback) => {
+    const child = { stdout: new EventEmitter(), stderr: new EventEmitter() };
+    queueMicrotask(() => {
+      assert.equal(options.timeout, 1234, "the harness bound must reach execFile");
+      child.stdout.emit("data", "step=docker-build target=abc\nstep=health target=abc\n");
+      child.stdout.emit("data", "step=cleanup target=abc\n");
+      const error = Object.assign(new Error("Command failed"), { killed: true, signal: "SIGTERM" });
+      callback(error, "", "");
+    });
+    return child;
+  };
+  await assert.rejects(
+    execFileWithLiveOutput("docker", ["run"], { timeout: 1234 }, launch, { stdout: { write() {} }, stderr: { write() {} } }),
+    (error) => error.lastStep === "cleanup"
+      && /stopped by SIGTERM after the harness's 1234ms bound \(last promoter step seen: cleanup\)/.test(error.message),
+  );
+  assert.equal(lastStepIn("noise\nstep=a x\nmore step=b-c y\n"), "b-c");
+  assert.equal(lastStepIn("no steps here", "previous"), "previous");
 });
 
 test("GitHub client authenticates and follows pagination", async () => {
