@@ -148,6 +148,21 @@ released by a person with a reason. **Verify placement readiness** appears only
 when every reason is gone, and it re-checks the same facts before the animal
 moves on to Adoptions.
 
+### Daily care rounds
+
+**Daily care** is the list a volunteer opens in the morning. A routine (feed,
+water, medication, walk, clean, weigh, welfare check) is set up once per animal
+with a time of day, every day or on chosen weekdays, for a fixed course or
+ongoing. The platform turns it into dated rounds two weeks ahead, so the list
+exists whether or not anyone remembered.
+
+Each round is recorded with what happened. Done or partly done closes it. Did
+not eat, refused, or a concern needs a short observation and raises a welfare
+follow-up that a person must take on and resolve with a note. A medication
+round that is still open two hours after it was due can be escalated the same
+way; the page shows how many are waiting. Nothing here decides treatment. It
+makes sure a person sees it.
+
 If every place is taken, the board adds a review. It is the only time it appears.
 
 The review lists the animals that have waited longest with nobody waiting for
