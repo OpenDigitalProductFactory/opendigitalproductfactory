@@ -41,6 +41,8 @@ The platform's promise is that work gets done without the customer having to do 
 
 The 100x weight is not arithmetic, it is a statement about who the platform is for. A technical step does not merely take longer for a non-technical user; it can stop them entirely, and then the capability behind it may as well not exist. A feature reachable only by editing a config file is a feature most customers do not have.
 
+**This delta is one of the platform's differentiators, so it is a positioning claim as well as an internal measure.** What makes the platform more useful than an alternative is not a longer feature list but a lower intervention cost for the same outcome — a capability a customer can actually reach without a technician is worth more than a richer one they cannot. A comparison against an alternative should therefore be argued on steps required for a given outcome, and that argument is only available if the number is kept (see the two ledgers above).
+
 Counting matters because judgement alone does not hold. `human_cognitive_load` and `operator_effort` are already decision axes, but a score is supplied by whoever authors the option, so a proposal can assert it is low-effort and nothing can contradict it. Steps enumerated from a flow can be checked against the claim, which makes the claim falsifiable and makes a reduction reportable as value.
 
 ## How to apply
