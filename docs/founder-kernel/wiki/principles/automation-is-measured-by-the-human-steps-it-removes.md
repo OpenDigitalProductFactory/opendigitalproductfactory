@@ -90,6 +90,19 @@ This is why human-resource and AI-resource management sit side by side in the pl
 
 *Resolver note: the AI side of this ledger needs per-thread and per-run token and cost attribution to be real. That machinery exists and is currently inert — see BI-CCF1ACBB, where the per-thread cost ledger joins on columns nothing populates, so it has never reported a number. This measure is unavailable on the AI tier until it does.*
 
+## This is the return-on-investment criterion for the backlog
+
+Because the measure is a net delta on a known ledger, it gives investment decisions a computable return rather than a judgement: **ROI = (cost removed − cost added) ÷ cost to build**. Applied across the backlog it ranks where money is best spent, and most prioritisation can then be automated rather than argued.
+
+It is worth seeing what that is: moving the platform's own investment decisions down the ladder, from human deliberation toward a computed ranking. The doctrine applied to itself.
+
+Four things keep it honest, and none is optional:
+
+- **The denominator is an estimate; the numerator is a measurement.** Build cost is forecast, intervention cost is counted. A ranking is only as good as its estimates, so the two must not be presented with equal confidence.
+- **Universal obligations are not ranked.** Safety, data privacy and legal duty outrank return by construction — the kernel already holds that a universal obligation outranks usage frequency. A compliance item must never lose a ranking to a larger UX win; it is not in the competition.
+- **Dependency before return.** A high-ROI item that is blocked returns nothing until its blocker clears, so reachability belongs in the ranking, not as a footnote after it.
+- **It will bias toward measurable wins.** This principle's own first draft drove the canonical quick-vs-proper decision below its margin floor; at portfolio scale the same pull favours visible step-removal over foundational work whose return is real but diffuse. Ranked returns inform investment; they do not overrule [[principles/architecture-over-shortcuts]].
+
 ## `human_cognitive_load` is a required measure, not an optional axis
 
 Any decision that descends from this principle **must score `human_cognitive_load`**. Not "may", and not "where relevant": a decision taken under this doctrine that does not state its effect on human attention has not been evaluated against the doctrine, and its result is not a valid answer under it.
