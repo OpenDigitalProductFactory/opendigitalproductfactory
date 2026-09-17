@@ -13,8 +13,7 @@ principleAppliesTo:
   - external_coding_agent
   - human
 principleRingScope:
-  - ring-1-product
-  - ring-2-workflow
+  - universal-ring
 principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: States what the platform is FOR, so adopters can judge whether a feature earns its cost and contributors know which direction counts as improvement.
