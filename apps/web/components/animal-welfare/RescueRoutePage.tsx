@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { RescueCockpit, type RescueArea } from "./RescueCockpit";
 import { auth } from "@/lib/auth";
 import { loadRescueCockpitData, resolveRescueOrganizationScope } from "@/lib/animal-welfare/cockpit-loader";
+import { loadIntakeWorkspace } from "@/lib/animal-welfare/intake-workspace";
 import { parseRescueFilter } from "@/lib/animal-welfare/cockpit";
 import { EmptyState } from "@/components/ui/report-kit";
 import { can } from "@/lib/govern/permissions";
@@ -27,16 +28,17 @@ export async function RescueRoutePage({
       />
     );
   }
-  return (
-    <RescueCockpit
-      area={area}
-      filter={filter}
-      data={await loadRescueCockpitData(scope.organizationId, {
-        area,
-        filter,
-        timeZone: scope.timeZone,
-        canViewFinance: can(session.user, "view_finance"),
-      })}
-    />
-  );
+  const canOperate = can(session.user, "operate_animal_welfare");
+  const [data, intake] = await Promise.all([
+    loadRescueCockpitData(scope.organizationId, {
+      area,
+      filter,
+      timeZone: scope.timeZone,
+      canViewFinance: can(session.user, "view_finance"),
+    }),
+    area === "intake" && canOperate
+      ? loadIntakeWorkspace({ organizationId: scope.organizationId }).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+  return <RescueCockpit area={area} filter={filter} data={data} intake={intake} />;
 }

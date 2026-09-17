@@ -1,0 +1,77 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-7111AF0C. Migration 20260917210000_animal_subject_care_intake_rls adds one row-level security policy to each of CareIntakePacket, CareIntakeException and CareIntakeStatusEvent so the subject-neutral intake apparatus can hold an animal's intake checklist. NO column is added, removed or repurposed and no row is touched: the existing patient context policy admits only rows whose patientProfileId is in app.patient_profile_ids, which a non-patient row (patientProfileId IS NULL) can never satisfy, so animal packets were unreadable and unwritable under the forced RLS these tables carry. The new policy admits a row only when its organizationId matches app.organization_id, its subject kind is animal-profile and it carries no patient binding (for the exception and status-event tables, through the packet it belongs to). A patient row can never satisfy the animal policy and an animal row can never satisfy the patient policy, so patient list access is not broadened. The animal repository sets app.organization_id and clears app.patient_profile_ids in every transaction. The same change introduces the first application writer of CareRecord rows for animal subjects (kind, typed detail, value/unit, provider inside detail), on a table that already exists and already carries confidential sensitivity in the animal-welfare asset registry. Verified inside rolled-back transactions on the contributor-preview database (dpf and shadow_rebase): all three CREATE POLICY statements apply and the policies are listed with polcmd '*'.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "CareIntakePacket",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "requirementSnapshot",
+          "resolution": "governed",
+          "reason": "For an animal subject the snapshot is the versioned pet-rescue intake requirement list (policy version, subject kind, requirement keys and labels). It names what must be evidenced; it holds no measurement, no medical fact and nothing about a person. Frozen at intake so a later policy change never re-judges an old admission.",
+          "provenance": "Built server-side from ANIMAL_INTAKE_REQUIREMENTS in apps/web/lib/animal-welfare/intake-policy.ts at admission. Never caller-supplied.",
+          "flags": []
+        },
+        {
+          "name": "subjectRef",
+          "resolution": "governed",
+          "reason": "animal-profile:<AnimalProfile.id> for an animal packet. An opaque row id of a confidential animal record; the same field already carries patient references for the patient path and is unchanged in type.",
+          "provenance": "Derived server-side from the organization-owned AnimalProfile resolved inside the admission transaction.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "CareIntakeException",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "CareIntakeStatusEvent",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "actorPrincipalId",
+          "resolution": "inherited",
+          "reason": "The acting operator's Principal id on the admission status event, exactly as the patient path records it. Resolved from the authenticated session; never caller-supplied.",
+          "provenance": "resolvePrincipalRecordIdForSessionIdentity in the intake server action.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "CareRecord",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "detail",
+          "resolution": "governed",
+          "reason": "For an animal subject: the typed evidence for one intake requirement (requirement key, provider or checker name, product, outcome, findings, recovery end, cost reference, complication). It can name the veterinary provider or the volunteer who did the check, which is why it stays confidential and is projected only into the operator's intake detail, never into the bounded queue or any public surface.",
+          "provenance": "Validated server-side by validateAnimalEvidence against the packet's frozen requirement snapshot; a legacy boolean is refused.",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": {
+            "basis": "legitimate-interest-animal-welfare-operations",
+            "access": "Readable by operators holding operate_animal_welfare or view_animal_welfare inside the owning organization, through the intake detail and care surfaces only. The bounded intake queue projects completion counts and blocker sentences, never the detail JSON. Never exposed on public or storefront surfaces, and never enumerable across organizations: the repository resolves the AnimalProfile inside the organization before any read or write.",
+            "retention": "Bound to the animal's custody history; retained and disposed with the AnimalProfile under the animal-welfare asset registry's domain lifecycle. Corrections supersede, they never delete.",
+            "obligations": "The provider or checker name it carries identifies a worker or a veterinary partner, not a data subject of the platform, and must not be used to rank or evaluate that person. It is never used as an input to any automated placement or euthanasia decision; placement readiness reads only the requirement key, kind, outcome and recovery date."
+          }
+        },
+        {
+          "name": "value",
+          "resolution": "governed",
+          "reason": "A measurement such as weight, with its unit. Animal welfare data, no person data.",
+          "provenance": "Operator entry validated as a positive number with a unit.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
