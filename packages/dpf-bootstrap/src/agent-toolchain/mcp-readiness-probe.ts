@@ -103,11 +103,19 @@ export const SCOPE_COVERAGE_PROBE = {
   requiredScope: "registry_read",
   /** Substring the DPF MCP emits when a token lacks a required scope. */
   scopeFailureMarker: "lacks the required scope",
+  /**
+   * Substring the DPF MCP emits (HTTP 401, JSON-RPC error) when the bearer is
+   * revoked, expired, or unknown to this database (BI-A1EA29F2). As
+   * unambiguous as the scope marker: a present token that gets this answer
+   * can never work and must be re-minted.
+   */
+  rejectedTokenMarker: "unauthorized: invalid or expired token",
 } as const;
 
 export type ScopeCoverageResult =
   | { sufficient: true }
   | { sufficient: false; missingScope: string }
+  | { sufficient: false; rejected: true }
   | { sufficient: null; reason: "unreachable" | "inconclusive" };
 
 /**
@@ -130,6 +138,9 @@ export function interpretScopeCoverageProbe(
   if (httpStatus === 0 || httpStatus >= 500) {
     return { sufficient: null, reason: "unreachable" };
   }
+  if (httpStatus === 401 && bodyMentionsRejectedToken(body)) {
+    return { sufficient: false, rejected: true };
+  }
   if (httpStatus !== 200) {
     return { sufficient: null, reason: "inconclusive" };
   }
@@ -150,6 +161,16 @@ export function interpretScopeCoverageProbe(
     return { sufficient: true };
   }
   return { sufficient: null, reason: "inconclusive" };
+}
+
+function bodyMentionsRejectedToken(body: unknown): boolean {
+  const text =
+    typeof body === "string"
+      ? body
+      : body && typeof body === "object"
+        ? JSON.stringify(body)
+        : "";
+  return text.includes(SCOPE_COVERAGE_PROBE.rejectedTokenMarker);
 }
 
 function extractToolCallResult(

@@ -435,8 +435,40 @@ if [ "$HAS_TOKEN" -eq 1 ] && [ "$AUTO_MINT" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] \
      && printf '%s' "$_scope_probe" | grep -q 'registry_read'; then
     warn "Present MCP token is under-provisioned (missing registry_read); re-minting with the full development template."
     HAS_TOKEN=0
+  # BI-A1EA29F2: a REJECTED token (revoked, expired, or from a wiped DB) is the
+  # other way "present" != "sufficient". The portal answers 401 with an
+  # unambiguous marker; anything else (unreachable, ambiguous) leaves the token.
+  elif printf '%s' "$_scope_probe" | grep -q 'unauthorized: invalid or expired token'; then
+    warn "Present MCP token is rejected by the portal (invalid or expired); re-minting."
+    HAS_TOKEN=0
   fi
 fi
+
+# BI-A1EA29F2: the in-container issuer invocation. Two things drifted between
+# the image and this script and left macOS/Linux installs with no token and a
+# swallowed reason: the tsx binary moved (the .pnpm-nested path no longer
+# exists; /app/node_modules/.bin/tsx does), and apps/web-src ships without the
+# @dpf/* workspace links the issuer's import graph needs. The preamble picks
+# whichever tsx exists and links every /app/packages/* into
+# apps/web-src/node_modules/@dpf by its package name when missing — idempotent,
+# inside the container only, never on the host. Single source for both twins:
+# the PowerShell script carries the same string.
+issuer_command() {
+  cat <<'SH'
+cd /app/apps/web-src || exit 70
+TSX=""
+for c in /app/node_modules/.bin/tsx /app/node_modules/.pnpm/node_modules/.bin/tsx; do
+  if [ -x "$c" ]; then TSX="$c"; break; fi
+done
+if [ -z "$TSX" ]; then echo "issuer: no tsx binary under /app/node_modules" >&2; exit 71; fi
+mkdir -p node_modules/@dpf
+for d in /app/packages/*/; do
+  n="$(sed -n 's/.*"name": *"@dpf\/\([^"]*\)".*//p' "${d}package.json" 2>/dev/null | head -1)"
+  if [ -n "$n" ] && [ ! -e "node_modules/@dpf/$n" ]; then ln -s "${d%/}" "node_modules/@dpf/$n"; fi
+done
+exec "$TSX" scripts/issue-mcp-token.ts "$@"
+SH
+}
 
 if [ "$HAS_TOKEN" -eq 0 ] && [ "$AUTO_MINT" -eq 1 ]; then
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -449,8 +481,7 @@ if [ "$HAS_TOKEN" -eq 0 ] && [ "$AUTO_MINT" -eq 1 ]; then
     MINT_ERR="$(mktemp)"
     # Run the shipped issuer inside the container (matches the just-migrated
     # Prisma schema; reaches postgres over the compose network).
-    if MINT_OUT="$(docker exec "$PORTAL_CONTAINER" sh -c \
-          "cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-mcp-token.ts --scope '$MINT_SCOPE' --format raw" \
+    if MINT_OUT="$(docker exec "$PORTAL_CONTAINER" sh -c "$(issuer_command)" issuer --scope "$MINT_SCOPE" --format raw \
           2>"$MINT_ERR")"; then
       MINT_TOKEN="$(printf '%s\n' "$MINT_OUT" | grep -E '^dpfmcp_' | tail -n 1)"
       if [ -n "$MINT_TOKEN" ]; then
@@ -463,7 +494,7 @@ if [ "$HAS_TOKEN" -eq 0 ] && [ "$AUTO_MINT" -eq 1 ]; then
         sed -n '1,20p' "$MINT_ERR" >&2 || true
       fi
     else
-      warn "Token issuance failed (is the portal container running?); continuing without a token."
+      warn "Token issuance failed in container '$PORTAL_CONTAINER' (is it running? does /app/apps/web-src exist in this image?); continuing without a token. Issuer stderr:"
       sed -n '1,20p' "$MINT_ERR" >&2 || true
     fi
     rm -f "$MINT_ERR"

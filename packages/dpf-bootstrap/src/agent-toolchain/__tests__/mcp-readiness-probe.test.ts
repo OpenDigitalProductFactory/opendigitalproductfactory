@@ -138,6 +138,28 @@ describe("interpretScopeCoverageProbe (BI-A3DE9A31)", () => {
     expect(interpretScopeCoverageProbe(200, successBody)).toEqual({ sufficient: true });
   });
 
+  it("flags a rejected token (401 + the unauthorized marker) so the adapters re-mint (BI-A1EA29F2)", () => {
+    const rejected = {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32600, message: "unauthorized: invalid or expired token" },
+    };
+    expect(interpretScopeCoverageProbe(401, rejected)).toEqual({ sufficient: false, rejected: true });
+    expect(interpretScopeCoverageProbe(401, JSON.stringify(rejected))).toEqual({ sufficient: false, rejected: true });
+  });
+
+  it("does not re-mint on a 401 that carries no rejection marker (ambiguous)", () => {
+    expect(interpretScopeCoverageProbe(401, { error: { message: "nope" } })).toEqual({ sufficient: null, reason: "inconclusive" });
+  });
+
+  it("the shell adapters carry the rejected-token marker verbatim", () => {
+    for (const twin of ["dpf-bootstrap-agent-toolchain.sh", "dpf-bootstrap-agent-toolchain.ps1"]) {
+      const src = readFileSync(join(__dirname, "..", "..", "..", "..", "..", "scripts", twin), "utf8");
+      expect(src).toContain(SCOPE_COVERAGE_PROBE.rejectedTokenMarker);
+      expect(src).not.toContain("/app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-mcp-token.ts");
+    }
+  });
+
   it("returns null (never re-mint) when the endpoint is unreachable", () => {
     expect(interpretScopeCoverageProbe(0, null)).toEqual({ sufficient: null, reason: "unreachable" });
     expect(interpretScopeCoverageProbe(503, null)).toEqual({ sufficient: null, reason: "unreachable" });

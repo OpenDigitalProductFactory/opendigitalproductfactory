@@ -165,9 +165,44 @@ if ($HasToken -and $AutoMint -and -not $DryRun.IsPresent) {
             $HasToken = $false
         }
     } catch {
-        # Unreachable / ambiguous - fail safe, leave the present token untouched.
+        # BI-A1EA29F2: a REJECTED token (revoked, expired, or from a wiped DB)
+        # surfaces here as a 401 with an unambiguous marker; re-mint. Anything
+        # else (unreachable, ambiguous) fails safe and leaves the token untouched.
+        $rejected = $false
+        try {
+            $errResp = $_.Exception.Response
+            if ($errResp -and [int]$errResp.StatusCode -eq 401) {
+                $reader = New-Object System.IO.StreamReader($errResp.GetResponseStream())
+                $errBody = $reader.ReadToEnd()
+                if ($errBody -match 'unauthorized: invalid or expired token') { $rejected = $true }
+            }
+        } catch { }
+        if ($rejected) {
+            Write-Warn2 "Present MCP token is rejected by the portal (invalid or expired); re-minting."
+            $HasToken = $false
+        }
     }
 }
+
+# BI-A1EA29F2: the in-container issuer invocation, identical to issuer_command
+# in the POSIX twin. The tsx binary moved (the .pnpm-nested path is gone) and
+# apps/web-src ships without the @dpf/* workspace links the issuer imports;
+# the preamble picks whichever tsx exists and links every /app/packages/* by
+# package name when missing. Idempotent, inside the container only.
+$IssuerCommand = @'
+cd /app/apps/web-src || exit 70
+TSX=""
+for c in /app/node_modules/.bin/tsx /app/node_modules/.pnpm/node_modules/.bin/tsx; do
+  if [ -x "$c" ]; then TSX="$c"; break; fi
+done
+if [ -z "$TSX" ]; then echo "issuer: no tsx binary under /app/node_modules" >&2; exit 71; fi
+mkdir -p node_modules/@dpf
+for d in /app/packages/*/; do
+  n="$(sed -n 's/.*"name": *"@dpf\/\([^"]*\)".*//p' "${d}package.json" 2>/dev/null | head -1)"
+  if [ -n "$n" ] && [ ! -e "node_modules/@dpf/$n" ]; then ln -s "${d%/}" "node_modules/@dpf/$n"; fi
+done
+exec "$TSX" scripts/issue-mcp-token.ts "$@"
+'@
 
 if (-not $HasToken -and $AutoMint) {
     if ($DryRun.IsPresent) {
@@ -178,7 +213,8 @@ if (-not $HasToken -and $AutoMint) {
         $portal = Resolve-PortalContainer
         Write-Info "No MCP token found; minting a '$MintScope'-scoped token via portal container ($portal)."
         try {
-            $mintOut = & docker exec $portal sh -c "cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-mcp-token.ts --scope '$MintScope' --format raw" 2>$null
+            $mintErrFile = [System.IO.Path]::GetTempFileName()
+            $mintOut = & docker exec $portal sh -c $IssuerCommand issuer --scope $MintScope --format raw 2>$mintErrFile
             $mintToken = ($mintOut | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -match '^dpfmcp_' } | Select-Object -Last 1)
             if ($mintToken) {
                 # Durable persistence for new processes (Windows analog of the
@@ -190,10 +226,13 @@ if (-not $HasToken -and $AutoMint) {
                 $prefix = ($mintToken -split '_')[0]
                 Write-Ok "MCP token issued and persisted (${prefix}_... , scope=$MintScope)."
             } else {
-                Write-Warn2 "Token issuance produced no token; continuing without one."
+                Write-Warn2 "Token issuance produced no token; continuing without one. Issuer stderr:"
+                try { Get-Content $mintErrFile -TotalCount 20 | ForEach-Object { Write-Host "    $_" } } catch { }
             }
+            Remove-Item $mintErrFile -ErrorAction SilentlyContinue
         } catch {
-            Write-Warn2 "Token issuance failed (is the portal container running?); continuing without a token."
+            Write-Warn2 "Token issuance failed in container '$portal' (is it running? does /app/apps/web-src exist in this image?); continuing without a token."
+            try { Get-Content $mintErrFile -TotalCount 20 | ForEach-Object { Write-Host "    $_" } } catch { }
         }
     }
 }

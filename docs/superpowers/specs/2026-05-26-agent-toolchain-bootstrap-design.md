@@ -1,6 +1,6 @@
 ---
 title: Agent Toolchain Bootstrap - DPF-kernel-aware contributor sessions on first run
-status: revised-for-implementation
+status: active
 author: Claude (Opus 4.7)
 reviewers:
   - Codex (chief architect + UX review, 2026-05-27)
@@ -116,6 +116,7 @@ The repo already contains most of the substrate this design depends on. The work
 ### Portal-side substrate (out of scope for this design but adjacent)
 
 - `packages/db/src/seed-skills.ts` — Seeds dpf-platform skills into `SkillDefinition` / `SkillAssignment` rows for in-portal coworkers. **Already covered by the skill-pack formalization arc; do not touch.**
+- **In-container issuer contract (BI-A1EA29F2).** The auto-mint runs `apps/web-src/scripts/issue-mcp-token.ts` inside the portal container through a preamble that both twins carry verbatim (`issuer_command` in the `.sh`, `$IssuerCommand` in the `.ps1`): it picks whichever `tsx` binary exists under `/app/node_modules` (the `.pnpm`-nested path the scripts used to hardcode no longer exists in the image) and links every `/app/packages/*` into `apps/web-src/node_modules/@dpf/<name>` when missing, because the runner image ships `web-src` without its workspace links and the issuer's import graph needs them. Idempotent, container-only. A present token is re-minted on two unambiguous answers only: the `registry_read` scope-failure marker (BI-A3DE9A31) and the `401` rejected-token marker; both markers are owned by `SCOPE_COVERAGE_PROBE` in `@dpf/bootstrap` and a test pins the shell twins to them. Issuer stderr is surfaced on failure instead of swallowed.
 - `apps/web/lib/mcp/contributor-readiness.ts` + `ContributorMcpReadinessCard.tsx` (PR #1204) — Portal-side card that shows whether a contributor's MCP token is set up correctly. This bootstrap composes with it: the install step issues / detects the token and the portal card surfaces token-scope drift over time.
 
 ### Kernel principles to seed into contributor memory
