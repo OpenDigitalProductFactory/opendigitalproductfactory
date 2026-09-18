@@ -261,8 +261,8 @@ An install on `quiet` gets tier 1 and 2 in-app and nothing else. An install on `
 | **F** — `BI-7ED79807` ✅ **delivered** | **Prerequisite.** Populate `applicability` (archetype, capability, platform range) on projection. Until this lands every envelope is archetype-blind and no ballot can be scoped. | — |
 | **G** — `BI-4D924DB4` ✅ **delivered** | Generalise the tri-state applicability evaluator; assemble the consent-gated, three-tier ballot per install. | C, F |
 | **H** — `BI-784D20FD` ✅ **delivered** | `ecosystem-participation` proactivity family; the weekly two-directional watchdog in the derived room. | G |
-| **D** — `BI-4D1CAD69` | Vote budget, quadratic weighting, tally → `DemandScoreInputs`. Votes start moving the score. | B, C, G |
-| **E** — `BI-4C8A83AB` | Arbitration ordering + capacity draw + disposition writeback to every submitter. Closes the loop. | D |
+| **D** — `BI-4D1CAD69` ✅ **delivered** | Vote budget, quadratic weighting, tally → `DemandScoreInputs`. Votes start moving the score. | B, C, G |
+| **E** — `BI-4C8A83AB` ✅ **delivered** | Arbitration ordering + capacity draw + disposition writeback to every submitter. Closes the loop. | D |
 
 C is independent of A/B and is the highest-value single slice: it is the half of the loop that does not exist at all.
 
@@ -358,6 +358,37 @@ not to receive.
 flag rather than dressing up an uneventful week as activity.
 
 An install is never told its own submission is "coming for you too".
+
+### 5.4 Implementation notes — Phases D and E, delivered 2026-09-18
+
+**An unaffordable vote is refused, never clamped or dropped.** A voter who
+believes they voted, and did not, is worse off than one who was told no. The
+refusal names the cost and the credits remaining.
+
+**Re-weighting replaces a prior vote rather than stacking on it**, so the refund
+is implicit and a voter can always correct themselves.
+
+**The tally counts distinct installations, not votes.** A second vote from the
+same installation re-weights it; it never adds a voter. This is the Debian
+popcon / Sentry fingerprinting lesson — counting events lets one noisy source
+outrank a silent structural defect.
+
+**Impact is the MEAN weight, not the sum.** Breadth is already carried by
+`reach`; summing weights would double-count it and let a broadly-but-mildly
+wanted item bury a narrowly-but-urgently needed one.
+
+**Arbitration is deterministic** — equal candidates fall through to `ref`, so two
+runs over the same input never disagree. A queue that reshuffles itself is not a
+queue an operator can act on.
+
+**Starvation is made visible, not fixed by magic.** `drawAgainstCapacity` leaves
+everything beyond the line in `queued`, in order, and `buildDispositions` answers
+*every* submission — funded ones as `scheduled`, queued ones as `deferred` **with
+their position**. A submitter is told honestly where they stand rather than
+hearing nothing, which is the failure that retired Ubuntu Brainstorm.
+
+The output is advisory throughout: guards nominate, the accountable human
+decides.
 
 ## 6. Verification
 
