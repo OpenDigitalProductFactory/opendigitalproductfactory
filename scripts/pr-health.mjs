@@ -38,7 +38,9 @@ import {
 
 // Single SoT for override codes (BI-563F6AB6) — shared with PreToolUse guards.
 import {
+  GATE_INFRASTRUCTURE_UNAVAILABLE_CODE,
   LOCAL_CI_OVERRIDE_REASON_CODES,
+  classifyGateInfrastructureEvidence,
   classifyLocalCiOverride,
 } from "../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
@@ -228,7 +230,20 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
       notes.push(`local-CI sandbox gate passed for head ${localCi.headSha.slice(0, 12)}`);
     } else if (recMatchesHead && rec.skipped && rec.skipReason) {
       const classified = classifyLocalCiOverride(rec.skipReason);
-      if (classified.ok) {
+      if (classified.ok && classified.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE) {
+        // BI-02E5F2A1: this code is evidence-gated, not attestation-gated. The
+        // hook's probe must have captured the failed lease claim; the push is
+        // reported as gate-UNRUN, never passed, and cloud CI is the safety net.
+        const evidence = classifyGateInfrastructureEvidence(rec.infrastructureEvidence);
+        if (evidence.ok) {
+          notes.push(
+            `local-CI gate UNRUN for head ${localCi.headSha.slice(0, 12)} — gate infrastructure unavailable ` +
+              `at push time (${evidence.kind}: ${evidence.message}); NOT a pass — cloud CI is the safety net`,
+          );
+        } else {
+          blockers.push(`local-CI push-time override rejected: ${evidence.reason}`);
+        }
+      } else if (classified.ok) {
         notes.push(
           `local-CI gate overridden at push time (code=${classified.code}` +
             (classified.detail ? `; ${classified.detail}` : "") +
@@ -246,7 +261,14 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
         );
       } else if (localCi.attestation.kind === "override") {
         const classified = classifyLocalCiOverride(localCi.attestation.value);
-        if (classified.ok) {
+        if (classified.ok && classified.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE) {
+          // A PR-body/commit trailer is prose; the only evidence for this code
+          // is what the hook captured at push time in the gate record.
+          blockers.push(
+            `local-CI PR-body override rejected: ${GATE_INFRASTRUCTURE_UNAVAILABLE_CODE} is accepted only ` +
+              "as a push-time record carrying the hook's captured lease-claim failure — a trailer is prose, not evidence",
+          );
+        } else if (classified.ok) {
           notes.push(
             `local-CI override attestation in commit history or PR body (code=${classified.code}` +
               (classified.detail ? `; ${classified.detail}` : "") +
