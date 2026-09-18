@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSetupSnippets } from "./mcp-setup-snippets";
+import { buildCredentialsClientSnippets, buildSetupSnippets } from "./mcp-setup-snippets";
 
 const BASE = "http://localhost:3000";
 const LOCAL_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1";
@@ -129,5 +129,19 @@ describe("buildSetupSnippets", () => {
   it("syncCommand contains the seed script path", () => {
     const { syncCommand } = buildSetupSnippets(TOKEN, BASE);
     expect(syncCommand).toContain("seed-worktree-mcp.ps1");
+  });
+});
+
+describe("buildCredentialsClientSnippets (BI-EDB67A2B)", () => {
+  it("writes the exact file the gate resolver reads, at the path outside every checkout", () => {
+    const s = buildCredentialsClientSnippets("dpfoc_abc", "s3cr'et");
+    expect(s.credentialsFilePath).toBe("~/.dpf/mcp-client-credentials.json");
+    expect(JSON.parse(s.credentialsFileJson)).toEqual({ clientId: "dpfoc_abc", clientSecret: "s3cr'et" });
+    expect(s.writeFilePosix).toContain("umask 077");
+    expect(s.writeFilePosix).toContain("~/.dpf/mcp-client-credentials.json");
+    // The quote in the secret must survive POSIX single-quoting intact.
+    expect(s.writeFilePosix).toContain("s3cr'\\''et");
+    expect(s.envPosix).toBe("export DPF_MCP_CLIENT_ID='dpfoc_abc' DPF_MCP_CLIENT_SECRET='s3cr'\\''et'");
+    expect(s.envPowerShell).toContain("'s3cr''et'");
   });
 });

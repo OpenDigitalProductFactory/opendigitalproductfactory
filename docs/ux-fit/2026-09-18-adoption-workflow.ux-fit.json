@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "extend-existing-rescue-adoptions-route-with-application-reservation-placement-and-return",
+  "decisionInteractionId": "DI-F289DBB51DCB",
+  "scope": { "files": ["apps/web/components/animal-welfare/AdoptionOperations.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-F289DBB51DCB",
+    "consideredOptions": [
+      "extend-existing-rescue-adoptions-route-with-application-reservation-placement-and-return",
+      "create-separate-adopter-crm-route-with-pipeline-board",
+      "keep-adoptions-read-only-and-manage-through-storefront-inquiries"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. /workspace/rescue/adoptions stays the single adoption home. Applications in progress are the first surface; recording an application and taking an animal back are collapsed disclosures. No new route, pipeline board, CRM or navigation layer.",
+    "persona": "An adoption coordinator screens an applicant, schedules a visit, approves and reserves one animal for one person, completes the adoption with a donation, and can always take an animal back.",
+    "reuse": "The existing RescueCockpit shell, Surface, StatusBadge and shared form primitives are extended. The state machine in adoption.ts, the canonical application and placement models, StorefrontDonation for the fee, the occupancy command for housing on return, and subject-bound WorkEngagement for visits.",
+    "sourceTruth": "AnimalAdoptionApplication owns the applicant, screening and stage; AnimalPlacement owns the exclusive reservation and the adoption record; StorefrontDonation owns the fee; AnimalCustodyEpisode owns custody close and reopen. Listing status is a projection.",
+    "states": "Approve and reserve is disabled with the reason when the animal is not placement-ready, on hold, or already reserved for someone else. Declines, waitlists, withdrawals and cancellations require a reason; visits require a date. No applications explains the next step; no animals disables recording. Every control is at least 44px high and no state is color-only.",
+    "aiBoundary": "No control sends a coworker prompt. Approval, placement and return are direct governed server commands with server-derived organization, storefront and acting principal.",
+    "verification": "Focused repository and component tests plus web typecheck passed. Browser verification on the governed contributor preview is recorded in the PR body; if the preview could not be leased the PR says so and the UX check is reported as unrun, not passed."
+  }
+}
