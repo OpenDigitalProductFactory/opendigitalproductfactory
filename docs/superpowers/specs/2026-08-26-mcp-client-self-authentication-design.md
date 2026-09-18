@@ -320,6 +320,8 @@ The grant that closes the second door without keeping a second system (§2.1). A
 
 This is what makes the PAT deprecable rather than permanent, so it is not optional and it is not "later" — a deprecation horizon (§9) cannot start until it ships.
 
+**Delivery note (2026-09-18, BI-EDB67A2B).** The grant, the token route and the server actions shipped earlier; the operator surface did not, so no install could actually issue a headless client and the gate's own remedy text (BI-78B653D5) pointed at a page with nothing on it. The surface now exists as the "MCP OAuth clients" section of Admin > Platform Development, directly beneath the PAT manager: list, create (one-time secret with the credentials-file command and the environment-variable alternative) and revoke. The file path and env names it prints are the same ones `scripts/lib/mcp-credential.mjs` resolves.
+
 ### Slice 3 — Registration (medium)
 
 DCR with policy gate; CIMD fetch/validate/cache; operator pre-registration UI. Registered clients listed and revocable.
