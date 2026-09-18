@@ -131,6 +131,6 @@ test("commentBody carries the marker, the failing checks and the runbook link", 
   const body = commentBody(f, { repo: "o/r" });
   assert.ok(body.startsWith(markerFor(SHA)));
   assert.match(body, /CI \/ Typecheck/);
-  assert.match(body, /https:\/\/github\.com\/o\/r\/blob\/main\/docs\/architecture\/build-gate-runbook\.md/);
+  assert.ok(body.includes("(https://github.com/o/r/blob/main/docs/architecture/build-gate-runbook.md)"));
   assert.match(body, /pnpm pr:health 5333/);
 });
