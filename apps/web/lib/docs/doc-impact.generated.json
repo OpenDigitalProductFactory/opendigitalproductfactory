@@ -1197,6 +1197,9 @@
     "apps/web/lib/ux-budget/measure.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/ux-budget/scope.ts": [
+      "docs/testing/ci-evidence.md"
+    ],
     "apps/web/lib/voice-synthesis/tts-health-contract.test.ts": [
       "docs/operations/observability-coverage.md"
     ],
@@ -3239,6 +3242,7 @@
       ".github/workflows/ux-route-sweep.yml",
       "apps/web/instrumentation.ts",
       "apps/web/lib/runtime/measurement-runtime.ts",
+      "apps/web/lib/ux-budget/scope.ts",
       "docs/testing/ci-observation-baseline.json",
       "scripts/ci-evidence-plan.mjs",
       "scripts/ci-shadow-selection.mjs"
