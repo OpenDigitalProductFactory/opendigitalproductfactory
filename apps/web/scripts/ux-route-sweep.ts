@@ -31,6 +31,8 @@ import {
 import AxeBuilder from "@axe-core/playwright";
 
 import { measureUxBudget } from "../lib/ux-budget/measure";
+import { MEASUREMENT_NOW_ENV } from "../lib/runtime/measurement-runtime";
+import { recordVisibleText } from "./ux-sweep-visible-text";
 import { confirmBlockingRoutes } from "./ux-sweep-reproducibility";
 import {
   evaluateSweep,
@@ -470,18 +472,18 @@ async function measureRoute(
   }
 
   phaseStartedAt = performance.now();
+  const normalisedHtml = normaliseVolatileText(html); // wall-clock text collapsed (BI-EA221325)
   const measurement = {
     routePath: row.routePath,
     shell: row.shell,
     audience: row.audience,
-    // Collapse wall-clock text first: seeded records render "updated <now>", so a
-    // raw measurement moves with the clock (BI-EA221325).
-    metrics: measureUxBudget(normaliseVolatileText(html)),
+    metrics: measureUxBudget(normalisedHtml),
     ariaSnapshot,
     axeViolations,
     exemptChecks: row.exemptChecks,
   };
   phases.budgetMeasurementMs = Math.round(performance.now() - phaseStartedAt);
+  recordVisibleText(ROOT, row.routePath, normalisedHtml);
 
   return { measurement, phases };
 }
@@ -658,6 +660,7 @@ async function main(): Promise<void> {
   const executionReport = {
     schemaVersion: 2,
     sourceSha: process.env.GITHUB_SHA ?? process.env.UX_SWEEP_SOURCE_SHA ?? "unknown",
+    measurementNow: process.env[MEASUREMENT_NOW_ENV] ?? null, // pinned portal clock (BI-99909E53)
     workerCount,
     durationMs: routeRun.durationMs,
     inventory: {
