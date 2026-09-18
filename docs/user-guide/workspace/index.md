@@ -163,6 +163,20 @@ round that is still open two hours after it was due can be escalated the same
 way; the page shows how many are waiting. Nothing here decides treatment. It
 makes sure a person sees it.
 
+### Veterinary visits
+
+Below the care rounds, **Veterinary visits** books an animal at a partner
+practice. A practice is registered once with its contact and arrangement (a
+charity rate, a monthly account, a credit limit) and becomes both a place a
+visit can be booked at and a supplier that bills can be recorded against.
+
+Each kind of visit carries a recovery period: a spay or neuter surgery holds
+the animal for a week, a dental for a day, a check-up not at all. Until
+recovery ends the animal cannot be placed, and the intake checklist says so.
+Closing a done surgery records the vet who performed it straight onto the
+checklist, so nobody re-types it. A missed or cancelled visit needs a reason
+and lifts the recovery hold.
+
 ### Adoptions
 
 **Adoptions** turns an enquiry into a decision. An application records the

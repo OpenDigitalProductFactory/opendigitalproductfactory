@@ -8,6 +8,8 @@ import type { IntakeWorkspace } from "@/lib/animal-welfare/intake-workspace";
 import { IntakeOperations } from "./IntakeOperations";
 import { DailyCareOperations } from "./DailyCareOperations";
 import { AdoptionOperations } from "./AdoptionOperations";
+import { VeterinaryOperations } from "./VeterinaryOperations";
+import type { VeterinaryWorkspace } from "@/lib/animal-welfare/veterinary-vocabulary";
 import type { AdoptionWorkspace } from "@/lib/animal-welfare/adoption-vocabulary";
 import type { DailyCareBoard } from "@/lib/animal-welfare/daily-care-vocabulary";
 import { formatInstant } from "@/lib/datetime";
@@ -278,6 +280,7 @@ export function RescueCockpit({
   intake = null,
   care = null,
   adoptions = null,
+  veterinary = null,
 }: {
   data: RescueCockpitData;
   area?: RescueArea;
@@ -288,6 +291,8 @@ export function RescueCockpit({
   care?: DailyCareBoard | null;
   /** The adoption workspace; null when the viewer cannot operate adoptions or it could not load. */
   adoptions?: AdoptionWorkspace | null;
+  /** Veterinary visits and partner practices; null when the viewer cannot operate care or it could not load. */
+  veterinary?: VeterinaryWorkspace | null;
 }) {
   const unavailable = Object.entries(data.sources).filter(([, source]) => source.state === "unavailable");
   const title = area === "overview" ? "Rescue operations" : NAV.find((item) => item.key === area)?.label ?? "Rescue operations";
@@ -312,6 +317,7 @@ export function RescueCockpit({
       <AreaBody area={area} data={data} />
       {area === "intake" && intake ? <IntakeOperations workspace={intake} /> : null}
       {area === "care" && care ? <DailyCareOperations board={care} timeZone={data.presentation.timeZone} /> : null}
+      {area === "care" && veterinary ? <VeterinaryOperations workspace={veterinary} timeZone={data.presentation.timeZone} /> : null}
       {area === "adoptions" && adoptions ? <AdoptionOperations workspace={{ ...adoptions, currency: data.presentation.currency }} timeZone={data.presentation.timeZone} /> : null}
       <QueuePanel queue={data.queue} timeZone={data.presentation.timeZone} />
       {area === "overview" ? (
