@@ -12,6 +12,6 @@ export const prSubmitAwaitingAcceptanceReconcile = inngest.createFunction(
     const result = await step.run("sweep-pr-submitted-items", async () =>
       sweepPrSubmittedBacklogItems({ limit: 100 }),
     );
-    return { ok: true, ...result };
+    return { swept: true, ...result };
   },
 );
