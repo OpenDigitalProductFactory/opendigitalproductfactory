@@ -197,15 +197,13 @@ export function McpOAuthClientManager() {
             Keys for automated tools
           </h2>
           <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-            Some programs run with nobody at the screen: the local-CI gate, a CI runner, a scheduled job. They
-            cannot sign in the way you do, so each gets its own key. A key can only do what you allow here, and
-            never more than your own role allows. Tools that signed in through a browser are listed too.
+            Programs that run with nobody at the screen cannot sign in as you do. Each gets its own key,
+            limited to what you allow here.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Button variant="secondary" size="sm" type="button" onClick={refresh} disabled={pending} aria-label="Refresh clients">
+          <Button variant="secondary" size="sm" type="button" onClick={refresh} disabled={pending} aria-label="Refresh keys">
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            Refresh
           </Button>
           <Button variant="primary" size="sm" type="button" onClick={openForm} disabled={view.kind === "form"}>
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -322,7 +320,7 @@ export function McpOAuthClientManager() {
         dense
         ariaLabel="Keys for automated tools"
         initialSort={{ key: "lastUsed", dir: "desc" }}
-        empty={<span>No clients yet. Add one so the local-CI gate and CI can sign in with their own key instead of your personal token.</span>}
+        empty={<span>No keys yet.</span>}
       />
     </Surface>
   );
