@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
+import { McpOAuthClientManager } from "@/components/admin/McpOAuthClientManager";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import { PrivatePathsEditor } from "@/components/admin/PrivatePathsEditor";
@@ -84,6 +85,10 @@ export default async function AdminPlatformDevelopmentPage() {
       <McpTokenManager
         baseUrl={baseUrl}
       />
+      {/* BI-EDB67A2B: headless (client_credentials) clients live beside the
+          PAT manager — the design's "operator-issued from Admin > Platform
+          Development, listed and revocable beside browser-authorized clients". */}
+      <McpOAuthClientManager />
     </div>
   );
 }

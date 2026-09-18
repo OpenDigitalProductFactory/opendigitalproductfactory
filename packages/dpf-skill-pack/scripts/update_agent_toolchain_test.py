@@ -1164,5 +1164,59 @@ class ProbeGrokExposedSkillsTest(unittest.TestCase):
             mock_probe.assert_not_called()
 
 
+class ClaudeMcpConfigSchemeAwarenessTest(unittest.TestCase):
+    """The bearer header and OAuth are mutually exclusive; the scheme decides.
+
+    BI-FA2C46D7, mirroring mcpClientBearerHeaderRequired() in
+    packages/integration-shared/src/mcp-client-credential-policy.ts (BI-46B636B0).
+
+    Both directions are pinned deliberately. Dropping the header on http strands
+    the install with no credential at all - that is what PR #5416 did. Keeping it
+    on https disables the OAuth fallback and silently prevents the self-renewing
+    path from engaging. Neither failure announces itself at write time, so the
+    test is the thing that catches them.
+    """
+
+    def _write(self, url: str) -> dict:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            updater.ensure_claude_repo_mcp_config(pack, url, dry_run=False)
+            return json.loads((pack / "claude.mcp.json").read_text())
+
+    def test_http_endpoint_keeps_the_bearer_header(self) -> None:
+        server = self._write("http://127.0.0.1:3000/api/mcp/v1")["mcpServers"]["dpf"]
+        self.assertIn("headers", server, "http has no OAuth path; the header is the only credential")
+        self.assertEqual(
+            server["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN:-}"
+        )
+
+    def test_https_endpoint_drops_the_bearer_header(self) -> None:
+        server = self._write("https://localhost:3000/api/mcp/v1")["mcpServers"]["dpf"]
+        self.assertNotIn("headers", server, "a pinned header disables the client's OAuth fallback")
+
+    def test_unparseable_endpoint_fails_safe_by_keeping_the_header(self) -> None:
+        self.assertTrue(updater.mcp_client_bearer_header_required("not a url"))
+
+    def test_predicate_matches_the_typescript_rule(self) -> None:
+        for endpoint, required in [
+            ("https://localhost:3000/api/mcp/v1", False),
+            ("http://127.0.0.1:3000/api/mcp/v1", True),
+            ("http://localhost:3000/api/mcp/v1", True),
+        ]:
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(updater.mcp_client_bearer_header_required(endpoint), required)
+
+    def test_checked_in_descriptor_matches_the_generator(self) -> None:
+        """An edit to the JSON alone is reverted by the next bootstrap run."""
+        repo_descriptor = Path(__file__).resolve().parents[1] / "claude.mcp.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            updater.ensure_claude_repo_mcp_config(
+                pack, "http://127.0.0.1:3000/api/mcp/v1", dry_run=False
+            )
+            generated = (pack / "claude.mcp.json").read_text()
+        self.assertEqual(generated, repo_descriptor.read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -62,6 +62,24 @@ $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principl
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
 $McpEndpoint            = if ($env:DPF_MCP_URL) { $env:DPF_MCP_URL } else { "http://127.0.0.1:3000/api/mcp/v1" }
+# BI-FA2C46D7: on an https endpoint the client authorizes over OAuth and Node
+# clients must trust the organization's own CA. Resolve the root bundle the PKI
+# bootstrap wrote (explicit env, then the install's .env, then the default PKI
+# dir) and export it for this run; the persist step below records it for new
+# processes beside the token (Windows analog of the POSIX env file + launchctl).
+$McpTrustBundle = ""
+if ($McpEndpoint -like 'https://*') {
+    $envFileBundle = ""
+    $installEnv = Join-Path $RepoRoot ".env"
+    if (Test-Path -LiteralPath $installEnv) {
+        $line = Get-Content -LiteralPath $installEnv | Where-Object { $_ -match '^DPF_PKI_TRUST_BUNDLE=' } | Select-Object -Last 1
+        if ($line) { $envFileBundle = ($line -replace '^DPF_PKI_TRUST_BUNDLE=', '').Trim() }
+    }
+    foreach ($candidate in @($env:DPF_PKI_TRUST_BUNDLE, $envFileBundle, (Join-Path $HOME ".dpf\pki\root_ca.crt"))) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) { $McpTrustBundle = $candidate; break }
+    }
+    if ($McpTrustBundle) { $env:NODE_EXTRA_CA_CERTS = $McpTrustBundle }
+}
 $SkillPackManifestPath  = Join-Path $RepoRoot "packages\dpf-skill-pack\.claude-plugin\plugin.json"
 
 if (-not (Test-Path -LiteralPath $SkillPackManifestPath)) {
@@ -129,6 +147,30 @@ function Resolve-PortalContainer {
     return "dpf-portal-1"
 }
 
+# Reconcile a rejected token (BI-2F82F1A0). "token present" != "token
+# accepted": a persisted token can be expired (issuer default TTL 90 days),
+# revoked, or unknown to this install; the portal answers HTTP 401 and every
+# gate downstream fails. Probe with the read-only tools/list call and re-mint
+# ONLY on 401. 403 is the scope probe's business; unreachable never replaces a
+# present token. SSOT: interpretTokenAuthProbe / TOKEN_AUTH_PROBE in @dpf/bootstrap.
+if ($HasToken -and $AutoMint -and -not $DryRun.IsPresent) {
+    $authStatus = 0
+    try {
+        $body = '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+        $headers = @{ "Authorization" = "Bearer $($env:DPF_MCP_BEARER_TOKEN)"; "Accept" = "application/json, text/event-stream" }
+        $resp = Invoke-WebRequest -Uri $McpEndpoint -Method Post -ContentType "application/json" -Headers $headers -Body $body -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+        $authStatus = [int]$resp.StatusCode
+    } catch {
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            $authStatus = [int]$_.Exception.Response.StatusCode
+        }
+    }
+    if ($authStatus -eq 401) {
+        Write-Warn2 "Present MCP token is rejected by $McpEndpoint (HTTP 401: expired, revoked or unknown to this install); re-minting."
+        $HasToken = $false
+    }
+}
+
 # Reconcile an under-provisioned token (BI-A3DE9A31). "token present" !=
 # "token sufficient": a token minted before the write->development-template fix
 # lacks `registry_read`, so registry-gated tools (principle_decide / WWMD)
@@ -159,25 +201,75 @@ if (-not $HasToken -and $AutoMint) {
     } else {
         $portal = Resolve-PortalContainer
         Write-Info "No MCP token found; minting a '$MintScope'-scoped token via portal container ($portal)."
-        try {
-            $mintOut = & docker exec $portal sh -c "cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-mcp-token.ts --scope '$MintScope' --format raw" 2>$null
-            $mintToken = ($mintOut | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -match '^dpfmcp_' } | Select-Object -Last 1)
-            if ($mintToken) {
-                # Durable persistence for new processes (Windows analog of the
-                # POSIX zshenv + launchctl path). Single source of truth for the
-                # exact line: buildSetupSnippets().envPowerShell.
-                [System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', $mintToken, 'User')
-                $env:DPF_MCP_BEARER_TOKEN = $mintToken
-                $HasToken = $true
-                $prefix = ($mintToken -split '_')[0]
-                Write-Ok "MCP token issued and persisted (${prefix}_... , scope=$MintScope)."
-            } else {
-                Write-Warn2 "Token issuance produced no token; continuing without one."
+        $running = (& docker inspect -f '{{.State.Running}}' $portal 2>$null)
+        if ("$running".Trim() -ne 'true') {
+            Write-Warn2 "Portal container '$portal' is not running; cannot mint an MCP token. Continuing without one."
+        } else {
+            $mintErr = [System.IO.Path]::GetTempFileName()
+            try {
+                # BI-3F16A430: the web-src snapshot in the image has no node_modules
+                # and /app/node_modules carries no @dpf/* links, so the issuer cannot
+                # resolve @dpf/db / @dpf/integration-shared. The image links them at
+                # build (Dockerfile runner stage); re-run the same script here so an
+                # image built before that shipped is repaired in place. Idempotent.
+                $linkScript = Join-Path $RepoRoot "scripts\link-web-src-workspace.sh"
+                if (Test-Path -LiteralPath $linkScript) {
+                    $linkBody = (Get-Content -LiteralPath $linkScript -Raw) -replace "`r`n", "`n"
+                    $linkOut = ($linkBody | & docker exec -i $portal sh -s 2>&1)
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warn2 "Could not link workspace packages into web-src; trying the issuer anyway. ($linkOut)"
+                    }
+                }
+                # Resolve tsx inside the container - never a pnpm-internal path (it
+                # moved once already). Probe the runtime locations, fall back to the
+                # Node loader form, and fail with the real reason if none resolves.
+                $issuerCmd = @'
+cd /app/apps/web-src || exit 2
+for t in /app/node_modules/.bin/tsx /app/packages/db/node_modules/.bin/tsx; do
+  if [ -x "$t" ]; then exec "$t" scripts/issue-mcp-token.ts "$@"; fi
+done
+if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import tsx scripts/issue-mcp-token.ts "$@"; fi
+echo "issue-mcp-token: no tsx runtime found in the portal image (probed /app/node_modules/.bin/tsx, /app/packages/db/node_modules/.bin/tsx, node --import tsx)" >&2
+exit 127
+'@ -replace "`r`n", "`n"
+                $mintOut = & docker exec $portal sh -c $issuerCmd issuer --scope $MintScope --format raw 2>$mintErr
+                $mintRc = $LASTEXITCODE
+                $mintToken = ($mintOut | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -match '^dpfmcp_' } | Select-Object -Last 1)
+                if ($mintRc -eq 0 -and $mintToken) {
+                    # Durable persistence for new processes (Windows analog of the
+                    # POSIX zshenv + launchctl path). Single source of truth for the
+                    # exact line: buildSetupSnippets().envPowerShell.
+                    [System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', $mintToken, 'User')
+                    $env:DPF_MCP_BEARER_TOKEN = $mintToken
+                    $HasToken = $true
+                    $prefix = ($mintToken -split '_')[0]
+                    Write-Ok "MCP token issued and persisted (${prefix}_... , scope=$MintScope)."
+                } else {
+                    if ($mintRc -eq 0) {
+                        Write-Warn2 "Token issuance produced no token; continuing without one. Issuer diagnostics:"
+                    } else {
+                        Write-Warn2 "Token issuance failed inside '$portal' (exit $mintRc); continuing without a token. Issuer diagnostics:"
+                    }
+                    if (Test-Path -LiteralPath $mintErr) {
+                        Get-Content -LiteralPath $mintErr -TotalCount 40 | ForEach-Object { Write-Host "    $_" }
+                    }
+                }
+            } catch {
+                Write-Warn2 "Token issuance failed: $($_.Exception.Message); continuing without a token."
+            } finally {
+                Remove-Item -LiteralPath $mintErr -Force -ErrorAction SilentlyContinue
             }
-        } catch {
-            Write-Warn2 "Token issuance failed (is the portal container running?); continuing without a token."
         }
     }
+}
+
+# On an https endpoint the transport values (DPF_MCP_URL + NODE_EXTRA_CA_CERTS)
+# are what let a client authorize over OAuth; persist them for new processes
+# even when no token was minted this run. Never at dry-run time.
+if (-not $DryRun -and $McpTrustBundle) {
+    [System.Environment]::SetEnvironmentVariable('DPF_MCP_URL', $McpEndpoint, 'User')
+    [System.Environment]::SetEnvironmentVariable('NODE_EXTRA_CA_CERTS', $McpTrustBundle, 'User')
+    Write-Ok "MCP client transport persisted (User env): https endpoint + organization root bundle (NODE_EXTRA_CA_CERTS)."
 }
 
 # --- Compute plan via Node bridge --------------------------------------------

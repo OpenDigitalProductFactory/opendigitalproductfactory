@@ -19,6 +19,11 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $StepImage = "smallstep/step-ca:0.30.2@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270"
+# The portal leaf certificate lifetime (see bootstrap-organization-pki.sh):
+# the dpf-installer provisioner defaulted to step-ca's 24h, so authority.crt
+# expired daily and nothing renewed it (BI-5727522F, BI-FA2C46D7).
+$PortalCertDuration = if ($env:DPF_PKI_PORTAL_CERT_DURATION) { $env:DPF_PKI_PORTAL_CERT_DURATION } else { "8760h" }
+
 $RootCert = Join-Path $OutDir "root_ca.crt"
 $FingerprintFile = Join-Path $OutDir "root_ca.fingerprint"
 $PasswordFile = Join-Path $OutDir "secrets\step-ca-password"
@@ -252,6 +257,36 @@ function Enable-DpfEdgeClientProvisioner {
     Wait-DpfStepCa
 }
 
+function Enable-DpfInstallerProvisionerClaims {
+    $provisioners = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "provisioner", "list", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")) -join "`n"
+    $wanted = $PortalCertDuration -replace '^(\d+)h$', '$1h0m0s'
+    $installerBlock = ""
+    if ($provisioners -match '(?s)"name"\s*:\s*"dpf-installer".*?(?="name"\s*:|\z)') { $installerBlock = $Matches[0] }
+    if ($installerBlock -match ('"maxTLSCertDuration"\s*:\s*"' + [regex]::Escape($wanted) + '"')) { return }
+    Invoke-DpfPkiCompose -Arguments @(
+        "exec", "-T", "step-ca", "step", "ca", "provisioner", "update", "dpf-installer",
+        "--x509-min-dur", "5m", "--x509-default-dur", $PortalCertDuration, "--x509-max-dur", $PortalCertDuration,
+        "--ca-config", "/home/step/config/ca.json"
+    ) | Out-Null
+    Invoke-DpfPkiCompose -Arguments @("restart", "step-ca") | Out-Null
+    Wait-DpfStepCa
+}
+
+# True when the host copy of the portal leaf was issued for less than
+# $PortalCertDuration (a legacy 24h leaf) or has under 30 days left; such a
+# leaf is re-issued, because `step ca renew` preserves its lifetime.
+function Test-DpfPortalLeafNeedsReissue {
+    if (-not (Test-Path -LiteralPath $AuthorityCert)) { return $true }
+    $inspect = (Invoke-DpfLocalStepClient -Arguments @("certificate", "inspect", "/work/authority.crt", "--format", "json")) -join "`n"
+    $parsed = $inspect | ConvertFrom-Json
+    $start = [DateTime]::Parse($parsed.validity.start).ToUniversalTime()
+    $end = [DateTime]::Parse($parsed.validity.end).ToUniversalTime()
+    $wantedHours = [int]($PortalCertDuration -replace 'h$', '')
+    if (($end - $start).TotalHours -lt ($wantedHours - 1)) { return $true }
+    if (($end - [DateTime]::UtcNow).TotalDays -lt 30) { return $true }
+    return $false
+}
+
 function New-DpfEdgeActionMaterial {
     if (-not (Test-Path -LiteralPath $ActionSigningPassword)) {
         $password = (& docker run --rm $StepImage step crypto rand --format hex 64).Trim()
@@ -308,6 +343,7 @@ if ($Mode -eq "authority") {
     Invoke-DpfPkiCompose -Arguments @("up", "-d", "step-ca")
     Wait-DpfStepCa
     Enable-DpfEdgeClientProvisioner
+    Enable-DpfInstallerProvisionerClaims
     Invoke-DpfPkiCompose -Arguments @("cp", "step-ca:/home/step/certs/root_ca.crt", $RootCert)
     $Fingerprint = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "certificate", "fingerprint", "/home/step/certs/root_ca.crt")).Trim()
     $sanArguments = @("--san", $Hostname)
@@ -316,12 +352,14 @@ if ($Mode -eq "authority") {
     try { Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "test", "-f", "/home/step/certs/dpf-portal.crt") | Out-Null } catch { $hasCert = $false }
     $hasKey = $true
     try { Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "test", "-f", "/home/step/secrets/dpf-portal.key") | Out-Null } catch { $hasKey = $false }
-    if ($hasCert -and $hasKey) {
+    if ($hasCert -and $hasKey -and -not (Test-DpfPortalLeafNeedsReissue)) {
         Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "renew", "/home/step/certs/dpf-portal.crt", "/home/step/secrets/dpf-portal.key", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt", "--force") | Out-Null
     } else {
+        # First issuance, or a leaf issued for less than $PortalCertDuration:
+        # issue fresh for the full lifetime instead of renewing a 24h certificate.
         $tokenArguments = @("exec", "-T", "step-ca", "step", "ca", "token", $Hostname) + $sanArguments + @("--provisioner", "dpf-installer", "--password-file", "/run/secrets/step-ca-password")
         $enrollmentToken = (Invoke-DpfPkiCompose -Arguments $tokenArguments).Trim()
-        $certificateArguments = @("exec", "-T", "step-ca", "step", "ca", "certificate", $Hostname, "/home/step/certs/dpf-portal.crt", "/home/step/secrets/dpf-portal.key", "--token", $enrollmentToken, "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt", "--force")
+        $certificateArguments = @("exec", "-T", "step-ca", "step", "ca", "certificate", $Hostname, "/home/step/certs/dpf-portal.crt", "/home/step/secrets/dpf-portal.key", "--token", $enrollmentToken, "--not-after", $PortalCertDuration, "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt", "--force")
         Invoke-DpfPkiCompose -Arguments $certificateArguments | Out-Null
         $enrollmentToken = $null
     }

@@ -163,6 +163,16 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // out of the install dir must ship in the image's /dpf-release-assets.
       conformanceTest("scripts/check-release-asset-contract.test.mjs"),
       node("--test", "scripts/installer/local-model-policy-contract.test.mjs"),
+      // BI-FA2C46D7: the PKI bootstrap and toolchain bootstrap ARE release assets
+      // (the image copies them by name). Pins, in both the Bash and PowerShell
+      // twins, that the portal leaf is issued for a year on a provisioner whose
+      // claims allow it, that the toolchain bootstrap persists the organization
+      // root + https endpoint beside the token, and that the session-start
+      // health hook reads the OAuth challenge on https. The PKI contract test
+      // rejoins CI here: it had been allowlisted while two of its assertions
+      // were stale (they now read compose-chain.ps1).
+      conformanceTest("scripts/installer/mcp-loopback-tls-contract.test.mjs"),
+      conformanceTest("scripts/installer/pki-contract.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -254,6 +264,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/pr-health.test.mjs",
+        "scripts/check-stuck-auto-merge.test.mjs",
         "scripts/check-failure-readiness.test.mjs",
         "scripts/check-ci-build-cache.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
@@ -283,6 +294,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/pregate-preflight.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/gate-wait.test.mjs",
+        "scripts/gate-local.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
       ),
       // Split out of the command above because these three read the real
@@ -296,6 +308,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/report-principle-vectors.test.mjs",
         "scripts/check-authoring-cost-dimensions.test.mjs",
         "scripts/pre-push-gate-slot-contract.test.mjs",
+        "scripts/lib/pre-push-gate-infrastructure-probe.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
