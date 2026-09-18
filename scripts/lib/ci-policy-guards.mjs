@@ -475,6 +475,16 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
     ], { inputs: ["code"] }),
+    // BI-25EF1456: a "use client" module that reaches @dpf/db / server-only /
+    // a Node built-in through a lib import passes vitest and tsc and fails only
+    // `next build` ("Module not found: fs"), twenty minutes into CI. Diff-scoped:
+    // only client modules the change affects are walked. The touched-route
+    // sweep beside it is a local convenience, not a gate; only its logic is tested.
+    guard("client-server-boundary-guard", "Client/Server Boundary Guard", [
+      node("--test", "scripts/check-no-server-imports-in-client.test.mjs"),
+      node("--test", "scripts/ux-sweep-touched.test.mjs"),
+      node("scripts/check-no-server-imports-in-client.mjs"),
+    ], { inputs: ["code"] }),
     // BI-5CC4159D: `new URL(..., import.meta.url).pathname` is "/D:/..." on
     // Windows, so every filesystem call built on it fails on every Windows host
     // while Linux CI stays green. Third recurrence (#4736, workroom-stall,

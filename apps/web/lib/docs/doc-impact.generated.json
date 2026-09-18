@@ -1800,6 +1800,9 @@
     "scripts/check-no-provider-local-connector-lifecycle.mjs": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "scripts/check-no-server-imports-in-client.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/check-no-unattributable-deferral.mjs": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -2562,6 +2565,7 @@
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
       "scripts/check-build-script-policy.mjs",
+      "scripts/check-no-server-imports-in-client.mjs",
       "scripts/check-stuck-auto-merge.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
