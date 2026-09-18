@@ -41,8 +41,9 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
   });
   afterEach(() => cleanup());
 
-  it("lists registered clients with kind, scopes, live tokens and status", async () => {
+  it("defers the list behind a disclosure that counts the keys, and lists them with kind, scopes, live tokens and status", async () => {
     render(<McpOAuthClientManager />);
+    fireEvent.click(screen.getByText(/Existing keys/));
     const table = await screen.findByRole("table", { name: "Keys for automated tools" });
     expect(within(table).getByText("CI runner")).toBeTruthy();
     expect(within(table).getByText("Automated tool")).toBeTruthy();
@@ -53,6 +54,7 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
   it("creates a headless client and shows the one-time secret with the credentials-file command", async () => {
     createMock.mockResolvedValue({ ok: true, data: { clientId: "dpfoc_new", clientSecret: "sekret", scopes: ["dpf.read", "dpf.work"] } });
     render(<McpOAuthClientManager />);
+    fireEvent.click(screen.getByText(/Existing keys/));
     await screen.findByRole("table", { name: "Keys for automated tools" });
 
     fireEvent.click(screen.getByRole("button", { name: "Add a client" }));
@@ -72,6 +74,7 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
   it("surfaces a refused creation inline instead of pretending", async () => {
     createMock.mockResolvedValue({ ok: false, error: "You do not have permission to manage MCP clients." });
     render(<McpOAuthClientManager />);
+    fireEvent.click(screen.getByText(/Existing keys/));
     await screen.findByRole("table", { name: "Keys for automated tools" });
     fireEvent.click(screen.getByRole("button", { name: "Add a client" }));
     const form = screen.getByRole("form", { name: "Add a client" });
@@ -89,6 +92,7 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
         <McpOAuthClientManager />
       </>,
     );
+    fireEvent.click(screen.getByText(/Existing keys/));
     await screen.findByRole("table", { name: "Keys for automated tools" });
     fireEvent.click(screen.getByRole("button", { name: "Revoke CI runner" }));
     // In-app confirm dialog: assert on its copy, confirm via the stable DOM ref.
@@ -102,6 +106,7 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
   it("hides the revoke action on an already revoked client", async () => {
     listMock.mockResolvedValue({ ok: true, data: [client({ revokedAt: "2026-09-18T06:00:00.000Z", liveTokenCount: 0 })] });
     render(<McpOAuthClientManager />);
+    fireEvent.click(screen.getByText(/Existing keys/));
     const table = await screen.findByRole("table", { name: "Keys for automated tools" });
     expect(within(table).getByText("Revoked")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Revoke CI runner" })).toBeNull();

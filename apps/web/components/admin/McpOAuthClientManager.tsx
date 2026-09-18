@@ -86,6 +86,7 @@ export function McpOAuthClientManager() {
   const [formName, setFormName] = useState("");
   const [formScopes, setFormScopes] = useState<Set<PublicScope>>(() => new Set<PublicScope>(["dpf.read"]));
   const [formError, setFormError] = useState<string | null>(null);
+  const [listOpen, setListOpen] = useState(false);
 
   function refresh() {
     startTransition(async () => {
@@ -191,16 +192,10 @@ export function McpOAuthClientManager() {
   return (
     <Surface as="section" level={1} padding="md" rounded="lg" className="mt-6" aria-labelledby="mcp-oauth-clients-heading">
       <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h2 id="mcp-oauth-clients-heading" className="flex items-center gap-2 text-base font-semibold text-[var(--dpf-text)]">
-            <KeyRound className="h-4 w-4" aria-hidden="true" />
-            Keys for automated tools
-          </h2>
-          <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-            Programs that run with nobody at the screen cannot sign in as you do. Each gets its own key,
-            limited to what you allow here.
-          </p>
-        </div>
+        <h2 id="mcp-oauth-clients-heading" className="flex items-center gap-2 text-base font-semibold text-[var(--dpf-text)]">
+          <KeyRound className="h-4 w-4" aria-hidden="true" />
+          Keys for automated tools
+        </h2>
         <div className="flex shrink-0 gap-2">
           <Button variant="secondary" size="sm" type="button" onClick={refresh} disabled={pending} aria-label="Refresh keys">
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -312,16 +307,34 @@ export function McpOAuthClientManager() {
         );
       })() : null}
 
-      <DataTable
-        columns={columns}
-        rows={clients}
-        getRowKey={(row) => row.clientId}
-        loading={loading}
-        dense
-        ariaLabel="Keys for automated tools"
-        initialSort={{ key: "lastUsed", dir: "desc" }}
-        empty={<span>No keys yet.</span>}
-      />
+      {/* Deferred on arrival (lib/ux-budget disclosure region): the page already
+          carries a long token section, so the explanation and the list open on
+          request. The primary action above stays visible. */}
+      <details
+        open={listOpen}
+        onToggle={(event) => setListOpen((event.currentTarget as HTMLDetailsElement).open)}
+        className="group rounded-md border border-[var(--dpf-border)]"
+      >
+        <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-[var(--dpf-text)]">
+          Existing keys{clients.length > 0 ? ` (${clients.length})` : ""}
+        </summary>
+        <div className="px-3 pb-3">
+          <p className="mb-3 text-sm text-[var(--dpf-muted)]">
+            Programs that run with nobody at the screen cannot sign in as you do. Each gets its own key,
+            limited to what you allow here. Tools that signed in through a browser are listed too.
+          </p>
+          <DataTable
+            columns={columns}
+            rows={clients}
+            getRowKey={(row) => row.clientId}
+            loading={loading}
+            dense
+            ariaLabel="Keys for automated tools"
+            initialSort={{ key: "lastUsed", dir: "desc" }}
+            empty={<span>No keys yet.</span>}
+          />
+        </div>
+      </details>
     </Surface>
   );
 }
