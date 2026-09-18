@@ -45,3 +45,11 @@ test("affectedClientModules includes changed client files and client files impor
   assert.deepEqual(affectedClientModules(["apps/web/components/x/Safe.tsx"], { allSources: all, read, resolveImport }), ["apps/web/components/x/Safe.tsx"]);
   assert.deepEqual(affectedClientModules(["apps/web/lib/unrelated.ts"], { allSources: all, read, resolveImport }), []);
 });
+
+test("directiveOf tolerates pathological comment prefixes in linear time and still reads the directive", () => {
+  const pathological = `${"/*".repeat(5000)}\n"use client";`;
+  const started = Date.now();
+  assert.equal(directiveOf(pathological), null);
+  assert.equal(directiveOf(`/* a */ // b\n/* c\n d */\n"use server";`), "use server");
+  assert.ok(Date.now() - started < 2000);
+});

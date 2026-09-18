@@ -38,7 +38,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WEB_ROOT = "apps/web";
 const SOURCE_FILE = /\.(ts|tsx|mts|cts)$/;
 const TEST_FILE = /\.(test|spec)\.[cm]?tsx?$/;
-const DIRECTIVE = /^\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*["'](use client|use server)["']\s*;?/;
+const DIRECTIVE_LITERAL = /^["'](use client|use server)["']\s*;?/;
 
 /** Specifiers that can never be bundled into a browser. */
 export const SERVER_ONLY_SPECIFIERS = new Set([
@@ -61,8 +61,33 @@ export const SERVER_ONLY_SPECIFIERS = new Set([
 /** `import x from "y"`, `import {a} from "y"`, `export {a} from "y"`, `import "y"` — value imports only. */
 const IMPORT_RE = /(?:^|\n)\s*(import|export)\s+(type\s+)?(?:[^"'\n;]*?\s+from\s+)?["']([^"']+)["']/g;
 
+/**
+ * Skip leading whitespace and comments without a backtracking regex (CodeQL
+ * flagged the nested-quantifier form as exponential on '/*' repetitions).
+ */
+function skipLeadingTrivia(source) {
+  let i = 0;
+  const n = source.length;
+  for (;;) {
+    while (i < n && /\s/.test(source[i])) i += 1;
+    if (source.startsWith("//", i)) {
+      const end = source.indexOf("\n", i);
+      if (end === -1) return n;
+      i = end + 1;
+      continue;
+    }
+    if (source.startsWith("/*", i)) {
+      const end = source.indexOf("*/", i + 2);
+      if (end === -1) return n;
+      i = end + 2;
+      continue;
+    }
+    return i;
+  }
+}
+
 export function directiveOf(source) {
-  const match = DIRECTIVE.exec(source);
+  const match = DIRECTIVE_LITERAL.exec(source.slice(skipLeadingTrivia(source)));
   return match ? match[1] : null;
 }
 
