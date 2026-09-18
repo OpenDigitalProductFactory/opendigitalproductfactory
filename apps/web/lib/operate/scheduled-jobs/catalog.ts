@@ -344,6 +344,21 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "ecosystem-issue-submission-sweep",
+    inngestId: "ecosystem/issue-submission-sweep",
+    honorsEnabledGate: true,
+    name: "Ecosystem: issue submission sweep",
+    purpose:
+      "Submits locally-triaged issue reports to the ecosystem so they are heard, without "
+      + "needing anyone to remember. Halts and asks once if upstream feedback has not been "
+      + "turned on; respects the contribution pause and fork-only mode.",
+    cron: "41 5 * * *",
+    cadence: "Daily (05:41)",
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: null,
+  },
+  {
     jobId: "ecosystem-inbound-issue-triage",
     inngestId: "ecosystem/inbound-issue-triage",
     honorsEnabledGate: true,

@@ -255,8 +255,8 @@ An install on `quiet` gets tier 1 and 2 in-app and nothing else. An install on `
 
 | Phase | Outcome | Depends on |
 |---|---|---|
-| **A** — `BI-96EFB042` | Automated submission sweep + standing consent prompt; non-coding installs stop depending on a human remembering. | §4.1 |
-| **B** — `BI-B423912F` | Federation transport for issue submission, so a linked install's issue is votable rather than opaque. | A |
+| **A** — `BI-96EFB042` ✅ **delivered** | Automated submission sweep + standing consent prompt; non-coding installs stop depending on a human remembering. | §4.1 |
+| **B** — `BI-B423912F` ✅ **delivered** | Federation transport for issue submission, so a linked install's issue is votable rather than opaque. | A |
 | **C** — `BI-F47386ED` ✅ **delivered** | Inbound read path (GitHub issues + demand mirrors) → BacklogItem with submitter provenance. the upstream install can finally *see* the queue. | — (parallel with A) |
 | **F** — `BI-7ED79807` ✅ **delivered** | **Prerequisite.** Populate `applicability` (archetype, capability, platform range) on projection. Until this lands every envelope is archetype-blind and no ballot can be scoped. | — |
 | **G** — `BI-4D924DB4` | Generalise the tri-state applicability evaluator; assemble the consent-gated, three-tier ballot per install. | C, F |
@@ -300,6 +300,37 @@ ignored so a newer peer may add a dimension without breaking an older receiver.
 
 The cron is registered in `SCHEDULED_JOB_CATALOG`; the drift guard caught the
 omission, and an uncatalogued cron runs invisibly.
+
+### 5.5 Implementation notes — Phases A and B, delivered 2026-09-18
+
+**§4.1's planned auth refactor turned out to be unnecessary, and was not done.**
+The design assumed the `manage_platform` requirement had to be split off
+`escalateReportUpstream`. Reading the code, the core is *already* auth-free by
+construction; `manage_platform` gates only the consent **toggle**, which is
+exactly where it belongs. Nothing was changed there — the spec's assumption was
+simply wrong, and inventing a refactor to match it would have loosened an auth
+boundary for no reason.
+
+**The sweep asks once, not once per report.** Consent is evaluated before the
+reports are even loaded, so an install that never opted in does not have its
+issue reports read on a daily cadence, and the operator sees one standing prompt
+rather than a stream. A consent request repeated per defect is how a prompt gets
+permanently dismissed.
+
+**Untriaged reports are left alone.** Only `triaged_local` and
+`awaiting-escalation-ack` are swept; raw `open` noise does not go upstream.
+
+**Daily, not weekly.** A defect should not wait a week to be heard, and the sweep
+costs nothing when there is nothing to send. The batch is bounded at 25 because
+the per-install rate limit is 30/hour — a larger batch would only manufacture
+refusals.
+
+**Phase B is a transport selection, not a pipeline.** `selectTransport` gains one
+case, and demand wins when a trusted federation link exists, because a submission
+filed as an opaque issue cannot be corroborated or voted on. The federation path
+is only taken when a projector was actually injected — a declared link with no
+way to project would otherwise swallow the report silently. Installs without a
+link keep the relay/direct behaviour byte-for-byte.
 
 ## 6. Verification
 
