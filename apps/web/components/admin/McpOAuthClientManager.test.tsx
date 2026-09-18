@@ -43,9 +43,9 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
 
   it("lists registered clients with kind, scopes, live tokens and status", async () => {
     render(<McpOAuthClientManager />);
-    const table = await screen.findByRole("table", { name: "MCP OAuth clients" });
+    const table = await screen.findByRole("table", { name: "Keys for automated tools" });
     expect(within(table).getByText("CI runner")).toBeTruthy();
-    expect(within(table).getByText("Headless")).toBeTruthy();
+    expect(within(table).getByText("Automated tool")).toBeTruthy();
     expect(within(table).getByText("dpf.read, dpf.work")).toBeTruthy();
     expect(within(table).getByText("Active")).toBeTruthy();
   });
@@ -53,32 +53,32 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
   it("creates a headless client and shows the one-time secret with the credentials-file command", async () => {
     createMock.mockResolvedValue({ ok: true, data: { clientId: "dpfoc_new", clientSecret: "sekret", scopes: ["dpf.read", "dpf.work"] } });
     render(<McpOAuthClientManager />);
-    await screen.findByRole("table", { name: "MCP OAuth clients" });
+    await screen.findByRole("table", { name: "Keys for automated tools" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Create headless client" }));
-    const form = screen.getByRole("form", { name: "Create headless client" });
+    fireEvent.click(screen.getByRole("button", { name: "Add a client" }));
+    const form = screen.getByRole("form", { name: "Add a client" });
     fireEvent.change(within(form).getByLabelText(/Client name/), { target: { value: "Laptop gate" } });
     fireEvent.click(within(form).getByLabelText(/Do governed work/));
     fireEvent.click(within(form).getByRole("button", { name: "Create client" }));
 
     await waitFor(() => expect(createMock).toHaveBeenCalledWith({ clientName: "Laptop gate", scopes: ["dpf.read", "dpf.work"] }));
-    const region = await screen.findByRole("region", { name: "New client credentials" });
+    const region = await screen.findByRole("region", { name: "New client key" });
     expect(within(region).getByText("dpfoc_new")).toBeTruthy();
     expect(within(region).getByText("sekret")).toBeTruthy();
-    expect(within(region).getByText(/shown once/)).toBeTruthy();
+    expect(within(region).getByText(/shown only once/)).toBeTruthy();
     expect(within(region).getByText(/mcp-client-credentials\.json/, { selector: "code" })).toBeTruthy();
   });
 
   it("surfaces a refused creation inline instead of pretending", async () => {
     createMock.mockResolvedValue({ ok: false, error: "You do not have permission to manage MCP clients." });
     render(<McpOAuthClientManager />);
-    await screen.findByRole("table", { name: "MCP OAuth clients" });
-    fireEvent.click(screen.getByRole("button", { name: "Create headless client" }));
-    const form = screen.getByRole("form", { name: "Create headless client" });
+    await screen.findByRole("table", { name: "Keys for automated tools" });
+    fireEvent.click(screen.getByRole("button", { name: "Add a client" }));
+    const form = screen.getByRole("form", { name: "Add a client" });
     fireEvent.change(within(form).getByLabelText(/Client name/), { target: { value: "x" } });
     fireEvent.click(within(form).getByRole("button", { name: "Create client" }));
     expect(await screen.findByText("You do not have permission to manage MCP clients.")).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "New client credentials" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "New client key" })).toBeNull();
   });
 
   it("revokes only after the operator confirms, and reports revoked tokens", async () => {
@@ -89,7 +89,7 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
         <McpOAuthClientManager />
       </>,
     );
-    await screen.findByRole("table", { name: "MCP OAuth clients" });
+    await screen.findByRole("table", { name: "Keys for automated tools" });
     fireEvent.click(screen.getByRole("button", { name: "Revoke CI runner" }));
     // In-app confirm dialog: assert on its copy, confirm via the stable DOM ref.
     await screen.findByText("Revoke client");
@@ -102,7 +102,7 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
   it("hides the revoke action on an already revoked client", async () => {
     listMock.mockResolvedValue({ ok: true, data: [client({ revokedAt: "2026-09-18T06:00:00.000Z", liveTokenCount: 0 })] });
     render(<McpOAuthClientManager />);
-    const table = await screen.findByRole("table", { name: "MCP OAuth clients" });
+    const table = await screen.findByRole("table", { name: "Keys for automated tools" });
     expect(within(table).getByText("Revoked")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Revoke CI runner" })).toBeNull();
   });

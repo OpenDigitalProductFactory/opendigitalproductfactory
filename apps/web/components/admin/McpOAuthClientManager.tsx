@@ -32,7 +32,7 @@ import {
   type OAuthClientSummary,
 } from "@/lib/actions/oauth-clients";
 import { buildCredentialsClientSnippets } from "@/lib/auth/mcp-setup-snippets";
-import { PUBLIC_SCOPES, PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-scope-map";
+import { PUBLIC_SCOPES, PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-public-scopes";
 
 type View = { kind: "idle" } | { kind: "form" } | { kind: "issued"; created: CreatedCredentialsClient };
 
@@ -42,7 +42,7 @@ function formatDate(value: string | null): string {
 }
 
 const KIND_LABEL: Record<string, string> = {
-  credentials: "Headless",
+  credentials: "Automated tool",
   dcr: "Browser (self-registered)",
   preregistered: "Browser (pre-registered)",
 };
@@ -194,12 +194,12 @@ export function McpOAuthClientManager() {
         <div>
           <h2 id="mcp-oauth-clients-heading" className="flex items-center gap-2 text-base font-semibold text-[var(--dpf-text)]">
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            MCP OAuth clients
+            Keys for automated tools
           </h2>
           <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-            Headless clients for CI, the local-CI gate and other callers with no browser. Each one exchanges its
-            secret for short-lived access tokens capped by the scopes you grant here and by your own role.
-            Browser clients that authorized themselves are listed too.
+            Some programs run with nobody at the screen: the local-CI gate, a CI runner, a scheduled job. They
+            cannot sign in the way you do, so each gets its own key. A key can only do what you allow here, and
+            never more than your own role allows. Tools that signed in through a browser are listed too.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -209,7 +209,7 @@ export function McpOAuthClientManager() {
           </Button>
           <Button variant="primary" size="sm" type="button" onClick={openForm} disabled={view.kind === "form"}>
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            Create headless client
+            Add a client
           </Button>
         </div>
       </div>
@@ -228,7 +228,7 @@ export function McpOAuthClientManager() {
               event.preventDefault();
               submit();
             }}
-            aria-label="Create headless client"
+            aria-label="Add a client"
           >
             <TextField
               name="clientName"
@@ -272,9 +272,9 @@ export function McpOAuthClientManager() {
       {view.kind === "issued" ? (() => {
         const snippets = buildCredentialsClientSnippets(view.created.clientId, view.created.clientSecret);
         return (
-          <Surface level={2} padding="md" rounded="md" className="mb-4" role="region" aria-label="New client credentials">
-            <Notice variant="warn" title="Copy the secret now — it is shown once">
-              The platform keeps only a hash. If it is lost, revoke this client and create another.
+          <Surface level={2} padding="md" rounded="md" className="mb-4" role="region" aria-label="New client key">
+            <Notice variant="warn" title="Copy the secret now — it is shown only once">
+              The platform keeps only a fingerprint of it. If it is lost, revoke this client and add another.
             </Notice>
             <dl className="mt-3 grid gap-3 md:grid-cols-[auto_1fr_auto] md:items-center">
               <dt className="text-sm font-medium text-[var(--dpf-text)]">Client id</dt>
@@ -307,7 +307,7 @@ export function McpOAuthClientManager() {
             </div>
             <div className="mt-3">
               <Button variant="secondary" size="sm" type="button" onClick={() => setView({ kind: "idle" })}>
-                Done — I have saved it
+                Done, I have saved it
               </Button>
             </div>
           </Surface>
@@ -320,9 +320,9 @@ export function McpOAuthClientManager() {
         getRowKey={(row) => row.clientId}
         loading={loading}
         dense
-        ariaLabel="MCP OAuth clients"
+        ariaLabel="Keys for automated tools"
         initialSort={{ key: "lastUsed", dir: "desc" }}
-        empty={<span>No clients yet. Create a headless client to let the local-CI gate and CI authenticate without a personal token.</span>}
+        empty={<span>No clients yet. Add one so the local-CI gate and CI can sign in with their own key instead of your personal token.</span>}
       />
     </Surface>
   );
