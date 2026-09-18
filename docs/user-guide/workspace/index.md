@@ -163,6 +163,24 @@ round that is still open two hours after it was due can be escalated the same
 way; the page shows how many are waiting. Nothing here decides treatment. It
 makes sure a person sees it.
 
+### Adoptions
+
+**Adoptions** turns an enquiry into a decision. An application records the
+applicant and the screening answers a rescue actually decides on: housing,
+other pets, children, landlord permission, and experience. It moves through
+screening, a meet-and-greet and a home check (each a dated visit on the
+animal's work list), and then approval.
+
+Approval reserves the animal for that one applicant. Nobody else can be
+promised the same animal, and an animal that is not placement-ready, or is on a
+hold, cannot be reserved. Completing the adoption records the adopter, closes
+custody, withdraws the public listing, frees the kennel, and records the fee
+as a donation toward that animal's care. It is never a price.
+
+A returned animal always comes back. Recording the return keeps the placement
+and its reason in history, reopens custody as a return, and puts the animal
+back through the intake checklist before it can be placed again.
+
 If every place is taken, the board adds a review. It is the only time it appears.
 
 The review lists the animals that have waited longest with nobody waiting for
