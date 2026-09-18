@@ -728,7 +728,7 @@ succeeds. `evidencePending` qualifies a PASS; it never establishes one. A run
 blocked by control-plane starvation also preserves its local evidence and sets
 the flag while `gatePassed` stays `false`, so `pregate:status` reports that
 record as `INCONCLUSIVE` and the fix is to re-run pregate on the SHA —
-`--finalize-evidence` has no published PASS to finalize and refuses (BI-41C3E303). Failure evidence also carries `failureSummary`, a bounded list of
+`--finalize-evidence` has no published PASS to finalize and refuses (PR #5295). Failure evidence also carries `failureSummary`, a bounded list of
 failed tests/checks and omitted counts, plus an explicit pointer to
 BI-A4EC0EA6 for code-graph impacted-test recommendations. The complete output
 from the most recent run is retained outside the working tree at the git-private
@@ -822,6 +822,7 @@ Allowlisted codes (see `LOCAL_CI_OVERRIDE_REASON_CODES` in
 | `operator-emergency` | Named human consciously waived the gate |
 | `external-contribution-no-install` | No local DPF install / cannot run pregate |
 | `install-bootstrap-recovery` | Sandbox/install is the patient under repair |
+| `gate-infrastructure-unavailable` | Push-time only; the hook itself re-attempts the lease claim and records the failure (401, refused connection, 5xx) — refused when the claim succeeds; reads as gate-**unrun** |
 
 Push-time `DPF_SKIP_PREPUSH_GATE_REASON` must use the same code format or
 `pr:health` treats the recorded skip as a **blocker**, not a pass. The normal

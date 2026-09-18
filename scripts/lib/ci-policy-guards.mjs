@@ -306,6 +306,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/report-principle-vectors.test.mjs",
         "scripts/check-authoring-cost-dimensions.test.mjs",
         "scripts/pre-push-gate-slot-contract.test.mjs",
+        "scripts/lib/pre-push-gate-infrastructure-probe.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),

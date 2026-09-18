@@ -2044,6 +2044,9 @@
       "docs/architecture/build-gate-runbook.md",
       "docs/founder-kernel/wiki/principles/dco-sign-off-required.md"
     ],
+    "scripts/pre-push-gate-infrastructure-probe.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/pre-push-gate-slot-contract.test.mjs": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -2553,6 +2556,7 @@
       "scripts/lib/dco-signoff.mjs",
       "scripts/lib/gate-exit-classification.mjs",
       "scripts/pre-push-dco-check.mjs",
+      "scripts/pre-push-gate-infrastructure-probe.mjs",
       "scripts/pre-push-gate-slot-contract.test.mjs",
       "scripts/pregate-preflight.mjs",
       "scripts/pregate-status.mjs"
