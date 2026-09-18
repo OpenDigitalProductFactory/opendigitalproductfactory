@@ -459,6 +459,51 @@ describe("initiative readiness recovery routing", () => {
     ]);
   });
 
+  it("routes a small shape's research to its author instead of demanding a spec (BI-3B323B6A)", async () => {
+    const smallDecision = {
+      ...decision,
+      shapeDecision: { declared: "small" as const, effective: "small" as const, sensitivity: "low" as const, raised: false },
+      unmet: [readinessRequirement({ code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author" })],
+    };
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: smallDecision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(
+        boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+      ) } },
+      dispatchContext,
+      canonicalArtifact: { resolved: false, nextAction: "No design document under docs/superpowers/specs/ changed between a71ddc26 and d2f70ae5." },
+    });
+
+    expect(recovery.reviewerRoutes).toEqual([]);
+    expect(recovery.escalations).toMatchObject([{
+      accountableRole: "design-author",
+      toolName: "record_initiative_evidence",
+      grant: "initiative_evidence_write",
+      reason: "research-evidence-required",
+    }]);
+    expect(recovery.escalations[0]?.nextAction).toContain("No canonical design is required");
+    expect(recovery.escalations[0]?.nextAction).not.toContain("docs/superpowers/specs/ changed");
+  });
+
+  it("keeps the spec-bound research route for a large shape and for an unshaped item", async () => {
+    for (const shapeDecision of [
+      { declared: "large" as const, effective: "large" as const, sensitivity: "low" as const, raised: false },
+      null,
+    ]) {
+      const recovery = await resolveInitiativeReviewerRecovery({
+        decision: { ...decision, shapeDecision, unmet: [readinessRequirement({ code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author" })] },
+        currentAgentId: "AGT-AUTHOR",
+        db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(
+          boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        ) } },
+        dispatchContext,
+        canonicalArtifact: { resolved: false, nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry." },
+      });
+      expect(recovery.escalations).toMatchObject([{ accountableRole: "design-author", reason: "no-canonical-artifact" }]);
+    }
+  });
+
   it("surfaces an unmet requirement whose accountable role owns no writer lane", async () => {
     const recovery = await resolveInitiativeReviewerRecovery({
       decision: {
