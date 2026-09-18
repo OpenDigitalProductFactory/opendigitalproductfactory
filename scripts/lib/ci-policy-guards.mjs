@@ -299,6 +299,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
+      // BI-78B653D5: the gate's credential resolution (client_credentials
+      // first, PAT until retirement, actionable refusal) against a loopback
+      // stub authorization server.
+      node("--test", "scripts/lib/mcp-credential.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -580,6 +584,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-no-unattributable-deferral.mjs"),
     ], { inputs: ["code"] }),
     guard("janitor-tests", "Janitor Tests", [
+      // BI-062F5687: a guard-run git fixture must never inherit the hook's
+      // GIT_DIR; runs the janitor freshness fixture under one, against the live
+      // tree, and proves the inherited repository is untouched.
+      conformanceTest("scripts/lib/git-hook-env.test.mjs"),
       node(
         "--test",
         "scripts/lib/runtime-artifact-janitor.test.mjs",
@@ -659,6 +667,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // reads the repository's own hook files, so it is a conformance assertion
       // and must not be stripped from the host-side preflight (BI-7B249AFE).
       conformanceTest("scripts/hooks/converge-git-hooks.test.mjs"),
+      // BI-9A46E89C. CONFORMANCE, not a plain self-test: one case asserts on the
+      // live hook source (that it never fetches at SessionStart), so stripping it
+      // host-side would remove the only check of a contract that protects session
+      // startup. The hook is also the only thing that tells a session its RULEBOOK
+      // is stale -- a condition the session cannot detect itself, because the
+      // stale AGENTS.md does not know it is stale. 6s.
+      conformanceTest("scripts/hooks/worktree-freshness.test.mjs"),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
     ]),
   ]),
