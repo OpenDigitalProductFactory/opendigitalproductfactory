@@ -2445,7 +2445,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 13
+    "textMass": 4
   },
   "apps/web/app/(shell)/workspace/rescue/intake/actions.ts": {
     "vocabulary": 0,
@@ -4342,6 +4342,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 22
+  },
+  "apps/web/components/animal-welfare/VeterinaryOperations.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 91
   },
   "apps/web/components/attention/AttentionInbox.tsx": {
     "vocabulary": 0,
