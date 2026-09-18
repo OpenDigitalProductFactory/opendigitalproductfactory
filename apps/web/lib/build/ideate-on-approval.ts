@@ -34,6 +34,31 @@
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { classifyRetrySafePreDispatchFailure } from "./build-engine-selection";
+
+/** BI-0B95D268: poll the sandbox container until it runs again (bounded). */
+export async function waitForSandboxRunning(opts: {
+  timeoutMs?: number;
+  intervalMs?: number;
+  isRunning?: () => Promise<boolean>;
+  sleep?: (ms: number) => Promise<void>;
+} = {}): Promise<boolean> {
+  const timeoutMs = opts.timeoutMs ?? 3 * 60 * 1000;
+  const intervalMs = opts.intervalMs ?? 10_000;
+  const isRunning = opts.isRunning ?? (async () => {
+    const [{ isSandboxRunning }, { SANDBOX_CONTAINER }] = await Promise.all([
+      import("./sandbox/sandbox"),
+      import("./sandbox/agent-cli-runtime"),
+    ]);
+    return isSandboxRunning(SANDBOX_CONTAINER);
+  });
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await isRunning()) return true;
+    if (Date.now() >= deadline) return false;
+    await sleep(intervalMs);
+  }
+}
 import { formatBuildEngineSelectionEvidence } from "./build-engine-selection-runtime";
 
 type DispatchOutcome =
@@ -317,6 +342,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const attemptCandidates = [selection.selected, ...selection.fallbackChain.slice(0, 1)];
     let ideateResult: Awaited<ReturnType<typeof dispatchIdeateResearch>> | null = null;
     let resolvedAttempt = selection.selected;
+    let infrastructureRetried = false;
     for (let attemptIndex = 0; attemptIndex < attemptCandidates.length; attemptIndex += 1) {
       const attempt = attemptCandidates[attemptIndex]!;
       resolvedAttempt = attempt;
@@ -338,6 +364,24 @@ export async function dispatchIdeateForApprovedBuild(params: {
         sensitivity: routingSensitivity,
       });
       if (ideateResult.success) break;
+      // BI-0B95D268: the harness killed the engine (a sandbox restart during a
+      // self-upgrade swap is the common case). Wait for the sandbox to come
+      // back, then re-run the SAME attempt once — before this, the build sat
+      // as a "model failure" until the 20-minute stale window plus the
+      // 10-minute reconciler tick re-drove it.
+      if (ideateResult.infrastructure && !infrastructureRetried) {
+        infrastructureRetried = true;
+        await logActivity(
+          `Infrastructure failure, not a model verdict: ${(ideateResult.error ?? "").slice(0, 160)} — waiting for the sandbox, then retrying the same engine once.`,
+        );
+        const ready = await waitForSandboxRunning();
+        if (ready) {
+          attemptIndex -= 1;
+          continue;
+        }
+        await logActivity("Sandbox did not come back within the wait window; leaving the build for the stranded-build reconciler.");
+        break;
+      }
       const retryClass = classifyRetrySafePreDispatchFailure({
         message: ideateResult.error ?? "",
         durationMs: ideateResult.durationMs,

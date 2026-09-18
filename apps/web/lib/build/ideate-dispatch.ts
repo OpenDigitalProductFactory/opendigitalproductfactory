@@ -35,6 +35,13 @@ export type IdeateResult = {
   success: boolean;
   durationMs: number;
   error?: string;
+  /**
+   * BI-0B95D268: true when the engine process was killed or lost its runtime
+   * (exit 137/143/124, a signal, or no output at all) — the harness failed,
+   * the model gave no verdict. The caller re-dispatches once the sandbox is
+   * back instead of treating it as an inference failure.
+   */
+  infrastructure?: boolean;
 };
 
 /**
@@ -782,12 +789,36 @@ export async function dispatchIdeateResearch(params: {
       } catch { /* no file */ }
     }
 
+    // BI-0B95D268: a process the harness killed (sandbox restart during a
+    // self-upgrade swap, OOM, SIGTERM) is not a model failure and must not be
+    // labelled as one — nor as "Codex" when Claude was the engine.
+    const exitCode = typeof (execErr as { code?: unknown }).code === "number"
+      ? (execErr as { code: number }).code
+      : null;
+    const signal = typeof (execErr as { signal?: unknown }).signal === "string"
+      ? (execErr as { signal: string }).signal
+      : null;
+    const { classifyBlockedCause } = await import("./blocked-cause");
+    const cause = classifyBlockedCause({
+      content: `${execErr.stdout ?? ""}\n${execErr.stderr ?? ""}`,
+      exitCode,
+    });
+    if (cause === "infrastructure") {
+      return {
+        designDoc: null,
+        rawOutput: execErr.stdout ?? "",
+        success: false,
+        durationMs,
+        infrastructure: true,
+        error: `${dispatchEngine} engine process was killed or lost its runtime (exit ${exitCode ?? "?"}${signal ? `, ${signal}` : ""}) — an infrastructure failure, not a model verdict.`,
+      };
+    }
     return {
       designDoc: null,
       rawOutput: execErr.stdout ?? "",
       success: false,
       durationMs,
-      error: `Codex CLI error: ${execErr.message?.slice(0, 500) ?? "Unknown"}`,
+      error: `${dispatchEngine} CLI error: ${execErr.message?.slice(0, 500) ?? "Unknown"}`,
     };
   }
 }
