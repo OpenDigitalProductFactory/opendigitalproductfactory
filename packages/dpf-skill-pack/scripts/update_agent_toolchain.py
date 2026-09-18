@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlparse
 
 
 PLUGIN_NAME = "dpf-platform"
@@ -655,21 +656,53 @@ def ensure_codex_config(
     return write_text_if_changed(path, text)
 
 
+def mcp_client_bearer_header_required(endpoint: str) -> bool:
+    """Whether a Claude MCP client config for `endpoint` must carry the header.
+
+    Python mirror of mcpClientBearerHeaderRequired() in
+    packages/integration-shared/src/mcp-client-credential-policy.ts (BI-46B636B0).
+    This script cannot import the TypeScript workspace, so the rule is mirrored
+    here and pinned by a test that asserts both directions. Keep the two in
+    lockstep - the JSON shape is mirrored the same way and for the same reason.
+
+    The two credential paths are mutually exclusive, and the URL scheme decides:
+
+      https -> NO header. The MCP client runs OAuth only over https; a pinned
+               Authorization header disables its OAuth fallback outright, so
+               leaving one here would silently prevent the self-renewing
+               credential path from ever engaging.
+      http  -> KEEP the header. The client will not run OAuth over plain http
+               even on loopback, so the ${DPF_MCP_BEARER_TOKEN} reference is the
+               ONLY credential path; dropping it leaves the install with none.
+
+    Fails safe, exactly as the TypeScript does: an endpoint that will not parse
+    keeps the header, because losing a credential is worse than keeping one that
+    is merely redundant.
+    """
+    try:
+        parsed = urlparse(endpoint)
+    except ValueError:
+        return True
+    return parsed.scheme != "https"
+
+
 def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
-    """Keep the packaged Claude MCP descriptor current for standalone installs."""
+    """Keep the packaged Claude MCP descriptor current for standalone installs.
+
+    Scheme-aware since BI-FA2C46D7. This generator previously pinned the bearer
+    header unconditionally, which is correct for today's http install and would
+    have been wrong the moment the endpoint moved to https: the next bootstrap
+    run would have re-pinned a header that disables the OAuth the move exists to
+    enable, and silently undone the transition.
+    """
     lazy_host_mcp_url = with_mcp_catalog_tier(mcp_url, "full")
-    content = json.dumps(
-        {
-            "mcpServers": {
-                "dpf": {
-                    "type": "http",
-                    "url": "${DPF_MCP_URL:-" + lazy_host_mcp_url + "}",
-                    "headers": {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"},
-                }
-            }
-        },
-        indent=2,
-    ) + "\n"
+    server: dict[str, object] = {
+        "type": "http",
+        "url": "${DPF_MCP_URL:-" + lazy_host_mcp_url + "}",
+    }
+    if mcp_client_bearer_header_required(lazy_host_mcp_url):
+        server["headers"] = {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"}
+    content = json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n"
     if dry_run:
         return True
     return write_text_if_changed(skill_pack_path / "claude.mcp.json", content)
