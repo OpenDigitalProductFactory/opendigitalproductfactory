@@ -63,6 +63,14 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **Build Studio mirrors this gate.** Per-task and pre-ship verification in the sandbox runs typecheck + production build. A Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox. Implementation status: landed ⟦runtime: dated snapshot, not doctrine — re-audited 2026-06-19; re-confirm against the cited files⟧ — the sandbox shells `npx tsc --noEmit` and `npx vitest run` (`apps/web/lib/build/coding-agent.ts`), the specialist/review prompts require `NODE_ENV=production pnpm --filter web build` before ship (`apps/web/lib/build/build-agent-prompts.ts`), and the orchestrator scopes the verdict to the build's own diff and gates the build→review transition on it (`apps/web/lib/build/build-orchestrator.ts`, `apps/web/lib/queue/functions/build-review-verification.ts`).
 
+## Auto-merge armed is not auto-merge happening (BI-53BE1C77)
+
+Arming auto-merge (`gh pr merge <n> --squash --auto`) is a promise that fires only when every check is green. When a check stays red, GitHub sends no signal that the promise will never be kept, and the merge-queue churn watch only sees PRs that reached the queue — a PR blocked *before* the queue never does. PR #5333 sat six days like this, `BLOCKED` with auto-merge armed, and nobody was told.
+
+`.github/workflows/stuck-auto-merge-alarm.yml` runs hourly and posts **one comment per stuck head SHA** on any open, non-draft PR that has had auto-merge armed while `BLOCKED` / `DIRTY` / `BEHIND` (or with a failing check) for at least four hours, naming the failing checks. The clock restarts on a push, on re-arming, or on a check completing, so a fresh push is never flagged early; a PR with a check still running is a transient and is never flagged. Pure logic: `scripts/check-stuck-auto-merge.mjs` (`findStuckPullRequests`, `shouldComment`). Run it locally with `node scripts/check-stuck-auto-merge.mjs --dry-run`.
+
+The alarm is GitHub-side only. The in-portal Needs-you inbox does not yet carry it: the contributor PR snapshot (`apps/web/lib/contributor-change-lanes/`) is read from the `/pulls` list endpoint, which returns neither `mergeable_state` nor the checks, and carries no auto-merge field — so an attention source over it would have nothing to read. That extension is a follow-up, not a half-built source.
+
 ## A merged pull request is delivered, not discovered (BI-A6E4D205)
 
 The thread that pushes should be able to end at the push. It could not, because nothing told the platform when a pull request merged — it went looking, on a timer.
