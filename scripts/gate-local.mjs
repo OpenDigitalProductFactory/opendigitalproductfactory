@@ -38,6 +38,7 @@ export const LOCAL_GATES = Object.freeze([
   { id: "clock-bombs", command: ["node", "scripts/check-test-clock-bombs.mjs"] },
   { id: "module-size", command: ["node", "scripts/check-module-size.mjs"] },
   { id: "one-action-result", command: ["node", "scripts/check-no-local-action-result.mjs"] },
+  { id: "client-server-boundary", command: ["node", "scripts/check-no-server-imports-in-client.mjs"] },
   { id: "prose-lint", command: ["pnpm", "run", "check:prose-lint"] },
 ]);
 
