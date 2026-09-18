@@ -1135,6 +1135,7 @@
       "publishedPortal": false,
       "anchors": [
         "build-gate-runbook",
+        "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205"
       ]
     },
