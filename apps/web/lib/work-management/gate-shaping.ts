@@ -26,7 +26,13 @@
 // gate requirement, written by someone who has never read this file, inherits
 // the contract by construction rather than by remembering to.
 //
-// Spec: docs/superpowers/specs/2026-08-23-decision-concierge-design.md §4.7
+// Spec: docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md §9
+// (this file is the "closed Record" that §9's rule 1 names). The same rule
+// generalised past this chokepoint is §10, in
+// docs/superpowers/specs/2026-09-15-third-state-is-typed-addendum-design.md —
+// the dispositions here map onto the platform vocabulary in
+// lib/shared/outcome-disposition.ts: shape → awaiting-input, escalate →
+// awaiting-person, hard-no → refused.
 
 import { getWorkCaseAction } from "./action-registry";
 import type { WorkCaseActionVerb } from "./case-types";

@@ -73,7 +73,7 @@ Findings reconcile into `EaConformanceIssue` beside the structural ones (visible
 
 ## Evidence payloads never live inline
 
-**The ceiling (BI-39AAE9B8, EP-A33A5C61 slice 2).** A ledger row records *that* something happened and what it carried, by digest. Any string leaf above `EVIDENCE_INLINE_CEILING_BYTES` (64 KB, [`apps/web/lib/evidence/bounded-output.ts`](../../apps/web/lib/evidence/bounded-output.ts)) leaves the JSON column:
+**The ceiling (BI-39AAE9B8, EP-A33A5C61 slice 2).** A ledger row records *that* something happened and what it carried, by digest. Any string leaf above `EVIDENCE_INLINE_CEILING_BYTES` (64 KB, [`apps/web/lib/evidence/bounded-evidence-output.ts`](../../apps/web/lib/evidence/bounded-evidence-output.ts)) leaves the JSON column:
 
 - **Evidence writers** (`recordLocalIntegrationResult` and anything else that persists a console log or report body) call `offloadEvidenceOutput`: the bytes are written once to the content-addressed blob store (`lib/documents/blob-storage.ts`, tracked by a `DocumentBlob` row keyed on sha256) and the record keeps a head+tail excerpt — still a string, so readers that want the failing tail keep working — plus `outputBlob: {sha256, storageKey, sizeBytes}`.
 - **The tool-execution ledger** (`lib/governed-tool-audit.ts`) applies `boundLargeStrings` to every parameter tree: an oversized leaf becomes `{__dpfBounded, sha256, byteLength, head}`. Two ledgers carrying the same log converge on one file and one row.

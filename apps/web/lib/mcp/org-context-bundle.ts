@@ -22,7 +22,7 @@
 import {
   resolveBusinessProfile,
   resolveStanceVectors,
-  STANCE_VECTOR_KEYS,
+  seededStanceVectorKeys,
   type ArchetypeBusinessProfile,
   type ArchetypeStanceVectors,
 } from "@/lib/onboarding/archetype-business-context";
@@ -157,7 +157,10 @@ export function formatOrgContextInstructions(
     .filter(Boolean)
     .join(" · ");
 
-  const stances = STANCE_VECTOR_KEYS.map((key) => {
+  // Only the vectors this archetype is actually seeded (BI-0902BAE9). Telling a
+  // software platform's coworkers how to behave in a customer's home would be
+  // noise at best; at worst it invites a stance nobody here has a view on.
+  const stances = seededStanceVectorKeys({ industry: bundle.industry }).map((key) => {
     const s = bundle.stanceVectors[key];
     const ceiling =
       typeof s.ceilingUsd === "number" ? ` (authority ceiling ~$${s.ceilingUsd})` : "";
@@ -174,7 +177,7 @@ export function formatOrgContextInstructions(
     `How we decide: ${p.howWeDecide}`,
     `Supply/vendor posture: ${p.supplyChain}`,
     `Standing stances (owner-editable starters):\n${stances}`,
-    `DECISION ROUTING: for a decision about operating THIS organization's business (pricing, staffing, customers, spend, growth), call the evaluate_org_business_decision tool — it is scored against the organization's own recorded stance and doctrine (its WWWD profile) and escalates to a human when the organization's confidence is not high enough for the risk. For a decision about building the DPF platform itself, use principle_decide, which is governed by the platform/founder kernel.`,
+    `DECISION ROUTING: name the scope that OWNS the question before you ask anything to answer it. For a decision about operating THIS organization's business (pricing, staffing, customers, spend, growth, what it promises, how it treats customer data), call evaluate_org_business_decision with decisionScope "wwwd" — it is scored against the organization's own recorded stance (its WWWD profile) and escalates to a human when confidence is not high enough for the risk. For a decision about building or operating the DPF platform itself, or about how a supplier's product works, use principle_decide (the founder kernel). For what a qualified practitioner should do — legal, privacy, regulatory, clinical, accounting — use evaluate_profession_decision: the business sets its posture around a craft but does not decide the craft answer, and lawful basis is not a business preference. If you cannot tell which scope owns it, ask the owner rather than defaulting to the business gate; a question the business never owned cannot be answered there, it only waits in the queue.`,
   ]
     .filter(Boolean)
     .join("\n\n");

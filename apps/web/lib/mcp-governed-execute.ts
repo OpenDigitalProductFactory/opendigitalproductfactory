@@ -9,6 +9,8 @@
 
 import { prisma } from "@dpf/db";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
+import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
+import { approvalPendingResult } from "./govern/authority/approval-pending-result";
 import type { CoworkerAuthorityDecision } from "./govern/authority/coworker-authority-decision";
 import {
   enforceCoworkerToolAuthority,
@@ -37,6 +39,7 @@ import {
   type ToolResult,
 } from "./mcp-tools";
 import { coerceMcpToolArgs } from "./mcp-arg-coercion";
+import { canonicalWorkroomToolName } from "./tak/workroom-tool-aliases";
 import {
   setGovernedToolAuditOverridesForTests,
   updateGovernedToolAudit as updateAudit,
@@ -376,11 +379,14 @@ function rejectionResult(
   rejection: GovernedExecuteRejection,
   detail: string,
 ): GovernedExecuteResult {
-  const message = `${toolName} rejected: ${detail}`;
+  // Only a settled no is worded "rejected"; see governed-rejection-disposition.
+  const disposition = GOVERNED_REJECTION_DISPOSITION[rejection];
+  const message = rejectionMessage(toolName, detail, disposition);
   return {
     success: false,
     error: rejection,
     message,
+    disposition,
     governance: { rejected: rejection },
   };
 }
@@ -414,6 +420,7 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
 export async function governedExecuteTool(
   args: GovernedExecuteArgs,
 ): Promise<GovernedExecuteResult> {
+  args = { ...args, toolName: canonicalWorkroomToolName(args.toolName) };
   let approvedAuthorityEnvelopeId: string | null = null;
   let authorityDecisionId: string | undefined;
   let alignmentDecision: AlignmentGateDecision | null = null;
@@ -510,11 +517,13 @@ export async function governedExecuteTool(
     );
     if (authorityGate.outcome === "reject") {
       const result: GovernedExecuteResult = {
-        ...rejectionResult(
-          args.toolName,
-          authorityGate.rejection,
-          authorityGate.message,
-        ),
+        ...(authorityGate.rejection === "approval_required"
+          ? approvalPendingResult(args.toolName, authorityGate.message, authorityGate.data)
+          : rejectionResult(
+            args.toolName,
+            authorityGate.rejection,
+            authorityGate.message,
+          )),
         ...(authorityGate.data ? { data: authorityGate.data } : {}),
         governance: {
           rejected: authorityGate.rejection,

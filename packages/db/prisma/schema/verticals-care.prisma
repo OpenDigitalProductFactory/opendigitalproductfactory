@@ -50,6 +50,8 @@ model PatientProfile {
   @@index([organizationId, status])
   @@index([principalId])
   @@index([mergedIntoPatientProfileId])
+  @@index([recordedByPrincipalId])
+  @@index([verifiedByPrincipalId])
 }
 
 /// Effective-dated human relationship authority for a patient. This does not
@@ -96,6 +98,8 @@ model PatientAuthority {
   @@index([granteePrincipalId, status])
   @@index([expiresAt])
   @@index([supersedesAuthorityId])
+  @@index([revokedByPrincipalId])
+  @@index([verifiedByPrincipalId])
 }
 
 /// Versioned patient consent or privacy restriction. A deny directive is
@@ -142,6 +146,8 @@ model PatientConsentDirective {
   @@index([organizationId, patientProfileId, status])
   @@index([expiresAt])
   @@index([supersedesDirectiveId])
+  @@index([revokedByPrincipalId])
+  @@index([verifiedByPrincipalId])
 }
 
 /// Organization-owned definition of a clinical or dental visit. StorefrontItem

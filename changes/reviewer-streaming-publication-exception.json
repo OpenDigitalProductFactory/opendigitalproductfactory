@@ -1,0 +1,57 @@
+{
+  "kind": "operator-authorized-semantic-publication-disposition",
+  "backlogItemId": "BI-87148687",
+  "workroomId": "WC-64E1A7A1",
+  "branch": "fix/reviewer-streaming-contract",
+  "scope": "Only the semantic-pass publication condition for the assembled reviewer streaming-contract and exact canonical CI evidence-attribution repair. The autonomous-origin bootstrap is already merged and is not duplicated here.",
+  "authorization": "On 2026-09-15 the operator-directed coordinating task explicitly authorized this checked-in AGENTS.md section 1 exception after the original review and its single authorized recovery were infrastructure-inconclusive. This is a new exception for the full repair, not reuse of the expired origin-bootstrap exception and not a semantic approval.",
+  "semanticPublicationException": {
+    "status": "SKIPPED/INCONCLUSIVE; NOT PASSED",
+    "reviewedSourceSha": "92128a1c202975ce0b48220c5f95388658a631c4",
+    "baseSha": "efd1796e3eefb2c4933ce26c07f6717d9ce9ccd2",
+    "baseTreeHash": "5432bd5c7a8448a0c71bcdd18cf267b150b7967b",
+    "headTreeHash": "789d185a3f0d278ae88ff9ab2b67be580e338b86",
+    "diffDigest": "49e515ff7b766a170ace695c2e43d4b8e793d465c5c16f358a05cba431073d1e",
+    "taskRunId": "TR-GATE-139993341C2BF84BFFBC695D",
+    "requestDigest": "88dc5e860d547544d382c71d0524de2f450145f37aaa7056055db6640ef50c17",
+    "attempts": [
+      {
+        "recoveryAttempt": 0,
+        "outcome": "INCONCLUSIVE; no semantic receipt",
+        "reason": "provider-outcome-uncertain",
+        "provider": "local",
+        "adapterStatus": "error",
+        "errorClass": "network",
+        "error": "Network error calling local: fetch failed",
+        "durationMs": 414905,
+        "startedAt": "2026-09-15T06:11:56.806Z",
+        "finishedAt": "2026-09-15T06:18:51.711Z",
+        "checkpointDisposition": "Original checkpoints preserved as superseded with providerOutcome unknown by the supported recovery action."
+      },
+      {
+        "recoveryAttempt": 1,
+        "authorizedAt": "2026-09-15T06:26:32.455Z",
+        "outcome": "INCONCLUSIVE; no semantic receipt",
+        "reason": "review-deadline-exhausted",
+        "deadlineAt": "2026-09-15T06:41:56.560Z",
+        "checkpointDisposition": "Both change-reviewer and AGT-181 recovery-1 checkpoints had null outputs when deadline exhaustion was verified. No completed reviewer verdict is asserted."
+      }
+    ],
+    "freshness": "This signed disposition changes HEAD. Prior canonical CI evidence is historical, not final-tree verification; rerun affected guards and the full canonical pregate for the final commit. No review receipt approves this amended tree.",
+    "stopCondition": "Stop on any protected refusal. Do not change policy, synthesize a passing receipt, mutate checkpoints or authority, reset the expired request, write directly to the database, or use skip flags."
+  },
+  "protectedRequirements": [
+    "fresh canonical exact-tree integration gate on final SHA",
+    "DCO on every commit",
+    "normal pre-push guards",
+    "regular ready PR and mechanical pr:ready/pr:health",
+    "GitHub PR protection and merge queue",
+    "grant intersection and sensitivity clearance",
+    "destructive and production-integrity controls",
+    "canonical self-upgrade",
+    "live functional verification before claiming repair"
+  ],
+  "expiresWhen": "This full-repair PR merges or the branch is abandoned. Any further substantive code change requires a new review or explicit operator disposition.",
+  "docsImpact": "The branch includes docs/architecture/ai-routing-document-map.md and docs/superpowers/specs/2026-09-14-reviewer-streaming-contract-design.md. This disposition records a run-specific exception only; it changes no standing policy or product behavior.",
+  "remainingObligations": "Publication, protected merge, canonical deployment and live functional proof remain required. This file does not mark BI-87148687 or the original BI-B19AF1F3 objective complete. Existing Workroom authority and readiness findings remain unchanged."
+}

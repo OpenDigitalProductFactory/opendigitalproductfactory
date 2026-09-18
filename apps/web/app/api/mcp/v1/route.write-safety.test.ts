@@ -105,7 +105,7 @@ describe("POST — mutating tool safety", () => {
     expect(prisma.taskRun.update).not.toHaveBeenCalled();
   });
 
-  it("allows write-scoped tokens to call create_workroom", async () => {
+  it.each(["create_workroom", "create_work_capsule"])("allows write-scoped tokens to call %s", async (name) => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_write",
       userId: "u1",
@@ -122,7 +122,7 @@ describe("POST — mutating tool safety", () => {
     });
 
     const res = await POST(
-      toolRequest("create_workroom", {
+      toolRequest(name, {
         title: "Token scope test",
         objective: "Verify write-token acceptance",
         source: "operator",

@@ -30,6 +30,25 @@ import type {
 } from "./types";
 
 describe("AI operations map projection", () => {
+  it("projects only recorded native review budget fields", () => {
+    const projection = projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" },
+      progressPayload: { semanticReview: { schemaVersion: 1, deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 3, requestDigest: "not-for-display" } } }));
+    expect(projection.reviewBudget).toEqual({ deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 3 });
+    expect(projection.links.historyHref).toBeTruthy();
+  });
+  it("keeps missing or invalid native budget evidence unknown", () => {
+    expect(projectTaskRun(makeTaskRun({ a2aMetadata: { gateKind: "semantic-review" } })).reviewBudget).toEqual({ deadlineAt: null, recoveryAttempt: null });
+    expect(projectTaskRun(makeTaskRun({ progressPayload: { semanticReview: { deadlineAt: "2099-01-01T00:00:00Z" } } })).reviewBudget).toBeUndefined();
+  });
+  it.each(["completed", "failed", "rejected"])("keeps %s reviewer evidence inspectable without offering recovery", (status) => {
+    const waiting = projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" } }));
+    const terminal = projectTaskRun(makeTaskRun({ status, a2aMetadata: { gateKind: "semantic-review" } }));
+    expect(terminal.id).toBe(waiting.id);
+    expect(terminal.refs.taskRunId).toBe(waiting.refs.taskRunId);
+    expect(terminal.links.historyHref).toBe(waiting.links.historyHref);
+    expect(terminal.summary).toContain(`(${status})`);
+    expect(terminal.recovery).toBeUndefined();
+  });
   it("offers native recovery only for a recorded reviewer wait", () => {
     expect(projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" } })).recovery).toBe("semantic-review");
     expect(projectTaskRun(makeTaskRun({ status: "input-required" })).recovery).toBeUndefined();

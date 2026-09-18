@@ -2431,6 +2431,22 @@
     "longSentences": 0,
     "textMass": 3
   },
+  "apps/web/app/(shell)/workspace/rescue/care/actions.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/(shell)/workspace/rescue/intake/actions.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
   "apps/web/app/(shell)/workspace/ward/actions.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -4270,6 +4286,22 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 12
+  },
+  "apps/web/components/animal-welfare/DailyCareOperations.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 106
+  },
+  "apps/web/components/animal-welfare/IntakeOperations.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 149
   },
   "apps/web/components/animal-welfare/RescueCockpit.tsx": {
     "vocabulary": 0,
@@ -6661,7 +6693,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 82
+    "textMass": 76
   },
   "apps/web/components/ops/BacklogItemRow.tsx": {
     "vocabulary": 0,

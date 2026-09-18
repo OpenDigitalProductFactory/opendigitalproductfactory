@@ -345,6 +345,8 @@ export type ToolResult = {
   message: string;
   error?: string;
   data?: Record<string, unknown>;
+  /** `success` cannot say "awaiting a person"; this can. */
+  disposition?: import("@/lib/shared/outcome-disposition").OutcomeDisposition;
 };
 
 function cleanEndpointTestString(value: unknown): string | undefined {

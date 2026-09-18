@@ -204,7 +204,7 @@ export function AiOperationsMap({
     ? agents.find((agent) => agent.agentId === selected.id) ?? null
     : null;
   const selectedProjection = selected.kind === "projection"
-    ? filteredProjections.find((projection) => projection.id === selected.id) ?? null
+    ? projections.find((projection) => projection.id === selected.id) ?? null
     : null;
 
   const applyQuickView = (viewId: OperationsMapQuickViewId) => {
@@ -567,7 +567,7 @@ function ProjectionInspector({ projection }: { projection: OperationsMapProjecti
         <InspectorFact label="Source" value={SOURCE_LABEL[projection.source]} />
         <InspectorFact label="Severity" value={projection.severity} />
       </dl>
-      {projection.recovery && projection.refs.taskRunId ? <StalledTaskRecoveryActions taskRunId={projection.refs.taskRunId} phase={null} nativeReview={projection.recovery === "semantic-review"} /> : null}
+      {projection.recovery && projection.refs.taskRunId ? <StalledTaskRecoveryActions taskRunId={projection.refs.taskRunId} phase={null} nativeReview={projection.recovery === "semantic-review"} reviewBudget={projection.reviewBudget} /> : null}
       <div className="flex flex-wrap gap-2">
         {links.map((item) => <Link key={item.href} href={item.href} className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] hover:underline">{item.label}</Link>)}
       </div>

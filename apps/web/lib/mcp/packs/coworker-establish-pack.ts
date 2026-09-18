@@ -15,7 +15,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "establish_coworker",
     description:
-      "Create a new AI coworker as a draft (action 'establish'), or promote a draft to production once its definition has landed and it passed behavioral certification (action 'promote'). Establishing returns the definition checklist that must be completed via PR; a draft coworker is not summonable until promoted.",
+      "Create a new AI coworker as a draft (action 'establish'), or promote a draft to production once its definition has landed and it passed behavioral certification (action 'promote'). Establishing REQUIRES a jobDefinition answering all nine axes — a coworker without a job is wired and idle, which is what this door used to produce. Establishing returns the definition checklist that must be completed via PR; a draft coworker is not summonable until promoted.",
     inputSchema: {
       type: "object",
       properties: {
@@ -48,6 +48,19 @@ const definitions: ToolDefinition[] = [
           type: "string",
           enum: ["frontier", "strong", "adequate", "basic"],
           description: "Minimum model tier floor (establish only). Defaults to adequate.",
+        },
+        jobDefinition: {
+          type: "object",
+          description:
+            "REQUIRED for 'establish'. The job this coworker is hired to do. An object keyed by axis "
+            + "— purpose, accountabilities, authority, cadence, qualifications, context, measures, "
+            + "supervision, tailoring — where each value is either "
+            + "{state:'satisfied', evidence:'...'} or {state:'waived', reason:'...', reviewBy:'YYYY-MM-DD'}. "
+            + "Unanswered is not a state. A waiver needs a reason a reader can disagree with and an "
+            + "expiry; when it falls due the answer is to re-decide the axis, not to extend the date.",
+          properties: {
+            axes: { type: "object", description: "Axis name -> answer." },
+          },
         },
       },
       required: ["action", "agentId"],
@@ -90,6 +103,7 @@ async function establishCoworkerHandler(
       sensitivity: params["sensitivity"] as "internal" | "confidential" | "restricted" | undefined,
       grants: Array.isArray(params["grants"]) ? params["grants"].map(String) : undefined,
       minimumTier: params["minimumTier"] ? String(params["minimumTier"]) : undefined,
+      jobDefinition: params["jobDefinition"] as never,
     },
     userId,
   );

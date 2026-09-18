@@ -1588,8 +1588,20 @@
         "update_workroom_status"
       ],
       "implies": [
-        "work_capsule_read"
+        "work_capsule_read",
+        "workroom_evidence_write"
       ]
+    },
+    {
+      "key": "workroom_evidence_write",
+      "description": "Pseudo-User Contract split of record_workroom_evidence out of work_capsule_write (BI-CAP-AB63E190). Lets a standing-room dispatched coworker leave the completing evidence the drive reads, without authority to create rooms, claim leases, or reassign executors. Implied by work_capsule_write (one-way).",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "record_capsule_evidence",
+        "record_workroom_evidence"
+      ],
+      "implies": []
     },
     {
       "key": "work_engagement_read",

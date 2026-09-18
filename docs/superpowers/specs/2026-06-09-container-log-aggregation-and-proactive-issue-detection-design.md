@@ -1,7 +1,11 @@
+---
+status: active
+---
+
 # Container Log Aggregation & Proactive Issue Detection (EP-FULL-OBS Tier 2)
 
 **Date:** 2026-06-09
-**Status:** Draft
+**Status:** Active — implemented, with the 2026-09-15 implementation correction below
 **Epic:** EP-FULL-OBS (Full Observability) — this is the **Tier 2 — Log Aggregation** spec explicitly deferred in `docs/superpowers/specs/2026-04-01-platform-operational-health-monitoring-design.md` §1.2.
 **Author:** Claude (design partner) + Mark Bodman (CEO)
 **Depends on:**
@@ -10,6 +14,46 @@
 - `apps/web/lib/queue/functions/token-expiry-monitor.ts` (canonical Inngest cron-monitor pattern: `gateAtEntry` quiescence gate + exported pure scan logic + idempotent `PlatformNotification` upsert)
 
 **IT4IT Alignment:** SS5.7 Operate — Detect to Correct. Extends the **Detect** phase from metric-threshold breaches (Tier 1) to **log-line pattern breaches**, which are the larger and currently-invisible class of operational signal. Feeds the same downstream Diagnose→Change→Resolve→Close flow.
+
+---
+
+## Implementation correction — 2026-09-15 (BI-F8024A9D, BI-ADB574AB)
+
+This spec shipped, and then did not run. Recorded here because the gap between
+"specified" and "running" is the interesting part.
+
+**What went wrong.** The Capture Layer below is explicit that `loki` and `alloy`
+must be **default-on in the base `docker-compose.yml`, not profile-gated** — that
+is the whole mechanism by which this spec closes the macOS blind spot. They were
+implemented behind `profiles: ["runtime-deep-observability", "observability-ui"]`.
+On this operator install (macOS) neither container had ever been created. Every layer
+below was therefore inert: nothing persisted container stderr, the ruler rules in
+§2 were never evaluated, and the §3 novel-signature scanner woke every 15 minutes,
+failed to reach Loki, and returned a clean result.
+
+The incident in the Problem Statement — a macOS install accumulating hundreds of
+unseen error lines — was reproducing on the install that authored this spec, for
+the duration.
+
+**What was missing beyond the gating.** The scanner degraded silently. It caught
+the unreachable-Loki case, logged to stderr, and returned a success-shaped result
+with an unread `lokiUnreachable` flag. Two sibling monitors had the same shape.
+A monitor that cannot see its source was indistinguishable from one that sees
+nothing wrong, so un-gating the services alone would have left the platform one
+config change away from silently losing the capability again.
+
+**The correction.** Both services are now base compose services, bounded in
+`config/install-resource-budgets.json`. Separately, every monitor that depends on
+a source it does not own reports that source's reachability as a
+`monitor_source_unreachable` issue — see
+`docs/operations/observability-coverage.md` for the contract and
+`apps/web/lib/observability/monitor-source-reachability.ts` for the writer.
+
+**The durable lesson for Tier 3 and anything like it.** A detection layer needs a
+detector for its own absence. "Is it specified?" and "is it running on this
+install?" are different questions, and only the second one catches errors. The
+§4 surfacing layer can only surface what the capture layer collected; none of it
+self-reports when the bottom of the stack never started.
 
 ---
 

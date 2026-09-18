@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 710,
+  "pageCount": 714,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -413,6 +413,7 @@
         "2-the-composition-the-assurance-operating-loop",
         "3-the-capability-completeness-contract",
         "31-the-dead-column-check-generalized",
+        "3a-staffing-posture-a-hole-or-a-decision-runtime-2026-09-16",
         "4-what-changes-concretely",
         "4a-the-decision-gate-and-the-closed-loop",
         "4a1-what-exists",
@@ -866,6 +867,7 @@
       "anchors": [
         "ai-routing-document-map",
         "current-authority",
+        "streaming-versus-result-delivery",
         "approved-adjacent-delivery-contract",
         "proposed-architecture",
         "historical-records",
@@ -1580,6 +1582,19 @@
       "anchors": [
         "failure-analysis-and-recovery-evidence",
         "deployment-and-protection"
+      ]
+    },
+    "docs/architecture/federation-outbox-runbook.md": {
+      "publicHref": "/architecture/federation-outbox-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "federation-outbox-reading-a-backlog-correctly",
+        "the-two-shapes-of-failure-and-why-they-must-not-share-a-budget",
+        "reading-the-queue-health-line",
+        "link-quarantine",
+        "when-you-get-back-on-the-peers-network"
       ]
     },
     "docs/architecture/field-service-work-item.md": {
@@ -2520,6 +2535,7 @@
         "concurrent-execution-and-recorded-state",
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
+        "a-named-governed-writer-must-be-attached-not-discovered",
         "related-references",
         "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
       ]
@@ -3532,6 +3548,25 @@
         "examples",
         "regulatory-interoperability-boundaries",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes.md": {
+      "publicHref": "/founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "value-is-the-net-and-that-is-what-makes-it-a-proof",
+        "where-work-should-move-human-then-ai-then-code",
+        "this-is-the-return-on-investment-criterion-for-the-backlog",
+        "humancognitiveload-is-a-required-measure-not-an-optional-axis",
+        "scope-and-propagation",
+        "examples",
+        "related-principles"
       ]
     },
     "docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md": {
@@ -5530,16 +5565,16 @@
         "evidence-weight-1-ceiling-2",
         "every-agent",
         "widest-gaps-detail",
-        "agt-100-policy-enforcement-agent-declared-only-48-attainable",
-        "agt-101-strategy-alignment-agent-declared-only-48-attainable",
-        "agt-102-portfolio-backlog-agent-declared-only-48-attainable",
-        "agt-110-portfolio-rationalization-agent-declared-only-48-attainable",
-        "agt-111-investment-analysis-agent-declared-only-48-attainable",
-        "agt-112-gap-analysis-agent-declared-only-48-attainable",
-        "agt-113-scope-agreement-agent-declared-only-48-attainable",
-        "agt-120-product-backlog-prioritization-agent-declared-only-48-attainable",
-        "agt-121-architecture-definition-agent-declared-only-48-attainable",
-        "agt-122-roadmap-assembly-agent-declared-only-48-attainable",
+        "agt-100-policy-enforcement-agent-deliberately-unstaffed-48-attainable",
+        "agt-101-strategy-alignment-agent-deliberately-unstaffed-48-attainable",
+        "agt-102-portfolio-backlog-agent-deliberately-unstaffed-48-attainable",
+        "agt-110-portfolio-rationalization-agent-deliberately-unstaffed-48-attainable",
+        "agt-111-investment-analysis-agent-deliberately-unstaffed-48-attainable",
+        "agt-112-gap-analysis-agent-deliberately-unstaffed-48-attainable",
+        "agt-113-scope-agreement-agent-deliberately-unstaffed-48-attainable",
+        "agt-120-product-backlog-prioritization-agent-deliberately-unstaffed-48-attainable",
+        "agt-121-architecture-definition-agent-deliberately-unstaffed-48-attainable",
+        "agt-122-roadmap-assembly-agent-deliberately-unstaffed-48-attainable",
         "assignto-health"
       ]
     },
@@ -5940,7 +5975,9 @@
         "platform-split-linux-vs-windows-hostinfra-alerts",
         "status-decisions-2026-06-25-objective-completed",
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
-        "alert-delivery"
+        "alert-delivery",
+        "log-capture-runs-by-default-bi-f8024a9d",
+        "a-monitor-that-cannot-see-must-say-so-bi-adb574ab"
       ]
     },
     "docs/operations/oss-repo-identity-hygiene.md": {
@@ -6045,6 +6082,15 @@
         "how-to-disable",
         "known-limits",
         "composition-with-other-dr-hardening-features"
+      ]
+    },
+    "docs/operations/workroom-pagination.md": {
+      "publicHref": "/operations/workroom-pagination/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "enumerating-workrooms-through-mcp"
       ]
     },
     "docs/personas/README.md": {
@@ -9261,6 +9307,26 @@
         "re-evaluation-triggers"
       ]
     },
+    "docs/security/tool-evaluations/2026-09-15-bmad-method.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-15-bmad-method/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "bmad-method-tool-evaluation",
+        "executive-decision",
+        "what-bmad-is",
+        "where-dpf-already-stands",
+        "the-decisive-conflict",
+        "security-findings-cosai",
+        "compliance",
+        "architecture-fit",
+        "integration-test",
+        "what-dpf-should-harvest",
+        "conditions-and-re-evaluation",
+        "sources"
+      ]
+    },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
       "publicHref": "/specs/device-identification-and-portfolio-placement-spec/",
       "portalHref": null,
@@ -11176,6 +11242,7 @@
         "the-confidence-model",
         "the-inheritance-chain",
         "profile-kinds",
+        "what-onboarding-seeds-for-wwwd",
         "the-profession-scope-wsid",
         "ratifying-a-policy-once",
         "calling-the-gate",
@@ -12474,6 +12541,7 @@
         "workflow",
         "authoritative-state",
         "ai-coworker-support",
+        "your-business-stances",
         "reading-the-decision-log",
         "escalated-and-deferred-decisions-what-to-do",
         "suggestions-your-coworkers-drafted",
@@ -12518,6 +12586,8 @@
         "the-ward-for-a-shelter",
         "rescue-operations",
         "when-the-ward-is-full",
+        "admitting-an-animal",
+        "daily-care-rounds",
         "confirming-an-operational-suggestion",
         "which-installation-you-are-on",
         "correcting-the-identity",

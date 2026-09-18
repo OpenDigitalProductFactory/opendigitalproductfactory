@@ -1,5 +1,6 @@
 // apps/web/lib/routing/adapter-registry.ts
 import type { ProviderAdapter } from "./adapter-interface";
+import { referencePricingFor } from "./model-pricing-reference";
 import type { ModelCard } from "./model-card-types";
 import { DEFAULT_DIMENSION_SCORES, EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 import { getBaselineForModel } from "./family-baselines";
@@ -119,7 +120,12 @@ function buildKnownCatalogCard(
     inputModalities: knownModel.inputModalities,
     outputModalities: knownModel.outputModalities,
     capabilities: knownModel.capabilities,
-    pricing: { ...EMPTY_PRICING },
+    // BI: a provider whose metadata carries no prices used to leave every model
+    // unpriced, and loader.ts then costed them all at ONE flat provider rate —
+    // gpt-5.5-pro ($180/MTok out) and gpt-5.6-luna ($1.20) both read as $6.
+    // Fall back to the researched reference so each model carries its own rate;
+    // a model the reference does not know stays unpriced rather than guessed.
+    pricing: pricingFromReference(modelId),
     supportedParameters: [],
     defaultParameters: null,
     instructType: null,
@@ -135,6 +141,21 @@ function buildKnownCatalogCard(
     rawMetadataHash: computeMetadataHash(rawMetadata),
     dimensionScores,
     dimensionScoreSource: "family_baseline",
+  };
+}
+
+/**
+ * Researched pricing for a model, falling back to explicit nulls when the
+ * reference has no row. Never interpolates from a sibling: within one family
+ * prices span two orders of magnitude.
+ */
+function pricingFromReference(modelId: string): typeof EMPTY_PRICING {
+  const priced = referencePricingFor(modelId);
+  if (!priced) return { ...EMPTY_PRICING };
+  return {
+    ...EMPTY_PRICING,
+    inputPerMToken: priced.inputPerMToken,
+    outputPerMToken: priced.outputPerMToken,
   };
 }
 
@@ -156,7 +177,12 @@ function buildFallbackCard(
     inputModalities: ["text"],
     outputModalities: ["text"],
     capabilities: { ...EMPTY_CAPABILITIES },
-    pricing: { ...EMPTY_PRICING },
+    // BI: a provider whose metadata carries no prices used to leave every model
+    // unpriced, and loader.ts then costed them all at ONE flat provider rate —
+    // gpt-5.5-pro ($180/MTok out) and gpt-5.6-luna ($1.20) both read as $6.
+    // Fall back to the researched reference so each model carries its own rate;
+    // a model the reference does not know stays unpriced rather than guessed.
+    pricing: pricingFromReference(modelId),
     supportedParameters: [],
     defaultParameters: null,
     instructType: null,

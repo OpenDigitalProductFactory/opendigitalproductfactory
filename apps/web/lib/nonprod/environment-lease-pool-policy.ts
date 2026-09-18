@@ -14,7 +14,9 @@ import {
   resolveHostResourceAdmission,
   type ActiveHeavyReservation,
   type HeavyResourceClass,
+  type HostResourceAdmission,
 } from "./host-resource-policy";
+import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 
 type PlatformConfigReader = Parameters<
   typeof loadLocalCiPoolConfig
@@ -46,7 +48,46 @@ export interface ResolvedHostResourcePoolPolicy {
   slotKeys: ["slot-0"] | [];
   rollbackReason: string | null;
   config: null;
+  /**
+   * BI-C77D920A. The admission's own kind, carried through instead of collapsed.
+   *
+   * `hostSafeCapacity`/`effectiveCapacity`/`slotKeys` are genuinely boolean —
+   * there is one slot or none — but `admitted ? … : …` made "wait, capacity will
+   * free" and "this will never be admitted" indistinguishable to the caller, and
+   * the durable-wait behaviour the resilient-concurrent-development process
+   * depends on needs to tell them apart.
+   */
+  admissionStatus: HostResourceAdmission["status"];
+  /**
+   * The same fact in the canonical vocabulary (§10 rule 5: a boundary may narrow
+   * a disposition, never collapse it).
+   *
+   * NOTE on `queued` → `awaiting-person`: the §10 table places it there, and the
+   * routing property is what matters rather than the name — RETRY_POSTURE is
+   * "never", meaning REPORT the wait rather than spin on it, which is exactly how
+   * the durable wait works (pregate exits 75 and a detached resumer holds the
+   * claim; the caller does not re-ask). That the label says "person" when the
+   * thing being waited on is capacity is a naming tension owned by BI-2B96E1B9,
+   * which reconciles the two vocabularies; it is recorded here rather than
+   * silently resolved.
+   */
+  disposition: OutcomeDisposition;
 }
+
+/**
+ * What kind of answer each host admission is — total over the union, so a new
+ * admission status cannot be added without deciding what it MEANS (§10 rule 6).
+ */
+const HOST_ADMISSION_DISPOSITION: Record<HostResourceAdmission["status"], OutcomeDisposition> = {
+  // Not heavyweight, so the gate does not apply and the work proceeds.
+  bypass: "proceed",
+  admitted: "proceed",
+  // Capacity is full now and frees later. The claim is not in question.
+  queued: "awaiting-person",
+  // Settled no: an unmeasurable host or an unknown resource class never admits
+  // this request, however long the caller waits.
+  blocked: "refused",
+};
 
 /** Adapter from the typed host policy to the durable lease pool shape. */
 export function resolveHostResourcePoolPolicy(input: {
@@ -75,6 +116,8 @@ export function resolveHostResourcePoolPolicy(input: {
     slotKeys: admitted ? ["slot-0"] : [],
     rollbackReason: admitted ? null : admission.reason,
     config: null,
+    admissionStatus: admission.status,
+    disposition: HOST_ADMISSION_DISPOSITION[admission.status],
   };
 }
 
@@ -141,16 +184,24 @@ export async function resolveNonprodPoolPolicy(input: {
       evidenceIsolationHealthy: false,
     };
   }
-  return resolveLocalCiPoolPolicy({
-    configValue,
-    host: mergeLocalCiHostPressure({
-      client: clientPressure,
-      server: serverPressure,
-    }),
-    manifestSlotCount: input.manifestSlotCount,
-    reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
-    env: process.env,
-    now: input.now,
-    installation,
+  const decidedHostPressure = mergeLocalCiHostPressure({
+    client: clientPressure,
+    server: serverPressure,
   });
+  // Hand the decided observation back with the decision (BI-48F42581). The
+  // caller only has its own client sample; recording that next to a
+  // server-derived rollbackReason produced gate records that contradicted
+  // themselves and sent operators looking for a bug in the wrong place.
+  return {
+    ...resolveLocalCiPoolPolicy({
+      configValue,
+      host: decidedHostPressure,
+      manifestSlotCount: input.manifestSlotCount,
+      reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
+      env: process.env,
+      now: input.now,
+      installation,
+    }),
+    decidedHostPressure,
+  };
 }

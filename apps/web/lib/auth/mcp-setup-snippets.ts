@@ -4,6 +4,7 @@
 // apps/web/scripts/issue-mcp-token.ts (CLI).
 
 import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
+import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 export type McpSnippetFormat = "claude-code" | "codex" | "grok" | "antigravity" | "vscode" | "raw";
 
@@ -55,16 +56,19 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
   const url = `${clientBaseUrl}/api/mcp/v1`;
   const lazyHostUrl = withDpfMcpCatalogTier(url, "full");
   const refreshUrl = `${clientBaseUrl}/api/mcp/token/refresh`;
+  // BI-46B636B0: the header fallback is the only credential path over plain
+  // http (the client refuses OAuth there); over https it would disable OAuth.
+  const headerRequired = mcpClientBearerHeaderRequired(url);
   const httpEntry = {
     type: "http",
     url,
-    headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` },
+    ...(headerRequired ? { headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}),
   };
   const lazyHostHttpEntry = { ...httpEntry, url: lazyHostUrl };
   const vscodeHttpEntry = {
     type: "http",
     url,
-    headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` },
+    ...(headerRequired ? { headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}),
   };
   // Claude Code: .mcp.json uses the mcpServers key.
   const claudeCode = JSON.stringify({ mcpServers: { dpf: lazyHostHttpEntry } }, null, 2);

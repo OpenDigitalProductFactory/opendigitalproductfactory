@@ -19,6 +19,18 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
+
+// BI-78B653D5: the interrupted-gate recovery path releases a lease with
+// whatever credential the gate itself would use; none configured is "cannot
+// release", never a crash.
+function resolveMcpCredentialOrNull({ mcpUrl, env = process.env }) {
+  try {
+    return resolveMcpCredential({ mcpUrl, env }).bearer;
+  } catch {
+    return null;
+  }
+}
 import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
 import {
   createLocalCiSlotManifest,
@@ -319,7 +331,7 @@ export async function recoverInterruptedGateState({
   childStatus = null,
   childSignal = "",
   mcpUrl = process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
-  bearerToken = process.env.DPF_MCP_BEARER_TOKEN,
+  bearerToken = resolveMcpCredentialOrNull({ mcpUrl }),
   mcpCallImpl = mcpCall,
   releaseLocalQueueObserverImpl = releaseLocalQueueObserver,
   releaseDeadLocalQueueObserversForGateImpl = releaseDeadLocalQueueObserversForGate,
@@ -334,7 +346,7 @@ export async function recoverInterruptedGateState({
   let releaseSucceeded = false;
   let releaseError = "";
   if (!bearerToken) {
-    releaseError = "missing DPF_MCP_BEARER_TOKEN";
+    releaseError = "no MCP credential configured (client_credentials client or DPF_MCP_BEARER_TOKEN)";
   } else {
     try {
       const response = await mcpCallImpl(
@@ -670,7 +682,7 @@ export async function recoverInterruptedGate({
       childStatus: result?.status ?? null,
       childSignal: result?.signal || "",
       mcpUrl: env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
-      bearerToken: env.DPF_MCP_BEARER_TOKEN,
+      bearerToken: resolveMcpCredentialOrNull({ mcpUrl: env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1", env }),
       mcpCallImpl,
       queueObserverFallbackDirectory: env.DPF_LOCAL_QUEUE_OBSERVER_DIR
         || resolvePath(context.gitCommonDir, "dpf-local-ci-queue-observers"),

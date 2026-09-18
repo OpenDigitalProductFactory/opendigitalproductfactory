@@ -13,6 +13,7 @@ import type {
 import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
 import type { ToolResult } from "./mcp-tools";
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
+import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
 type AuditRow = Record<string, unknown>;
 function captureAudit(rows: AuditRow[]) { return async (data: AuditRow) => { rows.push(data); }; }
 const NORMAL_USER = { platformRole: "ceo", isSuperuser: true };
@@ -439,6 +440,8 @@ describe("governedExecuteTool — happy path", () => {
 });
 
 describe("governedExecuteTool — rejection paths", () => {
+  registerWorkroomAliasCases({ executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows });
+
   it("returns unknown_tool without invoking executeTool", async () => {
     const result = await governedExecuteTool({
       toolName: "totally_made_up_tool",

@@ -1,20 +1,11 @@
 // Next.js instrumentation hook — runs once on server startup.
 // See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 
-import {
-  areOptionalStartupTasksEnabled,
-  isInngestSelfSyncOnBootEnabled,
-  isStartupModelRevalidationEnabled,
-} from "@/lib/runtime/env-flags";
-import { isMeasurementRuntime, settleBootSync } from "@/lib/runtime/measurement-runtime";
-import { settleRenderRelevantBootReconcilers } from "@/lib/runtime/render-relevant-boot-reconcilers";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { sweepOrphanedPromoterContainers } from "@/lib/self-upgrade/promoter-sweep";
-import { reconcileSelfUpgradeAdmissions } from "@/lib/self-upgrade/admission";
-import {
-  resolveInngestSelfRegistrationEndpoint,
-  syncInngestSelfRegistration,
-} from "@/lib/queue/inngest-self-registration";
+// NO static imports of the boot-task modules (BI-188371C4). Next.js compiles this
+// file for BOTH runtimes, and a NEXT_RUNTIME check is a RUNTIME guard — it does not
+// stop bundling. Static imports pulled @dpf/db (node:path/process/url) into the edge
+// compile: 45 edge-runtime errors per build. Loaded dynamically past the edge gate
+// instead — and every module-scope helper below needs that gate for the same reason.
 /**
  * Logs a deprecation notice when HIVE_CONTRIBUTION_TOKEN is set in the
  * environment. Exported so the instrumentation module's startup behavior
@@ -40,6 +31,10 @@ export function scheduleInitialCodeGraphBootstrap(input: {
   setTimer?: (callback: () => void, delayMs: number) => unknown;
   ensure?: () => Promise<void>;
 } = {}): void {
+  // Edge gate (BI-188371C4): the one module-scope helper that lacked it, leaving its
+  // code-graph-refresh import reachable from the edge entry. Prunes the branch.
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
+
   const logger = input.logger ?? console;
   const setTimer = input.setTimer ?? setTimeout;
 
@@ -924,6 +919,23 @@ export async function onRequestError(
 
 export async function register() {
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  // Past the edge gate: safe to reach the Node-only boot-task graph (see top of file).
+  const [
+    { areOptionalStartupTasksEnabled, isInngestSelfSyncOnBootEnabled, isStartupModelRevalidationEnabled },
+    { isMeasurementRuntime, settleBootSync },
+    { settleRenderRelevantBootReconcilers },
+    { sweepOrphanedPromoterContainers },
+    { reconcileSelfUpgradeAdmissions },
+    { resolveInngestSelfRegistrationEndpoint, syncInngestSelfRegistration },
+  ] = await Promise.all([
+    import("@/lib/runtime/env-flags"),
+    import("@/lib/runtime/measurement-runtime"),
+    import("@/lib/runtime/render-relevant-boot-reconcilers"),
+    import("@/lib/self-upgrade/promoter-sweep"),
+    import("@/lib/self-upgrade/admission"),
+    import("@/lib/queue/inngest-self-registration"),
+  ]);
   if (process.env.NEXT_RUNTIME === "nodejs" && process.env.NEXT_PHASE !== "phase-production-build") {
     // Fire the deprecation warning up front so operators see it on first
     // boot rather than waiting for a contribution to trip it.
@@ -1086,12 +1098,11 @@ export async function register() {
         // Same boot + periodic net for the provider ↔ default-connection status
         // split (BI-04E4F111): routing filters on AiProviderConnection.status
         // while the UI renders ModelProvider.status — see the module header.
-        const { reconcileProviderConnectionState } = await import(
-          "@/lib/inference/provider-connection-reconcile"
-        );
+        const { reconcileProviderConnectionState } = await import("@/lib/inference/provider-connection-reconcile");
         await reconcileProviderConnectionState().catch(() => {});
         setInterval(() => void reconcileProviderConnectionState().catch(() => {}), 20 * 60 * 1000);
       })();
+      void import("@/lib/build/issue-bridge-sweep").then((m) => m.startUpstreamClosureSweep());
     }
 
     // Backfill the operational value stream (OVSM) EA view for any storefront

@@ -41,9 +41,9 @@
   "devDependencies": {
     "@react-native/jest-preset": "0.86.2",
     "@testing-library/react-native": "^14.0.1",
-    "@types/jest": "^29.5.14",
+    "@types/jest": "^30.0.0",
     "@types/react": "^19",
-    "jest": "~30.4.2",
+    "jest": "~30.5.1",
     "jest-expo": "~56.0.5",
     "msw": "^2.15.0",
     "react-test-renderer": "19.2.8",

@@ -22,8 +22,8 @@ export type AppointCoordinatorDb = {
   workroomParticipant: {
     findMany(args: {
       where: { workroomId: string; lifecycle: string };
-      select: { principalId: true; roles: true };
-    }): Promise<Array<{ principalId: string; roles: string[] }>>;
+      select: { id: true; principalId: true; roles: true };
+    }): Promise<Array<{ id: string; principalId: string; roles: string[] }>>;
   };
   principal: {
     findFirst(args: {
@@ -39,6 +39,12 @@ export type AppointedCoordinator = {
   capsuleId: string;
   principalRef: string;
   displayName: string;
+  /** Incumbent coordinators this appointment hands over FROM. Empty unless
+   *  replaceExisting was set. The caller MUST stand these down in the same
+   *  transaction as the new assignment — see standDownCoordinators. A handover
+   *  that only writes the appointee leaves the room with two coordinators, which
+   *  conformance treats as blocking (BI-061B2BC0). */
+  standDown: Array<{ participantId: string; principalId: string; roles: WorkroomParticipantRole[] }>;
 };
 export type AppointCoordinatorResult = ActionResult<AppointedCoordinator>;
 
@@ -81,7 +87,7 @@ export async function planCoordinatorAppointment(input: {
 
   const existing = await input.db.workroomParticipant.findMany({
     where: { workroomId: room.id, lifecycle: "active" },
-    select: { principalId: true, roles: true },
+    select: { id: true, principalId: true, roles: true },
   });
   const coordinators = existing.filter((p) => p.roles.includes("coordinator"));
   const alreadyThis = coordinators.some((p) => p.principalId === principal.id);
@@ -99,8 +105,30 @@ export async function planCoordinatorAppointment(input: {
     capsuleId: room.capsuleId,
     principalRef: input.principalRef,
     displayName: principal.displayName,
+    standDown: coordinators
+      .filter((p) => p.principalId !== principal.id)
+      .map((p) => ({
+        participantId: p.id,
+        principalId: p.principalId,
+        roles: p.roles as WorkroomParticipantRole[],
+      })),
   });
 }
 
 /** The roles an appointment writes. Coordinator is the Process Overseer role. */
 export const COORDINATOR_ROLES: WorkroomParticipantRole[] = ["coordinator"];
+
+/**
+ * Roles an outgoing Process Overseer keeps after a handover.
+ *
+ * A handover removes the coordinator role; it does NOT evict the principal from
+ * the room — they were working there and usually still are. If coordinator was
+ * their only role they become a contributor, so the roster never carries a
+ * participant with an empty role set.
+ */
+export function rolesAfterStandDown(
+  roles: readonly WorkroomParticipantRole[],
+): WorkroomParticipantRole[] {
+  const kept = roles.filter((role) => role !== "coordinator");
+  return kept.length > 0 ? kept : ["contributor"];
+}

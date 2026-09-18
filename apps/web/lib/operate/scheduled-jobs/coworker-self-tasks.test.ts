@@ -357,9 +357,9 @@ describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
     expect(prisma.scheduledAgentTask.upsert as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
-  it("Direction B: restores a missing toggle from an orphaned daily self-task", async () => {
+  it("Direction B: observes an orphaned self-task without minting a fact for it", async () => {
     const { prisma } = await import("@dpf/db");
-    // No facts, but a live daily marketing self-task exists (fact went missing).
+    // No facts, but a live daily marketing self-task exists.
     (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
     (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
       { taskId: coworkerSelfTaskId(MKT, "u1"), agentId: MKT, ownerUserId: "u1", schedule: "7 14 * * *" },
@@ -367,15 +367,32 @@ describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
 
     const r = await reconcileAllCoworkerSelfTasks();
 
-    expect(r.backfilledFacts).toBe(1);
-    // A daily orphan → Assertive toggle restored via a UserFact write.
-    const created = prisma.userFact.create as ReturnType<typeof vi.fn>;
-    expect(created).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(created.mock.calls[0]![0].data.value).level).toBe("assertive");
-    expect(created.mock.calls[0]![0].data.key).toBe(PROACTIVITY_KEY(MKT));
+    expect(r.orphansObserved).toBe(1);
+    // BI-4CE4F52F: this used to write an `aiCoworkerProactivity:agent:*` fact
+    // "so the UI tells the truth" — a UI BI-87C9C91C had already deleted. Under
+    // the room-owned ruling (DI-81E47BDA59F1) an agent-scoped fact is not a
+    // source of truth, so minting one manufactures inert data no surface can
+    // act on. Nothing is written.
+    expect(prisma.userFact.create as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
-  it("Direction B: does NOT backfill a task that already has an active fact", async () => {
+  it("Direction B: leaves the orphan RUNNING — it is observed, not stood down", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { taskId: coworkerSelfTaskId(MKT, "u1"), agentId: MKT, ownerUserId: "u1", schedule: "7 14 * * *" },
+    ]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    // BI-4CE4F52F warns explicitly against stopping standing work on the
+    // strength of a missing fact that is no longer authoritative. Stopping the
+    // growth must not become silencing the coworker.
+    expect(r.deactivated).toBe(0);
+    expect(prisma.scheduledAgentTask.updateMany as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  it("Direction B: a task with an active fact is not an orphan", async () => {
     const { prisma } = await import("@dpf/db");
     (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
       factRow("u1", MKT, "assertive"),
@@ -387,7 +404,7 @@ describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
 
     const r = await reconcileAllCoworkerSelfTasks();
 
-    expect(r.backfilledFacts).toBe(0);
+    expect(r.orphansObserved).toBe(0);
     expect(prisma.userFact.create as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 });

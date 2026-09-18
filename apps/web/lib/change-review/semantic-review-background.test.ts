@@ -24,6 +24,7 @@ vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: 
 vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus: vi.fn() }));
 import { createSemanticReviewRequest } from "./semantic-review-request";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
+import { currentInferenceOrigin } from "@/lib/inference/inference-admission";
 
 const result = { decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Exact diff reviewed." };
 let row: Record<string, unknown>;
@@ -77,6 +78,25 @@ beforeEach(() => {
 });
 
 describe("durable semantic review worker", () => {
+  it("propagates autonomous inference origin through concurrent reviewer branches without leaking it", async () => {
+    const origins: string[] = [];
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
+      await Promise.all(["change-reviewer", "AGT-181"].map((agentId) => branch(agentId, async () => {
+        await Promise.resolve();
+        origins.push(currentInferenceOrigin());
+        return result;
+      })));
+      return result;
+    });
+    expect(currentInferenceOrigin()).toBe("interactive");
+    const pending = executePersistedSemanticReview("TR-1");
+    expect(currentInferenceOrigin()).toBe("interactive");
+    await pending;
+    expect(origins).toEqual(["autonomous", "autonomous"]);
+    expect(row.status).toBe("completed");
+    expect(currentInferenceOrigin()).toBe("interactive");
+  });
+
   it("requires the original requester and explicit uncertain-inference confirmation", async () => {
     row.status = "input-required";
     await expect(retryPersistedSemanticReview("TR-1", "other-user", true)).rejects.toThrow("authority");
@@ -192,6 +212,32 @@ describe("durable semantic review worker", () => {
     expect(providerCalls).toBe(0);
     expect(mocks.evidence).not.toHaveBeenCalled();
   });
+  it("records an inconclusive review as a wait, not a failed run (BI-FF63D266)", async () => {
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+      providerCalls += 1;
+      return { decision: "inconclusive", issues: [], summary: "Provider could not determine a verdict.",
+        inconclusiveReason: "provider-capacity-exhausted" };
+    }));
+    await executePersistedSemanticReview("TR-1");
+    // AGENTS.md §4: a gate that could not run is recorded as inconclusive and
+    // re-runs on the same SHA — never a FAIL against the diff.
+    expect(providerCalls).toBe(1);
+    expect(row.status).toBe("input-required");
+    // A non-verdict is not terminal, so it must not be stamped complete. The
+    // previous write marked an inconclusive run both failed AND completed.
+    expect(row.completedAt).toBeUndefined();
+    // The review still produced a receipt; its evidence is durable regardless.
+    expect(mocks.evidence).toHaveBeenCalled();
+    const payload = row.progressPayload as { resultClass?: string; semanticReview: Record<string, unknown> };
+    expect(payload.resultClass).toBe("inconclusive");
+    expect(payload.semanticReview.state).toBe("input-required");
+    expect(payload.semanticReview.reason).toBe("provider-capacity-exhausted");
+  });
+  it("still completes and stamps a decided review", async () => {
+    await executePersistedSemanticReview("TR-1");
+    expect(row.status).toBe("completed");
+    expect(row.completedAt).toBeInstanceOf(Date);
+  });
   it("refuses a missing immutable request and revoked authority before dispatch", async () => {
     mocks.db.taskArtifact.findUnique.mockResolvedValue(null);
     await executePersistedSemanticReview("TR-1");
@@ -202,6 +248,22 @@ describe("durable semantic review worker", () => {
     mocks.authority.mockResolvedValue(false);
     await executePersistedSemanticReview("TR-1");
     expect(row.status).toBe("auth-required");
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+  it("terminalizes an immutable request whose failure evidence changed so a refreshed request is not stranded", async () => {
+    mocks.resolveFailureEvidence.mockResolvedValue([]);
+
+    expect(await executePersistedSemanticReview("TR-1")).toMatchObject({
+      taskRunId: "TR-1",
+      status: "failed",
+      changed: true,
+    });
+    expect(row.status).toBe("failed");
+    expect(row.progressPayload).toMatchObject({ semanticReview: {
+      state: "failed",
+      reason: "failure-analysis-evidence-changed",
+      action: "Submit a refreshed immutable review request with current failure evidence.",
+    } });
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
   it("reports cancellation when it wins against an admission failure", async () => {

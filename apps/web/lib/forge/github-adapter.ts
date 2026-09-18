@@ -1,13 +1,21 @@
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import type {
+  CloseIssueInput,
+  CloseIssueOutcome,
+  CloseIssueResult,
   CreateIssueInput,
   ForgeCapabilities,
   ForgeFailure,
   ForgeRepository,
+  RemoteIssue,
   RemoteIssueResult,
 } from "./types";
 
 export type {
+  CloseIssueInput,
+  CloseIssueOutcome,
+  CloseIssueReason,
+  CloseIssueResult,
   CreateIssueInput,
   EgressClass,
   ForgeCapabilities,
@@ -189,7 +197,25 @@ function githubHeaders(token: string): Record<string, string> {
 interface GitHubIssueResponse {
   number?: number;
   html_url?: string;
+  state?: string;
   message?: string;
+}
+
+/** The one success literal for issue operations; create and close both spread it. */
+function issueSuccess(remote: RemoteIssue): Exclude<RemoteIssueResult, ForgeFailure> {
+  return { ok: true, remote };
+}
+
+function invalidResponse(status: number | undefined, message: string): ForgeFailure {
+  return {
+    ok: false,
+    adapter: "github",
+    category: "invalid-response",
+    retryable: false,
+    freshness: "unavailable",
+    status,
+    message,
+  };
 }
 
 export class GitHubForgeAdapter {
@@ -254,14 +280,76 @@ export class GitHubForgeAdapter {
       };
     }
 
-    return {
-      ok: true,
-      remote: {
-        adapter: "github",
-        id: String(data.number),
-        number: data.number,
-        url: data.html_url,
-      },
+    return issueSuccess({
+      adapter: "github",
+      id: String(data.number),
+      number: data.number,
+      url: data.html_url,
+    });
+  }
+
+  /**
+   * Closes an existing issue, posting `comment` first when given. Idempotent:
+   * an issue that is already closed is reported as `already-closed` and is
+   * neither commented on nor patched, so a retrying caller never doubles the
+   * resolution comment.
+   */
+  async closeIssue(input: CloseIssueInput): Promise<CloseIssueResult> {
+    const pathOwner = encodeURIComponent(input.repository.owner);
+    const pathRepo = encodeURIComponent(input.repository.repo);
+    const issueUrl = `https://${GITHUB_API_HOST}/repos/${pathOwner}/${pathRepo}/issues/${input.number}`;
+    assertSafeOutboundUrl(issueUrl, { allowedHosts: [GITHUB_API_HOST] });
+    const headers = { ...githubHeaders(this.config.token), "Content-Type": "application/json" };
+
+    const request = async (url: string, init: RequestInit): Promise<{ response: Response; data: GitHubIssueResponse } | ForgeFailure> => {
+      let response: Response;
+      try {
+        response = await fetch(url, init);
+      } catch (err) {
+        return classifyGitHubFailure(err);
+      }
+      let data: GitHubIssueResponse;
+      try {
+        data = (await response.json()) as GitHubIssueResponse;
+      } catch {
+        return classifyGitHubFailure(response, { message: "GitHub returned an unparseable issue response" });
+      }
+      if (!response.ok) return classifyGitHubFailure(response, data);
+      return { response, data };
     };
+
+    const current = await request(issueUrl, { method: "GET", headers });
+    if ("ok" in current) return current;
+    if (typeof current.data.number !== "number" || typeof current.data.html_url !== "string") {
+      return invalidResponse(current.response.status, "GitHub response missing number/html_url");
+    }
+    const remote = {
+      adapter: "github" as const,
+      id: String(current.data.number),
+      number: current.data.number,
+      url: current.data.html_url,
+    };
+    const success = (outcome: CloseIssueOutcome): CloseIssueResult => ({ ...issueSuccess(remote), outcome });
+    if (current.data.state === "closed") return success("already-closed");
+
+    if (input.comment) {
+      const commented = await request(`${issueUrl}/comments`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ body: input.comment }),
+      });
+      if ("ok" in commented) return commented;
+    }
+
+    const closed = await request(issueUrl, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ state: "closed", state_reason: input.reason }),
+    });
+    if ("ok" in closed) return closed;
+    if (closed.data.state !== "closed") {
+      return invalidResponse(closed.response.status, "GitHub did not report the issue as closed");
+    }
+    return success("closed");
   }
 }

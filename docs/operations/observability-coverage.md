@@ -140,3 +140,51 @@ verified. Before merging any new alert or portal-side probe:
 Prometheus has no Alertmanager here; firing alerts reach the portal via the Inngest
 poll-bridge (`apps/web/lib/queue/functions/alert-delivery-bridge.ts`) and surface in
 the System Health UI. The Grafana dashboard UI is opt-in (`observability-ui` profile).
+
+## Log capture runs by default (BI-F8024A9D)
+
+`loki` and `alloy` are **base compose services, not profile-gated**. They read
+container logs through the Docker socket with no host-path bind mount, so they run
+identically on macOS/Windows Docker Desktop and native Linux — unlike
+`cadvisor`/`node-exporter`, which do need Linux host paths and stay behind the
+`linux-monitoring` profile.
+
+This is load-bearing, not a convenience. They shipped gated, which left the capture
+layer dark on every install: nothing persisted container stderr, the Loki ruler's
+rate rules were never evaluated, and `ops/log-signature-scanner` woke every 15
+minutes, found nothing, and reported success. The macOS blind spot the Tier 2 spec
+was written to close had reopened on the install that authored it. Both services are
+bounded in `config/install-resource-budgets.json`, so a container flooding stdout
+costs disk and retention, never the host.
+
+If you are tempted to re-gate them, the question to answer first is: who tells the
+operator that log capture is off?
+
+## A monitor that cannot see must say so (BI-ADB574AB)
+
+Every scheduled monitor that depends on a data source it does not own reports that
+source's reachability through
+`apps/web/lib/observability/monitor-source-reachability.ts`. Unreachable opens a
+`monitor_source_unreachable` issue naming what the operator is now blind to;
+reaching it again resolves the row automatically.
+
+This is not optional politeness. Three monitors previously computed their own
+reachability and discarded it, so a dead source produced an empty result set that
+read as a quiet, healthy estate:
+
+| Monitor | Source | What its silence hid |
+| --- | --- | --- |
+| `ops/log-signature-scanner` | Loki | no novel error signature detected, on any container |
+| `ops/alert-delivery-bridge` | Loki ruler / Prometheus | error-rate and storm alerts never evaluated |
+| `ops/patch-assessment-sweep` | CISA KEV | which CVEs are actively exploited in the wild |
+
+The row is about the MONITOR, never the subject — see the
+`monitor_source_unreachable` contract in `packages/db/src/quality-issue-registry.ts`.
+A clean run from a blind monitor is not an all-clear, and the platform now says which
+one it is. Blindness is reported only for sources the install actually expects:
+Prometheus is reported only once an operator wires `PROMETHEUS_URL`, so an install
+that never deployed it stays quiet.
+
+Adding a monitor with a new external dependency? Call
+`recordMonitorSourceReachability` on both the success and failure paths. The new-alert
+checklist above applies to the blindness row too — prove it fires, prove it clears.

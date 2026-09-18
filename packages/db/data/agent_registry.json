@@ -557,6 +557,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (policy enforcement across the estate). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -607,6 +612,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (strategy alignment). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -655,6 +665,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (portfolio backlog management). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -702,6 +717,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (portfolio rationalization). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -754,6 +774,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (investment analysis). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -804,6 +829,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (gap analysis). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -850,6 +880,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (scope agreement). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -904,6 +939,11 @@
           "backend": null
         },
         "concurrency_limit": 2
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (security auditing). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -951,6 +991,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (product backlog prioritization). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1001,6 +1046,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (architecture definition). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1049,6 +1099,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (roadmap assembly). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1096,6 +1151,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (release planning). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1152,6 +1212,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (SBOM composition and dependency lifecycle). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1201,6 +1266,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (release acceptance gating). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1250,6 +1320,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (deployment planning). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1298,6 +1373,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (resource reservation). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1345,6 +1425,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (infrastructure-as-code execution). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1675,6 +1760,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (runtime monitoring). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1722,6 +1812,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (incident detection). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1770,6 +1865,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (incident resolution). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1816,6 +1916,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (constraint validation). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1867,6 +1972,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (architecture guardrails). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1913,6 +2023,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (evidence-chain assurance). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1962,6 +2077,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (policy specialism). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2115,6 +2235,11 @@
           "backend": null
         },
         "concurrency_limit": 8
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (architecture definition and structure). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2166,6 +2291,11 @@
           "backend": null
         },
         "concurrency_limit": 8
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (data governance). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2263,6 +2393,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (portfolio backlog specialism). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2310,6 +2445,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (product backlog specialism). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2412,6 +2552,12 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "superseded",
+        "supersededBy": "AGT-WS-DOC",
+        "reason": "Documentation Specialist (AGT-WS-DOC) is active, on the roster, and holds the same cross-cutting documentation role. Confirmed by reading both capability_domain texts, not by name similarity. Same failure shape as BI-6A1BFE77, where the UX Design Critic was dual-seeded and rendered as a visible duplicate in the live roster.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2452,6 +2598,12 @@
           "work_capsule_adopt",
           "web_search"
         ]
+      },
+      "staffing_posture": {
+        "state": "superseded",
+        "supersededBy": "AGT-WS-DATA-ARCHITECT",
+        "reason": "Same job, same escalation target (AGT-ORCH-300). NOT duplicates: build-software-engineer/-qa/-frontend are specialist executors, while AGT-WS-BUILD is the user-facing guide through the five build phases.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2492,6 +2644,11 @@
           "work_capsule_adopt",
           "web_search"
         ]
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (backend build execution). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2532,6 +2689,11 @@
           "work_capsule_adopt",
           "web_search"
         ]
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (frontend build execution). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2571,6 +2733,11 @@
           "work_capsule_write",
           "work_capsule_adopt"
         ]
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Platform-build concern (build test execution and reporting). The operator's stated investment test: this install grows the use of and supports the platform, and investment follows existing-customer priority and new-customer acquisition (operator, 2026-09-16). Platform-build work is real but is not that.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -2675,7 +2842,8 @@
           "release_plan_read",
           "coworker_screen_read",
           "coworker_screen_drive",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "workroom_evidence_write"
         ]
       }
     },
@@ -2728,7 +2896,8 @@
           "backlog_read",
           "registry_read",
           "initiative_design_review",
-          "initiative_domain_review"
+          "initiative_domain_review",
+          "workroom_evidence_write"
         ]
       }
     },
@@ -2772,7 +2941,8 @@
           "consumer_read",
           "crm_read",
           "crm_write",
-          "web_search"
+          "web_search",
+          "workroom_evidence_write"
         ]
       }
     },
@@ -3173,7 +3343,8 @@
           "backlog_write",
           "registry_read",
           "registry_write",
-          "web_search"
+          "web_search",
+          "workroom_evidence_write"
         ]
       }
     },
@@ -3222,7 +3393,8 @@
           "registry_read",
           "web_search",
           "work_capsule_read",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "workroom_evidence_write"
         ]
       }
     },
@@ -3990,7 +4162,8 @@
           "backlog_write",
           "telemetry_read",
           "web_search",
-          "registry_read"
+          "registry_read",
+          "workroom_evidence_write"
         ]
       }
     },
@@ -4074,7 +4247,8 @@
         "tool_grants": [
           "registry_read",
           "backlog_read",
-          "portfolio_read"
+          "portfolio_read",
+          "workroom_evidence_write"
         ]
       }
     },

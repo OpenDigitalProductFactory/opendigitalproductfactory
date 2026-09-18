@@ -45,10 +45,10 @@ export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.
 type LeaseModel = typeof prisma.nonProductionEnvironmentLease;
 type LeaseTx = Pick<
   typeof prisma,
-  "$executeRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord"
+  "$executeRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
 >;
 type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pick<
-  typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord"
+  typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord" | "workroom"
 >>;
 type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>>;
 
@@ -707,6 +707,12 @@ export async function renewNonprodEnvironmentLease(input: {
       slotKeys: ["slot-0"],
       rollbackReason: null,
       config: null,
+      // Renewing a lease that is already running: admission was decided when it
+      // was granted, so this path restates it rather than re-deciding it
+      // (BI-C77D920A — the required fields are what surfaced this second
+      // construction site, which the boolean collapse had hidden).
+      admissionStatus: "admitted",
+      disposition: "proceed",
     }
     : await resolveNonprodPoolPolicy({
       platformConfig: db.platformConfig,

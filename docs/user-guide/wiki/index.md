@@ -33,6 +33,22 @@ WWMD uses the same wiki substrate for decision support. It retrieves relevant pr
 
 How much each coworker acts on its own — its proactivity — is set from your industry's risk posture and can be confirmed or adjusted per coworker. See [Coworker Proactivity](../ai-workforce/coworker-proactivity.md).
 
+## Your Business Stances
+
+`/coworker-decisions/stance` is where your business's own answers live. Onboarding seeds a starting
+set from your mission and business type — money and quality, how you handle personal information,
+what the team gets on with unasked, and which decisions are yours to make at all. They are starting
+positions, not rulings: confirm them, or adjust any one first.
+
+Which stances you see depends on what your business actually does. A firm whose people work at
+customer premises gets a stance about conduct there; one whose people never leave the office does
+not, and is not asked whether it has field staff — that follows from your business type.
+
+Each card shows the sentence that carries the decision, with the rest a click away, and the list of
+published stances below shows the opening line of anything not already summarised in a card above. That is deliberate — a page of full stances
+is not one anyone reads before confirming, and confirming without reading is worse than a longer
+page. Open any stance to read it whole.
+
 ## Reading The Decision Log
 
 The decision log at `/coworker-decisions/decisions` is the record of what your AI workforce actually decided, split into three tiers: **WWMD** (platform doctrine), **WWWD** (your business), and **WSID** (role craft). Open a row for the options weighed, the rationale, the principles that pulled which way, and whether a human still needs to resolve it.

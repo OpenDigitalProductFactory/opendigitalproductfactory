@@ -20,7 +20,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { resolvePrincipalIdForUser } from "@/lib/identity/principal-linking";
+import { resolvePrincipalRecordIdForSessionIdentity } from "@/lib/identity/principal-linking";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 export type RatifiedPolicyVersion = {
@@ -102,7 +102,17 @@ export async function ratifyPolicyVersion(input: { profileId: string }): Promise
   } catch {
     return err("You do not have access to ratify a decision perspective.");
   }
-  const principalId = await resolvePrincipalIdForUser(userId);
+  // DecisionPerspectiveProfileVersion.promotedByPrincipalId is a foreign key
+  // to Principal.id, the RELATIONAL cuid — not Principal.principalId, the
+  // public semantic id that resolvePrincipalIdForUser returns. Writing the
+  // latter satisfies TypeScript (both are string) and violates the FK at
+  // runtime, which is what the first live click did: the action 500ed, the
+  // page crashed with React #441, and nothing was ratified. The unit tests
+  // could not catch it because they stub the store (BI-9C384562).
+  const principalId = await resolvePrincipalRecordIdForSessionIdentity({
+    type: "admin",
+    id: userId,
+  });
   if (!principalId) {
     return err("Your account has no principal identity to sign with.");
   }

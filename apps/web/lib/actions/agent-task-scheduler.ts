@@ -19,6 +19,7 @@ import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-ste
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
+  classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
   detectScheduledRunFailure,
   type ScheduledTaskRunRef,
@@ -514,16 +515,26 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     const boundary = proactivity.actionBoundary;
     // BI-0A59F936: unattended turns resolve external access from standing grants.
     const externalAccess = await resolveScheduledTurnExternalAccess(task.agentId);
-    const { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
+    // BI-CAP-F2D39F8F budgets attachment to the serving model. A prompt that NAMES
+    // a governed writer declares a dependency on it, so it is pinned inside the
+    // budget rather than left to runtime discovery (BI-4A394B21).
+    const toolArgs = {
       userContext,
-      mode: boundary === "advise" ? "advise" : "act",
+      mode: (boundary === "advise" ? "advise" : "act") as "advise" | "act",
       agentId: task.agentId,
       externalAccessEnabled: externalAccess.enabled,
-      // BI-CAP-F2D39F8F: budget the attachment to the serving model; the task
-      // prompt ranks which tools stay attached, the rest load on demand.
       routeContext: task.routeContext,
       intentQuery: task.prompt,
+    };
+    let { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools(toolArgs);
+    const pinned = scheduledToolsNeedingPin({
+      prompt: task.prompt, attached: tools, deferred: deferredTools,
     });
+    if (pinned.length > 0) {
+      ({ tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
+        ...toolArgs, requiredToolNames: pinned,
+      }));
+    }
     // A research task that cannot research fails loudly BEFORE the model runs.
     assertScheduledResearchCapability({
       taskKind: task.taskKind, prompt: task.prompt, agentId: task.agentId,
@@ -622,6 +633,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     });
     if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
+    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools });
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
     const playbookRunStatus =
@@ -683,8 +695,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { taskId },
       data: {
         lastRunAt: now,
-        lastStatus:
-          preparedPlaybook && playbookRunStatus === "partial" ? "partial" : "ok",
+        lastStatus: scheduledRunLastStatus(requiredTools, preparedPlaybook, playbookRunStatus),
         lastError: null,
         lastThreadId: thread.id,
         taskRunId: taskRunRef.taskRunId,
@@ -736,8 +747,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { jobId: taskId },
       data: {
         lastRunAt: now,
-        lastStatus:
-          preparedPlaybook && playbookRunStatus === "partial" ? "partial" : "ok",
+        lastStatus: scheduledRunLastStatus(requiredTools, preparedPlaybook, playbookRunStatus),
         lastError: null,
         nextRunAt,
       },

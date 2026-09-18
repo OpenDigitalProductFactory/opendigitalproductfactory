@@ -137,6 +137,17 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-guard-conformance-marks.test.mjs"),
       node("scripts/check-guard-conformance-marks.mjs"),
     ]),
+    // BI-FACB7C05 / BI-B6433DC6. `git diff <base>...HEAD` exits 128 with EMPTY
+    // stdout when the base cannot be resolved, so a guard whose wrapper collapses
+    // a failed git call into "" reports "nothing changed" — a clean line from a
+    // guard that never saw the diff. The class was closed by hand four times and
+    // came back each time, most recently on two --diff-filter=AM holdouts the
+    // ten-guard sweep missed while claiming completeness. This guard detects the
+    // shape statically so the next one cannot land.
+    guard("guard-diff-honesty", "Guard Diff Honesty", [
+      node("--test", "scripts/check-guard-diff-honesty.test.mjs"),
+      node("scripts/check-guard-diff-honesty.mjs"),
+    ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
       // Drives the real POSIX guard under bash: a cached binary path goes stale on
@@ -271,6 +282,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/gate-context.test.mjs",
+        "scripts/gate-wait.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
       ),
       // Split out of the command above because these three read the real
@@ -287,6 +299,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
+      // BI-78B653D5: the gate's credential resolution (client_credentials
+      // first, PAT until retirement, actionable refusal) against a loopback
+      // stub authorization server.
+      node("--test", "scripts/lib/mcp-credential.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -568,6 +584,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-no-unattributable-deferral.mjs"),
     ], { inputs: ["code"] }),
     guard("janitor-tests", "Janitor Tests", [
+      // BI-062F5687: a guard-run git fixture must never inherit the hook's
+      // GIT_DIR; runs the janitor freshness fixture under one, against the live
+      // tree, and proves the inherited repository is untouched.
+      conformanceTest("scripts/lib/git-hook-env.test.mjs"),
       node(
         "--test",
         "scripts/lib/runtime-artifact-janitor.test.mjs",
@@ -647,6 +667,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // reads the repository's own hook files, so it is a conformance assertion
       // and must not be stripped from the host-side preflight (BI-7B249AFE).
       conformanceTest("scripts/hooks/converge-git-hooks.test.mjs"),
+      // BI-9A46E89C. CONFORMANCE, not a plain self-test: one case asserts on the
+      // live hook source (that it never fetches at SessionStart), so stripping it
+      // host-side would remove the only check of a contract that protects session
+      // startup. The hook is also the only thing that tells a session its RULEBOOK
+      // is stale -- a condition the session cannot detect itself, because the
+      // stale AGENTS.md does not know it is stale. 6s.
+      conformanceTest("scripts/hooks/worktree-freshness.test.mjs"),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
     ]),
   ]),
@@ -655,6 +682,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
   // Keeping them separate preserves the source profile's minimal install while
   // letting CI, pregate preflight, and pr:ready consume one canonical inventory.
   workspace: Object.freeze([
+    guard("decoder-consumer-regression", "URI Decoder Consumer Regression", [
+      node("--test", "scripts/security/decode-uri-component.test.mjs"),
+    ]),
     guard("fpaw-standard-guard", "FPAW Standard Guard", [
       pnpm("run", "check:fpaw-standard:test"),
       pnpm("run", "check:fpaw-standard"),

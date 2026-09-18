@@ -9,6 +9,31 @@ Workroom: WC-4A72DC95. Parent delivery item: BI-06AE6833.
 Decision: DI-515AD614CCF6, harden existing DPF/Inngest execution.
 Canonical design: [throughput design sections 8.1–8.7](../specs/2026-09-03-local-first-agentic-delivery-throughput-design.md).
 
+## 2026-09-12 reviewer source classification repair
+
+WC-C7F9AB04 extends BI-06AE6833 after the memory review exposed another routing
+defect. Task TR-GATE-17CAD3AAE52422739C8CFF11 and screen
+`screen_d67cb7b6c5cda47d` recorded customer-contact classification and local-only
+routing. The exact artifact contains memory byte literals matching the phone
+detector and a versioned dependency patch filename matching the email detector.
+The global local-only setting and task-specific override are absent. These facts
+explain route restriction; they do not prove the subsequent provider failure.
+
+1. Reproduce the five artifact matches through the public classifier, while
+   retaining real and ambiguous phone/email evidence, including mixed messages.
+2. Extend the existing span exception mechanism for explicit unquoted resource
+   byte quantities and versioned dependency patch paths. Never exempt an entire
+   source block, message, caller or Workroom. Preserve all other screening rules.
+3. Consolidate contact-specific span handling outside the general classifier;
+   rerun authorship, classification and policy tests with typechecks and guards.
+4. Obtain exact-source review and protected merge checks, then verify ordinary
+   development review can use an eligible external route on the canonical image.
+   Actual customer contacts and an explicit local-only policy must remain enforced.
+
+Related prior work BI-EBE25715 and BI-67CAF494 is retained, not duplicated or
+modified on its owning peer. This repair does not certify the seven execution
+scenarios or close the overarching portal objective.
+
 ## Design grounding
 
 Reconciles published amendment 58b4480b against main 729c017e7d6. The three
@@ -607,3 +632,32 @@ screenshot and prescribed fresh measurement 34294055045 both show 369 arrival
 words. Update only that route's measured accessibility snapshot, retaining every
 numeric limit and every other route. The fresh measurement passed; the amended
 commit still requires independent review and protected CI.
+
+## September 12 reviewer outcome visibility
+
+WC-4B4B03F5 continues BI-06AE6833 on current main. Include native semantic
+reviews in the existing bounded recent TaskRun query, regardless of status;
+retain the separate outstanding-wait query and identity deduplication. Share
+the reviewer query predicate in the canonical Operations Map run read model.
+This preserves completed outcomes within the selected start-time window and
+existing source cap; it does not claim an unlimited historical ledger.
+
+Resolve the selected inspector against loaded evidence rather than the filtered
+list so changing a filter does not erase navigation context. No cached state or
+inferred completion is introduced. Verify query bounds, terminal reviewer
+projection without a recovery action, deduplication, and filter navigation.
+Protected CI and live portal verification remain required before completion.
+
+## September 13 recovery readback (WC-958DA760, BI-06AE6833)
+
+Live review TR-GATE-17CAD3AAE52422739C8CFF11 expired but still offers Resume review. Consolidate deadline/retry-budget evaluation into one pure policy used by the existing server recovery guard and existing inspector. Preserve server-side requester, immutable packet, consent, authority, quiescence and compare-and-swap checks. Load only the existing progress fields needed to explain the budget; unknown or malformed evidence must not imply permission. Show the recorded deadline, attempt count and unavailable reason, retaining history navigation. Re-evaluate at the deadline and before confirmation. Tests first: future/expired/invalid deadlines, exhausted/malformed counters, missing projection evidence, and no retry dispatch after expiry. This is an existing-inspector repair using shared primitives and theme tokens; no new route or control. Record source verification separately from later deployed acceptance. Approximately one fifth of this repair consolidates recovery policy and projection logic.
+
+UX-fit decision DI-DDD94F1471A4 selected existing-inspector-explanation over a dedicated recovery-detail route (high confidence, autonomy eligible, no commandment conflict). The committed propose-n-pick manifest points to that canonical decision; estimates used in option scoring are not claimed as measured visual metrics. Deployed acceptance remains separate.
+
+## September 13 screening evidence readback (WC-710B477C, BI-06AE6833)
+
+The c448 live reviewer probe recorded six screening receipts and six correlated provider responses, while Operations Map reported zero screening coverage. The loader omits the receipt and its privacy adapter hardcodes null. Select the existing receipt and reconstruct only the five fields in SafeInferenceScreenReceipt. Validate the version and field types; missing, malformed or unsupported receipts remain uncovered. Never expose raw payloads, match values, input hashes or arbitrary JSON fields. Reuse the existing conformance calculation and inspector; no new metrics, routes or controls. Test the real loader seam, mixed covered/missing records, blocked-route evidence and malicious extra fields before implementation. Verify against the same six existing live receipts after protected release, without another provider request. Consolidation remains in the existing shared privacy adapter rather than creating a parallel evidence store.
+
+## September 13 reviewer source-analysis intent (WC-132508EC, BI-06AE6833)
+
+Canonical c448 probe logs show the exact failure: the first model answer described the supplied historical source diff, then the /build evidence classifier injected a live-operational-data nudge. Subsequent calls searched for monitoring tools and lost the original task. Repair the existing shared intent classifier, not the prompt or evidence authority: recognize explicit analysis of supplied source as source-based work, excluding quoted code from intent cues. Preserve requests for live state before or after the artifact, mixed requests, ordinary build/backlog/provider questions and the existing no-evidence refusal. Do not treat 'no tools' as an exemption. Reuse one source-analysis classifier at the taxonomy and fallback evidence boundary. Test the original request shape, fenced and unified diffs, mixed/live counterexamples, and the actual agentic loop returning the first grounded source answer without a recovery call. No tool grants, dispatch authority, payload screening or terminal writer checks change. After protected deployment, one bounded original-artifact acceptance must return the requested cap, reserve and limitation; source tests alone do not complete that acceptance.

@@ -109,6 +109,7 @@ model EdgeNode {
   @@index([lastSeenAt])
   @@index([customerAccountId])
   @@index([customerSiteId])
+  @@index([subscriptionId])
 }
 
 model BootstrapToken {

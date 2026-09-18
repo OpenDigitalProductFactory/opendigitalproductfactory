@@ -470,6 +470,7 @@ model CatalogPriceListEntry {
   @@index([organizationId, catalogItemId, effectiveFrom])
   @@index([catalogSkuId])
   @@index([effectiveTo])
+  @@index([catalogItemId])
 }
 
 /// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
@@ -516,6 +517,7 @@ model CatalogPromotionItem {
   @@unique([promotionId, catalogItemId, priceListId])
   @@index([organizationId, catalogItemId])
   @@index([priceListId])
+  @@index([catalogItemId])
 }
 
 /// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward

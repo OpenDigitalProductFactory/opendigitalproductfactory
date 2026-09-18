@@ -25,6 +25,8 @@ export type McpSessionPayload = {
   agentId?: string | null;
   threadId?: string | null;
   routeContext?: string | null;
+  /** BI-B949993E: governed TaskRun identity; the route derives the review binding from it. */
+  taskRunId?: string | null;
   /** Tool grants this session can exercise — same shape as `McpApiToken.scopes`.
    *  The route's existing scope-vs-tool gate runs identically against either. */
   scopes: string[];
@@ -53,6 +55,7 @@ export async function createMcpSessionToken(payload: McpSessionPayload): Promise
     agentId: payload.agentId ?? null,
     threadId: payload.threadId ?? null,
     routeContext: payload.routeContext ?? null,
+    taskRunId: payload.taskRunId ?? null,
     scopes: payload.scopes,
     capability: payload.capability,
   })
@@ -82,6 +85,7 @@ export async function verifyMcpSessionToken(token: string): Promise<McpSessionPa
       agentId: typeof payload.agentId === "string" ? payload.agentId : null,
       threadId: typeof payload.threadId === "string" ? payload.threadId : null,
       routeContext: typeof payload.routeContext === "string" ? payload.routeContext : null,
+      taskRunId: typeof payload.taskRunId === "string" ? payload.taskRunId : null,
       scopes,
       capability,
     };

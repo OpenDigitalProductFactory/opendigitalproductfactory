@@ -5,7 +5,7 @@ import {
   ensureCapsuleWorkItemAnchorNonFatal,
 } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveTerminalInitiativeRecovery } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import {
@@ -156,7 +156,7 @@ function parseReleaseInputs(params: Record<string, unknown>): Array<Pick<ScopeCl
   return parsed.length > 0 ? parsed : null;
 }
 
-export async function listWorkCapsulesTool(params: Record<string, unknown>): Promise<ToolResult> {
+export async function listWorkCapsulesTool(params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
   const status = stringParam(params, "status");
   const decisionScope = stringParam(params, "decisionScope");
   const portfolioRole = stringParam(params, "portfolioRole");
@@ -182,28 +182,12 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>): Pro
     };
   }
 
-  const limit = numberParam(params, "limit");
-  // WS9 (BI-CBAAEA94): `staleOnly` returns only NOT-truly-live capsules (the reap
-  // lens); default false keeps the tool a full inventory. Liveness is derived
-  // from lease/build/sync — never updatedAt (a daily-heartbeat artifact).
-  const staleOnly = params["staleOnly"] === true;
-  const where = {
-    ...(status ? { status } : {}),
-    ...(decisionScope ? { decisionScope } : {}),
-    ...(portfolioRole ? { portfolioRole } : {}),
-  };
-  const take = limit === null ? 50 : Math.min(Math.max(Math.trunc(limit), 1), 100);
-  const { loadCapsuleLivenessInventory } = await import("@/lib/work-capsules/liveness-inventory");
-  const { capsulesAll, livenessSummary } = await loadCapsuleLivenessInventory(prisma as never, { where, take });
-  const capsules = staleOnly ? capsulesAll.filter((c) => !c.isLive) : capsulesAll;
-
-  return {
-    success: true,
-    message:
-      `Listed ${capsules.length} work capsule(s). Liveness (updatedAt is NOT a liveness signal): ` +
-      `${livenessSummary.live} live, ${livenessSummary.reapable} reap-candidate of ${livenessSummary.scanned} scanned.`,
-    data: { capsules, livenessSummary },
-  };
+  const { listWorkroomObservation } = await import("./list-observation");
+  if ((params.cursor !== undefined && typeof params.cursor !== "string")
+    || (params.limit !== undefined && (typeof params.limit !== "number" || !Number.isInteger(params.limit) || params.limit < 1 || params.limit > 100))) {
+    return { success: false, error: "invalid_page_input", message: "Use a string cursor and an integer limit from 1 to 100." };
+  }
+  return listWorkroomObservation(prisma as never, { ...params, status, decisionScope, portfolioRole }, userId, context);
 }
 
 export async function getWorkCapsuleTool(params: Record<string, unknown>): Promise<ToolResult> {

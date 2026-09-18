@@ -73,6 +73,92 @@ export interface TaskClassification {
 }
 
 /**
+ * Words that signal a question about CURRENT operational state — the class of
+ * answer that must be backed by a live tool call, not the model's memory. Kept
+ * deliberately small and high-precision for Phase 1.
+ */
+export const LIVE_STATE_CUES: readonly RegExp[] = [
+  /\bresolved\b/i,
+  /\bstatus\b/i,
+  /\bhow many\b/i,
+  /\bhow much\b/i,
+  /\bcount\b/i,
+  /\bcurrent(ly)?\b/i,
+  /\b(still )?(open|pending|outstanding|in[- ]progress|blocked|overdue|done|closed|completed)\b/i,
+  /\bany (new|updates?|changes?)\b/i,
+  /\bwhat('?s| is| are)\b.*\b(left|remaining|happening|going on)\b/i,
+  /\blatest\b/i,
+  /\bright now\b/i,
+  /\b(now|today|live|latest|pass(?:ed)?|fail(?:ed|ures?)?|deployed|production|running|queue|health)\b/i,
+];
+
+
+/**
+ * A supplied source artifact is evidence for what that source says, not for the
+ * running system. Keep quoted code out of intent matching and preserve any live
+ * request outside it. This narrows classification only; it grants no tool or
+ * writer authority and does not accept 'do not use tools' as an exemption.
+ */
+export function isSuppliedSourceAnalysis(message: string): boolean {
+  let suppliedSource = false;
+  const withoutFences: string[] = [];
+  let fenceLines: string[] | null = null;
+  let fenceWidth = 0;
+  // One forward pass: repeated/unclosed fence markers must not cause regex
+  // backtracking on an unbounded caller-supplied artifact (CodeQL #406).
+  for (const line of message.split(/\r?\n/)) {
+    const trimmed = line.trimStart();
+    let width = 0;
+    while (trimmed[width] === "`") width++;
+    if (fenceLines) {
+      fenceLines.push(line);
+      if (width >= fenceWidth && trimmed.slice(width).trim() === "") {
+        suppliedSource = true;
+        fenceLines = null;
+      }
+    } else if (width >= 3) {
+      fenceWidth = width;
+      fenceLines = [line];
+    } else {
+      withoutFences.push(line);
+    }
+  }
+  // An unterminated fence is not a verified supplied artifact. Preserve its
+  // text for live-request matching rather than silently discarding the tail.
+  for (const line of fenceLines ?? []) withoutFences.push(line);
+  let inDiff = false;
+  let oldLines = 0;
+  let newLines = 0;
+  const request = withoutFences.filter((line) => {
+    if (/^diff --git a\/.+ b\//.test(line)) {
+      suppliedSource = true;
+      inDiff = true;
+      oldLines = newLines = 0;
+      return false;
+    }
+    if (!inDiff) return true;
+    const hunk = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(line);
+    if (hunk) {
+      oldLines = Number(hunk[1] ?? 1);
+      newLines = Number(hunk[2] ?? 1);
+      return false;
+    }
+    if ((oldLines > 0 || newLines > 0) && /^[ +\-]/.test(line)) {
+      if (line[0] !== "+") oldLines--;
+      if (line[0] !== "-") newLines--;
+      return false;
+    }
+    if (/^(?:--- a\/|--- \/dev\/null|\+\+\+ b\/|\+\+\+ \/dev\/null|index |(?:new|deleted) file mode |(?:old|new) mode |(?:similarity|dissimilarity) index |(?:rename|copy) (?:from|to) |\\ No newline)/.test(line)) return false;
+    if (line.trim() === "") return false;
+    inDiff = false;
+    return true;
+  }).join("\n");
+  if (!suppliedSource || !/\b(?:read|summari[sz]e|explain|review|analy[sz]e|compare)\b[^.!?\n]{0,160}\b(?:diff|patch|source code|code snippet)\b/i.test(request)) return false;
+  // Mixed source/live questions still owe live evidence, wherever they appear.
+  return !LIVE_STATE_CUES.some((cue) => cue.test(request));
+}
+
+/**
  * Classify a turn's task class from its route + message. Returns the best-matching
  * class when the route matches a class AND the message reads like a live-state
  * question (a cue hit or a literal '?'). Returns null for turns no class covers —
@@ -86,6 +172,7 @@ export function classifyTaskClass(params: {
   const routeContext = params.routeContext ?? "";
   const message = (params.message ?? "").trim();
   if (message.length === 0) return null;
+  if (isSuppliedSourceAnalysis(message)) return null;
   const isQuestion = message.includes("?");
 
   let best: { def: TaskClassDef; prefixLen: number } | null = null;

@@ -773,6 +773,31 @@ above. This amendment is design evidence, not their passing result.
 
 ## 16. Architecture review (advisory)
 
+### September 12 implementation: provider observation binding
+
+WC-20D2C1BC continues BI-06AE6833 and BI-0B3FED3D. The existing authenticated
+contributor inventory observes GitHub every ten minutes, but its pure Workroom
+binding resolver has no production caller. The current install also lacks a
+production webhook secret; a webhook-only path cannot provide continuity there.
+
+After each existing scheduled or on-demand inventory checkpoint, run a separately
+checkpointed binding pass. Reuse verified provider observations, their retained
+snapshot pointer on unchanged responses, and the repository/branch resolver.
+Require fresh successful source confirmation and an exact recorded head when
+one exists. Fill a missing PR URL only from that same PR. Bound the batch, report
+coverage gaps, and atomically compare-and-swap the binding with its evidence
+journal. Duplicate or restarted execution must not append duplicate receipts or
+overwrite concurrent ownership, scope, status, or another PR binding.
+
+This is observation, not authority to merge, deploy, close a room, or invoke an
+AI worker. It adds no scheduler, provider poll, public endpoint, or schema. Reuse
+the existing Build Studio readiness/actuation boundary for subsequent work.
+Verification covers initial binding, partial binding, repeated delivery, stale
+or failed observation, repository/head mismatch, concurrent writes, and journal
+failure. Live acceptance after canonical release must show an external Workroom
+acquiring its PR binding without an attached client. Source tests alone do not
+complete that acceptance.
+
 **Alignment:** well aligned after amendment. The design extends canonical Workroom,
 TaskRun, federation, evidence, closeout, and deployment-provider contracts; campaign
 and scorecard are projections/operating views rather than new authorities.

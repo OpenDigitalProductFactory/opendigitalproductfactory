@@ -22,6 +22,7 @@ import {
   runNMinusOneUpgrade,
   buildPromoterPromotionDockerArgs,
   execFileWithLiveOutput,
+  lastStepIn,
   buildPromoterReadinessDockerArgs,
   normalizePromoterReadiness,
   prepareNMinusOneBaseline,
@@ -45,8 +46,29 @@ test("long promotion commands stream progress while retaining evidence", async (
     stdout: { write: (chunk) => { forwarded.stdout += chunk; } },
     stderr: { write: (chunk) => { forwarded.stderr += chunk; } },
   });
-  assert.deepEqual(result, { stdout: "captured stdout", stderr: "captured stderr" });
+  assert.deepEqual(result, { stdout: "captured stdout", stderr: "captured stderr", lastStep: "docker-build" });
   assert.deepEqual(forwarded, { stdout: "step=docker-build\n", stderr: "build progress\n" });
+});
+
+test("a promoter stopped by a signal is reported with the last step it reached (BI-DC04048A)", async () => {
+  const launch = (_command, _args, options, callback) => {
+    const child = { stdout: new EventEmitter(), stderr: new EventEmitter() };
+    queueMicrotask(() => {
+      assert.equal(options.timeout, 1234, "the harness bound must reach execFile");
+      child.stdout.emit("data", "step=docker-build target=abc\nstep=health target=abc\n");
+      child.stdout.emit("data", "step=cleanup target=abc\n");
+      const error = Object.assign(new Error("Command failed"), { killed: true, signal: "SIGTERM" });
+      callback(error, "", "");
+    });
+    return child;
+  };
+  await assert.rejects(
+    execFileWithLiveOutput("docker", ["run"], { timeout: 1234 }, launch, { stdout: { write() {} }, stderr: { write() {} } }),
+    (error) => error.lastStep === "cleanup"
+      && /stopped by SIGTERM after the harness's 1234ms bound \(last promoter step seen: cleanup\)/.test(error.message),
+  );
+  assert.equal(lastStepIn("noise\nstep=a x\nmore step=b-c y\n"), "b-c");
+  assert.equal(lastStepIn("no steps here", "previous"), "previous");
 });
 
 test("GitHub client authenticates and follows pagination", async () => {
@@ -356,6 +378,12 @@ test("baseline preparation uses the unique harness project and proves health aft
     assert.deepEqual(events[1].args.slice(0, 4), ["run", "-d", "--name", "dpf-n1-isolated-portal-1"]);
     assert.ok(events[1].args.includes("com.docker.compose.project=dpf-n1-isolated"));
     assert.ok(events[1].args.includes("com.docker.compose.service=portal"));
+    // BI-BC7AE37B: without these two labels Compose does not recognise the
+    // sentinel as the project's portal container, `up --force-recreate portal`
+    // tries to create a second `<project>-portal-1` and the daemon refuses
+    // with a name Conflict — the acceptance gate could never pass.
+    assert.ok(events[1].args.includes("com.docker.compose.oneoff=False"), "sentinel must be a non-oneoff service container");
+    assert.ok(events[1].args.some((arg) => /^com\.docker\.compose\.config-hash=.+/.test(arg)), "sentinel must carry a config-hash Compose will treat as stale");
     assert.deepEqual(workspace.harnessEnvironment, events[0].env);
     const stateBytes = await readFile(join(workspace.state, "install-state.json"));
     assert.deepEqual([...stateBytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);

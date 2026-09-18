@@ -29,6 +29,7 @@ import type {
   DeliberationTriggerSource,
 } from "./types";
 import { getPattern, extractRoleRecipes } from "./registry";
+import { mapRoleToNode, type NodeTypeMapping } from "./role-vocabulary";
 import type { ResolvedDeliberationPattern } from "./registry";
 import {
   buildBranchRequestContract,
@@ -86,6 +87,12 @@ export interface OrchestrateDeliberationInput {
   routeContext?: string | null;
   /** Coworker on whose behalf this runs — stamped on a bootstrapped TaskRun (BI-B3AB7FC9). */
   agentId?: string | null;
+
+  /** The caller's case in plain prose. Without it a panel has nothing to
+   *  weigh and can only report insufficient evidence. */
+  brief?: string | null;
+  /** One-line subject for logs, UI and node titles. */
+  subject?: string | null;
 
   patternSlug: string;
   artifactType: DeliberationArtifactType;
@@ -169,40 +176,6 @@ export interface BranchRecord {
   authorityEnvelope: string[];
 }
 
-/* -------------------------------------------------------------------------- */
-/* Role → node mapping (preserves underscore schema values per §6.6)          */
-/* -------------------------------------------------------------------------- */
-
-interface NodeTypeMapping {
-  nodeType: string;
-  workerRole: string;
-}
-
-function mapRoleToNode(roleId: string): NodeTypeMapping {
-  // Existing TaskNode enum values — underscores preserved per schema comments
-  // (schema.prisma:2550, 2554). Deliberation-specific enums (§6.6) use
-  // hyphens; existing schema columns stay as-is.
-  switch (roleId) {
-    case "author":
-      return { nodeType: "analyze", workerRole: "planner" };
-    case "reviewer":
-      return { nodeType: "review", workerRole: "reviewer" };
-    case "skeptic":
-      return { nodeType: "skeptical_review", workerRole: "skeptical_reviewer" };
-    case "debater":
-      return { nodeType: "analyze", workerRole: "researcher" };
-    case "adjudicator":
-      return { nodeType: "summarize", workerRole: "summarizer" };
-    default:
-      // Unknown role — fall back to a safe read-only review node. Warn so
-      // pattern authors notice missing role-to-node mappings rather than
-      // silently getting a generic review node (memory: silent seed skips).
-      console.warn(
-        `[deliberation/orchestrator] unknown roleId "${roleId}" — mapping to review/reviewer fallback`,
-      );
-      return { nodeType: "review", workerRole: "reviewer" };
-  }
-}
 
 /* -------------------------------------------------------------------------- */
 /* Authority envelope — spec §6.5                                             */
@@ -417,6 +390,8 @@ export async function orchestrateDeliberation(
       metadata: {
         requestedDiversity: input.diversityMode,
         requestedBy: input.userId,
+        ...(input.brief ? { brief: input.brief } : {}),
+        ...(input.subject ? { subject: input.subject } : {}),
       },
     },
     select: { id: true },
@@ -698,6 +673,11 @@ export async function orchestrateDeliberation(
         requestedBy: input.userId,
         actualDiversity,
         budgetHalted,
+        // Carried through: this write REPLACES metadata, so omitting the brief
+        // here silently erased it before the runner could read it — branches
+        // then convened with nothing and reported insufficient evidence.
+        ...(input.brief ? { brief: input.brief } : {}),
+        ...(input.subject ? { subject: input.subject } : {}),
       },
     },
   });

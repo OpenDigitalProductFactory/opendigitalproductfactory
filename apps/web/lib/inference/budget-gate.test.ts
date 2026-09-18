@@ -4,6 +4,9 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     tokenUsage: { aggregate: vi.fn() },
     agentBudgetEvent: { create: vi.fn() },
+    modelProfile: { findUnique: vi.fn() },
+    modelProvider: { findUnique: vi.fn() },
+    aiProviderFinanceProfile: { findUnique: vi.fn() },
   },
 }));
 
@@ -94,5 +97,59 @@ describe("writeBudgetEvent", () => {
     await expect(
       writeBudgetEvent({ agentId: "build-architect", eventKind: "warning_80", actualTokens: 85_000, limitTokens: 100_000 })
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("amountUsd reflects cash, not the published rate", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function amountUsdFromLastEvent(): number {
+    const call = vi.mocked(prisma.agentBudgetEvent.create).mock.calls[0]?.[0] as
+      | { data: { amountUsd: number } }
+      | undefined;
+    if (!call) throw new Error("no AgentBudgetEvent was written");
+    return call.data.amountUsd;
+  }
+
+  async function writeOne(valuationMethod: string | null) {
+    mockTokenUsage(0, 0);
+    vi.mocked(prisma.aiProviderFinanceProfile.findUnique).mockResolvedValue(
+      valuationMethod === null
+        ? null
+        : ({ valuationMethod } as never),
+    );
+    vi.mocked(prisma.modelProfile.findUnique).mockResolvedValue({
+      inputPricePerMToken: 5,
+      outputPricePerMToken: 25,
+    } as never);
+    vi.mocked(prisma.agentBudgetEvent.create).mockResolvedValue({} as never);
+    await writeBudgetEvent({
+      agentId: "build-architect",
+      eventKind: "warning_80",
+      actualTokens: 1_000_000,
+      limitTokens: 2_000_000,
+      providerId: "anthropic-sub",
+      modelId: "claude-opus-5",
+    });
+  }
+
+  it("charges nothing extra for a provider funded by a commitment", async () => {
+    // The Max subscription already bought these tokens. Billing them at the
+    // list rate would invent spend that no invoice will ever show.
+    await writeOne("commitment_first");
+    expect(amountUsdFromLastEvent()).toBe(0);
+  });
+
+  it("charges the published rate when the provider bills per token", async () => {
+    // Blended 60/40 of $5 in and $25 out = $13/MTok over 1M tokens.
+    await writeOne("metered");
+    expect(amountUsdFromLastEvent()).toBeCloseTo(13, 6);
+  });
+
+  it("treats a provider with no finance profile as metered", async () => {
+    // Failing open to $0 would hide real spend behind missing config; a
+    // provider we know nothing about must still be assumed to cost money.
+    await writeOne(null);
+    expect(amountUsdFromLastEvent()).toBeCloseTo(13, 6);
   });
 });

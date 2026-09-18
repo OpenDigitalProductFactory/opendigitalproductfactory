@@ -241,7 +241,47 @@ export type DecisionPerspectiveEvaluationResult = {
     // BI-F5F2869D: not a gap at all — recorded doctrine is consistent with the
     // proposal, but nobody has ruled on this question, so it goes to the owner
     // as a NEW idea to weigh rather than as missing policy.
-    | "aligned-not-settled";
+    | "aligned-not-settled"
+    // EP-5CC9C184 / BI-5843CD9C: the material present CANNOT reach the
+    // recommendation band no matter how much more of the same kind is added,
+    // because its weighting ceiling sits below the band. Distinct from
+    // "material-below-confidence", which more or better material can fix.
+    | "ceiling-below-recommendation-band";
+  /**
+   * Why this consult could or could not have recommended, independent of what it
+   * decided. Present whenever applicable material was scored.
+   *
+   * Without this, a consult that is arithmetically incapable of recommending is
+   * indistinguishable from one that weighed the evidence and chose to escalate —
+   * both return an escalation with a plausible rationale. Callers then treat an
+   * inert mechanism as a considered judgement, and operators add material that
+   * cannot possibly help. Measured live under BI-0F3D5F94: five acumens holding
+   * 3 to 12 material rows all returned exactly 0.35 at medium risk.
+   */
+  decidability?: MaterialDecidability;
+};
+
+/**
+ * Whether the scored material could clear the recommendation band at all, and
+ * what is holding the ceiling down when it cannot.
+ */
+export type MaterialDecidability = {
+  /** Highest confidence this material set could reach at this risk tier. */
+  ceiling: number;
+  /** The band the ceiling is measured against. */
+  recommendationBand: number;
+  /** False when ceiling < band — more material of the same kind cannot help. */
+  canReachRecommendation: boolean;
+  /**
+   * The weighting factor capping the ceiling, when one dominates. `promotion`
+   * is the common case for seeded doctrine: candidate material is weighted 0.45,
+   * so it cannot reach a 0.7 band however much of it exists — only promotion
+   * moves it. `freshness` and `review` are operator-fixable by curation;
+   * `evidence` needs better sources, not more of them.
+   */
+  bindingFactor: "promotion" | "freshness" | "review" | "evidence" | "confidence" | null;
+  /** Plain-language remedy naming what would actually change the outcome. */
+  remedy: string | null;
 };
 
 /**

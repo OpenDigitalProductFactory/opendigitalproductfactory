@@ -46,6 +46,7 @@ import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/m
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
+import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import {
   resolveListingAuthorityForToken,
   filterListableTools,
@@ -503,7 +504,7 @@ async function handleToolsCall(
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
   }
-  const toolName = params["name"];
+  const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:
@@ -594,6 +595,11 @@ async function handleToolsCall(
       apiTokenId: token.tokenId,
       threadId: token.threadId ?? undefined,
       routeContext: token.routeContext ?? undefined,
+      // BI-B949993E: a session JWT minted for a governed TaskRun carries its
+      // id; governed execution resolves the TaskRun's immutable review
+      // binding from it (resolve-coworker-tool-authority), so a native CLI
+      // writer call is admitted routinely instead of parked on an envelope.
+      ...(token.taskRunId ? { taskRunId: token.taskRunId } : {}),
       callerClient,
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,

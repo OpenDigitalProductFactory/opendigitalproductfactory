@@ -291,6 +291,7 @@ model RuntimeVerification {
   @@index([featureBuildId, kind, status])
   @@index([workCapsuleId, kind, status])
   @@index([kind, status])
+  @@index([gitPromotionCandidateId])
 }
 
 // Per-run audit row for the contributor-inventory-sync Inngest cron. Mirrors
@@ -353,6 +354,7 @@ model ContributorInventorySnapshot {
   @@unique([source, sourceKey, syncRunId])
   @@index([source, syncRunId])
   @@index([source, fetchedAt])
+  @@index([syncRunId])
 }
 
 model CodeGraphIndexState {
@@ -705,6 +707,7 @@ model AssuranceRun {
   @@index([buildId, startedAt(sort: Desc)])
   @@index([digitalProductId, startedAt(sort: Desc)])
   @@index([adapterKey, status])
+  @@index([releaseBundleId])
 }
 
 model BomDocument {
@@ -738,6 +741,8 @@ model BomDocument {
   @@index([digitalProductId, generatedAt(sort: Desc)])
   @@index([digest])
   @@index([status])
+  @@index([artifactRevisionId])
+  @@index([assuranceRunId])
 }
 
 model BomComponent {
@@ -1055,7 +1060,13 @@ model TaskRun {
   title                String
   objective            String                   @db.Text
   source               String                   @default("coworker") // coworker | build | skill | proactive
-  /// A2A-aligned task states: submitted | working | input-required | auth-required | completed | failed | canceled | rejected | archived
+  /// Closed set, enforced by "TaskRun_status_closed_set" (20260916140000) and
+  /// single-sourced from TASK_STATES in apps/web/lib/tak/task-states.ts, which a
+  /// parity test pins against the constraint (BI-9F6AFFA0). The nine A2A-aligned
+  /// states — submitted | working | input-required | auth-required | completed |
+  /// failed | canceled | rejected | archived — plus four DPF runtime states:
+  /// stalled, quiescing, paused-for-upgrade, paused-for-upgrade-forced. This
+  /// comment is no longer the constraint; do not widen the set here alone.
   status               String                   @default("submitted")
   authorityScope       Json?
   a2aMetadata          Json?
