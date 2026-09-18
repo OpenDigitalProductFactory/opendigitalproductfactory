@@ -55,12 +55,14 @@ type DiscoverCanonicalArtifact = (args: {
   repositoryFullName: string;
   baseSha: string;
   headSha: string;
+  backlogBody?: string | null;
 }) => Promise<InitiativeRecoveryCanonicalArtifact>;
 
 async function discoverCanonicalArtifactFromProvider(args: {
   repositoryFullName: string;
   baseSha: string;
   headSha: string;
+  backlogBody?: string | null;
 }): Promise<InitiativeRecoveryCanonicalArtifact> {
   const { discoverCanonicalDesignArtifact } = await import(
     "@/lib/backlog/initiative-readiness/canonical-artifact-discovery"
@@ -112,6 +114,7 @@ function claimSuccess(data: GovernedClaimSuccess): GovernedClaimSuccessResult {
 const EMPTY_RECOVERY: InitiativeReviewerRecovery = { reviewerRoutes: [], escalations: [], unroutable: [] };
 
 type PendingRecovery = {
+  backlogBody: string | null;
   decision: InitiativeReadinessDecision;
   baselineId: string | null;
   dispatchContext: InitiativeRecoveryDispatchContext | null;
@@ -138,6 +141,7 @@ async function resolveRecoveryOutsideTransaction(args: {
       repositoryFullName: pending.dispatchContext.repositoryFullName,
       baseSha: pending.baseSha,
       headSha: pending.dispatchContext.headSha,
+      ...(pending.backlogBody ? { backlogBody: pending.backlogBody } : {}),
     })
     : {
       resolved: false,
@@ -469,6 +473,7 @@ export async function claimGovernedBacklogWorkspace(args: {
         // the not-ready path records its decision here and resolves recovery
         // after the commit.
         pendingRecovery = {
+          backlogBody: item.body ?? null,
           decision: evaluated,
           baselineId: projection.baselineId,
           planArtifact: projection.planArtifact,
