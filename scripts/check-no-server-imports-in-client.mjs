@@ -29,7 +29,7 @@
 //   under apps/web/lib — and import that from the component.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { exitUnresolvable, listChangedFiles } from "./lib/git-changed-files.mjs";
