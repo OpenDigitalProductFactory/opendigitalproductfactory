@@ -424,15 +424,8 @@ OPERATING RULES:
     modelRequirements: {
       defaultMinimumTier: "strong",
       defaultBudgetClass: "balanced",
-      // BI-8CFA1CA8: was `preferredProviderId: "anthropic"`. A pin in route
-      // source cannot be cleared from the portal and strands the route whenever
-      // that provider is disabled — the same defect removed from /build after
-      // the 2026-05-12 "Pinned provider 'codex' not available" warnings.
-      //
-      // What this route actually needs is a model that follows the "do not
-      // invent legal facts" instruction and reasons carefully over sparse
-      // evidence. That is a requirement, so it is stated as one and routing
-      // picks whichever model meets it today. See kernel `no-provider-pinning`.
+      // BI-8CFA1CA8: was pinned to anthropic; the need is stated so routing can
+      // pick. Kernel no-provider-pinning; guard no-literal-pins.test.ts.
       instructionFollowing: "excellent",
       minimumDimensions: { instructionFollowing: 85, reasoning: 80 },
       defaultEffort: "high",

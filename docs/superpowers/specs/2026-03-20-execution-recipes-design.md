@@ -1,7 +1,10 @@
+---
+status: active
+---
 # EP-INF-005b: Execution Recipes
 
 **Date:** 2026-03-20
-**Status:** Draft
+**Status:** Active (§3 and §2 default-plan parameters superseded 2026-09-18)
 **Author:** Mark Bodman (CEO) + Claude (COO/design partner)
 **Epic:** EP-INF-005b
 
