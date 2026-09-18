@@ -270,3 +270,76 @@ recovery packet); authors do not hold the receipt writers directly, and that is
 the intended authority split, not a blocker. Reviewer receipts are bound to the
 immutable blob of this file at the reviewed commit, so any edit after a receipt
 requires the affected gates to be re-recorded at the new head.
+
+## PR-submit coding close and awaiting-acceptance (BI-7161625D)
+
+Operator-ratified 2026-09-07. This addendum extends OBJ-DC-2/3/4; it is not a
+second close-out design. Kernel scoring the same day preferred later verification
+over treating merge as `done` (9.52 vs 6.20). The operator then locked a sharper
+split: **coding ends when the merge-ready PR is submitted**, and **acceptance is
+a separate `BacklogItem.status` batched in verification loops that do not use the
+original thread, author, or worktree.**
+
+This supersedes the earlier "prove we do not need a new status" clause on
+BI-7161625D. Workroom `verifying` stays room liveness and is not reused as the
+item lifecycle.
+
+### Research note (medium-item design)
+
+Problem: `done` mixed coding close-out with live acceptance. Authoring threads
+were gone before `update_backlog_item_status(done)` could run, so shipped PRs
+stayed `open` and `get_next_recommended_work` kept offering them. Observed
+2026-09-07: BI-CA54ACC8 (#5126), BI-E54F7F87 (#4972), BI-D58567DC (#5044),
+BI-SIG-463E478D (#5052), BI-MCP-EFF-CD5F744B (#4899) were on `origin/main` and
+still `open`.
+
+Options considered:
+
+1. **Keep `done` as coding close; file misses as new BIs.** Fastest for authors;
+   collapses acceptance into merge. Rejected: kernel and operator require live
+   acceptance after deploy.
+2. **Leave items `open`/`in-progress` until a later verification loop marks
+   `done`.** No enum change. Rejected: the coding pool and next-work selector
+   cannot tell shipped work from unstarted work (the 467-item rot).
+3. **Add `awaiting-acceptance` and close coding at PR submit.** Chosen. DPF
+   opens PRs only when merge-ready (no drafts), so submit is a durable server
+   event. Verification stays independent.
+
+Benchmarks: GitHub can close issues on merge — too late for DPF, whose PRs are
+already merge-ready at open, and too early for acceptance (merge ≠ served SHA).
+Jira/Linear "In Review" is the analogue we adopt, as a closed Prisma enum value,
+not a free-form string. Argo Rollouts analysis and the parent spec's
+release-scoped acceptance still own the later pass (OBJ-DC-3).
+
+### Contracts added
+
+- **OBJ-DC-8:** A merge-ready GitHub PR for a linked BacklogItem moves that item
+  from `triaging`/`open`/`in-progress` to `awaiting-acceptance` without an
+  authoring-session tool call. The item leaves implementation-ready next-work.
+  `done` is reserved for batched verification against the served SHA.
+  (contract CT-DC-PR-SUBMIT)
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-DC-8 | OBJ-DC-2, OBJ-DC-3, OBJ-DC-8 | Opening or marking ready a non-draft PR stamps the Workroom PR identity and moves the linked item to `awaiting-acceptance`. Withdrawing an unmerged PR returns it to `open`. `get_next_recommended_work` does not offer `awaiting-acceptance` as implementation-ready. A later verification loop moves a pass to `done` and files exactly one corrective BI on a fail, leaving the original in `awaiting-acceptance`. Already-PRed open items reconcile via Workroom `pullRequestNumber` or evidence `/pull/N` links without reconstructing the original session. |
+
+Legal transitions (extend `apps/web/lib/backlog/transitions.ts`; do not fork):
+
+- `triaging` / `open` / `in-progress` → `awaiting-acceptance` on PR submit
+- `awaiting-acceptance` → `done` on verification pass (`completeBacklogItemTransition`)
+- `awaiting-acceptance` → `open` if the PR is closed without merge
+- `awaiting-acceptance` → `retired` for discarded delivered demand
+
+Coding agents never own `awaiting-acceptance` → `done`. Federation does not
+project `awaiting-acceptance` (delivered locally, not open demand). Visibility
+gets a fourth bucket so the active coding lens does not show PRed work. Epic
+remaining-count still treats the item as unfinished until `done`/`retired`.
+
+Trigger: GitHub `pull_request` webhook on the existing
+`/api/platform/git/updates` intake. Push-only sandbox evaluation is unchanged.
+The actuator is server-side (`apps/web/lib/backlog/pr-submit-awaiting-acceptance.ts`)
+so it survives the authoring session. A bounded reconcile sweeps Workrooms that
+already have a PR number and items whose evidence links name `/pull/N`.
+
+Failure: reuse the existing corrective-intake fingerprint
+(`capture-corrective-bi.ts` pattern). Do not reopen the coding thread.

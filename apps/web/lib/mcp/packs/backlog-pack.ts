@@ -269,7 +269,7 @@ async function updateBacklogItemStatus(
     return {
       success: false,
       error: "invalid_status",
-      message: `status must be one of triaging|open|in-progress|done|deferred|retired, got ${target}`,
+      message: `status must be one of triaging|open|in-progress|awaiting-acceptance|done|deferred|retired, got ${target}`,
     };
   const deferral = target === "deferred"
     ? normalizeDeferralInput(params["deferral"])
