@@ -13,6 +13,7 @@ import { prisma } from "@dpf/db";
 import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 
 import type { ToolResult } from "@/lib/mcp-tools";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPackHandler } from "./tool-pack";
 import {
   logBuildActivity,
@@ -54,18 +55,32 @@ async function attestIdeateResearch(
   userId: string,
   agentId: string | null,
 ): Promise<void> {
+  let outcome: { recorded: boolean; reason: string };
   try {
     const { recordIdeateResearchReceipt } = await import("@/lib/build/record-ideate-research-receipt");
-    await recordIdeateResearchReceipt({
+    outcome = await recordIdeateResearchReceipt({
       buildId,
       designDoc,
       revisionId: `review:${buildId}`,
       authorUserId: userId,
       authorAgentId: agentId,
     });
-  } catch {
-    // A missing receipt leaves the build exactly where it already was.
+  } catch (err) {
+    outcome = { recorded: false, reason: `attestation threw: ${getErrorMessage(err)}` };
   }
+  // A missing receipt leaves the build exactly where it already was — but it
+  // must never leave it there silently (BI-CA7C0C48: the swallowed refusal is
+  // what made ten builds look stuck for no reason). The outcome is a build
+  // activity row either way.
+  await prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "ideate_research_attestation",
+      summary: outcome.recorded
+        ? "Research receipt recorded for the governed backlog subject (author-accountable lane)."
+        : `Research receipt NOT recorded: ${outcome.reason.slice(0, 400)}`,
+    },
+  }).catch(() => undefined);
 }
 
 export async function reviewDesignDoc(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {
