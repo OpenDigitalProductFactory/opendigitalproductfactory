@@ -285,25 +285,9 @@ done
 ok "Pointer files intact: $POINTER_COUNT tools wired to AGENTS.md"
 
 # ── Worktree hygiene defaults (BI-5F4F0146) ───────────────────────────────────
-# Register the worktree janitor on a schedule so merged+clean worktrees are reaped
-# automatically. Unreaped, they accumulate into the hundreds; each carries a real
-# node_modules tree, and the OS file indexer (Spotlight on macOS) then thrashes the
-# host — starving the portal/inference VM. On macOS, also keep the worktree base
-# out of Spotlight. All best-effort: a hygiene step must never fail contributor setup.
-WT_BASE="$(cd "$REPO_ROOT/.." && pwd)/dpf-worktrees"
-mkdir -p "$WT_BASE" 2>/dev/null || true
-if bash "$SCRIPT_DIR/install-worktree-janitor-schedule.sh" --live --tier-a-only >/dev/null 2>&1; then
-  ok "Worktree janitor scheduled (daily, merged+clean only)"
-else
-  warn "Could not schedule the worktree janitor (non-fatal): bash scripts/install-worktree-janitor-schedule.sh --live --tier-a-only"
-fi
-if [ "$(uname -s)" = "Darwin" ]; then
-  # mdutil -i off does not work on a subfolder; the .metadata_never_index hint is
-  # the no-privilege mechanism, and the Privacy list is the authoritative one.
-  touch "$WT_BASE/.metadata_never_index" 2>/dev/null || true
-  ok "Placed a Spotlight no-index hint at the worktree base"
-  warn "For a full Spotlight exclusion (needs admin): add '$WT_BASE' under System Settings > Spotlight > Privacy."
-fi
+# Schedule the reaper + keep the worktree base out of the OS file indexer, via the
+# shared helper every install surface calls (one source of truth). Best-effort.
+bash "$SCRIPT_DIR/setup-worktree-hygiene.sh" "$REPO_ROOT" || true
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 

@@ -61,6 +61,8 @@ genuine disagreement in a class still lowers autonomy there, which is the point.
 
 For a consequential tool call, Decision Perspective is a pre-execution control rather than optional advice. The gate extracts the proposed market, customer, product, geography, and go-to-market motion, then checks them independently against the organization's published WWWD stance, organization-owned product portfolio, and GTM evidence. An explicit hard boundary in any required corpus vetoes the action; positive signals elsewhere cannot average the veto away.
 
+Only effects that leave the **business** are checked this way. A tool whose outward effect is platform development or operations (opening a pull request, contributing to the hive, running a discovery sweep, a sign-in handshake) declares `consequenceScope: "platform"` and is governed by the founder kernel (WWMD) instead: it is still receipted and outward-reviewed, but the business owner is never asked "what should the business do?" about a pull request (BI-63B14D4B). When a business-outward tool carries no descriptive fields, the gate states the parameters it was given rather than escalating a bare tool name.
+
 Product and GTM checks may use a qualified WSID specialist, but qualification never grants permission. The ordinary TAK intersection still requires the actor's authority, tool grants, workflow policy, data constraints, and preconditions. Owners and employees pass through the same control as coworkers.
 
 There is no alignment bypass flag. To permit an action that the current stance rejects, an owner deliberately amends and publishes the WWWD stance, producing a new policy version, and submits the action for a fresh decision. Every consequential verdict is recorded as a GAID-bound receipt showing the actor, decision interaction, policy version, delegation and qualification evidence, cited sources, and amendment lineage. For an approved action, the receipt channel is reserved before the side effect; if it cannot be reserved, the action does not run.
@@ -101,6 +103,62 @@ The `DecisionPerspectiveProfile` model supports several profile kinds today. Eac
 
 The non-negotiable boundary: a customer profile **must not** inherit platform-specific business judgment as authority by default. DPF product doctrine can be advisory product guidance for any profile; the customer's own WWWD profile becomes authoritative for its business context once that profile exists.
 
+## What Onboarding Seeds for WWWD
+
+A brand-new organization has no recorded stance, so every business question would go to the owner.
+Onboarding avoids that by seeding a **starting** WWWD corpus from the captured mission and the chosen
+business archetype: four identity pages, a "what great looks like" page, and eight **stance vectors**.
+
+Each vector is a plain-language question with a default answer, worded for the archetype. They are
+starting positions the owner edits — never a ruling attributed to the owner.
+
+| Vector | The question it answers |
+|---|---|
+| `customer-goodwill` | When something goes wrong on our side |
+| `pricing-integrity` | Prices, quotes, and discounts |
+| `growth-vs-stability` | New opportunities vs existing commitments |
+| `quality-bar` | Our quality standard |
+| `spend-authority` | Spending without asking |
+| `data-handling` | Personal information we hold |
+| `routine-operations` | What the team just gets on with |
+| `decision-scope` | Which decisions are ours to make |
+
+Some stances only exist because of what a business actually *does*. "Under what conditions may we
+capture an employee's location?" is a real question for a business whose people drive to customer
+homes, and meaningless for one whose people never leave the office.
+
+So the activity decides whether the stance is seeded, and **the activity is derived from your
+business type, never asked**. A plumbing firm is not asked whether its engineers visit customers; a
+software platform is never handed a posture about behaviour in someone's home. Where a business type
+is genuinely mixed — professional services, some veterinary and care work — the stance is still
+seeded with a sensible default you can edit, because an editable default costs you one card and a
+missing one costs you an unanswerable question later.
+
+You will not find a setup question asking which activities apply. If we can work it out, asking you
+is a tax rather than a check.
+
+The last three exist because the first five cover money and quality, and the decisions that actually
+reached owners unanswered were none of those — they were personal-data handling, routine operations
+nobody wanted to be asked about, and questions that were not the business's to decide at all. A
+corpus silent on those sends all three to the owner, which is the input the seeding exists to avoid.
+
+`decision-scope` is the one to read first if your queue is noisy: it states which questions this
+business owns and which route to a qualified craft or to a supplier, and that a question whose facts
+are not yet established needs the research rather than a ruling. That reflects
+[decisions belong to their scope](../../founder-kernel/wiki/principles/decisions-belong-to-their-scope.md)
+— the organization's business stance has no authority over a craft or platform question, and
+answering one anyway is the failure mode, not a shortcut.
+
+Each vector lands as an org-scoped wiki page under `stances/<vector>` plus `PerspectiveMaterial`
+rows in the decision classes that consult it, so the gate can find it. Seeded defaults land
+unconfirmed and carry no decisive weight on their own; confirming them in **How you decide** during
+onboarding is what promotes them.
+
+Existing installs converge without operator action: the boot backfill counts the stance pages an org
+holds against the current vector set, so an install seeded before a vector was added re-runs the
+idempotent seeding chain once on its next boot and picks it up. Owner-confirmed and owner-ruled
+material is never downgraded by that re-run.
+
 ## The Profession Scope (WSID)
 
 WWMD answers "what would the founder/platform do?" and WWWD answers "what would this organization do?" — but a coworker doing a specialist's job has no governed source for **what a competent professional in that role should do**. The data-architect coworker has no DAMA-DMBOK grounding; the finance coworker has no GAAP doctrine; the marketing specialist has no marketing body of knowledge. Without WSID, that professional judgment is whatever the underlying LLM happens to produce — ungoverned, unauditable, and inconsistent across model routings.
@@ -122,6 +180,12 @@ Candidate anchor standards for the pilot three (each profession's research pass 
 - **Marketing** — AMA definitions and ethics statement, classic frameworks (4Ps/7Ps, STP, funnel/AARRR), brand-consistency doctrine, CAN-SPAM / GDPR consent as commandment-tier contextual rules.
 
 SFIA 9 and O*NET/ESCO inform which knowledge areas each role profile must cover — used as a completeness checklist, not ingested as text. WSID does **not** include verbatim ingestion of licensed/copyrighted texts, per the corpus content policy.
+
+## Ratifying a Policy Once
+
+Autonomy is delegated by a person, not claimed by the platform. When a coworker asks WWMD to authorize an exact, bounded platform action (for example recording a readiness receipt), the authority projector only turns a high-confidence yes into an approval when the policy version that answered was **ratified by a human**. A fresh install seeds the platform and organization perspectives unsigned, so until someone ratifies them every such action falls to a per-action approval card in your inbox.
+
+Ratify once at `/coworker-decisions/perspectives`: the platform and organization rows show **Ratify this policy** until a person with capability management rights clicks it, then show **Ratified**. The act records your own principal as the root of that delegation; it never overwrites an earlier ratifier, and profession (WSID) doctrine is confirmed on its craft page instead. After ratification, routine exact-bound actions that WWMD answers with a high-confidence, autonomy-eligible yes proceed without a card; anything uncertain, declined, or outside the bound still comes to you (BI-9C384562).
 
 ## Calling the Gate
 
@@ -145,13 +209,14 @@ Materials alone produce a fully functional text-only gate. Adding generation sty
 
 ### Speech-to-Text (input)
 
-STT is **on by default** on every install. The bundled service is **speaches** — a local Docker service at `dpf-stt:9000` running faster-whisper / distil-whisper. No GPU is required; speaches runs CPU-friendly. A 3-tier hardware ladder is available for installs that want to upgrade:
+STT is **provider-managed**: DPF ships no speech container, and voice input turns on as soon as you configure a provider that can transcribe. Any provider serving an OpenAI-compatible `/v1/audio/transcriptions` endpoint works.
 
-| Tier | Backend | When to use |
+| Option | Backend | When to use |
 |------|---------|-------------|
-| **CPU (default)** | `speaches` on CPU | Every install gets this. Adequate for normal admin and coworker dictation. |
-| **GPU (upgrade)** | `speaches` with the CUDA image (`DPF_STT_IMAGE` env var) | Faster, lower-latency transcription on hosts with an NVIDIA GPU. |
-| **Hosted** | Groq / Deepgram / AssemblyAI / OpenAI Whisper | Customer-supplied fallback when local STT isn't desired, or when local hardware is constrained. |
+| **Self-hosted** | Your own speech server (speaches, whisper.cpp server — both MIT) | Audio never leaves your infrastructure. Ranked first when configured, and the only option cleared for regulated data. |
+| **Hosted** | OpenAI, Groq | Nothing to run or maintain. Audio leaves your install, so org vocabulary is redacted before dispatch by the bias-classification gate. |
+
+DPF stopped bundling a speech image because a third party's registry housekeeping was able to block platform releases for every install.
 
 The mic button is wired into the coworker chat surface; transcripts feed the existing coworker message pipeline. Errors surface inline rather than silently failing.
 
@@ -193,6 +258,9 @@ Re-training is allowed when sample quality improves or the existing voice degrad
 - **Decision Canvas** — a read surface for a single `DecisionInteraction`; shows the question, options, recommendation, confidence, material pulls, evidence sources, and audit identifiers without exposing internal tool names in the default view
 - **Material Backlinks** — a bounded local neighborhood for the cited principle or profile material; shows related stances and heuristics, citations, and prior decisions when the material has been approved and promoted
 - **Founder / owner review queue** — unresolved decisions grouped by human-readable gap reason. WWMD decisions use founder-review wording; WWWD and custom profiles use owner/operator wording. The reason is DERIVED from the evidence the gate recorded, never invented (BI-38658E6B): a reason the gate wrote wins; `coverageGap:true` is the only signal that reports a genuine doctrine gap and asks you to clarify policy; conflicting stance directions report a principle conflict; a `lexical` relevance fallback reports that the embedding layer is unavailable rather than blaming your corpus; a score below the profile threshold reports exactly that; and a payload with none of these reports "Reason not recorded" instead of guessing. An approve-direction escalation is reported as **New proposition**, not as a gap: your recorded stance is consistent with the idea, but nobody has ruled on this question before. That escalation is deliberate — auto-approving whatever matches existing doctrine would mean the business only ever does what it already does, so a novel proposal comes to you on purpose (BI-F5F2869D). The gate acts on its own only where you have ALREADY RULED on the same question; alignment alone is not a licence to act. This matters because after content-aware scoring landed, "add a stance" is not always a remedy — a relevance-weighted score can be unmoved by more material, so a queue that always said "clarify operating policy" was pointing at the one lever that could not work.
+- **Repeated questions are collapsed, on every surface.** When several unresolved decisions ask the same question of the same gate, the review queue and the attention inbox both show one card, labelled with how many times it was asked, rather than one card per row. Repeated demand stays visible; the noise does not. Until this was single-sourced the two surfaces disagreed: the review queue collapsed, the inbox did not, and one question left pending by an already-fixed routing defect filled roughly three quarters of an owner's inbox (BI-13C38318). A duplicate is judged on the normalised question text, so trailing rationale or casing differences still collapse, while the same question asked of a different gate stays separate. Note that collapsing is presentation only — it does not resolve or retract anything, and a decision whose routing basis no longer applies still needs retracting at the ledger.
+- **A question that no longer applies is retracted, not left pending.** A decision is asked because some rule said your business should answer it. When that rule changes — a platform tool reclassified so its judgement belongs to the founder kernel rather than your business stance — the rows it already produced become questions the gate would not ask today. Those are retracted with the reason recorded, and they leave both the review queue and your inbox. They stay in the ledger: retraction closes a question, it does not erase the record of having asked. A retracted decision keeps an empty human outcome permanently, because nobody ever answered it — that is deliberate, so a cleanup can never be mistaken for a ruling you made. Retraction follows a tool being re-scoped, never a tool merely going missing: a name that no longer resolves is ambiguous, and acting on an ambiguous lookup is the mistake that produced this backlog in the first place (BI-13C38318).
+- **Craft consults answered from platform defaults** (on the review page) — per profession and decision class, how many times in the last 30 days a specialist coworker was asked a craft question and had no confirmed page of its own covering that class, so general platform doctrine answered instead (the ledger row carries `gateFallbackUsed: true` and names the doctrine that answered in `fallbackProfileId`). This is the demand signal behind the deliberate rule that platform-derived craft pages stay out of the `architecture-tradeoff` class until a human confirms one; the fix is the existing craft page publish at `/coworker-decisions/craft/<key>`, not a ruling on the individual consult (BI-6BB728F1).
 - **`/coworker-decisions/personas/[id]`** — profile detail with materials, generation style, and voice configuration
 - **`/coworker-decisions/personas/[id]/voice`** — voice training, consent record, training job status, provider voice ID
 - **`DecisionInteraction` ledger** — every gate invocation; queryable for "what did the gate decide for this build, and on what basis?"

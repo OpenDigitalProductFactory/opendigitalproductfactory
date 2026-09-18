@@ -20,6 +20,10 @@ import {
   UNRESOLVED_OUTCOMES,
   excludedFromOwnerRulingQueue,
 } from "@/lib/decision-perspective/owner-ruling-queue";
+import {
+  expireLapsedEnvelopes,
+  type EnvelopeExpiryDb,
+} from "@/lib/coworker/envelope-expiry";
 import { conductTriage, type TriageSubject } from "./triage-conductor";
 import { runGovernanceTriagePanel } from "./triage-panel-binding";
 import type { ProposalClient } from "./resolution-proposal-store";
@@ -94,6 +98,23 @@ async function loadCandidates(): Promise<TriageSubject[]> {
 
 function optionIdsOf(options: unknown): string[] {
   return Array.isArray(options) ? options.filter((o): o is string => typeof o === "string") : [];
+}
+
+/**
+ * Settle approval envelopes whose window closed with nobody answering
+ * (BI-410ACCB8), before the pass looks at what is waiting on a human.
+ *
+ * This sweep already runs over exactly that set, so a lapsed envelope left in
+ * `proposed` is one this job would otherwise convene coworkers about — drafting
+ * a recommendation for a decision that can no longer be taken. Settling first
+ * means the pass reasons about live questions only.
+ */
+async function retireLapsedEnvelopes(now: Date): Promise<number> {
+  const { expired } = await expireLapsedEnvelopes(
+    prisma as unknown as EnvelopeExpiryDb,
+    now,
+  );
+  return expired;
 }
 
 /** Retire drafts whose decision was settled some other way since the last pass. */
@@ -171,7 +192,11 @@ export async function runConciergeSweepJob(input: {
   return runConciergeSweep(
     {
       candidates: loadCandidates,
-      retireStale: retireStaleProposals,
+      retireStale: async () => {
+        const lapsed = await retireLapsedEnvelopes(new Date());
+        const stale = await retireStaleProposals();
+        return lapsed + stale;
+      },
       report: recordPass,
       conduct: async (subject) => {
         const row = await prisma.decisionInteraction.findUnique({

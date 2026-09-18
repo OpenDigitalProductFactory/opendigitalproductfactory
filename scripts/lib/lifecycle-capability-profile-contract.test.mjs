@@ -6,8 +6,9 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { signTransitionPayload } from "./transition-signing.mjs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const root = resolve(new URL("../..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+const root = fileURLToPath(new URL("../..", import.meta.url));
 const bashPath = (path) => resolve(path).replace(/^([A-Za-z]):\\/, (_, drive) => `/mnt/${drive.toLowerCase()}/`).replaceAll("\\", "/");
 const runBash = (body, env = {}) => spawnSync("bash", [], { cwd: root, encoding: "utf8", input: body, env: { ...process.env, ...env } });
 
@@ -432,7 +433,20 @@ test("explicit optional-service gates execute from enabled and disabled projecti
 });
 
 test("all touched PowerShell lifecycle files are ASCII and parse under PowerShell 5.1 grammar", () => {
-  const files = ["install-dpf.ps1", "dpf-start.ps1", "scripts/dpf-start.ps1", "scripts/fresh-install.ps1", "scripts/installer/lib/state.ps1", "scripts/setup.ps1"];
+  // BI-9A46E89C: scripts/hooks/worktree-freshness.ps1 joins this list because
+  // NOTHING verified it. A SessionStart hook with a parse error fails before its
+  // own try/catch can swallow it, so a bad edit breaks session start on Windows
+  // silently on every other platform. It is edited from macOS/Linux hosts that
+  // have no pwsh, which is exactly when an unparsed file ships.
+  //
+  // READ THIS BEFORE TRUSTING THE LIST. This whole test file is currently on
+  // scripts/ci-policy-test-inventory-allowlist.txt, so it runs in NO CI profile:
+  // adding a path here does not yet cause it to be parse-checked anywhere. The
+  // list is the intended contract, not live coverage -- including for the Windows
+  // installer entry points above (install-dpf.ps1, dpf-start.ps1, setup.ps1,
+  // fresh-install.ps1), which customers run. Wiring this test back into a profile
+  // is tracked separately; until then a green PR is not evidence these parse.
+  const files = ["install-dpf.ps1", "dpf-start.ps1", "scripts/dpf-start.ps1", "scripts/fresh-install.ps1", "scripts/installer/lib/state.ps1", "scripts/setup.ps1", "scripts/hooks/worktree-freshness.ps1"];
   const command = `$errors=@(); ${files.map((file) => `$bytes=[IO.File]::ReadAllBytes('${join(root, file)}'); if($bytes | Where-Object {$_ -gt 127}){throw 'non_ascii:${file}'}; [void][Management.Automation.Language.Parser]::ParseFile('${join(root, file)}',[ref]$null,[ref]$errors)`).join("; ")}; if($errors.Count){throw ($errors -join ';')}`;
   const result = spawnSync("pwsh", ["-NoProfile", "-Command", command], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);

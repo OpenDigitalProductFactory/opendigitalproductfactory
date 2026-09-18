@@ -165,6 +165,12 @@ describe("getShellNavSections()", () => {
       "workspace",
       "business",
       "products",
+      // Delivery appears for HR-500 because the Work entry is gated on
+      // view_operations, which this role holds (asserted above) — so
+      // /ops/workrooms was already open to it. The rail surfaces a destination
+      // the role can reach; withholding it would be obscurity, not access
+      // control. The section stays absent for roles without the capability.
+      "delivery",
       "knowledge",
     ]);
     expect(sections.find((section) => section.key === "platform")).toBeUndefined();

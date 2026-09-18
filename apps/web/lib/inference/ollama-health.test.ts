@@ -26,14 +26,30 @@ vi.mock("./ai-provider-internals", () => ({
   queueUncalibratedModelEvals: vi.fn().mockResolvedValue(0),
 }));
 
+// Capacity posture writes (demotion reason, promotion clear) — BI-A8EE127F.
+vi.mock("@/lib/routing/provider-capacity/store", () => ({
+  recordProviderCapacityStatus: vi.fn().mockResolvedValue(undefined),
+  clearProviderCapacityStatus: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
 import { prisma, syncInfraCI } from "@dpf/db";
 import { autoDiscoverAndProfile, queueUncalibratedModelEvals } from "./ai-provider-internals";
-import { checkBundledProviders } from "./ollama";
+import {
+  clearProviderCapacityStatus,
+  recordProviderCapacityStatus,
+} from "@/lib/routing/provider-capacity/store";
+import {
+  checkBundledProviders,
+  LOCAL_PROVIDER_DEMOTION_STRIKES,
+  resetLocalProviderProbeState,
+} from "./ollama";
 
+const mockRecordCapacity = vi.mocked(recordProviderCapacityStatus);
+const mockClearCapacity = vi.mocked(clearProviderCapacityStatus);
 const mockFindFirst = vi.mocked(prisma.modelProvider.findFirst);
 const mockUpdate = vi.mocked(prisma.modelProvider.update);
 const mockDiscoveredAggregate = vi.mocked(prisma.discoveredModel.aggregate);
@@ -52,6 +68,9 @@ describe("checkBundledProviders", () => {
     mockAutoDiscover.mockReset().mockResolvedValue({ discovered: 2, profiled: 2 });
     mockQueueEvals.mockReset().mockResolvedValue(0);
     mockSyncInfraCI.mockReset();
+    mockRecordCapacity.mockReset().mockResolvedValue(undefined);
+    mockClearCapacity.mockReset().mockResolvedValue(undefined);
+    resetLocalProviderProbeState();
   });
 
   it("activates the provider and runs auto-discover+profile when reachable and unconfigured", async () => {
@@ -84,7 +103,7 @@ describe("checkBundledProviders", () => {
     expect(mockAutoDiscover).toHaveBeenCalledWith("local");
   });
 
-  it("deactivates the provider when unreachable and currently active", async () => {
+  it("keeps an active provider on a single missed probe (BI-A8EE127F)", async () => {
     mockFindFirst.mockResolvedValue({
       providerId: "local",
       status: "active",
@@ -95,16 +114,105 @@ describe("checkBundledProviders", () => {
 
     await checkBundledProviders();
 
+    // Short probe, then the long retry — both missed — but one check is not an outage.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockRecordCapacity).not.toHaveBeenCalled();
+    expect(mockSyncInfraCI).not.toHaveBeenCalled();
+  });
+
+  it("deactivates the provider after consecutive missed probes and records why", async () => {
+    mockFindFirst.mockResolvedValue({
+      providerId: "local",
+      status: "active",
+      baseUrl: "http://localhost:11434/v1",
+      endpoint: null,
+    } as any);
+    mockFetch.mockRejectedValue(new Error("Connection refused"));
+
+    for (let i = 0; i < LOCAL_PROVIDER_DEMOTION_STRIKES; i += 1) {
+      await checkBundledProviders();
+    }
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockUpdate).toHaveBeenCalledWith({
       where: { providerId: "local" },
       data: { status: "inactive" },
     });
+    expect(mockRecordCapacity).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "local",
+      source: "api",
+      classification: expect.objectContaining({ state: "provider_degraded", isHumanActionRequired: false }),
+    }));
     expect(mockAutoDiscover).not.toHaveBeenCalled();
     expect(mockQueueEvals).not.toHaveBeenCalled();
     expect(mockSyncInfraCI).toHaveBeenCalledWith(
       expect.objectContaining({ status: "offline" }),
       undefined,
     );
+  });
+
+  it("promotes an inactive provider back to active when the runner answers again (BI-A8EE127F)", async () => {
+    mockFindFirst.mockResolvedValue({
+      providerId: "local",
+      status: "inactive",
+      baseUrl: "http://localhost:11434/v1",
+      endpoint: null,
+    } as any);
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ data: [{ id: "qwen3.8-27b" }] }) });
+
+    await checkBundledProviders();
+
+    expect(mockUpdate).toHaveBeenCalledWith({
+      where: { providerId: "local" },
+      data: { status: "active" },
+    });
+    expect(mockClearCapacity).toHaveBeenCalledWith({ providerId: "local", source: "api" });
+    expect(mockAutoDiscover).toHaveBeenCalledWith("local");
+    expect(mockSyncInfraCI).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "operational" }),
+      expect.objectContaining({ modelCount: 1 }),
+    );
+  });
+
+  it("treats a slow runner as reachable: the short probe times out, the long retry answers", async () => {
+    mockFindFirst.mockResolvedValue({
+      providerId: "local",
+      status: "active",
+      baseUrl: "http://localhost:11434/v1",
+      endpoint: null,
+    } as any);
+    mockFetch
+      .mockRejectedValueOnce(new Error("The operation was aborted due to timeout"))
+      .mockResolvedValue({ ok: true, json: async () => ({ data: [{ id: "qwen3.8-27b" }] }) });
+
+    await checkBundledProviders();
+
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockRecordCapacity).not.toHaveBeenCalled();
+    expect(mockSyncInfraCI).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "operational" }),
+      expect.anything(),
+    );
+  });
+
+  it("a reachable check clears the strike count so misses must be consecutive", async () => {
+    mockFindFirst.mockResolvedValue({
+      providerId: "local",
+      status: "active",
+      baseUrl: "http://localhost:11434/v1",
+      endpoint: null,
+    } as any);
+    mockFetch.mockRejectedValue(new Error("Connection refused"));
+    await checkBundledProviders(); // strike 1
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ data: [] }) });
+    await checkBundledProviders(); // reachable: strikes reset
+    mockFetch.mockReset();
+    mockFetch.mockRejectedValue(new Error("Connection refused"));
+    await checkBundledProviders(); // strike 1 again, not 2
+
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it("leaves unconfigured status when unreachable and unconfigured", async () => {

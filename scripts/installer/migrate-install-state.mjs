@@ -44,9 +44,16 @@ export async function projectInstallState({ bytes, hostIdentity, catalog }) {
     capabilityCatalogHash: capability.capabilityCatalogHash,
     capabilityStateVersion: capability.capabilityStateVersion,
   };
+  // `agentToolchain` is agent-CLIENT readiness, rewritten by every client
+  // session start. It never belonged in the install transition envelope: a
+  // session starting during a self-upgrade's drain changed these bytes under
+  // the signed handoff and fenced the run (SUR-4758058F, BI-95DF1BFC). The
+  // bootstrap now writes it to its own sidecar (agent-toolchain-state.json);
+  // migration drops the legacy copy so the envelope binds install state only.
+  const { agentToolchain: legacyAgentToolchain, ...installOwned } = source;
   const projectedState = source.schemaVersion === 2
-    ? { ...source, ...projectedCapability }
-    : { ...source, schemaVersion: 2, platform: hostIdentity.platform, arch: hostIdentity.arch, ...projectedCapability };
+    ? { ...installOwned, ...projectedCapability }
+    : { ...installOwned, schemaVersion: 2, platform: hostIdentity.platform, arch: hostIdentity.arch, ...projectedCapability };
   const validated = await validateInstallState(projectedState);
   if (!validated.valid) throw new Error(validated.errors.join(", "));
   // A catalog move is a real migration even though the schema version does not
@@ -58,7 +65,7 @@ export async function projectInstallState({ bytes, hostIdentity, catalog }) {
   return {
     sourceHash: sha256(sourceBytes),
     projectionHash: sha256(projectedBytes(projectedState)),
-    migrationRequired: source.schemaVersion !== 2 || capabilityMoved,
+    migrationRequired: source.schemaVersion !== 2 || capabilityMoved || legacyAgentToolchain !== undefined,
     projectedState,
   };
 }

@@ -1,4 +1,5 @@
 import { fileURLToPath } from "url";
+import { currentPageBuildBudget } from "./build-memory-budget.mjs";
 
 const turbopackRoot = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -41,15 +42,23 @@ const config = {
     root: turbopackRoot,
   },
   experimental: {
+    ...currentPageBuildBudget(),
     // Turbopack filesystem cache for `next build` — persists compilation
     // artifacts under `.next/cache` so a warm CI cache skips recompiling
-    // unchanged modules. Still EXPERIMENTAL for production builds in Next 16.2,
-    // so it is gated behind an env var and enabled ONLY in the CI verification
-    // build (see .github/workflows/ci.yml). The shipped Docker release build
-    // (publish-image.yml) leaves it OFF and is unaffected. Flip the env to
-    // measure/disable; remove the gate once the feature is stable.
-    turbopackFileSystemCacheForBuild:
-      process.env.DPF_TURBOPACK_BUILD_CACHE === "1" || undefined,
+    // unchanged modules. Enabled ONLY in the CI verification build (see
+    // .github/workflows/ci.yml); the shipped Docker release build runs without
+    // it.
+    //
+    // This MUST stay an explicit `false`, never `undefined`. It used to read
+    // `=== "1" || undefined`, which yields `undefined` when the env is unset —
+    // and `undefined` does not mean OFF, it means "unspecified", so Next applies
+    // its own default. That was harmless while the default was OFF (Next 16.2,
+    // when the comment above was written and when it claimed the release build
+    // "leaves it OFF and is unaffected"). Next 16.3 turned the build cache ON by
+    // default, so the same expression silently flipped the release image onto an
+    // experimental cache nobody intended to ship. An option whose default can
+    // move is not a gate; spell the off-state out.
+    turbopackFileSystemCacheForBuild: process.env.DPF_TURBOPACK_BUILD_CACHE === "1",
   },
   outputFileTracingExcludes: {
     "**/*": ["./node_modules/@swc/core*", "./node_modules/esbuild*"],

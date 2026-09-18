@@ -128,6 +128,7 @@ describe("projectPolicyAuthority", () => {
     if (result.outcome === "allow") {
       expect(result.expiresAt.getTime()).toBeGreaterThan(now.getTime());
       expect(result.auditEvidenceDigest).toMatch(/^[a-f0-9]{64}$/);
+      expect(result.contributionLedger).toEqual([{ principleId: "P-1", contribution: 4.2 }]);
     }
   });
 
@@ -273,6 +274,9 @@ describe("persistPolicyAuthorityProjection", () => {
         decision: "allow",
         organizationId: "org-1",
         policyVersion: "PV-7",
+        rationale: expect.objectContaining({
+          contributionLedger: [{ principleId: "P-1", contribution: 4.2 }],
+        }),
       }),
     }));
     expect(envelopeCreate).toHaveBeenCalledWith(expect.objectContaining({
@@ -280,6 +284,11 @@ describe("persistPolicyAuthorityProjection", () => {
         status: "approved",
         authorityDecisionId: result.authorityDecisionId,
         approvalBindingFingerprint: expect.any(String),
+        argsJson: expect.objectContaining({
+          policyAuthority: expect.objectContaining({
+            contributionLedger: [{ principleId: "P-1", contribution: 4.2 }],
+          }),
+        }),
       }),
     }));
   });

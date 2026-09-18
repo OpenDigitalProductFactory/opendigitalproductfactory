@@ -1,10 +1,18 @@
 # Design research runbook
 
-**Status:** procedure reference. The *rules* — research required in every spec, and the alignment checklist — live in [`AGENTS.md`](../../AGENTS.md) §10 and stay always-on. This file holds the checklist detail and worked examples. Relocated by BI-0020D511 Phase 1; no rule was dropped.
+**Status:** procedure reference. The *rules* — research required in every spec, and the alignment checklist — live in [`AGENTS.md`](../../AGENTS.md) §7 and stay always-on. This file holds the checklist detail and worked examples. Relocated by BI-0020D511 Phase 1; no rule was dropped.
 
 → [kernel principle](../founder-kernel/wiki/principles/design-research-required.md)
 
 Every new feature spec must include a "Research & Benchmarking" section before finalization. Compare 2–3 open-source leaders (read their data models, not just feature lists) and 2–3 commercial products. Document patterns adopted, patterns rejected, anti-patterns identified, and gaps the design fills. Reference specific projects, not abstract "best practices."
+
+**Named comparators, so "2–3 open-source leaders" is not left to whoever is writing (BI-F7E620C8).** The requirement is satisfied in form and not in substance when an author reaches for whatever they happen to know and the nearest peer goes uncompared. Where DPF has an obvious category leader, name it:
+
+| Spec category | Default comparator | Standing |
+| --- | --- | --- |
+| Delivery lifecycle, agentic process, gates, phase progression | **BMAD Method** (~53k stars, MIT, actively maintained) | Evaluated in full at [`docs/security/tool-evaluations/2026-09-15-bmad-method.md`](../security/tool-evaluations/2026-09-15-bmad-method.md) — **rejected as a dependency, adopted as a benchmark and idea source.** Citing it is not a step toward taking it on. |
+
+It is the leader in DPF's own category, and no DPF spec cited it before [`2026-09-15-third-state-is-typed-addendum-design.md`](../superpowers/specs/2026-09-15-third-state-is-typed-addendum-design.md) §3, which is that adoption's first use. Compare against it for delivery-lifecycle work unless there is a reason not to — and say what DPF adopts *and* what it rejects, which is the part the rule actually turns on.
 
 **Minimum Architectural Alignment Checklist (BI-IMP-25A07E52).** Before finalizing a feature spec (or rubber-stamping a PR that changes contracts), confirm:
 

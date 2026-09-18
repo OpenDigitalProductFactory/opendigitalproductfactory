@@ -18,6 +18,30 @@ records.
 Current implementation truth comes from code plus live evidence. A diagram, design
 document, or seeded row does not override those sources.
 
+## Streaming versus result delivery
+
+`RouteAndCallOptions.requiresStreaming` expresses token-streaming demand; it
+does not change `interactionMode` or authorize asynchronous result handles.
+Autonomous agentic loops and semantic-review branches set it to `false` because
+they consume completed results. Omitted values retain the existing sync-chat/background
+defaults; explicit `true` still requires a streaming-capable endpoint.
+Tool capability, sensitive-data screening, provider policy and receipt checks
+continue to constrain eligible routes independently.
+
+Durable background operations remain a separate delivery contract. A caller
+must support their operation handles before selecting background mode.
+
+Durable semantic review binds autonomous inference origin around its reviewer
+execution subtree. Concurrent primary and specialist calls use the shared
+autonomous admission budget while interactive callers retain priority. This
+origin tag does not change synchronous result delivery or the review deadline.
+
+Reviewer delivery evidence remains bound to an immutable change and its
+Workroom. Canonical local-CI reuse can reconcile a missing Workroom link after
+executor identity is corrected, using only the recorded branch, commit and
+session. Ambiguous or foreign links are refused; reconciliation never changes
+the test verdict, expiry, lease or evidence contents.
+
 ## Approved adjacent delivery contract
 
 [Pre-dispatch sensitive LLM routing](../superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md)

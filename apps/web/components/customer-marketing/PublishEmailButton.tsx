@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import {
+  INTEGRATIONS_INDEX_HREF,
+  integrationSettingsHrefForChannel,
+} from "@/lib/tools/integration-settings-href";
 import { publishOutboundDraftAction } from "@/app/(shell)/customer/marketing/actions";
 
 type Props = {
@@ -59,7 +63,7 @@ export function PublishEmailButton({
     return (
       <div className="flex flex-wrap items-center gap-2">
         <a
-          href={`/platform/tools/integrations/${channelId}`}
+          href={integrationSettingsHrefForChannel(channelId) ?? INTEGRATIONS_INDEX_HREF}
           className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1.5 text-xs text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
         >
           Connect Postmark first

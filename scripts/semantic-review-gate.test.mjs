@@ -3,7 +3,27 @@ import test from "node:test";
 
 import { createHash } from "node:crypto";
 
-import { readGitDiffDigest, validateLocalSemanticReviewGate } from "./lib/semantic-review-gate.mjs";
+import { readFailureEvidenceBinding, readGitDiffDigest, validateLocalSemanticReviewGate } from "./lib/semantic-review-gate.mjs";
+
+test("failure evidence binds the requested checkout and exact diff", () => {
+  const sha = "a".repeat(40), tree = "b".repeat(40), base = "c".repeat(40);
+  const binding = readFailureEvidenceBinding(sha, "candidate", (_command, args, options) => {
+    assert.equal(options.cwd, "candidate");
+    return { status: 0, stdout: args[0] === "diff" ? Buffer.from("exact diff")
+      : args[0] === "merge-base" ? base : args[1] === "HEAD" ? sha : tree };
+  });
+  assert.deepEqual(binding, { headTreeHash: tree, diffDigest: createHash("sha256").update("exact diff").digest("hex") });
+});
+
+test("missing or moved source retains diagnostics without inventing verified bindings", () => {
+  for (const spawn of [() => ({ status: 1, stderr: "missing repository" }),
+    () => ({ status: 0, stdout: "b".repeat(40) })]) {
+    const binding = readFailureEvidenceBinding("a".repeat(40), "candidate", spawn);
+    assert.equal(binding.headTreeHash, null);
+    assert.equal(binding.diffDigest, null);
+    assert.ok(binding.failureAnalysisBindingError);
+  }
+});
 
 const current = {
   branch: "feat/change-reviewer-enforcement",

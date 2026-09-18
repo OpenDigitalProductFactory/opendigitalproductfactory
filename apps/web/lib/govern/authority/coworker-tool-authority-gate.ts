@@ -53,7 +53,7 @@ export type PolicyAuthorityProjectionAttempt = (input: {
   authorityDecisionId: string;
   envelopeId: string;
   expiresAt: Date;
-} | { outcome: "not-authorized" }
+} | { outcome: "not-authorized"; explanation?: string }
   | {
       outcome: "denied";
       reasonCode: "policy-declined" | "policy-authorization-invalid";
@@ -330,6 +330,11 @@ export async function enforceCoworkerToolAuthority(
         reasonCode: projected.reasonCode,
         explanation: projected.explanation,
         nextAction: "request-authority",
+      };
+    } else if (projected.explanation) {
+      decision = {
+        ...decision,
+        explanation: projected.explanation,
       };
     }
   }

@@ -62,7 +62,7 @@ function encodePath(path: string): string | null {
 }
 
 type RepositoryProviderBlobResult =
-  | ActionSuccess<Uint8Array>
+  | (ActionSuccess<Uint8Array> & { /** The blob the provider actually served; equals expectedBlobId when one was given. */ blobId: string })
   | {
       ok: false;
       code:
@@ -158,7 +158,7 @@ async function fetchGithubJson(args: {
   return { ok: false, kind: "transport", attempts: MAX_PROVIDER_ATTEMPTS };
 }
 
-function decodeGithubContent(payload: unknown, expectedBlobId: string): RepositoryProviderBlobResult {
+function decodeGithubContent(payload: unknown, expectedBlobId: string | null): RepositoryProviderBlobResult {
   if (!payload || typeof payload !== "object") {
     return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
   }
@@ -166,15 +166,21 @@ function decodeGithubContent(payload: unknown, expectedBlobId: string): Reposito
   if (row.type !== "file" || row.encoding !== "base64" || typeof row.content !== "string") {
     return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
   }
-  if (row.sha !== expectedBlobId) {
+  if (typeof row.sha !== "string" || !/^[a-f0-9]{40}$/i.test(row.sha)) {
+    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
+  }
+  // A commit + path locator is already immutable; the blob id is verification
+  // when the caller has one, not a precondition for serving the artifact.
+  if (expectedBlobId !== null && row.sha !== expectedBlobId) {
     return { ok: false, code: "IMMUTABLE_BLOB_MISMATCH", error: "Repository provider blob identity does not match the requested locator." };
   }
+  const blobId = row.sha;
   if (typeof row.size === "number" && row.size > MAX_REPOSITORY_ARTIFACT_BYTES) {
     return { ok: false, code: "IMMUTABLE_SOURCE_TOO_LARGE", error: "Repository artifact exceeds the 1 MiB immutable reader ceiling." };
   }
   const bytes = Buffer.from(row.content.replace(/\s/g, ""), "base64");
   return bytes.byteLength <= MAX_REPOSITORY_ARTIFACT_BYTES
-    ? ok(bytes)
+    ? { ...ok(bytes), blobId }
     : { ok: false, code: "IMMUTABLE_SOURCE_TOO_LARGE", error: "Repository artifact exceeds the 1 MiB immutable reader ceiling." };
 }
 
@@ -184,11 +190,15 @@ async function fetchRepositoryProviderBlob(args: {
   token: string | null;
   commitSha: string;
   path: string;
-  expectedBlobId: string;
+  expectedBlobId: string | null;
   fetchImpl: typeof fetch;
 }): Promise<RepositoryProviderBlobResult> {
   const encodedPath = encodePath(args.path);
-  if (!encodedPath || !/^[a-f0-9]{40}$/i.test(args.commitSha) || !/^[a-f0-9]{40}$/i.test(args.expectedBlobId)) {
+  if (
+    !encodedPath
+    || !/^[a-f0-9]{40}$/i.test(args.commitSha)
+    || (args.expectedBlobId !== null && !/^[a-f0-9]{40}$/i.test(args.expectedBlobId))
+  ) {
     return { ok: false, code: "IMMUTABLE_SOURCE_IDENTITY_INVALID", error: "Repository artifact locator is not a recognized immutable provider blob." };
   }
   const result = await fetchGithubJson({
@@ -218,7 +228,8 @@ export async function readRepositoryProviderBlob(args: {
   repositoryFullName: string;
   commitSha: string;
   path: string;
-  expectedBlobId: string;
+  /** Verification when known. A commit + path locator is served without it. */
+  expectedBlobId?: string | null;
   db?: Pick<RepositoryArtifactDb, "credentialEntry" | "platformDevConfig" | "scheduledJob">;
   fetchImpl?: typeof fetch;
   transportFactory?: () => GithubReadTransport;
@@ -253,7 +264,7 @@ export async function readRepositoryProviderBlob(args: {
       token,
       commitSha: args.commitSha,
       path: args.path,
-      expectedBlobId: args.expectedBlobId,
+      expectedBlobId: args.expectedBlobId ?? null,
       fetchImpl: args.fetchImpl ?? transport!.fetch,
     });
   } finally {

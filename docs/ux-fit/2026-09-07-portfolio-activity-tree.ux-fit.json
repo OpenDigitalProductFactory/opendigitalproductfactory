@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "compact-branch-rows-with-representative-activity",
+  "scope": { "files": ["apps/web/app/(shell)/ops/workrooms/page.tsx", "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx"] },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/ops/workrooms": {
+        "defaultVisibleWords": 184,
+        "leadBandWords": 17,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  }
+}

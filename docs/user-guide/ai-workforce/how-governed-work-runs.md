@@ -198,6 +198,8 @@ governed call. A consequential tool also carries the collaboration shape its use
 which is how a tool reaching outward pulls `outward-review` into the picture even when
 nobody named it.
 
+Reaching outward is not the same as reaching the business. A tool whose outward effect is platform development or operations (opening a pull request, contributing to the hive, running a discovery sweep) declares a platform consequence scope: it is still consequential, receipted and outward-reviewed, but the business-stance alignment check is not applied, because the founder kernel owns that judgement and the business owner should never be asked what the business would do about a pull request.
+
 Two independent checks then apply, and both must pass:
 
 - **The authority intersection.** A tool is unavailable unless the coworker's grant *and*
@@ -214,6 +216,13 @@ envelope cannot act on work whose shape declared that it must be proposed.
 Denials come back as named reasons — a missing decision interaction, a missing envelope, a
 tripped stop condition, a missing verification receipt — not as a generic refusal. A denial
 tells you what to fix.
+
+**A request for approval has a deadline, and a missed deadline is its own answer.** When a
+call needs a person, the approval request carries a window. If it closes with nobody
+answering, the request is settled as **expired** — not cancelled, which would say somebody
+decided, and not left sitting as though it were still live. The difference is what makes
+"how many decisions lapsed unanswered" a question the platform can answer at all, and an
+expired request is final: re-asking mints a new one rather than reviving it.
 
 ### The floors nothing crosses
 
@@ -250,6 +259,25 @@ Four surfaces read that trail, each answering a different question:
   stage: passed, holding, declined, awaiting a person, or not reached. *Declined* and
   *awaiting a person* are deliberately different marks — a decline is a settled answer to act
   on, an open question is not.
+
+The coworker is told the same difference, in the same words. When a call needs approval it is
+told the work is waiting, which approval request it is waiting on and until when, and that the
+tool is available to it — not that the call was rejected. That wording is load-bearing: while
+the two read alike, coworkers concluded the capability was missing and proposed work to build
+tools that already existed. They are also told that calling again will not advance it, so the
+honest response to a wait is to report it rather than retry.
+
+That difference is now carried by the result itself, not only by its wording. Every governed
+call comes back saying which kind of answer it is: the work went through, a person has to rule
+on it, an input is missing that the coworker can supply, the check could not run at all, or the
+platform said no. Only the last one is a refusal. The middle three are not answers about the
+request, and nothing downstream may file them as failures.
+
+The one you will notice is **the check could not run**. If the platform cannot record the
+authority evidence a call needs, or cannot reserve its receipt, the coworker is told the check
+itself was unavailable and the call can be retried unchanged — not that it was rejected. That is
+an outage on our side, and reading it as a refusal is how a coworker talks itself out of work it
+was entitled to do.
 
 Where the audit trail has nothing to say, these surfaces say so rather than guessing. A stage
 with no records reads **No records yet**. A room with no posture of its own reads **Running on

@@ -87,3 +87,19 @@ describe("projectRemoteTaskReplay required terminal writer dispatch", () => {
     });
   });
 });
+
+// BI-C35576A9: a wait recorded after a CLI dispatch carries the contract it was
+// actually held to. The parser must accept it and still reject an invented one.
+describe("projectRemoteTaskReplay dispatch contracts", () => {
+  it("accepts a receipt-verified wait", () => {
+    expect(project({ terminalWriterWait: { ...terminalWriterWait, dispatchContract: "receipt-verified" } })).toMatchObject({
+      kind: "result",
+      result: { resumable: true, waitReason: "missing-terminal-writer" },
+    });
+  });
+
+  it("does not accept an unknown dispatch contract", () => {
+    const projected = project({ terminalWriterWait: { ...terminalWriterWait, dispatchContract: "trust-me" } });
+    expect(JSON.stringify(projected)).not.toContain('"waitReason":"missing-terminal-writer"');
+  });
+});

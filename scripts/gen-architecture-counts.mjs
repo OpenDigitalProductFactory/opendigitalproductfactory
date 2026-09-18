@@ -14,7 +14,10 @@
 // derived from the artifacts that actually decide each number. Registered in
 // scripts/lib/derived-artifacts-registry.mjs, so pre-commit regenerates it when
 // a source changes and CI (`derived-artifacts-gate.mjs check-all`) fails on
-// staleness. Living docs LINK the include instead of retyping the numbers.
+// staleness — except inside the merge queue, where a repo-wide count can drift
+// under a concurrent merge that the author could not have seen (the entry is
+// `mergeQueueRaceTolerant`). Living docs LINK the include instead of retyping
+// the numbers.
 //
 // Deliberately timestamp-free: the content changes only when a count changes,
 // so `--check` is a byte comparison and re-runs are idempotent.

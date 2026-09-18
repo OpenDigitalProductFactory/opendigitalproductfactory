@@ -11,6 +11,7 @@ export const SETUP_STEPS = [
   "how-you-decide",      // /coworker-decisions/stance — confirm the archetype-prefilled stance cards (BI-D6DC2432)
   "operating-hours",     // /storefront/settings/operations — business hours
   "storefront",          // /storefront — customer-facing portal setup
+  "mailroom",            // /workspace/mailroom — declare the mailboxes the Mailroom reads, or learn what it would do (design 2026-09-09 §4.9)
   "platform-development",// /admin/platform-development — contribution mode
   "build-studio",        // /build — show the self-development capability
   "meet-your-coo",       // /workspace — optionally choose a conversational name for the standing COO
@@ -25,6 +26,7 @@ export const STEP_ROUTES: Record<string, string> = {
   "how-you-decide": "/coworker-decisions/stance",
   "operating-hours": "/storefront/settings/operations",
   "storefront": "/storefront",
+  "mailroom": "/workspace/mailroom",
   "platform-development": "/admin/platform-development",
   "build-studio": "/build",
   "meet-your-coo": "/workspace",
@@ -39,6 +41,7 @@ export const STEP_LABELS: Record<string, string> = {
   "how-you-decide": "How You Decide",
   "operating-hours": "Operating Hours",
   "storefront": "Storefront",
+  "mailroom": "Mailroom",
   "platform-development": "Platform Dev",
   "build-studio": "Build",
   "meet-your-coo": "Meet Your COO",
@@ -66,6 +69,9 @@ export type SetupContext = {
   cloudProviderReadiness?: "none" | "public-only" | "ready";
   cooConversationalName?: string;
   skippedSteps?: string[];
+  /** The owner skipped the Mailroom step with no mailbox to connect; the page
+   *  keeps offering the connect flow (design 2026-09-09 §4.9). */
+  mailroomSkipped?: boolean;
   // Populated by importBrandFromUrl during the branding step
   suggestedCompanyName?: string;
   suggestedArchetypeId?: string;

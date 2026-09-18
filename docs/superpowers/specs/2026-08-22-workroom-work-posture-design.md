@@ -281,6 +281,52 @@ because what the work actually is outranks a blanket preference about rooms. Bot
 paths pass the action boundary through the tighten-only clamp, and the UI says so in
 words — an invariant the operator cannot see is one they will be surprised by.
 
+## 8.2 The room owns the coworker's controls ⟦founder direction 2026-09-08⟧
+
+The 2026-08-30 correction settled proactivity: it belongs to the outcome-specific
+Workroom, not to the coworker's identity. On 2026-09-08 the founder extended the same
+ownership rule to the three remaining coworker-level controls, after seeing the chat
+composer's "Controls" popover ("THIS CONVERSATION — Edit fields on this page / Web
+access") beside the per-coworker Golden Triangle dock.
+
+> **A coworker's hands-on access, internet access, and Cost/Quality/Time posture are
+> parameters of the Workroom definition, chosen so the room achieves its expected outcome.
+> They are not a user's per-conversation preference and not the coworker's identity
+> state. The room's work shape and requirements, and the privilege context of the
+> coworker's role in that room, determine them.**
+
+Three consequences, each a filed slice:
+
+| Control today | Where it lives now | Where it moves | Slice |
+| --- | --- | --- | --- |
+| "Edit fields on this page" (`elevatedAssistEnabled`) and "Web access" (`externalAccessEnabled`) — per-conversation switches in `CoworkerPostureControl`, stored in the browser (`agent-form-assist-prefs.ts`, `agent-external-access-session.ts`), POSTed as client-asserted booleans that `api/agent/send/route.ts` never re-derives, then read by `getAvailableTools` and `resolve-coworker-tool-authority.ts integration.state` | The browser session | One server-side resolver over the room definition (shape, activity, sensitivity, declared action boundary), the coworker's participant role, and its standing grants — the interactive path adopts what `scheduled-external-access.ts` already does for unattended turns. The switches are removed. | `BI-947780FE` |
+| Tool authority beyond the room | Agent grants ∩ human `can()` only; the room is not an input, and a zero-grant coworker is left ungated. A room-aware pre-tool gate exists (`workroom-shape-governance-hook.ts`) but never fires from chat because `authorizedSurfaceContext.workroomId` is never populated; `WorkShapeDefinition.grants` declares a per-activity tool allow-list that nothing enforces | **Block by default.** The effective surface for a roomed turn is agent grants ∩ human `can()` ∩ the room-authorized surface, derived from the shape entry, the room's declared activities, and the WSID profession of the coworker's role. A request made in chat is a request, not authority; only a room definition, an approval envelope, or a delegation link with the scope widens it. The WWWD × WSID composition runs for every tool the room marks consequential for its shape, not only the four legacy names. | `BI-F114354D` |
+| Golden Triangle — per-coworker `CoworkerPriorityDock` in the composer; ladder agent → org → platform | Coworker identity | The room declaration already stores a `priority` preference (Slice D) but no room surface writes it, `parseWorkroomPostureDefault` drops it, and no consumer of `resolveWorkroomPosture` reads it. The room posture control gains the triangle, every shape entry carries a default preset, the coworker turn compiles from the room's resolved priority, and the per-coworker dock and `agent:` scope are retired — identity preferences are ignored, not migrated. | `BI-7ADEBDC1` |
+
+**Amendment to the §3.1 ladder.** Layer 4 ("Agent — Golden Triangle priority only") is
+retired once `BI-7ADEBDC1` lands. The ladder becomes hard policy → room declaration →
+derived (shape × stream × clock × stakes) → org / activity-family → platform default, with
+no identity layer at all. Participant-specific trust, grants, qualifications and autonomy
+envelopes remain safety ceilings that narrow the room; they never supply a posture or an
+access decision the room did not make.
+
+**Why the gate moves to the room.** The 2026-08-13 alignment-gate spec placed the
+consequential-tool check at the TAK intersection (`GAID identity → JSI qualification →
+TAK intersection → GAID receipt`). Today that intersection has no room term, so the
+coworker's job — the thing WSID qualifies and WWWD constrains — is invisible at the moment
+of execution, and the only per-turn widening lever is a session toggle in the user's hand.
+Adding the room-authorized surface to the intersection puts the coworker's job in the gate
+and removes the session as an authority source. This is the `least-privilege-deny-by-default`
+commandment and `decisions-belong-to-their-scope` applied at execution time, and it
+satisfies the no-widening invariants that spec already states.
+
+**What does not change.** Advise/Act mode remains a room posture (action boundary) and
+follows the same ownership rule. The platform default triangle stays on
+`/platform/ai/assignments`; the decreed room default (§8.1) gains the triangle beside pace
+and authority. Unroomed interactive turns resolve to the platform/activity-family default,
+which never includes side-effecting or external tools without a grant — the same rule
+`BI-87C9C91C` applied to proactivity.
+
 ## 9. Decomposition
 
 Each slice is independently shippable and independently inert until the next lands.

@@ -22,7 +22,7 @@ describe("projectSetupStepCompletion", () => {
     });
 
     expect(result.steps.storefront).toBe("completed");
-    expect(result.currentStep).toBe("platform-development");
+    expect(result.currentStep).toBe("mailroom");
     expect(result.isComplete).toBe(false);
   });
 

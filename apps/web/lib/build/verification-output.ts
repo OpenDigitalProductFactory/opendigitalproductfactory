@@ -1,3 +1,15 @@
+import type { FailureAnalysis } from "@/lib/change-review/failure-analysis";
+
+/** Existing Build Studio verification payload, shared by authoring and review. */
+export type VerificationOutput = {
+  failureAnalysis?: FailureAnalysis;
+  testsPassed: number;
+  testsFailed: number;
+  typecheckPassed: boolean;
+  fullOutput: string;
+  timestamp: string;
+};
+
 import type { BuildFailureAxis } from "./progress-visibility-types";
 
 export type NormalizedVerificationOutput = {

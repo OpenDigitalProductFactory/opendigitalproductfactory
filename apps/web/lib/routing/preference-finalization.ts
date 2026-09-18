@@ -1,3 +1,4 @@
+import { resolveModelSuccessor } from "./model-successor";
 import type {
   RoutePreferenceKind,
   RoutePreferenceResolution,
@@ -7,12 +8,17 @@ export type EndpointPreferences = {
   pinnedEndpointId?: string;
   preferredProviderId?: string;
   preferredModelId?: string;
+  /** Family of the preferred model when the caller knows it (pin lineage). */
+  preferredModelFamily?: string | null;
 };
 
 export type PreferenceCandidate = {
   endpointId: string;
   providerId: string;
   modelId: string;
+  /** Lineage, when the manifest knows it; lets an unavailable preference find its family successor. */
+  modelFamily?: string | null;
+  qualityTier?: string | null;
 };
 
 export type EndpointPreferenceSelection<T extends PreferenceCandidate> = {
@@ -120,6 +126,28 @@ export function selectEndpointPreference<T extends PreferenceCandidate>(
       });
     } else {
       unavailable.push({ kind: "model", value: preferredModelId });
+      // BI-7F2FBDA3: a retired, deprecated or refused preference moves to the
+      // newest eligible model in its family on its provider, not to whatever
+      // ranked first. Candidates are already fenced, so no policy is crossed.
+      const successorProviderId = preferredProvider?.providerId ?? preferredProviderId ?? null;
+      const successor = successorProviderId
+        ? resolveModelSuccessor({
+            candidates: modelCandidates,
+            preferredProviderId: successorProviderId,
+            preferredModelId,
+            preferredModelFamily: preferences.preferredModelFamily ?? null,
+          })
+        : null;
+      if (successor) {
+        winner = successor.successor;
+        applied.push({
+          kind: "model",
+          value: successor.successor.modelId,
+          endpointId: successor.successor.endpointId,
+          successorOf: preferredModelId,
+          successorBasis: successor.basis,
+        });
+      }
     }
   }
 
@@ -131,5 +159,38 @@ export function selectEndpointPreference<T extends PreferenceCandidate>(
       unavailable,
       fallbackUsed: unavailable.length > 0,
     },
+  };
+}
+
+/**
+ * BI-7F2FBDA3: fill in the preferred model's family when the caller did not
+ * know it, from any loaded manifest that still names that model on that
+ * provider. A retired model is no longer loaded, so a caller that knows the
+ * pin's lineage (the agent loop reads it from the profile row) passes it in.
+ */
+export function withInferredPreferenceFamily(
+  endpoints: ReadonlyArray<{ providerId: string; modelId: string; modelFamily?: string | null }>,
+  preferences: EndpointPreferences,
+): EndpointPreferences {
+  if (!preferences.preferredModelId || preferences.preferredModelFamily) return preferences;
+  const known = endpoints.find(
+    (ep) => ep.modelId === preferences.preferredModelId
+      && (!preferences.preferredProviderId || ep.providerId === preferences.preferredProviderId),
+  );
+  return known?.modelFamily ? { ...preferences, preferredModelFamily: known.modelFamily } : preferences;
+}
+
+/** Shape a ranked endpoint for preference selection, carrying its lineage and tier. */
+export function toPreferenceCandidate<E>(
+  endpoint: { id: string; providerId: string; modelId: string; modelFamily?: string | null; qualityTier?: string | null },
+  entry: E,
+): PreferenceCandidate & { entry: E } {
+  return {
+    endpointId: endpoint.id,
+    providerId: endpoint.providerId,
+    modelId: endpoint.modelId,
+    modelFamily: endpoint.modelFamily ?? null,
+    qualityTier: endpoint.qualityTier ?? null,
+    entry,
   };
 }

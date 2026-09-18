@@ -1,5 +1,5 @@
 import { statfs } from "node:fs/promises";
-import { cpus, freemem, loadavg } from "node:os";
+import { cpus, freemem } from "node:os";
 import { dockerSocketGet } from "../platform-runtime/docker-socket.mjs";
 import type { LocalCiHostPressure } from "./local-ci-pool-policy";
 import localCiSlotResources from "./local-ci-slot-resources.json" with {
@@ -12,7 +12,7 @@ export type LocalCiServerPressureProbes = {
   now: () => Date;
   availableMemoryBytes: () => number;
   builderMemoryUsageBytes: () => MaybePromise<number[]>;
-  sustainedCpuPercent: () => number;
+  sustainedCpuPercent: () => MaybePromise<number>;
   diskFreeBytes: () => MaybePromise<number>;
   dockerHealthy: () => MaybePromise<boolean>;
   convergenceActive: () => MaybePromise<boolean>;
@@ -183,15 +183,73 @@ async function defaultBuilderMemoryUsageBytes(): Promise<number[]> {
   return builderMemoryUsageBytesFromDocker(dockerSocketGet);
 }
 
+/** How long the CPU sample runs. Matches the host client's window (BI-48F42581). */
+export const LOCAL_CI_CPU_SAMPLE_WINDOW_MS = 1_000;
+
+type CpuTimesSnapshot = { idle: number; total: number };
+
+/** Cumulative-since-boot CPU times, summed across cores. */
+export function cpuTimesSnapshot(): CpuTimesSnapshot {
+  return cpus().reduce(
+    (sum, cpu) => {
+      const total = Object.values(cpu.times).reduce((acc, value) => acc + value, 0);
+      return { idle: sum.idle + cpu.times.idle, total: sum.total + total };
+    },
+    { idle: 0, total: 0 },
+  );
+}
+
+/**
+ * Busy percentage between two cumulative snapshots.
+ *
+ * The same delta the host client computes in scripts/lib/local-ci-host-pressure.mjs,
+ * so the two halves of the merged observation now measure the same quantity.
+ * A non-advancing or backwards total is unmeasurable, never zero — reporting an
+ * idle host we did not observe is how admission gets looser than the evidence.
+ */
+export function cpuPercentBetween(
+  start: CpuTimesSnapshot | undefined,
+  end: CpuTimesSnapshot | undefined,
+): number {
+  if (!start || !end) return Number.NaN;
+  const totalDelta = end.total - start.total;
+  const idleDelta = end.idle - start.idle;
+  if (!Number.isFinite(totalDelta) || totalDelta <= 0 || !Number.isFinite(idleDelta)) {
+    return Number.NaN;
+  }
+  return Math.max(0, Math.min(100, ((totalDelta - idleDelta) / totalDelta) * 100));
+}
+
+/**
+ * Measure CPU utilization over a real window.
+ *
+ * This replaced `loadavg()[0] / cpus().length`, which is not utilization
+ * (BI-48F42581). Load average is a 1-minute-smoothed count of runnable PLUS
+ * uninterruptible-I/O tasks, so it was wrong in both directions and the pool
+ * opened and closed on it. Measured on the reference install inside the portal,
+ * over one 2-second window: /proc/stat said 55.2% busy, loadavg/cpus said 24.2%.
+ * The converse bit harder — Docker build I/O parks tasks in D-state, inflating
+ * load without using CPU, so a running gate could close the pool for every gate
+ * queued behind it.
+ */
+export async function sampleSustainedCpuPercent(deps: {
+  snapshot?: () => CpuTimesSnapshot;
+  delay?: (ms: number) => Promise<void>;
+  windowMs?: number;
+} = {}): Promise<number> {
+  const snapshot = deps.snapshot ?? cpuTimesSnapshot;
+  const delay = deps.delay
+    ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const start = snapshot();
+  await delay(deps.windowMs ?? LOCAL_CI_CPU_SAMPLE_WINDOW_MS);
+  return cpuPercentBetween(start, snapshot());
+}
+
 const DEFAULT_PROBES: LocalCiServerPressureProbes = {
   now: () => new Date(),
   availableMemoryBytes: () => freemem(),
   builderMemoryUsageBytes: defaultBuilderMemoryUsageBytes,
-  sustainedCpuPercent: () => {
-    const cpuCount = cpus().length;
-    if (cpuCount < 1) return Number.NaN;
-    return Math.min(100, Math.max(0, (loadavg()[0] / cpuCount) * 100));
-  },
+  sustainedCpuPercent: () => sampleSustainedCpuPercent(),
   diskFreeBytes: defaultDiskFreeBytes,
   dockerHealthy: defaultDockerHealthy,
   // Portal quiescence rejects the claim before this broker runs. Dependency

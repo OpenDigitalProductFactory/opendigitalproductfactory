@@ -509,7 +509,10 @@ describe("generated route-shell registry", () => {
     // fixture provisions a storefront the wizard navigates away and cannot be measured.
     // Net: 206 base + /workspace/ward + /storefront/animals/waiting - /storefront/setup
     // + six deterministic Pet Rescue operating routes = 213.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(213);
+    // 213 -> 214: /workspace/mailroom (design 2026-09-09, BI-727D5FD9) — the Mailroom
+    // reads declared mailboxes and routed items from route-owned read models; with no
+    // mailbox it renders the education state, so its output is stable and measurable.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(214);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
@@ -523,7 +526,8 @@ describe("generated route-shell registry", () => {
     // detection removed five compatibility shims from this count in BI-7D2C4F02.
     // 120 -> 119: the mirror of the eligibility gain above — /workspace/cases/[caseKey]
     // left the excluded set when the fixture began minting its id.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);
+    // 120 -> 121: /workspace/mailroom/items/[inboundId] — dynamic, fixture-required.
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(121);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

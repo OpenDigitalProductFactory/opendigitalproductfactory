@@ -15,9 +15,13 @@ ship, and track."
 - A new **Delivery** rail section (`apps/web/lib/govern/permissions.ts` `SHELL_SECTIONS` +
   the `PortalShellSectionKey` union).
 - `/delivery` ([`apps/web/app/(shell)/delivery/page.tsx`](../../apps/web/app/(shell)/delivery/page.tsx))
-  — a launcher that groups the existing delivery surfaces: Build & ship (Build Studio,
+  — a launcher that groups the existing delivery surfaces: Build & ship (Work, Build Studio,
   Work control), Plan (Backlog), Track & release (Change lanes, Promotions, Dev loop,
-  Self-upgrade).
+  Self-upgrade). **Work** leads the group and points at the canonical activity destination
+  `/ops/workrooms`; **Work control** (`/build/work`) is the planning surface for governed
+  work before it is claimed. Those had been two entries claiming the same job — Work control
+  was described as "Workrooms across every surface and agent", which is what `/ops/workrooms`
+  now is (BI-9DC43E17).
 - The **Build Studio work surface (`/build`)** moves into the Delivery rail section. It is
   already `domain: "delivery"`; this aligns the rail grouping with the domain. Build Studio
   **configuration** (models/providers) stays under Platform at `/platform/ai/build-studio`

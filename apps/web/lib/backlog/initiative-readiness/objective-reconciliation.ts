@@ -73,7 +73,7 @@ function statementIds(value: unknown, key: "objectiveId" | "acceptanceId"): stri
   return new Set(normalized).size === normalized.length ? normalized : null;
 }
 
-function parseBaseline(activity: ObjectiveReconciliationActivity, itemId: string): Baseline | null {
+function parseBaseline(activity: ObjectiveReconciliationActivity, subjectIds: readonly string[]): Baseline | null {
   const payload = object(activity.payload);
   const subject = object(payload?.subject);
   const objectives = statementIds(payload?.objectiveStatements, "objectiveId");
@@ -82,7 +82,7 @@ function parseBaseline(activity: ObjectiveReconciliationActivity, itemId: string
     || typeof payload.baselineId !== "string"
     || (payload.supersedesBaselineId !== null && typeof payload.supersedesBaselineId !== "string")
     || typeof payload.artifactDigest !== "string" || !payload.artifactDigest
-    || subject?.kind !== "backlog-item" || subject.id !== itemId
+    || subject?.kind !== "backlog-item" || typeof subject.id !== "string" || !subjectIds.includes(subject.id)
     || !objectives || !acceptance) return null;
   const required = [...objectives, ...acceptance];
   if (required.length === 0 || new Set(required).size !== required.length) return null;
@@ -97,10 +97,10 @@ function parseBaseline(activity: ObjectiveReconciliationActivity, itemId: string
 
 function currentBaseline(
   activities: readonly ObjectiveReconciliationActivity[],
-  itemId: string,
+  subjectIds: readonly string[],
 ): { baseline: Baseline | null; malformed: boolean; conflict: boolean } {
   const rows = activities.filter((activity) => activity.kind === "initiative_scope_baseline");
-  const parsed = rows.map((activity) => parseBaseline(activity, itemId));
+  const parsed = rows.map((activity) => parseBaseline(activity, subjectIds));
   if (parsed.some((baseline) => !baseline)) return { baseline: null, malformed: true, conflict: false };
   const baselines = parsed as Baseline[];
   const ids = new Set(baselines.map((entry) => entry.baselineId));
@@ -121,8 +121,18 @@ export function reconcileInitiativeObjectives(args: {
   itemId: string;
   itemRowId?: string;
   activities: readonly ObjectiveReconciliationActivity[];
+  /**
+   * BI-2515F779: a decomposed child reconciles against the baseline it inherits
+   * from its mapping parent, so the baseline's canonical subject may be the
+   * parent. Defaults to the item alone; the caller names the parent when the
+   * child has no baseline of its own.
+   */
+  baselineSubjectIds?: readonly string[];
 }): ObjectiveReconciliationResult {
-  const current = currentBaseline(args.activities, args.itemId);
+  const subjectIds = args.baselineSubjectIds && args.baselineSubjectIds.length > 0
+    ? args.baselineSubjectIds
+    : [args.itemId];
+  const current = currentBaseline(args.activities, subjectIds);
   if (current.malformed) return { state: "malformed", baselineId: null, evidenceRefs: [], requiredStatementIds: [] };
   if (current.conflict) return { state: "conflict", baselineId: null, evidenceRefs: [], requiredStatementIds: [] };
   const baseline = current.baseline;

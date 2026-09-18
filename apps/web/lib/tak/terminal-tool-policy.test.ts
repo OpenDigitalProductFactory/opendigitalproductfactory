@@ -21,12 +21,12 @@ vi.mock("@dpf/db", () => ({
     coworkerTurnMetric: { upsert: vi.fn() },
   },
 }));
-vi.mock("@/lib/routed-inference", () => ({ routeAndCall: vi.fn() }));
+vi.mock("@/lib/routed-inference", () => ({ routeAndCall: vi.fn(), previewRoute: vi.fn() }));
 vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [], toolsToOpenAIFormat: vi.fn(() => []) }));
 vi.mock("@/lib/mcp-governed-execute", () => ({ governedExecuteTool: vi.fn() }));
 
 import { prisma } from "@dpf/db";
-import { routeAndCall } from "@/lib/routed-inference";
+import { routeAndCall, previewRoute } from "@/lib/routed-inference";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { runAgenticLoop } from "./agentic-loop";
 
@@ -79,6 +79,13 @@ const writer = (success = true): TerminalToolRecord => ({
 });
 
 describe("terminal tool policy", () => {
+  it("does not authorize a receipt when transport withheld part of a complete source page", () => {
+    const withheld = { ...read(), modelEvidenceTruncated: true };
+    expect(summarizeTerminalToolProgress(policy, [withheld]).evidenceAvailable).toBe(false);
+    expect(resolveTerminalToolCall(policy, [withheld], policy.writerToolName).kind).toBe("refuse");
+    // A later complete bounded traversal can recover without changing identity.
+    expect(summarizeTerminalToolProgress(policy, [withheld, read()]).evidenceAvailable).toBe(true);
+  });
   it("bounds malformed correction and never retries success, approval, or authority failure", () => {
     const malformed = { name: policy.writerToolName, result: { success: false, error: "malformed-receipt" } };
     expect(resolveTerminalToolCall(policy, [read(), malformed, malformed, malformed], policy.writerToolName).kind).toBe("refuse");
@@ -445,6 +452,7 @@ describe("agent loop terminal writer integration", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(previewRoute).mockResolvedValue({ decision: { selectedEndpoint: "eligible-alternative" } } as never);
     vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       isSuperuser: true,
@@ -457,6 +465,37 @@ describe("agent loop terminal writer integration", () => {
           message: "Immutable evidence page.",
           ...(toolName === "read_source_at_version" ? { data: completePage } : {}),
         });
+  });
+
+  it("retains the bounded immutable design in the writer's actual input", async () => {
+    const content = ("Research context. ".repeat(30) + "\n").repeat(19)
+      + "DESIGN: bounded server-side snapshots; no client-side enumeration.\n";
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true, message: "Complete immutable page",
+      data: { ...completePage, content },
+    });
+    vi.mocked(routeAndCall).mockResolvedValueOnce({
+      ...response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]),
+      resolvedMaxContextTokens: 1_048_576,
+    } as never).mockRejectedValueOnce(new Error("End test after observing writer input"));
+    await runAgenticLoop(params);
+    const evidence = vi.mocked(routeAndCall).mock.calls[1]![0].find((message) => message.role === "tool");
+    expect(evidence?.content).toContain("DESIGN: bounded server-side snapshots; no client-side enumeration.");
+    expect(evidence?.content).not.toContain("[truncated");
+  });
+
+  it("refuses a provider's writer call after the model-facing budget truncated its read", async () => {
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true,
+      message: "Complete immutable page", data: { ...completePage, content: ("x".repeat(500) + "\n").repeat(20) },
+    });
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("", [{ id: "write", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValue(response("Cannot assess the unseen source.") as never);
+    const result = await runAgenticLoop(params);
+    expect(result.executedTools[0]).toMatchObject({ modelEvidenceTruncated: true, result: { success: true } });
+    expect(vi.mocked(governedExecuteTool).mock.calls.some(([call]) => call.toolName === policy.writerToolName)).toBe(false);
+    const nextTools = (vi.mocked(routeAndCall).mock.calls[1]![3] as { tools: typeof providerTools }).tools;
+    expect(nextTools.some((tool) => tool.function.name === policy.writerToolName)).toBe(false);
   });
 
   it("traverses six contiguous pages before exposing exactly the writer", async () => {
@@ -515,6 +554,7 @@ describe("agent loop terminal writer integration", () => {
     const thirdTools = (vi.mocked(routeAndCall).mock.calls[2]![3] as { tools: typeof providerTools }).tools;
     expect(secondTools.map((tool) => tool.function.name)).toEqual(policy.readerToolNames);
     expect(thirdTools.map((tool) => tool.function.name)).toContain(policy.writerToolName);
+    expect(vi.mocked(routeAndCall).mock.calls[1]![3]?.deniedProviders).toBeUndefined();
   });
 
   it("executes only the first writer when a provider emits duplicates in one batch", async () => {
@@ -553,7 +593,7 @@ describe("agent loop terminal writer integration", () => {
     vi.mocked(routeAndCall)
       .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
       .mockResolvedValueOnce(response("The evidence is sufficient for a judgment.") as never)
-      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "anthropic-sub" } as never)
+      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "gemini" } as never)
       .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
 
     await runAgenticLoop(params);
@@ -564,6 +604,34 @@ describe("agent loop terminal writer integration", () => {
     };
     expect(retryOptions.deniedProviders).toEqual(["local"]);
     expect(retryOptions.preferredProviderId).toBeUndefined();
+  });
+
+  it("uses one bounded retry on the sole eligible provider and records the writer only once", async () => {
+    vi.mocked(previewRoute).mockResolvedValue({ decision: { selectedEndpoint: null } } as never);
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true, message: "Receipt recorded." } as never);
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce({ ...response("I have assessed the evidence."), providerId: "gemini" } as never)
+      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "gemini" } as never)
+      .mockResolvedValueOnce({ ...response("Receipt recorded."), providerId: "gemini" } as never);
+    const result = await runAgenticLoop({ ...params, terminalToolPolicy: enterTerminalWriterPhase(policy) });
+    expect(result.failure).toBeUndefined();
+    expect(governedExecuteTool).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(routeAndCall).mock.calls[1]![3]?.deniedProviders).toBeUndefined();
+    expect(result.executedTools).toHaveLength(1);
+  });
+
+  it("preserves the native signed call while executing and recording server-bound arguments", async () => {
+    const nativeCall = { id: "native-read", name: "read_source_at_version", arguments: {}, gemini: { modelId: "gemini-3", thoughtSignature: "opaque" } };
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [nativeCall]) as never)
+      .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("Writer rejected.") as never);
+    const result = await runAgenticLoop(params);
+    expect(result.executedTools[0]?.args).toEqual(policy.immutableReaderArguments);
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]![0].rawParams).toEqual(policy.immutableReaderArguments);
+    const nextHistory = vi.mocked(routeAndCall).mock.calls[1]![0];
+    expect(nextHistory.find((message) => message.role === "assistant")?.toolCalls?.[0]).toEqual(nativeCall);
+    expect(nextHistory.find((message) => message.role === "tool")?.content).toContain(policy.immutableReaderArguments!.version);
   });
 
   it("returns a missing-writer failure when the review budget expires after a successful read", async () => {

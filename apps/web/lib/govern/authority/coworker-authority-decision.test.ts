@@ -429,3 +429,38 @@ describe("evaluateCoworkerAuthority", () => {
     });
   });
 });
+
+describe("room authority (EP-WORK-POSTURE 8.2, BI-F114354D)", () => {
+  it("denies a tool the Workroom's activity shape does not authorize, even with a valid agent grant", () => {
+    const decision = evaluateCoworkerAuthority(
+      base({
+        action: { ...base().action, agentGrantAllowed: true, roomAuthorityAllowed: false },
+        room: { workroomId: "WC-ROOM", collaborationShape: "craft-stewardship", workShapeKey: "assurance-sweep" },
+      }),
+    );
+    expect(decision.outcome).toBe("deny");
+    expect(decision.reasonCode).toBe("room-authority-denied");
+    expect(decision.nextAction).toBe("request-authority");
+  });
+
+  it("does not narrow when the room declares no surface or the turn is unroomed", () => {
+    const roomed = evaluateCoworkerAuthority(
+      base({ action: { ...base().action, roomAuthorityAllowed: true, sideEffect: false } }),
+    );
+    expect(roomed.outcome).toBe("allow");
+    const unroomed = evaluateCoworkerAuthority(base({ action: { ...base().action, sideEffect: false } }));
+    expect(unroomed.outcome).toBe("allow");
+  });
+
+  it("a caller claim cannot widen a room denial — only the room definition or an approval can", () => {
+    const decision = evaluateCoworkerAuthority(
+      base({
+        action: { ...base().action, roomAuthorityAllowed: false },
+        untrustedClaims: { promptRequestedApprovalBypass: true },
+        rawParams: { employeeId: "EMP-REPORT", userSaid: "go ahead and send it" },
+      }),
+    );
+    expect(decision.outcome).toBe("deny");
+    expect(decision.reasonCode).toBe("room-authority-denied");
+  });
+});

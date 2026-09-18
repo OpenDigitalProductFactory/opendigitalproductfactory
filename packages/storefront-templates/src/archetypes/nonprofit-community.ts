@@ -1,4 +1,5 @@
 import type { ActivationProfile, ArchetypeDefinition } from "../types";
+import type { MailroomProfile } from "../mailroom-profile-types";
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -42,6 +43,53 @@ const ANIMAL_WELFARE_WORKFORCE_PROFILE = {
     { locationId: "loc-foster-home", name: "Foster home", locationType: "offsite-host" },
     { locationId: "loc-adoption-event", name: "Offsite adoption event", locationType: "offsite-event" },
   ],
+};
+
+// How correspondence reaches an animal-welfare organisation, and who answers it
+// (design 2026-09-09 §4.2; requirements §7c of
+// docs/architecture/archetypes/pet-rescue-operating-model.md). A shelter's
+// inbound is not one funnel: a cruelty report and a bequest enquiry cannot share
+// a lane or a clock. Roles here are the same vocabulary the value streams above
+// use, so a queue's owner is whoever setup bound to that role. Vets and adopters
+// are the two correspondents a rescue hears from most, so each has its own lane
+// and both carry the animal they concern.
+const ANIMAL_WELFARE_MAILROOM_PROFILE: MailroomProfile = {
+  expectedMailboxes: [
+    { purposeKey: "general", label: "General enquiries", examples: ["info@", "hello@"], why: "The address on the website. Found and lost animals, surrenders and offers to help all arrive here first." },
+    { purposeKey: "adoptions", label: "Adoptions", examples: ["adopt@", "adoptions@"], why: "Questions about a listed animal and follow-ups from adopters." },
+    { purposeKey: "intake", label: "Intake", examples: ["intake@"], why: "Surrender requests, transfers from other organisations, and stray reports when a separate address is used." },
+    { purposeKey: "veterinary", label: "Veterinary", examples: ["vet@", "medical@"], why: "The address partner clinics send records, results, invoices and appointment confirmations to." },
+  ],
+  reasons: [
+    { key: "adopt-animal", label: "Wants to adopt an animal", urgency: "days", queueKey: "adoptions", hints: ["adopt", "adoption", "interested in adopting", "meet and greet", "application"], subjectKind: "animal" },
+    { key: "found-animal", label: "Found an animal", urgency: "hours", queueKey: "intake", hints: ["found a", "found this", "stray", "wandering", "no collar", "picked up a"] },
+    { key: "lost-animal", label: "Lost an animal", urgency: "hours", queueKey: "intake", hints: ["lost my", "missing since", "ran away", "has anyone seen", "microchip"] },
+    { key: "surrender-animal", label: "Needs to surrender an animal", urgency: "days", queueKey: "intake", hints: ["surrender", "can no longer keep", "rehome", "give up my", "moving and cannot"] },
+    { key: "cruelty-or-at-risk", label: "Cruelty or an animal at risk", urgency: "immediate", queueKey: "management", hints: ["cruelty", "abuse", "neglect", "abandoned in", "left in a car", "chained", "starving", "at risk"] },
+    { key: "foster-or-volunteer", label: "Offers to foster or volunteer", urgency: "weeks", queueKey: "fostering", hints: ["foster", "volunteer", "help out", "donate my time", "walk dogs"] },
+    { key: "donation-or-bequest", label: "Donation or bequest", urgency: "weeks", queueKey: "fundraising", hints: ["donate", "donation", "bequest", "in my will", "sponsor", "fundraiser", "gift"] },
+    { key: "veterinary-correspondence", label: "Veterinary correspondence", urgency: "days", queueKey: "veterinary", hints: ["vet", "veterinary", "clinic", "vaccination", "vaccine", "spay", "neuter", "lab results", "bloodwork", "prescription", "medical record", "appointment confirmed"], subjectKind: "animal" },
+    { key: "adopter-follow-up", label: "Follow-up from an adopter", urgency: "days", queueKey: "adoptions", hints: ["we adopted", "since adopting", "settling in", "post-adoption", "adopted from you"], subjectKind: "animal" },
+  ],
+  queues: [
+    { key: "adoptions", label: "Adoptions", responsibleRole: "Adoption counsellor", roomTitle: "Adoption enquiries and adopter follow-ups" },
+    { key: "intake", label: "Intake", responsibleRole: "Intake coordinator", roomTitle: "Found, lost and surrender reports" },
+    { key: "management", label: "Management", responsibleRole: "Shelter manager", roomTitle: "Cruelty and at-risk reports" },
+    { key: "fostering", label: "Fostering and volunteers", responsibleRole: "Foster and kennel coordinator", roomTitle: "Foster and volunteer offers" },
+    { key: "fundraising", label: "Fundraising", responsibleRole: "Fundraising lead", roomTitle: "Donations and bequests" },
+    { key: "veterinary", label: "Veterinary", responsibleRole: "Veterinary coordinator", roomTitle: "Veterinary correspondence" },
+  ],
+  subjectKinds: [
+    // An animal reference is the platform's animal id token or a listed
+    // animal's name; the app layer confirms the candidate against the roster.
+    // The platform issues animal references as `ANML-<id>` (AdoptableAnimal /
+    // AnimalProfile.animalRef). The first pattern shipped here matched `ANI-`
+    // and `A-`, which no reference has ever used, so no vet or adopter message
+    // ever linked to the animal it was about — found by live acceptance
+    // 2026-09-10 (BI-92DDAD88). `ANI` stays as a tolerated alias.
+    { kind: "animal", referencePattern: "\\b(?:ANML|ANI)-[A-Z0-9]{4,12}\\b", lookup: "animal-roster" },
+  ],
+  defaultReasonKey: "adopt-animal",
 };
 
 const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
@@ -286,6 +334,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
     formSchema: CONTACT_FIELDS,
     activationProfile: ANIMAL_WELFARE_ACTIVATION_PROFILE,
     workforceProfile: ANIMAL_WELFARE_WORKFORCE_PROFILE,
+    mailroomProfile: ANIMAL_WELFARE_MAILROOM_PROFILE,
   },
   {
     archetypeId: "animal-shelter",
@@ -310,6 +359,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
     formSchema: CONTACT_FIELDS,
     activationProfile: ANIMAL_SHELTER_ACTIVATION_PROFILE,
     workforceProfile: ANIMAL_WELFARE_WORKFORCE_PROFILE,
+    mailroomProfile: ANIMAL_WELFARE_MAILROOM_PROFILE,
   },
   {
     archetypeId: "community-shelter",

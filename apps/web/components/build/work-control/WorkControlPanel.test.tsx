@@ -43,7 +43,7 @@ describe("WorkControlPanel", () => {
           asyncOperation: { coreHandleAvailable: false },
         }] }}
         adoptable={[]}
-        livenessSummary={{ scanned: 2, live: 1, history: 1, reapable: 1, byLiveness: { live: 1, "lease-expired": 1 }, heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } }}
+        livenessSummary={{ scanned: 2, live: 1, working: 1, history: 1, reapable: 1, byLiveness: { live: 1, working: 1, "lease-expired": 1 }, heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } }}
         createAction={vi.fn()}
       />,
     );

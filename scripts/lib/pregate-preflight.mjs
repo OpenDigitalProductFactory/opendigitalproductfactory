@@ -31,6 +31,7 @@
 // than a missed one.
 
 import { spawnSync } from "node:child_process";
+import { scrubGitRepoLocationEnv } from "./git-hook-env.mjs";
 
 import {
   POLICY_GUARD_PROFILES,
@@ -54,8 +55,14 @@ export const PREFLIGHT_SKIP_ENV = "DPF_SKIP_PREGATE_PREFLIGHT_REASON";
 // a full CI round trip on #4558, where Docs Impact failed in CI on an edge the
 // preflight had just declared clean.
 //
-// Two gates stay excluded, and these reasons do NOT expire:
-//   - seed-fit-gate reads the PR body, which does not exist before push;
+// seed-fit-gate joined this list on 2026-09-11 (BI-4F1E9249). Its exclusion
+// reason — "reads the PR body, which does not exist before push" — was removed
+// rather than waived: the gate now reads `git log <base>..HEAD` for its
+// decision, as its four sibling decision gates already did. It cost a full CI
+// round trip on #5291, where a kernel principle was pushed without a seed-fit
+// decision and the fix needed an amended commit plus a fresh local-CI gate.
+//
+// ONE gate stays excluded, and that reason does NOT expire:
 //   - decision-baseline MERGES origin/main into the branch — a tree mutation
 //     the preflight must never perform.
 export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
@@ -65,6 +72,7 @@ export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
   "data-impact-gate",
   "convergence-impact-gate",
   "spec-plan-doc-gate",
+  "seed-fit-gate",
 ]);
 
 // Exit-output signatures that mean "this host cannot run the guard", not
@@ -146,22 +154,34 @@ export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES, changeSco
   return planPreflight({ profiles, changeScope }).entries;
 }
 
-function defaultExecute(command, args) {
-  const invocation = resolvePolicyGuardInvocation(command, args);
-  const result = spawnSync(invocation.command, invocation.args, {
-    cwd: process.cwd(),
-    env: process.env,
-    encoding: "utf8",
-    shell: false,
-  });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}${result.error?.message ?? ""}`;
-  if (result.status !== 0) process.stderr.write(output);
-  // A guard command the host refused to launch, killed by a signal, or the
-  // guard-loop runner's reserved runner-failure exit code — keyed on exit code,
-  // never on output text — so runPreflight never mislabels an evicted spawn as
-  // deterministic, nor downgrades a real violation that merely mentions one.
-  const runnerFailure = isRunnerFailureResult({ args, status: result.status, error: result.error });
-  return { exitCode: result.status ?? 1, output, runnerFailure };
+/**
+ * Builds the executor that runs one guard command. The environment handed to
+ * every guard is scrubbed of git's repository-locating variables
+ * (BI-062F5687): under `git push` from a linked worktree the hook inherits
+ * GIT_DIR, and a guard that builds a temp git fixture would otherwise commit
+ * to the REAL repository — which is how a 15,511-file deletion landed on a
+ * pushing branch. Guards resolve their repository from cwd, never from the
+ * hook's environment.
+ */
+export function createDefaultExecute(env = process.env) {
+  const guardEnv = scrubGitRepoLocationEnv(env);
+  return function defaultExecute(command, args) {
+    const invocation = resolvePolicyGuardInvocation(command, args, { env: guardEnv });
+    const result = spawnSync(invocation.command, invocation.args, {
+      cwd: process.cwd(),
+      env: guardEnv,
+      encoding: "utf8",
+      shell: false,
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}${result.error?.message ?? ""}`;
+    if (result.status !== 0) process.stderr.write(output);
+    // A guard command the host refused to launch, killed by a signal, or the
+    // guard-loop runner's reserved runner-failure exit code — keyed on exit code,
+    // never on output text — so runPreflight never mislabels an evicted spawn as
+    // deterministic, nor downgrades a real violation that merely mentions one.
+    const runnerFailure = isRunnerFailureResult({ args, status: result.status, error: result.error });
+    return { exitCode: result.status ?? 1, output, runnerFailure };
+  };
 }
 
 /**
@@ -177,10 +197,10 @@ function defaultExecute(command, args) {
  */
 export async function runPreflight({
   plan = buildPreflightPlan(),
-  execute = defaultExecute,
   logger = () => {},
   now = () => Date.now(),
   env = process.env,
+  execute = createDefaultExecute(env),
 } = {}) {
   const skipReason = env[PREFLIGHT_SKIP_ENV];
   if (skipReason) {

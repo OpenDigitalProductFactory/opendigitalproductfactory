@@ -182,3 +182,39 @@ cosmetic next to the trigger, and neither is worth widening this change.
   inference runtime is down, or the origin cannot be resolved.
 - Documentation impact per phase: the decision-governance surface docs and the
   operator-facing help copy change with Phase 1 and Phase 4.
+
+## Running a panel: the contract the first implementation got wrong
+
+The panel shipped unable to complete a single run. Ten `governance-triage`
+runs were created on the live install and none finished, against 222 waiting
+decisions. Both causes were invented identifiers, and both were invisible to
+unit tests because the tests asserted against fixtures rather than the engine.
+
+**A pattern may only use role ids the orchestrator implements.**
+`lib/deliberation/orchestrator.ts` maps roles to node types through a hardcoded
+switch, and finds the fan-in node by an exact `roleId === "adjudicator"` match.
+A pattern declaring `resolution-adjudicator` gets branch nodes and *no
+adjudicator node* — the run has nothing to conclude it and stays `pending`
+forever, with no error anywhere. The vocabulary today is `author`, `reviewer`,
+`skeptic`, `debater`, `adjudicator`; unknown ids fall back to a generic review
+node with a `console.warn` nobody reads. Node types are likewise fixed
+(`analyze`, `review`, `skeptical_review`, `summarize`).
+
+**Orchestration persists a graph; it does not run it.**
+`orchestrateDeliberation` writes the run and its nodes. A separate Inngest
+function executes them, and it only wakes on `deliberation/run.start`. Omitting
+that event does not fail — it leaves queued nodes and no outcome, which reads
+from the outside as "the panel produced nothing" rather than "the panel never
+ran". `lib/deliberation/start-run.ts` is the single place that send lives, so
+the step cannot be forgotten by omission.
+
+**The verdict is asynchronous.** Reading `DeliberationOutcome` immediately after
+orchestrating always returns nothing. The binding waits, bounded (four minutes),
+then reports "not drafted" and lets the next pass retry — one slow panel must
+not starve the decisions queued behind it, and a partial verdict is never
+written.
+
+**Verification that counts.** A green test suite did not catch either defect.
+The check is a run row with `completedAt` set and a `DecisionResolutionProposal`
+against a real interaction — read from the database on a live install, not from
+a fixture.

@@ -19,6 +19,7 @@ export function buildInitialRouteContext(input: {
     ...(posture?.routeContext ?? {}),
     sensitivity: input.sensitivity,
     interactionMode: options?.interactionMode,
+    requiresStreaming: options?.requiresStreaming,
     requiresCodeExecution: options?.requiresCodeExecution,
     requiresWebSearch: options?.requiresWebSearch,
     requiresComputerUse: options?.requiresComputerUse,
@@ -64,6 +65,8 @@ export async function buildEffectiveRequestContract(input: {
           input.taskRequirement,
         );
 
+  contract.toolChoice = input.options?.toolChoice;
+  contract.terminalWriterToolName = input.options?.terminalWriterToolName;
   contract.minimumDimensions = mergeMinimumDimensions(
     contract.minimumDimensions,
     input.options?.minimumDimensions,

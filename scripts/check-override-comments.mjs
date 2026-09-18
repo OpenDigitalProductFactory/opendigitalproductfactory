@@ -36,6 +36,10 @@ const EXEMPT_DEDUP = new Set([
   "@tootallnate/once",
   "uuid",
   "ip-address",
+  // Types-only major unification: @inngest/ai, @types/net-snmp and docx each
+  // pinned an older @types/node major, four copies of one types package
+  // (plan 2026-09-08 M7, BI-5265CAD0). Not a CVE floor.
+  "@types/node@<26",
 ]);
 
 // Documented workaround families (not CVE floors): the jest-30 unification block
@@ -47,9 +51,6 @@ const EXEMPT_PATTERNS = [
   /^expect$/,
   /^pretty-format$/,
   /^@testing-library\//,
-  /^mermaid$/,
-  /^@mermaid-js\//,
-  /^@zenuml\//,
   /^@floating-ui\//,
 ];
 

@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
-import { agentHoldsWebSearchGrant } from "@/lib/tak/agent-web-search-grant";
 import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
 import { signOutAction } from "@/lib/actions";
 import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
@@ -16,7 +15,6 @@ import { ThreadSensitivityNotice } from "./ThreadSensitivityNotice";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
-import { CoworkerPriorityDock } from "@/components/golden-triangle/CoworkerPriorityDock";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
 import { collaborationReturnMessage, type CollaborationCard } from "./HandoffCard";
@@ -29,13 +27,6 @@ import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { isStandingCooAgentId, presentStandingCoo, resolveCooPresentationIdentity, resolveCooPresentationName } from "@/lib/coworker-presentation/coo-name";
 import {
-  loadElevatedAssistPreference,
-  saveElevatedAssistPreference,
-} from "./agent-form-assist-prefs";
-import {
-  buildExternalAccessContinuationPrompt,
-  loadExternalAccessSessionState,
-  saveExternalAccessSessionState,
   loadCoworkerMode,
   saveCoworkerMode,
   type CoworkerMode,
@@ -83,7 +74,6 @@ type Props = {
 };
 
 type MessageSendOptions = {
-  externalAccessEnabled?: boolean;
   questionPacket?: QuestionPacket | null;
 };
 
@@ -158,8 +148,6 @@ export function AgentCoworkerPanel({
     sendsInFlight,
     isBusy,
   });
-  const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
-  const [externalAccessEnabled, setExternalAccessEnabled] = useState(false);
   // Build Studio defaults to Act mode — its purpose is building, not advising
   const [coworkerMode, setCoworkerMode] = useState<CoworkerMode>(() =>
     pathname.startsWith("/build") ? "act" : "advise"
@@ -272,7 +260,6 @@ export function AgentCoworkerPanel({
   const routeAgent: AgentInfo = resolveAgentForRouteSync(effectiveRoute, userContext);
   const agent = presentStandingCoo(routeAgent, cooConversationalName);
   const agentIdentity = resolveCooPresentationIdentity({ agentId: agent.agentId, canonicalName: agent.agentName, conversationalName: cooConversationalName });
-  const webAccessAvailable = agentHoldsWebSearchGrant(agent.agentId);
   const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
 
@@ -610,8 +597,6 @@ export function AgentCoworkerPanel({
   }, [threadId]);
 
   useEffect(() => {
-    setElevatedAssistEnabled(loadElevatedAssistPreference(preferenceUserKey, pathname));
-    setExternalAccessEnabled(loadExternalAccessSessionState(preferenceUserKey, pathname));
     setCoworkerMode(loadCoworkerMode(preferenceUserKey, pathname));
   }, [pathname, preferenceUserKey]);
 
@@ -633,32 +618,6 @@ export function AgentCoworkerPanel({
     }
   }, [pendingAutoMessage, threadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleToggleElevatedAssist() {
-    setElevatedAssistEnabled((prev) => {
-      const next = !prev;
-      saveElevatedAssistPreference(preferenceUserKey, pathname, next);
-      return next;
-    });
-  }
-
-  function handleToggleExternalAccess() {
-    const next = !externalAccessEnabled;
-    setExternalAccessEnabled(next);
-    saveExternalAccessSessionState(preferenceUserKey, pathname, next);
-
-    if (next && !isBusy) {
-      const continuation = buildExternalAccessContinuationPrompt(messages);
-      if (continuation) {
-        submitMessage(
-          continuation,
-          createOptimisticUserMessage(continuation, effectiveRoute),
-          true,
-          { externalAccessEnabled: true },
-        );
-      }
-    }
-  }
-
   function handleToggleCoworkerMode() {
     setCoworkerMode((prev) => {
       const next: CoworkerMode = prev === "advise" ? "act" : "advise";
@@ -669,7 +628,9 @@ export function AgentCoworkerPanel({
 
   // EP-ASYNC-COWORKER-001: activeFormAssist ref for SSE done handler
   const activeFormAssistRef = useRef<ReturnType<typeof getActiveFormAssist>>(null);
-  activeFormAssistRef.current = elevatedAssistEnabled ? getActiveFormAssist(pathname) : null;
+  // EP-WORK-POSTURE 8.2: the page's form-assist DATA is always collected; whether
+  // the coworker may fill the fields is decided server-side from the Workroom.
+  activeFormAssistRef.current = getActiveFormAssist(pathname);
 
   function submitMessage(
     content: string,
@@ -710,7 +671,6 @@ export function AgentCoworkerPanel({
       devMode,
       useUnifiedCoworker,
       coworkerMode,
-      externalAccessEnabled: sendOptions?.externalAccessEnabled ?? externalAccessEnabled,
     });
 
     // EP-ASYNC-COWORKER-001: Non-blocking fetch to API route.
@@ -724,8 +684,6 @@ export function AgentCoworkerPanel({
         content,
         routeContext: effectiveRoute,
         coworkerMode: runtimeMode.coworkerMode,
-        externalAccessEnabled: runtimeMode.externalAccessEnabled,
-        elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
         ...(activeBuildId ? { buildId: activeBuildId } : {}),
         ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
@@ -933,11 +891,7 @@ export function AgentCoworkerPanel({
 
       {/* BI-706530B2: name the local-model pin instead of letting the owner
           experience it as an unexplained loss of capability. */}
-      <ThreadSensitivityNotice
-        threadId={threadId}
-        messageCount={messages.length}
-        onStartFresh={handleOpenClearConfirm}
-      />
+      <ThreadSensitivityNotice threadId={threadId} messageCount={messages.length} />
 
       {/* Voice activity indicator — shown when voice synthesis is active */}
       {voiceSynth.available && (voiceSynth.isSynthesizing || voiceSynth.isPlaying) && (
@@ -1206,7 +1160,6 @@ export function AgentCoworkerPanel({
       </div>
 
       <CoworkerHealthStatus />
-      <CoworkerPriorityDock agentId={agent.agentId} />
       {effectiveThreadLoadState === "failed" && (
         <div
           role="alert"
@@ -1297,11 +1250,6 @@ export function AgentCoworkerPanel({
         voicePlaybackUnavailableReason={voiceSynth.unavailableReason}
         voicePlaybackEnabled={voicePlaybackEnabled}
         onVoicePlaybackToggle={toggleVoicePlayback}
-        elevatedAssistEnabled={elevatedAssistEnabled}
-        onToggleElevatedAssist={handleToggleElevatedAssist}
-        externalAccessEnabled={webAccessAvailable && externalAccessEnabled}
-        onToggleExternalAccess={handleToggleExternalAccess}
-        webAccessAvailable={webAccessAvailable}
         coworkerMode={coworkerMode}
         onToggleCoworkerMode={handleToggleCoworkerMode}
         useUnified={useUnifiedCoworker}

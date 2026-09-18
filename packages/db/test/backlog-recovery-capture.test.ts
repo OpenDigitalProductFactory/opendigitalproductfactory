@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildBacklogRecoveryBundle,
+  buildWorkroomCaptureRecord,
   parseBacklogRecoveryBundle,
+  planWorkroomRestore,
+  workroomRestorePlanBalances,
   type BacklogCaptureEpicRow,
   type BacklogCaptureItemRow,
+  type WorkroomCaptureRecord,
+  type WorkroomCaptureRow,
 } from "../src/backlog-recovery-bundle";
 
 const CAPTURED_AT = "2026-08-22T10:00:00.000Z";
@@ -236,5 +241,174 @@ describe("payload sanitisation", () => {
     });
     const payload = result.bundle?.items[0]?.activities[0]?.payload;
     expect(payload).toEqual({ note: "kept", nested: { detail: "also kept" } });
+  });
+});
+
+function room(overrides: Partial<WorkroomCaptureRow> = {}): WorkroomCaptureRow {
+  return {
+    capsuleId: "WC-00000001",
+    title: "Work on BI-TEST0001",
+    objective: "Claim-at-start binding for BI-TEST0001",
+    status: "working",
+    source: "external-adoption",
+    executorKind: "claude-desktop",
+    executorRef: "worktree:D:/DPF-worktrees/test",
+    backlogItemId: "BI-TEST0001",
+    epicId: "EP-TEST0001",
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    baseBranch: "main",
+    baseSha: null,
+    headBranch: "fix/test",
+    headSha: "abc123",
+    worktreePath: "D:/DPF-worktrees/test",
+    pullRequestUrl: null,
+    pullRequestNumber: null,
+    contributionMode: "private",
+    branchTaxonomy: "fix",
+    idempotencyKey: null,
+    scopeClaims: [],
+    workspaceState: {},
+    verificationState: {},
+    leaseHolderPrincipalId: "principal-1",
+    createdAt: new Date("2026-09-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-02T00:00:00.000Z"),
+    lastSyncedAt: null,
+    archivedAt: null,
+    activities: [],
+    ...overrides,
+  };
+}
+
+describe("buildWorkroomCaptureRecord", () => {
+
+  it("keeps every Workroom, counts the branch-bound and open ones, and sorts deterministically", () => {
+    const record = buildWorkroomCaptureRecord(
+      [
+        room({ capsuleId: "WC-B", status: "abandoned", headBranch: null }),
+        room({
+          capsuleId: "WC-A",
+          activities: [
+            { id: "act-2", kind: "evidence", summary: "later", payload: {}, recordedAt: new Date("2026-09-02T00:00:00.000Z") },
+            { id: "act-1", kind: "claim", summary: "earlier", payload: { branch: "fix/test" }, recordedAt: new Date("2026-09-01T00:00:00.000Z") },
+          ],
+        }),
+      ],
+      CAPTURED_AT,
+    );
+
+    expect(record.schemaVersion).toBe(1);
+    expect(record.capturedAt).toBe(CAPTURED_AT);
+    expect(record.workroomCount).toBe(2);
+    expect(record.boundBranchCount).toBe(1);
+    expect(record.openCount).toBe(1);
+    expect(record.workrooms.map((r) => r.capsuleId)).toEqual(["WC-A", "WC-B"]);
+    expect(record.workrooms[0]?.activities.map((a) => a.id)).toEqual(["act-1", "act-2"]);
+    expect(record.workrooms[0]?.createdAt).toBe("2026-09-01T00:00:00.000Z");
+    expect(record.workrooms[1]?.headBranch).toBeNull();
+    // A JSON round-trip loses nothing the rebind slice will need.
+    const parsed = JSON.parse(JSON.stringify(record)) as WorkroomCaptureRecord;
+    expect(parsed.workrooms[0]?.worktreePath).toBe("D:/DPF-worktrees/test");
+    expect(parsed.workrooms[0]?.activities[0]?.payload).toEqual({ branch: "fix/test" });
+  });
+});
+
+describe("planWorkroomRestore", () => {
+  function record(rooms: Partial<WorkroomCaptureRow>[]): WorkroomCaptureRecord {
+    return buildWorkroomCaptureRecord(
+      rooms.map((over) => room(over)),
+      CAPTURED_AT,
+    );
+  }
+  const allPresent = () => true;
+  const nonePresent = () => false;
+
+  it("restores a captured room whose worktree still exists, under its captured status", () => {
+    const plan = planWorkroomRestore({
+      record: record([{ capsuleId: "WC-A", status: "working" }]),
+      existingCapsuleIds: [],
+      worktreeExists: allPresent,
+    });
+
+    expect(plan.restore.map((a) => [a.capsuleId, a.status])).toEqual([["WC-A", "working"]]);
+    expect(plan.archiveMissingWorktree).toEqual([]);
+    expect(workroomRestorePlanBalances(plan)).toBe(true);
+  });
+
+  // "We destroyed the evidence" is not the same claim as "this never existed".
+  it("restores a room whose worktree is gone as archived, with the reason recorded", () => {
+    const plan = planWorkroomRestore({
+      record: record([{ capsuleId: "WC-GONE", status: "working", worktreePath: "D:/DPF-worktrees/gone" }]),
+      existingCapsuleIds: [],
+      worktreeExists: nonePresent,
+    });
+
+    expect(plan.restore).toEqual([]);
+    expect(plan.archiveMissingWorktree).toHaveLength(1);
+    expect(plan.archiveMissingWorktree[0]?.status).toBe("archived");
+    expect(plan.archiveMissingWorktree[0]?.archivedReason).toContain("D:/DPF-worktrees/gone");
+    expect(plan.archiveMissingWorktree[0]?.archivedReason).toContain("no longer exists");
+    // The room and its history still come back.
+    expect(plan.archiveMissingWorktree[0]?.room.capsuleId).toBe("WC-GONE");
+    expect(workroomRestorePlanBalances(plan)).toBe(true);
+  });
+
+  it("leaves a room this install already has alone, so a re-run is a no-op", () => {
+    const rec = record([{ capsuleId: "WC-A" }, { capsuleId: "WC-B" }]);
+    const first = planWorkroomRestore({ record: rec, existingCapsuleIds: [], worktreeExists: allPresent });
+    expect(first.restore).toHaveLength(2);
+
+    const applied = first.restore.map((a) => a.capsuleId);
+    const second = planWorkroomRestore({ record: rec, existingCapsuleIds: applied, worktreeExists: allPresent });
+    expect(second.restore).toEqual([]);
+    expect(second.skipped.map((s) => s.capsuleId)).toEqual(["WC-A", "WC-B"]);
+    expect(workroomRestorePlanBalances(second)).toBe(true);
+  });
+
+  it("restores a room with no worktree path under its captured status", () => {
+    const plan = planWorkroomRestore({
+      record: record([{ capsuleId: "WC-BUILDSTUDIO", status: "verifying", worktreePath: null }]),
+      existingCapsuleIds: [],
+      // Would archive everything if it were consulted; it must not be.
+      worktreeExists: nonePresent,
+    });
+
+    expect(plan.restore.map((a) => a.status)).toEqual(["verifying"]);
+    expect(plan.archiveMissingWorktree).toEqual([]);
+  });
+
+  it("accounts for every captured room across the three buckets", () => {
+    const plan = planWorkroomRestore({
+      record: record([
+        { capsuleId: "WC-KEEP", worktreePath: "D:/here" },
+        { capsuleId: "WC-GONE", worktreePath: "D:/gone" },
+        { capsuleId: "WC-HAVE" },
+      ]),
+      existingCapsuleIds: ["WC-HAVE"],
+      worktreeExists: (p) => p === "D:/here",
+    });
+
+    expect(plan.capturedCount).toBe(3);
+    expect(plan.restore).toHaveLength(1);
+    expect(plan.archiveMissingWorktree).toHaveLength(1);
+    expect(plan.skipped).toHaveLength(1);
+    expect(workroomRestorePlanBalances(plan)).toBe(true);
+  });
+
+  it("carries the activity history through the restore", () => {
+    const plan = planWorkroomRestore({
+      record: record([
+        {
+          capsuleId: "WC-A",
+          activities: [
+            { id: "act-1", kind: "claim", summary: "claimed", payload: { branch: "fix/test" }, recordedAt: new Date("2026-09-01T00:00:00.000Z") },
+          ],
+        },
+      ]),
+      existingCapsuleIds: [],
+      worktreeExists: allPresent,
+    });
+
+    expect(plan.restore[0]?.room.activities).toHaveLength(1);
+    expect(plan.restore[0]?.room.activities[0]?.payload).toEqual({ branch: "fix/test" });
   });
 });

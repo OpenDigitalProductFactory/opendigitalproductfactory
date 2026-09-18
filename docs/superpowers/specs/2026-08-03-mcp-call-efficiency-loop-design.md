@@ -39,6 +39,18 @@ External MCP clients (Claude/Codex/Grok) and in-portal coworkers burn tokens via
 - **Tool:** `toolName`, success, governed-refusal flag, `durationMs`
 - **Window:** default 24h, max 7d
 
+### Complete requested-window coverage (BI-4BB68EB6)
+
+The interactive tool and daily scan read the same fixed `[requestedStart, requestedEnd)` range in one read-only PostgreSQL Repeatable Read transaction. Count and `(createdAt, id)` pages share that snapshot; calls committed after it was established, including backdated calls, appear on the next scan. IDs use PostgreSQL `COLLATE "C"` ordering and the matching code-point comparator in the analyzer.
+
+`coverage` reports requested and observed bounds, included and snapshot population counts, completeness, stop reason, query/scan duration, pages read, retained aggregate state and the last processed identity. An empty range is complete with zero counts and null observed bounds. The compatibility fields `windowStart`/`windowEnd` still describe observed events. Headline success divides successful calls by all included calls, including governed refusals; tool reliability excludes refusals.
+
+The normal scan no longer silently stops at 5,000 calls. Safety bounds are 250,000 rows, 8 seconds of scanning, 20,000 aggregate entries and 16 MiB of estimated retained state. Pages contain at most 500 scalar projections; required scalar fields are limited to 1,024 UTF-16 code units. Oversized fields stop ingestion before that row instead of grouping clipped identities. Full request/result JSON is never transferred. Estimates include conservative bookkeeping and string allowances; `estimatedRetainedBytes` is not an observed JavaScript heap measurement. Database statements have a 5-second timeout and the transaction has its own finite timeout.
+
+When a budget is exhausted, the report is labelled partial and unusable for a full-window conclusion. The checkpoint is diagnostic provenance, not a cursor capable of resuming an ended snapshot. Narrow the lookback and restart with a new snapshot. A query failure is an error, not a successful partial report.
+
+Only complete scans enter the finding-notification and AI Ops handoff loops. A partial scan may produce one coverage warning per lookback length per 24 hours; it names requested/observed bounds, missing population and recovery. It creates no ImprovementSignal, corrective BI or review dispatch. Both the MCP headline and daily result carry the same coverage object.
+
 ### A governed refusal is not a tool failure
 `ToolExecution.success` is false for two different events: a tool that broke, and a gate that correctly said no. Counting them together makes a working gate read as a misbehaving tool. Measured on the live install over seven days (2026-09-02): of ~5,700 failed executions, ~4,900 were governed refusals — `gate_evidence_blocked` alone was 4,520 — against ~235 genuine caller defects (`missing_required`, `invalid_input`, `invalid_status`).
 

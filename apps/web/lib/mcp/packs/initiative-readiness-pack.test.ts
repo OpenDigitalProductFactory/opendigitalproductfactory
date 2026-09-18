@@ -37,6 +37,7 @@ const expected = {
   record_initiative_compliance_review: ["manage_compliance", "initiative_compliance_review"],
   record_initiative_domain_review: ["manage_backlog", "initiative_domain_review"],
   record_initiative_archetype_review: ["manage_taxonomy", "initiative_archetype_review"],
+  record_initiative_post_implementation_review: ["manage_backlog", "initiative_design_review"],
 } as const;
 
 describe("initiative readiness reviewer tools", () => {

@@ -30,6 +30,8 @@ function participant(
 const definition: WorkShapeDefinitionContract = {
   key: "obligation-assurance-watch",
   version: "1.0.0",
+  title: "Test shape",
+  description: "A shape used in tests.",
   triggers: ["cadence"],
   stages: [
     {
@@ -48,9 +50,9 @@ const definition: WorkShapeDefinitionContract = {
     },
   ],
   stopConditions: [
-    { kind: "success", condition: "findings dispositioned" },
-    { kind: "failure", condition: "scan failed" },
-    { kind: "budget", condition: "findings-per-run exhausted" },
+    { kind: "success", condition: "findings dispositioned", disposition: "proceed" },
+    { kind: "failure", condition: "scan failed", disposition: "inconclusive" },
+    { kind: "budget", condition: "findings-per-run exhausted", disposition: "awaiting-person" },
   ],
   grants: ["tool:read"],
   measures: [{ key: "findings-raised", description: "Findings raised this run" }],
@@ -338,7 +340,7 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
     const plan = resolveDrivePlan(baseInput({
       currentStageKey: "scan",
       receipts: [],
-      priorDrive: { action: "dispatch_agent", reason: "agent_stage", stageKey: "scan" },
+      priorDrive: { action: "dispatch_agent", reason: "agent_stage", stageKey: "scan", cycleKey: null },
     }));
     expect(plan.action).toBe("pause");
     expect(plan.reason).toBe("executor_writeback_unavailable");
@@ -355,7 +357,7 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
       priorDrive: {
         action: "pause",
         reason: "executor_writeback_unavailable",
-        stageKey: "scan",
+        stageKey: "scan", cycleKey: null,
       },
     }));
     expect(plan.action).toBe("pause");
@@ -394,7 +396,7 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
       priorDrive: {
         action: "pause",
         reason: "executor_writeback_unavailable",
-        stageKey: "scan",
+        stageKey: "scan", cycleKey: null,
       },
     }));
     expect(plan.action).toBe("dispatch_agent");

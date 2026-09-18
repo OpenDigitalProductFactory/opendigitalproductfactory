@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -132,21 +132,17 @@ describe("Hive Scout seed helper", () => {
       join(routePersonaDirectory, "inventory-specialist.prompt.md"),
       "utf8",
     );
-    const estatePrompt = readFileSync(
-      join(routePersonaDirectory, "estate-specialist.prompt.md"),
-      "utf8",
-    );
 
     expect(inventoryPrompt).toContain(noRepeatRule);
-    expect(estatePrompt).toContain(noRepeatRule);
+
+    // BI-5CCBF85B: `estate-specialist.prompt.md` used to sit beside this file as
+    // a hand-synced near-duplicate, because the prompt loader keyed on filename
+    // and could not alias two names onto one coworker. It resolves by the
+    // declared agent_id now, so AGT-WS-INVENTORY has exactly one job
+    // description and the copy that had to be kept in sync is gone.
     expect(
-      estatePrompt
-        .replace("name: estate-specialist", "name: inventory-specialist")
-        .replace(
-          "<!-- This file is intentionally a near-duplicate of inventory-specialist.prompt.md. Both names alias to agent_id AGT-WS-INVENTORY. Keep them in sync until the prompt loader supports aliasing natively. -->\n\n",
-          "",
-        ),
-    ).toBe(inventoryPrompt);
+      existsSync(join(routePersonaDirectory, "estate-specialist.prompt.md")),
+    ).toBe(false);
   });
 
   it("ships the seeded Hive Scout ambiguity-reviewer prompt", () => {

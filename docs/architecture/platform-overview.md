@@ -35,6 +35,8 @@ The current platform runtime is a containerized application stack centered on th
 | `postgres` | The single datastore: system of record for transactional data, **plus** the graph mirror (`graph_node` / `graph_edge`) for topology and impact, **plus** vector storage via `pgvector` for semantic indexing and memory. Built from `docker/postgres/Dockerfile` so the `vector` and `ltree` extensions can never drift out of the image |
 | `inngest` | Durable execution engine for scheduled jobs, event-driven workflows, and retryable background tasks |
 | `redis` | In-memory store backing Inngest's job queue and state |
+| `loki` | Log store for every container's stdout/stderr, 14-day retention. Always-on, not profile-gated: it reads logs through the Docker socket with no host-path bind mount, so it runs identically on macOS/Windows Docker Desktop and native Linux (BI-F8024A9D) |
+| `alloy` | Log shipper that discovers every container on the local Docker daemon and tails it into `loki`. Always-on for the same reason; a new compose service is tailed automatically on the next 15s discovery refresh, with no per-service wiring |
 | Docker Model Runner | Local AI inference built into Docker Desktop 4.40+ — no separate container needed. Models managed via `docker model pull`. On Linux installs without Docker Desktop, Ollama in compose substitutes; on TAPPaaS deployments, the customer's AI Stack Ollama / LiteLLM serves the same role. The runtime contract (`DPF_LLM_PROVIDER`, `LLM_BASE_URL`) is universal — see Doctrine Contract 9. |
 | External AI providers | Optional provider layer used when the tenant enables remote model access |
 

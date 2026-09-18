@@ -8,6 +8,12 @@
 // wrappers behind gateAtEntry.
 
 import { cron } from "inngest";
+import {
+  driveOutcomeNeedsOwner,
+  resolveDriveConclusion,
+} from "@/lib/work-management/drive-conclusion";
+import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
+import type { PrismaClient } from "@dpf/db";
 import { inngest } from "../inngest-client";
 import {
   COORDINATION_RESOURCE_TYPE,
@@ -15,8 +21,16 @@ import {
   jsiSchemePresent,
   resolveCoordinatorEligibility,
 } from "@/lib/work-management/coordinator-eligibility";
-import { planCoordinationBindings } from "@/lib/authority/coordination-bindings";
-import { planContainmentRelations } from "@/lib/work-management/standing-room-nesting";
+import { buildStageBrief, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
+
+import {
+  loadCoordinationBindings,
+  loadRecordedEvidence,
+  loadStageDispatchTimes,
+  reconcileCoordinationBindings,
+  reconcileStandingRoomNesting,
+} from "./workroom-drive-data";
+import { earnEvidenceReceipts, type RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
 
 import { gateAtEntry } from "../quiescence-gates";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
@@ -47,7 +61,7 @@ import {
   priorDriveFromStored,
   readStoredWorkroomDriveState,
 } from "@/lib/work-management/workroom-drive-state";
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { appendCompletingWorkroomDriveReceipt, WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
 
 export type WorkroomDriveRoom = {
   id: string;
@@ -60,6 +74,13 @@ export type WorkroomDriveRoom = {
   participants: ProjectableWorkroomParticipantAssignment[];
   currentStageKey: string | null;
   receipts: { stageKey: string; kind: string }[];
+  /** The room's own objective, sent to the coworker in its stage brief. */
+  objective?: string | null;
+  /** Stage-scoped evidence recorded through record_workroom_evidence — the only
+   *  thing a completing receipt is earned from (BI-76B35820). */
+  recordedEvidence?: RecordedEvidence[];
+  /** When the current stage was most recently dispatched. */
+  stageDispatchedAt?: Date | null;
   budgetUsage: { kind: string; used: number }[];
   stopConditionHits: string[];
   reviewDue: boolean;
@@ -70,12 +91,24 @@ export type WorkroomDriveRoom = {
 };
 
 export type WorkroomDriveEffects = {
+  /**
+   * BI-12A083B4: who answers for this room, asked ONLY when a tick ends in a
+   * blockage. Resolving it walks the room's containment lineage, so the drive
+   * does not pay for that on work that is moving or finished.
+   *
+   * Optional so existing callers and tests keep working. When it is absent the
+   * conclusion records `unconcluded` with the reason, which is the honest
+   * answer: nobody was asked, so nobody is named.
+   */
+  resolveAccountability?: (roomId: string) => Promise<EffectiveHumanAccountability>;
   persist: (input: {
     roomId: string;
     snapshot: Record<string, unknown>;
     activityKind: string;
     summary: string;
     payload: Record<string, unknown>;
+    observationOnly?: boolean;
+    lease?: { expiresAt: Date; holderPrincipalId: string | null };
   }) => Promise<void>;
   acquireLease: (input: {
     roomId: string;
@@ -92,7 +125,8 @@ export type WorkroomDriveEffects = {
     title: string;
     prompt: string;
     now: Date;
-  }) => Promise<void>;
+    lease: { roomId: string; expiresAt: Date; holderPrincipalId: string | null };
+  }) => Promise<boolean>;
   deactivateAgentTask: (taskId: string) => Promise<void>;
 };
 
@@ -103,10 +137,9 @@ export type WorkroomDriveResult = {
   attention: number;
   stopped: number;
   skipped: number;
-  /** `contains` relations materialized this tick from the declared standing-room
-   *  tree. Non-zero only while the estate is catching up; a settled estate reports
-   *  0 forever, which is how an operator tells "nesting is done" from "nesting was
-   *  never written" (BI-AEAA90A9). */
+  /** `contains` relations added this tick. Zero does not prove nesting is
+   * complete: unchanged trees, absent parents and contained failures all yield
+   * zero. Read persisted relations to establish hierarchy coverage. */
   nestedRelations: number;
   plans: Array<{ roomId: string; action: string; reason: string; taskId: string | null }>;
 };
@@ -128,6 +161,45 @@ function postureLevelOf(scopeClaims: unknown): ProactivityLevel | null {
   return "balanced";
 }
 
+/**
+ * The answer when nobody was asked, because the tick did not need an owner.
+ * Never reaches a recorded blockage: driveOutcomeNeedsOwner gates the call.
+ */
+const NOT_ASKED_ACCOUNTABILITY: EffectiveHumanAccountability = {
+  state: "setup-required",
+  reason: "no-organization-owner-recorded",
+  message: "Accountability was not resolved because this tick needed no owner.",
+  atWorkroomId: null,
+};
+
+async function resolveAccountabilityForConclusion(
+  roomId: string,
+  effects: WorkroomDriveEffects,
+): Promise<EffectiveHumanAccountability> {
+  if (!effects.resolveAccountability) {
+    return {
+      state: "setup-required",
+      reason: "no-organization-owner-recorded",
+      message:
+        "This drive was composed without an accountability resolver, so no owner could be named. "
+        + "Wire resolveAccountability into the drive's effects.",
+      atWorkroomId: roomId,
+    };
+  }
+  try {
+    return await effects.resolveAccountability(roomId);
+  } catch (error) {
+    // A failed lookup must not swallow the blockage. Record that the owner is
+    // unknown and why, which is still louder than stopping silently.
+    return {
+      state: "setup-required",
+      reason: "no-organization-owner-recorded",
+      message: `Accountability could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      atWorkroomId: roomId,
+    };
+  }
+}
+
 export async function applyDrivePlan(input: {
   room: WorkroomDriveRoom;
   plan: DrivePlan;
@@ -145,11 +217,32 @@ export async function applyDrivePlan(input: {
   ) {
     receipts.push({ stageKey: plan.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND });
   }
+  // BI-12A083B4 — no work stops without a conclusion. Every tick records which
+  // of the three legitimate states it reached: the outcome is met, work
+  // continues, or a blockage is named with an owner and the event that clears
+  // it. A tick that concluded none of those records `unconcluded`, which is a
+  // defect surfaced rather than a room left silently waiting on nobody.
+  const needsOwner = driveOutcomeNeedsOwner({
+    action: plan.action,
+    reason: plan.reason,
+    attentionPrincipalRef: plan.attentionPrincipalRef,
+  });
+  const accountability: EffectiveHumanAccountability = needsOwner
+    ? await resolveAccountabilityForConclusion(room.id, effects)
+    : NOT_ASKED_ACCOUNTABILITY;
+  const conclusion = resolveDriveConclusion({
+    action: plan.action,
+    reason: plan.reason,
+    attentionPrincipalRef: plan.attentionPrincipalRef,
+    accountability,
+  });
+
   const snapshot = {
     kind: "workroom-drive",
     version: 1,
     action: plan.action,
     reason: plan.reason,
+    conclusion,
     stageKey: plan.stageKey,
     taskId: plan.taskId,
     lastRunAt: now.toISOString(),
@@ -196,11 +289,12 @@ export async function applyDrivePlan(input: {
 
   if (plan.action === "dispatch_agent") {
     if (!plan.taskId || !plan.agentId) return "skipped";
+    const expiresAt = new Date(now.getTime() + WORKROOM_DRIVE_LEASE_MS);
     const lease = await effects.acquireLease({
       roomId: room.id,
       now,
       holderPrincipalId: room.leaseHolderPrincipalId,
-      expiresAt: new Date(now.getTime() + WORKROOM_DRIVE_LEASE_MS),
+      expiresAt,
       currentExpiresAt: room.leaseExpiresAt,
       currentHolder: room.leaseHolderPrincipalId,
     });
@@ -211,6 +305,7 @@ export async function applyDrivePlan(input: {
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
         summary: "Drive lease held by another worker; stage remains eligible when it expires.",
         payload: { ...snapshot, reason: "lease_held" },
+        observationOnly: true,
       });
       return "skipped";
     }
@@ -224,20 +319,40 @@ export async function applyDrivePlan(input: {
       });
       return "skipped";
     }
-    await effects.upsertAgentTask({
+    const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
       agentId: plan.agentId,
       ownerUserId: room.ownerUserId,
       title: `Workroom ${room.capsuleId} / ${plan.stageKey}`,
-      prompt: `Execute Workroom ${room.capsuleId} stage ${plan.stageKey} for shape ${plan.shapeKey}@${plan.shapeVersion}. Stay inside the declared grants. Do not skip stages, widen authority, or invent occupants.`,
+      // The old prompt was the stage KEY plus three prohibitions, and 337 runs
+      // answered it with prose and zero tool calls (BI-4A394B21). The shape
+      // already carries the objective, the definition of done and the evidence
+      // to leave; send it.
+      prompt: buildStageBrief({
+        capsuleId: room.capsuleId,
+        roomObjective: room.objective ?? null,
+        shapeKey: plan.shapeKey ?? "",
+        shapeVersion: plan.shapeVersion ?? "",
+        shapeTitle: plan.definition?.title ?? null,
+        shapeDescription: plan.definition?.description ?? null,
+        stageKey: plan.stageKey ?? "",
+        stageTitle: plan.definition?.stages.find((stage) => stage.key === plan.stageKey)?.title ?? null,
+        doneWhen:
+          plan.definition?.stages.find((stage) => stage.key === plan.stageKey)?.advance.condition ?? null,
+        evidenceKinds: stageEvidenceKinds(plan.definition ?? null, plan.stageKey),
+        stopConditions: (plan.definition?.stopConditions ?? []).map((entry) => entry.condition),
+      }),
       now,
+      lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
+    if (!scheduled) return "skipped";
     await effects.persist({
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
       summary: `Dispatched ${plan.taskId} for stage ${plan.stageKey}`,
       payload: snapshot,
+      lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
     return "dispatched";
   }
@@ -287,8 +402,17 @@ export async function runWorkroomDriveJob(
       jsiSchemePresent(prisma as unknown as Record<string, unknown>),
     ];
     rooms = await loadStandingRooms(bindings, schemePresent);
+    // Stage-scoped evidence is the ONLY thing a completing receipt is earned
+    // from, so a room that arrives without it can never advance.
+    const evidenceByRoom = await loadRecordedEvidence(rooms.map((room) => room.capsuleId));
+    const dispatchByRoom = await loadStageDispatchTimes(rooms.map((room) => room.capsuleId));
+    rooms = rooms.map((room) => ({
+      ...room,
+      recordedEvidence: evidenceByRoom.get(room.capsuleId) ?? [],
+      stageDispatchedAt: dispatchByRoom.get(room.capsuleId) ?? null,
+    }));
   }
-  const effects = deps?.effects ?? liveEffects();
+  const effects = deps?.effects ?? createWorkroomDriveEffects();
   const plans: WorkroomDriveResult["plans"] = [];
   let dispatched = 0;
   let attention = 0;
@@ -298,6 +422,13 @@ export async function runWorkroomDriveJob(
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
     const stored = readStoredWorkroomDriveState(room.workspaceState);
+    const receipts = earnEvidenceReceipts({
+      stageKey: room.currentStageKey ?? stored.currentStageKey,
+      declaredKinds: stageEvidenceKinds(shape ? readWorkShapeDefinitionContract(shape) : null, room.currentStageKey ?? stored.currentStageKey),
+      evidence: room.recordedEvidence ?? [],
+      dispatchedAt: room.stageDispatchedAt ?? null,
+      existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
+    }) as { stageKey: string; kind: string }[];
     const plan = resolveDrivePlan({
       roomId: room.capsuleId,
       definition: shape ? readWorkShapeDefinitionContract(shape) : null,
@@ -308,7 +439,9 @@ export async function runWorkroomDriveJob(
         presencePrincipalRefs: [],
       }),
       currentStageKey: room.currentStageKey ?? stored.currentStageKey,
-      receipts: room.receipts.length > 0 ? room.receipts : stored.receipts,
+      // Earned from governed, stage-scoped evidence only — never from a run's
+      // self-reported completion (BI-76B35820).
+      receipts,
       budgetUsage: room.budgetUsage.length > 0 ? room.budgetUsage : stored.budgetUsage,
       stopConditionHits: room.stopConditionHits.length > 0 ? room.stopConditionHits : stored.stopConditionHits,
       reviewDue: room.reviewDue || stored.reviewDue,
@@ -324,7 +457,7 @@ export async function runWorkroomDriveJob(
       reason: plan.reason,
       taskId: plan.taskId,
     });
-    const outcome = await applyDrivePlan({ room, plan, now, effects });
+    const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects });
     if (outcome === "dispatched") dispatched += 1;
     else if (outcome === "attention") attention += 1;
     else if (outcome === "stopped") stopped += 1;
@@ -379,7 +512,13 @@ export async function loadStandingRoomIds(db: {
     WHERE "archivedAt" IS NULL
       AND "status" NOT IN ('abandoned', 'archived', 'complete')
       AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements("scopeClaims") AS claim
+        SELECT 1 FROM jsonb_array_elements(
+          CASE jsonb_typeof("scopeClaims")
+            WHEN 'array' THEN "scopeClaims"
+            WHEN 'object' THEN jsonb_build_array("scopeClaims")
+            ELSE '[]'::jsonb
+          END
+        ) AS claim
         WHERE claim ? 'workShape'
       )
     ORDER BY "updatedAt" ASC, "id" ASC
@@ -388,131 +527,8 @@ export async function loadStandingRoomIds(db: {
   return rows.map((row) => row.id);
 }
 
-/**
- * Write the declared standing-room tree, returning how many relations were newly
- * created. Idempotent: the (from, to, relation) unique constraint plus
- * skipDuplicates means a settled estate writes nothing and reports 0.
- *
- * Failure is non-fatal. Nesting is what the hierarchy is built on, but a room
- * that can still be driven must not be blocked because its parent link could not
- * be written this minute.
- */
-export async function reconcileStandingRoomNesting(): Promise<number> {
-  try {
-    const { prisma } = await import("@dpf/db");
-    const rooms = await prisma.workroom.findMany({
-      where: { archivedAt: null, idempotencyKey: { startsWith: "standing-room:" } },
-      select: { id: true, capsuleId: true, idempotencyKey: true },
-    });
-    const byCapsuleId = new Map(rooms.map((room) => [room.capsuleId, room.id]));
-    const plans = planContainmentRelations(
-      rooms.map((room) => ({ capsuleId: room.capsuleId, idempotencyKey: room.idempotencyKey })),
-    );
-    if (plans.length === 0) return 0;
-    const created = await prisma.workroomRelation.createMany({
-      data: plans.flatMap((plan) => {
-        const fromWorkroomId = byCapsuleId.get(plan.fromCapsuleId);
-        const toWorkroomId = byCapsuleId.get(plan.toCapsuleId);
-        return fromWorkroomId && toWorkroomId
-          ? [{ fromWorkroomId, toWorkroomId, relation: "contains" as const }]
-          : [];
-      }),
-      skipDuplicates: true,
-    });
-    return created.count;
-  } catch {
-    return 0;
-  }
-}
 
-/**
- * Coordination bindings, keyed by the shape they grant coordination over.
- *
- * One query for the whole tick rather than one per room: the binding set is
- * small (a row per shape the install staffs) and the drive reads every standing
- * room on every pass.
- */
-/**
- * Materialize coordination authority for the shapes this install ships.
- *
- * Idempotent by derivable bindingId: an existing binding is left exactly as the
- * operator has it — including SUSPENDED. Re-seeding must never silently
- * re-grant authority a human deliberately withdrew, which is the one way this
- * could become an authority-laundering path rather than a grant.
- *
- * Returns how many were newly created; a settled install reports 0.
- */
-export async function reconcileCoordinationBindings(): Promise<number> {
-  try {
-    const { prisma } = await import("@dpf/db");
-    const plans = planCoordinationBindings();
-    if (plans.length === 0) return 0;
-    const existing = await prisma.authorityBinding.findMany({
-      where: { bindingId: { in: plans.map((plan) => plan.bindingId) } },
-      select: { bindingId: true },
-    });
-    const known = new Set(existing.map((row) => row.bindingId));
-    const missing = plans.filter((plan) => !known.has(plan.bindingId));
-    if (missing.length === 0) return 0;
-    let created = 0;
-    for (const plan of missing) {
-      const agent = await prisma.principal.findFirst({
-        where: { kind: "agent", principalId: plan.agentId },
-        select: { id: true, principalId: true },
-      });
-      await prisma.authorityBinding.create({
-        data: {
-          bindingId: plan.bindingId,
-          name: plan.name,
-          scopeType: plan.scopeType,
-          resourceType: plan.resourceType,
-          resourceRef: plan.resourceRef,
-          status: plan.status,
-          approvalMode: plan.approvalMode,
-          appliedAgentId: agent?.id ?? null,
-          subjects: {
-            create: plan.subjects.map((subject) => ({
-              subjectType: subject.subjectType,
-              subjectRef: subject.subjectRef,
-              relation: subject.relation,
-            })),
-          },
-        },
-      });
-      created += 1;
-    }
-    return created;
-  } catch {
-    // Never take the drive down over a seeding failure; rooms then read "absent"
-    // and refuse, which is the safe pre-existing behaviour.
-    return 0;
-  }
-}
 
-async function loadCoordinationBindings(): Promise<
-  Map<string, Array<{ status: string; scopeType: string; resourceType: string; resourceRef: string }>>
-> {
-  const byShape = new Map<
-    string,
-    Array<{ status: string; scopeType: string; resourceType: string; resourceRef: string }>
-  >();
-  try {
-    const { prisma } = await import("@dpf/db");
-    const rows = await prisma.authorityBinding.findMany({
-      where: { scopeType: COORDINATION_SCOPE_TYPE, resourceType: COORDINATION_RESOURCE_TYPE },
-      select: { status: true, scopeType: true, resourceType: true, resourceRef: true },
-    });
-    for (const row of rows) {
-      const bucket = byShape.get(row.resourceRef);
-      if (bucket) bucket.push(row);
-      else byShape.set(row.resourceRef, [row]);
-    }
-  } catch {
-    // A binding lookup that fails must not take the drive down. Rooms then read
-    // "unknown" and refuse, which is the pre-existing safe behaviour.
-  }
-  return byShape;
-}
 
 async function loadStandingRooms(
   coordinationBindings?: Map<
@@ -604,27 +620,68 @@ async function loadStandingRooms(
   });
 }
 
-function liveEffects(): WorkroomDriveEffects {
+export function createWorkroomDriveEffects(
+  loadDb: () => Promise<Pick<PrismaClient, "workroom" | "workroomActivity" | "scheduledAgentTask" | "$transaction">>
+    = async () => (await import("@dpf/db")).prisma,
+  clock: () => Date = () => new Date(),
+): WorkroomDriveEffects {
   return {
+    // BI-12A083B4: the drive asks this only when a tick ends stuck, so a
+    // blockage can name who clears it instead of waiting on nobody. Composed
+    // from the same lineage walk the room workforce read uses, so the two
+    // cannot disagree about who answers for a room.
+    async resolveAccountability(roomId) {
+      const prisma = await loadDb();
+      const { resolveRoomAccountabilityFromDb } = await import(
+        "@/lib/work-management/room-workforce.server"
+      );
+      return resolveRoomAccountabilityFromDb(
+        prisma as unknown as Parameters<typeof resolveRoomAccountabilityFromDb>[0],
+        { workroomId: roomId },
+      );
+    },
     async persist(input) {
-      const { prisma } = await import("@dpf/db");
-      const current = await prisma.workroom.findUnique({
-        where: { id: input.roomId },
-        select: { workspaceState: true },
+      const prisma = await loadDb();
+      const activity = await prisma.$transaction(async (tx) => {
+        if (!input.observationOnly) {
+          const current = await tx.workroom.findUnique({
+            where: { id: input.roomId },
+            select: { workspaceState: true, updatedAt: true },
+          });
+          if (!current) return null;
+          const currentDrive = asRecord(asRecord(current.workspaceState)?.workroomDrive);
+          let snapshot = input.snapshot;
+          if (currentDrive && currentDrive.lastCycleKey === input.snapshot.lastCycleKey) {
+            let receipts = readStoredWorkroomDriveState({ workroomDrive: snapshot }).receipts;
+            for (const receipt of readStoredWorkroomDriveState(current.workspaceState).receipts) {
+              if (receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) continue;
+              const merged = appendCompletingWorkroomDriveReceipt(receipts, receipt);
+              if (merged.ok) receipts = merged.data;
+            }
+            snapshot = { ...snapshot, receipts };
+          }
+          const updated = await tx.workroom.updateMany({
+            where: {
+              id: input.roomId, updatedAt: current.updatedAt, archivedAt: null, status: { notIn: [...TERMINAL] },
+              ...(input.lease ? {
+                leaseExpiresAt: input.lease.expiresAt, leaseHolderPrincipalId: input.lease.holderPrincipalId,
+                AND: [{ leaseExpiresAt: { gt: clock() } }],
+              } : {}),
+            },
+            data: { workspaceState: { ...asRecord(current.workspaceState), workroomDrive: snapshot } as object },
+          });
+          if (updated.count !== 1) return null;
+        }
+        return tx.workroomActivity.create({
+          data: {
+            workCapsuleId: input.roomId,
+            kind: input.activityKind,
+            summary: input.summary,
+            payload: input.payload as object,
+          },
+        });
       });
-      const existing = asRecord(current?.workspaceState) ?? {};
-      await prisma.workroom.update({
-        where: { id: input.roomId },
-        data: { workspaceState: { ...existing, workroomDrive: input.snapshot } as object },
-      });
-      const activity = await prisma.workroomActivity.create({
-        data: {
-          workCapsuleId: input.roomId,
-          kind: input.activityKind,
-          summary: input.summary,
-          payload: input.payload as object,
-        },
-      });
+      if (!activity) return;
       const { publishRecordedWorkCapsuleActivity } = await import("@/lib/work-capsules/activity-events");
       publishRecordedWorkCapsuleActivity(input.roomId, activity.id);
     },
@@ -632,43 +689,64 @@ function liveEffects(): WorkroomDriveEffects {
       if (input.currentExpiresAt && input.currentExpiresAt.getTime() > input.now.getTime()) {
         return "held";
       }
-      const { prisma } = await import("@dpf/db");
-      await prisma.workroom.update({
-        where: { id: input.roomId },
+      const prisma = await loadDb();
+      const claimed = await prisma.workroom.updateMany({
+        where: {
+          id: input.roomId,
+          archivedAt: null,
+          status: { notIn: [...TERMINAL] },
+          leaseExpiresAt: input.currentExpiresAt,
+          leaseHolderPrincipalId: input.currentHolder,
+        },
         data: {
           leaseExpiresAt: input.expiresAt,
           leaseHolderPrincipalId: input.holderPrincipalId,
         },
       });
-      return "acquired";
+      return claimed.count === 1 ? "acquired" : "held";
     },
     async upsertAgentTask(input) {
-      const { prisma } = await import("@dpf/db");
-      await prisma.scheduledAgentTask.upsert({
-        where: { taskId: input.taskId },
-        create: {
-          taskId: input.taskId,
-          agentId: input.agentId,
-          title: input.title,
-          prompt: input.prompt,
-          routeContext: "/ops/workrooms",
-          schedule: WORKROOM_DRIVE_CRON,
-          timezone: "UTC",
-          ownerUserId: input.ownerUserId,
-          nextRunAt: input.now,
-          isActive: true,
-        },
-        update: {
-          agentId: input.agentId,
-          title: input.title,
-          prompt: input.prompt,
-          nextRunAt: input.now,
-          isActive: true,
-        },
+      const prisma = await loadDb();
+      return prisma.$transaction(async (tx) => {
+        // Lock the room through the scheduling write. An expired or superseded
+        // driver cannot reactivate a task after another owner takes over.
+        const owned = await tx.workroom.updateMany({
+          where: {
+            id: input.lease.roomId, archivedAt: null, status: { notIn: [...TERMINAL] },
+            leaseExpiresAt: input.lease.expiresAt,
+            leaseHolderPrincipalId: input.lease.holderPrincipalId,
+            AND: [{ leaseExpiresAt: { gt: clock() } }],
+          },
+          data: { leaseExpiresAt: input.lease.expiresAt },
+        });
+        if (owned.count !== 1) return false;
+        await tx.scheduledAgentTask.upsert({
+          where: { taskId: input.taskId },
+          create: {
+            taskId: input.taskId,
+            agentId: input.agentId,
+            title: input.title,
+            prompt: input.prompt,
+            routeContext: "/ops/workrooms",
+            schedule: WORKROOM_DRIVE_CRON,
+            timezone: "UTC",
+            ownerUserId: input.ownerUserId,
+            nextRunAt: input.now,
+            isActive: true,
+          },
+          update: {
+            agentId: input.agentId,
+            title: input.title,
+            prompt: input.prompt,
+            nextRunAt: input.now,
+            isActive: true,
+          },
+        });
+        return true;
       });
     },
     async deactivateAgentTask(taskId) {
-      const { prisma } = await import("@dpf/db");
+      const prisma = await loadDb();
       await prisma.scheduledAgentTask.updateMany({
         where: { taskId },
         data: { isActive: false },

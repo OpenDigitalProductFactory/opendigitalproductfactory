@@ -4,7 +4,7 @@
 //
 // Daily purge of accumulating operational/telemetry/log/chat data past its
 // retention window. Regulated records (financial/tax/compliance/licensing/HR/
-// consent) are never touched — see policies.ts RETAINED_DATASETS.
+// consent) are never touched — they are declared retention=retained in the schema (/// @dpf).
 //
 // Runs at 04:00 UTC, strictly AFTER the 03:00 backup crons, so a durable backup
 // always exists before any row is purged. Quiescence-gated (skips cleanly during

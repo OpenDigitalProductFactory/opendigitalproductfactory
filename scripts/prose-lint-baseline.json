@@ -237,7 +237,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 7
+    "textMass": 24
   },
   "apps/web/app/(shell)/admin/backups/RestoreHistorySection.tsx": {
     "vocabulary": 0,
@@ -725,7 +725,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 60
+    "textMass": 75
   },
   "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx": {
     "vocabulary": 0,
@@ -742,6 +742,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 13
+  },
+  "apps/web/app/(shell)/coworker-decisions/review/craft-consult-demand-list.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
   },
   "apps/web/app/(shell)/coworker-decisions/review/gap-answer-form.tsx": {
     "vocabulary": 0,
@@ -901,7 +909,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 75
+    "textMass": 82
   },
   "apps/web/app/(shell)/docs/[[...slug]]/page.tsx": {
     "vocabulary": 0,
@@ -973,7 +981,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 60
+    "textMass": 63
   },
   "apps/web/app/(shell)/employee/page.tsx": {
     "vocabulary": 0,
@@ -1589,7 +1597,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 20
+    "textMass": 23
   },
   "apps/web/app/(shell)/performance/loading.tsx": {
     "vocabulary": 0,
@@ -2399,6 +2407,22 @@
     "longSentences": 0,
     "textMass": 30
   },
+  "apps/web/app/(shell)/workspace/mailroom/items/[inboundId]/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/(shell)/workspace/mailroom/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 171
+  },
   "apps/web/app/(shell)/workspace/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -2406,6 +2430,22 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 3
+  },
+  "apps/web/app/(shell)/workspace/rescue/care/actions.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/(shell)/workspace/rescue/intake/actions.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
   },
   "apps/web/app/(shell)/workspace/ward/actions.ts": {
     "vocabulary": 0,
@@ -4221,7 +4261,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 38
+    "textMass": 24
   },
   "apps/web/components/agent/CoworkerProfilePanel.tsx": {
     "vocabulary": 0,
@@ -4246,6 +4286,22 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 12
+  },
+  "apps/web/components/animal-welfare/DailyCareOperations.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 106
+  },
+  "apps/web/components/animal-welfare/IntakeOperations.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 149
   },
   "apps/web/components/animal-welfare/RescueCockpit.tsx": {
     "vocabulary": 0,
@@ -6151,22 +6207,6 @@
     "longSentences": 0,
     "textMass": 60
   },
-  "apps/web/components/golden-triangle/CoworkerPriorityControl.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 30
-  },
-  "apps/web/components/golden-triangle/CoworkerPriorityDock.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 14
-  },
   "apps/web/components/golden-triangle/GoldenTriangleControl.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -6519,6 +6559,30 @@
     "longSentences": 0,
     "textMass": 25
   },
+  "apps/web/components/mailroom/MailboxConnectForm.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 71
+  },
+  "apps/web/components/mailroom/MailboxControls.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/mailroom/MailroomItemActions.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
   "apps/web/components/monitoring/AiCoworkerHealthPanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -6629,7 +6693,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 82
+    "textMass": 76
   },
   "apps/web/components/ops/BacklogItemRow.tsx": {
     "vocabulary": 0,
@@ -6886,6 +6950,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 11
+  },
+  "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
   },
   "apps/web/components/ops/workrooms/WorkroomInventory.tsx": {
     "vocabulary": 0,
@@ -7319,6 +7391,14 @@
     "longSentences": 0,
     "textMass": 137
   },
+  "apps/web/components/platform/ProviderClearanceOverridePanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 81
+  },
   "apps/web/components/platform/ProviderCostSourcePanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -7477,7 +7557,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 60
+    "textMass": 38
   },
   "apps/web/components/platform/TokenSpendPanel.tsx": {
     "vocabulary": 0,
@@ -7646,6 +7726,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 7
+  },
+  "apps/web/components/platform/coworker-record/CoworkerPriorityNote.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
   },
   "apps/web/components/platform/coworker-record/CoworkerProactivityNote.tsx": {
     "vocabulary": 0,
@@ -9367,6 +9455,14 @@
     "longSentences": 0,
     "textMass": 17
   },
+  "apps/web/components/workspace/workroom/RoomWorkforcePanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 49
+  },
   "apps/web/components/workspace/workroom/ShapeViewToggle.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -9383,13 +9479,21 @@
     "longSentences": 0,
     "textMass": 27
   },
+  "apps/web/components/workspace/workroom/WorkroomBoundaryControl.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
   "apps/web/components/workspace/workroom/WorkroomCycles.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 39
+    "textMass": 49
   },
   "apps/web/components/workspace/workroom/WorkroomHeader.tsx": {
     "vocabulary": 0,
@@ -9421,7 +9525,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 84
+    "textMass": 90
   },
   "apps/web/components/workspace/workroom/WorkroomPostureProvenance.tsx": {
     "vocabulary": 0,
@@ -9445,7 +9549,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 3
+    "textMass": 52
   },
   "apps/web/components/workspace/workroom/WorkroomStructurePanel.tsx": {
     "vocabulary": 0,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
 import {
@@ -55,7 +56,7 @@ test("every file baked into the promoter image is self-upgrade sensitive", async
   // means a newly baked file cannot silently escape the acceptance gate.
   // (Dockerfile.promoter deliberately copies directories rather than files, so
   // the closure — not the Dockerfile — is what enumerates them: BI-A04D61B9.)
-  const baked = await readPromoterBuildContextSources(new URL("..", import.meta.url).pathname);
+  const baked = await readPromoterBuildContextSources(fileURLToPath(new URL("..", import.meta.url)));
   assert.ok(baked.length >= 15, `expected the promoter closure, parsed ${baked.length} staged inputs`);
   assert.deepEqual(findUnownedLifecyclePaths(baked), [], "a file baked into the promoter image must trigger the self-upgrade acceptance gate");
 });

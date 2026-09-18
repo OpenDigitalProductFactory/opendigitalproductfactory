@@ -159,6 +159,22 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "soc-triage-analyst": 7,
     "storefront-advisor": 7,
     "ux-accessibility-agent": 7,
+    // Value-stream orchestrators + finance specialist, seeded from the IT4IT
+    // lattice because each carries an authored persona. 6 wildcard + 1 authored
+    // recurring skill = 7.
+    "consume-orchestrator": 7,
+    "deploy-orchestrator": 7,
+    "evaluate-orchestrator": 7,
+    "explore-orchestrator": 7,
+    "finance-agent": 7,
+    // New identity (2026-09-09, BI-4F7BB48B): the six wildcard skills plus its
+    // one authored cadence skill, mailroom-acknowledgement-sweep. Same shape as
+    // soc-triage-analyst and finance-agent; nothing else is eligible for it.
+    "mailroom-coordinator": 7,
+    "governance-orchestrator": 7,
+    "integrate-orchestrator": 7,
+    "operate-orchestrator": 7,
+    "release-orchestrator": 7,
 
   };
 

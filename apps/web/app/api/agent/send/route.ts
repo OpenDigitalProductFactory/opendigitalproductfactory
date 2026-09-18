@@ -61,8 +61,6 @@ export async function POST(request: NextRequest): Promise<Response> {
     content: string;
     routeContext: string;
     coworkerMode?: "advise" | "act";
-    externalAccessEnabled?: boolean;
-    elevatedFormFillEnabled?: boolean;
     formAssistContext?: AgentFormAssistContext;
     buildId?: string;
     attachmentId?: string;
@@ -78,6 +76,11 @@ export async function POST(request: NextRequest): Promise<Response> {
   if (!input.threadId || !input.content || !input.routeContext) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
+  // EP-WORK-POSTURE 8.2 (BI-947780FE): hands-on and web access are resolved
+  // server-side from the Workroom; a body that still carries the retired
+  // per-conversation flags is stripped so a crafted POST cannot widen a turn.
+  delete (input as Record<string, unknown>).externalAccessEnabled;
+  delete (input as Record<string, unknown>).elevatedFormFillEnabled;
 
   // Clear any stale cancellation for this thread
   agentEventBus.clearCancel(input.threadId);

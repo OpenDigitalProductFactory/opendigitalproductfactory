@@ -381,3 +381,45 @@ describe("loadContributorChangeLaneReadModel — Phase 3", () => {
     expect(worktree?.state).toBe("stale");
   });
 });
+
+// ─── BI-BFFB9211: unchanged runs point at the run holding the rows ───────────
+
+describe("loadContributorChangeLaneReadModel — snapshotRunId pointer (BI-BFFB9211)", () => {
+  it("follows perSourceResult.snapshotRunId to the run that holds the rows when the latest successful run wrote none", async () => {
+    const db = makeDb();
+    const now = new Date("2026-05-26T20:00:00.000Z");
+    const prPayload = {
+      number: 42,
+      url: "https://github.com/o/r/pull/42",
+      title: "feat: a",
+      headBranch: "feat/a",
+      state: "open",
+      isDraft: false,
+      mergeStateStatus: "CLEAN",
+    };
+    db.contributorInventorySyncRun.findFirst.mockImplementation(async ({ where }) => {
+      if (where.syncRunId === "civs-holder") {
+        return { snapshots: [{ payload: prPayload }] };
+      }
+      const path = (where.perSourceResult?.path as string[] | undefined)?.[0];
+      if (path === "github-pr") {
+        return {
+          ...syncRunRow({ syncRunId: "civs-unchanged", completedAt: now, snapshots: [] }),
+          perSourceResult: { "github-pr": { ok: true, count: 1, error: null, unchanged: true, snapshotRunId: "civs-holder" } },
+        };
+      }
+      return syncRunRow({ syncRunId: `civs-${path}`, completedAt: now, snapshots: [] });
+    });
+    db.credentialEntry.findFirst.mockResolvedValue({ id: "cred-1" });
+
+    const result = await loadContributorChangeLaneReadModel({ db: db as never, now });
+
+    const gh = result.freshness.find((f) => f.source === "github-pr");
+    expect(gh?.state).toBe("ok");
+    expect(gh?.count).toBe(1);
+    const holderCall = db.contributorInventorySyncRun.findFirst.mock.calls.find(
+      (c) => (c[0] as { where: { syncRunId?: string } }).where.syncRunId === "civs-holder",
+    );
+    expect(holderCall).toBeDefined();
+  });
+});

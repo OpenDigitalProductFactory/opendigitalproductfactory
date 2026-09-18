@@ -176,11 +176,21 @@ describe("recordKernelConsultInteraction", () => {
     expect(row.domainClass).toBe("kernel-consult");
     // BI-FD7CBA06: external MCP consults must name their door for audit filters.
     expect(row.gateKey).toBe("kernel-consult");
+    // BI-01F8F06D: a consult with no human behind it is unattended, and must be
+    // excluded from an agreement denominator by construction. This fixture has
+    // no triggeredByUserId, so it is an agent asking the kernel.
+    expect(row.autonomous).toBe(true);
     expect(row.outcomeType).toBe("recommend");
     expect(row.question).toBe("Which storage approach should we take?");
     expect(row.options).toEqual(["option-a", "option-b"]);
     expect(row.phaseFrom).toBeNull();
     expect(row.phaseTo).toBeNull();
+    // BI-F302B80E: the pick belongs in its own indexed column, not only in the
+    // JSON blob. It was written to the payload and the seal while this column
+    // stayed NULL, so 657 recorded recommendations across the corpus were
+    // unqueryable — and agreement cannot be measured against a value nothing
+    // can select. Assert the column, not just the payload copy.
+    expect(row.recommendedOptionId).toBe("option-a");
     const payload = row.outcomePayload as Record<string, unknown>;
     expect(payload.tool).toBe("principle_decide");
     expect(payload.recommendedOptionId).toBe("option-a");

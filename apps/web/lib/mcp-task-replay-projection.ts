@@ -14,7 +14,7 @@ export type TerminalWriterWait = {
   resumeMode: "same-taskrun";
   attempt: number;
   observedAt: string;
-  dispatchContract?: "required-tool-call";
+  dispatchContract?: "required-tool-call" | "receipt-verified";
   noncompliance?: "prose-without-required-writer";
   validationFailure?: { error: string; message: string; proposal?: Prisma.JsonValue };
 };
@@ -47,7 +47,9 @@ export function parseTerminalWriterWait(value: unknown): TerminalWriterWait | nu
     || !Number.isInteger(wait["attempt"])
     || Number(wait["attempt"]) < 1
     || !optionalString(wait["observedAt"])
-    || (wait["dispatchContract"] !== undefined && wait["dispatchContract"] !== "required-tool-call")
+    || (wait["dispatchContract"] !== undefined
+      && wait["dispatchContract"] !== "required-tool-call"
+      && wait["dispatchContract"] !== "receipt-verified")
     || (wait["noncompliance"] !== undefined && wait["noncompliance"] !== "prose-without-required-writer")
   ) return null;
   return wait as TerminalWriterWait;

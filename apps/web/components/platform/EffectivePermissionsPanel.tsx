@@ -80,7 +80,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   plan_workroom_worktree: ["work_capsule_write"],
   adopt_worktree: ["work_capsule_adopt"],
   claim_workroom_scope: ["work_capsule_write"],
-  record_workroom_evidence: ["work_capsule_write"],
+  record_workroom_evidence: ["workroom_evidence_write"],
   heartbeat_workroom: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],
   release_workroom_scope: ["work_capsule_write"],

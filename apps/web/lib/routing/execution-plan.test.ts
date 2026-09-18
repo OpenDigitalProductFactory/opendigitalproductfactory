@@ -10,6 +10,7 @@ import {
   buildPlanFromRecipe,
   buildDefaultPlan,
   resolveDefaultExecutionAdapter,
+  terminalWriterDispatchContractForProvider,
 } from "./execution-plan";
 import { bindHarnessRecipeForActivity } from "./harness-recipe";
 import type { ActivityContract } from "./activity-contract";
@@ -468,5 +469,19 @@ describe("attachHarnessRecipeToPlan", () => {
       executionAdapterHint: harnessRecipe.executionAdapterHint,
     });
     expect(plan.harness).toBeUndefined();
+  });
+});
+
+// BI-C35576A9
+describe("terminalWriterDispatchContractForProvider", () => {
+  it("never invents a contract for a dispatch that did not happen", () => {
+    expect(terminalWriterDispatchContractForProvider("unknown")).toBeUndefined();
+    expect(terminalWriterDispatchContractForProvider("")).toBeUndefined();
+    expect(terminalWriterDispatchContractForProvider(undefined)).toBeUndefined();
+  });
+  it("reports receipt-verified for CLI-backed providers and required-tool-call otherwise", () => {
+    expect(terminalWriterDispatchContractForProvider("anthropic-sub")).toBe("receipt-verified");
+    expect(terminalWriterDispatchContractForProvider("codex")).toBe("receipt-verified");
+    expect(terminalWriterDispatchContractForProvider("anthropic")).toBe("required-tool-call");
   });
 });

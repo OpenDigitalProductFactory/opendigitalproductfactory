@@ -144,6 +144,112 @@ describe("durable nonproduction lease wait", () => {
     }));
   });
 
+  // BI-D35B85BF. The waker notified ONLY the single oldest queued row and never
+  // asked whether anything was still behind it. On 2026-09-10 that aimed every
+  // 5-minute tick at one abandoned row for over half an hour while six live
+  // waiters got nothing, and the queue starved with slots standing empty.
+  describe("waking past an abandoned head", () => {
+    function queueDb(rows: Array<Record<string, unknown>>) {
+      const task = {
+        taskRunId: "TR-NONPROD-1",
+        status: "submitted",
+        progressPayload: {
+          nonprodLeaseWait: {
+            schemaVersion: 1,
+            kind: "nonprod-lease-wait",
+            state: "waiting",
+            leaseId: rows[0]?.leaseId,
+            claimKey: "gate:abc",
+            environmentKey: "local-integration-ci",
+            ownerProvider: "codex",
+            ownerSessionId: "session-1",
+            worktreePath: "D:/worktrees/fix-x",
+            branchName: "fix/x",
+            queuePosition: 1,
+            waitDeadlineAt: "2026-08-30T20:00:00.000Z",
+            lastTransitionAt: NOW.toISOString(),
+            eventId: null,
+            eventConsumed: false,
+          },
+        },
+      };
+      return {
+        taskRun: {
+          findUnique: vi.fn(async () => null),
+          findMany: vi.fn(async () => [task]),
+          update: vi.fn(async () => task),
+          upsert: vi.fn(async () => task),
+        },
+        nonProductionEnvironmentLease: {
+          updateMany: vi.fn(async () => ({ count: 1 })),
+          findMany: vi.fn(async () => rows),
+        },
+      } as any;
+    }
+
+    const stale = {
+      ...lease({ leaseId: "NPEL-ABANDONED", taskRunId: "TR-NONPROD-1" }),
+      queuedAt: new Date(NOW.getTime() - 60 * 60_000),
+      heartbeatAt: new Date(NOW.getTime() - 55 * 60_000),
+    };
+    const live = {
+      ...lease({ leaseId: "NPEL-LIVE", taskRunId: "TR-NONPROD-1" }),
+      queuedAt: new Date(NOW.getTime() - 20 * 60_000),
+      heartbeatAt: new Date(NOW.getTime() - 15_000),
+    };
+
+    it("skips a head with nothing behind it and wakes the first live waiter", async () => {
+      const mock = queueDb([stale, live]);
+      const result = await publishNonprodCapacityForHead({
+        db: mock,
+        environmentKey: "local-integration-ci",
+        causeLeaseId: "NPEL-OLD",
+        now: NOW,
+        emit: vi.fn(async () => undefined),
+      });
+      expect(result.headLeaseId).toBe("NPEL-LIVE");
+    });
+
+    it("keeps the abandoned row's queue position rather than expiring it here", async () => {
+      const mock = queueDb([stale, live]);
+      await publishNonprodCapacityForHead({
+        db: mock,
+        environmentKey: "local-integration-ci",
+        causeLeaseId: "NPEL-OLD",
+        now: NOW,
+        emit: vi.fn(async () => undefined),
+      });
+      // Expiry belongs to the admission pass, not the waker. Reaping here would
+      // put a second home under one rule.
+      expect(mock.nonProductionEnvironmentLease.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the literal head when nothing proves live, rather than waking nobody", async () => {
+      const mock = queueDb([stale]);
+      const result = await publishNonprodCapacityForHead({
+        db: mock,
+        environmentKey: "local-integration-ci",
+        causeLeaseId: "NPEL-OLD",
+        now: NOW,
+        emit: vi.fn(async () => undefined),
+      });
+      expect(result.headLeaseId).toBe("NPEL-ABANDONED");
+    });
+
+    it("treats a waiter with no beat recorded at all as wakeable", async () => {
+      const noSignal = { ...lease({ leaseId: "NPEL-NO-SIGNAL", taskRunId: "TR-NONPROD-1" }) };
+      const mock = queueDb([noSignal, live]);
+      const result = await publishNonprodCapacityForHead({
+        db: mock,
+        environmentKey: "local-integration-ci",
+        causeLeaseId: "NPEL-OLD",
+        now: NOW,
+        emit: vi.fn(async () => undefined),
+      });
+      expect(result.headLeaseId).toBe("NPEL-NO-SIGNAL");
+    });
+  });
+
   it("fails closed when a wake does not match the persisted lease, claim, owner, or environment", async () => {
     const mock = db();
     const wait = await checkpointNonprodLeaseWait({

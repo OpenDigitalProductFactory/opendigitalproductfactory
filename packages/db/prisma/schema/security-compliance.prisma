@@ -55,6 +55,7 @@ model LicenseRequirementReference {
   @@index([authorityType])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained basis=Licensing_compliance minYears=7
 model OrganizationLicenseRecord {
   id                           String    @id @default(cuid())
   licenseRecordId              String    @unique
@@ -87,6 +88,7 @@ model OrganizationLicenseRecord {
   @@index([status, expiresAt])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained basis=Credential_/_licensing_compliance minYears=7
 model PersonLicenseRecord {
   id                       String    @id @default(cuid())
   personLicenseRecordId    String    @unique
@@ -259,6 +261,20 @@ model Obligation {
   // attestation | evidence-pack | policy-acknowledgement | none), so the platform
   // and the compliance coworker know what to produce/track. Null = unspecified.
   deliverableType String?
+  // EP-A33A5C61 slice 6 — the STRUCTURED retention minimum this obligation
+  // imposes, so the retention sweep can derive its floors from the compliance
+  // plane instead of a hardcoded industry table. Before this, durations existed
+  // only as prose in `description` ("at least three years"), unreadable by the
+  // engine. Null = this obligation says nothing about retention.
+  //
+  // retentionMinimumDays: the regulator's minimum. Floors only ever LENGTHEN a
+  // window (effective = max(base, floor)), so a wrong-but-shorter value can
+  // never cause an early delete; a missing one simply leaves the base in place.
+  // retentionFloorBuckets: which retention floor buckets it binds
+  // (audit | chat | telemetry — apps/web/lib/operate/retention/policies.ts).
+  // Empty with a non-null minimum means "every bucket".
+  retentionMinimumDays   Int?
+  retentionFloorBuckets  String[] @default([])
   penaltySummary  String?
   ownerEmployeeId String?
   reviewDate      DateTime?
@@ -354,6 +370,7 @@ model ComplianceProposal {
   @@index([kind])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=GRC_evidence_(per-record_retentionUntil) minYears=7
 model ComplianceEvidence {
   id                        String                     @id @default(cuid())
   evidenceId                String                     @unique
@@ -497,6 +514,7 @@ model CorrectiveAction {
   @@index([dueDate])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Audit_record_retention minYears=7
 model ComplianceAudit {
   id                String           @id @default(cuid())
   auditId           String           @unique
@@ -522,6 +540,7 @@ model ComplianceAudit {
   @@index([auditType])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Audit_record_retention minYears=7
 model AuditFinding {
   id                String             @id @default(cuid())
   findingId         String             @unique
@@ -545,6 +564,7 @@ model AuditFinding {
   @@index([status])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Regulatory_filing_retention minYears=7
 model RegulatorySubmission {
   id                    String           @id @default(cuid())
   submissionId          String           @unique
@@ -578,6 +598,7 @@ model RegulatorySubmission {
   @@index([dueDate])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=restricted basis=Compliance_change_audit minYears=7
 model ComplianceAuditLog {
   id                    String           @id @default(cuid())
   entityType            String
@@ -663,6 +684,7 @@ model PolicyRequirement {
 
 /// Organization-specific confirmation of why a bounded data scope is processed.
 /// Archetype proposals remain status="review" until an accountable owner confirms them.
+/// @dpf lifecycle=legal-evidence retention=retained sensitivity=confidential categories=configuration,authorization,security-audit owner=privacy-owner steward=data-steward basis=Processing_authority_and_accountability_evidence minYears=7
 model DataProcessingActivity {
   id                      String       @id @default(cuid())
   activityId              String
@@ -708,6 +730,7 @@ model DataProcessingActivity {
 }
 
 /// Time-bounded, explicitly approved exception to executable data policy.
+/// @dpf lifecycle=legal-evidence retention=retained sensitivity=restricted categories=authorization,security-audit,content owner=privacy-owner steward=data-steward basis=Policy_exception_approval_and_compensating-control_evidence minYears=7
 model DataPolicyException {
   id                  String       @id @default(cuid())
   exceptionId         String
@@ -738,6 +761,7 @@ model DataPolicyException {
 /// Deliberately distinct from a data-policy attestation (which asserts the
 /// account IS protected). Honored by the routing fence as a separate signal;
 /// it never widens ModelProvider.sensitivityClearance. (BI-4512E7D2)
+/// @dpf lifecycle=legal-evidence retention=retained sensitivity=restricted categories=security-audit,authorization,configuration owner=platform-owner steward=data-steward basis=Security_decision_audit_—_informed_risk-acceptance_of_provider_data_exposure minYears=7
 model ProviderClearanceOverride {
   id                    String        @id @default(cuid())
   organizationId        String
@@ -762,6 +786,7 @@ model ProviderClearanceOverride {
   @@index([expiresAt])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Training/compliance_evidence minYears=6
 model RequirementCompletion {
   id                String            @id @default(cuid())
   completionId      String            @unique
@@ -803,6 +828,7 @@ model TrainingRequirement {
   @@index([requirementId])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Policy_compliance_evidence minYears=6
 model PolicyAcknowledgment {
   id                String          @id @default(cuid())
   policyId          String
@@ -921,6 +947,7 @@ model ComplianceSnapshot {
 
 /// Durable intent and reconciliation journal for consequential data mutations
 /// that cross Postgres and one or more external or derived stores.
+/// @dpf lifecycle=legal-evidence retention=retained sensitivity=restricted categories=authorization,security-audit,configuration owner=privacy-owner steward=data-steward basis=Consequential_mutation_intent,_authorization,_and_reconciliation_evidence minYears=7
 model DataControlOperation {
   id                       String                     @id @default(cuid())
   operationId              String                     @unique @default(cuid())
@@ -966,6 +993,7 @@ model DataControlOperation {
 
 /// A target-specific durable outbox/checkpoint row. Provider acknowledgement
 /// is intentionally separate from verified target truth.
+/// @dpf lifecycle=legal-evidence retention=retained sensitivity=restricted categories=authorization,security-audit,configuration owner=privacy-owner steward=data-steward basis=Target_effect,_verification,_and_compensation_evidence minYears=7
 model DataControlOperationStep {
   id                  String               @id @default(cuid())
   stepId              String               @unique @default(cuid())
@@ -1025,6 +1053,8 @@ model DataControlOperationStep {
 // (the sovereignty boundary: raw stays on the edge, detections cross). ocsf-
 // Version pins the schema the producer normalized to (version-pinned-ocsf,
 // the kernel-decided schema authority, spec §8) so schema evolution is explicit.
+/// OCSF-normalized security telemetry (EP-SOVEREIGN-SOC P0). One-year security-audit baseline; regulated industries lengthen via floors. Detections derive from this stream; SecurityCase (the regulated incident record) is retained separately and never auto-purged.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit,authorization timeAxis=createdAt
 model SecurityEvent {
   id              String   @id @default(cuid())
   // Globally-unique, producer-composed idempotency / dedup key. Internal
@@ -1106,6 +1136,8 @@ model DetectionRule {
   @@index([rulePackKey, rulePackVersion])
 }
 
+/// Fired detections (EP-SOVEREIGN-SOC P1). One-year security-audit window; a notable detection that opens a SecurityCase is preserved via the retained case record, so purging the raw detection past the window is safe.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit,authorization timeAxis=createdAt
 model Detection {
   id                String   @id @default(cuid())
   // Idempotency: a rule firing on the same event-set collapses on this key.
@@ -1164,6 +1196,7 @@ model ThreatIndicator {
 // notificationDeadline / CorrectiveAction — those stay on ComplianceIncident.
 // The verdict is an evidence conclusion (set by investigation), NOT a kernel
 // vote; the kernel governs the action decisions layered on top (spec §6, §7.3).
+/// @dpf lifecycle=regulated-record retention=retained basis=Security_incident_record_(breach-notification_/_forensic_/_legal-hold) minYears=7
 model SecurityCase {
   id                   String    @id @default(cuid())
   caseKey              String    @unique

@@ -4,8 +4,9 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const script = new URL("./runtime-transition-authority.mjs", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1");
+const script = fileURLToPath(new URL("./runtime-transition-authority.mjs", import.meta.url)).replace(/^\/(.:\/)/, "$1");
 const run = (dir, args, env = {}) => spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, ...env } });
 
 test("same transition id cannot acquire concurrent authority", async () => {

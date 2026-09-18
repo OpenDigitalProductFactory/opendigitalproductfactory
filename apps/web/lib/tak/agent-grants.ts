@@ -38,7 +38,7 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // EP-WORKROOM-COMMS (BI-4402DABB): a coworker that can write a work capsule (the
   // executors that claim/work rooms, incl. the external CLIs) may post to the room
   // it is admitted to. One-way — work_room_write never implies capsule write.
-  work_capsule_write: ["work_room_write"],
+  work_capsule_write: ["work_room_write", "workroom_evidence_write"],
   // CRM drafting (crm_write) implies CRM inspection (crm_read): a coworker that
   // can draft an opportunity or quote can always read the accounts/pipeline it
   // is drafting against. One-way — crm_read alone never implies crm_write.
@@ -216,7 +216,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   claim_backlog_item_for_work: ["work_capsule_adopt"],
   start_external_work: ["work_capsule_adopt"],
   claim_workroom_scope: ["work_capsule_write"],
-  record_workroom_evidence: ["work_capsule_write"],
+  declare_break_fix: ["work_capsule_write"],
+  record_workroom_evidence: ["workroom_evidence_write"],
   record_agent_activity: ["work_capsule_write"],
   heartbeat_workroom: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],
@@ -236,7 +237,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   heartbeat_capsule: ["work_capsule_write"],
   update_work_capsule_status: ["work_capsule_write"],
   release_capsule_scope: ["work_capsule_write"],
-  record_capsule_evidence: ["work_capsule_write"],
+  record_capsule_evidence: ["workroom_evidence_write"],
   reassign_capsule_executor: ["work_capsule_write"],
   // Queue-awareness reads (EP-3516E23D): platform-coordination visibility over
   // the shared queue flow-telemetry — same read grant as the sibling ops-read
@@ -807,18 +808,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
  * canonical name becomes a silent authorization failure. Deriving them makes the
  * two provably identical and deletes in one edit when the window closes.
  */
-export const WORKROOM_TOOL_ALIASES: Record<string, string> = {
-  list_work_capsules: "list_workrooms",
-  get_work_capsule: "get_workroom",
-  create_work_capsule: "create_workroom",
-  plan_capsule_worktree: "plan_workroom_worktree",
-  claim_capsule_scope: "claim_workroom_scope",
-  heartbeat_capsule: "heartbeat_workroom",
-  update_work_capsule_status: "update_workroom_status",
-  release_capsule_scope: "release_workroom_scope",
-  record_capsule_evidence: "record_workroom_evidence",
-  reassign_capsule_executor: "reassign_workroom_executor",
-};
+export { WORKROOM_TOOL_ALIASES } from "./workroom-tool-aliases";
 
 
 

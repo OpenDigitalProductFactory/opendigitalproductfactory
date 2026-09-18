@@ -947,10 +947,10 @@
   },
   {
     "providerId": "speaches",
-    "name": "Local STT (whisper-server)",
+    "name": "Self-hosted speech-to-text",
     "category": "direct",
     "endpointType": "transcription",
-    "baseUrl": "http://dpf-stt:9000",
+    "baseUrl": null,
     "authMethod": "none",
     "supportedAuthMethods": [
       "none"
@@ -961,20 +961,20 @@
     "enabledFamilies": [],
     "computeWatts": 80,
     "electricityRateKwh": 0.12,
-    "docsUrl": "https://github.com/hwdsl2/docker-whisper",
+    "docsUrl": "https://github.com/speaches-ai/speaches",
     "consoleUrl": null,
     "billingLabel": "Local compute · electricity cost only",
-    "costPerformanceNotes": "OpenAI-compatible /v1/audio/transcriptions. Default model: base.",
+    "costPerformanceNotes": "Any OpenAI-compatible /v1/audio/transcriptions endpoint the operator runs. DPF does not ship or pin a speech image (BI-F7E9A541); supply the base URL of your own container.",
     "catalogVisibility": "visible",
     "userFacing": {
-      "plainDescription": "Speech-to-text running entirely on your own hardware via the local whisper-server sidecar. Audio never leaves your system.",
-      "authExplained": "None needed — the sidecar is reached over the internal Docker network.",
+      "plainDescription": "Speech-to-text running on hardware you control. Point this at a speech server you run yourself and audio never leaves your network.",
+      "authExplained": "None needed — you supply the address of your own speech server.",
       "costTier": "free",
-      "costExplained": "Costs only the electricity to run your computer. No per-use charges.",
+      "costExplained": "Costs only the electricity to run your own machine. No per-use charges.",
       "capabilitySummary": "Transcribes voice notes and dictation. Whisper-derived ASR with high accuracy on English; supports 90+ languages.",
-      "limitations": "Runs on CPU by default — works on any modern machine. Operators with an NVIDIA GPU can upgrade to a CUDA variant for faster transcription via the SpeechToTextCard upgrade flow.",
-      "dataResidency": "Your machine. Audio is processed on the local sidecar; nothing leaves the install.",
-      "setupDifficulty": "automatic",
+      "limitations": "You run and maintain the speech server. Any OpenAI-compatible implementation works; speaches and whisper.cpp server are both MIT-licensed and known to work. DPF stopped shipping one so that a third party's registry housekeeping can no longer block platform releases.",
+      "dataResidency": "Your infrastructure. Audio is processed by the server you nominate; nothing reaches a hosted provider.",
+      "setupDifficulty": "manual",
       "regulatoryNotes": "Maximum privacy. Suitable for all sensitivity levels including restricted/regulated data."
     },
     "supportsToolUse": false

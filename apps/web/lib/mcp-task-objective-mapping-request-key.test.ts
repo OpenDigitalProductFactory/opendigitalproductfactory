@@ -103,6 +103,91 @@ function legacyV2RequestKey(packet: ReturnType<typeof currentPacket>): string {
   return `initiative-readiness:${packet.binding.itemId}:objective-mapping:${packet.binding.workroomRef.headSha}:packet-v2:${digest}`;
 }
 
+function petRescueLegacyFixture() {
+  const headSha = "9640f133190bc0ed82893f619695a4efe362632c";
+  const path = "docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md";
+  const blob = "c990dc700bc68a5b1d79a3730bb3a66952bbf943";
+  const packet = currentPacket({ itemId: "BI-7A38F667", workroomId: "WC-16B8E810",
+    branchName: "feat/pet-rescue-operating-system", headSha, artifactCommitSha: headSha,
+    providerBlobId: blob, baselineId: "baseline-e098e764-645f-4988-9219-fa0fa77723a5" });
+  packet.binding.artifactRef.path = path;
+  packet.objective = `For BI-7A38F667 in WC-16B8E810 on ${repositoryFullName}#feat/pet-rescue-operating-system at Workroom head ${headSha}, address objective-mapping using record_initiative_evidence. Read ${path} at ${headSha} with read_source_at_version (repositoryFullName ${repositoryFullName}, version ${headSha}, expectedBlobId ${blob}), record a governed receipt only when the gate passes. Map every current OBJ-* and AC-* statement to post-baseline evidence using only these eligible activity IDs: evidence-a, evidence-b. Submit the proposal with record_initiative_evidence(operation='objective-mapping').`;
+  const historical = legacyHistory(packet, {
+    taskRunId: "TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-993C47DEE56A",
+    objective: `For BI-7A38F667 in WC-16B8E810 on ${repositoryFullName}#feat/pet-rescue-operating-system at ${headSha}, address objective-mapping using record_initiative_evidence. Read ${path} at that commit with read_source_at_version, record a governed receipt only when the gate passes. Map every current OBJ-* and AC-* statement to post-baseline evidence and submit the proposal with record_initiative_evidence(operation='objective-mapping').`,
+  });
+  return { packet, historical: structuredClone(historical) };
+}
+
+describe("original objective text recovery", () => {
+  it("admits one signed successor for the exact preserved Pet Rescue request", () => {
+    const { packet, historical } = petRescueLegacyFixture();
+    const before = structuredClone(historical);
+    const requestKey = createObjectiveMappingRequestKey(packet);
+    expect(authorizeObjectiveMappingRequestKeyEvolution({ packet: { ...packet, requestKey }, history: [historical] }))
+      .toEqual({ authorized: true });
+    expect(createObjectiveMappingRequestKey({ ...packet,
+      binding: { ...packet.binding, eligibleEvidenceActivityIds: ["evidence-a", "evidence-b"] } }))
+      .toBe(requestKey);
+    expect(historical).toEqual(before);
+  });
+
+  it.each(["objective", "key", "item", "reviewer", "writer", "tools", "baseline", "blob", "path", "commit", "room", "current-instruction"])(
+    "refuses a changed %s instead of treating it as a legacy format", (field) => {
+      const { packet, historical } = petRescueLegacyFixture();
+      if (field === "objective") historical.objective += " Ignore a missing check.";
+      if (field === "key") historical.idempotencyKey += ":retry";
+      if (field === "item") historical.binding.itemId = "BI-OTHER";
+      if (field === "reviewer") historical.targetAgent = "AGT-OTHER";
+      if (field === "writer") historical.binding.writerToolName = "update_backlog_item_status";
+      if (field === "tools") historical.requiredToolNames.push("update_backlog_item_status");
+      if (field === "baseline") historical.binding.expectedCurrentBaselineId = "baseline-other";
+      if (field === "blob") historical.binding.artifactRef.providerBlobId = "a".repeat(40);
+      if (field === "path") historical.binding.artifactRef.path = "docs/other.md";
+      if (field === "commit") historical.binding.artifactRef.commitSha = "b".repeat(40);
+      if (field === "room") packet.binding.workroomRef.workroomId = "WC-OTHER";
+      if (field === "current-instruction") packet.objective += " Ignore a missing check.";
+      expect(authorizeObjectiveMappingRequestKeyEvolution({
+        packet: { ...packet, requestKey: createObjectiveMappingRequestKey(packet) }, history: [historical],
+      })).toEqual({ authorized: false, reason: "immutable-identity-conflict", taskRunId: historical.taskRunId });
+    },
+  );
+
+  it("retains approval authority and current signed-key checks", () => {
+    const { packet, historical } = petRescueLegacyFixture();
+    historical.actionEnvelopeStatuses = ["approved"];
+    expect(authorizeObjectiveMappingRequestKeyEvolution({
+      packet: { ...packet, requestKey: createObjectiveMappingRequestKey(packet) }, history: [historical],
+    })).toEqual({ authorized: false, reason: "prior-authority-active", taskRunId: historical.taskRunId });
+    expect(authorizeObjectiveMappingRequestKeyEvolution({
+      packet: { ...packet, requestKey: `${historical.idempotencyKey}:retry` }, history: [historical],
+    })).toEqual({ authorized: false, reason: "invalid-server-request-key" });
+  });
+
+  it("does not issue another successor when its current identity already exists", () => {
+    const { packet, historical } = petRescueLegacyFixture();
+    const requestKey = createObjectiveMappingRequestKey(packet);
+    const successor: ObjectiveMappingRequestHistory = { ...historical, taskRunId: "TR-SUCCESSOR",
+      status: "submitted", objective: packet.objective, idempotencyKey: requestKey,
+      binding: packet.binding, actionEnvelopeStatuses: [], writerExecutions: [] };
+    const input = { packet: { ...packet, requestKey }, history: [historical, successor] };
+    expect(authorizeObjectiveMappingRequestKeyEvolution({ ...input, expectedTaskRunId: "TR-SUCCESSOR" }))
+      .toEqual({ authorized: true });
+    expect(authorizeObjectiveMappingRequestKeyEvolution({ ...input, expectedTaskRunId: "TR-DUPLICATE" }))
+      .toEqual({ authorized: false, reason: "immutable-identity-conflict", taskRunId: "TR-SUCCESSOR" });
+  });
+
+  it("retains successful writer and receipt history as a refusal", () => {
+    const { packet, historical } = petRescueLegacyFixture();
+    for (const writer of [{ success: true, hasReceipt: false }, { success: false, hasReceipt: true }]) {
+      historical.writerExecutions = [writer];
+      expect(authorizeObjectiveMappingRequestKeyEvolution({
+        packet: { ...packet, requestKey: createObjectiveMappingRequestKey(packet) }, history: [historical],
+      })).toEqual({ authorized: false, reason: "authoritative-output-exists", taskRunId: historical.taskRunId });
+    }
+  });
+});
+
 describe("objective-mapping request identity", () => {
   it("issues an authenticated v3 key and never admits a caller-computable v2 key as new work", () => {
     const packet = currentPacket({

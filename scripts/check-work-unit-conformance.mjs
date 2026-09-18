@@ -3,6 +3,8 @@
 // New carrier/projector code must adapt into WorkUnit instead of forking lifecycle.
 
 import { execFileSync } from "node:child_process";
+
+import { exitUnresolvable, listChangedFiles } from "./lib/git-changed-files.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,8 +45,14 @@ function git(...args) {
 
 function main() {
   git("fetch", "--no-tags", "origin", "main");
-  const paths = git("diff", "--name-only", "--diff-filter=AM", "origin/main...HEAD")
-    .split("\n").map((line) => line.trim()).filter(Boolean)
+  // BI-B6433DC6: `git()` collapses a failed diff into "", which this guard read
+  // as "no runtime modules changed" and reported as conformant.
+  const base = process.env.BASE_SHA || "origin/main";
+  const listed = listChangedFiles(base, { diffArgs: ["--diff-filter=AM"] });
+  if (listed.status === "unresolvable") {
+    exitUnresolvable("work-unit-conformance", base, listed.detail);
+  }
+  const paths = listed.files
     .filter((path) => path.startsWith("apps/web/lib/") && path.endsWith(".ts") && existsSync(path));
   const files = paths.map((path) => ({ path, source: readFileSync(path, "utf8") }));
   const workUnitSource = readFileSync("apps/web/lib/work-management/work-unit.ts", "utf8");

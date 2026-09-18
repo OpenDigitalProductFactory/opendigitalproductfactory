@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const execFileAsync = promisify(execFile);
@@ -196,7 +197,7 @@ test("macOS host install preserves the one-time token in its protected runtime e
     await chmod(join(fakeBin, name), 0o755);
   }
 
-  const installerPath = new URL("./native-edge-host.sh", import.meta.url).pathname;
+  const installerPath = fileURLToPath(new URL("./native-edge-host.sh", import.meta.url));
   await execFileAsync("/bin/bash", ["-c", [
     "warn() { :; }", "ok() { :; }", `. ${JSON.stringify(installerPath)}`,
     `dpf_native_edge_install ${JSON.stringify(repo)} dpfboot_TEST_TOKEN test-mac`,

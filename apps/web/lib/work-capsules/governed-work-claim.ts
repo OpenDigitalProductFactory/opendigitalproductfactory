@@ -388,7 +388,7 @@ export async function claimGovernedBacklogWorkspace(args: {
       if (!item) throw new Error(`BacklogItem ${args.input.backlogItemId} not found`);
       backlogItemRowId = item.id;
       const activities = await tx.backlogItemActivity.findMany({
-        where: { backlogItemId: item.id, kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        where: { backlogItemId: item.id, kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage", "break_fix_declared"] } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
       }) as InitiativeReadinessActivity[];

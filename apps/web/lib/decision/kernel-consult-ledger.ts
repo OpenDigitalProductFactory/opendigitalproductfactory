@@ -297,6 +297,13 @@ export async function recordKernelConsultInteraction(input: {
 
     const evaluation: DecisionPerspectiveEvaluationResult = {
       outcomeType,
+      // BI-F302B80E: the kernel's pick belongs in its own indexed column, not
+      // only in outcomePayload. It was being written to the JSON blob and the
+      // seal payload while this column stayed NULL, so 152 recorded
+      // recommendations were unqueryable — and agreement cannot be measured
+      // against a value nothing can select. `coverageGap` below already tracks
+      // the absence of a recommendation, so null here means "none was made".
+      recommendedOptionId: input.result.recommendation?.optionId ?? null,
       selectedProfileId: profile.profileId,
       fallbackProfileId: null,
       profileVersionId: version.versionId,
@@ -350,6 +357,11 @@ export async function recordKernelConsultInteraction(input: {
       // BI-FD7CBA06: name the door so WWMD audit can filter external MCP consults
       // separately from build-studio / backlog-triage (was always null before).
       gateKey: "kernel-consult",
+      // BI-01F8F06D: a consult is attended when a human triggered it and
+      // unattended when an agent did. Derived from the caller the request
+      // already declares rather than assumed, so the agreement denominator
+      // never silently absorbs a decision nobody reviewed.
+      autonomous: !input.triggeredByUserId,
       phaseFrom: null,
       phaseTo: null,
       chain,

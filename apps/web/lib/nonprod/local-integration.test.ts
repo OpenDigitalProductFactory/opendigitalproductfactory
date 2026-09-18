@@ -261,3 +261,58 @@ describe("recordLocalIntegrationResult", () => {
     expect(mockRecordExternalEvidence).not.toHaveBeenCalled();
   });
 });
+
+describe("recordLocalIntegrationResult — evidence output offload (BI-39AAE9B8)", () => {
+  const platformConfig = { findUnique: vi.fn(), updateMany: vi.fn() };
+  const environmentLease = { findUnique: vi.fn(), updateMany: vi.fn() };
+
+  it("moves an oversized evidence.output to the blob writer and records an excerpt plus reference", async () => {
+    vi.clearAllMocks();
+    const written: string[] = [];
+    const writeEvidenceBlob = async (text: string) => {
+      written.push(text);
+      return { sha256: "f".repeat(64), storageKey: `documents/sha256/ff/ff/${"f".repeat(64)}`, sizeBytes: text.length, mimeType: "text/plain" as const };
+    };
+    const log = `${"=".repeat(100 * 1024)}\nTests 12 passed\n`;
+
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "codex",
+      externalSessionId: "codex-session-9",
+      routeContext: "/build",
+      candidateBranch: "feat/big-log",
+      mode: "single-branch",
+      status: "passed",
+      summary: "gate passed",
+      evidence: { sha: "c".repeat(40), commands: ["pnpm test"], output: log },
+    }, { platformConfig, environmentLease, writeEvidenceBlob });
+
+    expect(written).toEqual([log]);
+    const call = mockRecordExternalEvidence.mock.calls.at(-1)?.[0] as { details: { evidence: { output: string; outputBlob: { sha256: string }; outputTruncated: boolean; sha: string } } };
+    expect(call.details.evidence.outputTruncated).toBe(true);
+    expect(call.details.evidence.outputBlob.sha256).toBe("f".repeat(64));
+    expect(call.details.evidence.sha).toBe("c".repeat(40));
+    expect(call.details.evidence.output.endsWith("Tests 12 passed\n")).toBe(true);
+    expect(call.details.evidence.output.length).toBeLessThan(log.length);
+  });
+
+  it("leaves small evidence exactly as submitted and never calls the blob writer", async () => {
+    vi.clearAllMocks();
+    const writeEvidenceBlob = vi.fn();
+    const evidence = { sha: "d".repeat(40), output: "ok" };
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "codex",
+      externalSessionId: "codex-session-9",
+      routeContext: "/build",
+      candidateBranch: "feat/small-log",
+      mode: "single-branch",
+      status: "passed",
+      summary: "gate passed",
+      evidence,
+    }, { platformConfig, environmentLease, writeEvidenceBlob });
+    expect(writeEvidenceBlob).not.toHaveBeenCalled();
+    const call = mockRecordExternalEvidence.mock.calls.at(-1)?.[0] as { details: { evidence: unknown } };
+    expect(call.details.evidence).toBe(evidence);
+  });
+});

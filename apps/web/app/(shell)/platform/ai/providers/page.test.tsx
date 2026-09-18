@@ -19,9 +19,17 @@ vi.mock("@dpf/db", () => ({
           jobId: "provider-registry-sync",
           schedule: "daily",
           lastRunAt: new Date("2026-06-28T12:00:00.000Z"),
-          nextRunAt: new Date("2099-01-01T00:00:00.000Z"),
+          nextRunAt: new Date(Date.now() + 86_400_000),
           lastStatus: "ok",
           lastError: null,
+        },
+        {
+          jobId: "model-discovery-refresh",
+          schedule: "daily",
+          lastRunAt: new Date("2026-09-08T03:10:00.000Z"),
+          nextRunAt: new Date(Date.now() + 86_400_000),
+          lastStatus: "partial",
+          lastError: "codex: app-server unavailable",
         },
       ]),
       update: vi.fn(),
@@ -41,9 +49,17 @@ vi.mock("@/lib/ai-provider-data", () => ({
       jobId: "provider-registry-sync",
       schedule: "daily",
       lastRunAt: new Date("2026-06-28T12:00:00.000Z"),
-      nextRunAt: new Date("2099-01-01T00:00:00.000Z"),
+      nextRunAt: new Date(Date.now() + 86_400_000),
       lastStatus: "ok",
       lastError: null,
+    },
+    {
+      jobId: "model-discovery-refresh",
+      schedule: "daily",
+      lastRunAt: new Date("2026-09-08T03:10:00.000Z"),
+      nextRunAt: new Date(Date.now() + 86_400_000),
+      lastStatus: "partial",
+      lastError: "codex: app-server unavailable",
     },
   ]),
   groupByEndpointTypeAndCategory: vi.fn().mockReturnValue([]),
@@ -170,5 +186,6 @@ describe("ProvidersPage", () => {
     expect(html).toContain("Last updated");
     expect(html).not.toContain("Refresh Provider Catalog");
     expect(html).not.toContain("Sync Provider Registry");
+    expect(html).toMatch(/Provider catalog[\s\S]*Last updated[\s\S]*Sep 8, 2026/);
   });
 });

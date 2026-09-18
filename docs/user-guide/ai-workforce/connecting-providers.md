@@ -136,6 +136,29 @@ technical boundaries DPF applies to clinical, financial, legal,
 criminal-justice, safety, youth, employee, source-code, credential, customer,
 and unknown governed data before provider selection.
 
+### Break-glass: accepting a risk on purpose
+
+Attestation above says an account *is* contractually safe. Sometimes an
+organization instead wants to knowingly proceed on an account that is **not**
+verified safe — an acceptable risk, made with eyes open. The provider detail
+page has a separate, warning-toned **Accept risk / add an override** panel for
+exactly that. It is deliberately not the attestation form: attestation records
+that the account is protected; an override records that it is **not**, and that
+you accept the exposure anyway.
+
+An override is operator-only, defaults off, and is never the path of least
+resistance — the attested-account and capable-local-model paths remain the
+recommended answers. To create one, you pick the specific sensitivities to
+accept (only those the provider is not already cleared for), type a
+justification, set a required expiry, and check an acknowledgment that states
+the exact risk. The decision is audited (who accepted, when, scope, the frozen
+risk text), listed on the page, and revocable with one click; revoking restores
+the block. Routing then permits that provider for those sensitivities until the
+override expires or is revoked — without changing what the provider is genuinely
+cleared for. Without an override, a coworker whose only cleared provider is a
+too-weak local model is told plainly why it cannot answer, rather than being
+routed onto an uncleared provider.
+
 ### OpenRouter and other router accounts
 
 A router connection is two trust decisions: the OpenRouter account and the underlying provider that actually handles the request. For public work, DPF may use normal price or latency routing. For private or regulated work, DPF requires an explicit underlying-provider allowlist, disables unbounded fallback, requests parameter-compatible endpoints, enables Zero Data Retention, denies provider data collection, and requires returned router metadata before releasing the answer.

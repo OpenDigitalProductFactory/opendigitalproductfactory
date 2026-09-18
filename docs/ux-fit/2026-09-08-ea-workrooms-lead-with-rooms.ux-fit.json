@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "lead-with-real-rooms",
+  "decisionInteractionId": "DI-66AC55277576",
+  "scope": {
+    "files": ["apps/web/app/(shell)/ea/workrooms/page.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "lead-with-real-rooms",
+      "fix-copy-only",
+      "build-plan-creation",
+      "hide-the-tab"
+    ]
+  }
+}

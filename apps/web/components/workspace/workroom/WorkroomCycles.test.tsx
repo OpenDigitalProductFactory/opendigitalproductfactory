@@ -71,6 +71,7 @@ function room(): WorkroomView {
       closureRuleSummary: null, gaps: [], sourceRefs: [],
     },
     currentCycle: cycle,
+    cycleProjectionError: null,
     completedCycles: [{ ...cycle, cycleKey: "2026-W31", carrierId: "WI-CYCLE-31", status: "closed", outcomePacket: packet }],
     participants: [], activity: [],
     work: { nextAction: "Continue work", attentionRequired: false, attentionReason: null, blockingActorKind: null, activeCapsuleRefs: [], activeTaskRunSummary: null, terminal: false, sourceRefs: [] },
@@ -108,13 +109,28 @@ describe("WorkroomCycles", () => {
     expect(html.indexOf("Current cycle")).toBeLessThan(html.indexOf("Completed cycles"));
   });
 
+  // A cycle that could not be projected is UNKNOWN, not idle. Reporting
+  // "healthy and idle" here would state a fact nobody established, on a room
+  // that is in trouble (BI-97B24FB5).
+  it("distinguishes a cycle that could not be projected from a healthy idle room", () => {
+    const value = room();
+    value.currentCycle = null;
+    value.cycleProjectionError = "finite_room_has_cycle";
+    const html = renderToStaticMarkup(<WorkroomCycles room={value} />);
+
+    expect(html).toContain("Cycle unavailable");
+    expect(html).not.toContain("Healthy and idle");
+    // The rest of the room survives: the section degrades, the page does not.
+    expect(html).toContain("Completed cycles");
+  });
+
   it("shows healthy-idle guidance for a standing room without a current cycle", () => {
     const value = room();
     value.currentCycle = null;
     const html = renderToStaticMarkup(<WorkroomCycles room={value} />);
 
     expect(html).toContain("Ready for the next cycle");
-    expect(html).toContain("healthy and idle");
+    expect(html).toContain("Healthy and idle");
   });
 
   it("does not add cycle chrome to finite rooms", () => {

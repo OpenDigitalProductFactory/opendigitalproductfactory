@@ -128,6 +128,41 @@ animal journey as a whole. The workspace follows three connected value streams:
 Use **Animals**, **Intake**, **Housing**, **Daily care**, **Adoptions**, and
 ## When the ward is full
 
+### Admitting an animal
+
+**Intake** admits an animal in one step: identity, the intake source (stray,
+owner relinquished, transfer, born in care, return, or seizure), an optional
+legal or policy hold, and the housing it goes into. The admission either houses
+the animal or refuses with the reason, so custody without a place, or a place
+without custody, cannot exist.
+
+Each animal in intake shows its checklist: identity and microchip check, intake
+examination, weight, vaccination, parasite treatment, sterilization, behaviour
+assessment, and housing. Every item is satisfied by a dated record with the
+person or provider who did the work. A note that an animal "is spayed" does not
+count; the sterilization record does, and it holds the animal back until its
+recovery date has passed.
+
+The page explains, in words, why an animal is not yet placement-ready. A hold is
+released by a person with a reason. **Verify placement readiness** appears only
+when every reason is gone, and it re-checks the same facts before the animal
+moves on to Adoptions.
+
+### Daily care rounds
+
+**Daily care** is the list a volunteer opens in the morning. A routine (feed,
+water, medication, walk, clean, weigh, welfare check) is set up once per animal
+with a time of day, every day or on chosen weekdays, for a fixed course or
+ongoing. The platform turns it into dated rounds two weeks ahead, so the list
+exists whether or not anyone remembered.
+
+Each round is recorded with what happened. Done or partly done closes it. Did
+not eat, refused, or a concern needs a short observation and raises a welfare
+follow-up that a person must take on and resolve with a note. A medication
+round that is still open two hours after it was due can be escalated the same
+way; the page shows how many are waiting. Nothing here decides treatment. It
+makes sure a person sees it.
+
 If every place is taken, the board adds a review. It is the only time it appears.
 
 The review lists the animals that have waited longest with nobody waiting for
@@ -209,7 +244,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
 - **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you.
-- **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Workroom is the friendly Workspace view over a governed Work Case.
+- **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Workroom is the friendly Workspace view over a governed Work Case. One room means one case: however you address a room — from your inbox, the Workrooms inventory, or a link someone sent you by room ID — you arrive at the same case rather than a second copy of it.
 
 ## What You Can Do
 
@@ -219,6 +254,8 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
 - Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.
+- Each room also names the human accountable for it and says where that answer came from, alongside the workers in the room and any subagents they delegated — see [who is accountable, and who is working](work-rooms.md#who-is-accountable-and-who-is-working)
+- A Workroom that is not attached to a work item opens as [its own case](work-rooms.md#opening-a-workroom-that-has-no-work-item) instead of reporting that the page could not be found
 - Use your digital coworker to get a personalized briefing on what needs your attention
 - Select the installation badge beside the logo to open [what this installation is](../operations/index.md#what-this-installation-is) and correct it
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed

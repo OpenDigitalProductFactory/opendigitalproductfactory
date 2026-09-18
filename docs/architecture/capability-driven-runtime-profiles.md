@@ -33,11 +33,13 @@ For locally capability-activated services, runtime profile names are mechanicall
 | `runtime:build` | `runtime-build` | `sandbox-postgres`, `sandbox-init`, `sandbox` |
 | `runtime:browser-automation` | `runtime-browser-automation` | `browser-use` |
 | `runtime:durable-automation` | `runtime-durable-automation` | `redis`, `redis-exporter`, `inngest` |
-| `runtime:local-speech` | `runtime-local-speech` | `dpf-stt`, `dpf-tts` |
+| `runtime:local-speech` | `runtime-local-speech` | `dpf-tts` (speech-to-text is provider-managed, not a local service — see below) |
 | `runtime:deep-observability` | `runtime-deep-observability` | Prometheus, Grafana, Loki, Alloy, and PostgreSQL exporter |
 | `runtime:external-ai` | `runtime-external-ai` on Linux | Ollama from the Linux overlay; configured external providers remain provider-managed |
 | `runtime:adp-integration` | `integrations-adp` (separate-distribution exception) | `adp` |
 | `runtime:development` | `dev` and `integration-test` (lifecycle-only) | `dev-postgres`, `dev-init`, `dev-portal`, and `integration-test-harness` |
+
+**Speech-to-text is provider-managed, not a local service (BI-F7E9A541).** DPF previously shipped a digest-pinned third-party whisper image as `dpf-stt` under `runtime:local-speech`. Because the release manifest guard deliberately covers images behind optional profiles, a publisher pruning that digest failed install verification and froze the `:latest` pointer for every install — three times. Speech-to-text therefore moved to the **External — provider managed** class described in the health table below: availability follows provider configuration and there is no local container. Configuring any provider that serves an OpenAI-compatible `/v1/audio/transcriptions` endpoint enables voice input, because endpoint resolution already skips candidates whose provider is not active. An operator who wants audio to stay on their own infrastructure runs their own speech server and supplies its base URL, rather than DPF shipping and pinning one. `runtime:local-speech` still owns `dpf-tts`, which is pinned by version tag and unaffected.
 
 PostgreSQL, `portal-init`, and the portal are `runtime:core` and have no profile. The resolver filters service bindings by `hostPlatforms` before returning profiles and required services. The Linux overlay therefore provides a deliberate hybrid: the same `runtime:external-ai` capability can select host-local Ollama on Linux while external provider configurations remain outside Compose on every host. Linux-only `cadvisor` and `node-exporter` remain under the explicit `linux-monitoring` overlay.
 

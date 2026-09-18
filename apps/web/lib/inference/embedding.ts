@@ -4,6 +4,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 // barrier, so a local copy would leave js/log-injection unbroken.
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
+import { providerInferenceFetch } from "./provider-inference-transport";
 // apps/web/lib/embedding.ts
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
 // Uses OpenAI-compatible /v1/embeddings endpoint.
@@ -115,7 +116,7 @@ export async function generateEmbeddingDetailed(text: string): Promise<Embedding
       const limit = lengths[attempt]!;
       const truncated = text.slice(0, limit);
 
-      const res = await fetch(`${baseUrl}/embeddings`, {
+      const res = await providerInferenceFetch(`${baseUrl}/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -179,7 +180,7 @@ export async function generateEmbeddingDetailed(text: string): Promise<Embedding
 export async function isEmbeddingAvailable(): Promise<boolean> {
   try {
     const baseUrl = getLlmBaseUrl();
-    const res = await fetch(`${baseUrl}/models`, { signal: AbortSignal.timeout(5000) });
+    const res = await providerInferenceFetch(`${baseUrl}/models`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return false;
     const data = (await res.json()) as { data?: Array<{ id: string }> };
     return data.data?.some((m) => m.id.includes("nomic-embed-text") || m.id.includes("embed")) ?? false;

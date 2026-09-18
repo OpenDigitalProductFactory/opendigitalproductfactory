@@ -1,7 +1,9 @@
 import { prisma, type Prisma } from "@dpf/db";
 
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
-import { dispatchRoutedSemanticReview } from "@/lib/change-review/routed-semantic-review";
+import { enqueueSemanticReview } from "@/lib/change-review/semantic-review-background";
+import { resolveFailureAnalysisEvidence } from "@/lib/change-review/failure-analysis-evidence";
+import { createSemanticReviewRequest, REVIEW_ARTIFACT_TYPES, REVIEW_RISKS, REVIEW_PROFILES } from "@/lib/change-review/semantic-review-request";
 import {
   runSemanticChangeReview,
   resolveSemanticReviewCoordination,
@@ -14,12 +16,9 @@ import {
 } from "@/lib/change-review/semantic-change-review";
 import {
   claimSemanticReviewSingleFlight,
-  completeSemanticReviewSingleFlight,
   createPrismaSemanticReviewSingleFlightStore,
-  failSemanticReviewSingleFlight,
   type SemanticReviewSingleFlightClaim,
 } from "@/lib/change-review/semantic-review-single-flight";
-import { deriveSemanticReviewGateIdentity } from "@/lib/gates/gate-run-identity";
 import {
   SEMANTIC_REVIEW_OUTCOME_SCHEMA_VERSION,
   projectSemanticReviewOutcome,
@@ -28,27 +27,21 @@ import {
 import type { DeliberationArtifactType, StrategyProfile } from "@/lib/deliberation/external-review-activation";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isRecord } from "@/lib/shared/coerce";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 
-const ARTIFACT_TYPES: DeliberationArtifactType[] = [
-  "spec",
-  "plan",
-  "code-change",
-  "architecture-decision",
-  "policy",
-  "research-question",
-];
-const RISKS: SemanticReviewRisk[] = ["low", "medium", "high", "critical"];
-const PROFILES: StrategyProfile[] = ["economy", "balanced", "high-assurance", "document-authority"];
-const SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION = "routed-semantic-review.v1";
+const ARTIFACT_TYPES = [...REVIEW_ARTIFACT_TYPES];
+const RISKS = [...REVIEW_RISKS];
+const PROFILES = [...REVIEW_PROFILES];
 
 const definitions: ToolDefinition[] = [{
   name: "review_semantic_change",
   description:
     "Independently review an immutable committed change before its first publication, record one fresh semantic-review receipt on the Work Capsule, and return whether the author should publish, repair, or escalate. " +
     "Call ONCE per committed (baseTreeHash, headTreeHash, diffDigest) identity — not as a status poll. " +
+    "New reviews are persisted and queued before this call returns. Use MCP tasks/get and tasks/result with the returned taskRunId for progress and evidence. " +
     "After a publish/repair/escalate decision, do not re-call until the tree digests change. repairRound > 2 escalates instead of looping.",
   inputSchema: {
     type: "object",
@@ -59,6 +52,7 @@ const definitions: ToolDefinition[] = [{
       title: { type: "string", description: "Human-readable committed change title" },
       artifact: { type: "string", description: "Exact committed diff or equivalent immutable assembled-change artifact" },
       verificationEvidence: { type: "string", description: "Tests, typecheck, build, migration, or scoped verification evidence available before publication" },
+      failureAnalysis: { type: "object", description: "Versioned failure analysis: design, scope, eliminated opportunities, scenarios with business effects and prevention/containment/detection/recovery, existing verification evidence IDs, accountable residual risks. See shared failure-analysis contract." },
       changedFiles: { type: "array", items: { type: "string" } },
       baseTreeHash: { type: "string", description: "Git base tree hash for the committed review identity" },
       headTreeHash: { type: "string", description: "Git head tree hash for the committed review identity" },
@@ -101,6 +95,9 @@ const definitions: ToolDefinition[] = [{
       falsePositiveFindingCount: { type: "number" },
       uniqueLocalFindingCount: { type: "number" },
       postPublicationMissCount: { type: "number" },
+      escapedFailureFollowUps: { type: "array", items: { type: "object", properties: {
+        scenarioKey: { type: "string" }, incidentReference: { type: "string" }, followUpReference: { type: "string" },
+      }, required: ["scenarioKey", "incidentReference", "followUpReference"] } },
       correctivePushCount: { type: "number" },
       timeToFirstSignalMs: { type: "number" },
       costUsd: { type: "number" },
@@ -134,7 +131,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
   const authorSurface = stringParam(params, "authorSurface");
   const artifactType = stringParam(params, "artifactType") as DeliberationArtifactType;
   const title = stringParam(params, "title");
-  const artifact = stringParam(params, "artifact");
+  const artifact = typeof params.artifact === "string" ? params.artifact : "";
   const verificationEvidence = stringParam(params, "verificationEvidence");
   const baseTreeHash = stringParam(params, "baseTreeHash");
   const headTreeHash = stringParam(params, "headTreeHash");
@@ -155,7 +152,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
 
   const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
-    select: { id: true },
+    select: { id: true, headSha: true },
   });
   if (!capsule) {
     return { success: false, error: "capsule_not_found", message: `Work Capsule ${capsuleId} was not found.` };
@@ -178,6 +175,8 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     title,
     artifact,
     verificationEvidence,
+    failureAnalysis: params.failureAnalysis,
+    resolvedFailureEvidence: await resolveFailureAnalysisEvidence(params.failureAnalysis, capsule.id),
     changedFiles,
     identity: {
       capsuleId,
@@ -185,6 +184,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
       headTreeHash,
       diffDigest,
       specialistIds: [],
+      sourceHeadSha: capsule.headSha ?? undefined,
     },
     priorReceipt,
     repairRound: typeof params.repairRound === "number" ? params.repairRound : 0,
@@ -196,14 +196,12 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
 
   try {
     const coordination = resolveSemanticReviewCoordination(operationInput);
-    const { gateKey } = deriveSemanticReviewGateIdentity({
-      repository: process.env.GITHUB_REPOSITORY
-        ?? "OpenDigitalProductFactory/opendigitalproductfactory",
-      identity: coordination.identity,
-      risk: coordination.risk,
-      dispatchContractVersion: SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION,
+    const packet = createSemanticReviewRequest(operationInput, {
+      userId, agentId: context?.agentId ?? null, apiTokenId: context?.apiTokenId ?? null,
+      authSource: context?.authSource ?? null,
     });
-    const store = createPrismaSemanticReviewSingleFlightStore(prisma as never);
+    const { gateKey } = packet;
+    const store = createPrismaSemanticReviewSingleFlightStore(prisma as never, { packet });
     singleFlight = await claimSemanticReviewSingleFlight({
       gateKey,
       userId,
@@ -225,6 +223,15 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
       result_class: singleFlight.disposition === "reused" ? singleFlight.resultClass : "none",
     });
 
+    if (singleFlight.disposition === "admitted") {
+      const queued = await enqueueSemanticReview(singleFlight.taskRunId);
+      return { success: true, entityId: singleFlight.taskRunId,
+        message: `Semantic review ${singleFlight.taskRunId} persisted; ${queued ? "queued for execution" : "dispatch reconciliation pending"}.`,
+        data: { disposition: "admitted", gateKey, taskRunId: singleFlight.taskRunId,
+          attempt: singleFlight.attempt, queued, deadlineAt: packet.deadlineAt },
+      };
+    }
+
     if (singleFlight.disposition === "subscribed") {
       return {
         success: true,
@@ -239,118 +246,28 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
       };
     }
 
-    let coordinatedPriorReceipt = priorReceipt;
-    let coordinatedEvidenceId = previousEvidence?.id ?? null;
-    if (singleFlight.disposition === "reused") {
-      const row = await prisma.externalEvidenceRecord.findUnique({
-        where: { id: singleFlight.evidenceRecordId },
-        select: { details: true },
-      });
-      if (!isReceipt(row?.details)) {
-        throw new Error("Canonical semantic-review evidence is missing or invalid");
-      }
-      coordinatedPriorReceipt = row.details;
-      coordinatedEvidenceId = singleFlight.evidenceRecordId;
-    }
-
-    const outcome = await runSemanticChangeReview({
-      ...operationInput,
-      priorReceipt: coordinatedPriorReceipt,
-    }, { dispatch: dispatchRoutedSemanticReview });
-
-    if (outcome.reusedFreshReceipt && coordinatedEvidenceId) {
-      if (singleFlight.disposition === "admitted") {
-        await completeSemanticReviewSingleFlight({
-          taskRunId: singleFlight.taskRunId,
-          evidenceRecordId: coordinatedEvidenceId,
-          resultClass: outcome.receipt.result.decision === "fail" ? "fail" : "pass",
-        }, store);
-      }
-      return {
-        success: true,
-        entityId: coordinatedEvidenceId,
-        message: `Reused the fresh semantic review receipt for ${capsuleId}.`,
-        data: {
-          disposition: "reused",
-          gateKey,
-          taskRunId: singleFlight.taskRunId,
-          receipt: outcome.receipt,
-          fresh: true,
-          reusedFreshReceipt: true,
-          staleReasons: outcome.staleReasons,
-          mayPublish: outcome.mayPublish,
-          nextAction: outcome.nextAction,
-          repairLimitReached: outcome.repairLimitReached,
-          mode: reviewMode(),
-        },
-      };
-    }
-
-    const projection = outcome.evidence;
-    const evidence = await recordExternalEvidence({
-      actorUserId: userId,
-      routeContext: projection.externalEvidence.routeContext,
-      operationType: projection.externalEvidence.operationType,
-      target: projection.externalEvidence.target,
-      provider: projection.externalEvidence.provider,
-      resultSummary: projection.externalEvidence.resultSummary,
-      details: projection.externalEvidence.details as unknown as Prisma.InputJsonValue,
-      workCapsuleId: capsule.id,
-      executorKind: context?.agentId ?? authorSurface,
-      recordedByAgentId: context?.agentId,
+    const existing = await prisma.externalEvidenceRecord.findUnique({
+      where: { id: singleFlight.evidenceRecordId }, select: { details: true },
     });
-    await recordWorkCapsuleEvidence({
-      db: prisma,
-      capsuleId,
-      evidence: {
-        kind: "verification",
-        summary: projection.activity.summary,
-        targetId: evidence.id,
-        result: projection.activity.payload,
-      },
-      actor: { userId, agentId: context?.agentId ?? null, principalId: null },
+    if (!isReceipt(existing?.details)) throw new Error("Canonical semantic-review evidence is missing or invalid");
+    const outcome = await runSemanticChangeReview({ ...operationInput, priorReceipt: existing.details }, {
+      dispatch: async () => { throw new Error("Canonical semantic-review evidence is no longer fresh"); },
     });
-    if (outcome.receipt.result.decision === "inconclusive") {
-      await failSemanticReviewSingleFlight({
-        taskRunId: singleFlight.taskRunId,
-        reason: outcome.receipt.result.inconclusiveReason ?? "semantic-review-inconclusive",
-      }, store);
-    } else {
-      await completeSemanticReviewSingleFlight({
-        taskRunId: singleFlight.taskRunId,
-        evidenceRecordId: evidence.id,
-        resultClass: outcome.receipt.result.decision === "fail" ? "fail" : "pass",
-      }, store);
-    }
-
-    return {
-      success: true,
-      entityId: evidence.id,
-      message: `Recorded semantic review receipt for ${capsuleId}: ${outcome.receipt.result.decision}.`,
-      data: {
-        disposition: "admitted",
-        gateKey,
-        taskRunId: singleFlight.taskRunId,
-        receipt: outcome.receipt,
-        fresh: true,
-        reusedFreshReceipt: outcome.reusedFreshReceipt,
-        staleReasons: outcome.staleReasons,
-        mayPublish: outcome.mayPublish,
-        nextAction: outcome.nextAction,
-        repairLimitReached: outcome.repairLimitReached,
-        mode: reviewMode(),
-      },
+    const { publishFailureReadinessStatus } = await import("@/lib/change-review/failure-readiness-status");
+    await publishFailureReadinessStatus(capsuleId);
+    return { success: true, entityId: singleFlight.evidenceRecordId,
+      message: `Reused the fresh semantic review receipt for ${capsuleId}.`,
+      data: { disposition: "reused", gateKey, taskRunId: singleFlight.taskRunId,
+        receipt: outcome.receipt, fresh: true, reusedFreshReceipt: true, staleReasons: outcome.staleReasons,
+        mayPublish: outcome.mayPublish, nextAction: outcome.nextAction,
+        repairLimitReached: outcome.repairLimitReached, mode: reviewMode() },
     };
   } catch (error) {
     if (singleFlight?.disposition === "admitted") {
-      try {
-        await failSemanticReviewSingleFlight({
-          taskRunId: singleFlight.taskRunId,
-          reason: getErrorMessage(error),
-        }, createPrismaSemanticReviewSingleFlightStore(prisma as never));
-      } catch {
-        // Preserve the original review failure; the TaskRun watchdog remains a fallback.
-      }
+      return { success: true, entityId: singleFlight.taskRunId,
+        message: "The immutable review is persisted; background dispatch reconciliation will continue.",
+        data: { disposition: "admitted", taskRunId: singleFlight.taskRunId, queued: false },
+      };
     }
     return { success: false, error: "review_failed", message: getErrorMessage(error) };
   }
@@ -386,8 +303,11 @@ const recordSemanticReviewOutcome: ToolPackHandler = async (params, userId, cont
       target: receiptId,
     },
     select: { id: true, resultSummary: true, details: true },
+    orderBy: { createdAt: "desc" },
   });
-  if (priorOutcome) {
+  if (priorOutcome && isRecord(priorOutcome.details)
+    && (priorOutcome.details.postPublicationMissCount ?? null) === (params.postPublicationMissCount ?? null)
+    && JSON.stringify(priorOutcome.details.escapedFailureFollowUps ?? []) === JSON.stringify(params.escapedFailureFollowUps ?? [])) {
     return {
       success: true,
       entityId: priorOutcome.id,
@@ -410,7 +330,12 @@ const recordSemanticReviewOutcome: ToolPackHandler = async (params, userId, cont
     acceptedFindingCount: correlationStatus === "completed" ? nonNegativeNumber(params, "acceptedFindingCount") : 0,
     falsePositiveFindingCount: correlationStatus === "completed" ? nonNegativeNumber(params, "falsePositiveFindingCount") : 0,
     uniqueLocalFindingCount: correlationStatus === "completed" ? nonNegativeNumber(params, "uniqueLocalFindingCount") : 0,
-    postPublicationMissCount: correlationStatus === "completed" ? nonNegativeNumber(params, "postPublicationMissCount") : 0,
+    postPublicationMissCount: correlationStatus === "completed" && typeof params.postPublicationMissCount === "number"
+      && Number.isInteger(params.postPublicationMissCount) && params.postPublicationMissCount >= 0 ? params.postPublicationMissCount : null,
+    escapedFailureFollowUps: Array.isArray(params.escapedFailureFollowUps) ? params.escapedFailureFollowUps.filter(
+      (v): v is { scenarioKey: string; incidentReference: string; followUpReference: string } => Boolean(v && typeof v === "object"
+        && ["scenarioKey", "incidentReference", "followUpReference"].every(key => typeof v[key] === "string" && v[key].trim())),
+    ) : [],
     correctivePushCount: correlationStatus === "completed" ? nonNegativeNumber(params, "correctivePushCount") : 0,
     timeToFirstSignalMs: correlationStatus === "completed" && typeof params.timeToFirstSignalMs === "number"
       ? nonNegativeNumber(params, "timeToFirstSignalMs")

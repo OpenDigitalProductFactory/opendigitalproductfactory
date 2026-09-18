@@ -7,6 +7,7 @@
  * See: docs/superpowers/specs/2026-03-20-contract-based-selection-design.md
  */
 
+import { terminalWriterDispatchContract, type TerminalWriterDispatchContract } from "./execution-adapter-types";
 import type { RequestContract } from "./request-contract";
 import type { EndpointManifest } from "./types";
 import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
@@ -42,6 +43,19 @@ export function resolveDefaultExecutionAdapter(
   if (providerAdapter) return providerAdapter;
   if (requiredModelClass) return MODEL_CLASS_ADAPTER[requiredModelClass] ?? "chat";
   return "chat";
+}
+
+/**
+ * The terminal-writer dispatch contract the provider that actually ran was held
+ * to (BI-C35576A9). Undefined when no provider ran ("unknown" / empty), so a
+ * TaskRun record never claims a contract for a dispatch that did not happen.
+ */
+export function terminalWriterDispatchContractForProvider(
+  providerId: string | null | undefined,
+): TerminalWriterDispatchContract | undefined {
+  const id = providerId?.trim();
+  if (!id || id === "unknown") return undefined;
+  return terminalWriterDispatchContract(resolveDefaultExecutionAdapter(id));
 }
 
 // ── buildPlanFromRecipe ──────────────────────────────────────────────────────

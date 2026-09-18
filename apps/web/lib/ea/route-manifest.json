@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 659,
+  "routeCount": 661,
   "routes": [
     {
       "routePath": "/",
@@ -7769,6 +7769,30 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/workspace/inbox/page.tsx"
+    },
+    {
+      "routePath": "/workspace/mailroom",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "mailroom"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/mailroom/page.tsx"
+    },
+    {
+      "routePath": "/workspace/mailroom/items/[inboundId]",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "mailroom",
+        "items",
+        "[inboundId]"
+      ],
+      "dynamicParams": [
+        "inboundId"
+      ],
+      "file": "apps/web/app/(shell)/workspace/mailroom/items/[inboundId]/page.tsx"
     },
     {
       "routePath": "/workspace/my-queue",

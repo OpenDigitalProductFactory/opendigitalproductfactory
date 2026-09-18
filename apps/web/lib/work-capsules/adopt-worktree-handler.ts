@@ -1,10 +1,9 @@
+import { normalizePersistedScope, parseScopeInput } from "./scope-input";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import {
   WORK_CAPSULE_EXECUTOR_KINDS,
   isWorkCapsuleExecutorKind,
-  normalizeWorkCapsuleScopeInput,
-  type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
 
 import {
@@ -23,18 +22,6 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
-  return {
-    workroomShape: params.workroomShape,
-    decisionScope: params.decisionScope,
-    portfolioRole: params.portfolioRole,
-    servedPersona: params.servedPersona,
-    activityKind: params.activityKind,
-    outcomeAnchor: params.outcomeAnchor,
-    servesPortfolioRoles: params.servesPortfolioRoles,
-    dependsOnPortfolioRoles: params.dependsOnPortfolioRoles,
-  };
-}
 
 /**
  * Adopt an existing branch/worktree pair into a Workroom.
@@ -78,7 +65,7 @@ export async function adoptWorktree(args: {
     ? executorKind
     : null;
   try {
-    normalizeWorkCapsuleScopeInput(parseScopeInput(params));
+    normalizePersistedScope(parseScopeInput(params));
   } catch (error) {
     return invalidScopeResult(error);
   }

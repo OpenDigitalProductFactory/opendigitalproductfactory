@@ -927,6 +927,21 @@ outcomes.
 
 ### 9.6 Proposed competence-evolution Workroom application profile
 
+**Informative cross-workroom application.** The
+[cross-workroom review design](../superpowers/specs/2026-09-06-cross-workroom-learning-review-design.md)
+applies this profile across occurrences. Its proposed common contract preserves event evidence,
+review cursors, effective profile versions, accountable ownership and the next safe action before
+an executor is replaced. Source, activity-shape, facet, category, leaf and organization overlays
+add their applicable obligations without silently removing common ones. An unexercised definition
+is reported separately from an observed successful occurrence.
+
+The proposed operating cadence captures evidence at consequential transitions, reviews daily
+deltas and assesses weekly trends; domain deadlines and seasonal opportunity windows refine it.
+Every accepted lesson links the original evidence, triage decision, existing delivery owner,
+changed method/profile version and independent subsequent assessment. A completed task, merged
+change or scheduled review alone does not establish benefit. This application note introduces no
+new normative requirement or adopted standard version; Section 19 remains the publication authority.
+
 The [PAAW competence-evolution Workroom
 design](../superpowers/specs/2026-08-30-paaw-competence-evolution-workroom-design.md) defines a
 candidate application profile for turning operational experience into governed knowledge, evaluated
@@ -960,6 +975,20 @@ The profile creates no second room definition, evidence ledger, commons, playboo
 qualification model, or action-permission engine.
 
 ## 10. Performer and work-allocation model
+
+> **Implementation status.** The two closed vocabularies below — performer kinds
+> (§10.1) and allocation patterns (§10.3) — plus the §10.2 eligibility gates are
+> declared in code at [`packages/db/src/performer-allocation.ts`](../../packages/db/src/performer-allocation.ts),
+> exported from `@dpf/db`. A conformance test parses this section and fails in
+> both directions, so a term added here and not there (or the reverse) breaks the
+> build: the standard stays the source of truth and the code stays its only
+> spelling. Consume the exported constants; never retype these strings.
+>
+> Not yet implemented: the allocation RECORD itself (which performer executes a
+> given activity under which pattern) and runtime evaluation of the §10.2 gates.
+> Tracked as `BI-40B36B94`, which carries the remaining slices and the open
+> design questions. Until those land, this section constrains vocabulary, not
+> behaviour.
 
 ### 10.1 Performer kinds
 
@@ -1866,6 +1895,14 @@ telecommunications, GS1 in supply chains, or jurisdiction-specific law and profe
 
 Selection **MUST** be based on applicability, version, license, and actual implementation evidence.
 A category label alone is not proof that a standard applies to every leaf or WorkUnitDefinition.
+
+Applicability is enforced on both halves of the lifecycle, not one. `packages/db/src/reference-model-applicability.ts`
+holds the single rule naming which archetypes an industry model serves; the seed consults it before
+importing a model's element hierarchy, and every read path consults it before presenting the model.
+A profile catalogue entry is kept on every install so an operator can see the standard exists, so the
+read is what makes an inapplicable profile honest: it reports **not this archetype** with the reason
+rather than a lifecycle status beside empty counts. Scoping only the seed is insufficient and was the
+defect in BI-C44EAEE6, where an install outside banking still advertised the BIAN profile as active.
 
 ## 14. Conformance model
 

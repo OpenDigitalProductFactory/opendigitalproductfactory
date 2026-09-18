@@ -344,3 +344,9 @@ The DPF-specific conformance position is in `docs/architecture/agent-standards-d
 - **Prompt-context generation** — `AgentPromptContext.{perspective,heuristics,interpretiveModel}` are hand-seeded; there is no auto-sync to capability changes.
 - **Agent versioning** — no formal major/minor versioning, deprecation, or staged-rollout policy beyond `lifecycleStage`.
 - **Dynamic MCP binding** — tool grants are static at seed time; runtime discovery/binding of new MCP servers to an agent is not yet modelled.
+
+Progressive discovery does not change those grants. `load_tools` classifies an
+empty result as an unknown name, known-but-ungranted tool, intent miss, or
+reviewer-route requirement. Reviewer-only initiative writers remain separate
+principals and are entered through the server-issued route returned by
+`get_backlog_item`; discovery never delegates their authority to the author.

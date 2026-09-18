@@ -89,6 +89,17 @@ shape; every merge, deploy, acceptance and authority-changing advance is a `gove
 and the author never holds the receipt writer. `small | medium | large | xlarge` are
 `BacklogEffortSize`; `break-fix` is the expedite lane on a small fix (post-hoc review, WIP 1).
 
+That `claim` vs `cadence` split is load-bearing, not decorative. A shape's own
+declared triggers decide whether the room it drives RECURS: every standing shape
+declares `cadence`, every finite delivery shape declares `claim`, and
+`isStandingWorkShape` reads that rather than a hand-kept list. The source-registry
+entry supplies a room's default projection mode; the room's declared shape
+overrides it, one way only — a declared standing shape widens a finite source to
+standing, never the reverse, and an absent or unknown shape leaves the source's
+policy untouched. A new standing shape is therefore standing the day it is
+declared, with nothing else to remember to update
+(BI-97B24FB5, kernel decision DI-5F69035EC6B9).
+
 A delivery room gets its shape at the claim (`claim_backlog_item_for_work`, BI-02470C7E, design §3.3): declared by the caller as `workShape`, or derived from the item's `effortSize` and work type when every classification rule in design §3.4 agrees (`derive-delivery-shape.ts`, recorded with `source: derived` and the signals used). An implementation claim with no derivable shape is refused with `work_shape_required` and the five-shape pick list; an unattended caller gets `attentionRequired` on the refusal; `delivery-xlarge` is refused for implementation because it only ever decomposes. The shape persists as the room's `workShape` scope claim, read back by `readWorkShapeClaim` / `resolveWorkShapeClaim` like any activity shape.
 
 **This claim is what makes a room wake.** The standing-Workroom drive
@@ -288,16 +299,22 @@ as named reasons from `policy-envelope.ts` — including `missing_decision_inter
 
 ### Where the declared shapes live ⟦runtime: 2026-09-02⟧
 
-The shape registry spans three modules, merged into `ALL_SHAPES` at runtime:
+The shape registry spans SEVEN modules, merged into `ALL_SHAPES` at runtime:
 
 | module | holds |
 |---|---|
 | `work-shapes.ts` | the contract — types, validation, cycle projection — and the anchor compliance shape |
 | `standing-operations-shapes.ts` | the standing operations a BUSINESS runs |
 | `coworker-standing-shapes.ts` | the standing work the platform's own coworkers run |
+| `coworker-standing-shapes-operate.ts` | coworker standing work in the `operate` stream — split when the file above reached its 800-LOC ceiling |
+| `coworker-standing-shapes-craft.ts` | the read-and-propose craft roles, whose shapes all close on a human gate because their grants withhold the write |
 | `delivery-shapes.ts` | the five delivery shapes: size and what each owes before it is done (BI-B90F7CBB) |
+| `orchestration-shapes.ts` | one cycle per IT4IT value stream, plus the two cross-cutting shapes that sit ACROSS the streams (the COO standup and the finance position) |
 
-A static reader must consult all four. The capability measure read only the first
+A static reader must consult all seven. (This sentence and the count above have
+themselves drifted twice — the table said "three" while listing five. That is the
+same failure the paragraph below describes, in the doc that describes it, which is
+why the count is now a guarded list rather than prose.) The capability measure read only the first
 for a period and reported seven fully-bounded agents as having no declared work
 shape at all — an unbounded coworker is what that reads as, so the under-report was
 the more dangerous direction. `SHAPE_SOURCE_FILES` in
@@ -308,6 +325,16 @@ it.
 Every shape in the coworker module ends in a `governed-decision` taken by a human
 `role:`, never by the coworker that prepared the work. A shape whose advances are
 all `status-change` declares an unbounded coworker in the shape of a bounded one.
+
+
+The same one-file assumption has now broken this scanner four times — shapes,
+self-tasks, skills, and the coworker grants map. Each time a registry moved to a
+second module and the static reader kept reading the first. Every source list it
+depends on is therefore explicit and guarded: `SHAPE_SOURCE_FILES`,
+`SELF_TASK_SOURCES`, `GRANTS_SOURCE_FILES`, and the skill-pack namespace. The
+grants case was the worst-reading: a re-export carries no entries, so slicing the
+seed file alone reported a live coworker as "holds no grants at all — no tool
+surface is authorised".
 
 ## What is actually enforced today
 
@@ -439,7 +466,7 @@ Workroom/cycle/task records. These are DPF contracts, not BPMN XML or SysML text
 
 | View | Purpose | Current implementation boundary |
 | --- | --- | --- |
-| Workroom Overview/Details | Explain current progress, evidence and what holds the work | `shape-projection.ts` builds the five-stage DPF graph rendered by `WorkroomShape`; it is not a BPMN editor or a full rendering of every activity definition |
+| Workroom Overview/Details | Explain current state, evidence and what holds the work | `shape-projection.ts` projects registered versioned steps into `WorkroomShape`, with the legacy five-stage fallback when no executable definition resolves. The selected-step inspector separates intended conditions from observed evidence; missing step correlation remains explicit. This is not a BPMN editor. |
 | BPMN | Process tasks, gateways, waits, recovery paths and ownership lanes | `process-extract.ts` and `reconcile-process.ts` project selected state machines; WorkShape recovery extraction needs explicit coverage |
 | SysML v2 | Requirements, interfaces, allocation to components and verification evidence | Existing EA notation and Parity Engine; use stable source keys rather than a separately maintained model |
 
@@ -459,6 +486,12 @@ adoption handler drops `workShape`, and the store does not update scope on reuse
 Readback, not tool success text, determines whether a shape is active. The recovery
 amendment assigns repair and round-trip verification to `BI-06AE6833`; do not create
 a duplicate room or edit the database to make a diagram look configured.
+
+The source repair centralizes creation, adoption and scope-update persistence in
+`scope-input.ts`, preserves unrelated claims and rejects conflicting writes.
+Its regression tests cover both creation and update readback. Verification on the
+governed installation remains a separate release requirement; the historical
+observation above is not evidence that the new code is already deployed.
 
 ## A stalled room reaches a human
 
@@ -566,8 +599,10 @@ The drive tick now reconciles the declared tree before driving:
   writes nothing and reports `nestedRelations: 0`. A failure to write a parent link
   never blocks a room that could otherwise be driven.
 
-`nestedRelations` on the drive result is how an operator tells "nesting is done"
-from "nesting was never written" — the distinction that hid this defect.
+`nestedRelations` counts newly written links. Zero alone does not establish a
+complete tree: an unchanged tree, absent parent, or contained reconciliation failure
+can all produce zero. Verify the declared relationships against persisted rows;
+missing links remain a projection gap.
 
 ## Who may coordinate: authority, and a gate with no key
 
@@ -616,9 +651,182 @@ nobody needing to remember.
 
 `unknown` still blocks. Only `eligible` and `not-applicable` satisfy the gate.
 
+## Concurrent execution and recorded state
+
+The scheduled and manual drive paths share conditional database ownership checks.
+Lease acquisition compares the observed holder and expiry and rejects archived or
+terminal rooms. Scheduling checks the same unexpired lease while holding the room
+row in the transaction that creates or updates the scheduled task. A replaced worker
+cannot reactivate work using its old lease.
+
+Snapshot persistence compares the read revision and, after dispatch, the lease.
+The snapshot and its journal entry commit together. A lease-held observation adds
+an activity without replacing the current owner's snapshot. These checks protect
+driver scheduling and state writes; they do not prove idempotency of downstream
+provider effects or automatic reviewer successor recovery. Those require correlated
+execution receipts and separate restart/duplicate-delivery verification.
+
+The external reviewer TaskRun reconciler also admits a narrowly defined recovery:
+the runtime explicitly recorded prose without the required initiative receipt, the
+existing three-attempt budget remains, and no writer attempt or approval envelope
+exists. It reuses the persisted request, identity, authority checks and generation
+reservation from normal replay. Unknown waits, rejected writers, approvals and
+exhausted recovery stay outside this automatic path.
+
+Native semantic reviews persist their immutable request before returning a TaskRun
+identity. The existing queue worker revalidates the submitting authority, records
+reviewer branch checkpoints, and commits the final receipt with task completion.
+The existing Tasks read methods expose the bound receipt or its explicit absence.
+Completed branches can be reused after restart; an interrupted synchronous provider
+call remains a reconciliation wait. It must not be replayed merely because the
+client disconnected or a queue event arrived again. A resumable provider handle and
+authorized recovery are still required to close that part of the execution contract.
+
+## The brief, and what advances a stage
+
+Once the twelve standing rooms began dispatching, they produced **337 completed
+task runs with `executedToolCount: 0`** and no summary. Every one. The runs were
+real — quiescence was held by a live `coworker.reasoning-loop` for
+`Workroom WC-C9320161 / assemble` — so dispatch reached a coworker and a model
+ran. It had nothing to act on.
+
+This was the entire brief a coworker received:
+
+    Execute Workroom WC-A69BCABB stage sweep for shape
+    dependency-advisory-watch@1.0.0. Stay inside the declared grants. Do not skip
+    stages, widen authority, or invent occupants.
+
+An opaque stage key and three prohibitions. Meanwhile the shape already carried
+the stage's title, its `advance.condition` — which IS the definition of done —
+the `evidence` kinds it must leave behind, the activity's description including
+its prohibitions ("It never applies a patch"), and the room's objective. None of
+it was sent. A model handed that will reasonably answer in prose that it did the
+work, which is what 337 runs did.
+
+**The dispatcher now briefs from the shape.** Objective, activity description,
+stage title, definition of done, stop conditions, the evidence to record, and an
+explicit statement that claiming completion advances nothing.
+
+**And a stage advances on recorded evidence, never on a claim.** A completed
+`TaskRun` is the executor's claim about ITSELF — provenance, not evidence. PR
+#5168 proposed earning the completing receipt from `TaskRun.status` and was
+correctly refused: it would have converted those 337 fabrications into stage
+advancement and undone the fail-closed pause from #5166. A visible loop is
+strictly better than silent false progress.
+
+The receipt is earned instead from a governed write the worker had to make
+through MCP — `record_workroom_evidence`, a sanctioned mutator requiring
+`workroom_evidence_write` (implied by `work_capsule_write`) — carrying the stage it belongs to. The drive still owns the
+advance; a worker cannot advance itself, only leave evidence the drive reads.
+Evidence must name the stage, be of a kind the stage declared, and post-date the
+dispatch; anything short of that re-dispatches.
+
+The dispatch timestamp comes from the recorded agent dispatch for the room's
+current stage and cycle. Without that dispatch, evidence cannot complete the
+stage. Fresh evidence replaces a blocked receipt, and the earned receipt is
+persisted with the drive snapshot so subsequent ticks retain the completed
+stage. Concurrent completing receipts in the same cycle are preserved.
+
+`record_workroom_evidence` therefore takes an optional `stageKey`, and a
+schema/handler parity guard protects it — the same seam already shipped broken
+once when `workShape` was advertised and silently dropped.
+
+## Failing closed is not the same as locking
+
+`#5166` stopped a real defect: a stage that produced no completing receipt was
+re-dispatched every fifteen minutes, burning model capacity on work that never
+completed. Pausing instead of re-dispatching was correct.
+
+The latch it introduced was self-sustaining, though — the pause reason is itself
+one of the conditions that produces the pause:
+
+    alreadyTriedWriteback = ... || prior.reason === EXECUTOR_WRITEBACK_UNAVAILABLE
+
+so a room that entered the state never left it. The only exit is a completing
+receipt, and a room that never dispatches can never produce one. On this install
+that locked **12 of 24 rooms**, and they stayed locked after the defect causing
+the empty writeback was fixed and deployed. **A fix cannot reach a room that will
+not try again.**
+
+The latch is now bounded rather than permanent: it holds **within** a cycle and
+releases on the next, giving one attempt per cycle — daily for these shapes —
+instead of the 96 per day the guard was built to stop. The capacity protection is
+kept almost entirely (a 96x reduction); the deadlock is not.
+
+A **`blocked` receipt is bounded by its cycle too**. It records "this stage
+produced no writeback in THIS cycle" — not a finding that the stage is
+permanently unfit.
+
+That correction was itself a live defect. The first bounded latch returned early
+and unconditionally on a blocked receipt, reasoning that a recorded receipt
+outranks a prior-tick inference. It preserved the exact deadlock the bounded
+latch existed to remove, and preserved it precisely for the rooms already stuck:
+the cycle rolled from 2026-09-08 to 2026-09-09 and all twelve stayed locked,
+because every one of them carried `[{"kind":"blocked","stageKey":"sweep"}]`.
+Every predicate test passed while the estate did not move.
+
+**A guard that cannot be re-entered by the fix for its own cause is not a
+guard.** The test that catches this reproduces a real room's stored state — its
+receipts, its `lastCycleKey`, its pause reason — and asserts it dispatches
+through the real resolver.
+
+One case still holds unconditionally:
+
+- **An unknown cycle key on either side.** Reading "unknown" as "a new cycle"
+  would silently re-open the every-tick loop.
+
+The general lesson is worth stating plainly, because it applies to any
+fail-closed guard: a guard whose own output re-triggers its input has no
+recovery path, and the estate it protects can only degrade. Bound the latch to
+something that changes on its own.
+
+## A named governed writer must be attached, not discovered
+
+The chain above — owner, authority, brief, evidence receipt — was complete and
+deployed, and the estate still performed no work. The coworker's own transcript
+says why. `WC-A69BCABB`, 2026-09-15, after a full 64-message agent loop:
+
+> **Status: Tools mismatch — the tools you listed don't match what's actually
+> available to me.** I attempted to call `surface_list`, `surface_snapshot`,
+> `surface_open`, `surface_query`, `surface_act`, `load_tools`, and
+> `search_knowledge` — none of …
+
+The run was then failed for `record_workroom_evidence executed zero times`. The
+grant existed (`workroom_evidence_write`), the tool was authorized, and it was
+never attached: it fell below the attachment budget and the marketplace lookup
+did not surface it. Zero tool calls was never a model declining to act.
+
+**A prompt that NAMES a governed writer is declaring a dependency on it.**
+`scheduledRequiredToolNames` applies the rule the post-hoc verdict already used —
+a side-effecting tool whose name appears in the prompt is required — *before* the
+model runs, and pins it through `requiredToolNames`. One rule, two uses, asserted
+equal by test: otherwise a run can be failed for a tool the pin never attached,
+which is precisely the live defect.
+
+Pinning stays narrow. Read-only tools are not pinned (they load on demand
+safely), unnamed side-effecting tools are not pinned (that would defeat the
+budget), and nothing unauthorized is pinned — authorization remains upstream.
+
+**The richer brief made the failure worse before it made it better.** Given the
+full objective and definition of done but still no reachable tools, the same
+coworker stopped erroring and started answering: *"Sweep completed — 0
+vulnerability findings, 0 CISA KEV exposures, 0 end-of-life components, estate is
+clean."* Specific counts, no tool call, entirely invented. A brief that presses
+for an answer without the means to obtain one converts an honest failure into a
+confident falsehood — which is why the governed-evidence requirement is the load
+-bearing guard here, not the prompt.
+
 ## Related references
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
 - [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI and the composition rule
 - [A Governance Gate on Consequential Tool Use](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) — the target architecture
 - [Work Rooms](../user-guide/workspace/work-rooms.md) — the end-user view
+
+## A shape must outlive the room that decided it (BI-82DCD601)
+
+`readBoundWorkShapeRef` read the `workShape` scope claim from the item's newest **live** Workroom. By completion that room is closed — its correct end state — so the shape became unreadable at exactly the moment the completion rule needed it.
+
+Measured on the development install 2026-09-09: **67 merged bug fixes stalled at completion, 0 with a live room, 0 with a readable shape.** `smallShapeAcceptance` — the clause that lets a small or break-fix item be accepted by a runtime check or a failing-to-passing test, with no spec, no plan and no reconciliation receipt — could therefore never fire for the population it was written to serve. Across the whole install only 46 of 353 live rooms carried a shape claim at all.
+
+A closed or completed room is now consulted as a **fallback**, newest first. A live room still wins, so an in-flight re-shape is honoured over a historical one. An `abandoned` or `superseded` room is still never consulted: abandoning the work is a statement that its shape claim no longer stands.

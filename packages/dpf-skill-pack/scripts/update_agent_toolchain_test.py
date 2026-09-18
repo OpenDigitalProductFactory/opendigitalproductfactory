@@ -269,9 +269,66 @@ class HookRosterTest(unittest.TestCase):
             for group in groups if isinstance(groups, list) else []:
                 for hook in group.get("hooks", []) if isinstance(group, dict) else []:
                     base = updater.hook_script_basename(hook.get("command", ""))
-                    if base and base not in updater.HOOK_PURPOSES:
+                    if base and not str(hook.get("statusMessage", "")).strip():
                         missing.append(base)
-        self.assertEqual(missing, [], f"hooks missing a HOOK_PURPOSES entry: {missing}")
+        self.assertEqual(missing, [], f"hooks missing a statusMessage: {missing}")
+
+    def test_roster_uses_canonical_purpose_not_a_second_dictionary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hooks").mkdir()
+            (root / "hooks" / "hooks.json").write_text(json.dumps({"hooks": {
+                "Stop": [{"hooks": [{"type": "command", "command": 'node "hooks/test.mjs"',
+                                      "statusMessage": "Preserve work before ending"}]}]}}))
+            self.assertIn("Preserve work before ending", "\n".join(updater.hook_roster(root)))
+
+    def test_reference_matches_all_canonical_handlers_and_is_current(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        reference = updater.hook_reference(root)
+        self.assertEqual((root / "hooks" / "README.md").read_text(encoding="utf-8"), reference)
+        data = json.loads((root / "hooks" / "hooks.json").read_text())
+        for groups in data["hooks"].values():
+            for group in groups:
+                for hook in group["hooks"]:
+                    self.assertIn(hook["statusMessage"], reference)
+                    self.assertIn(updater.hook_script_basename(hook["command"]), reference)
+
+    def test_codex_adapter_carries_purpose_from_canonical_definition(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        payload = updater.merge_codex_hooks_payload({}, root, dry_run=False)
+        for group in payload["hooks"]["PreToolUse"]:
+            for hook in group["hooks"]:
+                self.assertTrue(hook.get("statusMessage"), hook["command"])
+
+    def test_grok_lifecycle_purposes_match_event_not_just_script(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        payload = updater.build_grok_hooks_payload(root)
+        for event, expected in [("SessionStart", "Check worktree location"),
+                                ("SessionEnd", "Reap this checkout")]:
+            hooks = [h for group in payload["hooks"][event] for h in group["hooks"]]
+            hook = next(h for h in hooks if "worktree-session-hygiene.mjs" in h["command"])
+            self.assertTrue(hook["statusMessage"].startswith(expected))
+
+    def test_reference_check_is_read_only_and_detects_stale_content(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp)
+            import shutil
+            shutil.copytree(root / "hooks", copy / "hooks")
+            reference = copy / "hooks" / "README.md"
+            reference.write_text("stale", encoding="utf-8")
+            self.assertEqual(updater.main(["--skill-pack-path", str(copy), "--check-hook-reference"]), 1)
+            self.assertEqual(reference.read_text(), "stale")
+
+    def test_reference_rejects_missing_purpose(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hooks").mkdir()
+            (root / "hooks" / "test.mjs").write_text("")
+            (root / "hooks" / "hooks.json").write_text(json.dumps({"hooks": {
+                "Stop": [{"hooks": [{"type": "command", "command": "node hooks/test.mjs"}]}]}}))
+            with self.assertRaisesRegex(ValueError, "purpose is missing"):
+                updater.hook_reference(root)
 
     def test_roster_enumerates_named_hooks(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]

@@ -346,11 +346,15 @@ describe("MCP Tasks durable inference lifecycle", () => {
   it("preserves the ordinary TaskRun cancellation path", async () => {
     const ordinary = task({ a2aMetadata: {}, progressPayload: null });
     db.findTask.mockResolvedValueOnce(ordinary);
-    db.updateTask.mockResolvedValueOnce({ ...ordinary, status: "canceled", completedAt: new Date() });
+    db.updateTasks.mockResolvedValueOnce({ count: 1 });
+    db.findTask.mockResolvedValueOnce({ ...ordinary, status: "canceled", completedAt: new Date() });
 
     await expect(handleTasksCancel("user-1", { taskId: "TR-MCP-DURABLE" }))
       .resolves.toMatchObject({ kind: "ok", value: { status: "cancelled" } });
-    expect(db.updateTask).toHaveBeenCalledOnce();
+    expect(db.updateTasks).toHaveBeenCalledWith(expect.objectContaining({ where: {
+      taskRunId: ordinary.taskRunId, userId: ordinary.userId, status: ordinary.status, updatedAt: ordinary.updatedAt,
+    } }));
+    expect(db.updateTask).not.toHaveBeenCalled();
     expect(runtime.cancel).not.toHaveBeenCalled();
   });
 });

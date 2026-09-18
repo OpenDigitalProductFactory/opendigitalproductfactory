@@ -67,7 +67,40 @@ type WaitLease = {
   worktreePath: string | null;
   branchName: string | null;
   taskRunId: string | null;
+  /** BI-D35B85BF: needed to tell a waiter with a process behind it from an
+   *  abandoned row. Optional so legacy callers and test doubles still typecheck. */
+  queuedAt?: Date | null;
+  heartbeatAt?: Date | null;
 };
+
+/**
+ * How stale a waiter's last beat may be and still be worth waking.
+ *
+ * BI-D35B85BF. Under the detached resumer a live waiter re-claims about every
+ * 20s, so a beat older than this belongs to a row with nothing behind it.
+ * Waking such a row is not merely useless: because the waker notified ONLY the
+ * single oldest queued row, one abandoned head absorbed every tick. On
+ * 2026-09-10 the 5-minute reconciler aimed 04:23, 04:28 and 04:38 at
+ * NPEL-3B6293E4CB (which then expired unadmitted at 04:40:58) and 04:43 and
+ * 04:48 at NPEL-FCD900EF28 (last beat 03:22:08), while six other waiters got
+ * nothing at all.
+ *
+ * `waiterProvesLiveness` in environment-lease-admission.ts already applies this
+ * judgement when ADMITTING. The two halves used to disagree about who is alive;
+ * they no longer do.
+ */
+export const WAITER_LIVENESS_WINDOW_MS = 5 * 60_000;
+
+/** How far down the queue to look for a live waiter before giving up and
+ *  falling back to the literal head. Bounded so a long queue of abandoned rows
+ *  cannot turn one reconcile tick into an unbounded scan. */
+const HEAD_SCAN_LIMIT = 10;
+
+function waiterHasProcessBehindIt(lease: WaitLease, now: number): boolean {
+  const lastBeat = lease.heartbeatAt ?? lease.queuedAt ?? null;
+  if (!lastBeat) return true; // no signal either way: do not silently skip it
+  return now - lastBeat.getTime() <= WAITER_LIVENESS_WINDOW_MS;
+}
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -231,9 +264,20 @@ export async function publishNonprodCapacityForHead(input: {
     where: { environmentKey: input.environmentKey, status: "queued" },
     orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
   };
-  const head = input.db.nonProductionEnvironmentLease.findFirst
-    ? await input.db.nonProductionEnvironmentLease.findFirst(headQuery)
-    : (await input.db.nonProductionEnvironmentLease.findMany?.({ ...headQuery, take: 1 }))?.[0] ?? null;
+  // BI-D35B85BF. Take the first waiter that still has a process behind it, in
+  // FIFO order. An abandoned row keeps its queue position - it is not expired
+  // here - but it no longer swallows the wake that the waiters behind it need.
+  // Falling back to the literal head when nothing proves live keeps the old
+  // behaviour rather than notifying nobody.
+  const candidates: WaitLease[] = input.db.nonProductionEnvironmentLease.findMany
+    ? await input.db.nonProductionEnvironmentLease.findMany({ ...headQuery, take: HEAD_SCAN_LIMIT }) ?? []
+    : [await input.db.nonProductionEnvironmentLease.findFirst?.(headQuery)].filter(
+      (row): row is WaitLease => Boolean(row),
+    );
+  const now = (input.now ?? new Date()).getTime();
+  const head = candidates.find((lease) => waiterHasProcessBehindIt(lease, now))
+    ?? candidates[0]
+    ?? null;
   if (!head) return { notified: 0, headLeaseId: null };
   if (!input.db.taskRun) return { notified: 0, headLeaseId: head.leaseId };
 

@@ -127,6 +127,13 @@ export async function recordTriageDecision(input: {
       phaseTo: null,
       gateKey: BACKLOG_TRIAGE_GATE_KEY,
       gateFallbackUsed: false,
+      // BI-01F8F06D: the item being triaged was only ever recorded inside the
+      // question prose and the payload blob, so no outcome could be attributed
+      // back to it. `autonomous` marks the hourly drain as unattended, which
+      // keeps it out of any agreement denominator by construction.
+      // The Prisma MEMBER name; Prisma maps it to `backlog-item` in Postgres.
+      subject: { kind: "backlog_item", id: input.item.itemId },
+      autonomous: true,
       outcomePayloadExtra: {
         // Names the unattended writer, so an operator scanning WWMD can tell
         // hourly cron triage from a human-initiated gate at a glance.

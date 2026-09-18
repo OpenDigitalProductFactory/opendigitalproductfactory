@@ -145,6 +145,9 @@ describe("submitRemoteCoworkerTask idempotency", () => {
   it("keeps a review input-required when successful reads end without its required writer", async () => {
     autonomous.execute.mockResolvedValue({
       content: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      // BI-C35576A9: the provider that ran was a CLI subscription, so the wait
+      // must record the receipt-verified contract it was actually held to.
+      providerId: "anthropic-sub",
       executedTools: Array.from({ length: 5 }, (_, index) => ({
         name: "read_source_at_version",
         args: { startLine: index * 30 + 1 },
@@ -192,7 +195,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
             kind: "missing-terminal-writer",
             writerToolName: "record_initiative_evidence",
             resumeMode: "same-taskrun",
-            dispatchContract: "required-tool-call",
+            dispatchContract: "receipt-verified",
             attempt: 1,
             observedAt: expect.any(String),
           },

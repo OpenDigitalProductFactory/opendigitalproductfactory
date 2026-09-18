@@ -630,7 +630,13 @@ async function main(): Promise<void> {
             [...confirmRows],
             Math.min(workerCount, confirmRows.length),
             async (row, workerIndex) =>
-              withIsolatedSweepPage(contexts[workerIndex], async (page) => measureRoute(page, row, baseUrl, routeParams)),
+              withIsolatedSweepPage(contexts[workerIndex], async (page) => {
+                const result = await measureRoute(page, row, baseUrl, routeParams);
+                if (evaluateSweep([result.measurement], loadBaseline(join(ROOT, BASELINE_REL))).blocked) {
+                  await captureFailureScreenshot(page, row.routePath);
+                }
+                return result;
+              }),
           );
           const measured = run.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
           return {

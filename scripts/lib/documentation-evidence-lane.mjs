@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { mcpCall } from "./mcp-client.mjs";
+import { readGitDiffDigest } from "./semantic-review-gate.mjs";
 import {
   createLocalCiPassEvidenceValidity,
   writeLocalCiGateState,
@@ -214,7 +215,11 @@ export async function runPreAdmissionDocumentationLane({
       branch,
       sha,
       integrationTreeSha: plan.headTreeSha,
+      headTreeHash: gitOutput(gitBin, ["rev-parse", `${sha}^{tree}`], worktreePath),
+      diffDigest: readGitDiffDigest(gitOutput(gitBin, ["merge-base", sha, "origin/main"], worktreePath), spawnSync, worktreePath),
+      completedAt: issuedAt,
       gatePassed: passed,
+      evidenceValidity,
       leaseId: null,
       commands: execution.commands.map(([script, ...args]) => (
         ["node", script, ...args].join(" ")

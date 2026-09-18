@@ -45,6 +45,7 @@ const GOVERNED_REVIEW_TOOLS = new Set([
   "record_initiative_compliance_review",
   "record_initiative_domain_review",
   "record_initiative_archetype_review",
+  "record_initiative_post_implementation_review",
 ]);
 
 /**

@@ -38,15 +38,9 @@ type Props = {
   voicePlaybackEnabled?: boolean;
   /** Toggle handler — flips voicePlaybackEnabled and persists to localStorage. */
   onVoicePlaybackToggle?: () => void;
-  // ── Posture (input-lip) controls. When the toggle handlers are provided the
-  //    composer renders the posture chip in its lip (mode / page-edit / web).
-  //    Work priority is a separate concern (CoworkerPriorityDock). ──────────
-  elevatedAssistEnabled?: boolean;
-  onToggleElevatedAssist?: () => void;
-  externalAccessEnabled?: boolean;
-  /** Hide Web access when coworker lacks web_search grant (BI-CD9DC3BC). */
-  webAccessAvailable?: boolean;
-  onToggleExternalAccess?: () => void;
+  // ── Posture (input-lip) control: the Advise / Act mode switch. Page editing,
+  //    web access and work priority follow the Workroom (EP-WORK-POSTURE 8.2)
+  //    and are not composer controls. ──────────────────────────────────────
   coworkerMode?: "advise" | "act";
   onToggleCoworkerMode?: () => void;
   useUnified?: boolean;
@@ -93,7 +87,7 @@ function truncate(value: string, max = 32): string {
   return `${value.slice(0, max - 1)}…`;
 }
 
-export function AgentMessageInput({ onSend, composerState, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voiceSynthChecking, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle, elevatedAssistEnabled, onToggleElevatedAssist, externalAccessEnabled, onToggleExternalAccess, webAccessAvailable = true, coworkerMode, onToggleCoworkerMode, useUnified }: Props) {
+export function AgentMessageInput({ onSend, composerState, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voiceSynthChecking, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle, coworkerMode, onToggleCoworkerMode, useUnified }: Props) {
   const disabled = composerInputDisabled(composerState);
   const [value, setValue] = useState("");
   const [intentCenter, setIntentCenter] = useState("");
@@ -371,7 +365,7 @@ export function AgentMessageInput({ onSend, composerState, busy, threadId, pendi
     !!expectedArtifact;
   const showStop = !!busy;
   const sendDisabled = disabled || !!busy || !value.trim() || overLimit;
-  const showPosture = Boolean(onToggleElevatedAssist && onToggleExternalAccess);
+  const showPosture = Boolean(useUnified && onToggleCoworkerMode);
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
@@ -864,11 +858,6 @@ export function AgentMessageInput({ onSend, composerState, busy, threadId, pendi
 
           {showPosture && (
             <CoworkerPostureControl
-              elevatedAssistEnabled={!!elevatedAssistEnabled}
-              onToggleElevatedAssist={onToggleElevatedAssist!}
-              externalAccessEnabled={!!externalAccessEnabled}
-              onToggleExternalAccess={onToggleExternalAccess!}
-              webAccessAvailable={webAccessAvailable}
               {...(coworkerMode ? { coworkerMode } : {})}
               {...(onToggleCoworkerMode ? { onToggleCoworkerMode } : {})}
               useUnified={useUnified}

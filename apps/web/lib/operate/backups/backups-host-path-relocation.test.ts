@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // __dirname = apps/web/lib/operate/backups → 5 `..` to reach repo root.
@@ -50,35 +50,7 @@ describe("DPF_BACKUPS_HOST_PATH relocation (BI-8004BCD8)", () => {
     });
   });
 
-  describe("scripts/backup-neo4j.sh + scripts/restore-neo4j.sh", () => {
-    for (const script of ["scripts/backup-neo4j.sh", "scripts/restore-neo4j.sh"]) {
-      describe(script, () => {
-        const body = read(script);
-
-        it("reads DPF_BACKUPS_HOST_PATH from env", () => {
-          expect(body).toContain('DPF_BACKUPS_HOST_PATH="${DPF_BACKUPS_HOST_PATH:-}"');
-        });
-
-        it("prefers DPF_BACKUPS_HOST_PATH and falls back to DPF_HOST_INSTALL_PATH/backups", () => {
-          expect(body).toContain('if [ -n "$DPF_BACKUPS_HOST_PATH" ]; then');
-          expect(body).toContain('HOST_BACKUPS_BASE="$DPF_BACKUPS_HOST_PATH"');
-          expect(body).toContain('elif [ -n "$DPF_HOST_INSTALL_PATH" ]; then');
-          expect(body).toContain('HOST_BACKUPS_BASE="${DPF_HOST_INSTALL_PATH}/backups"');
-        });
-
-        it("uses HOST_BACKUPS_BASE for the docker-in-docker bind path (not the raw install path)", () => {
-          // Old pattern referenced ${DPF_HOST_INSTALL_PATH}/backups/${...}
-          // directly when building the host bind path. The new pattern goes
-          // through HOST_BACKUPS_BASE.
-          expect(body).toMatch(/HOST_BACKUPS_BASE\}\/\$\{(?:TARGET_REL|DUMP_RELATIVE)\}/);
-          expect(body).not.toMatch(/HOST_TARGET_DIR="\$\{DPF_HOST_INSTALL_PATH\}\/backups\/\$\{TARGET_REL\}"/);
-          expect(body).not.toMatch(/HOST_DUMP_DIR="\$\{DPF_HOST_INSTALL_PATH\}\/backups\/\$\{DUMP_RELATIVE\}"/);
-        });
-      });
-    }
-  });
-
-  describe("TypeScript runners", () => {
+  describe("runtime image", () => {
     const dockerfile = read("Dockerfile");
     const managedScripts = [
       "backup-postgres.sh",
@@ -108,14 +80,15 @@ describe("DPF_BACKUPS_HOST_PATH relocation (BI-8004BCD8)", () => {
       }
     });
 
-    it("neo4j-backup-runner.ts forwards DPF_BACKUPS_HOST_PATH explicitly", () => {
-      const body = read("apps/web/lib/operate/backups/neo4j-backup-runner.ts");
-      expect(body).toContain('DPF_BACKUPS_HOST_PATH: process.env.DPF_BACKUPS_HOST_PATH ?? ""');
-    });
-
-    it("neo4j-restore-runner.ts forwards DPF_BACKUPS_HOST_PATH explicitly", () => {
-      const body = read("apps/web/lib/operate/backups/neo4j-restore-runner.ts");
-      expect(body).toContain('DPF_BACKUPS_HOST_PATH: process.env.DPF_BACKUPS_HOST_PATH ?? ""');
+    it("retired graph or vector backup scripts are no longer in the repo (BET-5 / BI-B1977CEE)", () => {
+      for (const script of [
+        "scripts/backup-neo4j.sh",
+        "scripts/backup-qdrant.sh",
+        "scripts/restore-neo4j.sh",
+        "scripts/restore-qdrant.sh",
+      ]) {
+        expect(existsSync(join(REPO_ROOT, script)), `${script} must stay deleted`).toBe(false);
+      }
     });
   });
 

@@ -191,6 +191,55 @@ async function githubGet<T>(url: string, token: string): Promise<T> {
 }
 
 /**
+ * The commit a ref currently points at, or null when it cannot be read.
+ *
+ * Null is "I could not tell", not "nothing is there" — the caller must treat it
+ * as a reason to refuse rather than as permission to overwrite (BI-9A405652).
+ */
+export async function readRefSha(
+  apiBase: string,
+  branchName: string,
+  token: string,
+): Promise<string | null> {
+  try {
+    const ref = await githubGet<{ object?: { sha?: unknown } }>(
+      `${apiBase}/git/refs/heads/${encodeURIComponent(branchName)}`,
+      token,
+    );
+    const sha = ref.object?.sha;
+    return typeof sha === "string" && sha.length > 0 ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether `ancestor` is reachable from `descendant` — i.e. moving the ref to
+ * `descendant` would be a fast-forward and would discard nothing.
+ *
+ * Uses the compare API, whose `status` is `ahead` or `identical` exactly when
+ * nothing would be lost. Anything unreadable answers false, because the safe
+ * direction here is to refuse: the cost of a wrong "yes" is someone else's work.
+ */
+export async function isAncestorCommit(
+  apiBase: string,
+  ancestor: string,
+  descendant: string,
+  token: string,
+): Promise<boolean> {
+  if (ancestor === descendant) return true;
+  try {
+    const comparison = await githubGet<{ status?: unknown }>(
+      `${apiBase}/compare/${encodeURIComponent(ancestor)}...${encodeURIComponent(descendant)}`,
+      token,
+    );
+    return comparison.status === "ahead" || comparison.status === "identical";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Build a specific error for a base-branch lookup failure.
  *
  * GitHub returns 404 for BOTH "repo doesn't exist" and "token can't see this
@@ -380,7 +429,8 @@ export async function publishBranchCommit(input: {
     token,
   );
 
-  // 6. Create the branch ref on the HEAD repo.
+  // 6. Create the branch ref on the HEAD repo. See the catch below for why an
+  // existing ref is not simply force-updated.
   try {
     await githubPost(
       `${headApiBase}/git/refs`,
@@ -388,11 +438,30 @@ export async function publishBranchCommit(input: {
       token,
     );
   } catch (err) {
-    // Branch might already exist — try updating it
+    // The ref already exists. It used to be force-updated here with no check of
+    // who wrote it or what it pointed at, which silently destroyed the previous
+    // content: branch names are derived (`dpf/<clientId>/<slug>`), so two builds
+    // described similarly on the SAME install collide, and the loser is
+    // unrecoverable from the remote. Nobody is told, and the pseudonymous
+    // identity means the loser cannot be contacted (BI-9A405652).
+    //
+    // A fast-forward is safe and still allowed — that is the same branch moving
+    // on. Anything else is refused, and the caller is told which ref stopped it.
+    const existingSha = await readRefSha(headApiBase, branchName, token);
+    const fastForward = existingSha
+      ? await isAncestorCommit(headApiBase, existingSha, commit.sha, token)
+      : false;
+    if (!fastForward) {
+      throw new Error(
+        `Refusing to overwrite ${branchName}: it already exists at ${existingSha ?? "an unreadable commit"} `
+        + `and the new commit ${commit.sha} does not descend from it. `
+        + "Publishing would discard whatever is there, unrecoverably.",
+      );
+    }
     const response = await fetch(`${headApiBase}/git/refs/heads/${branchName}`, {
       method: "PATCH",
       headers: getHeaders(token),
-      body: JSON.stringify({ sha: commit.sha, force: true }),
+      body: JSON.stringify({ sha: commit.sha, force: false }),
     });
     if (!response.ok) {
       throw new Error(`Failed to create/update branch: ${(err as Error).message}`);

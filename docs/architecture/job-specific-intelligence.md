@@ -386,6 +386,23 @@ risk, tools, data classes, and allowed oversight posture. A material change to t
 conformance logic, coordinator instructions, tools, model/provider, or authority binding triggers
 the Section 13 impact and revalidation rules.
 
+**Informative application of Sections 8.2, 8.3, 11.5 and 13.** The
+[cross-workroom review profile](../superpowers/specs/2026-09-06-cross-workroom-learning-review-design.md)
+records effective source/shape and archetype-profile versions, tool/skill/instruction versions,
+evidence scope and missing attribution alongside a proposed learning. Its analyst and assessor
+need competence in selecting comparable denominators, separating retries from independent
+occurrences, interpreting valid refusals, reporting uncertainty and reconstructing safe recovery.
+Qualification to execute a business activity does not itself establish competence to assess
+improvements across that activity's workrooms.
+
+For this proposed application, the assessor precommits the eligible population, critical failures,
+minimum opportunity window and decision rule before observing the candidate. The change author
+does not certify its benefit. Common-to-domain and domain-to-common transfer use the target-profile
+evidence or equivalence process in Section 8.2; changes to the reviewer, evaluator, method or
+effective profile receive the applicable Section 13 impact analysis. Insufficient observations
+remain inconclusive. This note explains application of existing requirements; it does not confer
+qualification, widen authority or adopt additional conformance requirements.
+
 ## 9. Model and Provider Suitability
 
 ### 9.1 Eligibility before ranking

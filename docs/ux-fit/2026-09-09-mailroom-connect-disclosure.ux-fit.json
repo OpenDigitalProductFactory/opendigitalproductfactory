@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "expected-then-disclose",
+  "decisionInteractionId": "DI-D494E2AE22FC",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workspace/mailroom/page.tsx",
+      "apps/web/app/(shell)/workspace/mailroom/items/[inboundId]/page.tsx",
+      "apps/web/components/mailroom/MailboxConnectForm.tsx",
+      "apps/web/components/mailroom/MailboxControls.tsx",
+      "apps/web/components/mailroom/MailroomItemActions.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "expected-then-disclose",
+      "all-fields-flat",
+      "separate-settings-route"
+    ]
+  }
+}

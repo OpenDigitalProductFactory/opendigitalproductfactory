@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { WORK_CAPSULE_SOURCES } from "@/lib/work-capsules";
 import { describeCoverage, recordCoverageRun } from "./embedding-coverage-workroom";
 import { CORPUS_HEALTH_WORKROOM_ID, EMBEDDING_COVERAGE_ACTIVITY_KIND } from "./embedding-coverage-constants";
 
@@ -61,6 +62,17 @@ describe("coverage runs land in the corpus-health Workroom (BI-ED117C82)", () =>
     expect(activity.data.workCapsuleId).toBe("room-1");
     expect(activity.data.kind).toBe(EMBEDDING_COVERAGE_ACTIVITY_KIND);
     expect(activity.data.payload).toMatchObject({ covered: 5, scanned: 5, repaired: 1 });
+  });
+
+  it("opens the room with a source the closed Workroom source set admits (BI-A5EEB5D1)", async () => {
+    // The database mirrors WORK_CAPSULE_SOURCES in a CHECK constraint; before
+    // "platform-maintenance" was registered, every upsert failed with 23514 and
+    // the corpus-health room was never written. This pins the writer to the set.
+    const client = db();
+    await recordCoverageRun({ db: client, result: { scanned: 1, missing: 0, embedded: 0, failed: [] } });
+
+    const upsert = client.workroom.upsert.mock.calls[0]![0] as unknown as { create: { source: string } };
+    expect(WORK_CAPSULE_SOURCES).toContain(upsert.create.source);
   });
 
   it("carries the outage flag so a run is not mistaken for a clean pass", async () => {

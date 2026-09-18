@@ -41,6 +41,11 @@ export function classifyOwnerAttentionLane(
     // choice that is never batched into a digest (BI-3DA1DFDC).
     return decision("needs-you-now", "A guest is waiting on a reservation decision.", true, appliedLevel);
   }
+  if (item.source === "mailroom-item") {
+    // A message the platform accepted and nobody has acknowledged inside its
+    // window; immediate items surface at once (design 2026-09-09 §4.7).
+    return decision("needs-you-now", "A message is waiting for someone to acknowledge it.", true, appliedLevel);
+  }
   if (item.source === "storefront-inquiry") {
     // A customer is waiting on the owner's first reply — hard-floored like a
     // reservation so a waiting lead is never batched into a digest (BI-A36CF68D).

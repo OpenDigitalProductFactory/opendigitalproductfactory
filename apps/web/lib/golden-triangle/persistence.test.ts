@@ -3,13 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
 import {
-  clearAgentGoldenTrianglePosture,
-  getAgentGoldenTrianglePosture,
   getEffectiveGoldenTrianglePosture,
   getEffectivePostureForAgent,
   getGoldenTrianglePosture,
   isGoldenTrianglePreference,
-  setAgentGoldenTrianglePosture,
   setGoldenTrianglePosture,
   type GoldenTrianglePersistenceClient,
 } from "./persistence";
@@ -100,36 +97,6 @@ describe("setGoldenTrianglePosture", () => {
   });
 });
 
-describe("clearAgentGoldenTrianglePosture", () => {
-  it("removes only the target coworker's entry, preserving the rest of the per-agent map", async () => {
-    const { client, getPolicy } = makeClient({
-      goldenTriangle: FRUGAL,
-      goldenTrianglePerAgent: { "agent-x": ASSURED, "agent-y": FRUGAL },
-    });
-    const ok = await clearAgentGoldenTrianglePosture("agent-x", client);
-    expect(ok).toBe(true);
-    const policy = getPolicy() as Record<string, Record<string, unknown>>;
-    expect(policy.goldenTrianglePerAgent).toEqual({ "agent-y": FRUGAL }); // x gone, y kept
-    expect(policy.goldenTriangle).toEqual(FRUGAL); // platform default untouched
-  });
-
-  it("is idempotent: clearing a coworker with no override still succeeds without writing nonsense", async () => {
-    const { client, getPolicy } = makeClient({ goldenTrianglePerAgent: { other: ASSURED } });
-    const ok = await clearAgentGoldenTrianglePosture("agent-x", client);
-    expect(ok).toBe(true);
-    expect((getPolicy() as Record<string, unknown>).goldenTrianglePerAgent).toEqual({ other: ASSURED });
-  });
-
-  it("rejects an unsafe agent key (prototype-pollution guard)", async () => {
-    const { client } = makeClient({ goldenTrianglePerAgent: {} });
-    expect(await clearAgentGoldenTrianglePosture("__proto__", client)).toBe(false);
-  });
-
-  it("is fail-open: returns false when the db throws", async () => {
-    expect(await clearAgentGoldenTrianglePosture("agent-x", throwingClient())).toBe(false);
-  });
-});
-
 describe("getGoldenTrianglePosture", () => {
   it("reads a previously saved posture back", async () => {
     const { client } = makeClient({ goldenTriangle: ASSURED });
@@ -176,41 +143,10 @@ describe("getEffectiveGoldenTrianglePosture", () => {
   });
 });
 
-describe("per-coworker (per-agent) posture", () => {
-  it("writes a coworker posture into the per-agent map, preserving other keys", async () => {
-    const { client, getPolicy } = makeClient({ goldenTriangle: FRUGAL });
-    expect(await setAgentGoldenTrianglePosture("agent-x", ASSURED, client)).toBe(true);
-    const pol = getPolicy() as Record<string, Record<string, unknown>>;
-    expect(pol.goldenTriangle).toEqual(FRUGAL);
-    expect(pol.goldenTrianglePerAgent["agent-x"]).toEqual(ASSURED);
-  });
-
-  it("reads a coworker's own posture back; null for an unset coworker", async () => {
-    const { client } = makeClient({ goldenTrianglePerAgent: { "agent-x": ASSURED } });
-    expect(await getAgentGoldenTrianglePosture("agent-x", client)).toEqual(ASSURED);
-    expect(await getAgentGoldenTrianglePosture("agent-y", client)).toBeNull();
-  });
-
-  it("layers agent over platform (the coworker's own choice wins)", async () => {
+describe("per-coworker posture is retired (BI-7ADEBDC1)", () => {
+  it("ignores a legacy per-agent map: the coworker inherits org/platform, never identity", async () => {
     const { client } = makeClient({ goldenTriangle: FRUGAL, goldenTrianglePerAgent: { "agent-x": ASSURED } });
-    expect(await getEffectivePostureForAgent("agent-x", null, client)).toEqual({ preference: ASSURED, source: "agent" });
-    expect(await getEffectivePostureForAgent("agent-y", null, client)).toEqual({ preference: FRUGAL, source: "platform" });
-  });
-
-  it("is fail-open on read and write", async () => {
-    expect(await getAgentGoldenTrianglePosture("a", throwingClient())).toBeNull();
-    expect(await setAgentGoldenTrianglePosture("a", ASSURED, throwingClient())).toBe(false);
-  });
-
-  it("rejects prototype-pollution / malformed agent keys (js/remote-property-injection)", async () => {
-    const { client, calls } = makeClient({});
-    for (const bad of ["__proto__", "constructor", "prototype", "has space", "a/b", ""]) {
-      expect(await setAgentGoldenTrianglePosture(bad, ASSURED, client)).toBe(false);
-      expect(await getAgentGoldenTrianglePosture(bad, client)).toBeNull();
-    }
-    // No write reached the store, and the prototype is intact.
-    expect(calls.updateMany).toHaveLength(0);
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(await getEffectivePostureForAgent("agent-x", null, client)).toEqual({ preference: FRUGAL, source: "platform" });
   });
 });
 

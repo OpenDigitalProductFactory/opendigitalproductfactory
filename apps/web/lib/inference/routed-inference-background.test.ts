@@ -61,6 +61,19 @@ vi.mock("@/lib/ai-inference", () => ({
 import { routeAndCall } from "./routed-inference";
 
 describe("routeAndCall background starts", () => {
+  it("does not strip a required writer when every endpoint lacks tool support", async () => {
+    const baseContract = await mocks.inferContract("tool-action", []);
+    mocks.inferContract.mockResolvedValue({ ...baseContract, interactionMode: "sync", requiresTools: true });
+    const decision = await mocks.routeEndpointV2();
+    mocks.routeEndpointV2.mockClear();
+    mocks.routeEndpointV2.mockResolvedValue({ ...decision, selectedEndpoint: null, candidates: [{ excluded: true, excludedReason: "Missing required capability: toolUse" }], excludedCount: 1, excludedReasons: ["Missing required capability: toolUse"] });
+    await expect(routeAndCall([{ role: "user", content: "Record the review." }], "Independent review.", "internal", {
+      toolChoice: "required", terminalWriterToolName: "record_review",
+      tools: [{ type: "function", function: { name: "record_review", parameters: {} } }],
+    })).rejects.toThrow();
+    expect(mocks.routeEndpointV2).toHaveBeenCalledTimes(1);
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getLocalOnlyInference.mockResolvedValue(false);

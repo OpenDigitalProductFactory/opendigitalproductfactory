@@ -203,6 +203,8 @@ model ModelCapabilityChangeLog {
   @@index([modelId, changedAt])
 }
 
+/// Per-inference token/cost rows. Kept long enough for billing reconciliation; superseded by aggregates afterwards.
+/// @dpf lifecycle=telemetry-bounded retention=180d sensitivity=restricted categories=telemetry timeAxis=createdAt
 model TokenUsage {
   id           String   @id @default(cuid())
   traceId      String?
@@ -247,6 +249,8 @@ model EndpointTaskPerformance {
   @@unique([endpointId, taskType])
 }
 
+/// Per-eval rows. Spec 2026-03-16 confirms EndpointTaskPerformance running averages are the source of truth; raw rows >90d are archivable.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=restricted categories=telemetry timeAxis=createdAt
 model TaskEvaluation {
   id              String   @id @default(cuid())
   threadId        String
@@ -266,6 +270,8 @@ model TaskEvaluation {
   @@index([createdAt])
 }
 
+/// Probe/scenario test-run summaries. Trending value is short-lived; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=restricted categories=telemetry timeAxis=startedAt
 model EndpointTestRun {
   id              String    @id @default(cuid())
   runId           String    @unique
@@ -379,6 +385,8 @@ model PolicyRule {
   createdBy      User?     @relation("PolicyRuleCreator", fields: [createdById], references: [id])
 }
 
+/// Endpoint-selection reasoning per coworker/task call. Debugging value decays fast; 90 days is ample.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=confidential categories=telemetry timeAxis=createdAt
 model RouteDecisionLog {
   id                         String   @id @default(cuid())
   traceId                    String?
@@ -498,6 +506,7 @@ model AsyncInferenceOp {
   @@unique([authorityScopeKey, requestKey])
 }
 
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=operational,security-audit owner=platform-owner steward=data-steward
 model AsyncInferenceOperationTransition {
   id               String   @id @default(cuid())
   operationId      String

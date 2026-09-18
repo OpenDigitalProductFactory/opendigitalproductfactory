@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20260912070000_decision_subject_and_autonomy",
+    "backfill": "adds subjectKind, subjectId and autonomous to DecisionInteraction, then promotes values each row already recorded in its own outcomePayload JSON into those columns. Nothing is derived or inferred: subjectRef is copied from outcomePayload->>'backlogItemId' with subjectKind set to the constant 'backlog-item' that key implies, and autonomous is set only where the payload already says autonomous is true. Rows carrying neither key keep NULL / false, which is the honest state. Both statements touch only rows whose column is still unset, so re-running reports UPDATE 0. Measured on one operator install: 518 subjects and 518 unattended decisions recovered out of 1093 rows; the attended population carrying a recommendation became selectable at 151."
+  },
+  "tests": [
+    "apps/web/lib/operate/backlog-triage-ledger.test.ts",
+    "apps/web/lib/decision/kernel-consult-ledger.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-interaction",
+      "prismaModel": "DecisionInteraction",
+      "lifecycleDisposition": "operational",
+      "fields": [
+        {
+          "fieldId": "data:decision-interaction#subjectKind",
+          "resolution": "inherited",
+          "reason": "a closed-vocabulary label naming what kind of thing a governed decision was about; not personal or customer data. Only the constant 'backlog-item' is written by the backfill, matching the one payload key that exists today.",
+          "provenance": "manual/platform-architecture"
+        },
+        {
+          "fieldId": "data:decision-interaction#subjectRef",
+          "resolution": "inherited",
+          "reason": "an internal platform record identifier such as a backlog item id, already present in the same row's outcomePayload and in the question text; carries no personal or customer data. Its absence is why no decision outcome could be attributed to the work it governed.",
+          "provenance": "manual/platform-architecture"
+        },
+        {
+          "fieldId": "data:decision-interaction#autonomous",
+          "resolution": "inherited",
+          "reason": "a boolean stating whether a human was in the loop, already recorded in outcomePayload for the unattended cron writer. It is a governance classifier rather than telemetry: it keeps unattended decisions out of any agreement denominator by construction, and carries no personal data.",
+          "provenance": "manual/platform-architecture"
+        }
+      ]
+    }
+  ]
+}

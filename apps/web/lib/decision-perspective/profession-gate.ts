@@ -38,7 +38,7 @@ type ProfessionGateClient = Parameters<typeof resolveProfileMaterialForProfessio
 type GateEvaluator = (input: DecisionPerspectiveEvaluationInput) => DecisionPerspectiveEvaluationResult;
 
 /** Every row this gate writes audits as WSID, whatever doctrine it fell back to. */
-const PROFESSION_GATE_KEY: DecisionGateKey = "profession";
+export const PROFESSION_GATE_KEY: DecisionGateKey = "profession";
 
 export type ProfessionAgentIdentityInput = {
   agentId?: string | null;
@@ -325,6 +325,15 @@ export async function evaluateProfessionDecisionGate(input: {
       errorClass: errorClass(error),
       errorMessage: getErrorMessage(error),
     });
+  }
+
+  // BI-6BB728F1: when the craft's own profile did not decide, name the profile
+  // that did. The evaluator computes fallbackProfileId relative to the profile
+  // it was HANDED, and this gate hands it the already-resolved fallback, so the
+  // column stayed NULL on every fallback row and the ledger could not show
+  // which doctrine actually answered a craft question.
+  if (!professionProfileSelected && !evaluation.fallbackProfileId) {
+    evaluation.fallbackProfileId = evaluation.selectedProfileId;
   }
 
   if (resolved.coverageGap) {

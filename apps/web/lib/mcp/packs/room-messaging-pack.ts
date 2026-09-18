@@ -291,7 +291,7 @@ async function appointRoomCoordinatorHandler(
     };
   }
   const { prisma } = await import("@dpf/db");
-  const { planCoordinatorAppointment, COORDINATOR_ROLES } = await import(
+  const { planCoordinatorAppointment, COORDINATOR_ROLES, rolesAfterStandDown } = await import(
     "@/lib/work-management/appoint-room-coordinator"
   );
   const { persistWorkroomParticipantAssignment } = await import(
@@ -309,6 +309,39 @@ async function appointRoomCoordinatorHandler(
     return { success: false, error: code ?? "appointment_refused", message: plan.error };
   }
   const appointed = plan.data;
+
+  // A handover must stand the incumbent DOWN, not merely permit a second row.
+  // replaceExisting used to authorize the appointment and then write only the
+  // appointee, leaving the room with two active coordinators — which conformance
+  // treats as blocking, so the "replacement" left the room more stuck than
+  // before (BI-061B2BC0). Demote first: a room briefly with no coordinator is
+  // recoverable, a room with two is the exact state we are fixing.
+  for (const outgoing of appointed.standDown) {
+    await prisma.workroomParticipant.update({
+      where: { id: outgoing.participantId },
+      data: {
+        roles: rolesAfterStandDown(outgoing.roles),
+        lifecycleReason:
+          `Stood down as Process Overseer: handed over to ${appointed.principalRef}.`,
+      },
+    });
+    // The design of record makes a hand-off a first-class activity, not a silent
+    // role edit, so the room's trail explains why its owner changed.
+    await prisma.workroomActivity.create({
+      data: {
+        workCapsuleId: appointed.workroomId,
+        kind: "coworker-handoff",
+        summary:
+          `Process Overseer handed over to ${appointed.displayName} (${appointed.principalRef}).`,
+        payload: {
+          fromPrincipalId: outgoing.principalId,
+          toPrincipalRef: appointed.principalRef,
+          rolesRetained: rolesAfterStandDown(outgoing.roles),
+          reason: str(params, "reason") || null,
+        },
+      },
+    });
+  }
 
   const written = await persistWorkroomParticipantAssignment({
     workroomId: appointed.workroomId,

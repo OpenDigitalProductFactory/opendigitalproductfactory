@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "ratify-button-on-perspectives-list",
+  "decisionInteractionId": "DI-31EFD3A387B6",
+  "scope": { "files": ["apps/web/app/(shell)/coworker-decisions/perspectives/ratify-policy-button.tsx", "apps/web/app/(shell)/coworker-decisions/perspectives/page.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["ratify-button-on-perspectives-list", "ratify-from-each-approval-card", "seed-records-founder-as-promoter"],
+    "fitDecision": "fits",
+    "owningArea": "Coworker Decision Engine",
+    "routeFamily": "/coworker-decisions",
+    "primaryPersona": "founder or owner establishing the root of delegated autonomy once",
+    "navigationLayer": "row action on the existing Decision Perspectives list",
+    "reuseConvergence": "Same row layout as the voice and coworker-record links; canonical ui/Button; one control that disappears once used and is replaced by a Ratified mark. No new route.",
+    "sourceTruth": "DecisionPerspectiveProfileVersion.promotedByPrincipalId on the profile's current version; the signed-in human's principal via principal-linking.",
+    "aiBoundary": "The platform never signs for the human: the seed leaves the version unsigned, the action refuses to overwrite an earlier ratifier, and the authority projector still requires every other exact-bound condition.",
+    "verification": "decision-perspective-ratify.test.ts, policy-action-judgment.test.ts, resolve-policy-action-authority.test.ts, caller-context.test.ts, principle-decide-pack.test.ts (62 pass). Live acceptance after deploy: ratify mark-dpf-platform, re-dispatch a reviewer, observe AuthorizationDecisionLog allow with no envelope.",
+    "decisionQuality": "High confidence, autonomy eligible, margin 6.628 on DI-31EFD3A387B6; seed-as-promoter rejected for governance_compliance and legibility."
+  }
+}

@@ -104,7 +104,7 @@ async function resolveSubject(tx: CapsuleTerminalClient, capsule: TerminalCapsul
     activities: {
       where: { kind: { in: [
         "initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage",
-        "initiative_objective_mapping", "evidence",
+        "initiative_objective_mapping", "initiative_readiness_decision", "evidence",
       ] } },
       orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
       take: 500,

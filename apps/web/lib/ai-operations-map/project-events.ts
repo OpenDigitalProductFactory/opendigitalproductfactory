@@ -1,5 +1,6 @@
 import type { AuditClass } from "@/lib/audit-classes";
 import { slugify } from "@/lib/shared/slugify";
+import { isRecord } from "@/lib/shared/coerce";
 import type { TaskState } from "@/lib/tak/task-states";
 import { SOFTWARE_PLATFORM_MAP_TEMPLATE } from "./templates";
 import { classifyRunStatus } from "./operations-run-read-model";
@@ -216,9 +217,20 @@ export function projectTaskRun(
 ): OperationsMapProjection {
   const stationId = resolveTaskRunStationId(row, template);
   const label = row.source === "proactive" ? "Scheduled task run" : "Task run";
+  const nativeReview = row.a2aMetadata !== null && typeof row.a2aMetadata === "object"
+    && "gateKind" in row.a2aMetadata && row.a2aMetadata.gateKind === "semantic-review";
+  const progress = isRecord(row.progressPayload) ? row.progressPayload.semanticReview : null;
+  const budget = isRecord(progress) && progress.schemaVersion === 1 ? progress : null;
+  const attempt = budget ? budget.recoveryAttempt ?? 0 : null;
 
   return {
     id: `task-run:${row.id}`,
+    recovery: nativeReview && ["input-required", "stalled"].includes(row.status)
+      ? "semantic-review" : row.status === "stalled" ? "stalled" : undefined,
+    reviewBudget: nativeReview ? {
+      deadlineAt: typeof budget?.deadlineAt === "string" ? budget.deadlineAt : null,
+      recoveryAttempt: typeof attempt === "number" ? attempt : null,
+    } : undefined,
     occurredAt: row.startedAt.toISOString(),
     actorAgentId: row.currentAgentId,
     source: "task-run",

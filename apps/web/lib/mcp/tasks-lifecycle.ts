@@ -18,6 +18,8 @@
 import { createHash } from "node:crypto";
 
 import { prisma } from "@dpf/db";
+import { isTerminalTaskStatus } from "@/lib/tak/task-states";
+export { isTerminalTaskStatus } from "@/lib/tak/task-states";
 import {
   readPrismaAuthorizedAsyncOperation,
   requestPrismaAuthorizedAsyncOperationCancellation,
@@ -74,7 +76,6 @@ const DPF_TO_MCP_STATE: Record<string, string> = {
   archived: "completed",
 };
 
-const TERMINAL_DPF_STATES = new Set(["completed", "failed", "canceled", "rejected", "archived"]);
 const DURABLE_RESULT_TEXT_JSON_BUDGET = Math.floor(MCP_ROUTE_TOOL_RESULT_CHAR_CAP / 3);
 
 function boundedDurableResultText(value: string | null): {
@@ -111,11 +112,6 @@ function boundedDurableResultText(value: string | null): {
 /** Map a DPF/A2A TaskRun.status to the MCP-spec wire state. Pure. */
 export function mcpTaskStateForWire(dpfStatus: string): string {
   return DPF_TO_MCP_STATE[dpfStatus] ?? "working";
-}
-
-/** True when a DPF task status is terminal (no further transitions). Pure. */
-export function isTerminalTaskStatus(dpfStatus: string): boolean {
-  return TERMINAL_DPF_STATES.has(dpfStatus);
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 2_000;
@@ -387,6 +383,25 @@ export async function handleTasksResult(
     progressPayload: row.progressPayload ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
   };
+  if (object(row.a2aMetadata)?.gateKind === "semantic-review") {
+    const evidenceId = object(row.progressPayload)?.evidenceRecordId;
+    const capsuleId = object(row.a2aMetadata)?.capsuleId;
+    const evidence = typeof evidenceId === "string" && typeof capsuleId === "string"
+      ? await prisma.externalEvidenceRecord.findFirst({ where: {
+          id: evidenceId, actorUserId: userId, taskRunId: row.taskRunId,
+          operationType: "semantic-change-review.receipt", workCapsule: { capsuleId },
+        }, select: { id: true, details: true, createdAt: true } })
+      : null;
+    structured.evidence = evidence
+      ? { id: evidence.id, state: "available", recordedAt: evidence.createdAt.toISOString(), receipt: evidence.details }
+      : { id: typeof evidenceId === "string" ? evidenceId : null, state: "unavailable" };
+    if (JSON.stringify(structured).length > MCP_ROUTE_TOOL_RESULT_CHAR_CAP) {
+      structured.evidence = evidence
+        ? { id: evidence.id, state: "available", recordedAt: evidence.createdAt.toISOString(),
+            receiptTruncated: true, receiptSha256: createHash("sha256").update(JSON.stringify(evidence.details)).digest("hex") }
+        : structured.evidence;
+    }
+  }
   // Bound the model-facing payload (context-engineering-standards.md G1/P6):
   // progressPayload is arbitrary JSON. Drop it to a marker before overflow.
   if (JSON.stringify(structured).length > MCP_ROUTE_TOOL_RESULT_CHAR_CAP) {
@@ -522,10 +537,14 @@ export async function handleTasksCancel(
     // Idempotent: already terminal, report current state.
     return { kind: "ok", value: toMcpTaskObject(row) };
   }
-  const updated = await prisma.taskRun.update({
-    where: { taskRunId: taskId },
+  await prisma.taskRun.updateMany({
+    where: { taskRunId: taskId, userId, status: row.status, updatedAt: row.updatedAt },
     data: { status: "canceled", completedAt: new Date() },
-    select: MCP_TASK_SELECT,
   });
+  // Completion or another state transition may have won. Report the durable
+  // winner instead of overwriting it with the stale cancellation snapshot.
+  const updated = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: MCP_TASK_SELECT });
+  if (!updated) return { kind: "notfound", message: `task not found: ${taskId}` };
+  if (updated.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
   return { kind: "ok", value: toMcpTaskObject(updated) };
 }

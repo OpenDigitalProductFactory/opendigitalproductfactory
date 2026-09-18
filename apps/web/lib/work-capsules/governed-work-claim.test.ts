@@ -330,6 +330,13 @@ describe("claimGovernedBacklogWorkspace", () => {
                 itemId: "BI-ENTRY",
                 gate: "design-spec",
                 expectedCurrentBaselineId: null,
+                workroomRef: {
+                  kind: "workroom-head",
+                  workroomId: "WC-ENTRY",
+                  repositoryFullName: input.repositoryFullName,
+                  branchName: input.headBranch,
+                  headSha: "1111111111111111111111111111111111111111",
+                },
                 artifactRef: {
                   kind: "repo-blob-at-commit",
                   repositoryFullName: input.repositoryFullName,

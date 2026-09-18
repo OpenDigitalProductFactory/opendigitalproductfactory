@@ -36,6 +36,8 @@ This task-hub slice neither defines nor replaces a queue, worker, retry policy, 
 
 Live acceptance found a producer-side contract gap rather than a Task Hub consumer defect. A server-authorized Workroom request could admit the closed `background.mcp-durable-inference-one-shot` contract directly against `Workroom`. The generic row was durable, but the closed worker correctly refused it with `DURABLE_INFERENCE_TASKRUN_BINDING_MISSING`; no terminal transition therefore existed for Task Hub to deliver.
 
+That refusal was itself a second defect (BI-B28F6940). The worker threw before claiming the lease, so the orphan row kept no lease and no next poll, and bounded cron recovery re-enqueued it on every tick with no terminal state, indefinitely. The rule now: a dispatch binding that can never be satisfied is a terminal fact about the row, not a transient fault. The worker evaluates the binding under the fenced lease and settles the row as `failed` through the ordinary owned transition (checkpoint phase `dispatch-binding-unsatisfiable`), which publishes a terminal transition Task Hub can deliver and removes the row from recovery.
+
 For that one closed contract family, the production admission boundary must bridge a Workroom authority to a canonical TaskRun before provider dispatch:
 
 1. authorize the public Workroom and actor against committed server records;

@@ -104,7 +104,8 @@ export interface SemanticReviewOutcome {
   acceptedFindingCount: number;
   falsePositiveFindingCount: number;
   uniqueLocalFindingCount: number;
-  postPublicationMissCount: number;
+  postPublicationMissCount: number | null;
+  escapedFailureFollowUps?: Array<{ scenarioKey: string; incidentReference: string; followUpReference: string }>;
   correctivePushCount: number;
   timeToFirstSignalMs: number | null;
   costUsd: number | null;
@@ -117,24 +118,32 @@ function ratio(numerator: number, denominator: number): number | null {
 }
 
 export function aggregateSemanticReviewOutcomes(outcomes: readonly SemanticReviewOutcome[]) {
-  const completed = outcomes.filter((outcome) => outcome.correlationStatus === "completed");
+  const latest = new Map<string, SemanticReviewOutcome>();
+  for (const outcome of outcomes) {
+    const prior = latest.get(outcome.receiptId);
+    if (!prior || Date.parse(outcome.recordedAt) >= Date.parse(prior.recordedAt)) latest.set(outcome.receiptId, outcome);
+  }
+  const samples = [...latest.values()];
+  const completed = samples.filter((outcome) => outcome.correlationStatus === "completed");
   const accepted = completed.reduce((sum, outcome) => sum + outcome.acceptedFindingCount, 0);
   const falsePositives = completed.reduce((sum, outcome) => sum + outcome.falsePositiveFindingCount, 0);
   const unique = completed.reduce((sum, outcome) => sum + outcome.uniqueLocalFindingCount, 0);
-  const misses = completed.reduce((sum, outcome) => sum + outcome.postPublicationMissCount, 0);
+  const observedMisses = completed.filter(outcome => outcome.postPublicationMissCount != null);
+  const misses = observedMisses.reduce((sum, outcome) => sum + (outcome.postPublicationMissCount ?? 0), 0);
   return {
-    totalSamples: outcomes.length,
+    totalSamples: samples.length,
     completedSamples: completed.length,
-    infrastructureInconclusiveSamples: outcomes.length - completed.length,
+    infrastructureInconclusiveSamples: samples.length - completed.length,
     externalCompletedSamples: completed.filter((outcome) => outcome.surface === "external").length,
     buildStudioCompletedSamples: completed.filter((outcome) => outcome.surface === "build-studio").length,
     acceptedFindingCount: accepted,
     falsePositiveFindingCount: falsePositives,
-    postPublicationMissCount: misses,
+    postPublicationMissCount: observedMisses.length ? misses : null,
+    unknownPostPublicationSamples: completed.length - observedMisses.length,
     correctivePushCount: completed.reduce((sum, outcome) => sum + outcome.correctivePushCount, 0),
     precision: ratio(accepted, accepted + falsePositives),
     uniqueYieldPerCompletedSample: ratio(unique, completed.length),
-    postPublicationMissRate: ratio(misses, completed.length),
+    postPublicationMissRate: ratio(misses, observedMisses.length),
     averageTimeToFirstSignalMs: ratio(
       completed.reduce((sum, outcome) => sum + (outcome.timeToFirstSignalMs ?? 0), 0),
       completed.filter((outcome) => outcome.timeToFirstSignalMs !== null).length,

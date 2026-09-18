@@ -74,6 +74,15 @@ export const AGENT_IDENTITY_OVERRIDES: Record<string, { displayName?: string; ki
  * collapses dual-seed pairs via `dropDualSeedAliasAgents` (prefer AGT-*).
  */
 export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string>> = {
+  "evaluate-orchestrator": "AGT-ORCH-100",
+  "explore-orchestrator": "AGT-ORCH-200",
+  "integrate-orchestrator": "AGT-ORCH-300",
+  "deploy-orchestrator": "AGT-ORCH-400",
+  "release-orchestrator": "AGT-ORCH-500",
+  "consume-orchestrator": "AGT-ORCH-600",
+  "operate-orchestrator": "AGT-ORCH-700",
+  "governance-orchestrator": "AGT-ORCH-800",
+  "finance-agent": "AGT-900",
   coo: "AGT-ORCH-000",
   "build-specialist": "AGT-WS-BUILD",
   "change-reviewer": "AGT-WS-REVIEW",
@@ -106,6 +115,7 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   "data-architect": "AGT-WS-DATA-ARCHITECT",
   "data-steward": "AGT-WS-DATA-STEWARD",
   dispatcher: "AGT-WS-DISPATCHER",
+  "mailroom-coordinator": "AGT-WS-MAILROOM",
   "integration-engineer": "AGT-WS-INTEGRATION",
   "legal-operations-counsel": "AGT-WS-LEGAL",
   "security-engineer": "AGT-WS-SECURITY",

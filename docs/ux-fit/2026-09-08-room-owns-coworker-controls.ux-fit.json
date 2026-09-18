@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "inline-in-room-control",
+  "decisionInteractionId": "DI-4080516C696A",
+  "scope": {
+    "files": [
+      "apps/web/components/agent/CoworkerPostureControl.tsx",
+      "apps/web/components/platform/coworker-record/CoworkerPriorityNote.tsx",
+      "apps/web/components/workspace/workroom/WorkroomPostureControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-in-room-control",
+      "separate-room-section-plus-composer-chip",
+      "admin-only-inherit"
+    ]
+  }
+}

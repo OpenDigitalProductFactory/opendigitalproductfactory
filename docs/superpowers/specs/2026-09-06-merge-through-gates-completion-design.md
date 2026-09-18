@@ -41,9 +41,26 @@ For a completing backlog item, recognize completion when **all** hold:
    trunk, computed by LOCAL git (`isReachableFromTrunk`) against the host source mount
    the portal already carries (`/host-dpf`, or `DPF_REPO_ROOT`/`DPF_HOST_SOURCE_ROOT`).
    No GitHub API, no LLM — procedural and local, per *platform-function-never-depends-on-
-   a-client*. Best-effort: any failure → not recognized (fails safe). Because `main`
-   advances **only** via the protected merge queue (AGENTS.md §3; deployment.md), a SHA on
-   the trunk provably passed CI + the merge queue + PR review.
+   a-client*. Because `main` advances **only** via the protected merge queue
+   (AGENTS.md §3; deployment.md), a SHA on the trunk provably passed CI + the merge queue
+   + PR review.
+
+   **The signal is three-valued** (amended 2026-09-11, BI-043946C5). It was originally
+   specified as best-effort with "any failure → not recognized (fails safe)", and that
+   collapsed two different facts into one answer: *git said this did not merge* and
+   *nothing here could ask git*. The second is not a fail-safe, it is a blind spot, and it
+   was the live state of every install — the probe's first root `/host-dpf` is the
+   INSTALLED runtime directory, not a checkout, so `trunkRefExists` was false everywhere
+   and the signal was unconditionally and silently negative. Both this recognition and
+   merge-as-delivery-evidence (BI-B04A0203) were dead platform-wide with nothing saying so.
+
+   So `resolveMergeDelivery` now answers `merged` | `not-merged` | `signal-unavailable`.
+   Recognition still requires `merged`, so governance is unchanged and still fails safe.
+   What changes is that `signal-unavailable` is REPORTED: when an item clears every other
+   term of the predicate and only the signal could not run, the readiness decision says so
+   on each requirement the signal would have satisfied, and names `DPF_HOST_SOURCE_ROOT`
+   as the lever. A consumer install with no checkout is a legitimate instance of this —
+   the answer there is an honest "unknown", never a silent "no".
 2. **Direct-merge platform predicate** (`isDirectMergePlatformWork`): `scopeKind` is
    `platform`/`common`, AND no Build Studio build, AND no linked `DigitalProduct`, AND no
    linked product objective. Demand-driven feature work fails this (it carries a build,
@@ -118,3 +135,13 @@ delivery + acceptance + reconciliation) and does NOT recognize demand-driven wor
 linked DigitalProduct. `entry-adapter.test.ts` — `recognizeMergeThroughGates` coerces the
 design/plan lanes to pass with zero receipts, and is inert without the flag. 346 backlog
 tests green; typecheck clean.
+
+Amended 2026-09-11 (BI-043946C5). Every test above injects `resolveMergeDelivery`, so the
+SHIPPED probe was never executed by the suite — which is exactly why a resolver that could
+not answer at all on any install kept a green suite. `merge-delivery-signal.test.ts` now
+drives the real probe against REAL git repositories built in a temp directory: a readable
+root distinguishes merged from not-merged, a directory that is not a repository reports
+`signal-unavailable` (the live-install shape), and a head the clone never fetched reports
+`signal-unavailable` rather than a negative. `backlog-terminal-transition.test.ts` asserts
+that an unavailable signal is named on every requirement it would have satisfied, and is
+silent for items that could never qualify anyway.

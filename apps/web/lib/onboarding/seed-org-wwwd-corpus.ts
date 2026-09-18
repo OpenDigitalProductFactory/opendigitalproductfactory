@@ -47,6 +47,7 @@ import {
   resolveBusinessProfile,
   resolveStanceVectors,
   STANCE_VECTOR_KEYS,
+  seededStanceVectorKeys,
   type StanceVectorKey,
 } from "./archetype-business-context";
 import {
@@ -68,6 +69,15 @@ export const STANCE_VECTOR_BUNDLES: Record<StanceVectorKey, DecisionDomainClass[
   "growth-vs-stability": ["plan-readiness"],
   "quality-bar": ["professional-practice"],
   "spend-authority": ["risk-assessment", "architecture-tradeoff"],
+  // BI-7728C3B7. Data handling is weighed as risk and as craft practice;
+  // routine operations decide plan-readiness ("may this just proceed?");
+  // decision-scope is consulted wherever the gate must first ask whether the
+  // question is this business's to answer at all.
+  "data-handling": ["risk-assessment", "professional-practice"],
+  "routine-operations": ["plan-readiness", "risk-assessment"],
+  "decision-scope": ["plan-readiness", "professional-practice", "architecture-tradeoff"],
+  // On-site conduct is weighed as risk (privacy, lone working) and as practice.
+  "on-site-work-conduct": ["risk-assessment", "professional-practice"],
 };
 
 /** Org-overlay slug for a stance vector page (shown under /coworker-decisions/stance). */
@@ -259,8 +269,13 @@ function buildPages(
   // The 5 coverage vectors (stance-onboarding design §3-4): archetype-default
   // stance pages whose materials prime every decision class. Unconfirmed
   // starters — the owner confirms/adjusts them in the "How you decide" step.
-  const vectors = resolveStanceVectors({ archetypeId, industry: industry ?? bc?.industry ?? null });
-  for (const key of STANCE_VECTOR_KEYS) {
+  const resolvedIndustry = industry ?? bc?.industry ?? null;
+  const vectors = resolveStanceVectors({ archetypeId, industry: resolvedIndustry });
+  // Activity-triggered vectors seed only where the archetype is derived as
+  // having the activity (BI-0902BAE9) — a software platform is never handed a
+  // worker-location posture, and a trades business is never asked whether its
+  // people visit customers.
+  for (const key of seededStanceVectorKeys({ industry: resolvedIndustry })) {
     const v = vectors[key];
     const ceiling =
       v.ceilingUsd != null && v.ceilingUsd > 0

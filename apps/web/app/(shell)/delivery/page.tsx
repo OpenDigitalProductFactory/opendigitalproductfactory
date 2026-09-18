@@ -16,8 +16,9 @@ const GROUPS: Array<{ title: string; blurb: string; items: DeliveryLink[] }> = [
     title: "Build & ship",
     blurb: "Compose and deliver new capability.",
     items: [
+      { label: "Work", href: "/ops/workrooms", description: "Workrooms across every surface and agent." },
       { label: "Build Studio", href: "/build", description: "Create and ship new capability with AI help." },
-      { label: "Work control", href: "/build/work", description: "Workrooms across every surface and agent." },
+      { label: "Work control", href: "/build/work", description: "Plan governed work before it is claimed." },
     ],
   },
   {

@@ -46,7 +46,12 @@ export async function runTypecheckStage({
 } = {}) {
   const identity = {
     integrationTreeSha: resolveGitImpl("HEAD^{tree}"),
-    command: "pnpm --filter web typecheck",
+    // BOTH web TypeScript programs. The M11 split (BI-0A3B155F) moved
+    // *.test.ts(x) out of `typecheck` into `typecheck:tests`, which silently
+    // took test files out of this gate: PR #5285 passed the local gate and
+    // then failed CI on three test-only type errors. `typecheck:all` runs the
+    // production program and the test program, so the gate sees what CI sees.
+    command: "pnpm --filter web typecheck:all",
     nodeOptions: process.env.NODE_OPTIONS ?? "",
   };
   const priorReceipt = readStageReceipt(receiptPath);
@@ -78,7 +83,7 @@ export async function runTypecheckStage({
 
   const result = await observedRunner({
     command: "pnpm",
-    args: ["--filter", "web", "typecheck"],
+    args: ["--filter", "web", "typecheck:all"],
     observation: { stage: "web-typecheck" },
   });
   const classification = classifyTypecheckResult(result);

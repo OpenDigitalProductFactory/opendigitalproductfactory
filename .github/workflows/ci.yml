@@ -171,6 +171,36 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm typecheck
 
+  # apps/web's test files (37% of its TypeScript lines) are checked as their
+  # own program (apps/web/tsconfig.test.json) so the production program the
+  # local gate and `next build` see stays small (plan 2026-09-08 M11,
+  # BI-0A3B155F). Same required-check status as Typecheck; runs in parallel.
+  typecheck-tests:
+    name: Typecheck (web tests)
+    runs-on: ubuntu-latest
+    needs: [changes, exact-tree-evidence-shadow]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      (github.event_name != 'push' ||
+      needs.exact-tree-evidence-shadow.outputs.reusable != 'true')
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm with cache
+        if: needs.changes.outputs.heavy == 'true'
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Generate Prisma client
+        if: needs.changes.outputs.heavy == 'true'
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Typecheck the web test program
+        if: needs.changes.outputs.heavy == 'true'
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm --filter web typecheck:tests
+
   # BI-0580AFD3. These profiles replace 34 startup-heavy policy jobs with one
   # checkout/runtime per profile. The registry preserves each former job's
   # name, commands, result, and duration in the job summary and JSON artifact.
@@ -752,6 +782,7 @@ jobs:
       - changes
       - exact-tree-evidence-shadow
       - typecheck
+      - typecheck-tests
       - policy-guards-source
       - policy-guards-workspace
       - policy-guards-pr

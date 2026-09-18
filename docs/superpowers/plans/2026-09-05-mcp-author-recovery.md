@@ -75,6 +75,16 @@ operator instruction, while DCO and every protected pull-request and merge-group
 check remain mandatory. This checkpoint does not infer a scope baseline,
 coverage receipt, or independent reviewer PASS.
 
+Public `load_tools` acceptance then exposed one remaining AC-MCP-RECOVERY-5
+adapter gap: an unknown exact writer name and the real reviewer-only writer both
+collapsed to the same empty-success prose. The transport now derives a bounded
+structured `noMatch` reason from the authoritative platform and granted sets.
+Unknown names stop exact-name retries; reviewer-only initiative writers direct
+the author to `get_backlog_item` and its server-issued `reviewerRoutes` packet,
+without granting or invoking the writer. Intent misses, absent input, and known
+but ungranted tools remain distinct finite outcomes. Existing registry and
+reachability conformance tests continue to enforce descriptor/handler parity.
+
 ## 4. Verify and deliver
 
 Run affected tests in a compile-ready worktree or the canonical shared verification environment, never treating missing dependencies as product failure. The current worktree is source-only. Claim the appropriate shared nonproduction lease for runtime-bound checks. Test the complete external-author journey with distinct author/reviewer identities, immutable provider reads and persisted approval readback; mocks must not be the only authority test.

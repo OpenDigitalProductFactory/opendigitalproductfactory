@@ -158,6 +158,16 @@ COPY scripts/lib/ci-evidence-plan.mjs ./scripts/lib/
 COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/
 COPY scripts/lib/gate-sensitivity.mjs ./scripts/lib/
 COPY scripts/lib/seed-fit-gate.mjs ./scripts/lib/
+COPY scripts/lib/seed-fit-mechanism.mjs ./scripts/lib/
+# BI-B3370CB2: the worktree janitor is EXECUTED by the portal (queue function
+# worktreeJanitor, daily 05:40) but was never copied, so every run died with
+# MODULE_NOT_FOUND, was caught, and reported UNHEALTHY. A backstop that has
+# never once reached its subject looked exactly like a quiet success.
+COPY scripts/worktree-janitor.mjs ./scripts/
+COPY scripts/lib/worktree-janitor-core.mjs ./scripts/lib/
+COPY scripts/lib/worktree-session-heartbeat.mjs ./scripts/lib/
+COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
+COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
 COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/
@@ -270,6 +280,34 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp -R monitoring/. /dpf-release-assets/monitoring/ && \
     cd /dpf-release-assets && \
     find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+
+# ─── Runtime dependency set (BI-C7C6D827, plan 2026-09-08 M1) ───────────────
+# The runner copies this stage's node_modules, and until this step that was the
+# whole DEV workspace tree: two TypeScript compilers, vitest/jsdom/msw, Prisma
+# Studio, the mobile toolchain, a 130 MB browser-only ONNX runtime — 1.8 GB and
+# ~1,170 packages the portal never executes. Everything the build stage needed
+# (prisma generate, the tools snapshot, the release assets) has already run
+# above, so the tree is now re-installed to exactly what the runner executes:
+#
+#   docker-entrypoint.sh  pnpm --filter @dpf/db exec prisma migrate deploy
+#                         pnpm --filter @dpf/db exec tsx src/seed.ts (+ sync/
+#                         reconcile scripts under packages/db/scripts)
+#   seed.ts               @dpf/storefront-templates and the other @dpf/* links
+#   /app/scripts/*.mjs    pure Node by design (gate-context, data-impact, SBOM)
+#
+# The Next.js server itself resolves from the standalone output's own traced
+# node_modules, and Build Studio's /workspace runs its own `pnpm install` from
+# the shipped lockfile at first boot, so neither depends on this tree.
+# `@dpf/db...` selects the db package plus every workspace package it links;
+# its devDependencies (prisma CLI, tsx) are runtime executables here, so the
+# install is deliberately NOT --prod. --offline: the pnpm store in this stage
+# already holds every package from the full install above.
+RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules services/*/node_modules && \
+    pnpm install --frozen-lockfile --offline --filter "@dpf/db..." --config.confirmModulesPurge=false && \
+    pnpm --filter @dpf/db exec prisma generate && \
+    pnpm --filter @dpf/db exec tsx --version >/dev/null && \
+    pnpm --filter @dpf/db exec prisma --version >/dev/null && \
+    echo "runtime dependency set: $(find node_modules/.pnpm -maxdepth 1 -mindepth 1 -type d | wc -l) packages"
 
 # ─── Stage 5: runner (unified — serves app AND runs init) ─────────────────────
 FROM base AS runner

@@ -1,6 +1,9 @@
 // packages/db/src/sanitized-clone.ts
 // Sanitized clone pipeline -- copies production data to dev with PII obfuscation.
 // Classification driven by table-classification.ts.
+// Postgres-only: BET-5 (BI-A1E864A5) retired Neo4j/Qdrant onto Postgres, so the
+// graph mirror and vectors ride along in the Postgres clone; the former Neo4j
+// clone step was removed in BI-B1977CEE.
 
 import { getTableSensitivity } from "./table-classification";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -723,71 +726,10 @@ async function getCloneColumns(
   }));
 }
 
-// ── Neo4j Clone Pipeline ─────────────────────────────────────────────────────
-
-/**
- * Clone Neo4j graph structure from production to dev with PII obfuscation.
- * Uses HTTP API. Both NEO4J_URI (dev) and PRODUCTION_NEO4J_URI (prod) must be set.
- */
-export async function runNeo4jClone(): Promise<void> {
-  const prodUri = process.env.PRODUCTION_NEO4J_URI;
-  const devUri = process.env.NEO4J_URI;
-  const prodUser = process.env.PRODUCTION_NEO4J_USER ?? process.env.NEO4J_USER ?? "neo4j";
-  const prodPassword = process.env.PRODUCTION_NEO4J_PASSWORD ?? process.env.NEO4J_PASSWORD ?? "dpf_dev_password";
-
-  if (!prodUri) {
-    console.log("[sanitized-clone] PRODUCTION_NEO4J_URI not set, skipping Neo4j clone");
-    return;
-  }
-  if (!devUri) {
-    console.log("[sanitized-clone] NEO4J_URI not set, skipping Neo4j clone");
-    return;
-  }
-
-  // Extract host:port from bolt:// URIs for HTTP access
-  const prodHttpUrl = prodUri.replace("bolt://", "http://").replace(":7687", ":7474");
-
-  const auth = Buffer.from(`${prodUser}:${prodPassword}`).toString("base64");
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Basic ${auth}`,
-  };
-
-  console.log("[sanitized-clone] Exporting Neo4j graph from production...");
-
-  try {
-    const exportResponse = await fetch(`${prodHttpUrl}/db/neo4j/tx/commit`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        statements: [
-          { statement: "MATCH (n) RETURN count(n) as nodeCount" },
-          { statement: "MATCH ()-[r]->() RETURN count(r) as relCount" },
-        ],
-      }),
-    });
-
-    if (!exportResponse.ok) {
-      console.log(`[sanitized-clone] Neo4j export failed: ${exportResponse.status}, skipping`);
-      return;
-    }
-
-    const exportData = await exportResponse.json() as { results?: { data?: { row?: number[] }[] }[] };
-    const nodeCount = exportData.results?.[0]?.data?.[0]?.row?.[0] ?? 0;
-    const relCount = exportData.results?.[1]?.data?.[0]?.row?.[0] ?? 0;
-
-    console.log(`[sanitized-clone] Neo4j production has ${nodeCount} nodes, ${relCount} relationships`);
-    console.log("[sanitized-clone] Neo4j clone: structure counted (full APOC import TBD)");
-  } catch (err) {
-    console.log(`[sanitized-clone] Neo4j clone skipped: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
 // ── CLI Entry Point ──────────────────────────────────────────────────────────
 
 if (process.argv[1]?.endsWith("sanitized-clone.ts") || process.argv[1]?.endsWith("sanitized-clone.js")) {
   runSanitizedClone()
-    .then(() => runNeo4jClone())
     .then(() => {
       console.log("[sanitized-clone] Done");
       process.exit(0);

@@ -141,7 +141,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     ungatedReason:
       "Quiescence caller: the daily backup fan-out is the disaster-recovery floor the upgrade path depends on; gating it would deadlock self-upgrade.",
     name: "All backups (fan-out)",
-    purpose: "Fans out daily backups across Postgres / Neo4j / Qdrant sub-runners.",
+    purpose: "Runs the daily Postgres backup, then the trial-restore verification (postgres-only after BET-5).",
     cron: "daily",
     cadence: "Daily",
     category: "core",
@@ -339,6 +339,21 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     purpose: "Triages inbound issue reports into the backlog. Cadence is tunable.",
     cron: "3,18,33,48 * * * *",
     cadence: "Every 15 min (at :03)",
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: null,
+  },
+  {
+    jobId: "ecosystem-inbound-issue-triage",
+    inngestId: "ecosystem/inbound-issue-triage",
+    honorsEnabledGate: true,
+    name: "Ecosystem: inbound issue triage",
+    purpose:
+      "Reads what the ecosystem submitted — upstream issues filed by the relay and peer "
+      + "federated demand — and files it into the backlog with the submitter preserved. "
+      + "No-ops unless the installation's purpose is evolve-dpf.",
+    cron: "17 6 * * 1",
+    cadence: "Weekly (Mondays, 06:17)",
     category: "editable",
     tracksRunData: true,
     runNowEvent: null,
@@ -636,6 +651,19 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,
+  },
+  {
+    jobId: "mailroom-mailbox-poll",
+    inngestId: "mailroom/mailbox-poll",
+    honorsEnabledGate: true,
+    name: "Mailroom mailbox poll",
+    purpose:
+      "Reads every connected mailbox whose per-mailbox interval (default sixty minutes) has elapsed, triages what arrived and routes it to the owning queue room. If it stops, no new correspondence enters the Mailroom and acknowledgement windows are never started.",
+    cron: "9,24,39,54 * * * *",
+    cadence: "Every 15 minutes (at :09)",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: "mailroom/mailbox-poll.requested",
   },
   {
     jobId: "postmark-callback-sweep",

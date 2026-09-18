@@ -114,6 +114,7 @@ export function WorkroomPosture({ room }: { room: WorkroomView }) {
               currentShape={posture.editable.declaredShape as never}
               currentPace={posture.proactivityLevel}
               currentAuthority={posture.actionBoundary}
+              currentPriority={posture.priority}
               hasDeclaration={posture.editable.hasDeclaration}
             />
           ) : null}

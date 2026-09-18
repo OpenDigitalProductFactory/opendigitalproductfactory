@@ -124,7 +124,7 @@ function resolveTeardown(
     return {
       stance: "capture-required",
       rationale:
-        `This ${environmentClass} installation holds work that exists nowhere else, so capture a durable backlog bundle before any teardown.`,
+        `This ${environmentClass} installation holds work that exists nowhere else, so capture a durable backlog and Workroom bundle before any teardown.`,
     };
   }
   return {

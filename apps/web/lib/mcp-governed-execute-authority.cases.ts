@@ -222,12 +222,59 @@ export function registerCoworkerAuthorityCases(
         },
       },
     });
+
+    // BI-7561687F: the model must tell a wait apart from a refusal. When it
+    // could not, coworkers filed tech debt asking for tools that already exist —
+    // record_initiative_evidence had 139 successful executions at the time.
+    expect(result.message).toContain("waiting for a person to approve it");
+    expect(result.message).toContain("ENV-1");
+    expect(result.message).toContain("is available to you");
+    expect(result.message).toContain("calling it again will not advance it");
+    expect(result.message).not.toContain("rejected:");
     expect(harness.executeMock()).not.toHaveBeenCalled();
     expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledOnce();
     expect(JSON.stringify(result)).not.toContain("private title");
     expect(harness.authorityRows().at(-1)).toMatchObject({
       decision: "require-approval",
     });
+  });
+
+  it("puts the unresolved WWMD residue on the human decision card", async () => {
+    const pending = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "side-effects",
+      },
+    });
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => pending,
+      policyAuthorityProjectionAttempt: async () => ({
+        outcome: "not-authorized" as const,
+        explanation: "Human decision required: commandment conflict.",
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "bounded exception" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100", taskRunId: "TASK-EXCEPTION" },
+      source: "agentic-loop",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "approval_required",
+      message: expect.stringContaining("Human decision required: commandment conflict."),
+    });
+    expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledWith(expect.objectContaining({
+      explanation: "Human decision required: commandment conflict.",
+    }));
+    expect(harness.executeMock()).not.toHaveBeenCalled();
   });
 
   it("consumes a server-projected exact-call policy authorization before execution", async () => {

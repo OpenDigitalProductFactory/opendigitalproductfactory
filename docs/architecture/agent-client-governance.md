@@ -5,6 +5,8 @@ Codex, Grok, Antigravity, and customer-owned MCP agents. Trust does not come
 from a client brand or from the client saying that it followed instructions.
 Trust comes from layered controls and observed outcomes.
 
+Every change review requires [failure analysis and recovery evidence](failure-analysis-and-recovery.md), beginning in design and refined against the final change. Server review and publication boundaries resolve executed evidence and require an independent adequacy assessment. Internal engineering coordinates technical recovery; the business owner retains genuine scope and risk-acceptance decisions.
+
 ## The four governance altitudes
 
 | Altitude | Purpose | Authoritative mechanism |

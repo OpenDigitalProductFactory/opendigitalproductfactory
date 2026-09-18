@@ -46,6 +46,7 @@ import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/m
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
+import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import {
   resolveListingAuthorityForToken,
   filterListableTools,
@@ -75,7 +76,7 @@ import {
   type ResolvedMcpTransportAuth as ResolvedAuth,
 } from "@/lib/mcp/transport-auth";
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
-import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildUnknownToolResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -345,6 +346,9 @@ async function handleLoadTools(
     await resolveListingAuthorityForToken(token, userContext),
   );
   const selected = resolveLoadToolsSelection(authorized, args);
+  const noMatch = classifyLoadToolsNoMatch(
+    args, new Set(PLATFORM_TOOLS.map((tool) => tool.name)), new Set(granted.map((tool) => tool.name)), selected.length,
+  );
   // W12 (BI-EE64547B): internal session-JWT calls are per-call stateless — the
   // result still carries the selected definitions inline, but no per-token
   // session row is written (internal lists are full-tier; nothing to append).
@@ -355,6 +359,7 @@ async function handleLoadTools(
   const result = buildLoadToolsResult(
     selected.map((t) => ({ name: t.name, description: t.description })),
     loadedToolNames,
+    noMatch,
   );
   return acceptsEventStream && selected.length > 0
     ? loadToolsSseResponse(id, result)
@@ -499,7 +504,7 @@ async function handleToolsCall(
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
   }
-  const toolName = params["name"];
+  const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:
@@ -590,6 +595,11 @@ async function handleToolsCall(
       apiTokenId: token.tokenId,
       threadId: token.threadId ?? undefined,
       routeContext: token.routeContext ?? undefined,
+      // BI-B949993E: a session JWT minted for a governed TaskRun carries its
+      // id; governed execution resolves the TaskRun's immutable review
+      // binding from it (resolve-coworker-tool-authority), so a native CLI
+      // writer call is admitted routinely instead of parked on an envelope.
+      ...(token.taskRunId ? { taskRunId: token.taskRunId } : {}),
       callerClient,
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,

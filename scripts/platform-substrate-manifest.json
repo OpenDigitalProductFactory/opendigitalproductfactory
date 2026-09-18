@@ -437,14 +437,11 @@
     },
     {
       "service": "loki",
-      "class": "capability-activated",
-      "capability": "runtime:deep-observability",
-      "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-deep-observability",
-        "observability-ui"
-      ],
+      "class": "universal-core",
+      "capability": "runtime:core",
+      "boundaryReason": "Universal log store: container log capture is a platform guarantee, not an opt-in capability (BI-F8024A9D). Reads logs via the Docker socket with no host-path bind mount, so it runs on every supported host.",
+      "defaultRequired": true,
+      "profiles": [],
       "ports": [
         "127.0.0.1:3100:3100"
       ],
@@ -462,18 +459,15 @@
         "macos",
         "linux"
       ],
-      "targetClassification": "capability-activated"
+      "targetClassification": "universal-core"
     },
     {
       "service": "alloy",
-      "class": "capability-activated",
-      "capability": "runtime:deep-observability",
-      "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-deep-observability",
-        "observability-ui"
-      ],
+      "class": "universal-core",
+      "capability": "runtime:core",
+      "boundaryReason": "Universal log shipper feeding loki; promoted with it (BI-F8024A9D) because a capture layer nobody enabled is a capture layer that does not exist.",
+      "defaultRequired": true,
+      "profiles": [],
       "ports": [],
       "volumes": [
         "./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro",
@@ -491,7 +485,7 @@
         "macos",
         "linux"
       ],
-      "targetClassification": "capability-activated"
+      "targetClassification": "universal-core"
     },
     {
       "service": "cadvisor",
@@ -647,33 +641,6 @@
         "linux"
       ],
       "targetClassification": "universal-core"
-    },
-    {
-      "service": "dpf-stt",
-      "class": "capability-activated",
-      "capability": "runtime:local-speech",
-      "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-local-speech",
-        "tts"
-      ],
-      "ports": [
-        "127.0.0.1:8765:9000"
-      ],
-      "volumes": [
-        "dpf_stt_models:/app/models"
-      ],
-      "dependsOn": [],
-      "canonicalDataOwner": "none",
-      "backupPolicy": "excluded-rebuildable",
-      "healthSemantics": "compose-healthcheck",
-      "hostPlatforms": [
-        "windows",
-        "macos",
-        "linux"
-      ],
-      "targetClassification": "capability-activated"
     },
     {
       "service": "dpf-tts",

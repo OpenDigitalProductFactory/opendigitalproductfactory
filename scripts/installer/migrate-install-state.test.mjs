@@ -134,3 +134,18 @@ test("CLI binds persistence to signed hashes and the governed recovery path", as
     assert.deepEqual(await readFile(statePath), original);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("drops the legacy agentToolchain block so the envelope binds install state only (BI-95DF1BFC)", async () => {
+  // Every client session start used to rewrite this block INTO install-state.json;
+  // one landing during a self-upgrade's drain changed the bytes under the signed
+  // handoff and fenced the run (SUR-4758058F). The bootstrap now writes a sidecar;
+  // migration converges existing installs by dropping the stale copy.
+  const current = await migratedState();
+  const withLegacy = { ...current, agentToolchain: { appliedAt: "2026-09-08T22:22:43.018Z", dpfPlatformVersion: "0.2.5", superpowersVersion: null, claudeCodeWired: true, codexWired: true, grokWired: true, antigravityWired: false, memorySeededAt: "2026-09-08T22:22:40.803Z", mcpReadiness: { ok: true, toolCount: 41, observedAt: "2026-09-08T22:22:41.531Z" }, smokeTest: { result: "failed", transcript: "Not logged in", reason: "CLI exited 1" }, readinessState: "failed_smoke" } };
+  const result = await projectInstallState({ bytes: Buffer.from(JSON.stringify(withLegacy)), hostIdentity: identity, catalog });
+  assert.equal(result.migrationRequired, true);
+  assert.equal("agentToolchain" in result.projectedState, false);
+  assert.deepEqual(result.projectedState, current);
+  const settled = await projectInstallState({ bytes: Buffer.from(`${JSON.stringify(result.projectedState, null, 2)}\n`), hostIdentity: identity, catalog });
+  assert.equal(settled.migrationRequired, false);
+});

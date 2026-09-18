@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { toRoomAuthorityContext, type RoomTurnAuthority } from "@/lib/work-management/room-turn-authority";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import type { MessageOrigin } from "@/lib/inference/data-screening/types";
@@ -417,6 +418,10 @@ export async function executeAutonomousAgenticLoop(input: {
   /** BI-80532D5C — divert side-effecting non-artifact tool calls to proposals
    *  (propose boundary). Forwarded verbatim to runAgenticLoop. */
   proposeSideEffects?: boolean;
+  /** EP-WORK-POSTURE 8.2 — what the Workroom resolved for this turn (see
+   *  agentic-loop.ts param doc). Unset for callers that predate the room
+   *  resolver so their authority is unchanged. */
+  roomTurn?: RoomTurnAuthority | null;
   onProgress?: (event: AgentEvent) => void;
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
@@ -540,6 +545,14 @@ export async function executeAutonomousAgenticLoop(input: {
         agentMessageId: input.agentMessageId ?? null,
         interactionMode: input.interactionMode,
         proposeSideEffects: input.proposeSideEffects ?? false,
+        ...(input.roomTurn
+          ? {
+              workroomId: input.roomTurn.workroomId,
+              roomAuthority: toRoomAuthorityContext(input.roomTurn),
+              externalAccessEnabled: input.roomTurn.externalAccess.enabled,
+              workroomPriority: input.roomTurn.priority,
+            }
+          : {}),
         allowToolFreeInference: surfaceGuidanceOnly,
         ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
         onProgress: input.onProgress,

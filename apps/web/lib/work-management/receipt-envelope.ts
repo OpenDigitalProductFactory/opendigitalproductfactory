@@ -86,6 +86,8 @@ export interface WorkCapsuleActivityRow {
   summary: string;
   payload?: unknown;
   recordedAt: DateLike;
+  recordedById?: string | null;
+  recordedByAgentId?: string | null;
 }
 
 export interface WorkItemMessageRow {
@@ -268,18 +270,22 @@ export function fromToolExecutionReceipt(
   };
 }
 
-export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow): ReceiptEnvelope {
+export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow, options: { capsuleId?: string } = {}): ReceiptEnvelope {
   return observedEnvelope({
     receiptId: `work-capsule-activity:${row.id}`,
     sourceRef: {
       kind: "work-capsule",
-      id: row.workCapsuleId,
+      id: options.capsuleId ?? row.workCapsuleId,
       status: row.kind,
     },
     rawRef: { table: "WorkroomActivity", id: row.id },
     summary: row.summary,
     occurredAt: row.recordedAt,
     outputDigest: row.payload,
+    actorRef: {
+      actorKind: row.recordedByAgentId ? "agent" : row.recordedById ? "person" : "system",
+      actorId: row.recordedByAgentId ?? row.recordedById ?? undefined,
+    },
   });
 }
 

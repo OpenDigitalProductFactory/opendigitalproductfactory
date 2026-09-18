@@ -22,6 +22,7 @@ import {
   type MirrorPlan,
 } from "./data-model-mirror";
 import type { Prisma } from "@dpf/db";
+import type { ModelMetadata } from "@dpf/db/model-metadata";
 import type { PrismaSchemaFacts } from "../build/code-graph/extractors/prisma-schema-adapter";
 
 const NOTATION_SLUG = "archimate4";
@@ -243,13 +244,15 @@ export function relationshipCreateData(
 export async function reconcileDataModelMirror(deps: {
   prisma: MirrorPrismaClient;
   facts: PrismaSchemaFacts;
+  /** /// @dpf declarations by model name (EP-A33A5C61 slice 4d-ii); optional for callers and tests without schema text. */
+  declarations?: ReadonlyMap<string, ModelMetadata>;
   createdById?: string | null;
   syncNeo4j?: (ctx: MirrorContext) => Promise<void>;
 }): Promise<MirrorResult> {
   const { prisma, facts } = deps;
   const ctx = await resolveMirrorContext(prisma);
   const existing = await loadExistingMirror(prisma);
-  const plan = planMirror(facts, existing);
+  const plan = planMirror(facts, existing, deps.declarations);
   const summary = summarizePlan(plan);
 
   if (plan.blocked) {

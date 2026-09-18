@@ -6,7 +6,8 @@
 
 import { Prisma } from "@dpf/db";
 import type { prisma } from "@dpf/db";
-import { isFounderActionable } from "@/lib/founder-review/queue";
+import { isFounderActionable, normalizeFounderReviewQuestion } from "@/lib/founder-review/queue";
+import { retractionOf } from "@/lib/decision-perspective/retract-superseded";
 import type { AttentionItem, AttentionRiskClass, ResidueReason } from "../types";
 
 type Db = typeof prisma;
@@ -27,6 +28,8 @@ export type DecisionInteractionRow = {
   /** Governance gate that produced the row — 'profession' rows are advisory. */
   gateKey: string | null;
   createdAt: Date;
+  /** The gate's own record of how it resolved, including any retraction marker. */
+  outcomePayload?: unknown;
   /** Open drafted resolutions for this decision (at most one is live). */
   resolutionProposals?: { summary: string }[];
 };
@@ -77,6 +80,12 @@ export function aiDecisionToAttentionItem(
    * "go work this out" but "rule on what your coworkers drafted".
    */
   proposal?: { summary: string } | null,
+  /**
+   * How many unresolved rows are asking this same question. Shown so repeated
+   * demand stays visible after collapsing, rather than being silently hidden
+   * (BI-13C38318).
+   */
+  occurrences = 1,
 ): AttentionItem {
   const blast = row.buildId ? `build ${row.buildId}` : row.taskRunId ? "a coworker task" : undefined;
   const decisionHref = `/platform/ai/decisions/${encodeURIComponent(row.interactionId)}`;
@@ -84,7 +93,12 @@ export function aiDecisionToAttentionItem(
     id: `ai-decision:${row.interactionId}`,
     source: "ai-decision",
     title: clip(row.question),
-    context: proposal?.summary ?? row.rationale ?? "The governed scopes could not resolve this decision.",
+    context: [
+      proposal?.summary ?? row.rationale ?? "The governed scopes could not resolve this decision.",
+      occurrences > 1 ? `Asked ${occurrences} times and still unresolved.` : null,
+    ]
+      .filter(Boolean)
+      .join(" "),
     decisionClass: { scorability: "unscorable" },
     riskClass: riskFromTier(row.riskTier),
     triage: {
@@ -109,12 +123,44 @@ export function aiDecisionToAttentionItem(
   };
 }
 
+/**
+ * How many rows to read before collapsing duplicates.
+ *
+ * The cap used to be the render limit applied directly in SQL, which starved
+ * the feed: on the customer 0 install 39 of 53 unresolved rows were the SAME
+ * question, so a genuine decision ranked below them was never loaded at all —
+ * not merely buried. Read a wide window, collapse, then cap (BI-13C38318).
+ */
+const DECISION_SCAN_LIMIT = 500;
+const DECISION_RENDER_LIMIT = 50;
+
+/**
+ * Collapse rows that ask the same question of the same gate, newest first.
+ *
+ * The founder-review queue has always deduped; this source did not, so one
+ * question produced one card there and 39 here. The normaliser is imported
+ * rather than re-derived so the two surfaces cannot drift again.
+ */
+export function dedupeDecisionRows<T extends Pick<DecisionInteractionRow, "question" | "gateKey">>(
+  rows: T[],
+): Array<{ row: T; occurrences: number }> {
+  const byKey = new Map<string, { row: T; occurrences: number }>();
+  for (const row of rows) {
+    const key = `${row.gateKey ?? "?"}|${normalizeFounderReviewQuestion(row.question)}`;
+    const seen = byKey.get(key);
+    // Rows arrive newest-first, so the first of a group is the one to show.
+    if (seen) seen.occurrences += 1;
+    else byKey.set(key, { row, occurrences: 1 });
+  }
+  return [...byKey.values()];
+}
+
 export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
   const rows = await db.decisionInteraction.findMany({
     // humanOutcome IS NULL == still unresolved residue (Json? → DB NULL).
     where: { outcomeType: { in: ["escalate", "defer"] }, humanOutcome: { equals: Prisma.DbNull } },
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: DECISION_SCAN_LIMIT,
     select: {
       interactionId: true,
       question: true,
@@ -128,6 +174,8 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
       domainClass: true,
       gateKey: true,
       createdAt: true,
+      // Needed to spot a retraction marker (BI-13C38318).
+      outcomePayload: true,
       // The open drafted resolution, when one exists (BI-C62127B9). Read here
       // rather than in a second pass so the inbox cannot show "needs your
       // judgment" for a decision that already has an answer waiting.
@@ -139,8 +187,19 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
     },
   });
   // Keep only rows a human should actually decide; drop agent-internal consults
-  // and fail-open advisories (BI-6EC1EE25).
-  return rows
-    .filter((row) => isFounderActionable(row))
-    .map((row) => aiDecisionToAttentionItem(row, row.resolutionProposals?.[0] ?? null));
+  // and fail-open advisories (BI-6EC1EE25), and retracted rows whose routing
+  // basis no longer holds (BI-13C38318). Filter BEFORE collapsing so a row that
+  // should not be here cannot become the representative of its group — a
+  // retracted row standing in for a live one would hide a real decision behind
+  // a question nobody still has.
+  const actionable = rows.filter((row) => isFounderActionable(row) && !retractionOf(row.outcomePayload));
+  return dedupeDecisionRows(actionable)
+    .slice(0, DECISION_RENDER_LIMIT)
+    .map(({ row, occurrences }) =>
+      aiDecisionToAttentionItem(
+        row,
+        row.resolutionProposals?.[0] ?? null,
+        occurrences,
+      ),
+    );
 }

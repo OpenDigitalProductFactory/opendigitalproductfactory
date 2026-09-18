@@ -38,6 +38,7 @@ const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "compliance-submission": "A filing needs your approval",
   "reservation-exception": "A booking needs your decision",
   "storefront-inquiry": "A customer is waiting for a reply",
+  "mailroom-item": "A message is waiting to be acknowledged",
   "hospitality-capacity": "A table or kitchen station needs your decision",
   "business-journey": "Something your customers rely on has stopped working",
   "ai-decision": "A business decision needs you",

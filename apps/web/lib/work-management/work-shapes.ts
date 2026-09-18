@@ -1,3 +1,4 @@
+import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // apps/web/lib/work-management/work-shapes.ts
 //
 // Declared work shapes — TAK §8.11 ("Governed Activity Shapes and Triggers").
@@ -23,7 +24,10 @@
 
 import type { WorkroomShapeKey } from "./room-shapes";
 import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
+import { COWORKER_STANDING_SHAPES_CRAFT } from "./coworker-standing-shapes-craft";
+import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-operate";
 import { DELIVERY_SHAPES } from "./delivery-shapes";
+import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
 
 /** §8.11.1 trigger vocabulary, verbatim and closed. */
@@ -62,6 +66,32 @@ export type WorkShapeStopCondition = {
   /** A shape MUST declare its failure exit, not only its successful one. */
   kind: "success" | "failure" | "budget";
   condition: string;
+  /**
+   * WHAT KIND of stop this is, in the canonical vocabulary (BI-77CFC7BF).
+   *
+   * NOW REQUIRED. All 141 stop conditions across the seven shape files carry
+   * one, so a new shape cannot declare a stop without deciding what happens
+   * next — §9's mechanic, total by construction rather than by the author
+   * remembering. It was optional while the back-classification was in flight.
+   *
+   * `kind` says whether the shape ended well, badly or out of budget. It does
+   * NOT say what happens next, and is not a proxy for this field. Counted
+   * across all seven files:
+   *
+   *   failure -> inconclusive 37, awaiting-person 5, refused 3, awaiting-input 2
+   *   budget  -> awaiting-person 42, awaiting-input 3, refused 2
+   *
+   * 37 of the 47 `failure` exits are not refusals at all: they read "the
+   * substrate cannot be read — the run stops and reports", which is AGENTS.md
+   * §4's fail-open-on-infrastructure. The authors had been writing that
+   * distinction as English inside `condition` because the type could not hold
+   * it. Do not derive this field from `kind`.
+   *
+   * Budget stops anchor on §9 rule 3 — exhaustion converts to escalate, never
+   * to a hard no — and the two that say "refused" in their own words are read
+   * from the condition, not the kind.
+   */
+  disposition: OutcomeDisposition;
 };
 
 /** Allowed tools/capabilities this activity may consume. Empty is a declaration. */
@@ -104,6 +134,10 @@ export type WorkShapeDefinitionContract = Pick<
   WorkShapeDefinition,
   | "key"
   | "version"
+  // The activity's own words. The dispatcher briefs the coworker from these;
+  // without them the brief is a bare stage key (BI-4A394B21).
+  | "title"
+  | "description"
   | "triggers"
   | "stages"
   | "stopConditions"
@@ -119,6 +153,8 @@ export function readWorkShapeDefinitionContract(
   return {
     key: shape.key,
     version: shape.version,
+    title: shape.title,
+    description: shape.description,
     triggers: shape.triggers,
     stages: shape.stages,
     stopConditions: shape.stopConditions,
@@ -186,9 +222,9 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "No obligation, control review, or licence reference remains inside the horizon unfindinged." },
-      { kind: "failure", condition: "The sweep cannot read the compliance substrate (no profile, no obligations, or a query error) — it stops and reports, and does NOT raise findings from an empty read." },
-      { kind: "budget", condition: "More than 200 findings would be raised in one run — the run stops and escalates, rather than burying the ledger." },
+      { kind: "success", condition: "No obligation, control review, or licence reference remains inside the horizon unfindinged.", disposition: "proceed" },
+      { kind: "failure", condition: "The sweep cannot read the compliance substrate (no profile, no obligations, or a query error) — it stops and reports, and does NOT raise findings from an empty read.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 200 findings would be raised in one run — the run stops and escalates, rather than burying the ledger.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read"],
     measures: [
@@ -208,8 +244,19 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
 };
 
 
-/** The full registry: the anchor compliance shape, the standing operations, and the five delivery shapes. */
-const ALL_SHAPES: Record<string, WorkShapeDefinition> = { ...SHAPES, ...STANDING_SHAPES, ...COWORKER_STANDING_SHAPES, ...DELIVERY_SHAPES };
+/**
+ * The full registry: the anchor compliance shape, the standing operations, the
+ * five delivery shapes, and one orchestration cycle per IT4IT value stream.
+ */
+const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
+  ...SHAPES,
+  ...STANDING_SHAPES,
+  ...COWORKER_STANDING_SHAPES,
+  ...COWORKER_STANDING_SHAPES_OPERATE,
+  ...COWORKER_STANDING_SHAPES_CRAFT,
+  ...DELIVERY_SHAPES,
+  ...ORCHESTRATION_SHAPES,
+};
 
 export function listWorkShapes(): WorkShapeDefinition[] {
   return Object.values(ALL_SHAPES);
@@ -217,6 +264,35 @@ export function listWorkShapes(): WorkShapeDefinition[] {
 
 export function getWorkShape(key: string): WorkShapeDefinition | null {
   return ALL_SHAPES[key] ?? null;
+}
+
+/** Does this shape describe work that RECURS rather than finishing?
+ *
+ *  Read from the shape's own declared triggers, not a hand-kept list: every
+ *  standing operations shape declares `cadence`, every finite delivery shape
+ *  declares `claim`. A new standing shape is therefore standing the day it is
+ *  declared, with nothing else to remember to update (BI-97B24FB5).
+ */
+/** The work-shape key a room declares on its scope claims, e.g. from
+ *  "adopter-health-watch@1.0.0" -> "adopter-health-watch".
+ *
+ *  scopeClaims is an untyped JSON array written by several writers, so read it
+ *  defensively. Shared rather than re-implemented per caller: the room's
+ *  declared shape now decides its projection, so every reader must agree on
+ *  what the room declared (BI-97B24FB5).
+ */
+export function readDeclaredWorkShapeKey(scopeClaims: unknown): string | null {
+  if (!Array.isArray(scopeClaims)) return null;
+  for (const claim of scopeClaims) {
+    if (!claim || typeof claim !== "object") continue;
+    const ref = (claim as Record<string, unknown>).workShape;
+    if (typeof ref === "string" && ref.length > 0) return ref.split("@")[0] ?? null;
+  }
+  return null;
+}
+
+export function isStandingWorkShape(key: string): boolean {
+  return getWorkShape(key)?.triggers.includes("cadence") ?? false;
 }
 
 /** Agent ids that a declared shape names as accountable for at least one stage. */

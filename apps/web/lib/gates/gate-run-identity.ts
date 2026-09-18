@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
 
 export const GATE_RUN_IDENTITY_SCHEMA_VERSION = 1 as const;
-export const GATE_KINDS = ["local-integration-ci", "semantic-review"] as const;
+/**
+ * `in-platform-preflight` is the Build Studio fast tier: the guard gauntlet only,
+ * with no typecheck, tests, production build or image, because the sandbox has no
+ * Docker socket by design. It is a SEPARATE kind rather than a flag on
+ * `local-integration-ci` precisely so a fast-tier record can never be handed back
+ * to a claim asking for the heavy one — the gate key hashes the kind, so the two
+ * tiers derive different keys for the same tree and cannot be confused
+ * (BI-4A9910A9).
+ */
+export const GATE_KINDS = ["local-integration-ci", "semantic-review", "in-platform-preflight"] as const;
 
 export type GateKind = (typeof GATE_KINDS)[number];
 
@@ -17,8 +26,31 @@ export type GateRunIdentity = GateRunIdentityInput & {
   schemaVersion: typeof GATE_RUN_IDENTITY_SCHEMA_VERSION;
 };
 
+/**
+ * The freshness stamp a local-CI PASS carries, as recorded by the run that
+ * produced it. A reuse decision is made against this and nothing else, so the
+ * caller reusing the verdict must be told the same window rather than left to
+ * infer one (BI-03E1139A).
+ */
+export type LocalCiEvidenceValidity = {
+  /** Informational. Older records predate the field. */
+  issuedAt: string | null;
+  /** The instant this reuse decision was actually made against. */
+  expiresAt: string;
+};
+
 export type LocalCiTerminalEvidenceProjection =
-  | { status: "reused"; evidenceRecordId: string; resultClass: "pass" | "fail" }
+  | {
+    status: "reused";
+    evidenceRecordId: string;
+    resultClass: "pass" | "fail";
+    /**
+     * Present whenever the reuse was decided by a real stamp. Reuse of a record
+     * that reached a product verdict always carries one; the infrastructure
+     * records that skip validity are `rerunnable`, never `reused`.
+     */
+    evidenceValidity: LocalCiEvidenceValidity | null;
+  }
   | { status: "rerunnable" }
   | {
     status: "blocked";
@@ -35,6 +67,8 @@ export type SemanticReviewGateIdentityInput = {
     policyVersion: string;
     reviewerVersion: string;
     specialistIds: readonly string[];
+    failureAnalysisDigest?: string;
+    sourceHeadSha?: string;
   };
   risk: string;
   dispatchContractVersion: string;
@@ -152,10 +186,18 @@ export function projectLocalCiTerminalEvidence(input: {
   if (expiresAt <= input.now.getTime()) {
     return { status: "blocked", reason: "expired-evidence" };
   }
+  // Hand back the very stamp this decision was made against. The caller writes
+  // the verdict into its own state and needs the evidence's clock; left without
+  // one it reached for the lease's, which is minutes long, and stamped a PASS as
+  // already expired (BI-03E1139A).
   return {
     status: "reused",
     evidenceRecordId: input.evidence.id,
     resultClass: details.status === "passed" ? "pass" : "fail",
+    evidenceValidity: {
+      issuedAt: typeof validity?.issuedAt === "string" ? validity.issuedAt : null,
+      expiresAt: String(validity?.expiresAt),
+    },
   };
 }
 
@@ -194,6 +236,8 @@ export function deriveSemanticReviewGateIdentity(input: SemanticReviewGateIdenti
   gateKey: string;
 } {
   const reviewPlan = {
+    failureAnalysisDigest: input.identity.failureAnalysisDigest ?? null,
+    sourceHeadSha: input.identity.sourceHeadSha ?? null,
     capsuleId: nonEmpty(input.identity.capsuleId, "semantic-review capsule"),
     baseTreeHash: normalizeHex(input.identity.baseTreeHash, SHA1, "semantic-review base tree SHA"),
     diffDigest: normalizeHex(input.identity.diffDigest, SHA256, "semantic-review diff digest"),

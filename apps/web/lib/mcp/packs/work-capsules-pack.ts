@@ -67,7 +67,8 @@ const definitions: ToolDefinition[] = [
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
         staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
-        limit: { type: "number", description: "Max results (default 50, max 100)." },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Requested page size (default 5, maximum 100); whole rows are reduced to fit the client budget." },
+        cursor: { type: "string", maxLength: 1024, description: "Opaque continuation from this observation. Keep filters unchanged; expiry requires a fresh traversal." },
       },
       required: [],
     },
@@ -177,6 +178,22 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "declare_break_fix",
+    description:
+      "Declare the break-fix expedite lane on a claimed backlog item (design 2026-09-02 §4): an operational repair of a live defect that skips pre-authorisation and owes a post-implementation review receipt within 48 hours by someone other than the declarer. Human-only; WIP 1 per installation (a second open break-fix is refused); a declarer whose earlier break-fix missed its PIR is refused. Binds delivery-break-fix@1.0.0 on the item's live Workroom and records break_fix_declared with the PIR deadline.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "BacklogItem id (BI-*) already claimed into a live Workroom." },
+        reason: { type: "string", description: "The live symptom and the named ref it was reproduced on (goes on the record and the PR body)." },
+      },
+      required: ["itemId", "reason"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    consequence: "authority",
+  },
+  {
     name: "claim_workroom_scope",
     description: "Claim path/module/package/route/skill/prompt scope for a Workroom. Edit-path claims automatically derive, persist, and return changeImpactContract with the tests and guards to address before implementation; consume it immediately, and treat status=unresolved as requiring exhaustive verification. Repeated claims refresh both scope and the full edit-path impact contract. Rejected with error=scope_conflict if another active Workroom already holds an overlapping edit claim — coordinate, claim different scope, or pass force=true to deliberately co-claim.",
     inputSchema: {
@@ -277,6 +294,13 @@ const definitions: ToolDefinition[] = [
       properties: {
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         kind: { type: "string", enum: ENUMS.evidenceKinds, description: "Evidence kind." },
+        stageKey: {
+          type: "string",
+          description:
+            "The work-shape stage this evidence completes. REQUIRED for a Workroom stage to "
+            + "advance: the drive earns a completing receipt from stage-scoped evidence and "
+            + "never from a run's self-reported status (BI-76B35820).",
+        },
         summary: { type: "string", description: "Evidence summary." },
         command: { type: "string", description: "Optional command that produced the evidence." },
         url: { type: "string", description: "Optional URL for PRs, CI runs, screenshots, or external evidence." },
@@ -358,12 +382,14 @@ export const workCapsulesPack: ToolPack = {
   packId: "work-capsules",
   definitions,
   handlers: {
-    list_workrooms: (params) => HANDLERS().then((m) => m.listWorkCapsulesTool(params)),
+    list_workrooms: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
     get_workroom: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
     create_workroom: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_workroom_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),
     claim_backlog_item_for_work: (params, userId, context) => HANDLERS().then((m) => m.claimBacklogItemForWorkTool(params, userId, context)),
+    declare_break_fix: (params, userId, context) =>
+      import("@/lib/work-capsules/declare-break-fix-tool").then((m) => m.declareBreakFixTool(params, userId, context)),
     claim_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
     heartbeat_workroom: (params, userId, context) => HANDLERS().then((m) => m.heartbeatCapsuleTool(params, userId, context)),
     update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
@@ -373,7 +399,7 @@ export const workCapsulesPack: ToolPack = {
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
     record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),
     // Legacy workroom names — callable, deliberately NOT advertised in `definitions`.
-    list_work_capsules: (params) => HANDLERS().then((m) => m.listWorkCapsulesTool(params)),
+    list_work_capsules: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
     get_work_capsule: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
     create_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_capsule_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
@@ -391,11 +417,12 @@ export const workCapsulesPack: ToolPack = {
     plan_workroom_worktree: ["work_capsule_write"],
     adopt_worktree: ["work_capsule_adopt"],
     claim_backlog_item_for_work: ["work_capsule_adopt"],
+    declare_break_fix: ["work_capsule_write"],
     claim_workroom_scope: ["work_capsule_write"],
     heartbeat_workroom: ["work_capsule_write"],
     update_workroom_status: ["work_capsule_write"],
     release_workroom_scope: ["work_capsule_write"],
-    record_workroom_evidence: ["work_capsule_write"],
+    record_workroom_evidence: ["workroom_evidence_write"],
     reassign_workroom_executor: ["work_capsule_write"],
     start_external_work: ["work_capsule_adopt"],
     record_agent_activity: ["work_capsule_write"],
@@ -408,7 +435,7 @@ export const workCapsulesPack: ToolPack = {
     heartbeat_capsule: ["work_capsule_write"],
     update_work_capsule_status: ["work_capsule_write"],
     release_capsule_scope: ["work_capsule_write"],
-    record_capsule_evidence: ["work_capsule_write"],
+    record_capsule_evidence: ["workroom_evidence_write"],
     reassign_capsule_executor: ["work_capsule_write"],
   },
 };

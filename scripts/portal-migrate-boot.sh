@@ -35,6 +35,10 @@ until pnpm --filter @dpf/db exec prisma migrate deploy; do
   sleep 3
 done
 
+echo "[portal-boot] migrations applied; converging model metadata comments (EP-A33A5C61)"
+if ! pnpm --filter @dpf/db exec tsx scripts/apply-model-metadata-comments.ts; then
+  echo "[portal-boot] WARN: model metadata comments could not be applied — the catalog may lag the schema until the next boot (see error above)" >&2
+fi
 echo "[portal-boot] migrations applied; reconciling provider catalog"
 
 if ! pnpm --filter @dpf/db exec tsx scripts/sync-provider-registry.ts; then

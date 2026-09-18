@@ -18,6 +18,7 @@ import { INSTALLATION_IDENTITY_PURPOSE_CONTRACTS } from "./installation-identity
 import { WARD_PURPOSE_CONTRACTS } from "./ward";
 import { ADOPTION_WAITING_LIST_PURPOSE_CONTRACTS } from "./adoption-waiting-list";
 import { PET_RESCUE_PURPOSE_CONTRACTS } from "./pet-rescue";
+import { MAILROOM_PURPOSE_CONTRACTS } from "./mailroom";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
@@ -33,6 +34,7 @@ const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   WARD_PURPOSE_CONTRACTS,
   ADOPTION_WAITING_LIST_PURPOSE_CONTRACTS,
   PET_RESCUE_PURPOSE_CONTRACTS,
+  MAILROOM_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(

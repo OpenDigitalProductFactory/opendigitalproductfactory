@@ -9,6 +9,7 @@ import type {
 } from "@/lib/backlog/initiative-readiness";
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { formatInitiativeReviewObjective, IMMUTABLE_REVIEW_READER_TOOL as IMMUTABLE_READER_TOOL } from "./initiative-review-objective";
 
 export type InitiativeReadinessLane = {
   capability: NonNullable<ToolDefinition["requiredCapability"]>;
@@ -32,6 +33,8 @@ export const INITIATIVE_READINESS_LANES: Record<string, InitiativeReadinessLane>
   record_initiative_security_review: { capability: "manage_compliance", grant: "initiative_security_review", gates: ["security-review"], accountableRoles: ["security-reviewer"], independent: true },
   record_initiative_compliance_review: { capability: "manage_compliance", grant: "initiative_compliance_review", gates: ["compliance-review"], accountableRoles: ["compliance-reviewer"], independent: true },
   record_initiative_domain_review: { capability: "manage_backlog", grant: "initiative_domain_review", gates: ["domain-review"], accountableRoles: ["domain-reviewer"], independent: true },
+  // Break-fix PIR (BI-F2FEC1EB): independent by construction — the declarer authored the repair.
+  record_initiative_post_implementation_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["post-implementation-review"], accountableRoles: ["post-implementation-reviewer"], independent: true },
   record_initiative_archetype_review: { capability: "manage_taxonomy", grant: "initiative_archetype_review", gates: ["archetype-provisioning", "archetype-completeness"], accountableRoles: ["archetype-steward"], independent: true },
 };
 
@@ -47,6 +50,7 @@ export const INITIATIVE_READINESS_TOOL_GRANTS: Record<string, string[]> = {
   record_initiative_compliance_review: ["initiative_compliance_review"],
   record_initiative_domain_review: ["initiative_domain_review"],
   record_initiative_archetype_review: ["initiative_archetype_review"],
+  record_initiative_post_implementation_review: ["initiative_design_review"],
 };
 
 export function readinessLaneForRole(role: string): { toolName: string; lane: InitiativeReadinessLane } | null {
@@ -427,7 +431,7 @@ function sequenceBaselineBeforePlanCoverage(
  * carrying a DCO trailer owned by the Workroom principal, not by anyone
  * recording a receipt. Inventing a lane would invent an approver.
  */
-const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
+const UNROUTABLE_REMEDIES: Record<ReadinessCode, string | null> = {
   ARTIFACT_AUTHOR_REQUIRED: ARTIFACT_AUTHOR_RECOVERY,
   CLASSIFICATION_REQUIRED: "Classify the demand before shaping it: set the investment bucket and score inputs on the backlog item.",
   AUTHORIZATION_DENIED: "The caller's authority does not cover this transition. Re-run from a principal holding the required capability.",
@@ -438,9 +442,28 @@ const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
   OBJECTIVE_BASELINE_CONFLICT: "Two objective baselines disagree. Supersede the stale baseline, leaving exactly one chain head.",
   READINESS_PROJECTION_FAILED: "Readiness projection failed to read this item's evidence. Report it; do not retry blindly.",
   STALE_EVIDENCE: "Recorded evidence is bound to a superseded artifact. Re-record it against the current immutable head.",
+
+  // BI-174DB909: null = this requirement HAS a writer lane, so it is never unroutable and needs no unroutable remedy. Total by construction.
+  CANONICAL_DESIGN_REQUIRED: null,
+  RESEARCH_REQUIRED: null,
+  SPEC_APPROVAL_REQUIRED: null,
+  CANONICAL_DESIGN_AMBIGUOUS: null,
+  REVIEW_REQUIRED: null,
+  REVIEW_FAILED: null,
+  BLOCKING_FINDINGS_OPEN: null,
+  PLAN_REQUIRED: null,
+  PLAN_REVIEW_REQUIRED: null,
+  PLAN_COVERAGE_REQUIRED: null,
+  TRACEABILITY_INCOMPLETE: null,
+  DEPENDENCY_UNRESOLVED: null,
+  OBJECTIVE_BASELINE_REQUIRED: null,
+  ARCHETYPE_PROVISIONING_INCOMPLETE: null,
+  ARCHETYPE_COMPLETENESS_FAILED: null,
+  POST_IMPLEMENTATION_REVIEW_REQUIRED: null,
+  DECOMPOSITION_REQUIRED: null,
 };
 
-const REQUIREMENT_GATES: Partial<Record<ReadinessCode, InitiativeRecoveryGate>> = {
+const REQUIREMENT_GATES: Record<ReadinessCode, InitiativeRecoveryGate | null> = {
   CANONICAL_DESIGN_REQUIRED: "design-spec",
   RESEARCH_REQUIRED: "research",
   SPEC_APPROVAL_REQUIRED: "spec-approval",
@@ -453,6 +476,23 @@ const REQUIREMENT_GATES: Partial<Record<ReadinessCode, InitiativeRecoveryGate>> 
   ARCHETYPE_COMPLETENESS_FAILED: "archetype-completeness",
   ACCEPTANCE_EVIDENCE_REQUIRED: "objective-mapping",
   OBJECTIVE_RECONCILIATION_REQUIRED: "objective-mapping",
+
+  // BI-174DB909: null = no single gate owns this requirement. Some are satisfied without a receipt at all (ARTIFACT_AUTHOR_REQUIRED is the commit's DCO trailer), and recoveryGate() already falls back to the lane's only gate where there is exactly one. Total by construction.
+  CLASSIFICATION_REQUIRED: null,
+  CANONICAL_DESIGN_AMBIGUOUS: null,
+  REVIEW_REQUIRED: null,
+  REVIEW_FAILED: null,
+  BLOCKING_FINDINGS_OPEN: null,
+  PLAN_REQUIRED: null,
+  AUTHORIZATION_DENIED: null,
+  ARTIFACT_AUTHOR_REQUIRED: null,
+  CAPSULE_IDENTITY_MISMATCH: null,
+  DELIVERY_EVIDENCE_REQUIRED: null,
+  OBJECTIVE_BASELINE_CONFLICT: null,
+  READINESS_PROJECTION_FAILED: null,
+  STALE_EVIDENCE: null,
+  POST_IMPLEMENTATION_REVIEW_REQUIRED: null,
+  DECOMPOSITION_REQUIRED: null,
 };
 
 function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadinessLane): InitiativeRecoveryGate | null {
@@ -470,7 +510,6 @@ function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadine
  * `search_source_at_version`; a route binds one exact blob, so the point read is
  * the whole need and the broader search grant is not issued.
  */
-const IMMUTABLE_READER_TOOL = "read_source_at_version";
 const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
 
 function normalizeEligibleEvidenceActivityIds(value: readonly string[] | undefined): string[] | null {
@@ -492,16 +531,11 @@ function requestCoworkerPacket(args: {
   expectedCurrentBaselineId: string | null;
   eligibleEvidenceActivityIds: string[] | null;
 }) {
-  const reviewConstraint = args.independent ? "independently " : "";
   const reviewSha = args.artifact?.commitSha ?? args.dispatch.headSha;
-  const mappingInstruction = args.gate === "objective-mapping"
-    ? ` Map every current OBJ-* and AC-* statement to post-baseline evidence using only these eligible activity IDs: ${args.eligibleEvidenceActivityIds?.join(", ")}. Submit the proposal with record_initiative_evidence(operation='objective-mapping').`
-    : "";
-  const objective = `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at Workroom head ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
-    args.artifact
-      ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_READER_TOOL},`
-      : ""
-  } record a governed receipt only when the gate passes.${mappingInstruction}`;
+  const objective = formatInitiativeReviewObjective({ ...args.dispatch,
+    itemId: args.decision.subject.id, gate: args.gate, toolName: args.toolName,
+    independent: args.independent, artifact: args.artifact,
+    eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds });
   const questionPacketSummary = `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`;
   const base = {
     targetAgent: args.targetAgentId,
@@ -519,16 +553,16 @@ function requestCoworkerPacket(args: {
     itemId: args.decision.subject.id,
     gate: args.gate,
     expectedCurrentBaselineId: args.expectedCurrentBaselineId,
+    workroomRef: {
+      kind: "workroom-head" as const,
+      workroomId: args.dispatch.workroomId,
+      repositoryFullName: args.dispatch.repositoryFullName,
+      branchName: args.dispatch.branchName,
+      headSha: args.dispatch.headSha,
+    },
     ...(args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
       ? {
         eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
-        workroomRef: {
-          kind: "workroom-head" as const,
-          workroomId: args.dispatch.workroomId,
-          repositoryFullName: args.dispatch.repositoryFullName,
-          branchName: args.dispatch.branchName,
-          headSha: args.dispatch.headSha,
-        },
       }
       : {}),
     artifactRef: {

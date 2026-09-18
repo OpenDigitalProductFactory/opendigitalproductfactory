@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20260912060000_backfill_recommended_option_id",
+    "backfill": "in-place UPDATE promoting a value each row already recorded in its own outcomePayload JSON into DecisionInteraction.recommendedOptionId, the indexed column that was always its home. Nothing is derived, inferred or invented: the SQL copies outcomePayload->>'recommendedOptionId' and touches only rows where the column is NULL and that key is present and non-empty. A row that recorded no recommendation stays NULL, which is the honest state for a decision that reached no pick. Idempotent by construction; re-running against the live database reports UPDATE 0. Measured on one operator install: 657 rows updated, column population 1 -> 658 of 1080."
+  },
+  "tests": [
+    "apps/web/lib/decision/kernel-consult-ledger.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-interaction",
+      "prismaModel": "DecisionInteraction",
+      "lifecycleDisposition": "operational",
+      "fields": [
+        {
+          "fieldId": "data:decision-interaction#recommendedOptionId",
+          "resolution": "inherited",
+          "reason": "no schema change and no new field; the column already exists and is already the documented home for the kernel's argmax pick. The value being written is an internal option identifier chosen from the option set the caller supplied, carrying no personal or customer data, and it was already persisted in the same row's outcomePayload. This migration moves a recorded fact into its indexed column so agreement can be measured; it adds no data the row did not already hold.",
+          "provenance": "manual/platform-architecture"
+        }
+      ]
+    }
+  ]
+}

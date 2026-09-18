@@ -1,6 +1,10 @@
+import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
+
+const execFileAsync = promisify(execFile);
 
 import {
   isReachableFromTrunk,
@@ -108,8 +112,17 @@ describe("trunkHasMergedPullRequest (BI-AFE8BB73)", () => {
   it("finds a merged PR's squash commit on a present local trunk and not a never-merged number", async () => {
     const repoRoot = process.cwd();
     if (!(await trunkRefExists(repoRoot))) return; // no local trunk here → skip
-    // #5119 landed on main on 2026-09-06 (fix(readiness): child inherits parent scope).
-    expect(await trunkHasMergedPullRequest(repoRoot, 5119)).toBe(true);
+    // Use whatever squash-merge commit the local trunk tip carries, so the
+    // assertion does not depend on how much history the checkout fetched or
+    // on a fixed PR number that a shallow or partial trunk cannot see.
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", repoRoot, "log", "origin/main", "-20", "--format=%s"],
+      { timeout: 5000, windowsHide: true },
+    );
+    const merged = stdout.split("\n").map((line) => line.match(/\(#(\d+)\)\s*$/)?.[1]).find(Boolean);
+    if (!merged) return; // a trunk with no squash-merge subject in reach → nothing to assert
+    expect(await trunkHasMergedPullRequest(repoRoot, Number(merged))).toBe(true);
     expect(await trunkHasMergedPullRequest(repoRoot, 99999999)).toBe(false);
   });
 });

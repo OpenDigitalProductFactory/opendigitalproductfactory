@@ -70,6 +70,7 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   "reservation-exception": "products-and-services-sold", // a guest awaiting an owner reservation decision
   "hospitality-capacity": "products-and-services-sold", // capacity that blocks a reservation, event, production order, or delivery
   "storefront-inquiry": "products-and-services-sold", // a customer enquiry awaiting the owner's first reply
+  "mailroom-item": "products-and-services-sold", // correspondence from outside the business awaiting acknowledgement
   // A stalled room is classified by the room's OWN portfolio when it has one
   // (projectRoomStall sets `portfolio`, which wins over this default). This
   // fallback covers a room with no portfolio role recorded.

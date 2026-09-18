@@ -74,6 +74,32 @@ export async function POST(req: NextRequest): Promise<Response> {
     await auditTerminal("malformed_payload", "invalid_payload");
     return json("malformed_payload", 400);
   }
+  // Mailroom branch (design 2026-09-09 §4.4, BI-DD24A293): a message addressed to
+  // a declared postmark-inbound mailbox enters the Mailroom intake path instead
+  // of the marketing responder. Guarded by mailbox existence, so an install with
+  // no such mailbox is unaffected.
+  const { ingestPostmarkInboundForMailbox } = await import("@/lib/mailroom/runtime.server");
+  const mailroom = await ingestPostmarkInboundForMailbox({
+    toAddress: parsed.toAddress,
+    mail: {
+      providerMessageId: parsed.externalMessageId!,
+      messageIdHeader: parsed.externalMessageId,
+      inReplyTo: parsed.externalThreadId !== parsed.externalMessageId ? parsed.externalThreadId : null,
+      references: [],
+      from: parsed.fromAddress ? { address: parsed.fromAddress.toLowerCase(), name: parsed.fromDisplayName } : null,
+      to: parsed.toAddress ? [{ address: parsed.toAddress.toLowerCase(), name: null }] : [],
+      subject: parsed.subject,
+      textBody: parsed.textBody,
+      htmlBody: parsed.htmlBody,
+      receivedAt: parsed.receivedAt,
+      headers: parsed.headers,
+      attachments: [],
+    },
+  }).catch(() => null);
+  if (mailroom) {
+    return NextResponse.json({ accepted: true, mailroom: true, inboundId: mailroom.inboundId }, { status: 200 });
+  }
+
   const organization = await prisma.organization.findFirst({ select: { id: true }, orderBy: { createdAt: "asc" } });
   if (!organization) {
     await auditTerminal("no_organization", "configuration");

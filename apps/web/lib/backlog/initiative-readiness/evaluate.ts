@@ -1,5 +1,5 @@
 import { requirementEvidenceLane, requirementNextAction } from "./readiness-guidance";
-import { shapeRequirements, type ShapeRequirement } from "./shape-requirements";
+import { effectiveShape, shapeRequirements, type ShapeRequirement } from "./shape-requirements";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
@@ -164,6 +164,25 @@ function result(
   };
 }
 
+/**
+ * Report the shape that actually gated this evaluation (BI-BD60DC91).
+ *
+ * Sensitivity raises the shape silently, so a one-file fix can owe a medium
+ * item's independent baseline because its body mentions a keyword while
+ * describing the blast radius. Naming the declared shape, the effective one and
+ * the sensitivity between them does not change a single verdict — it makes the
+ * raise legible to the operator and to the recovery packet.
+ */
+function shapeDecisionOf(facts: InitiativeReadinessFacts): NonNullable<InitiativeReadinessDecision["shapeDecision"]> {
+  const effective = effectiveShape(facts.shape!, facts.sensitivity);
+  return {
+    declared: facts.shape!,
+    effective,
+    sensitivity: facts.sensitivity ?? null,
+    raised: effective !== facts.shape,
+  };
+}
+
 /** Pure policy evaluation. All I/O, identity resolution, persistence, and rendering stay in adapters. */
 export function evaluateInitiativeReadiness(
   facts: InitiativeReadinessFacts,
@@ -208,6 +227,10 @@ export function evaluateInitiativeReadiness(
     subject: facts.subject,
     transitionObject: facts.transitionObject,
     profile: facts.profile,
+    // Omitted, not null, for an unshaped item: the decision object is compared
+    // by deep equality against replayed terminal decisions, so an always-present
+    // key would invalidate every decision persisted before this change.
+    ...(facts.shape ? { shapeDecision: shapeDecisionOf(facts) } : {}),
     target,
     verdict: blockers.length > 0 ? "denied" : unmet.length > 0 ? "input-required" : "allowed",
     satisfied,

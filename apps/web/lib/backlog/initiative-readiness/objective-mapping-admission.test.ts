@@ -48,6 +48,7 @@ function persistedHistoryRow(input: {
   taskRunId: string;
   request: ReturnType<typeof packet>;
   status: string;
+  requestObjective?: unknown;
 }) {
   return {
     taskRunId: input.taskRunId,
@@ -59,6 +60,8 @@ function persistedHistoryRow(input: {
       idempotencyKey: input.request.requestKey,
       requestedAgentId: input.request.targetAgent,
       initiativeReviewBinding: input.request.binding,
+      ...(Object.prototype.hasOwnProperty.call(input, "requestObjective")
+        ? { requestObjective: input.requestObjective } : {}),
     },
     actionEnvelopes: [],
   };
@@ -137,6 +140,68 @@ function admissionDb() {
 }
 
 describe("objective-mapping action-time admission", () => {
+  it("replays the accepted same task after a missing writer using the full immutable objective", async () => {
+    const fixture = admissionDb();
+    const current = packet();
+    current.objective = current.objective.padEnd(1236, "x");
+    current.requestKey = createObjectiveMappingRequestKey(current);
+    const ports = {
+      db: fixture.db as never,
+      verifyHistoricalArtifact: vi.fn(),
+      workroomIsLive: vi.fn().mockResolvedValue(true),
+    };
+    const accepted = await prepareObjectiveMappingSubmissionAdmission({
+      packet: current, expectedTaskRunId: "TR-MCP-SUCCESSOR", ports,
+    });
+    expect(accepted.ok).toBe(true);
+    const row = persistedHistoryRow({
+      taskRunId: "TR-MCP-SUCCESSOR", request: current,
+      status: "input-required", requestObjective: current.objective,
+    });
+    row.objective = current.objective.slice(0, 1000);
+    fixture.setHistory([row]);
+    const replay = await prepareObjectiveMappingSubmissionAdmission({
+      packet: current, expectedTaskRunId: "TR-MCP-SUCCESSOR", ports,
+    });
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) return;
+    await expect(replay.data.admissionGuard(fixture.tx as never)).resolves.toBeUndefined();
+    expect(row.objective).toHaveLength(1000);
+    expect(row.a2aMetadata.requestObjective).toHaveLength(1236);
+    expect(fixture.db.toolExecution.findMany).toHaveBeenCalled();
+  });
+
+  it.each([null, "", "   ", 1236, {}, [], undefined].map((requestObjective) => ({ requestObjective })))("rejects present invalid immutable objective $requestObjective instead of falling back", async ({ requestObjective }) => {
+    const fixture = admissionDb();
+    const current = packet();
+    fixture.setHistory([persistedHistoryRow({
+      taskRunId: "TR-MCP-SUCCESSOR", request: current,
+      status: "input-required", requestObjective,
+    })]);
+    const replay = await prepareObjectiveMappingSubmissionAdmission({
+      packet: current, expectedTaskRunId: "TR-MCP-SUCCESSOR",
+      ports: { db: fixture.db as never, verifyHistoricalArtifact: vi.fn(), workroomIsLive: vi.fn().mockResolvedValue(true) },
+    });
+    expect(replay).toMatchObject({ ok: false, refusal: { reason: "objective-mapping-history-unavailable" } });
+  });
+
+  it.each(["legacy-exact", "legacy-truncated", "metadata-conflict"])("keeps the immutable key check for %s history", async (scenario) => {
+    const fixture = admissionDb();
+    const current = packet();
+    const row = persistedHistoryRow({
+      taskRunId: "TR-MCP-SUCCESSOR", request: current, status: "input-required",
+      ...(scenario === "metadata-conflict" ? { requestObjective: "A different requested outcome" } : {}),
+    });
+    if (scenario === "legacy-truncated") row.objective = row.objective.slice(0, 10);
+    fixture.setHistory([row]);
+    const replay = await prepareObjectiveMappingSubmissionAdmission({
+      packet: current, expectedTaskRunId: "TR-MCP-SUCCESSOR",
+      ports: { db: fixture.db as never, verifyHistoricalArtifact: vi.fn(), workroomIsLive: vi.fn().mockResolvedValue(true) },
+    });
+    if (scenario === "legacy-exact") expect(replay.ok).toBe(true);
+    else expect(replay).toMatchObject({ ok: false, refusal: { reason: "immutable-identity-conflict" } });
+  });
+
   it("re-reads under the item lock and refuses an alternate key that appeared after preparation", async () => {
     const fixture = admissionDb();
     const current = packet();

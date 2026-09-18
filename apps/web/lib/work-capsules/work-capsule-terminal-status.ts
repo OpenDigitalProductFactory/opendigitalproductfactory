@@ -5,6 +5,24 @@ import {
 
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
+/**
+ * A review-bound status (ready-for-review, ready-for-promotion, complete) was
+ * refused by the failure-readiness boundary. Distinct from a completion denial:
+ * it carries a closed refusal code so the MCP surface can answer with the
+ * repair step instead of an opaque throw (BI-023EF164).
+ */
+export class WorkCapsulePublicationRefusedError extends Error {
+  readonly code: "workroom_identity_incomplete" | "failure_review_required";
+  readonly reason: string;
+
+  constructor(input: { code: WorkCapsulePublicationRefusedError["code"]; reason: string }) {
+    super(input.reason);
+    this.name = "WorkCapsulePublicationRefusedError";
+    this.code = input.code;
+    this.reason = input.reason;
+  }
+}
+
 export class WorkCapsuleCompletionDeniedError extends Error {
   readonly result: Extract<GovernedTerminalTransitionResult, { ok: false }>;
 

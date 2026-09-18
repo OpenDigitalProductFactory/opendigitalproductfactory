@@ -113,7 +113,9 @@ export async function reserveTerminalWriterReplay(input: {
     resumeMode: "same-taskrun",
     attempt: existingWait ? existingWait.attempt + 1 : 2,
     observedAt: now,
-    dispatchContract: "required-tool-call",
+    // BI-C35576A9: a re-dispatch has not run yet, so it cannot claim a contract;
+    // carry forward what the last real dispatch recorded, if anything.
+    ...(existingWait?.dispatchContract ? { dispatchContract: existingWait.dispatchContract } : {}),
     ...(writerAttempt?.success === false && writerAttempt.result && typeof writerAttempt.result === "object"
       && !Array.isArray(writerAttempt.result)
       && INITIATIVE_CORRECTABLE_ERRORS.has(String((writerAttempt.result as Record<string, unknown>).error ?? ""))

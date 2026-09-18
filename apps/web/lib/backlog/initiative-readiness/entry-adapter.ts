@@ -389,6 +389,26 @@ function projectPlanCoverage(
   return { state: "pass", planDigest: String(payload.planArtifactDigest), planArtifact };
 }
 
+/**
+ * break-fix (BI-F2FEC1EB): the PIR receipt passes the gate; with no receipt the
+ * requirement is `missing` until the declaration's 48-hour window closes and
+ * `fail` after it, which flips the item to a REVIEW_FAILED blocker.
+ */
+function postImplementationReviewState(
+  activities: readonly InitiativeReadinessActivity[],
+  evidence: ReadonlyMap<string, ReadinessEvidenceState>,
+  evaluatedAt: string,
+): ReadinessEvidenceState {
+  const receipt = state(evidence, "post-implementation-review");
+  if (receipt !== "missing") return receipt;
+  const declared = [...activities]
+    .filter((activity) => activity.kind === "break_fix_declared")
+    .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime())[0];
+  const due = object(declared?.payload)?.pirDueAt;
+  if (typeof due === "string" && new Date(due).getTime() < new Date(evaluatedAt).getTime()) return "fail";
+  return "missing";
+}
+
 export function projectBacklogItemReadiness(args: {
   item: InitiativeReadinessItem;
   activities: readonly InitiativeReadinessActivity[];
@@ -513,7 +533,7 @@ export function projectBacklogItemReadiness(args: {
       skillsAndTools: archetypeProvisioning,
     },
     archetypeCompleteness: state(evidence, "archetype-completeness"),
-    postImplementationReview: state(evidence, "post-implementation-review"),
+    postImplementationReview: postImplementationReviewState(args.activities, evidence, args.evaluatedAt),
     projectionError: baseline.malformed || receipts.malformed || args.completion?.projectionError,
     evidenceRefs: args.completion?.evidenceRefs,
     unreadEvidenceRefs: unreadEvidenceByCode(args.activities),

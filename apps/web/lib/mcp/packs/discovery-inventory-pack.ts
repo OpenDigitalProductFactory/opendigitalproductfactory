@@ -78,6 +78,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
+    consequenceScope: "platform",
   },
   {
     name: "run_discovery_triage",
@@ -112,6 +113,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
+    consequenceScope: "platform",
   },
   {
     name: "attribute_entity_to_product",
@@ -172,6 +174,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
+    consequenceScope: "platform",
   },
   {
     name: "request_re_enrichment",
@@ -188,6 +191,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
+    consequenceScope: "platform",
   },
   {
     name: "list_discovery_connections",
@@ -217,6 +221,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
+    consequenceScope: "platform",
   },
   {
     name: "configure_and_test_discovery_connection",

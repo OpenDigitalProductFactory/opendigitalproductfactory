@@ -108,10 +108,10 @@ export const DERIVED_ARTIFACTS = [
     artifactPaths: ["docs/user-guide/assets/diagrams/**"],
     generate: ["node", "scripts/render-doc-diagrams.mjs"],
     check: ["node", "scripts/render-doc-diagrams.mjs", "--check"],
-    // Rendering shells out to mmdc (@mermaid-js/mermaid-cli), which is only
-    // installed in a compile-ready environment, not every source-only
-    // worktree. Pre-commit skips (loudly) rather than blocking when it's
-    // absent; CI (a compile-ready runner) is the backstop via --check.
+    // Rendering needs a Mermaid renderer (scripts/lib/mermaid-renderer.mjs:
+    // a local mermaid-cli, or the pinned tool image through Docker). Where
+    // neither exists pre-commit skips (loudly) rather than blocking; CI is the
+    // backstop via --check. "mmdc" is the renderer's probe name in the gate.
     requiresBinary: "mmdc",
   },
   {
@@ -127,6 +127,15 @@ export const DERIVED_ARTIFACTS = [
     artifactPaths: ["docs/architecture/architecture-counts.generated.md"],
     generate: ["node", "scripts/gen-architecture-counts.mjs"],
     check: ["node", "scripts/gen-architecture-counts.mjs", "--check"],
+    // Derived from REPO-WIDE counts (migrations above all). Two PRs that each
+    // add a migration produce a merged tree neither could have generated, so
+    // whichever enters the merge queue second is stale through no fault of
+    // its author — and cannot push a regeneration into the queue. PR #5175
+    // was ejected six times over twelve hours this way with zero code
+    // failures. PR-head CI still checks this strictly against the author's
+    // own base; only merge-order drift is tolerated, in the queue only, and
+    // the next source-touching PR regenerates it via pre-commit.
+    mergeQueueRaceTolerant: true,
   },
   // ─── Route-derived registry chain (BI-34D69270) ────────────────────────────
   //

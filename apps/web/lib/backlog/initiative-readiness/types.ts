@@ -165,6 +165,22 @@ export type InitiativeReadinessDecision = {
   subject: InitiativeSubject;
   transitionObject: InitiativeTransitionObject;
   profile: ReadinessProfile;
+  /**
+   * Which shape actually gated this evaluation, and why (BI-BD60DC91).
+   *
+   * `declared` is the shape bound on the item's live Workroom; `effective` is
+   * what `effectiveShape` gated on after sensitivity was applied. They differ
+   * whenever sensitivity raised the item, and until now nothing in the refusal
+   * said so: an author saw a small fix owing a medium item's independent
+   * baseline with no way to tell that a word in the body had raised it.
+   * Absent for an unshaped item, which is still gated by the v2 profile.
+   */
+  shapeDecision?: {
+    declared: ReadinessShape;
+    effective: ReadinessShape;
+    sensitivity: ReadinessSensitivity | null;
+    raised: boolean;
+  } | null;
   target: ReadinessTarget;
   verdict: ReadinessVerdict;
   satisfied: ReadinessRequirementResult[];

@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "Index-only change across 15 schema files: no field is added, removed, retyped or repurposed, so every field resolution below is empty by construction and no data subject, provenance or policy vector changes. BI-402CB8FE. Closes the remaining 39 unindexed cascading-FK gaps recorded in the KNOWN_GAPS ratchet of packages/db/src/cascading-fk-index-guard.test.ts, and empties that ratchet so the invariant now holds with no exemptions. Postgres must locate a parent's referencing children before deleting the parent; without an index whose LEADING column is the FK column it seq-scans the entire child table once per deleted parent row. The cost is invisible until the child table grows, which is why this is being closed now rather than left: the original incident sat at effectively zero cost for months, then became a 74-minute two-core zero-rows-deleted stall once the child crossed ~500k rows. Most exposed entry here is ContributorInventorySnapshot.syncRunId (Cascade) at 263,224 rows; InventoryRelationship.toEntityId (Cascade, 1,746 rows) is the classic trap where fromEntityId is covered only because it leads a composite unique and toEntityId is not; the remainder are currently empty on this install and are indexed so they cannot become the next incident. Migration is purely additive, IF NOT EXISTS throughout, alters no column, constraint or row, and applies cleanly against any data state -- verified against live data inside a rolled-back transaction, all 39 CREATE INDEX statements succeeded.",
+  "changes": [
+    { "kind": "model", "assetId": "ContributorInventorySnapshot", "lifecycleDisposition": "domain-lifecycle-managed", "fields": [] },
+    { "kind": "model", "assetId": "InventoryRelationship", "lifecycleDisposition": "domain-lifecycle-managed", "fields": [] },
+    { "kind": "model", "assetId": "DiscoveryFingerprintObservation", "lifecycleDisposition": "domain-lifecycle-managed", "fields": [] },
+    { "kind": "model", "assetId": "AuthorizationDecisionLog", "lifecycleDisposition": "domain-lifecycle-managed", "fields": [] }
+  ]
+}

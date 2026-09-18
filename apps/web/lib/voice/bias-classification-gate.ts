@@ -55,9 +55,12 @@ export interface BiasClassificationInput {
  * verbatim. Anything not in this set is treated as off-org (defense in depth:
  * unknown providers fail-safe to redaction).
  *
- * Slice 1 ships with the local sidecars only. Hosted providers (Groq,
- * Deepgram, AssemblyAI) are always off-org — DPF never enrolls as a partner
- * per [feedback_dpf_as_integration_conduit].
+ * Only an endpoint the operator runs themselves is on-org. Every hosted
+ * provider (OpenAI, Groq, Deepgram, AssemblyAI) is off-org and has its bias
+ * prompt redacted — DPF never enrolls as a partner per
+ * [feedback_dpf_as_integration_conduit]. Speech became provider-managed in
+ * BI-F7E9A541, so this list is the boundary that keeps org vocabulary from
+ * leaving the install when an operator connects a hosted transcriber.
  */
 export const ON_ORG_TRANSCRIPTION_PROVIDERS = ["speaches", "whisper-cpp-local"] as const;
 

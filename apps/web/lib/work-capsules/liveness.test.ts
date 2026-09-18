@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { classifyWorkCapsuleLiveness, type CapsuleLivenessInput } from "./liveness";
+import { classifyWorkCapsuleLiveness, type CapsuleLivenessInput,
+  isDemonstrablyWorking,
+} from "./liveness";
 
 const NOW = new Date("2026-08-05T15:00:00.000Z");
 
@@ -111,21 +113,65 @@ describe("classifyWorkCapsuleLiveness", () => {
 
   it("an UNMERGED delivered signal is inert (deliveredSignal.merged=false ⇒ normal liveness)", () => {
     const v = classifyWorkCapsuleLiveness(
-      row({ executorKind: "grok-cli", leaseExpiresAt: new Date("2026-08-05T16:00:00.000Z"), deliveredSignal: { merged: false } }),
+      row({
+        executorKind: "grok-cli",
+        leaseExpiresAt: new Date("2026-08-05T16:00:00.000Z"),
+        lastSyncedAt: new Date("2026-08-05T14:45:00.000Z"),
+        deliveredSignal: { merged: false },
+      }),
       NOW,
     );
+    // A valid lease plus a fresh work signal is the genuine live case.
     expect(v.liveness).toBe("live"); // valid lease, not merged
     expect(v.disposition).toBeNull();
   });
 
-  it("treats a valid lease as live", () => {
+  // BI-7271460C. `heartbeatWorkCapsule` writes only leaseHolderPrincipalId and
+  // leaseExpiresAt, so a loop that only heartbeats renews the lease forever with
+  // nothing to show. WC-1B73A988 read `live` for three days on a branch whose PR
+  // had already merged. A lease is necessary for live, never sufficient.
+  it("treats a valid lease WITH a fresh work signal as live", () => {
     const v = classifyWorkCapsuleLiveness(
-      row({ executorKind: "codex-desktop", leaseExpiresAt: new Date("2026-08-05T15:20:00.000Z") }),
+      row({
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-05T15:20:00.000Z"),
+        lastSyncedAt: new Date("2026-08-05T14:30:00.000Z"),
+      }),
       NOW,
     );
     expect(v.liveness).toBe("live");
     expect(v.isLive).toBe(true);
     expect(v.isReapable).toBe(false);
+  });
+
+  it("does not call a valid lease live when nothing has recorded work", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({ executorKind: "codex-desktop", leaseExpiresAt: new Date("2026-08-05T15:20:00.000Z") }),
+      NOW,
+    );
+    expect(v.liveness).toBe("leased-idle");
+    expect(isDemonstrablyWorking(v.liveness)).toBe(false);
+    expect(v.reason).toContain("heartbeat renews the lease");
+    // Still HELD: ownership and the reaper must not weaken just because the
+    // room is quiet. Stealing a branch someone holds is the worse failure.
+    expect(v.isLive).toBe(true);
+    expect(v.isReapable).toBe(false);
+    expect(v.disposition).toBeNull();
+  });
+
+  it("does not call a valid lease live when the work signal is past the idle floor", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-05T15:20:00.000Z"),
+        // Three days stale, exactly the WC-1B73A988 shape.
+        lastSyncedAt: new Date("2026-08-02T15:00:00.000Z"),
+      }),
+      NOW,
+    );
+    expect(v.liveness).toBe("leased-idle");
+    expect(v.isReapable).toBe(false);
+    expect(v.trueLivenessAt?.toISOString()).toBe("2026-08-02T15:00:00.000Z");
   });
 
   it("keeps an expired Workroom lease live while its exact worktree has a durable capacity wait", () => {

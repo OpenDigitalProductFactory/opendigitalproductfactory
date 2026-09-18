@@ -1,12 +1,12 @@
 ---
-status: draft
+status: active
 ---
 
 # Cross-Install Operational Control Plane
 
 **Backlog item:** `BI-648F01A0`
 **Epic:** `EP-8B03CB06` (Per-install edge reachability & connectivity topology — federation)
-**Status:** Draft — for operator review
+**Status:** Active — Slices 1–3 delivered; Slice 4 gated on the org's control-scope stance
 
 ## Purpose
 
@@ -71,6 +71,18 @@ Only after the operator records how much *control* (vs visibility) to centralize
 ## Governance
 
 The **control-vs-visibility scope** is a WWWD (business) decision — it belongs on the org stance surface, not `principle_decide`. Slices 1–3 (visibility) are low-risk platform work; Slice 4 (control) must not ship until the stance is recorded. The just-published "How we build — vertical integration" stance is the strategic driver; a specific control-scope stance is the gate for Slice 4.
+
+## Delivery status (2026-09-07)
+
+| Slice | Delivered by | Notes |
+|---|---|---|
+| 1 — enrollment conflict | operator-directed revoke on the live install; self-healing in #5148 (BI-D4F79CE2) | a stale installer-managed enrollment beside a live one now retires itself; two live nodes remain a human decision |
+| 2.1 — record type + projection | #4968 (BI-0585906E) | |
+| 2.2 — posture flows on the cadence | #5146 (BI-27B578C7) | shared federation outbox, same-org links only, canonical-side rule enforced on receive |
+| 3 — paired-estate surface + peer runtime targets | #5147 (BI-27B578C7) | basis and age stated per install; a silent peer renders offline; UX-fit decision DI-4548A2BBF2BC |
+| 4 — governed action channel | not started | WWWD control-scope stance still to be recorded |
+
+Readiness receipts for this initiative are being recorded against WC-699D07EB per WWMD decision DI-3665A24BD8D1 (run the receipt chain rather than lower the profile).
 
 ## Not in scope
 

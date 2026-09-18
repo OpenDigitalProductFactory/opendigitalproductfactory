@@ -7,9 +7,57 @@
 // write stay in the route/store — this module is presentation + payload shaping.
 
 import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
+import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
+import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
 type JsonRpcId = string | number | null;
+type NoMatchReason = "unknown-tool-name" | "reviewer-route-required" | "not-granted" | "intent-no-match" | "missing-query";
+type LoadToolsNoMatch = { reason: NoMatchReason; requestedNames?: string[] };
+
+/**
+ * A writer the author must NOT invoke directly — the registry decides, not the
+ * tool's name (BI-7876699F).
+ *
+ * `record_initiative_*` used to be matched by prefix, which is right for nine of
+ * the ten lanes and wrong for the only one that matters to an author:
+ * `record_initiative_evidence` is declared `independent: false` with
+ * `design-author` among its accountableRoles. Prefix-matching it meant a
+ * delivery-small item could never satisfy RESEARCH_REQUIRED — its own shape owes
+ * no baseline and no plan, so the author had no reachable writer at all and the
+ * item could not be closed by anyone.
+ *
+ * The prefix test also sat ABOVE the not-granted branch, so a missing grant was
+ * reported as "reviewer-route-required" and sent the operator to a recovery
+ * packet that issues no route. One registry, one answer.
+ */
+function isReviewerOnlyWriter(name: string): boolean {
+  return INITIATIVE_READINESS_LANES[name]?.independent === true;
+}
+
+export function classifyLoadToolsNoMatch(
+  args: Record<string, unknown>,
+  knownNames: ReadonlySet<string>,
+  grantedNames: ReadonlySet<string>,
+  selectedCount: number,
+): LoadToolsNoMatch | undefined {
+  if (selectedCount > 0) return undefined;
+  const requestedNames = Array.isArray(args.names)
+    ? args.names.filter((name): name is string => typeof name === "string")
+    : [];
+  if (requestedNames.length > 0) {
+    const canonicalNames = requestedNames.map(canonicalWorkroomToolName);
+    const reason = canonicalNames.some((name) => !knownNames.has(name))
+      ? "unknown-tool-name"
+      : canonicalNames.some(isReviewerOnlyWriter)
+        ? "reviewer-route-required"
+        : canonicalNames.some((name) => !grantedNames.has(name))
+          ? "not-granted"
+          : "intent-no-match";
+    return { reason, requestedNames };
+  }
+  return { reason: typeof args.query === "string" && args.query.trim() ? "intent-no-match" : "missing-query" };
+}
 
 /**
  * Keep the cross-client recovery contract inside Codex's documented 512-char
@@ -66,12 +114,29 @@ function firstSentence(text: string): string {
 export function buildLoadToolsResult(
   selected: ReadonlyArray<{ name: string; description: string }>,
   loadedToolNames: string[],
+  noMatch?: LoadToolsNoMatch,
 ): { content: Array<{ type: "text"; text: string }>; structuredContent: Record<string, unknown> } {
+  const noMatchRecovery = selected.length === 0 && noMatch
+    ? {
+      ...noMatch,
+      ...(noMatch.reason === "reviewer-route-required"
+        ? {
+          supportedEntryPoint: { toolName: "get_backlog_item" },
+          nextStep: "Call get_backlog_item for the initiative and use its server-issued reviewerRoutes packet. The author must not invoke the reviewer writer directly.",
+        }
+        : {
+          nextStep: noMatch.reason === "unknown-tool-name"
+            ? "Use an intent query or search_tool_marketplace; do not retry the nonexistent exact name."
+            : "Use a broader intent query or an authorized workflow entry point; do not retry the same unavailable exact name.",
+        }),
+    }
+    : undefined;
   let data: Record<string, unknown> = {
     newlyLoaded: selected.map((t) => ({ name: t.name, description: firstSentence(t.description) })),
     loadedToolNames,
     count: selected.length,
     listChanged: selected.length > 0,
+    noMatch: noMatchRecovery,
     recovery:
       selected.length > 0
         ? { reListTools: true, programmaticCatalogFallback: true }

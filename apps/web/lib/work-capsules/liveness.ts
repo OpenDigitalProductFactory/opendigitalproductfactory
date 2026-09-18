@@ -58,6 +58,13 @@ export type WorkCapsuleLiveness =
   /** Lease-backed executor whose lease elapsed past the resume grace — the
    *  session is truly gone. */
   | "lease-expired"
+  /** Lease is VALID but nothing says work is happening. `heartbeatWorkCapsule`
+   *  writes only `leaseHolderPrincipalId` and `leaseExpiresAt`, so a loop that
+   *  only heartbeats renews the lease forever with nothing to show for it. The
+   *  room is held, not worked. NOT reapable: the lease is still valid and the
+   *  holder may resume at any moment — the reaper waits for expiry as before
+   *  (BI-7271460C). */
+  | "leased-idle"
   /** Linked Build Studio build is complete/failed/abandoned — nothing to do. */
   | "build-terminal"
   /** Linked TaskRun/turn is terminal while stale session state still claims activity. */
@@ -70,6 +77,18 @@ export type WorkCapsuleLiveness =
   | "terminal"
   /** Null lease, no build/sync signal, but recent enough to withhold judgment. */
   | "no-signal";
+
+/**
+ * Is an agent demonstrably WORKING in this room, as opposed to merely holding it?
+ *
+ * `isLive` on the verdict answers the weaker, safety-oriented question ("is it
+ * held — do not steal or reap"), which `leased-idle` satisfies. An operator
+ * surface asking "who is actually working" must ask this instead, or it repeats
+ * the conflation this exists to remove (BI-7271460C).
+ */
+export function isDemonstrablyWorking(liveness: WorkCapsuleLiveness): boolean {
+  return liveness === "live" || liveness === "durable-wait";
+}
 
 /** How a governed reaper should close a room the classifier says to act on. */
 export type WorkCapsuleDisposition =
@@ -165,6 +184,25 @@ function hasOpenPr(input: CapsuleLivenessInput, now: Date): boolean {
   return age >= -PROVIDER_CLOCK_SKEW_MS && age <= WORK_CAPSULE_OPEN_PR_FRESHNESS_MS;
 }
 
+/**
+ * The freshest signal that only advances when real work happens.
+ *
+ * Deliberately excludes `leaseExpiresAt` (a heartbeat moves it with no work
+ * behind it) and `updatedAt` (the 14:00 birth-time mask). Shared by the leased
+ * and null-lease branches so both answer "is work happening" the same way,
+ * rather than the lease branch answering an easier question (BI-7271460C).
+ */
+function freshestWorkSignal(
+  input: CapsuleLivenessInput,
+  build: { lastActivityAt?: Date | null } | null,
+): Date | null {
+  const buildActivityAt = build?.lastActivityAt ?? null;
+  if (buildActivityAt && input.lastSyncedAt) {
+    return new Date(Math.max(buildActivityAt.getTime(), input.lastSyncedAt.getTime()));
+  }
+  return buildActivityAt ?? input.lastSyncedAt ?? null;
+}
+
 function humanAge(ms: number): string {
   const mins = Math.round(ms / 60000);
   if (mins < 60) return `${mins}m`;
@@ -197,10 +235,17 @@ export function classifyWorkCapsuleLiveness(
     liveness,
     // `paused` reads as live so a token-limited session that may resume is never
     // shown as dead or reaped; `delivered` does NOT (it should be closed out).
+    // `isLive` answers "is this room HELD — keep hands off", which is what
+    // ownership, claim refusal and the reaper all need. It is NOT "is an agent
+    // demonstrably working": `leased-idle` is held under a valid lease with
+    // nothing to show, and weakening it here would let a second agent steal a
+    // branch someone still holds. Ask `liveness === "live"` for the stronger
+    // question; the two were one field and that was the defect (BI-7271460C).
     isLive:
       liveness === "live" ||
       liveness === "durable-wait" ||
       liveness === "no-signal" ||
+      liveness === "leased-idle" ||
       liveness === "paused",
     isReapable: REAPABLE_LIVENESS.has(liveness),
     disposition:
@@ -296,16 +341,44 @@ export function classifyWorkCapsuleLiveness(
         input.leaseExpiresAt,
       );
     }
+    // A valid lease says someone HOLDS this room. It does not say work is
+    // happening, and the two were conflated (BI-7271460C). `heartbeatWorkCapsule`
+    // updates only the lease holder and expiry — no sync, no evidence — so an
+    // agent that heartbeats every 30 minutes and does nothing else reads exactly
+    // like an agent delivering. WC-1B73A988 read `live` for three days on a
+    // branch whose PR had already merged, because the lease alone answered.
+    //
+    // So the lease is necessary, not sufficient: it must be backed by the same
+    // real signal the null-lease branch below already demands. `leaseExpiresAt`
+    // is deliberately NOT a candidate signal here — that is the circularity.
     const remaining = humanAge(input.leaseExpiresAt.getTime() - now.getTime());
-    return verdict("live", `Lease valid for ${remaining}.`, input.leaseExpiresAt);
+    const leasedSignalAt = freshestWorkSignal(input, build);
+    if (leasedSignalAt) {
+      const age = now.getTime() - leasedSignalAt.getTime();
+      if (age <= idleMs) {
+        return verdict(
+          "live",
+          `Lease valid for ${remaining}; work signal ${humanAge(age)} ago.`,
+          leasedSignalAt,
+        );
+      }
+      return verdict(
+        "leased-idle",
+        `Lease valid for ${remaining}, but no work signal for ${humanAge(age)} (past the ${humanAge(idleMs)} idle floor) — a heartbeat renews the lease without doing work.`,
+        leasedSignalAt,
+      );
+    }
+    return verdict(
+      "leased-idle",
+      `Lease valid for ${remaining}, but nothing has recorded work on this room — a heartbeat renews the lease without doing work.`,
+      null,
+    );
   }
 
-  // Null lease (e.g. a Build Studio capsule): use the freshest REAL signal.
-  const buildActivityAt = build?.lastActivityAt ?? null;
-  const signalAt =
-    buildActivityAt && input.lastSyncedAt
-      ? new Date(Math.max(buildActivityAt.getTime(), input.lastSyncedAt.getTime()))
-      : buildActivityAt ?? input.lastSyncedAt ?? null;
+  // Null lease (e.g. a Build Studio capsule): use the freshest REAL signal — the
+  // same one the leased branch above now demands, from the same helper, so the
+  // two branches cannot drift into answering different questions.
+  const signalAt = freshestWorkSignal(input, build);
 
   if (signalAt) {
     const age = now.getTime() - signalAt.getTime();

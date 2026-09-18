@@ -116,6 +116,34 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
 }
 
 describe("terminal initiative recovery", () => {
+  it("BI-05F8860A: a small-shape acceptance lane escalates to record_execution_evidence, never to objective mapping", async () => {
+    const ports = deps();
+    const smallShapeDecision: InitiativeReadinessDecision = {
+      ...decision,
+      policyVersion: "initiative-readiness.v3",
+      unmet: [readinessRequirement({
+        code: "ACCEPTANCE_EVIDENCE_REQUIRED",
+        state: "missing",
+        accountableRole: "delivery-coordinator",
+      })],
+    };
+    const recovery = await resolveTerminalInitiativeRecovery({
+      decision: smallShapeDecision,
+      currentAgentId: null,
+      refusedWorkroomId: null,
+      ports,
+    });
+    expect(recovery.reviewerRoutes).toEqual([]);
+    expect(recovery.escalations).toEqual([expect.objectContaining({
+      reason: "acceptance-evidence-required",
+      accountableRole: "delivery-coordinator",
+      toolName: "record_execution_evidence",
+    })]);
+    expect(String(recovery.escalations[0]?.nextAction)).toContain("manual_check");
+    expect(ports.loadLiveRooms).not.toHaveBeenCalled();
+    expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
+  });
+
   it("binds the unique live room, current baseline, and provider-verified artifact", async () => {
     const ports = deps();
     const result = await resolveTerminalInitiativeRecovery({
@@ -398,6 +426,39 @@ describe("terminal initiative recovery", () => {
     expect(ports.verifyHistoricalArtifact).not.toHaveBeenCalled();
     expect(result.reviewerRoutes).toEqual([]);
     expect(result.escalations).toMatchObject([{ reason: "objective-mapping-identity-conflict" }]);
+  });
+
+  // BI-7876699F: when the only unmet lane is RESEARCH_REQUIRED the packet used to
+  // fall through to the workroom/baseline chain and answer "baseline-not-found —
+  // complete independent spec approval". A delivery-small shape owes no
+  // OBJECTIVE_BASELINE_REQUIRED at all, so that route can never be taken: the
+  // item was unclosable by anyone. Research is author-satisfiable; say so.
+  it("routes an unmet research lane to the author's own writer, never to a baseline", async () => {
+    const ports = deps();
+    const researchOnly: InitiativeReadinessDecision = {
+      ...decision,
+      unmet: [readinessRequirement({
+        code: "RESEARCH_REQUIRED",
+        state: "missing",
+        accountableRole: "design-author",
+      })],
+    };
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: researchOnly,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.escalations).toMatchObject([{
+      reason: "research-evidence-required",
+      toolName: "record_initiative_evidence",
+      accountableRole: "design-author",
+    }]);
+    // It must not consult the baseline machinery at all for this lane.
+    expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
+    expect(ports.resolveRecovery).not.toHaveBeenCalled();
   });
 
   it("fails closed when the current baseline has no eligible post-baseline passing evidence", async () => {

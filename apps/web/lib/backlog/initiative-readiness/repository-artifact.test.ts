@@ -90,13 +90,26 @@ describe("resolveRepositoryArtifact", () => {
         transportFactory: () => ({ fetch: isolatedFetch as unknown as typeof fetch, close }),
       } as never);
 
-      expect(result).toEqual({ ok: true, data: bytes });
+      expect(result).toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
       expect(isolatedFetch).toHaveBeenCalledTimes(1);
       expect(frameworkFetch).not.toHaveBeenCalled();
       expect(close).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("serves a commit+path locator without an expected blob id and reports the blob the provider returned", async () => {
+    const isolatedFetch = providerFetch();
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: null,
+      db: db() as never,
+      transportFactory: () => ({ fetch: isolatedFetch as unknown as typeof fetch, close: vi.fn().mockResolvedValue(undefined) }),
+    } as never);
+    expect(result).toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
   });
 
   it("maps production transport construction failure to an immutable-source refusal", async () => {
@@ -167,7 +180,7 @@ describe("resolveRepositoryArtifact", () => {
       expectedBlobId: locator.providerBlobId,
       db: db() as never,
       fetchImpl: fetchImpl as typeof fetch,
-    })).resolves.toEqual({ ok: true, data: bytes });
+    })).resolves.toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
@@ -219,7 +232,7 @@ describe("resolveRepositoryArtifact", () => {
       expectedBlobId: locator.providerBlobId,
       db: db() as never,
       fetchImpl: transient as typeof fetch,
-    })).resolves.toEqual({ ok: true, data: bytes });
+    })).resolves.toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
     expect(transient).toHaveBeenCalledTimes(2);
     expect(cancel).toHaveBeenCalledTimes(1);
   });
@@ -272,7 +285,7 @@ describe("resolveRepositoryArtifact", () => {
       fetchImpl: fetchImpl as typeof fetch,
     });
 
-    expect(result).toEqual({ ok: true, data: bytes });
+    expect(result).toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(fetchImpl).toHaveBeenCalledWith(
       expect.stringContaining(`/contents/docs/superpowers/plans/test.md?ref=${locator.commitSha}`),

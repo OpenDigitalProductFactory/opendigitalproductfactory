@@ -13,6 +13,8 @@ import {
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
+import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
 import { DynamicToolSurface } from "@/lib/tak/dynamic-tool-surface";
 import {
@@ -24,6 +26,7 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage } from "@/lib/ai-inference";
+import type { ToolCallEntry } from "@/lib/routing/adapter-types";
 import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
@@ -34,6 +37,7 @@ import {
   resolveTurnMinimumCapabilities,
 } from "@/lib/routing/agent-capability-types";
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
+import { lookupPinnedModelFamily } from "@/lib/routing/model-successor";
 import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 import type { UserContext } from "@/lib/permissions";
 import {
@@ -47,13 +51,13 @@ import {
   planProgress,
 } from "./execution-plan";
 import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store";
-import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
+import { estimateContextTokens, classifyContextPressure, compactAgenticMessages } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
-import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
+import { applyEscalationLadderGuard } from "./escalation-ladder";
+import { buildDowngradedFabricationMessage, buildLocalToolCallFailureMessage } from "./provider-failure-messages";
 import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
-import { summarizeDroppedMessages } from "./compaction-digest";
 import {
   detectToolRefusedDespiteAvailability,
   appendToolRefusedRecoveryMessages,
@@ -62,12 +66,14 @@ import {
 import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
-  normalizeTerminalToolArguments, rotateTerminalWriterProvider,
+  normalizeTerminalToolArguments,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   selectTerminalToolSurface,
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
+import { rotateTerminalWriterRoute } from "./terminal-writer-route";
+import { shouldExitWithLocalToolCallDiagnostic } from "./local-tool-call-diagnostic";
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -86,9 +92,6 @@ const MAX_DURATION_BUILD_MS = 600_000;    // 10 min — sandbox code gen
 const MAX_DURATION_PLAN_MS = 600_000;     // 10 min — ideate/plan (heavy research)
 const MAX_DURATION_REVIEW_MS = 300_000;   // 5 min — review
 const MAX_DURATION_SHIP_MS = 300_000;     // 5 min — ship
-const MAX_AGENTIC_HISTORY_MESSAGES = 24;
-const MAX_TOOL_RESULT_CHARS = 1_500;
-const MAX_TEXT_MESSAGE_CHARS = 4_000;
 
 // ─── Extracted for testability ──────────────────────────────────────────────
 
@@ -228,6 +231,8 @@ type AgentRouteConfig = {
   budgetClass?: "minimize_cost" | "balanced" | "quality_first";
   preferredProviderId?: string;
   preferredModelId?: string;
+  /** BI-7F2FBDA3: lineage of the pinned model, looked up even when it has retired. */
+  preferredModelFamily?: string | null;
   allowedProviders?: string[];
   deniedProviders?: string[];
   residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
@@ -482,30 +487,7 @@ function buildFabricationFailureMessage(params: {
  * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
  * See spec docs/specs/routing-resilience-and-failure-observability-spec.md §4.5.
  */
-function buildDowngradedFabricationMessage(): string {
-  return (
-    "My usual AI provider was unavailable, so I worked through a backup that "
-    + "couldn't fully complete this — nothing was left half-saved on your side. "
-    + "Please try again (the primary connection may have recovered), or break "
-    + "the request into a smaller step."
-  );
-}
-
-function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): string {
-  // Respects IDENTITY_BLOCK rule #5 — no infrastructure names, model ids, or
-  // routing architecture; engineers get those from RoutedInferenceResult.
-  // Copy must stay honest (G2, 2026-05-23): an earlier version promised a
-  // re-route the loop never performs.
-  // Rung 4 (BI-33F1EA72): connecting a provider is work only the human can do,
-  // so this hands off rather than apologizing — steps, then the resumption.
-  return buildHumanHandoff({
-    blocker: "I'm on the local AI here, and it couldn't carry this one through.",
-    steps: ["Open Platform > AI > Providers.", "Connect a stronger provider — Claude, Gemini, or OpenAI."],
-    verify: "confirm the stronger provider is live",
-  });
-}
-
-type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult };
+type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult; modelEvidenceTruncated?: boolean };
 
 function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
   const counts = new Map<string, number>();
@@ -937,73 +919,7 @@ export function buildToolSessionHintMessage(
   );
 }
 
-function truncateMessageContent(content: string, maxChars: number, label: string): string {
-  if (content.length <= maxChars) return content;
-  const omitted = content.length - maxChars;
-  const suffix = `\n...[truncated ${omitted} chars of earlier ${label}]`;
-  return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
-}
 
-function compactAgenticMessages(
-  messages: ChatMessage[],
-  maxContextTokens?: number | null,
-  zone?: import("./context-pressure").ContextPressureZone,
-): ChatMessage[] {
-  // BI-9679EB1A: size the caps from the real model window when known, never
-  // below today's floor. Unknown window (incl. iteration 0) -> floor exactly,
-  // so the unknown-window path is byte-for-byte identical to before.
-  // BI-3C8220ED: a live overload `zone` tightens the trim (never below floor).
-  const caps = deriveCompactionCaps(maxContextTokens, {
-    maxHistory: MAX_AGENTIC_HISTORY_MESSAGES,
-    toolCap: MAX_TOOL_RESULT_CHARS,
-    textCap: MAX_TEXT_MESSAGE_CHARS,
-  }, zone);
-  let scopedMessages: ChatMessage[];
-  if (messages.length <= caps.maxHistory) {
-    scopedMessages = messages;
-  } else {
-    // R9a (P11): the middle of a long turn is dropped entirely. Before
-    // discarding it, distill its TOOL ACTIVITY into a one-line digest — zero
-    // inference, because the local-first single-GPU path can't afford a
-    // summarization call — and re-insert it right after message[0] so "what was
-    // already tried / what failed" survives compaction instead of being silently
-    // lost (which lets the model repeat completed work or re-hit a known fail).
-    const dropped = messages.slice(1, messages.length - (caps.maxHistory - 1));
-    const digest = summarizeDroppedMessages(dropped);
-    const tail = messages.slice(-(caps.maxHistory - 1));
-    scopedMessages = digest
-      ? [messages[0]!, { role: "assistant" as const, content: `[System notice] ${digest}` }, ...tail]
-      : [messages[0]!, ...tail];
-  }
-
-  const retainedToolCallIds = new Set(
-    scopedMessages.flatMap((message) =>
-      message.role === "assistant" && message.toolCalls
-        ? message.toolCalls.map((toolCall) => toolCall.id)
-        : [],
-    ),
-  );
-
-  return scopedMessages
-    .filter((message) =>
-      message.role !== "tool" ||
-      !message.toolCallId ||
-      retainedToolCallIds.has(message.toolCallId),
-    )
-    .map((message) => {
-      if (typeof message.content !== "string") return message;
-      if (message.role === "tool") {
-        return {
-          ...message,
-          content: truncateMessageContent(message.content, caps.toolCap, "tool output"),
-        };
-      }
-      return {
-        ...message,
-        content: truncateMessageContent(message.content, caps.textCap, "message context"),
-      };
-    });
-}
 
 export type RunAgenticLoopParams = {
 
@@ -1082,6 +998,19 @@ export type RunAgenticLoopParams = {
    * must opt in to `"chat"` explicitly.
    */
   interactionMode?: "chat" | "autonomous";
+  /**
+   * EP-WORK-POSTURE §8.2 — what the Workroom the turn runs in resolved for it
+   * (lib/work-management/room-turn-authority.ts). `workroomId` reaches the
+   * authorized-surface context so the room-aware pre-tool gate fires;
+   * `roomAuthority` reaches the governed executor so a tool outside the room's
+   * surface is denied; `externalAccessEnabled` is the server-resolved web
+   * permission (never a client flag); `workroomPriority` is the room's
+   * Cost/Quality/Time posture, which outranks org/platform in routing.
+   */
+  workroomId?: string | null;
+  roomAuthority?: RoomAuthorityContext | null;
+  externalAccessEnabled?: boolean;
+  workroomPriority?: GoldenTrianglePreference | null;
   /**
    * BI-80532D5C — when true, a side-effecting non-artifact tool the model calls
    * is diverted to an AgentActionProposal (status "proposed") instead of being
@@ -1227,6 +1156,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   );
   effectiveConfig.minimumDimensions = turnRoute.minimumDimensions;
 
+  // BI-7F2FBDA3: a pinned model is a preference with lineage; routing moves to
+  // the family successor rather than to whatever ranked first.
+  effectiveConfig.preferredModelFamily ??= await lookupPinnedModelFamily(prisma, effectiveConfig.preferredProviderId, effectiveConfig.preferredModelId);
+
   // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
   // per turn and, when it is near the budget, bias the routing budget class
   // toward cost so the router picks a cheaper (still capability-floor-respecting)
@@ -1256,27 +1189,28 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // Budget gate is advisory — never block a turn on it.
   }
 
-  // Build routeAndCall options once (reused every iteration)
   const routeOptions: RouteAndCallOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
     ...(messageOrigins?.length ? { messageOrigins } : {}),
     taskType: turnRoute.taskType,
     ...effectiveConfig,
+    requiresStreaming: interactionMode === "autonomous" ? false : undefined,
     ...(requireTools ? { requireTools: true } : {}),
     ...(agentDisplayName ? { agentDisplayName } : {}),
     // EP-AGENT-CAP-002: Capability floor — passed through to pipeline Stage 1
     minimumCapabilities,
     agentMinimumContextTokens,
-    agentId, routeContext,
+    agentId, routeContext, threadId, // threadId: the cost ledger's join key (BI-CCF1ACBB)
     ...(agentMessageId ? { agentMessageId } : {}),
+    ...(params.workroomPriority ? { workroomPriority: params.workroomPriority } : {}),
     // mcpSession is forwarded through callWithFallbackChain → callProvider →
     // AdapterRequest. The Claude CLI execution adapter consumes it to mint a
     // short-lived JWT for `--mcp-config`, exposing platform tools as native
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
     // adapters ignore the field. The agentic loop is the only place with
     // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext },
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two
@@ -1408,7 +1342,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `totalMs=${Date.now() - startTime} ` +
         `ctxPeakTokens=${ctxPeakTokens} ctxZone=${ctxPressure.zone} ` +
         `toolSurface=${surface.toolCount} estToolTokens=${surface.estDefinitionTokens} surfaceZone=${surface.zone} ` +
-        `toolAccuracy=${economyMetrics.toolSelectionAccuracy === null ? "na" : economyMetrics.toolSelectionAccuracy.toFixed(2)}`,
+        // toolAccuracy scores the calls a turn MADE, so a requireTools turn that
+        // made none still logged a clean 1.00 and read as healthy (BI-2FA5A874).
+        `toolAccuracy=${economyMetrics.toolSelectionAccuracy === null ? "na" : economyMetrics.toolSelectionAccuracy.toFixed(2)}` +
+        (requireTools ? ` requiredToolsMet=${executedTools.length > 0}` : ""),
       ),
     );
     // BI-47443B67: persist the same rollup durably so the regression detector
@@ -1608,7 +1545,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       resolvedMaxContextTokens,
     ).zone;
     const assembledMessages = withPlanReminder(
-      compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone),
+      compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone, params.terminalToolPolicy?.readerToolNames),
     );
     const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt), resolvedMaxContextTokens);
     if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
@@ -1756,10 +1693,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           return completeResult(result.content, result);
         }
         if (exit.kind === "nudge") {
-          rotateTerminalWriterProvider(routeOptions, result.providerId);
           terminalToolNudges++;
           terminalToolSurfaceOverride = exit.allowedToolNames;
           messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];
+          await rotateTerminalWriterRoute({ policy: params.terminalToolPolicy, records: executedTools, options: routeOptions, providerId: result.providerId, messages, systemPrompt: params.systemPrompt, sensitivity: params.sensitivity });
           continue;
         }
         if (exit.kind === "input-required") {
@@ -2156,19 +2093,13 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         requireToolExecution: requireTools,
       });
 
-        // Local model produced text-only on iteration 0 of a tool-backed turn:
-        // exit with a diagnostic instead of nudging — nudging won't teach a
-        // small local model to use tools mid-turn, it just burns iterations.
-        // The previous Build-Studio carve-out (!BUILD_ROUTE_PATTERN) was the
-        // root cause of 200-iteration hangs on /build threads when the
-        // preferred provider was unavailable and routing fell back to local.
-        // See FB-71FB3A53 thread, 2026-05-22.
-        if (
-          shouldNudgeNow &&
-          iteration === 0 &&
-          executedTools.length === 0 &&
-          result.providerId === "local"
-        ) {
+        if (shouldExitWithLocalToolCallDiagnostic({
+          shouldNudgeNow,
+          iteration,
+          executedToolCount: executedTools.length,
+          providerId: result.providerId,
+          requireTools: Boolean(requireTools),
+        })) {
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
@@ -2292,10 +2223,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
 
     // Collect all immediate tool results for this iteration
-    const iterationResults: Array<{
-      tc: { id: string; name: string; arguments: Record<string, unknown> };
-      toolResult: ToolResult;
-    }> = [];
+    const iterationResults: Array<{ tc: ToolCallEntry; toolResult: ToolResult }> = [];
 
     for (const providerToolCall of result.toolCalls) {
       let tc = providerToolCall;
@@ -2528,8 +2456,21 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             // baseline read grant gets the tool attached but rejected on call.
             // Autonomous turns leave this false, so their authority is unchanged.
             coworkerReadBaseline: interactionMode === "chat",
-            ...createAuthorizedSurfaceTurnGovernance({ interactionMode, apiTokenId, route: routeContext, chatHistory }),
-            externalAccessEnabled: toolDef.requiresExternalAccess || undefined,
+            ...createAuthorizedSurfaceTurnGovernance({
+              interactionMode,
+              apiTokenId,
+              route: routeContext,
+              workroomId: params.workroomId ?? null,
+              chatHistory,
+            }),
+            // The turn's SERVER-resolved external permission when the caller
+            // supplied one (chat turns: room + standing grant). Callers that
+            // predate the resolver keep the prior admission-by-attachment
+            // behaviour so autonomous runs are unchanged.
+            externalAccessEnabled: params.externalAccessEnabled !== undefined
+              ? (toolDef.requiresExternalAccess ? params.externalAccessEnabled : undefined)
+              : (toolDef.requiresExternalAccess || undefined),
+            ...(params.roomAuthority ? { roomAuthority: params.roomAuthority } : {}),
             // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
             // user is messaging from into tool context so phase-scoped
             // tools (start_ideate_research, start_scout_research) can
@@ -2568,7 +2509,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         forbiddenGrantStreak = 0;
       }
 
-      executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
+      const modelEvidenceTruncated = params.terminalToolPolicy?.readerToolNames.includes(tc.name)
+        ? clampToolResultForModel(toolResult, { maxChars: resolveToolResultCharCap(resolvedMaxContextTokens) }).truncated
+        : undefined;
+      executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult, modelEvidenceTruncated });
       if (toolResult.success && params.terminalToolPolicy?.readerToolNames.includes(tc.name)) {
         terminalToolSurfaceOverride = null; terminalToolNudges = 0;
       }
@@ -2586,7 +2530,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       {
         role: "assistant" as const,
         content: result.content,
-        toolCalls: iterationResults.map(({ tc }) => tc),
+        toolCalls: iterationResults.map(({ tc }) => tc.gemini ? result.toolCalls!.find((original) => original.id === tc.id) ?? tc : tc),
       },
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,

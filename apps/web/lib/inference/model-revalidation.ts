@@ -10,8 +10,14 @@ import { prisma } from "@dpf/db";
 import { Pool } from "pg";
 import { autoDiscoverAndProfile } from "./ai-provider-internals";
 import { canRunStartupModelDiscovery } from "@/lib/routing/provider-eligibility";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const LOCK_KEY = 0x4d434156; // "MCAV" as int32 (deterministic, stable)
+
+export type ModelRevalidationOutcome =
+  | { providerId: string; status: "ok"; discovered: number; profiled: number }
+  | { providerId: string; status: "failed"; error: string };
+export type ModelRevalidationSummary = { acquired: boolean; outcomes: ModelRevalidationOutcome[] };
 
 /**
  * Acquire a session-scoped Postgres advisory lock on a dedicated connection.
@@ -46,8 +52,9 @@ async function withAdvisoryLock(
 export async function runModelRevalidation(
   opts: { source: "startup" | "scheduled" | "manual" },
   pgPool: Pool,
-): Promise<void> {
+): Promise<ModelRevalidationSummary> {
   console.log(`[model-revalidation] Starting (source=${opts.source})`);
+  const outcomes: ModelRevalidationOutcome[] = [];
 
   const acquired = await withAdvisoryLock(pgPool, async () => {
     const totalDeadline = Date.now() + 10 * 60 * 1000; // 10-min hard cap
@@ -74,7 +81,7 @@ export async function runModelRevalidation(
       }
       try {
         // Per-provider 60s timeout: race the discovery against a rejection
-        await Promise.race([
+        const result = await Promise.race([
           autoDiscoverAndProfile(providerId),
           new Promise<never>((_, reject) =>
             setTimeout(
@@ -83,8 +90,15 @@ export async function runModelRevalidation(
             ),
           ),
         ]);
+        if (result.error) {
+          outcomes.push({ providerId, status: "failed", error: result.error });
+          console.warn(`[model-revalidation] ${providerId} failed (non-fatal): ${result.error}`);
+          continue;
+        }
+        outcomes.push({ providerId, status: "ok", discovered: result.discovered, profiled: result.profiled });
         console.log(`[model-revalidation] Refreshed ${providerId}`);
       } catch (err) {
+        outcomes.push({ providerId, status: "failed", error: getErrorMessage(err) });
         console.warn(
           `[model-revalidation] ${providerId} failed (non-fatal):`,
           err,
@@ -96,4 +110,5 @@ export async function runModelRevalidation(
   if (!acquired) {
     console.log("[model-revalidation] Skipped — another instance is running");
   }
+  return { acquired, outcomes };
 }

@@ -176,6 +176,8 @@ describe("evaluateProfessionDecisionGate", () => {
     expect(data.profileId).toBe(MARK_DPF_PLATFORM_PROFILE.profileId);
     expect(data.gateKey).toBe("profession");
     expect(data.gateFallbackUsed).toBe(true);
+    // BI-6BB728F1: the ledger names the doctrine that actually answered.
+    expect(data.fallbackProfileId).toBe(MARK_DPF_PLATFORM_PROFILE.profileId);
   });
 
   it("coverage gap forces defer and is not allowed", async () => {

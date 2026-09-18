@@ -184,14 +184,78 @@ test("slot database reset fails closed when drop or create fails", () => {
   );
 });
 
-test("local CI shadows pnpm 11 with the repository-pinned version", () => {
+// BI-785B3253. These fixtures used to let preparePinnedPnpmEnvironment run the
+// REAL spawnSync against a `#!/bin/sh` fake pnpm. They already passed `platform`
+// to make the branch under test deterministic, but not `spawnSyncImpl`, so the
+// EXECUTION still depended on the host having a POSIX shell. On Windows the
+// spawn fails, the guard reports `local CI could not inspect host pnpm: unknown
+// error` (a failed spawn leaves stdout and stderr empty), and both tests are red
+// on every Windows host while staying green in CI — the same green-in-CI,
+// red-on-Windows shape as BI-5CC4159D. Windows is a GA target.
+//
+// The version probe is now stubbed, so what these assert is the pinning
+// DECISION on every host. The one thing that genuinely needs a POSIX shell —
+// executing the generated shim — is its own test below, skipped with a reason
+// rather than silently.
+const PNPM_HOST_VERSION = "11.19.0";
+const PNPM_PINNED_VERSION = "10.33.2";
+
+/**
+ * Stands in for the fake pnpm the fixture puts on PATH, without a shell.
+ * Mirrors that script's contract: a bare `--version` reports the host version,
+ * and `with <pinned> --version` reports the pinned one. Matches on the joined
+ * argv so it answers both the POSIX shape (pnpm ...) and the Windows shape
+ * (cmd.exe /d /s /c "pnpm ...").
+ */
+function fakePnpmSpawn({ hostVersion = PNPM_HOST_VERSION, pinnedVersion = PNPM_PINNED_VERSION } = {}) {
+  return (command, args = []) => {
+    const line = [command, ...args].join(" ");
+    if (!line.includes("--version")) return { status: 9, stdout: "", stderr: "" };
+    const version = line.includes(`with ${pinnedVersion}`) ? pinnedVersion : hostVersion;
+    return { status: 0, stdout: `${version}\n`, stderr: "" };
+  };
+}
+
+function pinnedShimFixture() {
   const fixture = mkdtempSync(join(tmpdir(), "dpf-local-ci-pnpm-"));
   const hostBin = join(fixture, "host-bin");
   const toolchainDir = join(fixture, "toolchain");
   const hostPnpm = join(hostBin, "pnpm");
   mkdirSync(hostBin, { recursive: true });
-  writeFileSync(hostPnpm, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 11.19.0; exit 0; fi\nif [ "$1" = "with" ] && [ "$2" = "10.33.2" ]; then shift 2; if [ "$1" = "--version" ]; then echo 10.33.2; exit 0; fi; fi\nexit 9\n`);
+  // The file must exist for executableOnPath to resolve it; only its EXECUTION
+  // is stubbed, and the POSIX-shell test below runs this same script for real.
+  writeFileSync(hostPnpm, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo ${PNPM_HOST_VERSION}; exit 0; fi\nif [ "$1" = "with" ] && [ "$2" = "${PNPM_PINNED_VERSION}" ]; then shift 2; if [ "$1" = "--version" ]; then echo ${PNPM_PINNED_VERSION}; exit 0; fi; fi\nexit 9\n`);
   chmodSync(hostPnpm, 0o755);
+  return { fixture, hostBin, toolchainDir, hostPnpm };
+}
+
+test("local CI shadows pnpm 11 with the repository-pinned version", () => {
+  const { hostBin, toolchainDir } = pinnedShimFixture();
+
+  const prepared = preparePinnedPnpmEnvironment({
+    packageManager: "pnpm@10.33.2+sha512.fixture",
+    toolchainDir,
+    env: { PATH: `${hostBin}${delimiter}/usr/bin:/bin` },
+    platform: "darwin",
+    spawnSyncImpl: fakePnpmSpawn(),
+  });
+
+  assert.equal(prepared.mode, "pinned-shim");
+  assert.equal(prepared.expectedVersion, "10.33.2");
+  assert.equal(prepared.actualVersion, "11.19.0");
+  assert.equal(prepared.env.PATH.split(delimiter)[0], toolchainDir);
+  assert.match(readFileSync(join(toolchainDir, "pnpm"), "utf8"), /with.*10\.33\.2/);
+});
+
+// The shim is a `#!/bin/sh` script, so only a POSIX host can prove it runs.
+// Named and skipped explicitly: a silently-absent assertion is how a platform
+// gap survives.
+test("the generated POSIX shim executes and reports the pinned version", {
+  skip: process.platform === "win32"
+    ? "needs a POSIX shell to execute a #!/bin/sh shim"
+    : false,
+}, () => {
+  const { hostBin, toolchainDir } = pinnedShimFixture();
 
   const prepared = preparePinnedPnpmEnvironment({
     packageManager: "pnpm@10.33.2+sha512.fixture",
@@ -200,14 +264,38 @@ test("local CI shadows pnpm 11 with the repository-pinned version", () => {
     platform: "darwin",
   });
 
-  assert.equal(prepared.mode, "pinned-shim");
-  assert.equal(prepared.expectedVersion, "10.33.2");
-  assert.equal(prepared.actualVersion, "11.19.0");
-  assert.equal(prepared.env.PATH.split(delimiter)[0], toolchainDir);
   const pinned = spawnSync("pnpm", ["--version"], { encoding: "utf8", env: prepared.env });
   assert.equal(pinned.status, 0, pinned.stderr);
   assert.equal(pinned.stdout.trim(), "10.33.2");
-  assert.match(readFileSync(join(toolchainDir, "pnpm"), "utf8"), /with.*10\.33\.2/);
+});
+
+// The branch a Windows host actually takes had no coverage at all, which is how
+// the POSIX-only fixtures went unnoticed: every pinning test exercised the
+// other side.
+test("on Windows the pinned shim is a pnpm.cmd that forwards to the host pnpm", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "dpf-local-ci-pnpm-win-"));
+  const hostBin = join(fixture, "host-bin");
+  const toolchainDir = join(fixture, "toolchain");
+  mkdirSync(hostBin, { recursive: true });
+  const hostPnpm = join(hostBin, "pnpm.CMD");
+  writeFileSync(hostPnpm, "@echo off\r\n");
+
+  const prepared = preparePinnedPnpmEnvironment({
+    packageManager: "pnpm@10.33.2+sha512.fixture",
+    toolchainDir,
+    env: { Path: hostBin, PATHEXT: ".CMD", ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+    platform: "win32",
+    spawnSyncImpl: fakePnpmSpawn(),
+  });
+
+  assert.equal(prepared.mode, "pinned-shim");
+  assert.equal(prepared.actualVersion, "11.19.0");
+  assert.equal(prepared.hostPnpm, hostPnpm);
+  // No `pnpm` extensionless shim on Windows — cmd.exe would not run it.
+  assert.equal(existsSync(join(toolchainDir, "pnpm")), false);
+  const cmdShim = readFileSync(join(toolchainDir, "pnpm.cmd"), "utf8");
+  assert.match(cmdShim, /with 10\.33\.2/);
+  assert.ok(cmdShim.includes(hostPnpm), "the shim must forward to the resolved host pnpm");
 });
 
 test("Windows executable lookup accepts the canonical Path environment key", () => {
@@ -246,19 +334,24 @@ test("local CI keeps an already-matching pnpm without a shim", () => {
   const hostBin = join(fixture, "host-bin");
   mkdirSync(hostBin, { recursive: true });
   const hostPnpm = join(hostBin, "pnpm");
-  writeFileSync(hostPnpm, "#!/bin/sh\necho 10.33.2\n");
+  writeFileSync(hostPnpm, `#!/bin/sh\necho ${PNPM_PINNED_VERSION}\n`);
   chmodSync(hostPnpm, 0o755);
   const originalPath = `${hostBin}${delimiter}/usr/bin:/bin`;
+  const toolchainDir = join(fixture, "toolchain");
 
   const prepared = preparePinnedPnpmEnvironment({
     packageManager: "pnpm@10.33.2",
-    toolchainDir: join(fixture, "toolchain"),
+    toolchainDir,
     env: { PATH: originalPath },
     platform: "darwin",
+    // A host already at the pinned version: the probe answers it directly.
+    spawnSyncImpl: fakePnpmSpawn({ hostVersion: PNPM_PINNED_VERSION }),
   });
 
   assert.equal(prepared.mode, "host-match");
   assert.equal(prepared.env.PATH, originalPath);
+  // host-match must not provision a toolchain at all.
+  assert.equal(existsSync(toolchainDir), false);
 });
 
 // BI-F22B4EEE. `result.status ?? 1` was the defect: a signal death reports

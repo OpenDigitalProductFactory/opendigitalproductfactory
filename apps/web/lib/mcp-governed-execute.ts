@@ -9,6 +9,8 @@
 
 import { prisma } from "@dpf/db";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
+import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
+import { approvalPendingResult } from "./govern/authority/approval-pending-result";
 import type { CoworkerAuthorityDecision } from "./govern/authority/coworker-authority-decision";
 import {
   enforceCoworkerToolAuthority,
@@ -37,6 +39,7 @@ import {
   type ToolResult,
 } from "./mcp-tools";
 import { coerceMcpToolArgs } from "./mcp-arg-coercion";
+import { canonicalWorkroomToolName } from "./tak/workroom-tool-aliases";
 import {
   setGovernedToolAuditOverridesForTests,
   updateGovernedToolAudit as updateAudit,
@@ -44,6 +47,7 @@ import {
 } from "./governed-tool-audit";
 import type { WorkCaseExecutionContext } from "./work-management/work-case-governance-hook";
 import type { AuthorizedSurfaceContext, AuthorizedSurfaceInvocation } from "@/lib/coworker/authorized-surface-execution-types";
+import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
 import {
   classifyConsequentialTool,
 } from "./tak/consequential-tool-policy";
@@ -123,11 +127,20 @@ export type GovernedExecuteContext = {
   coworkerAuthorizedSurfaceBaseline?: boolean;
   authorizedSurfaceContext?: AuthorizedSurfaceContext;
   /**
-   * Server-owned session permission for tools that cross the platform
-   * boundary. Callers may set this only after the tool registry has admitted
-   * the tool for the current session.
+   * Server-owned permission for tools that cross the platform boundary.
+   * Resolved from the coworker's standing grants and the Workroom the turn
+   * runs in (lib/work-management/room-turn-authority.ts) — never from a
+   * client-asserted switch (BI-947780FE).
    */
   externalAccessEnabled?: boolean;
+  /**
+   * EP-WORK-POSTURE §8.2 (BI-F114354D): the Workroom this call runs in and the
+   * tool surface that room authorizes. The authority evaluator intersects it
+   * with the coworker's grants and the human's capabilities; a tool outside
+   * the room's surface is denied `room-authority-denied`. Omitted for unroomed
+   * turns, which fall to the coworker's grants alone.
+   */
+  roomAuthority?: RoomAuthorityContext;
   /**
    * Optional Work Case context for consequential actions flowing through the
    * governed execution seam. Existing callers omit this and retain their
@@ -366,11 +379,14 @@ function rejectionResult(
   rejection: GovernedExecuteRejection,
   detail: string,
 ): GovernedExecuteResult {
-  const message = `${toolName} rejected: ${detail}`;
+  // Only a settled no is worded "rejected"; see governed-rejection-disposition.
+  const disposition = GOVERNED_REJECTION_DISPOSITION[rejection];
+  const message = rejectionMessage(toolName, detail, disposition);
   return {
     success: false,
     error: rejection,
     message,
+    disposition,
     governance: { rejected: rejection },
   };
 }
@@ -404,6 +420,7 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
 export async function governedExecuteTool(
   args: GovernedExecuteArgs,
 ): Promise<GovernedExecuteResult> {
+  args = { ...args, toolName: canonicalWorkroomToolName(args.toolName) };
   let approvedAuthorityEnvelopeId: string | null = null;
   let authorityDecisionId: string | undefined;
   let alignmentDecision: AlignmentGateDecision | null = null;
@@ -500,11 +517,13 @@ export async function governedExecuteTool(
     );
     if (authorityGate.outcome === "reject") {
       const result: GovernedExecuteResult = {
-        ...rejectionResult(
-          args.toolName,
-          authorityGate.rejection,
-          authorityGate.message,
-        ),
+        ...(authorityGate.rejection === "approval_required"
+          ? approvalPendingResult(args.toolName, authorityGate.message, authorityGate.data)
+          : rejectionResult(
+            args.toolName,
+            authorityGate.rejection,
+            authorityGate.message,
+          )),
         ...(authorityGate.data ? { data: authorityGate.data } : {}),
         governance: {
           rejected: authorityGate.rejection,
@@ -579,9 +598,16 @@ export async function governedExecuteTool(
     return hookRejection;
   }
 
+  // EP-WORK-POSTURE 8.2 (BI-F114354D item 6): inside a Workroom, EVERY tool the
+  // classification marks consequential clears the WWWD x WSID alignment gate,
+  // not only the outward/legacy-named subset. The room is where the coworker's
+  // job (WSID) and the org's constitution (WWWD) are both in scope; unroomed
+  // calls keep the narrower reach so nothing outside a room changes.
+  const alignmentRequired = consequence.alignmentRequired
+    || (consequence.consequential && Boolean(args.context?.roomAuthority?.workroomId));
   const preexecution = await enforceTakPreexecution({
     args,
-    alignmentRequired: consequence.alignmentRequired,
+    alignmentRequired,
     preconditionRequired: consequence.preconditionRequired,
     writeAudit: ({ result, alignmentDecision: alignment, preconditionDecision: precondition }) => writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,

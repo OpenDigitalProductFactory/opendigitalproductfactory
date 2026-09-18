@@ -9,6 +9,8 @@ vi.mock("@dpf/db", () => ({
     eaReferenceModel: { findMany: vi.fn(), findUnique: vi.fn() },
     eaReferenceAssessment: { findMany: vi.fn() },
     eaView: { findFirst: vi.fn() },
+    storefrontConfig: { findFirst: vi.fn() },
+    storefrontArchetype: { findUnique: vi.fn() },
   },
 }));
 
@@ -23,10 +25,19 @@ const mockPrisma = prisma as unknown as {
   eaReferenceModel: { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
   eaReferenceAssessment: { findMany: ReturnType<typeof vi.fn> };
   eaView: { findFirst: ReturnType<typeof vi.fn> };
+  storefrontConfig: { findFirst: ReturnType<typeof vi.fn> };
+  storefrontArchetype: { findUnique: ReturnType<typeof vi.fn> };
 };
+
+/** Put the install on a declared archetype, the way setup leaves it. */
+function installIs(category: string | null, archetypeId: string | null): void {
+  mockPrisma.storefrontConfig.findFirst.mockResolvedValue({ archetypeId: "cuid-archetype" });
+  mockPrisma.storefrontArchetype.findUnique.mockResolvedValue({ category, archetypeId });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
+  installIs("nonprofits-and-community", "pet-rescue");
 });
 
 describe("getReferenceModelsSummary", () => {
@@ -50,8 +61,53 @@ describe("getReferenceModelsSummary", () => {
         name: "IT4IT",
         version: "3.0.1",
         criteriaCount: 417,
+        applies: true,
       }),
     ]);
+  });
+
+  // BI-C44EAEE6: the seed scopes an industry model's element hierarchy to the
+  // archetype, so on a pet rescue BIAN is correctly empty. The read used to pass
+  // that through as "active with 0 criteria", which reads as broken.
+  it("marks an industry model as not this install's, and says why", async () => {
+    mockPrisma.eaReferenceModel.findMany.mockResolvedValue([
+      {
+        id: "rm-2",
+        slug: "bian_service_landscape_v14_0_0",
+        name: "BIAN Service Landscape",
+        version: "14.0.0",
+        status: "active",
+        _count: { elements: 0, assessments: 0, proposals: 0 },
+      },
+    ]);
+
+    const [model] = await getReferenceModelsSummary();
+
+    expect(model?.applies).toBe(false);
+    expect(model?.applicabilityReason).toContain("banking-financial-services");
+    expect(model?.applicabilityReason).toContain("pet-rescue");
+    // The catalogue row is still returned: it is kept on every install so an
+    // operator can see the standard exists.
+    expect(model?.slug).toBe("bian_service_landscape_v14_0_0");
+  });
+
+  it("applies the same industry model on an install that IS a bank", async () => {
+    installIs("banking-financial-services", "community-bank");
+    mockPrisma.eaReferenceModel.findMany.mockResolvedValue([
+      {
+        id: "rm-2",
+        slug: "bian_service_landscape_v14_0_0",
+        name: "BIAN Service Landscape",
+        version: "14.0.0",
+        status: "active",
+        _count: { elements: 390, assessments: 4, proposals: 0 },
+      },
+    ]);
+
+    const [model] = await getReferenceModelsSummary();
+
+    expect(model?.applies).toBe(true);
+    expect(model?.criteriaCount).toBe(390);
   });
 });
 

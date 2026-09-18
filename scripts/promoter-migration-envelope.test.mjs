@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 // End-to-end through the promoter entrypoint: an N-1 caller sends no handoff at
 // all, so the CLI must self-issue from the mounted state instead of exiting 78.
@@ -24,7 +25,7 @@ test("CLI self-issues when the caller sends no handoff", async () => {
   }));
   writeFileSync(join(root, "secret"), "s".repeat(32));
 
-  const stdout = execFileSync(process.execPath, [new URL("./promoter-migration-envelope.mjs", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")], {
+  const stdout = execFileSync(process.execPath, [fileURLToPath(new URL("./promoter-migration-envelope.mjs", import.meta.url))], {
     encoding: "utf8",
     env: {
       ...process.env,

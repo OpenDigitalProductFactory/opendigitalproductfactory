@@ -231,4 +231,44 @@ describe("TAK alignment interception", () => {
     expect(result.error).toBe("receipt_reservation_failed");
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it("inside a Workroom, every consequential tool clears alignment — not only outward ones (spec 8.2, BI-F114354D)", async () => {
+    const alignmentGate = vi.fn(async () => alignmentDecision("approve"));
+    const setup = () => _setGovernanceForTests({
+      alignmentGate, executeTool: execute,
+      resolveAgentGrants: async () => ["backlog_write"], isAllowedByGrants: () => true,
+      resolveCoworkerAuthorityInput: async () => ({
+        ...authorityInput(),
+        action: { ...authorityInput().action, toolName: "retire_backlog_item", requiredCapability: null },
+      }) as never,
+      authorizationDecisionCreate: async () => ({}),
+      toolExecutionCreate: async (data) => { audits.push(data); return { id: "room" }; },
+      toolExecutionReceiptCreate: async (data) => { receipts.push(data); return { id: "room-receipt" }; },
+      toolExecutionUpdate: async () => {},
+      toolExecutionReceiptUpdate: async () => {},
+      gaidActorResolver: resolveActor,
+    });
+    // retire_backlog_item is irreversible but not outward: unroomed it is receipted, not aligned.
+    setup();
+    await governedExecuteTool({
+      toolName: "retire_backlog_item", rawParams: { itemId: "BI-1", reason: "duplicate" },
+      userId: "user-1", userContext: USER, source: "agentic-loop",
+      context: { agentId: "AGT-100", threadId: "thread-1" },
+    });
+    expect(alignmentGate).not.toHaveBeenCalled();
+    // The same call inside a room runs the WWWD x WSID gate.
+    setup();
+    await governedExecuteTool({
+      toolName: "retire_backlog_item", rawParams: { itemId: "BI-1", reason: "duplicate" },
+      userId: "user-1", userContext: USER, source: "agentic-loop",
+      context: {
+        agentId: "AGT-100", threadId: "thread-1",
+        roomAuthority: {
+          workroomId: "WC-ROOM", collaborationShape: "craft-stewardship", workShapeKey: null,
+          authorizedGrants: null, actionBoundary: "propose", participantRoles: null, memberOfRoom: true,
+        },
+      },
+    });
+    expect(alignmentGate).toHaveBeenCalledTimes(1);
+  });
 });

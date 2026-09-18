@@ -34,7 +34,7 @@ import {
   resolveEvidenceRange,
   resolveGateResult,
 } from "./load-map-support";
-import { OPERATIONS_RUN_SELECT } from "./operations-run-read-model";
+import { OPERATIONS_REVIEW_WHERE, OPERATIONS_RUN_SELECT } from "./operations-run-read-model";
 import type {
   OperationsMapRoutingTopology,
   OperationsMapAgent,
@@ -180,7 +180,10 @@ export async function loadOperationsMapData(
     prisma.taskRun.findMany({
       where: {
         archivedAt: null,
-        source: "proactive",
+        OR: [
+          { source: "proactive" },
+          OPERATIONS_REVIEW_WHERE,
+        ],
         ...startedAtWindow,
       },
       orderBy: { startedAt: "desc" },
@@ -197,7 +200,10 @@ export async function loadOperationsMapData(
     prisma.taskRun.findMany({
       where: {
         archivedAt: null,
-        status: "stalled",
+        OR: [
+          { status: "stalled" },
+          { status: "input-required", ...OPERATIONS_REVIEW_WHERE },
+        ],
       },
       orderBy: { startedAt: "desc" },
       take: STALLED_TASK_RUN_LIMIT,
@@ -313,6 +319,7 @@ export async function loadOperationsMapData(
         policyRulesApplied: true,
         fallbackChain: true,
         fallbacksUsed: true,
+        inferenceDataScreenReceipt: true,
         shadowMode: true,
         createdAt: true,
         selectedModelId: true,

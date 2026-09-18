@@ -192,8 +192,6 @@ export const CONSOLIDATION_BETS: readonly ConsolidationBet[] = [
         "packages/db/src/qdrant.ts",
         "apps/web/lib/wiki/ppr.ts",
         "apps/web/lib/inference/embedding.ts",
-        "scripts/backup-neo4j.sh",
-        "scripts/backup-qdrant.sh",
       ],
     },
   },
@@ -308,8 +306,6 @@ export const CONSOLIDATION_BETS: readonly ConsolidationBet[] = [
       tools: [],
       files: [
         "scripts/backup-postgres.sh",
-        "scripts/backup-neo4j.sh",
-        "scripts/backup-qdrant.sh",
       ],
     },
   },

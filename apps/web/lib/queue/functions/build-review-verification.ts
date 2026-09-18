@@ -54,6 +54,7 @@ export const buildReviewVerification = inngest.createFunction(
           kind: true,
           diffPatch: true,
           verificationOut: true,
+          buildBranch: true,
         },
       });
     });
@@ -94,6 +95,79 @@ export const buildReviewVerification = inngest.createFunction(
     const runBrowserUse = shouldRunBrowserUxVerification({
       testCaseCount: testCases.length,
       changedFiles,
+    });
+
+    // The deterministic guard gauntlet the external-agent path runs before its
+    // first commit, run here against the build's OWN worktree and recorded as
+    // tree-keyed evidence (BI-CA6769FE, BI-4A9910A9).
+    //
+    // Deliberately NON-BLOCKING in this slice. Making publication depend on the
+    // record is BI-0700B79C, and it is sequenced after this on purpose: a
+    // refusal that arrives before the checks are trustworthy would meet a
+    // non-developer with a wall they did not earn. This step's job for now is to
+    // make the result exist and be honest about what it covers.
+    await step.run("guard-gauntlet", async () => {
+      const { runGuardGauntlet, guardPlanDigest } = await import("@/lib/build/sandbox/guard-gauntlet");
+      const { buildGauntletEvidence, summarizeGauntlet, toolchainFingerprintFrom, resolveGauntletRepository } =
+        await import("@/lib/build/sandbox/guard-gauntlet-evidence");
+      const { resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
+      const { execInSandbox } = await import("@/lib/sandbox");
+      const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
+
+      const workdir = resolveBuildWorkdir(buildId);
+      const outcome = await runGuardGauntlet({
+        exec: execInSandbox,
+        containerId: build.sandboxId!,
+        workdir,
+      });
+
+      // Could-not-run is not a failing verdict, and must not be recorded as one.
+      if (!outcome.ran) {
+        console.warn(`[guard-gauntlet] not run for ${buildId}: ${outcome.reason}`);
+        return { ran: false, reason: outcome.reason };
+      }
+      // Without a tree there is nothing to key evidence to, so the run informs
+      // the log but cannot become a record that something else reuses.
+      if (!outcome.treeSha) {
+        console.warn(`[guard-gauntlet] ${buildId} produced no tree sha; result not recorded as evidence`);
+        return { ran: true, passed: outcome.passed, recorded: false };
+      }
+
+      const toolchain = await execInSandbox(build.sandboxId!, "node -v 2>/dev/null; pnpm -v 2>/dev/null")
+        .catch(() => "");
+      const [node, pnpm] = toolchain.split(/\r?\n/);
+      const identity = {
+        repository: resolveGauntletRepository(),
+        treeSha: outcome.treeSha,
+        guardPlanDigest: guardPlanDigest("scripts/pregate-preflight.mjs"),
+        toolchainFingerprint: toolchainFingerprintFrom({ node, pnpm }),
+      };
+
+      await recordLocalIntegrationResult({
+        actorUserId: build.createdById,
+        provider: "build-studio",
+        externalSessionId: buildId,
+        routeContext: "/build",
+        buildId,
+        candidateBranch: build.buildBranch ?? `build/${buildId}`,
+        mode: "single-branch",
+        status: outcome.passed ? "passed" : "failed",
+        summary: summarizeGauntlet({
+          passed: outcome.passed,
+          failedGuards: outcome.failedGuards,
+          treeSha: outcome.treeSha,
+        }),
+        evidence: buildGauntletEvidence({
+          identity,
+          workdir: outcome.workdir,
+          passed: outcome.passed,
+          failedGuards: outcome.failedGuards,
+          output: outcome.output,
+          durationMs: outcome.durationMs,
+        }),
+      });
+
+      return { ran: true, passed: outcome.passed, recorded: true, treeSha: outcome.treeSha };
     });
 
     // Phase 3 of the shared Change Reviewer control: task-level reviews remain

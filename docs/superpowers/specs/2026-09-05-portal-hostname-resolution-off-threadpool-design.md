@@ -103,6 +103,7 @@ authorization, routing, timeout, streaming, tool-call, or fail-closed behavior.
 | `AC-DNS-7` | `OBJ-DNS-1`, `OBJ-DNS-3`, `OBJ-DNS-5` | The central inference caller injects one process-lived off-threadpool fetch into every HTTP adapter; a Gemini chat fixture proves the injected transport is used while preserving a schema-valid tool call. |
 | `AC-DNS-8` | `OBJ-DNS-1`, `OBJ-DNS-5` | Async interaction start and poll both use the provider transport while preserving provider API revision, opaque operation identity, timeout, and terminal-state handling. |
 | `AC-DNS-9` | `OBJ-DNS-2`, `OBJ-DNS-5` | Adjacent provider adapter, fallback-chain, streaming, and terminal-writer suites remain green; transport failure remains an explicit provider failure and never fabricates a model or writer result. |
+| `AC-DNS-10` | `OBJ-DNS-1`, `OBJ-DNS-3` | The release-registry reader uses a fresh shared off-threadpool transport for each bounded attempt, closes every dispatcher, and preserves its digest, immutable-tag, and typed failure checks. |
 
 ## Architecture
 
@@ -123,6 +124,11 @@ repair exists to avoid.
 The GitHub reader continues to expose `GithubReadTransport`; its factory now
 delegates to the shared transport. Existing initiative-readiness callers retain
 their operation-scoped `finally { close() }` behavior and test injection seams.
+
+The release-registry reader follows the same operation-scoped ownership model.
+Each bounded registry attempt receives a fresh shared off-threadpool transport
+and closes it in `finally`; registry authentication, redirects, digest checks,
+immutable tag resolution, and retry limits remain unchanged.
 
 `apps/web/lib/queue/inngest-client.ts` creates one process-lived shared
 transport and passes its fetch function through Inngest's supported `fetch`

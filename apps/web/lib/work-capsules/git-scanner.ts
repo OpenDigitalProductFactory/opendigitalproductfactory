@@ -123,6 +123,30 @@ export async function trunkRefExists(repoRoot: string, trunkRef = "origin/main")
 }
 
 /**
+ * When the trunk ref's tip commit was authored, or null when it cannot be read.
+ *
+ * A reachability check is only as current as the trunk it is measured against.
+ * Reachability is monotone — once a commit is an ancestor it stays one — so a
+ * POSITIVE answer from a stale trunk is still true. A NEGATIVE is not: a trunk
+ * that has not been fetched since before the merge will report perfectly
+ * confidently that merged work never landed. Callers use this to decide whether
+ * a negative is a measurement or just an old ref (BI-043946C5).
+ */
+export async function trunkRefCommittedAt(repoRoot: string, trunkRef = "origin/main"): Promise<Date | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", repoRoot, "log", "-1", "--format=%cI", trunkRef],
+      { timeout: 5000, windowsHide: true },
+    );
+    const parsed = new Date(stdout.trim());
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * True when `headSha` is an ancestor of the trunk (`git merge-base --is-ancestor`
  * exits 0) — i.e. the branch's work has landed and the room is DELIVERED. This is
  * the workroom-closeout "done" signal, computed PROCEDURALLY from the LOCAL repo:

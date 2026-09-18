@@ -21,6 +21,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
+    consequenceScope: "platform",
   },
   {
     name: "grok_signin_status",

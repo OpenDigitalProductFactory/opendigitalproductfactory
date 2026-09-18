@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 
 const db = vi.hoisted(() => ({
   capsuleFindFirst: vi.fn(),
@@ -33,10 +35,14 @@ const recordWorkCapsuleEvidence = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/work-capsules/work-capsule-store", () => ({ recordWorkCapsuleEvidence }));
 const dispatchRoutedSemanticReview = vi.hoisted(() => vi.fn());
 vi.mock("./routed-semantic-review", () => ({ dispatchRoutedSemanticReview }));
+const resolvedEvidence = vi.hoisted(() => vi.fn());
+vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: resolvedEvidence }));
+vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus: vi.fn() }));
 
 import { reviewBuildStudioAssembledChange } from "./build-studio-semantic-review";
 
 const taskRows: Array<Record<string, unknown>> = [];
+const fixture = failureAnalysisFixture({ capsuleId: "WC-BUILD", headTreeHash: "b".repeat(40), diffDigest: createHash("sha256").update("diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts").digest("hex") });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -65,7 +71,8 @@ beforeEach(() => {
   });
   recordExternalEvidence.mockResolvedValue({ id: "evidence-1" });
   recordWorkCapsuleEvidence.mockResolvedValue({ id: "activity-1" });
-  dispatchRoutedSemanticReview.mockResolvedValue({ decision: "pass", issues: [], summary: "Pass." });
+  dispatchRoutedSemanticReview.mockResolvedValue({ decision: "pass", issues: [], summary: "Pass.", failureAnalysisReview: { adequate: true, rationale: "Challenged the missing and stale evidence cases against the executed tests." } });
+  resolvedEvidence.mockResolvedValue(fixture.resolvedFailureEvidence);
 });
 
 describe("Build Studio assembled semantic review", () => {
@@ -77,7 +84,7 @@ describe("Build Studio assembled semantic review", () => {
         title: "Assembled change",
         createdById: "user-1",
         diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts",
-        verificationOut: { testsPassed: 1, testsFailed: 0 },
+        verificationOut: { testsPassed: 1, testsFailed: 0, failureAnalysis: fixture.failureAnalysis },
       },
       sandboxState: {
         source: "sandbox-git",
@@ -119,7 +126,7 @@ describe("Build Studio assembled semantic review", () => {
     expect(activityReceipt).toEqual(externalReceipt);
   });
 
-  it("does not block an older build missing a stable tree while policy is shadow-only", async () => {
+  it("requires an older build to refresh missing evidence even in shadow mode", async () => {
     const result = await reviewBuildStudioAssembledChange({
       build: {
         id: "build-row",
@@ -132,7 +139,7 @@ describe("Build Studio assembled semantic review", () => {
       sandboxState: null,
     });
 
-    expect(result).toMatchObject({ kind: "unavailable", mayContinue: true });
+    expect(result).toMatchObject({ kind: "unavailable", mayContinue: false });
     expect(dispatchRoutedSemanticReview).not.toHaveBeenCalled();
   });
 });

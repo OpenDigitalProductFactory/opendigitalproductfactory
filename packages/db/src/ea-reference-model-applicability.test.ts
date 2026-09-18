@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { referenceModelAppliesToInstall } from "./seed-ea-reference-models.js";
+import {
+  describeReferenceModelApplicability,
+  referenceModelAppliesToInstall,
+} from "./reference-model-applicability.js";
 
 // BI-DDB48B04 follow-on. The eaReferenceModels seed used to import the BIAN
 // Service Landscape and then ASSERT a non-zero element count for it on every
@@ -92,5 +95,68 @@ describe("referenceModelAppliesToInstall", () => {
         ARCHETYPES,
       ),
     ).toBe(false);
+  });
+});
+
+// BI-C44EAEE6. The read path needs the REASON, not just the boolean: a card that
+// says only "not applicable" invites the question this answers.
+describe("describeReferenceModelApplicability", () => {
+  const banking = { bian_service_landscape_v14_0_0: ["banking-financial-services"] };
+
+  it("names the install's own archetype when an industry model is not its business", () => {
+    const result = describeReferenceModelApplicability(
+      "bian_service_landscape_v14_0_0",
+      { category: "nonprofits-and-community", archetypeId: "pet-rescue" },
+      banking,
+    );
+    expect(result.applies).toBe(false);
+    expect(result.reason).toContain("banking-financial-services");
+    expect(result.reason).toContain("pet-rescue");
+  });
+
+  it("says so plainly when setup has not chosen an archetype yet", () => {
+    const result = describeReferenceModelApplicability(
+      "bian_service_landscape_v14_0_0",
+      { category: null, archetypeId: null },
+      banking,
+    );
+    expect(result.applies).toBe(false);
+    expect(result.reason).toContain("not chosen an archetype");
+  });
+
+  it("applies on the category as well as the specific archetype id", () => {
+    for (const install of [
+      { category: "banking-financial-services", archetypeId: "community-bank" },
+      { category: null, archetypeId: "banking-financial-services" },
+    ]) {
+      expect(
+        describeReferenceModelApplicability("bian_service_landscape_v14_0_0", install, banking)
+          .applies,
+      ).toBe(true);
+    }
+  });
+
+  it("treats a universal model as everyone's, with a reason that says why", () => {
+    const result = describeReferenceModelApplicability(
+      "it4it_v3_0_1",
+      { category: "nonprofits-and-community", archetypeId: "pet-rescue" },
+      banking,
+    );
+    expect(result.applies).toBe(true);
+    expect(result.reason).toContain("every install");
+  });
+
+  it("agrees with the boolean rule the seed uses, for every combination", () => {
+    for (const slug of ["bian_service_landscape_v14_0_0", "it4it_v3_0_1"]) {
+      for (const install of [
+        { category: "banking-financial-services", archetypeId: "community-bank" },
+        { category: "nonprofits-and-community", archetypeId: "pet-rescue" },
+        { category: null, archetypeId: null },
+      ]) {
+        expect(describeReferenceModelApplicability(slug, install, banking).applies).toBe(
+          referenceModelAppliesToInstall(slug, install, banking),
+        );
+      }
+    }
   });
 });

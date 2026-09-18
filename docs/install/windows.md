@@ -217,9 +217,23 @@ uninstall, or a volume removal destroys them. Capture them first:
 pnpm --filter @dpf/db backlog:capture -- --out D:\DPF-backups\backlog\capture
 ```
 
-That writes one recovery bundle per epic, a manifest, and a list of anything it
-could not represent. Restore on another installation with
-`pnpm --filter @dpf/db backlog:reconcile -- <bundle.json> --apply`.
+That writes one recovery bundle per epic, a manifest, `workrooms.json` (the
+Workroom rows that bind each item to its branch, worktree, lease and evidence),
+and a list of anything it could not represent. Restore on another installation
+with `pnpm --filter @dpf/db backlog:reconcile -- <bundle.json> --apply`.
+
+Put the Workrooms back on the new install with
+`pnpm --filter @dpf/db workrooms:restore -- --from <directory>`. It reports and
+changes nothing until you add `--apply`. A room whose worktree no longer exists
+is still restored, as archived with the reason recorded, because destroying a
+working tree is not the same as the work never having existed. A room the new
+install already has is left alone, so running it twice is safe.
+
+`dpf-reinstall.ps1` and `scripts\fresh-install.ps1` also take a full `pg_dump`
+into `D:\DPF-backups\pre-destructive\<date>\` immediately before they run
+`docker compose down -v`, and refuse to continue if that dump fails.
+`-SkipPreDestructiveDump` is the only way past, and it costs every row that is
+not mirrored elsewhere (BI-F9939341).
 
 ## Docker memory
 
@@ -263,10 +277,15 @@ DPF_LLM_PROVIDER=external
 DPF coworkers support voice **input** (speech-to-text) and voice
 **output** (text-to-speech).
 
-**Speech-to-text (STT) — works out of the box.** The bundled `dpf-stt`
-container (faster-whisper) is profile-free, so it starts on a plain
-install and the coworker mic button works immediately. CPU-friendly; no
-GPU required.
+**Speech-to-text (STT) — connect a provider.** DPF ships no speech
+container. Voice input becomes available as soon as you configure a
+provider that can transcribe, under **Platform Tools → Communications**.
+Any provider serving an OpenAI-compatible `/v1/audio/transcriptions`
+endpoint works, including OpenAI and Groq. If you would rather audio
+never left your own network, run your own speech server — speaches and
+whisper.cpp server are both MIT-licensed — and give DPF its address under
+the self-hosted speech provider. DPF stopped bundling one so that a third
+party's registry housekeeping could no longer block platform releases.
 
 **Text-to-speech (TTS) — automatic on an NVIDIA GPU.** Spoken output
 uses the bundled `dpf-tts` container (Chatterbox — self-hosted, no API
@@ -328,13 +347,6 @@ is skipped, and the installer no longer leaks a raw `docker: 'model' is not
 a docker command` error. Update Docker Desktop and re-run the installer to
 pull the model, or point the portal at an external LLM provider under
 Admin → Providers.
-
-**Install log says an "optional sidecar … image is unavailable upstream".**
-The bundled voice speech-to-text sidecar (`dpf-stt`) is pulled from a
-third-party registry that occasionally prunes its image tag. When that
-happens the installer brings the platform up *without* voice input rather
-than failing the whole install — everything else works. Re-run the
-installer later to pick the image up once it's available again.
 
 **`install-dpf.bat` closed instantly / "running scripts is disabled".**
 Run it from an elevated prompt; the `.bat` launcher passes

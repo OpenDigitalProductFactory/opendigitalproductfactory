@@ -44,7 +44,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Identity Federation (SSO)", href: "/platform/identity/federation" },
       { label: "Applications", href: "/platform/identity/applications" },
       { label: "Authorization", href: "/platform/identity/authorization" },
-      { label: "AI Coworkers", href: "/platform/identity/agents" },
+      { label: "Coworker Identity", href: "/platform/identity/agents" },
     ],
   },
   {
@@ -120,7 +120,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Ledger", href: "/platform/audit/ledger" },
       { label: "Journal", href: "/platform/audit/journal" },
       { label: "Routes", href: "/platform/audit/routes" },
-      { label: "Operations", href: "/platform/audit/operations" },
+      { label: "Jobs", href: "/platform/audit/operations" },
       { label: "Authority", href: "/platform/audit/authority" },
       { label: "Metrics", href: "/platform/audit/metrics" },
     ],

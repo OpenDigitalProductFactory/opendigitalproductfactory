@@ -21,10 +21,6 @@ services:
       AUTH_TRUST_HOST: "true"
       PUBLIC_URL: ${DPF_LOCAL_CI_URL:?DPF_LOCAL_CI_URL must come from the admitted local-CI slot manifest}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
-      NEO4J_URI: ${LOCAL_CI_NEO4J_URI:-bolt://host.docker.internal:7688}
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-dpf_dev_password}
-      QDRANT_INTERNAL_URL: ${LOCAL_CI_QDRANT_INTERNAL_URL:-http://host.docker.internal:6334}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://host.docker.internal:11434}
       DPF_ENVIRONMENT: local-ci

@@ -2,18 +2,58 @@ import { prisma } from "@dpf/db";
 import Link from "next/link";
 
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { PortfolioActivityTree } from "@/components/ops/workrooms/PortfolioActivityTree";
 import { WorkroomInventory, type WorkroomInventoryRow } from "@/components/ops/workrooms/WorkroomInventory";
 import { Surface } from "@/components/ui/Surface";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
+import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
+import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import {
+  projectPortfolioActivityPage,
+  type RoomActivityInput,
+} from "@/lib/work-management/portfolio-activity-projection";
 
 export const dynamic = "force-dynamic";
 
+/** Rooms read for one render of this page. */
+const WORKROOM_READ_LIMIT = 200;
+
 export default async function WorkroomsPage() {
-  const inventory = await loadCapsuleLivenessInventory(prisma, { where: {}, take: 200 });
+  const inventory = await loadCapsuleLivenessInventory(prisma, { where: {}, take: WORKROOM_READ_LIMIT });
+  // A full page means the read stopped at its limit, so branch counts describe
+  // the rooms read rather than the rooms that exist. The tree is told, and says so.
+  const roomReadBounded = inventory.capsulesAll.length >= WORKROOM_READ_LIMIT;
   const workrooms = inventory.capsulesAll.map((room) => ({
     ...room,
     updatedAt: room.updatedAt instanceof Date ? room.updatedAt.toISOString() : String(room.updatedAt),
   })) as WorkroomInventoryRow[];
+
+  // Map only from evidence the inventory actually carries. `latestAction` stays
+  // null where no concrete action was recorded — the projection then says so
+  // rather than manufacturing one — and a blocked room contributes its recorded
+  // liveness reason as the blocker. Nothing here asserts a verified receipt,
+  // because a terminal status is not one.
+  const activityRooms: RoomActivityInput[] = workrooms.map((room) => ({
+    roomId: room.capsuleId,
+    title: room.title,
+    portfolioRole: (room.portfolioRole ?? null) as RoomActivityInput["portfolioRole"],
+    branchId: room.portfolioRole ?? "unplaced",
+    href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId })}`,
+    status: room.status,
+    latestAction: null,
+    blocker: room.status === "blocked" ? room.livenessReason : null,
+    evidenceAt: room.trueLivenessAt ?? null,
+  }));
+  const activity = projectPortfolioActivityPage({ rooms: activityRooms, now: new Date(), pageSize: 50 });
+  // Labels are resolved here and passed as data. The tree is a client component,
+  // and a formatter function cannot cross the server/client boundary.
+  const activityRows = activity.rows.map((row) => ({
+    ...row,
+    label:
+      row.branchId === "unplaced"
+        ? "Not placed in a portfolio"
+        : portfolioRoleLabel(row.branchId as Parameters<typeof portfolioRoleLabel>[0]),
+  }));
 
   return (
     <div>
@@ -37,6 +77,15 @@ export default async function WorkroomsPage() {
           Review live Workrooms
         </Link>
       </Surface>
+      <Surface className="mt-6" rounded="xl">
+        <h2 className="text-base font-semibold text-[var(--dpf-text)]">Activity by portfolio</h2>
+          <PortfolioActivityTree
+          rows={activityRows}
+          partial={activity.partial}
+          roomReadBounded={roomReadBounded}
+        />
+      </Surface>
+
       <div className="mt-6">
         <WorkroomInventory workrooms={workrooms} summary={inventory.livenessSummary} />
       </div>

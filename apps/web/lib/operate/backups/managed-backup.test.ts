@@ -1,6 +1,7 @@
 /**
  * Unit tests for the shared managed-backup engine (EP-8DC217EB BET-11,
- * BI-B72328D5), parametrized across all three engine specs. Mirrors the
+ * BI-B72328D5), parametrized across every engine spec (postgres-only after
+ * BET-5 retired neo4j + qdrant; the table stays so a future engine slots in). Mirrors the
  * mocking idiom of postgres-restore-runner.test.ts: mock prisma, the
  * metrics module and the managed-script chokepoint; use the real fs against
  * a temp directory.
@@ -21,14 +22,6 @@ vi.mock("@/lib/operate/metrics", () => {
     postgresBackupLastSuccessSeconds: gauge(),
     postgresBackupStorageBytes: gauge(),
     postgresBackupDurationSeconds: histogram(),
-    neo4jBackupRunsTotal: counter(),
-    neo4jBackupLastSuccessSeconds: gauge(),
-    neo4jBackupStorageBytes: gauge(),
-    neo4jBackupDurationSeconds: histogram(),
-    qdrantBackupRunsTotal: counter(),
-    qdrantBackupLastSuccessSeconds: gauge(),
-    qdrantBackupStorageBytes: gauge(),
-    qdrantBackupDurationSeconds: histogram(),
     postgresRestoreRunsTotal: counter(),
     postgresRestoreDurationSeconds: histogram(),
   };
@@ -44,12 +37,7 @@ import {
   nextDailyRunAt,
   runManagedBackup,
 } from "./managed-backup";
-import {
-  NEO4J_BACKUP_SPEC,
-  POSTGRES_BACKUP_SPEC,
-  QDRANT_BACKUP_SPEC,
-  type BackupEngineSpec,
-} from "./engine-specs";
+import { POSTGRES_BACKUP_SPEC, type BackupEngineSpec } from "./engine-specs";
 import { runManagedScript } from "./managed-script-path";
 
 type Mock = ReturnType<typeof vi.fn>;
@@ -78,16 +66,6 @@ const ENGINES: EngineCase[] = [
     spec: POSTGRES_BACKUP_SPEC,
     failLine: "[backup-trace] failed: pg_dump exploded",
     expectedSummary: "pg_dump exploded",
-  },
-  {
-    spec: NEO4J_BACKUP_SPEC,
-    failLine: "[backup-neo4j-trace] failed: neo4j-admin dump borked",
-    expectedSummary: "neo4j-admin dump borked",
-  },
-  {
-    spec: QDRANT_BACKUP_SPEC,
-    failLine: "[backup-qdrant-trace] failed: snapshot upload borked",
-    expectedSummary: "snapshot upload borked",
   },
 ];
 
@@ -183,18 +161,15 @@ describe.each(ENGINES)("runManagedBackup — $spec.target", ({ spec, failLine, e
       }),
     );
 
-    // Success row update: manifest fields; pgVersion only for postgres.
+    // Success row update: manifest fields, including the postgres-only
+    // pgVersion extra the spec's successRowExtras hook contributes.
     const updateData = (prisma.backupRun.update as Mock).mock.calls[0][0].data;
     expect(updateData).toMatchObject({
       status: "ok",
       sizeBytes: BigInt(2048),
       sha256: "deadbeef",
+      pgVersion: "16.3",
     });
-    if (spec.target === "postgres") {
-      expect(updateData.pgVersion).toBe("16.3");
-    } else {
-      expect("pgVersion" in updateData).toBe(false);
-    }
 
     // Two heartbeats: running, then ok with the next 03:00 UTC.
     const heartbeats = (prisma.scheduledJob.update as Mock).mock.calls;

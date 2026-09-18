@@ -1,5 +1,6 @@
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { prisma } from "@dpf/db";
+import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
 import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import {
@@ -244,6 +245,12 @@ export async function executeRemoteTaskAttempt(input: {
     const terminalWriterMissing = terminalToolPolicy !== null
       && !terminalWriterSucceeded
       && terminalWriterApprovalEnvelopeId === null;
+    // BI-C35576A9: record the contract the provider that RAN was held to, never a
+    // hard-coded claim. A CLI adapter is receipt-verified; an HTTP adapter forced
+    // the call. Undefined when nothing ran, so a throw never invents a contract.
+    const terminalWriterContract = terminalWriterDispatchContractForProvider(
+      (result as { providerId?: string }).providerId,
+    );
     // BI-8B8731EE: a resource wait is NOT a writer-contract failure, and this
     // branch would otherwise swallow it. `terminalWriterMissing` is true for any
     // governed route that executed no tools, which is exactly what a capacity
@@ -329,7 +336,7 @@ export async function executeRemoteTaskAttempt(input: {
               resumeMode: "same-taskrun",
               attempt: terminalWriterAttempt,
               observedAt,
-              dispatchContract: "required-tool-call",
+              ...(terminalWriterContract ? { dispatchContract: terminalWriterContract } : {}),
             },
             terminalWriterDispatchFailure: {
               schemaVersion: 1,
@@ -405,7 +412,7 @@ export async function executeRemoteTaskAttempt(input: {
               resumeMode: "same-taskrun",
               attempt: terminalWriterAttempt,
               observedAt: new Date().toISOString(),
-              dispatchContract: "required-tool-call",
+              ...(terminalWriterContract ? { dispatchContract: terminalWriterContract } : {}),
               ...(terminalWriterFailureMessage.includes("did not honor the required writer tool-call contract")
                 ? { noncompliance: "prose-without-required-writer" }
                 : {}),

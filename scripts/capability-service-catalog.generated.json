@@ -179,6 +179,32 @@
       "externalRuntimes": [],
       "services": [
         {
+          "backupPolicy": "excluded-rebuildable",
+          "boundaryReason": "Universal log shipper feeding loki; promoted with it (BI-F8024A9D) because a capture layer nobody enabled is a capture layer that does not exist.",
+          "canonicalDataOwner": "none",
+          "capability": "runtime:core",
+          "class": "universal-core",
+          "defaultRequired": true,
+          "dependsOn": [
+            "loki"
+          ],
+          "healthSemantics": "consumer-observed",
+          "hostPlatforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "ports": [],
+          "profiles": [],
+          "service": "alloy",
+          "targetClassification": "universal-core",
+          "volumes": [
+            "./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro",
+            "/var/run/docker.sock:/var/run/docker.sock:ro",
+            "alloy_data:/var/lib/alloy/data"
+          ]
+        },
+        {
           "backupPolicy": "separate-required",
           "boundaryReason": "Universal durable execution endpoint required by the portal's unconditional INNGEST_BASE_URL contract.",
           "canonicalDataOwner": "postgres-and-redis",
@@ -203,6 +229,32 @@
           "service": "inngest",
           "targetClassification": "universal-core",
           "volumes": []
+        },
+        {
+          "backupPolicy": "separate-required",
+          "boundaryReason": "Universal log store: container log capture is a platform guarantee, not an opt-in capability (BI-F8024A9D). Reads logs via the Docker socket with no host-path bind mount, so it runs on every supported host.",
+          "canonicalDataOwner": "loki",
+          "capability": "runtime:core",
+          "class": "universal-core",
+          "defaultRequired": true,
+          "dependsOn": [],
+          "healthSemantics": "consumer-observed",
+          "hostPlatforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "ports": [
+            "127.0.0.1:3100:3100"
+          ],
+          "profiles": [],
+          "service": "loki",
+          "targetClassification": "universal-core",
+          "volumes": [
+            "./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro",
+            "./monitoring/loki/rules/dpf-log-alerts.yml:/loki/rules-config/fake/dpf-log-alerts.yml:ro",
+            "loki_data:/loki"
+          ]
         },
         {
           "backupPolicy": "included",
@@ -350,35 +402,6 @@
       "externalRuntimes": [],
       "services": [
         {
-          "backupPolicy": "excluded-rebuildable",
-          "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
-          "capability": "runtime:deep-observability",
-          "class": "capability-activated",
-          "defaultRequired": false,
-          "dependsOn": [
-            "loki"
-          ],
-          "healthSemantics": "consumer-observed",
-          "hostPlatforms": [
-            "linux",
-            "macos",
-            "windows"
-          ],
-          "ports": [],
-          "profiles": [
-            "observability-ui",
-            "runtime-deep-observability"
-          ],
-          "service": "alloy",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro",
-            "/var/run/docker.sock:/var/run/docker.sock:ro",
-            "alloy_data:/var/lib/alloy/data"
-          ]
-        },
-        {
           "backupPolicy": "excluded-stateless",
           "boundaryReason": "Separate cadvisor runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
           "canonicalDataOwner": "none",
@@ -433,35 +456,6 @@
             "./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro",
             "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro",
             "grafana_data:/var/lib/grafana"
-          ]
-        },
-        {
-          "backupPolicy": "separate-required",
-          "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "loki",
-          "capability": "runtime:deep-observability",
-          "class": "capability-activated",
-          "defaultRequired": false,
-          "dependsOn": [],
-          "healthSemantics": "consumer-observed",
-          "hostPlatforms": [
-            "linux",
-            "macos",
-            "windows"
-          ],
-          "ports": [
-            "127.0.0.1:3100:3100"
-          ],
-          "profiles": [
-            "observability-ui",
-            "runtime-deep-observability"
-          ],
-          "service": "loki",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro",
-            "./monitoring/loki/rules/dpf-log-alerts.yml:/loki/rules-config/fake/dpf-log-alerts.yml:ro",
-            "loki_data:/loki"
           ]
         },
         {
@@ -1109,33 +1103,6 @@
       "externalRuntimes": [],
       "services": [
         {
-          "backupPolicy": "excluded-rebuildable",
-          "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
-          "capability": "runtime:local-speech",
-          "class": "capability-activated",
-          "defaultRequired": false,
-          "dependsOn": [],
-          "healthSemantics": "compose-healthcheck",
-          "hostPlatforms": [
-            "linux",
-            "macos",
-            "windows"
-          ],
-          "ports": [
-            "127.0.0.1:8765:9000"
-          ],
-          "profiles": [
-            "runtime-local-speech",
-            "tts"
-          ],
-          "service": "dpf-stt",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "dpf_stt_models:/app/models"
-          ]
-        },
-        {
           "backupPolicy": "separate-required",
           "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
           "canonicalDataOwner": "tts-voices",
@@ -1168,7 +1135,7 @@
       ]
     }
   ],
-  "catalogHash": "e2dc58d78bd9f6d6e056b35a99aa7d609520ad8472a50f6eaf21dfe8f2f79208",
+  "catalogHash": "ba364cb279c151dc9e27ffe4793b8b621d9f469735f6b554087fdb740768c546",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

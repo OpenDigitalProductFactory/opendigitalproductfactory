@@ -2,8 +2,8 @@
  * Shared managed-restore engine (EP-8DC217EB BET-11, BI-B72328D5).
  *
  * `runManagedRestore(spec, args)` is the single implementation of the restore
- * lifecycle that postgres-restore-runner.ts, neo4j-restore-runner.ts and
- * qdrant-restore-runner.ts previously each carried:
+ * lifecycle that postgres-restore-runner.ts and the (since-deleted, BET-5)
+ * neo4j/qdrant restore runners previously each carried:
  *
  *   1. Acquire the portal-side mutex (single restore at a time, any target).
  *   2. Verify the source artifact exists and its sha256 still matches what
@@ -228,7 +228,7 @@ export async function runManagedRestore(
 
     // Engine hook: Postgres snapshots the safety BackupRun row in MEMORY here
     // because pg_restore --clean wipes every table (including the audit rows
-    // we just wrote); Neo4j/Qdrant leave Postgres untouched and skip this.
+    // we just wrote); an engine that leaves Postgres untouched skips this.
     const preState = spec.capturePreRestoreState
       ? await spec.capturePreRestoreState({ prisma, safetyRunId: safety.runId })
       : null;

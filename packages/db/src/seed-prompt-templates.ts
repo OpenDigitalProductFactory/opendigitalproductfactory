@@ -15,6 +15,14 @@ type PromptFrontmatter = {
   description?: string;
   category: string;
   version?: number;
+  /**
+   * The coworker whose job this prompt describes, as declared in frontmatter
+   * (`agent_id`). BI-5CCBF85B: this is the key the runtime resolves a job
+   * description by — see persona-reachability.ts. `agentId` is accepted as an
+   * alias so a file using either spelling stays reachable.
+   */
+  agent_id?: string;
+  agentId?: string;
   composesFrom?: string[];
   contentFormat?: string;
   variables?: Array<{ name: string; required?: boolean }>;
@@ -152,6 +160,16 @@ export async function seedPromptTemplates(prisma: PrismaClient): Promise<void> {
 
       // Build metadata from extra frontmatter fields
       const metadata: Record<string, unknown> = {};
+      // BI-5CCBF85B: the declared agent id is the only reliable key from a
+      // persona file back to the coworker whose job it describes — file
+      // basenames do not match agent ids for any of the 91 persona files. Drop
+      // it here and the runtime cannot find the job description at all, which
+      // is exactly what left 101 of 130 coworkers running on a generated
+      // one-liner. See persona-reachability.ts.
+      const declaredAgentId = frontmatter.agent_id ?? frontmatter.agentId;
+      if (typeof declaredAgentId === "string" && declaredAgentId.trim()) {
+        metadata.agentId = declaredAgentId.trim();
+      }
       if (frontmatter.valueStream) metadata.valueStream = frontmatter.valueStream;
       if (frontmatter.stage) metadata.stage = frontmatter.stage;
       if (frontmatter.sensitivity) metadata.sensitivity = frontmatter.sensitivity;

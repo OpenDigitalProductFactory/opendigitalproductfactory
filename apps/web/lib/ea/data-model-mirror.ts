@@ -19,7 +19,14 @@ import type {
   PrismaModelFact,
   PrismaRelationFact,
 } from "../build/code-graph/extractors/prisma-schema-adapter";
+import { formatRetentionValue, parseModelMetadataSource, type ModelMetadata } from "@dpf/db/model-metadata";
+
 import { DATA_ASSET_REGISTRY, lookupAssetByPrismaModel } from "../govern/data/assets";
+
+/** /// @dpf declarations keyed by model name, parsed from the same schema text the facts came from. */
+export function declarationsFromSchemaSource(source: string): Map<string, ModelMetadata> {
+  return new Map(parseModelMetadataSource(source, "schema").entries.map((e) => [e.model, e.metadata]));
+}
 
 export const DATA_MODEL_MIRROR_VERSION = "data-model-mirror-v1";
 export const MODEL_SOURCE_KEY_PREFIX = "prisma:model:";
@@ -112,11 +119,31 @@ function signature(value: unknown): string {
  * carry a `governance` block; unregistered models (still in the legacy coverage
  * baseline) carry none until a coverage wave classifies them.
  */
-function governanceProperties(modelName: string): Record<string, unknown> {
+function governanceProperties(modelName: string, declared?: ModelMetadata): Record<string, unknown> {
   const asset = lookupAssetByPrismaModel(DATA_ASSET_REGISTRY, modelName);
-  if (!asset) return {};
+  // EP-A33A5C61 slice 4d-ii: the schema's /// @dpf declaration is projected as
+  // `governance.declared` — lifecycle class, retention disposition, sensitivity,
+  // categories, regulated scope, owner, steward, time axis — so the ERD carries
+  // exactly what the catalog carries. The registry fields below stay for the
+  // field-level asset / coverage concerns the registry still owns.
+  const declaredBlock = declared
+    ? {
+        declared: {
+          lifecycle: declared.lifecycle,
+          retention: formatRetentionValue(declared.retention),
+          sensitivity: declared.sensitivity ?? null,
+          categories: declared.categories ?? [],
+          scope: declared.scope ?? null,
+          owner: declared.owner ?? null,
+          steward: declared.steward ?? null,
+          timeAxis: declared.timeAxis ?? null,
+        },
+      }
+    : {};
+  if (!asset) return declared ? { governance: declaredBlock } : {};
   return {
     governance: {
+      ...declaredBlock,
       assetId: asset.id,
       domain: asset.domain,
       sensitivity: asset.sensitivity,
@@ -131,12 +158,15 @@ function governanceProperties(modelName: string): Record<string, unknown> {
   };
 }
 
-export function buildDesiredState(facts: PrismaSchemaFacts): {
+export function buildDesiredState(
+  facts: PrismaSchemaFacts,
+  declarations: ReadonlyMap<string, ModelMetadata> = new Map(),
+): {
   elements: DesiredElement[];
   relationships: DesiredRelationship[];
 } {
   const elements: DesiredElement[] = facts.models.map((model) => {
-    const properties = { ...modelElementProperties(model), ...governanceProperties(model.name) };
+    const properties = { ...modelElementProperties(model), ...governanceProperties(model.name, declarations.get(model.name)) };
     return {
       sourceKey: modelSourceKey(model.name),
       name: model.name,
@@ -304,8 +334,9 @@ function diffRelationships(
 export function planMirror(
   facts: PrismaSchemaFacts,
   existing: { elements: ExistingMirrorRow[]; relationships: ExistingMirrorRow[] },
+  declarations: ReadonlyMap<string, ModelMetadata> = new Map(),
 ): MirrorPlan {
-  const desired = buildDesiredState(facts);
+  const desired = buildDesiredState(facts, declarations);
   const elementDiff = diffElements(desired.elements, existing.elements);
   const relationshipDiff = diffRelationships(desired.relationships, existing.relationships);
 

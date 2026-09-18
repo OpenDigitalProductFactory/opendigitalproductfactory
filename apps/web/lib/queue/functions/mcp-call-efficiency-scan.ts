@@ -33,13 +33,14 @@ export const mcpCallEfficiencyScan = inngest.createFunction(
         ownerUserId,
       });
       console.log(
-        `[mcp-call-efficiency] calls=${report.totalCalls} findings=${report.findings.length} notified=${notified} usable=${report.ledgerSufficiency.usable}` +
+        `[mcp-call-efficiency] coverage=${report.coverage.complete ? "complete" : "partial"} calls=${report.totalCalls}/${report.coverage.populationCount} findings=${report.findings.length} notified=${notified} usable=${report.ledgerSufficiency.usable}` +
           (aiOps
             ? ` aiOps=${aiOps.skipped ? `skip:${aiOps.reason}` : `task=${aiOps.agentTaskId} bis=${aiOps.backlogItemsFiled.length}`}`
             : ""),
       );
       return {
         totalCalls: report.totalCalls,
+        coverage: report.coverage,
         findingCount: report.findings.length,
         notified,
         aiOps,

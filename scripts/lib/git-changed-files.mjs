@@ -34,8 +34,12 @@ export function runGit(args, { exec = execFileSync, cwd = REPO_ROOT } = {}) {
 /**
  * Files changed vs `base`. An unresolvable ref or a failed three-dot diff is
  * `unresolvable`, never an empty list.
+ *
+ * `diffArgs` are extra `git diff` selectors inserted before the range — the
+ * escape hatch that keeps `--diff-filter=…` callers on this helper instead of
+ * writing their own error-swallowing diff.
  */
-export function listChangedFiles(base, { git = runGit } = {}) {
+export function listChangedFiles(base, { git = runGit, diffArgs = [] } = {}) {
   const parsed = git(["rev-parse", "--verify", `${base}^{commit}`]);
   if (!parsed.ok) {
     return {
@@ -44,7 +48,10 @@ export function listChangedFiles(base, { git = runGit } = {}) {
       detail: (parsed.stderr || parsed.stdout || "").trim(),
     };
   }
-  const diff = git(["diff", "--name-only", `${base}...HEAD`]);
+  // `diffArgs` carries caller-specific selectors (e.g. --diff-filter=AM) so a
+  // guard that needs them still gets the unresolvable-vs-empty distinction
+  // rather than hand-rolling its own swallowing diff.
+  const diff = git(["diff", "--name-only", ...diffArgs, `${base}...HEAD`]);
   if (!diff.ok) {
     return {
       status: "unresolvable",

@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20260909213000_workcapsule_source_platform_maintenance",
+    "backfill": "none \u2014 widens the WorkCapsule_source_closed_set CHECK by one value ('platform-maintenance'), recreated NOT VALID exactly as 20260902040000; no rows are rewritten"
+  },
+  "tests": [
+    "apps/web/lib/work-capsules/work-capsule-source-closed-set.test.ts",
+    "apps/web/lib/work-capsules/workroom-anchor-converger.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:workroom",
+      "prismaModel": "Workroom",
+      "lifecycleDisposition": "operational",
+      "fields": [
+        {
+          "fieldId": "data:workroom#source",
+          "resolution": "inherited",
+          "reason": "closed-set string widened by one registered value; not personal or sensitive data; the code set WORK_CAPSULE_SOURCES is the source of truth and the parity test keeps the DB check level with it",
+          "provenance": "manual/platform-architecture"
+        }
+      ]
+    }
+  ]
+}

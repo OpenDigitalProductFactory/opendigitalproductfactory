@@ -10,6 +10,9 @@ import {
   saveWorkroomShape,
 } from "@/lib/actions/workroom-posture";
 import { WORKROOM_SHAPE_KEYS, type WorkroomShapeKey } from "@/lib/work-management/room-shapes";
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
+import { preferenceFromPreset } from "@/lib/golden-triangle/presets";
+import { GoldenTriangleControl } from "@/components/golden-triangle/GoldenTriangleControl";
 
 /**
  * EP-WORK-POSTURE — the control the room's read-only posture section implied
@@ -71,6 +74,7 @@ export function WorkroomPostureControl({
   currentShape,
   currentPace,
   currentAuthority,
+  currentPriority,
   hasDeclaration,
 }: {
   roomRowId: string;
@@ -78,10 +82,17 @@ export function WorkroomPostureControl({
   currentShape: WorkroomShapeKey | null;
   currentPace: string | null;
   currentAuthority: string | null;
+  /** The room's resolved Cost / Quality / Time posture (declared, shape default, or inherited). */
+  currentPriority?: GoldenTrianglePreference | null;
   hasDeclaration: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // BI-7ADEBDC1: the triangle is edited here, on the ROOM. Local state so a
+  // drag feels immediate; the settled value is what gets saved.
+  const [priority, setPriority] = useState<GoldenTrianglePreference>(
+    currentPriority ?? preferenceFromPreset("balanced"),
+  );
 
   function run(fn: () => Promise<ActionResult>) {
     setError(null);
@@ -125,6 +136,25 @@ export function WorkroomPostureControl({
             );
           })}
         </div>
+      </fieldset>
+
+      <fieldset className="mt-4" disabled={pending}>
+        <legend className="text-xs font-medium text-[var(--dpf-fg)]">What should it favour?</legend>
+        <div className="mt-2">
+          <GoldenTriangleControl
+            value={priority}
+            onChange={setPriority}
+            compact
+          />
+        </div>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => run(() => saveWorkroomPosture(roomRowId, caseKey, { priority }))}
+          className="mt-2 rounded border border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)] px-2.5 py-1.5 text-xs text-[var(--dpf-fg)]"
+        >
+          Save priority
+        </button>
       </fieldset>
 
       <fieldset className="mt-4" disabled={pending}>

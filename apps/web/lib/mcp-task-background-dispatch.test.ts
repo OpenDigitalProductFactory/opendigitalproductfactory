@@ -6,6 +6,8 @@ const db = vi.hoisted(() => ({
   findMany: vi.fn(),
   findUnique: vi.fn(),
   findOperation: vi.fn(),
+  findWriter: vi.fn(),
+  findEnvelope: vi.fn(),
 }));
 const queue = vi.hoisted(() => ({ send: vi.fn() }));
 const notify = vi.hoisted(() => ({ publish: vi.fn() }));
@@ -14,6 +16,8 @@ const recipeRuntime = vi.hoisted(() => ({ ensure: vi.fn() }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    toolExecution: { findFirst: (...args: unknown[]) => db.findWriter(...args) },
+    coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
     asyncInferenceOp: {
       findFirst: (...args: unknown[]) => db.findOperation(...args),
     },
@@ -42,6 +46,7 @@ vi.mock("./mcp-task-durable-inference-runtime", () => ({
 }));
 
 import {
+  automaticReviewerRecoveryWait,
   enqueuePersistedRemoteTask,
   reconcilePersistedRemoteTaskDispatches,
 } from "./mcp-task-background-dispatch";
@@ -54,6 +59,8 @@ beforeEach(() => {
   db.findMany.mockResolvedValue([]);
   db.findUnique.mockResolvedValue(null);
   db.findOperation.mockResolvedValue(null);
+  db.findWriter.mockResolvedValue(null);
+  db.findEnvelope.mockResolvedValue(null);
   queue.send.mockResolvedValue({ ids: ["event-1"] });
   asyncRuntime.cancel.mockResolvedValue({ operationId: "async-op-1" });
   asyncRuntime.enqueue.mockResolvedValue(undefined);
@@ -66,6 +73,47 @@ beforeEach(() => {
 });
 
 describe("external TaskRun durable dispatch", () => {
+  it("queues missing reviewer receipts even when ordinary async submission is disabled", async () => {
+    const wait = { schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_design_review",
+      noncompliance: "prose-without-required-writer",
+      resumeMode: "same-taskrun", attempt: 1, observedAt: "2026-08-31T03:58:00.000Z" };
+    const candidate = { id: "row-review", taskRunId: "TR-REVIEW", status: "input-required",
+      updatedAt: new Date(wait.observedAt), progressPayload: { terminalWriterWait: wait },
+      a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
+        writerToolName: wait.writerToolName, itemId: "BI-2014236E", gate: "design",
+        artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "org/repo",
+          commitSha: "a".repeat(40), path: "docs/spec.md", providerBlobId: "b".repeat(40) },
+      } },
+    };
+    db.findMany.mockResolvedValue([candidate]);
+    db.updateMany.mockImplementation(async ({ data }) => {
+      db.findUnique.mockResolvedValue({ ...candidate, ...data });
+      return { count: 1 };
+    });
+    const result = await reconcilePersistedRemoteTaskDispatches({
+      now: new Date("2026-08-31T04:00:00.000Z"), includeOrdinary: false,
+    });
+    expect(result).toMatchObject({ enqueued: 1, exhausted: 0 });
+    expect(queue.send).toHaveBeenCalledWith("TR-REVIEW", "mcp-task-run:TR-REVIEW:execute:1");
+    expect(db.findMany.mock.calls[0]![0].where.OR).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: "input-required" }),
+    ]));
+    expect(db.updateMany.mock.calls[0]![0].data.progressPayload.terminalWriterWait).toEqual(wait);
+    for (const writerAttempt of [{ id: "approval-pending" }, { id: "declined" }, { id: "verified-receipt" }]) {
+      db.findWriter.mockResolvedValue(writerAttempt);
+      expect(await automaticReviewerRecoveryWait(candidate, new Date("2026-08-31T04:00:00.000Z"))).toBeNull();
+    }
+    db.findWriter.mockResolvedValue(null);
+    db.findEnvelope.mockResolvedValue({ id: "pending-before-writer-returns" });
+    expect(await automaticReviewerRecoveryWait(candidate, new Date("2026-08-31T04:00:00.000Z"))).toBeNull();
+    db.findEnvelope.mockResolvedValue(null);
+    for (const patch of [{ attempt: 3 }, { noncompliance: undefined }, { observedAt: "invalid" },
+      { writerToolName: "record_initiative_plan_review" }, { validationFailure: { error: "baseline_changed" } }]) {
+      expect(await automaticReviewerRecoveryWait({ ...candidate,
+        progressPayload: { terminalWriterWait: { ...wait, ...patch } },
+      }, new Date("2026-08-31T04:00:00.000Z"))).toBeNull();
+    }
+  });
   it("persists the submitted outbox projection before sending its deterministic event", async () => {
     const pending = {
       schemaVersion: 1,

@@ -20,7 +20,7 @@ discovery.docker "containers" {
 discovery.relabel "containers" {
   targets = discovery.docker.containers.targets
 
-  // compose service name -> `service` label (e.g. portal, dpf-stt, inngest)
+  // compose service name -> `service` label (e.g. portal, dpf-tts, inngest)
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service"

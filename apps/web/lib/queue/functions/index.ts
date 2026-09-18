@@ -6,6 +6,7 @@ import { rateRecovery } from "./rate-recovery";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
+import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
 import { backlogTriageDrain } from "./backlog-triage-drain";
@@ -58,6 +59,7 @@ import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import { edgeNodeJanitor } from "./edge-node-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
 import { worktreeJanitor } from "./worktree-janitor";
+import { pullRequestMergedBinding } from "./pull-request-merged-binding";
 import { sandboxBuildGc } from "./sandbox-build-gc";
 import {
   dataRetentionSweepScheduled,
@@ -81,6 +83,7 @@ import { remoteActionClaimTimeout } from "./remote-action-claim-timeout";
 import { alertDeliveryBridge } from "./alert-delivery-bridge";
 import { releaseHealthCheck } from "./release-health-check";
 import { marketingSchedulerDispatch, postmarkCallbackDispatchRequested, postmarkCallbackDispatchSweep } from "./marketing-scheduler-dispatch";
+import { mailroomMailboxPoll, mailroomMailboxPollRequested } from "./mailroom-poll";
 import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
 import { siemCorrelationSweep } from "./siem-correlation-sweep";
 import { patchAssessmentSweep } from "./patch-assessment-sweep";
@@ -132,6 +135,7 @@ import {
 } from "./data-control-operation";
 import { indexIntegritySweep } from "./index-integrity-sweep";
 import { localModelInstall } from "./local-model-install";
+import { providerCatalogRefresh } from "./provider-catalog-refresh";
 import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
 import {
   mcpTaskRunDispatchReconciliation,
@@ -154,6 +158,7 @@ export const scheduledFunctions = [
   infraPrune,
   codeGraphReconcileScheduled,
   issueReportTriage,
+  ecosystemInboundTriage,
   backlogTriageDrain,
   coworkerRegressionDetect,
   agentTaskDispatch,
@@ -196,6 +201,7 @@ export const scheduledFunctions = [
   alertDeliveryBridge,   // BI-5FE8656F: EP-FULL-OBS Tier 2 item #6 — Prometheus+Loki firing alerts -> PortfolioQualityIssue, every 1m
   releaseHealthCheck,    // BI-3630773C: EP-FULL-OBS release stamp verify-gate watch, every 15m
   marketingSchedulerDispatch, // BI-SCHED-DORMANT: wire ScheduledOutboundAction dispatch, every 30m
+  mailroomMailboxPoll, // BI-9C362E23: Mailroom — read every due mailbox (per-mailbox interval, default 60m), every 15m
   recurringInvoiceDispatch,   // BI-SCHED-DORMANT: wire recurring-invoice generation, daily 06:30
   siemCorrelationSweep,       // BI-6D9496F1: EP-SOVEREIGN-SOC P1 — project internal audit -> SecurityEvent + run detection rules, every 15m
   patchAssessmentSweep,       // EP-PATCH-MANAGEMENT P0: daily estate patch posture sweep (OSV+KEV -> AssuranceFinding), 05:00
@@ -222,8 +228,10 @@ export const scheduledFunctions = [
 ];
 
 export const eventFunctions = [
+  pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
   localModelInstall,
+  providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
   mcpCatalogSync,
   codeGraphReconcileEvent,
@@ -261,6 +269,7 @@ export const eventFunctions = [
   workroomDriveRunNow, // BI-FCD639D9: operator "run now" standing Workroom drive
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
   postmarkCallbackDispatchRequested,
+  mailroomMailboxPollRequested, // BI-9C362E23: Mailroom — poll one mailbox now (connect first read, Check now)
   workPatternExperimentRun,
   dataControlOperationRecoveryRequested,
   nonprodCapacityAvailable,

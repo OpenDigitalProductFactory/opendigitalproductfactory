@@ -29,10 +29,11 @@ describe("classifyRunStatus (EP-8DC217EB BET-10)", () => {
 });
 
 describe("OPERATIONS_RUN_SELECT", () => {
-  it("is the single canonical 11-column TaskRun projection select", () => {
+  it("is the single canonical TaskRun projection select", () => {
     expect(Object.keys(OPERATIONS_RUN_SELECT).sort()).toEqual(
       [
         "a2aMetadata",
+        "progressPayload",
         "completedAt",
         "currentAgentId",
         "id",

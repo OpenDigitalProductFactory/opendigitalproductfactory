@@ -109,10 +109,14 @@ describe("loadCapsuleLivenessInventory", () => {
 
     expect(result.livenessSummary).toEqual({
       scanned: 3,
+      // WC-LIVE holds a valid lease with lastSyncedAt null, so it is HELD but
+      // not demonstrably working — live counts it, working does not
+      // (BI-7271460C).
       live: 1,
+      working: 0,
       history: 2,
       reapable: 1,
-      byLiveness: { live: 1, "lease-expired": 1, terminal: 1 },
+      byLiveness: { "leased-idle": 1, "lease-expired": 1, terminal: 1 },
       heavyLane: { executing: 0, nextReady: 0, dormant: 0 },
       progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null },
     });

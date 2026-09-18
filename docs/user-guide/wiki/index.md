@@ -33,6 +33,22 @@ WWMD uses the same wiki substrate for decision support. It retrieves relevant pr
 
 How much each coworker acts on its own — its proactivity — is set from your industry's risk posture and can be confirmed or adjusted per coworker. See [Coworker Proactivity](../ai-workforce/coworker-proactivity.md).
 
+## Your Business Stances
+
+`/coworker-decisions/stance` is where your business's own answers live. Onboarding seeds a starting
+set from your mission and business type — money and quality, how you handle personal information,
+what the team gets on with unasked, and which decisions are yours to make at all. They are starting
+positions, not rulings: confirm them, or adjust any one first.
+
+Which stances you see depends on what your business actually does. A firm whose people work at
+customer premises gets a stance about conduct there; one whose people never leave the office does
+not, and is not asked whether it has field staff — that follows from your business type.
+
+Each card shows the sentence that carries the decision, with the rest a click away, and the list of
+published stances below shows the opening line of anything not already summarised in a card above. That is deliberate — a page of full stances
+is not one anyone reads before confirming, and confirming without reading is worse than a longer
+page. Open any stance to read it whole.
+
 ## Reading The Decision Log
 
 The decision log at `/coworker-decisions/decisions` is the record of what your AI workforce actually decided, split into three tiers: **WWMD** (platform doctrine), **WWWD** (your business), and **WSID** (role craft). Open a row for the options weighed, the rationale, the principles that pulled which way, and whether a human still needs to resolve it.
@@ -73,6 +89,8 @@ Nothing is applied behind you. Accepting a business answer still saves it as dra
 `/coworker-decisions/review` surfaces findings over the accumulating decision ledger so you can keep governance sharp without reading every row: conflicting principles, gaps where the doctrine has no settled answer yet, a canonical decision that quietly drifted under a doctrine change, and stale decision material. It shows only findings with enough recorded context and a real owner action. Open a finding to see the specific evidence, why it needs attention, the available resolution, and what completion will change. Empty or internal-only records stay in audit history instead of becoming unusable work.
 
 The same page carries **Craft doctrine waiting on you**. Some craft areas are high-stakes — anything touching money or compliance — and their expertise is written for your AI coworkers but deliberately not switched on. Until you approve it, that coworker answers from general platform judgement rather than its own specialist knowledge. Open one to see which pages are waiting, then approve the area to put its expertise to work. Nothing appears here unless something is genuinely waiting on you.
+
+It also lists **Craft questions your specialists answered from platform defaults**: for each profession and decision class, how many times in the last 30 days a specialist coworker was asked a craft question with no confirmed page of its own covering that class, so general platform doctrine answered instead. That is the demand signal for publishing a page on that craft; the row links straight to the craft page, and nothing here needs a ruling on the individual consult.
 
 **Weight-adjustment proposals** are a fifth finding type: when your recorded decisions in one class systematically separate from the kernel's recommendation on a specific axis (e.g. consistently favoring speed over long-term maintainability), the platform proposes adjusting how much that axis should weigh — never automatically. Each proposal shows the axis, direction, how many decisions it's based on, and how consistent the pattern is. Accept it to record it at the same `ruled` authority a real human ruling on stance material reaches, or reject it (with an optional reason) so it stops resurfacing. Accepting does not yet change any live decision score by itself — it is evidence the platform is confident enough to name, not an automatic rule change.
 

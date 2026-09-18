@@ -20,6 +20,8 @@ import { AiProviderFinancePanel } from "@/components/finance/AiProviderFinancePa
 import { getAiProviderFinanceDetail } from "@/lib/finance/ai-provider-finance";
 import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
 import { ProviderAccountPostureForm } from "@/components/platform/ProviderAccountPostureForm";
+import { ProviderClearanceOverridePanel } from "@/components/platform/ProviderClearanceOverridePanel";
+import { listActiveProviderClearanceOverrides } from "@/lib/actions/provider-clearance-override";
 import { ProviderTrustEvidencePanel } from "@/components/platform/ProviderTrustEvidencePanel";
 import { PROVIDER_TRUST_CLAIM_KEYS, resolveProviderTrustEvidence, type ProviderTrustClaimKey } from "@/lib/routing/provider-suitability/evidence";
 import { connectionPosture, loadBusinessSuitabilityContext, providerCatalogFacts } from "@/lib/routing/provider-suitability/provider-onboarding-data";
@@ -135,6 +137,11 @@ export default async function ProviderDetailPage({ params }: Props) {
   const user = session?.user;
   const canWrite = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections");
   const showPosture = shouldShowProviderAccountPosture(providerId, pw.provider.endpointType);
+  // Break-glass overrides (BI-FA412D44) — operator-only read; empty for everyone
+  // else and on any error, so a read-only viewer never triggers the capability throw.
+  const clearanceOverrides = canWrite
+    ? await listActiveProviderClearanceOverrides(providerId).catch(() => [])
+    : [];
 
   // Fetch hardware info for local providers via Neo4j InfraCI.
   // Wrapped in try/catch — Neo4j is best-effort; a graph error must never crash the page.
@@ -271,6 +278,12 @@ export default async function ProviderDetailPage({ params }: Props) {
               actions={connectionReview?.actions ?? []}
             />
           )}
+          <ProviderClearanceOverridePanel
+            providerId={providerId}
+            canWrite={canWrite}
+            genuinelyCleared={(pw.provider.sensitivityClearance ?? []) as string[]}
+            overrides={clearanceOverrides}
+          />
           {/* BI-87D93A71 (Minimum): surface OAuth callback port mismatch
               BEFORE the user clicks Connect — eliminates the silent
               :3000 → :1455 origin divergence that the shared OpenAI

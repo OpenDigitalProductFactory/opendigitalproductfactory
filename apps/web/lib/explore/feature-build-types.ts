@@ -1,3 +1,5 @@
+import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
+import type { GateRequirement } from "./build-process-matrix";
 // apps/web/lib/feature-build-types.ts
 // Pure types and helpers for the Build Studio. No server imports.
 
@@ -331,13 +333,8 @@ export type TaskResult = {
   commitSha?: string;
 };
 
-export type VerificationOutput = {
-  testsPassed: number;
-  testsFailed: number;
-  typecheckPassed: boolean;
-  fullOutput: string;
-  timestamp: string;
-};
+export type { VerificationOutput } from "@/lib/build/verification-output";
+import type { VerificationOutput } from "@/lib/build/verification-output";
 
 export type AcceptanceCriterion = {
   criterion: string;
@@ -726,8 +723,15 @@ export function canTransitionPhase(from: BuildPhase, to: BuildPhase): boolean {
 
 // ─── Phase Gate Enforcement ──────────────────────────────────────────────────
 
-export type PhaseGateResult = { allowed: boolean; reason?: string };
-
+/**
+ * The outcome of a phase gate. `allowed`/`reason` are unchanged; `requirement`
+ * (WHICH check said no, as the closed GateRequirement union) and `disposition`
+ * (WHAT KIND of no, which callers route on) are additive — BI-09D11444.
+ */
+export type PhaseGateResult = {
+  allowed: boolean; reason?: string;
+  requirement?: GateRequirement; disposition?: OutcomeDisposition;
+};
 // ─── Phase-handoff evidence digest ───────────────────────────────────────────
 //
 // A PhaseHandoff row is the structured artifact the next phase reads instead of

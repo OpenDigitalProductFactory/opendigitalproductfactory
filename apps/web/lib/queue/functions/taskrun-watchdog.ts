@@ -301,6 +301,33 @@ export const taskrunWatchdog = inngest.createFunction(
       console.warn("[taskrun-watchdog] work-capsule reaper failed:", err);
     }
 
+    // BI-A5EEB5D1 (kernel: a room is reachable by construction): anchor rooms that
+    // carry no Workroom.workItemId, so their case page resolves. Passes each
+    // through the one canonical anchor helper in a bounded batch. Unlike the
+    // reaper this is ADDITIVE and reversible — a WorkItem is created, nothing is
+    // deleted — so it actuates by default and the fix reaches every install
+    // with no operator action (DI-B3E42B8A9B48). Kill switch only. Best-effort.
+    let workroomsAnchored = 0;
+    try {
+      const { WORKROOM_ANCHOR_CONVERGER_KILL_SWITCH, convergeWorkroomAnchorsWithPrisma } =
+        await import("@/lib/work-capsules/workroom-anchor-converger.server");
+      if (process.env[WORKROOM_ANCHOR_CONVERGER_KILL_SWITCH] !== "1") {
+        const result = await convergeWorkroomAnchorsWithPrisma();
+        workroomsAnchored = result.anchored;
+        if (result.anchored > 0 || result.failed.length > 0) {
+          console.warn(
+            `[workroom-anchor-converger] anchored ${result.anchored}/${result.candidates} room(s)` +
+              ` (${result.created} case(s) minted)` +
+              (result.failed.length > 0
+                ? `; ${result.failed.length} failed: ${result.failed.map((f) => `${f.capsuleId} (${f.reason})`).join(", ")}`
+                : ""),
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("[taskrun-watchdog] workroom anchor converger failed:", err);
+    }
+
     // BI-B62B9F1E: release stale BacklogItem claims (dead sessions) so they do
     // not linger as "active" operator noise. Complements the atomic reclaim path.
     let staleBacklogClaimsReaped = 0;
@@ -313,14 +340,14 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (!(await isStallWatchdogEnabled())) {
-      return { skipped: true, reason: "flag-off", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, staleBacklogClaimsReaped };
+      return { skipped: true, reason: "flag-off", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored, staleBacklogClaimsReaped };
     }
 
     const { prisma } = await import("@dpf/db");
 
     const thresholds = await prisma.buildStudioStallThreshold.findMany();
     if (thresholds.length === 0) {
-      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, staleBacklogClaimsReaped };
+      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored, staleBacklogClaimsReaped };
     }
 
     // Coarse SQL filter using the smallest applicable thresholds across all
@@ -372,7 +399,7 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (decisions.length === 0) {
-      return { processed: 0, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped };
+      return { processed: 0, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored };
     }
 
     // Batch id-resolution: business taskRunId → cuid id for FK writes.
@@ -532,6 +559,6 @@ export const taskrunWatchdog = inngest.createFunction(
       processed += 1;
     }
 
-    return { processed, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped };
+    return { processed, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored };
   },
 );

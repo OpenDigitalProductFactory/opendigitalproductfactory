@@ -33,7 +33,7 @@ export interface Deviation {
 }
 
 /** Which authority scope supplied the governing posture, or "none" (Balanced cold-start). */
-export type GoldenTriangleGovernedBy = "agent" | "organization" | "platform" | "none";
+export type GoldenTriangleGovernedBy = "workroom" | "organization" | "platform" | "none";
 
 export interface GoldenTriangleReceipt {
   preset: GoldenTrianglePreset;

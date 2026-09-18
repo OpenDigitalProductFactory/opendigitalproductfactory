@@ -17,7 +17,6 @@ import { MessageSquare, Settings2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
-import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
 import {
   loadCoworkerCostProjection,
   costGlance,
@@ -26,7 +25,7 @@ import {
 } from "@/lib/coworker-identity/cost-projection";
 import { loadCoworkerEngagements } from "@/lib/coworker-identity/engagements-projection";
 import { loadCoworkerTeams } from "@/lib/coworker-identity/teams-projection";
-import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
+import { CoworkerPriorityNote } from "@/components/platform/coworker-record/CoworkerPriorityNote";
 import { CoworkerProactivityNote } from "@/components/platform/coworker-record/CoworkerProactivityNote";
 import { CostFacetPanel } from "@/components/platform/coworker-identity/CostFacetPanel";
 import { EngagementsFacetPanel } from "@/components/platform/coworker-identity/EngagementsFacetPanel";
@@ -119,9 +118,8 @@ export default async function CoworkerIdentityPage({
   if (!record) return notFound();
   const { agent, runtime } = record;
 
-  const [session, inheritance, cost, engagements, teams] = await Promise.all([
+  const [session, cost, engagements, teams] = await Promise.all([
     auth(),
-    getCoworkerPostureInheritance(agent.agentId),
     loadCoworkerCostProjection(runtime.agentId, { slugId: runtime.slugId }),
     loadCoworkerEngagements(runtime.agentId, runtime.id, { slugId: runtime.slugId }),
     loadCoworkerTeams(runtime.id),
@@ -265,7 +263,7 @@ export default async function CoworkerIdentityPage({
             <span className="ml-auto text-xs font-medium text-[var(--dpf-accent)]">Change ▾</span>
           </summary>
           <div className="border-t border-[var(--dpf-border)] px-4 py-4">
-            <CoworkerPriorityControl agentId={agent.agentId} inheritance={inheritance} canWrite={canWrite} />
+            <CoworkerPriorityNote />
           </div>
         </details>
         <details className="overflow-hidden rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">

@@ -35,6 +35,13 @@ export {
   DecisionProposalScope,
   DecisionProposalStatus,
 } from "../generated/client/client";
+// What a governed decision is ABOUT (BI-01F8F06D). Exported as a TYPE, not a
+// value: under vitest `@dpf/db` aliases to src/client.ts, which exports only
+// `prisma`, so a value import of a generated enum resolves to undefined there.
+// The type still closes the set at compile time, and Postgres closes it at
+// write time, so a writer spells the member as a literal and TS rejects any
+// member the schema does not define.
+export type { DecisionSubjectKind } from "../generated/client/client";
 export {
   WorkroomParticipantRole,
   WorkroomParticipantAssignmentSource,
@@ -639,6 +646,10 @@ export * from "./discovery-fingerprint-store";
 export * from "./installation-operating-intent";
 export * from "./installation-instance-stance";
 export * from "./reference-freshness";
+export * from "./performer-allocation";
+export * from "./workforce-staffing-posture";
+export * from "./coworker-job-definition";
+export * from "./archetype-job-definition-projection";
 
 // Contributor-inventory-sync ScheduledJob constants — shared between the
 // seed helper and the apps/web Inngest runner so the heartbeat row's name +

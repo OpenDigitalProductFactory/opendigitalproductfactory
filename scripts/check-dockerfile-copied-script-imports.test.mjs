@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   findMissingCopiedImports,
@@ -19,7 +20,7 @@ import {
 } from "./check-dockerfile-copied-script-imports.mjs";
 
 const REPO_ROOT = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")),
+  path.dirname(fileURLToPath(new URL(import.meta.url))),
   "..",
 );
 

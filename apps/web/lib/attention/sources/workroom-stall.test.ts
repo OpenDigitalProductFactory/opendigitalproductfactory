@@ -11,13 +11,57 @@
 // The threshold is deliberately not 1. A single paused tick is ordinary — a room
 // between cycles, a quiescent gate. An hour of consecutive refusals is a stall.
 
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
+import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 import {
   STALL_TICK_THRESHOLD,
   projectRoomStall,
   type RoomStallRow,
 } from "./workroom-stall";
+
+// `URL.pathname` yields "/D:/..." on Windows, which readdirSync cannot open, so
+// the walk below caught the error and reported every route as missing. That made
+// this test red on every Windows host while passing in CI. fileURLToPath is the
+// platform-correct conversion.
+const APP_ROOT = fileURLToPath(new URL("../../../app", import.meta.url));
+
+// Walk the App Router tree the way Next.js does: route groups "(shell)" are
+// transparent, and a "[param]" directory matches any single segment. Returns
+// false when no directory chain can consume every segment of the path.
+function routeExists(href: string): boolean {
+  const segments = href.split("?")[0].split("/").filter(Boolean).map(decodeURIComponent);
+
+  function walk(dir: string, remaining: string[]): boolean {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
+    } catch {
+      return false;
+    }
+    if (remaining.length === 0) return true;
+    const [head, ...tail] = remaining;
+    for (const entry of entries) {
+      // A route group adds nesting without consuming a URL segment.
+      if (entry.startsWith("(") && entry.endsWith(")")) {
+        if (walk(join(dir, entry), remaining)) return true;
+        continue;
+      }
+      if (entry === head || (entry.startsWith("[") && entry.endsWith("]"))) {
+        if (walk(join(dir, entry), tail)) return true;
+      }
+    }
+    return false;
+  }
+
+  return segments.length > 0 && walk(APP_ROOT, segments);
+}
 
 function pause(reason: string, deviations: string[] = []): unknown {
   return {
@@ -212,5 +256,37 @@ describe("projectRoomStall over escalating rooms", () => {
 
   it("counts an escalation streak the same way it counts a pause streak", () => {
     expect(projectRoomStall(row({ drive: escalating(), consecutivePauses: 1 }))).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The room the card points at must exist (BI-6F2CC21B).
+//
+// The operator reported that no "Open room" button on the Needs-you inbox
+// worked. This source emitted `/ea/workrooms/<capsuleId>`, a path with no
+// dynamic segment behind it, so every card 404'd — a total failure that shipped
+// because nothing asserted the link resolved. The canonical room address
+// already existed (encodeWorkCaseKey, used by the workrooms index); this source
+// hand-built a second shape instead of composing it.
+//
+// These two tests are deliberately a pair. The first pins the address to the
+// canonical helper, so a hand-built path fails. The second walks the real App
+// Router tree, so renaming the route fails the test rather than the operator's
+// inbox.
+
+describe("the emitted room link is reachable", () => {
+  it("addresses the room by its canonical work-case key, not a hand-built path", () => {
+    const item = projectRoomStall(row());
+    const expected = `/workspace/cases/${encodeWorkCaseKey({
+      sourceType: "work-capsule",
+      sourceId: "WC-A69BCABB",
+    })}`;
+    expect(item?.deepLink).toBe(expected);
+    expect(item?.actions?.[0]?.href).toBe(expected);
+  });
+
+  it("emits a path that resolves to a real App Router route", () => {
+    const item = projectRoomStall(row());
+    expect(routeExists(item?.deepLink ?? "")).toBe(true);
   });
 });

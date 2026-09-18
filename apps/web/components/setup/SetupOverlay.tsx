@@ -38,6 +38,7 @@ export function buildStepTrigger(step: string, ctx: Record<string, string>): str
     "business-context": "Your Business — describe what you do and who you serve",
     "operating-hours": "Operating Hours — when your business is open, and in what timezone",
     "storefront": "Storefront — customer-facing portal",
+    "mailroom": "Mailroom — the mailboxes your business reads, and what happens to what arrives",
     "platform-development": "Platform Development — contribution and governance mode",
     "build-studio": "Build Studio — custom feature development",
     "meet-your-coo": "Meet your AI COO — optionally choose how they are addressed",
@@ -59,6 +60,13 @@ export function buildStepTrigger(step: string, ctx: Record<string, string>): str
       ? `${ctx.cooConversationalName} · AI COO`
       : "COO";
     return `[Setup step: ${label}]\n${contextLine}\n\nThis is the final setup step. Welcome the user to their workspace and introduce their standing coworker as ${cooName}. Make clear that the conversational name does not change the coworker's AI identity, permissions, authority, or the owner's accountability. Briefly explain that this is where they will manage day-to-day operations — viewing their backlog, talking to coworkers, and monitoring work. Congratulate them on completing setup. Do NOT create any epics, backlog items, or guardrails. Do NOT start building or decomposing anything. Keep it to 2-3 sentences.`;
+  }
+
+  if (step === "mailroom") {
+    return `[Setup step: ${label}]
+${contextLine}
+
+Explain in plain language what the Mailroom does: it reads the mailboxes the business names on a near-hourly schedule, works out why each sender wrote and how urgent it is, puts the message in front of the right person, chases anything nobody has acknowledged, and lets a reply be drafted and approved from inside the product. Say that the page lists the mailboxes a business of this kind usually runs and that connecting one now is optional — it can be done later from this same Mailroom page. Do NOT ask for any password or credential in the chat; the connect form on the page takes them. Keep it to 2-3 sentences.`;
   }
 
   if (step === "meet-your-coo") {

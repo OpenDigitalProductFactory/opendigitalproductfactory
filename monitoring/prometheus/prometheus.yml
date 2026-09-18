@@ -64,9 +64,11 @@ scrape_configs:
       - targets: ["redis-exporter:9121"]
 
   # ─── Services without a /metrics endpoint ───────────────────
-  # dpf-stt (whisper-server) ships without /metrics — STT visibility is
-  # via portal-side counters (dpf_voice_stt_*) exposed on the portal's
-  # /api/metrics. The Health tab surfaces it as a "Portal metrics" tile.
+  # Speech-to-text is provider-managed and runs no DPF-shipped container
+  # (BI-F7E9A541), so there is nothing local to scrape. STT visibility is via
+  # portal-side counters (dpf_voice_stt_*) exposed on the portal's
+  # /api/metrics, which cover hosted and self-hosted endpoints alike. The
+  # Health tab surfaces it as a "Portal metrics" tile.
 
   # ─── AI Inference ───────────────────────────────────────────
   # Docker Model Runner does not expose a Prometheus `/metrics` endpoint

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
+import { EXIT_CHILD_SIGNAL_DEATH } from "./sandbox-freshness.mjs";
 
 export function integrationBranchName(candidateBranch, slotKey = "") {
   const prefix = slotKey ? `local-integration/${slotKey}` : "local-integration";
@@ -85,6 +86,31 @@ function redactCommandArgs(args) {
   });
 }
 
+/**
+ * BI-1669E08A. Did the HOST fail to start the process, rather than the process
+ * failing?
+ *
+ * `0xC0000142` (3221225794, STATUS_DLL_INIT_FAILED) is Windows reporting that
+ * process initialisation never completed. Nothing ran, so nothing was graded —
+ * yet the raw code used to travel out of here as an ordinary command failure,
+ * the gate recorded `failed`, and that superseded a real PASS for the same tree
+ * (observed 2026-09-10: the `git merge` step died 7 ms in with exactly this
+ * code). A gate that could not run is not a verdict.
+ *
+ * The runner already held this concept — `classifyTypecheckResult` calls status
+ * null/-1/4294967295 `runner-termination` — but it never covered the launch
+ * failure, and never reached the integration plan's own commands. Kept as one
+ * exported predicate so the two lanes cannot drift apart the way BI-C59AC8AF's
+ * four copies of a status set did.
+ */
+export function isHostProcessLaunchFailure(status) {
+  return status === null
+    || status === undefined
+    || status === -1
+    || status === 4294967295 // the wrapper-terminated sentinel
+    || status === 3221225794; // 0xC0000142 STATUS_DLL_INIT_FAILED
+}
+
 export function createCommandFailureDiagnostics({ invocation, result, elapsedMs }) {
   const error = result.error
     ? {
@@ -97,8 +123,11 @@ export function createCommandFailureDiagnostics({ invocation, result, elapsedMs 
     command: invocation.command,
     args: redactCommandArgs(invocation.args),
     elapsedMs,
+    // The RAW code is kept here on purpose: the diagnostics are the record of
+    // what the host actually said, even when the status we return is reclassified.
     status: result.status ?? null,
     signal: result.signal ?? null,
+    hostLaunchFailure: isHostProcessLaunchFailure(result.status),
     error,
   };
 }
@@ -138,7 +167,13 @@ export function executeLocalIntegrationPlan(plan, {
       });
       error(`[local-integration-ci] command-failure ${JSON.stringify(diagnostics)}`);
       return {
-        status: result.status ?? 1,
+        // BI-1669E08A: a host that could not START the command graded nothing.
+        // EXIT_CHILD_SIGNAL_DEATH is the code classifyGateOutcome already reads
+        // as infrastructure evidence rather than a product build failure, so the
+        // run is recorded inconclusive and the prior verdict stands.
+        status: diagnostics.hostLaunchFailure
+          ? EXIT_CHILD_SIGNAL_DEATH
+          : (result.status ?? 1),
         completedCommandCount,
         failedCommand: [...command],
         diagnostics,

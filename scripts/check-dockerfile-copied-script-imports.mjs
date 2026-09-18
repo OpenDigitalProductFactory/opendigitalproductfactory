@@ -30,10 +30,11 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { isEntryModule } from "./lib/entry-module.mjs";
 
-const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(new URL(import.meta.url))), "..");
 
 /** Static `import ... from "x"` / `export ... from "x"`, plus bare `import "x"`. */
 const STATIC_IMPORT_RE =

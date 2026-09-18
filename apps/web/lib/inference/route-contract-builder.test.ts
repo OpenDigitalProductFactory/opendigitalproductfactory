@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialRouteContext } from "./route-contract-builder";
+import { buildEffectiveRequestContract, buildInitialRouteContext } from "./route-contract-builder";
 
 // BI-8B4359DE / robust-build gap: `modelTier` expresses a cost/quality TIER
 // preference (trivial-tail build work is sized to the on-box "local" tier), NOT
@@ -11,6 +11,14 @@ import { buildInitialRouteContext } from "./route-contract-builder";
 // the explicit platform switch (`localOnlyInference`); sensitivity clearance
 // still independently protects sensitive data on every request.
 describe("buildInitialRouteContext — modelTier is a preference, not a residency boundary", () => {
+  it("retains required tool choice in the contract used for endpoint selection", async () => {
+    const contract = await buildEffectiveRequestContract({
+      taskType: "tool-action", messages: [{ role: "user", content: "Record the review." }],
+      tools: [{ type: "function", function: { name: "record_review", parameters: {} } }],
+      routeContext: { sensitivity: "internal" }, options: { toolChoice: "required" }, taskRequirement: null,
+    });
+    expect(contract).toMatchObject({ requiresTools: true, toolChoice: "required" });
+  });
   const base = { sensitivity: "public" as const, posture: null };
 
   it("does NOT force local_only residency just because modelTier is 'local'", () => {

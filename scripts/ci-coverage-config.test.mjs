@@ -37,7 +37,8 @@ test("database V8 coverage explicitly includes unloaded owned source", () => {
 test("web and database packages declare complete coverage runtimes", () => {
   for (const manifest of [webPackage, dbPackage]) {
     assert.equal(manifest.scripts["test:coverage"], "vitest run --coverage");
-    assert.equal(manifest.devDependencies["@vitest/coverage-v8"], "^4.1.10");
+    assert.equal(typeof manifest.devDependencies["@vitest/coverage-v8"], "string");
+    assert.equal(manifest.devDependencies["@vitest/coverage-v8"], manifest.devDependencies.vitest);
   }
 });
 

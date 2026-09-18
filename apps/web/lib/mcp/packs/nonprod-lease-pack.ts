@@ -527,6 +527,9 @@ async function claimNonprodEnvironmentLeaseHandler(
           status: "reused",
           evidenceRecordId: result.evidenceRecordId,
           resultClass: result.resultClass,
+          // The caller records this verdict in its own state and must stamp it
+          // with the evidence's clock, not the lease's (BI-03E1139A).
+          evidenceValidity: result.evidenceValidity,
         },
         poolPolicy: result.poolPolicy,
         gateKey,

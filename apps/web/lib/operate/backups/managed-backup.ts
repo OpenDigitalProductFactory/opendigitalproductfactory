@@ -2,8 +2,8 @@
  * Shared managed-backup engine (EP-8DC217EB BET-11, BI-B72328D5).
  *
  * `runManagedBackup(spec, args)` is the single implementation of the backup
- * lifecycle that postgres-backup-runner.ts, neo4j-backup-runner.ts and
- * qdrant-backup-runner.ts previously each carried as a near-verbatim copy:
+ * lifecycle that postgres-backup-runner.ts and the (since-deleted, BET-5)
+ * neo4j/qdrant backup runners previously each carried as a near-verbatim copy:
  *
  *   1. Allocate a per-run target directory under /backups/<subdir>/<ISO-ts>.
  *   2. Spawn the engine's managed shell script via the /bin/sh chokepoint.
@@ -53,12 +53,12 @@ export interface ScriptOutcome {
   exitCode: number;
 }
 
-/** Args shared by all three engine entry points (runPostgresBackup etc.). */
+/** Args shared by every engine entry point (runPostgresBackup etc.). */
 export interface ManagedBackupArgs {
   trigger: BackupTrigger;
   /**
    * Compose project name. Used by engines whose script env derives container
-   * names (`<project>-postgres-1`, `<project>-neo4j-1`) so worktree-isolated
+   * names (`<project>-postgres-1`) so worktree-isolated
    * stacks back themselves up independently. Defaults to "dpf".
    */
   composeProject?: string;

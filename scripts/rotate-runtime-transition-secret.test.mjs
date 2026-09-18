@@ -4,8 +4,9 @@ import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const script = new URL("./rotate-runtime-transition-secret.mjs", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1");
+const script = fileURLToPath(new URL("./rotate-runtime-transition-secret.mjs", import.meta.url)).replace(/^\/(.:\/)/, "$1");
 const run = (stateDir, ...args) => spawnSync(process.execPath, [script, "--state-dir", stateDir, ...args], { encoding: "utf8" });
 
 test("creates a cryptographically random owner-only secret", async () => {

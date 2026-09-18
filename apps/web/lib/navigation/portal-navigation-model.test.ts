@@ -4,6 +4,7 @@ import { PLATFORM_FAMILIES } from "@/components/platform/platform-nav";
 import { getShellNavSections } from "@/lib/govern/permissions";
 
 import {
+
   PORTAL_NAV_ROUTES,
   getPrimaryNavEntries,
   getRouteNavRecord,
@@ -136,5 +137,80 @@ describe("portal navigation model", () => {
     // /platform/ai/build-studio).
     const platformSection = sections.find((section) => section.key === "platform");
     expect(platformSection?.items.map((item) => item.href) ?? []).not.toContain("/build");
+  });
+
+  it("gives work activity one operator entry pointing at the canonical destination", () => {
+    const entries = PORTAL_NAV_ROUTES.filter((record) => record.path === "/ops/workrooms");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      key: "work_activity",
+      label: "Work",
+      audienceModes: ["operator"],
+    });
+  });
+
+  it("keeps the Workforce portfolio distinct from the coworker directory", () => {
+    const work = PORTAL_NAV_ROUTES.find((record) => record.key === "work_activity");
+    const directory = PORTAL_NAV_ROUTES.find((record) => record.key === "ai_coworkers");
+    expect(work?.path).toBe("/ops/workrooms");
+    expect(directory?.path).toBe("/workforce");
+    expect(work?.path).not.toBe(directory?.path);
+  });
+
+  it("does not introduce a second activity dashboard beside the canonical one", () => {
+    const activityish = PORTAL_NAV_ROUTES.filter(
+      (record) => record.label === "Work" && record.destinationKind !== "legacy-redirect",
+    );
+    expect(activityish).toHaveLength(1);
+  });
+});
+
+describe("one name means one destination", () => {
+  // An operator reported being unable to remember the difference between two
+  // areas. The cause was literal: two entries carried the byte-identical label
+  // "AI Coworkers" for different destinations (/workforce and
+  // /platform/identity/agents), so the portal offered the same words twice and
+  // neither name said which was which. A duplicate label is not a style
+  // preference — it makes the navigation unusable by name.
+  it("gives no two nav entries the same label", () => {
+    const byLabel = new Map<string, string[]>();
+    for (const route of PORTAL_NAV_ROUTES) {
+      const paths = byLabel.get(route.label) ?? [];
+      paths.push(route.path);
+      byLabel.set(route.label, paths);
+    }
+    const collisions = [...byLabel.entries()]
+      .filter(([, paths]) => new Set(paths).size > 1)
+      .map(([label, paths]) => `${label} -> ${[...new Set(paths)].sort().join(" , ")}`);
+    expect(collisions).toEqual([]);
+  });
+
+  it("keeps the coworker directory and the identity surface distinctly named", () => {
+    const label = (path: string) =>
+      PORTAL_NAV_ROUTES.find((route) => route.path === path)?.label;
+    const directory = label("/workforce");
+    const identity = label("/platform/identity/agents");
+    expect(directory).toBeTruthy();
+    expect(identity).toBeTruthy();
+    expect(identity).not.toBe(directory);
+  });
+});
+
+describe("one answer to where work activity lives", () => {
+  // Registering the Work entry without a shellNav left /ops/workrooms reachable
+  // only through the ops tab strip — which was the gap the entry was added to
+  // close, so the consolidation was not actually delivered. The rail entry is
+  // the deliverable; this pins it.
+  it("offers Work in the shell navigation, not only in the model", () => {
+    const work = PORTAL_NAV_ROUTES.find((route) => route.path === "/ops/workrooms");
+    expect(work?.label).toBe("Work");
+    expect(work?.shellNav?.sectionKey).toBe("delivery");
+  });
+
+  it("keeps exactly one shell entry pointing at the activity destination", () => {
+    const pointing = PORTAL_NAV_ROUTES.filter(
+      (route) => route.shellNav && route.path === "/ops/workrooms",
+    );
+    expect(pointing).toHaveLength(1);
   });
 });
