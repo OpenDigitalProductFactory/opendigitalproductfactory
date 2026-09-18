@@ -413,6 +413,29 @@ resolve_portal_container() {
   printf 'dpf-portal-1\n'
 }
 
+# --- Reconcile a rejected token (BI-2F82F1A0) ---------------------------------
+#
+# "token present" != "token accepted". A persisted token can be EXPIRED (the
+# issuer's default TTL is 90 days), revoked, or unknown to this install; the
+# portal answers HTTP 401 and every gate downstream fails. Probe with the
+# read-only tools/list call and re-mint ONLY on 401 (the credential itself is
+# rejected). 403 is the scope probe's business; 0/5xx is unreachable — never
+# replace a present token on a hiccup. SSOT: interpretTokenAuthProbe /
+# TOKEN_AUTH_PROBE in @dpf/bootstrap.
+if [ "$HAS_TOKEN" -eq 1 ] && [ "$AUTO_MINT" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] \
+   && command -v curl >/dev/null 2>&1; then
+  _auth_status="$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' -X POST "$MCP_ENDPOINT" \
+    -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+    2>/dev/null || printf '000')"
+  if [ "$_auth_status" = "401" ]; then
+    warn "Present MCP token is rejected by $MCP_ENDPOINT (HTTP 401: expired, revoked or unknown to this install); re-minting."
+    HAS_TOKEN=0
+  fi
+fi
+
 # --- Reconcile an under-provisioned token (BI-A3DE9A31) ----------------------
 #
 # "token present" != "token sufficient". A token minted before the
@@ -447,24 +470,45 @@ if [ "$HAS_TOKEN" -eq 0 ] && [ "$AUTO_MINT" -eq 1 ]; then
     PORTAL_CONTAINER="$(resolve_portal_container)"
     info "No MCP token found; minting a '$MINT_SCOPE'-scoped token via portal container ($PORTAL_CONTAINER)."
     MINT_ERR="$(mktemp)"
-    # Run the shipped issuer inside the container (matches the just-migrated
-    # Prisma schema; reaches postgres over the compose network).
-    if MINT_OUT="$(docker exec "$PORTAL_CONTAINER" sh -c \
-          "cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-mcp-token.ts --scope '$MINT_SCOPE' --format raw" \
-          2>"$MINT_ERR")"; then
-      MINT_TOKEN="$(printf '%s\n' "$MINT_OUT" | grep -E '^dpfmcp_' | tail -n 1)"
-      if [ -n "$MINT_TOKEN" ]; then
-        persist_mcp_token_posix "$MINT_TOKEN"
-        export DPF_MCP_BEARER_TOKEN="$MINT_TOKEN"
-        HAS_TOKEN=1
-        ok "MCP token issued and persisted (${MINT_TOKEN%%_*}_… , scope=$MINT_SCOPE)."
-      else
-        warn "Token issuance produced no token; continuing without one. See diagnostics below."
-        sed -n '1,20p' "$MINT_ERR" >&2 || true
-      fi
+    if [ "$(docker inspect -f '{{.State.Running}}' "$PORTAL_CONTAINER" 2>/dev/null)" != "true" ]; then
+      warn "Portal container '$PORTAL_CONTAINER' is not running; cannot mint an MCP token. Continuing without one."
     else
-      warn "Token issuance failed (is the portal container running?); continuing without a token."
-      sed -n '1,20p' "$MINT_ERR" >&2 || true
+      # BI-3F16A430: the web-src snapshot in the image has no node_modules and
+      # /app/node_modules carries no @dpf/* links, so the issuer cannot resolve
+      # @dpf/db / @dpf/integration-shared. The image now links them at build
+      # (Dockerfile runner stage); re-run the same script here so an image built
+      # before that shipped is repaired in place. Idempotent, symlinks only.
+      _link_script="$REPO_ROOT/scripts/link-web-src-workspace.sh"
+      if [ -f "$_link_script" ]; then
+        docker exec -i "$PORTAL_CONTAINER" sh -s < "$_link_script" >/dev/null 2>>"$MINT_ERR" \
+          || warn "Could not link workspace packages into web-src (see diagnostics below); trying the issuer anyway."
+      fi
+      # Resolve tsx inside the container — never a pnpm-internal path (it moved
+      # once already). Probe the known runtime locations, fall back to the
+      # Node loader form, and fail with the real reason if none resolves.
+      # shellcheck disable=SC2016
+      _issuer_cmd='cd /app/apps/web-src || exit 2
+for t in /app/node_modules/.bin/tsx /app/packages/db/node_modules/.bin/tsx; do
+  if [ -x "$t" ]; then exec "$t" scripts/issue-mcp-token.ts "$@"; fi
+done
+if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import tsx scripts/issue-mcp-token.ts "$@"; fi
+echo "issue-mcp-token: no tsx runtime found in the portal image (probed /app/node_modules/.bin/tsx, /app/packages/db/node_modules/.bin/tsx, node --import tsx)" >&2
+exit 127'
+      if MINT_OUT="$(docker exec "$PORTAL_CONTAINER" sh -c "$_issuer_cmd" issuer --scope "$MINT_SCOPE" --format raw 2>"$MINT_ERR")"; then
+        MINT_TOKEN="$(printf '%s\n' "$MINT_OUT" | grep -E '^dpfmcp_' | tail -n 1)"
+        if [ -n "$MINT_TOKEN" ]; then
+          persist_mcp_token_posix "$MINT_TOKEN"
+          export DPF_MCP_BEARER_TOKEN="$MINT_TOKEN"
+          HAS_TOKEN=1
+          ok "MCP token issued and persisted (${MINT_TOKEN%%_*}_… , scope=$MINT_SCOPE)."
+        else
+          warn "Token issuance produced no token; continuing without one. Issuer diagnostics:"
+          sed -n '1,40p' "$MINT_ERR" >&2 || true
+        fi
+      else
+        warn "Token issuance failed inside '$PORTAL_CONTAINER'; continuing without a token. Issuer diagnostics:"
+        sed -n '1,40p' "$MINT_ERR" >&2 || true
+      fi
     fi
     rm -f "$MINT_ERR"
   fi
