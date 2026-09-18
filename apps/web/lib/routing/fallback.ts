@@ -59,6 +59,13 @@ type RouteOutcomeAttribution = {
   agentMessageId?: string | null;
   /** FeatureBuild this call belongs to (BI-0A6B8B38 per-phase metering). */
   buildId?: string | null;
+  /**
+   * Coworker thread this call belongs to. The join key of the per-thread cost
+   * ledger (BI-CCF1ACBB): AdapterRunTelemetry.threadId was NULL on every row
+   * because nothing on this path carried it. Falls back to the MCP session's
+   * threadId the same way agentId does.
+   */
+  threadId?: string | null;
 };
 
 function buildFallbackProviderSettings(
@@ -269,6 +276,7 @@ export async function callWithFallbackChain(
   const traceId = outcomeAttribution?.traceId?.trim() || decision.traceId?.trim() || null;
   const agentMessageId = outcomeAttribution?.agentMessageId?.trim() || null;
   const buildId = outcomeAttribution?.buildId?.trim() || null;
+  const threadId = outcomeAttribution?.threadId?.trim() || mcpSession?.threadId?.trim() || null;
 
   // Small local fallback models (Docker Model Runner / 7-13B class) reliably
   // handle ~10-15 tools before tool-selection accuracy collapses. When the
@@ -359,7 +367,7 @@ export async function callWithFallbackChain(
         entryPlan,
         i === 0 ? previousResponseId : undefined,
         mcpSession,
-        { traceId, agentId, agentMessageId, buildId },
+        { traceId, agentId, agentMessageId, buildId, threadId },
       );
 
       // EP-INF-004: Record successful request for rate tracking

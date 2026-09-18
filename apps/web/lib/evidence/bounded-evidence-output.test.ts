@@ -9,7 +9,7 @@ import {
   EVIDENCE_EXCERPT_HEAD_BYTES,
   EVIDENCE_EXCERPT_TAIL_BYTES,
   type OffloadedTextReference,
-} from "./bounded-output";
+} from "./bounded-evidence-output";
 
 const big = (bytes: number, fill = "x") => fill.repeat(bytes);
 

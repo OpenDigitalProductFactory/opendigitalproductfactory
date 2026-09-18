@@ -215,13 +215,20 @@ test("gate-worktree.mjs dry-run reports the checked-in Node runner as the defaul
   assert.match(result.stdout, /localCiCommand=.*local-ci-runner\.mjs.*--candidate "feat\/local-ci-sandbox"/);
 });
 
-test("gate-worktree.mjs exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () => {
-  const env = { ...process.env, DPF_ALLOW_LOCAL_CI_STUB: "1" };
+test("gate-worktree.mjs exits non-zero when no MCP credential is configured, naming both paths (BI-78B653D5)", () => {
+  // No PAT, no client_credentials client (env unset and the credentials file
+  // pointed at a path that does not exist, so the host's own file cannot leak in).
+  const env = { ...process.env, DPF_ALLOW_LOCAL_CI_STUB: "1", DPF_MCP_CLIENT_CREDENTIALS_FILE: join(tmpdir(), "dpf-no-such-credentials.json") };
   delete env.DPF_MCP_BEARER_TOKEN;
+  delete env.DPF_MCP_CLIENT_ID;
+  delete env.DPF_MCP_CLIENT_SECRET;
   const { dir } = makeTempRepo();
   const result = runGate(["--branch", "feat/x", "--sha", "abc123", "--worktree", dir, "--no-push"], env);
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /DPF_MCP_BEARER_TOKEN is required/);
+  assert.match(result.stderr, /No MCP credential is configured/);
+  assert.match(result.stderr, /DPF_MCP_CLIENT_ID/);
+  assert.match(result.stderr, /DPF_MCP_BEARER_TOKEN/);
+  assert.match(result.stderr, /Admin > Platform Development > MCP/);
 });
 
 test("gate-worktree.mjs refuses to run when neither an explicit command, the stub, nor the checked-in Node runner exists", () => {
@@ -230,6 +237,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   mkdirSync(join(temp, "apps", "web", "lib", "nonprod"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "mcp-credential.mjs"), join(temp, "scripts", "lib", "mcp-credential.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "documentation-evidence-lane.mjs"), join(temp, "scripts", "lib", "documentation-evidence-lane.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "semantic-review-gate.mjs"), join(temp, "scripts", "lib", "semantic-review-gate.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-integration-ci.mjs"), join(temp, "scripts", "lib", "local-integration-ci.mjs"));

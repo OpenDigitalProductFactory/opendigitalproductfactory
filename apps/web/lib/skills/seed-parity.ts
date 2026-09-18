@@ -61,7 +61,7 @@ export function resolveSeedPath(category: string, skillId: string): string {
 
 /** Is a repo checkout reachable at all? Distinguishes benign from real absence. */
 function isRepoAvailable(): boolean {
-  return existsSync(repoRoot());
+  return existsSync(/*turbopackIgnore: true*/ repoRoot());
 }
 
 /**
@@ -124,7 +124,7 @@ export async function getSkillSeedDrift(skillId: string): Promise<SkillSeedDrift
   let seedBody: string | null = null;
   if (foundPath) {
     try {
-      seedBody = readFileSync(foundPath, "utf-8");
+      seedBody = readFileSync(/*turbopackIgnore: true*/ foundPath, "utf-8");
     } catch (err) {
       console.warn(
         `[seed-parity] could not read seed file ${foundPath}:`,

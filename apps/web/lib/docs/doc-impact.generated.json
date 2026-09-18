@@ -717,7 +717,7 @@
     "apps/web/lib/ea/table-growth.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
-    "apps/web/lib/evidence/bounded-output.ts": [
+    "apps/web/lib/evidence/bounded-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/explore/backlog.ts": [
@@ -1874,6 +1874,7 @@
     ],
     "scripts/gate-worktree.mjs": [
       "docs/architecture/context-engineering-standards.md",
+      "docs/architecture/mcp-tool-authorization-runbook.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/gate-worktree.sh": [
@@ -1973,6 +1974,9 @@
     "scripts/lib/mcp-client.mjs": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "scripts/lib/mcp-credential.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "scripts/lib/mermaid-renderer.mjs": [
       "docs/architecture/dependency-reduction-routine.md",
       "docs/architecture/enforced-ci-gates.md"
@@ -2048,6 +2052,9 @@
     ],
     "scripts/pregate-status.mjs": [
       "docs/architecture/build-gate-runbook.md"
+    ],
+    "scripts/pregate.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/probes/marketing-media/local-render-receipt.json": [
       "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md"
@@ -2603,7 +2610,7 @@
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
       "apps/web/lib/ea/table-growth.ts",
-      "apps/web/lib/evidence/bounded-output.ts",
+      "apps/web/lib/evidence/bounded-evidence-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
       "apps/web/lib/operate/retention/obligation-floors.ts",
       "apps/web/lib/routes.ts",
@@ -2726,8 +2733,11 @@
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
+      "scripts/gate-worktree.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
-      "scripts/lib/mcp-client.mjs"
+      "scripts/lib/mcp-client.mjs",
+      "scripts/lib/mcp-credential.mjs",
+      "scripts/pregate.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",

@@ -756,3 +756,19 @@ describe("parseCliJsonOutput", () => {
     expect(parsed.cliPreExecutedNames).toEqual([]);
   });
 });
+
+// BI-CCF1ACBB: Anthropic's input_tokens is the UNCACHED input only; the prompt
+// the model actually read is in the cache fields. Both parsers must keep them.
+describe("CLI parsers keep prompt-cache usage (BI-CCF1ACBB)", () => {
+  const usage = { input_tokens: 17, output_tokens: 900, cache_creation_input_tokens: 12000, cache_read_input_tokens: 30000 };
+  const expected = { inputTokens: 17, outputTokens: 900, cacheCreationInputTokens: 12000, cacheReadInputTokens: 30000 };
+
+  it("from the stream result event", () => {
+    const stream = ['{"type":"assistant","content":"ok"}', JSON.stringify({ type: "result", result: "ok", usage })].join("\n");
+    expect(parseCliStreamOutput(stream).usage).toEqual(expected);
+  });
+
+  it("from the final JSON", () => {
+    expect(parseCliJsonOutput(JSON.stringify({ result: "ok", usage })).usage).toEqual(expected);
+  });
+});

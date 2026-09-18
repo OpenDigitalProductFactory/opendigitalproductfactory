@@ -1201,7 +1201,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // EP-AGENT-CAP-002: Capability floor — passed through to pipeline Stage 1
     minimumCapabilities,
     agentMinimumContextTokens,
-    agentId, routeContext,
+    agentId, routeContext, threadId, // threadId: the cost ledger's join key (BI-CCF1ACBB)
     ...(agentMessageId ? { agentMessageId } : {}),
     ...(params.workroomPriority ? { workroomPriority: params.workroomPriority } : {}),
     // mcpSession is forwarded through callWithFallbackChain → callProvider →

@@ -128,6 +128,59 @@ animal journey as a whole. The workspace follows three connected value streams:
 Use **Animals**, **Intake**, **Housing**, **Daily care**, **Adoptions**, and
 ## When the ward is full
 
+### Admitting an animal
+
+**Intake** admits an animal in one step: identity, the intake source (stray,
+owner relinquished, transfer, born in care, return, or seizure), an optional
+legal or policy hold, and the housing it goes into. The admission either houses
+the animal or refuses with the reason, so custody without a place, or a place
+without custody, cannot exist.
+
+Each animal in intake shows its checklist: identity and microchip check, intake
+examination, weight, vaccination, parasite treatment, sterilization, behaviour
+assessment, and housing. Every item is satisfied by a dated record with the
+person or provider who did the work. A note that an animal "is spayed" does not
+count; the sterilization record does, and it holds the animal back until its
+recovery date has passed.
+
+The page explains, in words, why an animal is not yet placement-ready. A hold is
+released by a person with a reason. **Verify placement readiness** appears only
+when every reason is gone, and it re-checks the same facts before the animal
+moves on to Adoptions.
+
+### Daily care rounds
+
+**Daily care** is the list a volunteer opens in the morning. A routine (feed,
+water, medication, walk, clean, weigh, welfare check) is set up once per animal
+with a time of day, every day or on chosen weekdays, for a fixed course or
+ongoing. The platform turns it into dated rounds two weeks ahead, so the list
+exists whether or not anyone remembered.
+
+Each round is recorded with what happened. Done or partly done closes it. Did
+not eat, refused, or a concern needs a short observation and raises a welfare
+follow-up that a person must take on and resolve with a note. A medication
+round that is still open two hours after it was due can be escalated the same
+way; the page shows how many are waiting. Nothing here decides treatment. It
+makes sure a person sees it.
+
+### Adoptions
+
+**Adoptions** turns an enquiry into a decision. An application records the
+applicant and the screening answers a rescue actually decides on: housing,
+other pets, children, landlord permission, and experience. It moves through
+screening, a meet-and-greet and a home check (each a dated visit on the
+animal's work list), and then approval.
+
+Approval reserves the animal for that one applicant. Nobody else can be
+promised the same animal, and an animal that is not placement-ready, or is on a
+hold, cannot be reserved. Completing the adoption records the adopter, closes
+custody, withdraws the public listing, frees the kennel, and records the fee
+as a donation toward that animal's care. It is never a price.
+
+A returned animal always comes back. Recording the return keeps the placement
+and its reason in history, reopens custody as a return, and puts the animal
+back through the intake checklist before it can be placed again.
+
 If every place is taken, the board adds a review. It is the only time it appears.
 
 The review lists the animals that have waited longest with nobody waiting for

@@ -4,7 +4,7 @@ status: draft
 
 # Coworker Dialog Compaction & Thread Economy
 
-**Status:** draft (see frontmatter) — research complete, implementation not started; awaiting independent spec approval.
+**Status:** draft (see frontmatter) — research complete; Phase 2 implemented on BI-FDECBE0A (PR #5431, 2026-09-17), other phases not started; awaiting independent spec approval.
 **Date:** 2026-09-16
 **Standard:** `docs/architecture/context-engineering-standards.md` (P1, P6, P8, P11, P12).
 **Prior art this extends (not replaces):** EP-8C706944 (Memory & Context Architecture, closed), EP-27FD96BC (Reasoning Economy, closed), `2026-06-20-compaction-digest-design.md` (R9a, in-turn digest), `2026-04-03-context-budget-arbitration-design.md` (EP-CTX-001).
@@ -336,6 +336,8 @@ The direct fix for D1. Contained to `thread-checkpoint.ts` + its prisma binding.
 - **Backfill the wedged threads** once the batch loop exists.
 
 *Acceptance:* the 1,126-message thread reaches a non-null `compactedSummary` with `compactedTurnCount` > 1,000 across repeated sweeps; `pruneSummarizedThreadMessages` becomes non-zero for it; a deliberately oversized message produces a recorded skip, not a silent stall. Tests stay pure — the module is already fully dependency-injected.
+
+*Delivery record (2026-09-17, BI-FDECBE0A, PR #5431):* implemented as specified — `loadMessagesAfter` takes `checkpointLoadTake(keepRecentCount)` rows; one advance folds at most one `CHECKPOINT_FOLD_BATCH` and reports `moreEligible`; `CHECKPOINT_FOLD_TOKEN_BUDGET` (6,000 estimated tokens) bounds the transcript over whole messages, and a message that can never fit is skipped, announced as omitted, and recorded; a failed fold returns its stage and message and writes an `ImprovementSignal` (`thread_checkpoint_fold_failed` keyed `threadId:stage`, `thread_checkpoint_message_skipped` keyed `threadId`); the nightly sweep backfills under per-run and per-thread caps of 60 folds. The liveness probe is registered as evidence on the item; the acceptance above is what it observes.
 
 ### Phase 3 — Record-first compaction pipeline
 Gentlest-first, with the record ahead of the summarizer:

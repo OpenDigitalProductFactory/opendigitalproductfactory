@@ -6,6 +6,7 @@ import {
   distillMemoryNotesFromExperience,
   type MemoryExperienceSource,
 } from "./memory-acquisition";
+import type { AdvanceResult } from "./thread-checkpoint";
 import { advanceThreadCheckpointForThread } from "./thread-checkpoint-runner";
 
 type FindMany<T> = { findMany(args?: unknown): Promise<T[]> };
@@ -33,7 +34,15 @@ export type MemoryAcquisitionResult = {
 export type ThreadCheckpointSweepResult = {
   threadsChecked: number;
   advanceAttempts: number;
+  /** Advances that threw OR returned `reason: "error"` (an advance never throws, so only the latter is real). */
   advanceFailures: number;
+  /** Advances that moved a watermark. */
+  foldsPerformed: number;
+  messagesFolded: number;
+  /** Oversized messages the watermark passed without summarizing (each is recorded as a signal). */
+  messagesSkipped: number;
+  /** The per-run fold cap stopped the sweep before every thread converged; the next sweep continues. */
+  foldBudgetExhausted: boolean;
 };
 
 type PhaseHandoffRow = {
@@ -78,6 +87,17 @@ type RecordNote = typeof recordCoworkerNote;
 const DEFAULT_LOOKBACK_DAYS = 14;
 const DEFAULT_EXPERIENCE_TAKE = 100;
 const DEFAULT_THREAD_TAKE = 100;
+/**
+ * BI-FDECBE0A: the nightly sweep is the backfill path for threads whose fold
+ * had wedged (the largest needs ~110 folds at batch 10). Cap the summarizer
+ * calls per run so the sweep converges across nights inside the nightly step
+ * instead of running unbounded — one fold is one bounded local-model call, so
+ * 60 keeps the checkpoint pass to roughly the same order as the acquisition
+ * pass that shares the step. A per-thread cap stops one thread starving the rest
+ * once the backlog is worked off.
+ */
+const DEFAULT_MAX_FOLDS_PER_RUN = 60;
+const DEFAULT_MAX_FOLDS_PER_THREAD = 60;
 const prismaMemoryDb = prisma as unknown as MemoryAcquisitionDb;
 
 export async function runMemoryAcquisitionSweep(
@@ -159,11 +179,16 @@ export async function runThreadCheckpointSweep(
     now?: Date;
     lookbackDays?: number;
     take?: number;
-    advance?: (threadId: string, keepRecentCount: number) => Promise<void>;
+    /** One bounded fold; keeps being called while it reports `moreEligible`. A void result means one attempt per thread. */
+    advance?: (threadId: string, keepRecentCount: number) => Promise<AdvanceResult | void>;
+    maxFoldsPerRun?: number;
+    maxFoldsPerThread?: number;
   } = {},
 ): Promise<ThreadCheckpointSweepResult> {
   const now = opts.now ?? new Date();
   const since = new Date(now.getTime() - (opts.lookbackDays ?? DEFAULT_LOOKBACK_DAYS) * 24 * 60 * 60 * 1000);
+  const maxFoldsPerRun = opts.maxFoldsPerRun ?? DEFAULT_MAX_FOLDS_PER_RUN;
+  const maxFoldsPerThread = opts.maxFoldsPerThread ?? DEFAULT_MAX_FOLDS_PER_THREAD;
   const threads = await db.agentThread.findMany({
     where: { updatedAt: { gte: since }, cancelledAt: null },
     orderBy: { updatedAt: "desc" },
@@ -175,15 +200,41 @@ export async function runThreadCheckpointSweep(
     threadsChecked: threads.length,
     advanceAttempts: 0,
     advanceFailures: 0,
+    foldsPerformed: 0,
+    messagesFolded: 0,
+    messagesSkipped: 0,
+    foldBudgetExhausted: false,
   };
 
   for (const thread of threads) {
-    try {
+    let foldsThisThread = 0;
+    // Keep folding this thread while batches remain, inside both caps: a
+    // wedged 1,100-message thread converges across sweeps, one batch at a time.
+    for (;;) {
+      if (result.foldsPerformed >= maxFoldsPerRun) {
+        result.foldBudgetExhausted = true;
+        return result;
+      }
+      if (foldsThisThread >= maxFoldsPerThread) break;
       result.advanceAttempts += 1;
-      await advance(thread.id, keepRecentCountForThread(thread));
-    } catch (err) {
-      result.advanceFailures += 1;
-      console.warn(`[memory-acquisition] checkpoint advance failed for ${thread.id}:`, err);
+      let outcome: AdvanceResult | void;
+      try {
+        outcome = await advance(thread.id, keepRecentCountForThread(thread));
+      } catch (err) {
+        result.advanceFailures += 1;
+        console.warn(`[memory-acquisition] checkpoint advance failed for ${thread.id}:`, err);
+        break;
+      }
+      if (!outcome) break;
+      if (!outcome.advanced) {
+        if (outcome.reason === "error") result.advanceFailures += 1;
+        break;
+      }
+      foldsThisThread += 1;
+      result.foldsPerformed += 1;
+      result.messagesFolded += outcome.foldedCount;
+      result.messagesSkipped += outcome.skipped.length;
+      if (!outcome.moreEligible) break;
     }
   }
   return result;

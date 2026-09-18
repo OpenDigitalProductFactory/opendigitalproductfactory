@@ -677,7 +677,7 @@ async function routeAndCallAttempt(
       decision.executionPlan,
       options?.previousResponseId,
       options?.mcpSession,
-      { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
+      { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null },
       dispatchScreenInput,
     );
     applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
@@ -721,7 +721,7 @@ async function routeAndCallAttempt(
     decision.executionPlan,
     options?.previousResponseId,
     options?.mcpSession,
-    { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
+    { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null },
     dispatchScreenInput,
   );
   applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
