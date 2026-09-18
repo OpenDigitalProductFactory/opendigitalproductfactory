@@ -41,4 +41,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STUCK_PR_THRESHOLD_HOURS: "4"
-        run: node scripts/check-stuck-auto-merge.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
+          # Env indirection, never `${{ }}` inside `run:` (actions-injection audit, CWE-094).
+          DRY_RUN: ${{ inputs.dry_run == true }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            node scripts/check-stuck-auto-merge.mjs --dry-run
+          else
+            node scripts/check-stuck-auto-merge.mjs
+          fi

@@ -317,6 +317,9 @@
       "docs/security/README.md",
       "docs/security/secrets-scan.md"
     ],
+    ".github/workflows/stuck-auto-merge-alarm.yml": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     ".github/workflows/ux-route-sweep.yml": [
       "docs/platform-usability-standards.md",
       "docs/testing/ci-evidence.md"
@@ -1823,6 +1826,9 @@
     "scripts/check-stewardship-scope.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/check-stuck-auto-merge.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/check-style-drift.mjs": [
       "docs/architecture/ui-token-styling.md",
       "docs/maintenance/staleness-report.md",
@@ -2543,12 +2549,14 @@
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
+      ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
       "scripts/check-build-script-policy.mjs",
+      "scripts/check-stuck-auto-merge.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/lib/gate-exit-classification.mjs",
