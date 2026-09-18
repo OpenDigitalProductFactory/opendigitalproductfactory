@@ -62,6 +62,24 @@ $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principl
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
 $McpEndpoint            = if ($env:DPF_MCP_URL) { $env:DPF_MCP_URL } else { "http://127.0.0.1:3000/api/mcp/v1" }
+# BI-FA2C46D7: on an https endpoint the client authorizes over OAuth and Node
+# clients must trust the organization's own CA. Resolve the root bundle the PKI
+# bootstrap wrote (explicit env, then the install's .env, then the default PKI
+# dir) and export it for this run; the persist step below records it for new
+# processes beside the token (Windows analog of the POSIX env file + launchctl).
+$McpTrustBundle = ""
+if ($McpEndpoint -like 'https://*') {
+    $envFileBundle = ""
+    $installEnv = Join-Path $RepoRoot ".env"
+    if (Test-Path -LiteralPath $installEnv) {
+        $line = Get-Content -LiteralPath $installEnv | Where-Object { $_ -match '^DPF_PKI_TRUST_BUNDLE=' } | Select-Object -Last 1
+        if ($line) { $envFileBundle = ($line -replace '^DPF_PKI_TRUST_BUNDLE=', '').Trim() }
+    }
+    foreach ($candidate in @($env:DPF_PKI_TRUST_BUNDLE, $envFileBundle, (Join-Path $HOME ".dpf\pki\root_ca.crt"))) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) { $McpTrustBundle = $candidate; break }
+    }
+    if ($McpTrustBundle) { $env:NODE_EXTRA_CA_CERTS = $McpTrustBundle }
+}
 $SkillPackManifestPath  = Join-Path $RepoRoot "packages\dpf-skill-pack\.claude-plugin\plugin.json"
 
 if (-not (Test-Path -LiteralPath $SkillPackManifestPath)) {
@@ -178,6 +196,15 @@ if (-not $HasToken -and $AutoMint) {
             Write-Warn2 "Token issuance failed (is the portal container running?); continuing without a token."
         }
     }
+}
+
+# On an https endpoint the transport values (DPF_MCP_URL + NODE_EXTRA_CA_CERTS)
+# are what let a client authorize over OAuth; persist them for new processes
+# even when no token was minted this run. Never at dry-run time.
+if (-not $DryRun -and $McpTrustBundle) {
+    [System.Environment]::SetEnvironmentVariable('DPF_MCP_URL', $McpEndpoint, 'User')
+    [System.Environment]::SetEnvironmentVariable('NODE_EXTRA_CA_CERTS', $McpTrustBundle, 'User')
+    Write-Ok "MCP client transport persisted (User env): https endpoint + organization root bundle (NODE_EXTRA_CA_CERTS)."
 }
 
 # --- Compute plan via Node bridge --------------------------------------------
