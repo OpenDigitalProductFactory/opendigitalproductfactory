@@ -293,6 +293,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/pregate-preflight.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/gate-wait.test.mjs",
+        "scripts/gate-local.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
       ),
       // Split out of the command above because these three read the real
