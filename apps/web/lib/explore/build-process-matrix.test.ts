@@ -523,6 +523,24 @@ describe("deriveDeliverableSensitivity", () => {
     expect(deriveDeliverableSensitivity({ text: "spacing tweak" }, "balanced")).toBe("low");
     expect(deriveDeliverableSensitivity({ text: "spacing tweak" }, "progressive")).toBe("low");
   });
+
+  // BI-BD60DC91: the bare word "token" belonged to the HIGH list, so an item about
+  // LLM tokens was gated as if it were about auth tokens. BI-CCF1ACBB ("Per-thread
+  // cumulative token/cost ledger", a two-site attribution fix) was raised small→large
+  // on that word alone and could neither be claimed nor closed through its gate.
+  it("does not treat LLM \"token\" prose as a credential (BI-BD60DC91)", () => {
+    expect(deriveDeliverableSensitivity({
+      text: "Per-thread cumulative token/cost ledger\nanthropic-sub reports avg 17 input tokens per run; fold cache tokens into inputTokens",
+    })).toBe("low");
+    expect(deriveDeliverableSensitivity({ text: "token budget for the coworker context window" })).toBe("low");
+  });
+
+  it("still treats credential tokens as high", () => {
+    expect(deriveDeliverableSensitivity({ text: "Rotate the bearer token on refresh" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "Issue an API token from the admin page" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "session tokens expire after 5 minutes" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "OAuth access-token exchange" })).toBe("high");
+  });
 });
 
 describe("getModelTier — quality-first opts (byte-identical without)", () => {
