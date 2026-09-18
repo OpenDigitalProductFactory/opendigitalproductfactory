@@ -260,7 +260,7 @@ An install on `quiet` gets tier 1 and 2 in-app and nothing else. An install on `
 | **C** — `BI-F47386ED` ✅ **delivered** | Inbound read path (GitHub issues + demand mirrors) → BacklogItem with submitter provenance. the upstream install can finally *see* the queue. | — (parallel with A) |
 | **F** — `BI-7ED79807` ✅ **delivered** | **Prerequisite.** Populate `applicability` (archetype, capability, platform range) on projection. Until this lands every envelope is archetype-blind and no ballot can be scoped. | — |
 | **G** — `BI-4D924DB4` ✅ **delivered** | Generalise the tri-state applicability evaluator; assemble the consent-gated, three-tier ballot per install. | C, F |
-| **H** — `BI-784D20FD` | `ecosystem-participation` proactivity family; the weekly two-directional watchdog in the derived room. | G |
+| **H** — `BI-784D20FD` ✅ **delivered** | `ecosystem-participation` proactivity family; the weekly two-directional watchdog in the derived room. | G |
 | **D** — `BI-4D1CAD69` | Vote budget, quadratic weighting, tally → `DemandScoreInputs`. Votes start moving the score. | B, C, G |
 | **E** — `BI-4C8A83AB` | Arbitration ordering + capacity draw + disposition writeback to every submitter. Closes the loop. | D |
 
@@ -327,6 +327,37 @@ recomputes one.
 
 **Tier 1 bypasses the consent gate deliberately.** An install may always see what
 it itself submitted, whatever forwarding it granted others.
+
+### 5.3 Implementation notes — Phase H, delivered 2026-09-18
+
+**The family was the hard requirement, exactly as predicted.** `ecosystem-participation`
+is now a declarable activity family, so the resolver can govern the cadence. The
+posture rules follow the `marketing-campaign` precedent rather than inventing a
+second discipline:
+
+- the action boundary is **capped below `preauthorized`**, so no downstream room
+  declaration or agent preference can loosen it back and spend this
+  organisation's ecosystem voice without a human seeing it;
+- escalation goes to the **owner**, because how an organisation votes is not a
+  queue's call;
+- the **urgent channel is never used** — a ballot is not an outage, and spending
+  that channel here trains the owner to ignore it;
+- the routine weekly digest resolves **balanced**; only a ballot closing within
+  two days opens the assertive door.
+
+**A disposition without a reason is not closure.** `isClosure` withholds a bare
+`declined` or `deferred`. Ubuntu Brainstorm was retired for accumulating votes
+that were never answered, and an empty verdict reproduces that failure while
+*looking* like a response. A `scheduled` outcome speaks for itself.
+
+**A quiet posture suppresses the speculative tier**, not the substance: tiers 1
+and 2 still arrive; "might apply" is exactly the material a quiet install asked
+not to receive.
+
+**A quiet week is reported as quiet.** The digest carries an explicit `empty`
+flag rather than dressing up an uneventful week as activity.
+
+An install is never told its own submission is "coming for you too".
 
 ## 6. Verification
 
