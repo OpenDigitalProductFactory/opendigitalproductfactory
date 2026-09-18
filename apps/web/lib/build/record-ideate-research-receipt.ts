@@ -63,6 +63,27 @@ export async function recordIdeateResearchReceipt(args: {
     select: { id: true },
   });
   if (!revision) return { recorded: false, reason: "build has no accepted designDoc revision to bind the receipt to" };
+  // BI-397157EA / EP-WORK-POSTURE: the build runs inside a Workroom, and a
+  // room whose resolved action boundary is `preauthorized` is the recorded
+  // human decision that lets a coworker's side-effect proceed without a
+  // fresh approval envelope (resolveSteering -> "room-authority"). Carry the
+  // room's authority on the call; without it the gate can only ask a person,
+  // and a build-internal call has no thread to hang the approval envelope on.
+  const agentId = args.authorAgentId ?? IDEATE_ATTESTATION_AGENT_ID;
+  const room = await db.workroom.findFirst({
+    where: { executorKind: "build-studio", executorRef: args.buildId },
+    orderBy: { createdAt: "desc" },
+    select: { capsuleId: true },
+  });
+  const roomAuthority = room
+    ? await (async () => {
+      const [{ loadRoomTurnAuthority }, { toRoomAuthorityContext }] = await Promise.all([
+        import("@/lib/work-management/room-turn-authority.server"),
+        import("@/lib/work-management/room-turn-authority"),
+      ]);
+      return toRoomAuthorityContext(await loadRoomTurnAuthority({ agentId, capsuleId: room.capsuleId }));
+    })().catch(() => null)
+    : null;
   const { governedExecuteTool } = await import("@/lib/mcp-governed-execute");
   const result = await governedExecuteTool({
     toolName: "record_initiative_evidence",
@@ -77,10 +98,11 @@ export async function recordIdeateResearchReceipt(args: {
     userContext: { userId: args.authorUserId, platformRole: null, isSuperuser: author.isSuperuser },
     source: "agentic-loop",
     context: {
-      agentId: args.authorAgentId ?? IDEATE_ATTESTATION_AGENT_ID,
-      routeContext: "/build",
+      agentId,
+      routeContext: room ? `/build/work/${room.capsuleId}` : "/build",
       featureBuildId: args.buildId,
       tokenScope: "write",
+      ...(roomAuthority ? { roomAuthority } : {}),
     },
   });
   if (result.success) return { recorded: true, reason: "research receipt recorded" };
