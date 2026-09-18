@@ -5,7 +5,9 @@ import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
 import { McpOAuthClientManager } from "@/components/admin/McpOAuthClientManager";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
+import { GovernedBacklogSettings } from "@/components/admin/GovernedBacklogSettings";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
+import { getAutonomousPlaybookMode } from "@/lib/build/build-studio-config";
 import { PrivatePathsEditor } from "@/components/admin/PrivatePathsEditor";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
 import {
@@ -65,6 +67,13 @@ export default async function AdminPlatformDevelopmentPage() {
         contributorForkRepo={config?.contributorForkRepo ?? null}
         hasContributionToken={hasContribToken}
       />
+      <div className="mb-6">
+        <GovernedBacklogSettings
+          enabled={config?.governedBacklogEnabled === true}
+          dailyCap={config?.backlogTeeUpDailyCap ?? 3}
+          playbookMode={getAutonomousPlaybookMode()}
+        />
+      </div>
       <PlatformDevelopmentForm
         policyState={policyState}
         currentMode={policyState === "policy_pending" ? null : policyState}
