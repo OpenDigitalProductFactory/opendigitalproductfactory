@@ -163,6 +163,16 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // out of the install dir must ship in the image's /dpf-release-assets.
       conformanceTest("scripts/check-release-asset-contract.test.mjs"),
       node("--test", "scripts/installer/local-model-policy-contract.test.mjs"),
+      // BI-FA2C46D7: the PKI bootstrap and toolchain bootstrap ARE release assets
+      // (the image copies them by name). Pins, in both the Bash and PowerShell
+      // twins, that the portal leaf is issued for a year on a provisioner whose
+      // claims allow it, that the toolchain bootstrap persists the organization
+      // root + https endpoint beside the token, and that the session-start
+      // health hook reads the OAuth challenge on https. The PKI contract test
+      // rejoins CI here: it had been allowlisted while two of its assertions
+      // were stale (they now read compose-chain.ps1).
+      conformanceTest("scripts/installer/mcp-loopback-tls-contract.test.mjs"),
+      conformanceTest("scripts/installer/pki-contract.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their

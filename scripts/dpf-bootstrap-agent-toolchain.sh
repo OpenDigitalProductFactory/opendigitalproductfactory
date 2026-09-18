@@ -185,6 +185,25 @@ KERNEL_PRINCIPLES_DIR="$REPO_ROOT/docs/founder-kernel/wiki/principles"
 CONTRIBUTOR_MEMORY_DIR="$HOME/.claude/projects"
 PROJECT_SLUG="$(printf '%s' "$REPO_ROOT" | sed -E 's:[/:]:-:g' | sed -E 's:^-+::')"
 MCP_ENDPOINT="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
+
+# BI-FA2C46D7: on an https endpoint the client authorizes over OAuth and must
+# trust the organization's own CA. Resolve the root bundle the PKI bootstrap
+# wrote (explicit env, then the install's .env, then the default PKI dir) and
+# export it for this run's probes and the Node bridge; persist_mcp_client_env
+# below records it for shells and GUI clients beside the token.
+MCP_TRUST_BUNDLE=""
+case "$MCP_ENDPOINT" in
+  https://*)
+    for _cand in "${DPF_PKI_TRUST_BUNDLE:-}" \
+                 "$(sed -n 's/^DPF_PKI_TRUST_BUNDLE=//p' "$REPO_ROOT/.env" 2>/dev/null | tail -1)" \
+                 "$HOME/.dpf/pki/root_ca.crt"; do
+      if [ -n "$_cand" ] && [ -f "$_cand" ]; then MCP_TRUST_BUNDLE="$_cand"; break; fi
+    done
+    if [ -n "$MCP_TRUST_BUNDLE" ]; then
+      export NODE_EXTRA_CA_CERTS="$MCP_TRUST_BUNDLE"
+    fi
+    ;;
+esac
 SKILL_PACK_MANIFEST="$REPO_ROOT/packages/dpf-skill-pack/.claude-plugin/plugin.json"
 
 if [ ! -f "$SKILL_PACK_MANIFEST" ]; then
@@ -325,11 +344,33 @@ fi
 # each ' becomes '\'' so the value is safe inside a single-quoted shell string.
 mcp_token_envfile="$HOME/.dpf/agent-toolchain.env"
 
-persist_mcp_token_posix() {
-  _tok="$1"
-  _esc=${_tok//\'/\'\\\'\'}
+# One managed env file carries everything a client process needs to reach the
+# portal: the bearer token (http installs), and on https the endpoint plus the
+# organization root bundle so Node clients (Claude Code, Codex, the gate
+# scripts) trust the install's own CA (BI-FA2C46D7). Rewritten as a whole so a
+# later mint never drops the transport lines, and vice versa. The token
+# plaintext is NEVER written to install-state or logs.
+persist_mcp_client_env_posix() {
   mkdir -p "$HOME/.dpf"
-  ( umask 077; printf '# DPF MCP bearer token — managed by dpf-bootstrap-agent-toolchain.sh\nexport DPF_MCP_BEARER_TOKEN='\''%s'\''\n' "$_esc" > "$mcp_token_envfile" )
+  _tok="${DPF_MCP_BEARER_TOKEN:-}"
+  _esc=${_tok//\'/\'\\\'\'}
+  _url_esc=${MCP_ENDPOINT//\'/\'\\\'\'}
+  _bundle_esc=${MCP_TRUST_BUNDLE//\'/\'\\\'\'}
+  (
+    umask 077
+    {
+      printf '# DPF MCP client environment — managed by dpf-bootstrap-agent-toolchain.sh\n'
+      if [ -n "$_tok" ]; then
+        printf 'export DPF_MCP_BEARER_TOKEN='\''%s'\''\n' "$_esc"
+      fi
+      if [ "$MCP_ENDPOINT" != "http://127.0.0.1:3000/api/mcp/v1" ]; then
+        printf 'export DPF_MCP_URL='\''%s'\''\n' "$_url_esc"
+      fi
+      if [ -n "$MCP_TRUST_BUNDLE" ]; then
+        printf 'export NODE_EXTRA_CA_CERTS='\''%s'\''\n' "$_bundle_esc"
+      fi
+    } > "$mcp_token_envfile"
+  )
   chmod 600 "$mcp_token_envfile" 2>/dev/null || true
   # Source the env file from login + non-login shells (idempotent managed line).
   _src_line=". \"$mcp_token_envfile\"  # dpf-mcp-token"
@@ -339,12 +380,23 @@ persist_mcp_token_posix() {
     fi
     printf '%s\n' "$_src_line" >> "$_prof"
   done
-  # GUI-launched apps (e.g. Codex.app) are not started from a shell, so they do
-  # not read the profile. launchctl setenv injects the var for the current boot.
-  # (Reboot persistence for GUI apps is a follow-up; terminal clients are durable.)
+  # GUI-launched apps (e.g. Codex.app, Claude.app) are not started from a shell,
+  # so they do not read the profile. launchctl setenv injects the vars for the
+  # current boot. (Reboot persistence for GUI apps is a follow-up; terminal
+  # clients are durable.)
   if [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
-    launchctl setenv DPF_MCP_BEARER_TOKEN "$_tok" 2>/dev/null || true
+    if [ -n "$_tok" ]; then launchctl setenv DPF_MCP_BEARER_TOKEN "$_tok" 2>/dev/null || true; fi
+    if [ "$MCP_ENDPOINT" != "http://127.0.0.1:3000/api/mcp/v1" ]; then
+      launchctl setenv DPF_MCP_URL "$MCP_ENDPOINT" 2>/dev/null || true
+    fi
+    if [ -n "$MCP_TRUST_BUNDLE" ]; then
+      launchctl setenv NODE_EXTRA_CA_CERTS "$MCP_TRUST_BUNDLE" 2>/dev/null || true
+    fi
   fi
+}
+persist_mcp_token_posix() {
+  DPF_MCP_BEARER_TOKEN="$1"
+  persist_mcp_client_env_posix
 }
 
 # The token is minted INSIDE the portal container, not on the host: on a
@@ -373,7 +425,7 @@ resolve_portal_container() {
 # Markers mirror interpretScopeCoverageProbe in @dpf/bootstrap (SSOT).
 if [ "$HAS_TOKEN" -eq 1 ] && [ "$AUTO_MINT" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] \
    && command -v curl >/dev/null 2>&1; then
-  _scope_probe="$(curl -s --max-time 5 -X POST "$MCP_ENDPOINT" \
+  _scope_probe="$(curl -s --max-time 5 ${NODE_EXTRA_CA_CERTS:+--cacert "$NODE_EXTRA_CA_CERTS"} -X POST "$MCP_ENDPOINT" \
     -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json, text/event-stream" \
@@ -416,6 +468,14 @@ if [ "$HAS_TOKEN" -eq 0 ] && [ "$AUTO_MINT" -eq 1 ]; then
     fi
     rm -f "$MINT_ERR"
   fi
+fi
+
+# On an https endpoint the transport lines (DPF_MCP_URL + NODE_EXTRA_CA_CERTS)
+# are what let a client authorize over OAuth; persist them even when no token
+# was minted this run. Never at dry-run time.
+if [ "$DRY_RUN" -eq 0 ] && [ -n "$MCP_TRUST_BUNDLE" ]; then
+  persist_mcp_client_env_posix
+  ok "MCP client transport persisted: https endpoint + organization root bundle (NODE_EXTRA_CA_CERTS)."
 fi
 
 # --- Compute plan via Node bridge --------------------------------------------
