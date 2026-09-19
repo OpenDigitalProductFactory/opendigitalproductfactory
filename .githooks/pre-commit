@@ -289,8 +289,17 @@ TC_CACHE_FILE=""
 TC_FINGERPRINT=""
 if [ -n "$TC_CACHE_DIR" ] && command -v shasum >/dev/null 2>&1; then
   TC_CACHE_FILE="$TC_CACHE_DIR/dpf-typecheck-ok"
+  # The patterns must reach git as PATHSPECS, never as shell globs: with
+  # globbing on, `*.ts` expanded against the repo root to the one top-level
+  # file it matched (playwright-demo.config.ts) and the fingerprint stopped
+  # seeing every TypeScript file under apps/ and packages/ — a cache that
+  # never invalidated (found 2026-09-19 on a commit that changed two .ts
+  # files and was reported "cached"). `set -f` disables globbing for the
+  # word split; `set +f` restores it afterwards.
+  set -f
   # shellcheck disable=SC2086 — the patterns are meant to split.
   TC_FINGERPRINT="$( { git ls-files -s -- $TC_PATTERNS; git diff -- $TC_PATTERNS; } 2>/dev/null | shasum -a 256 | cut -d' ' -f1 )"
+  set +f
   if [ -n "$TC_FINGERPRINT" ] && [ -f "$TC_CACHE_FILE" ] && [ "$(cat "$TC_CACHE_FILE" 2>/dev/null)" = "$TC_FINGERPRINT" ]; then
     echo "[pre-commit] typecheck ok (cached — no TypeScript-relevant content changed since the last green run)"
     exit 0
