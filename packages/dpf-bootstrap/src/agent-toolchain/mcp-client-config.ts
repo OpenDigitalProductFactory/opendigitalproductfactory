@@ -17,7 +17,11 @@
  */
 
 import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
-import { mcpClientBearerHeaderRequired, type McpAuthMode } from "@dpf/integration-shared/mcp-client-credential-policy";
+import {
+  mcpClientBearerHeaderRequired,
+  mcpClientOAuthScopePin,
+  type McpAuthMode,
+} from "@dpf/integration-shared/mcp-client-credential-policy";
 
 // Mirrors MCP_BEARER_TOKEN_ENV_VAR in apps/web/lib/auth/mcp-setup-snippets.ts.
 const MCP_BEARER_TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN";
@@ -86,6 +90,12 @@ function claudeCodeContent(mcpEndpoint: string, authMode: McpAuthMode): string {
   const headerFallback = mcpClientBearerHeaderRequired(mcpEndpoint, "claude", authMode)
     ? { headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` } }
     : {};
+  // BI-3D2FD68C: over https the client authorizes by OAuth and asks for only
+  // the scope the portal advertises (read). The pin is what lets the consent
+  // grant the write scopes platform work needs. Never on http, where OAuth
+  // never runs and the header above is the credential.
+  const scopePin = mcpClientOAuthScopePin(mcpEndpoint, "claude", authMode);
+  const oauthPin = scopePin ? { oauth: { scopes: scopePin } } : {};
   return JSON.stringify(
     {
       mcpServers: {
@@ -93,6 +103,7 @@ function claudeCodeContent(mcpEndpoint: string, authMode: McpAuthMode): string {
           type: "http",
           url: lazyHostEndpoint,
           ...headerFallback,
+          ...oauthPin,
         },
       },
     },

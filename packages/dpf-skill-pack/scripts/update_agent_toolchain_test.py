@@ -1183,10 +1183,15 @@ class ClaudeMcpConfigSchemeAwarenessTest(unittest.TestCase):
         self.assertEqual(
             server["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN:-}"
         )
+        self.assertNotIn("oauth", server, "OAuth never runs over http; a pin there is noise")
 
     def test_https_endpoint_drops_the_bearer_header(self) -> None:
         server = self._write("https://localhost:3000/api/mcp/v1")["mcpServers"]["dpf"]
         self.assertNotIn("headers", server, "a pinned header disables the client's OAuth fallback")
+        # BI-3D2FD68C: without the pin the consent grants only the advertised
+        # read scope, so the OAuth path would be read-only for good.
+        self.assertEqual(server["oauth"], {"scopes": "dpf.read dpf.work dpf.build"})
+        self.assertEqual(server["oauth"]["scopes"], updater.MCP_CLIENT_OAUTH_SCOPE_PIN)
 
     def test_unparseable_endpoint_fails_safe_by_keeping_the_header(self) -> None:
         self.assertTrue(updater.mcp_client_bearer_header_required("not a url"))

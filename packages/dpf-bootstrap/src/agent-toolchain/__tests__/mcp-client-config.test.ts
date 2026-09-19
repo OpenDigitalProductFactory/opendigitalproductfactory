@@ -37,6 +37,17 @@ describe("planMcpClientConfig", () => {
     expect(mcp.mcpServers.dpf.url).toBe("https://dpf.example.com/api/mcp/v1?tier=full");
     expect("headers" in mcp.mcpServers.dpf).toBe(false);
     expect("headers" in vs.servers.dpf).toBe(false);
+    // BI-3D2FD68C: the pin is what turns the OAuth consent into a write grant;
+    // without it the client asks for the advertised read scope and stays there.
+    expect(mcp.mcpServers.dpf.oauth).toEqual({ scopes: "dpf.read dpf.work dpf.build" });
+    // VS Code has no oauth.scopes field; its entry stays url-only.
+    expect("oauth" in vs.servers.dpf).toBe(false);
+  });
+
+  it("carries no oauth block on plain http, where the header is the credential", () => {
+    const plan = planMcpClientConfig(REPO, ENDPOINT, null, null);
+    const mcp = JSON.parse(plan.writes.find((w) => w.path.endsWith("/.mcp.json"))!.content) as Record<string, any>;
+    expect("oauth" in mcp.mcpServers.dpf).toBe(false);
   });
 
   it("the tracked .mcp.json is exactly what the planner writes for the default endpoint (no drift in either direction)", () => {
