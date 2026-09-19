@@ -226,14 +226,46 @@ export function publicScopesGrantingGrant(grant: string): PublicScope[] {
 
 /**
  * The scopes advertised in `scopes_supported` on the Protected Resource
- * Metadata document.
+ * Metadata document — and, through `oauth-metadata.ts`, the `scope=` on the
+ * 401 challenge and the default for an authorize request that names none.
  *
- * READ ONLY, deliberately. MCP `2025-11-25` (`authorization.mdx:344-347`)
- * defines this field as "the minimal set of scopes necessary for basic
- * functionality", and tells clients to request all of it when the challenge
- * carries no `scope`. Advertising only `dpf.read` is what makes that default
- * behaviour SAFE: a client that asks for everything advertised gets read
- * access, and every escalation above it is a separate, named, human-approved
- * step-up decision.
+ * MCP `2025-11-25` (`authorization.mdx:344-347`) defines this field as "the
+ * minimal set of scopes necessary for BASIC FUNCTIONALITY", and tells clients
+ * to request all of it when the challenge carries no `scope`. The question is
+ * therefore what basic functionality means for THIS resource, and the answer
+ * is not read.
+ *
+ * This MCP server exists to do development work: claim a workroom, record
+ * evidence, move a backlog item, adopt a worktree. A grant that can do none
+ * of those is not a reduced version of the product, it is a client that
+ * cannot perform the task it connected to perform. Advertising read alone
+ * was not a smaller promise, it was a broken one.
+ *
+ * WHY THE PREVIOUS READ-ONLY FLOOR COULD NOT STAND (BI-CE5F8C0A):
+ * The floor was safe only because escalation was assumed reachable. It is
+ * not. The 403 `insufficient_scope` step-up fires solely on `tools/call` of
+ * a tool the grant does not cover, and `load_tools` filters by grant first,
+ * answering "not-granted" as a plain HTTP 200 — so a read-only client never
+ * sees the write tool, never calls it, and is never told a scope is missing.
+ * Measured on a production install: every OAuth client landed read-only and no
+ * step-up ever fired.
+ *
+ * Nor could a client work around it. Claude Code can pin `oauth.scopes` in
+ * `.mcp.json`; Grok cannot — it derives its request from this very challenge
+ * ("WWW-Authenticate challenge contains scope:") and has no scope setting at
+ * all. A per-client pin fixes one of four peer delivery surfaces (AGENTS.md
+ * §12) and strands the rest.
+ *
+ * WHAT IS DELIBERATELY NOT HERE: `dpf.business`, `dpf.operate` and
+ * `dpf.admin`. Development is the basic functionality of this resource;
+ * running the organization and administering the platform are not. Those
+ * stay behind an explicit request, which a client may still make — widening
+ * the floor does not cap the ceiling. The consent screen continues to list
+ * every requested scope as its own checkbox, so the human still approves
+ * each one.
  */
-export const ADVERTISED_SCOPES: readonly PublicScope[] = ["dpf.read"];
+export const ADVERTISED_SCOPES: readonly PublicScope[] = [
+  "dpf.read",
+  "dpf.work",
+  "dpf.build",
+];

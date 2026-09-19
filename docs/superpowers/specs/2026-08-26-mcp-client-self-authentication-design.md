@@ -233,7 +233,7 @@ The operator's experience is: point the client at the URL, a browser tab opens, 
 
 `grant_types_supported` is `["authorization_code", "refresh_token", "client_credentials"]` — the third is the headless path (§2.1), not a separate system.
 
-`scopes_supported` advertises **`dpf.read` only**, per `:344-347` ("the minimal set of scopes necessary for basic functionality"). Everything above read arrives through step-up (§5.4). See §4.3.1 for why the vocabulary is six strings rather than the 75 internal grant names.
+`scopes_supported` advertises **`dpf.read dpf.work dpf.build`** — the development floor — per `:344-347` ("the minimal set of scopes necessary for basic functionality"). See §4.3.1 for why the vocabulary is six strings rather than the 75 internal grant names, and **§4.3.2 for why the floor is no longer read alone**. `dpf.business`, `dpf.operate` and `dpf.admin` remain above the floor and arrive through an explicit request.
 
 ### 4.3 Mapping onto the existing authorization model
 
@@ -266,7 +266,17 @@ This is the load-bearing decision and it is a projection, not a new model.
 
 Properties this has to satisfy:
 
-- **`scopes_supported` advertises `dpf.read` only.** Per `authorization.mdx:344-347` that field is "the minimal set of scopes necessary for basic functionality." Everything above read arrives through step-up (§5.4), which is what makes the default-request behaviour in point 2 above *safe* rather than dangerous — a client that requests everything advertised gets read access, and each escalation is a separate, named, human-approved decision.
+- **`scopes_supported` advertises the development floor: `dpf.read dpf.work dpf.build`.** Per `authorization.mdx:344-347` that field is "the minimal set of scopes necessary for basic functionality," and for this resource basic functionality is development work. **Superseded 2026-09-19 — this bullet previously read "`dpf.read` only"; see §4.3.2.**
+
+### 4.3.2 Why the read-only floor was superseded (2026-09-19, BI-CE5F8C0A)
+
+The read-only floor was safe **only if** escalation was reachable. Measurement says it is not, so the floor was not least privilege — it was no privilege.
+
+1. **The step-up cannot fire.** The 403 `insufficient_scope` challenge is emitted solely on `tools/call` of a tool the grant does not cover (`apps/web/app/api/mcp/v1/route.ts`). But `load_tools` filters by grant first and answers `not-granted` as a plain HTTP 200 (`apps/web/lib/mcp/load-tools.ts`), so a read client never sees the write tool, never calls it, and is never told a scope is missing. On a production install every OAuth client landed read-only and no step-up ever fired.
+2. **A per-client pin does not generalise.** Claude Code can pin `oauth.scopes` in `.mcp.json`. Grok cannot: it derives its request from the challenge (`"WWW-Authenticate challenge contains scope:"` in its binary) and exposes no scope setting in `grok mcp add` or `config.toml`. Pinning therefore fixes one of the four peer delivery surfaces (`AGENTS.md` §12) and strands the others.
+3. **Read is not a reduced product here.** This MCP server exists to claim workrooms, record evidence and move backlog items. A grant that can do none of those is not a smaller promise; it is a client that cannot perform the task it connected to perform.
+
+What did **not** change: `dpf.business`, `dpf.operate` and `dpf.admin` stay off the floor, because running the organization and administering the platform are not this resource's basic functionality. Widening the floor does not cap the ceiling — a client may still request them, and the consent screen continues to list every requested scope as its own checkbox for human approval.
 - **The coarse tier is derived, not separately requested.** The granted scope set implies `read`/`write`/`admin`; there is no independent tier parameter for a client to get wrong.
 - **The mapping is a code artifact with a completeness guard.** A single `apps/web/lib/mcp/oauth-scope-map.ts` owns it, and a test asserts every one of the 86 grants maps to exactly one public scope. **Adding a new grant without mapping it fails CI.** This is the drift guard, and without it the two vocabularies separate within a quarter — the failure this whole item exists to correct is a pointer that nobody re-checked.
 - **Grants stay refactorable.** Internal names can be split, merged or renamed freely as long as the map stays total. The public contract is six strings.

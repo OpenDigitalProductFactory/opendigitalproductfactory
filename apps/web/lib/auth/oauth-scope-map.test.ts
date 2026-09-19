@@ -178,13 +178,39 @@ describe("grant expansion", () => {
 });
 
 describe("advertised scopes", () => {
-  it("advertises read only", () => {
-    // The MCP spec tells clients to request everything in scopes_supported
-    // when the challenge carries no scope. Advertising a write scope here
-    // would make maximal grants the DEFAULT while appearing to implement
-    // least privilege. See design section 4.3.1 point 2.
-    expect(ADVERTISED_SCOPES).toEqual(["dpf.read"]);
-    expect(coarseScopeForPublicScopes([...ADVERTISED_SCOPES])).toBe("read");
+  it("advertises the development floor, not read alone", () => {
+    // This OVERTURNS design §4.3.1 point 2, which argued that advertising a
+    // write scope "would make maximal grants the DEFAULT while appearing to
+    // implement least privilege". That argument rested on a premise
+    // measurement has since falsified: that a read client could escalate.
+    //
+    // It cannot. The 403 insufficient_scope step-up fires only on tools/call
+    // of an ungranted tool, and load_tools filters by grant first and answers
+    // "not-granted" as a plain HTTP 200 — so the client never sees the write
+    // tool, never calls it, and is never told a scope is missing. On
+    // a production install every OAuth client landed read-only and no step-up ever
+    // fired (BI-CE5F8C0A).
+    //
+    // Nor is a per-client pin a general answer: Claude Code can set
+    // oauth.scopes, Grok cannot — it takes its request from the challenge and
+    // exposes no scope setting — so pinning fixes one of four peer delivery
+    // surfaces and strands the rest.
+    //
+    // This resource exists to do development work. Read alone is not a
+    // least-privilege version of it; it is a client that cannot perform the
+    // task it connected to perform.
+    expect(ADVERTISED_SCOPES).toEqual(["dpf.read", "dpf.work", "dpf.build"]);
+    expect(coarseScopeForPublicScopes([...ADVERTISED_SCOPES])).toBe("write");
+  });
+
+  it("still withholds business, operate and admin from the floor", () => {
+    // The floor moved; it did not disappear. Running the organization and
+    // administering the platform are not this resource's basic functionality,
+    // so they stay behind an explicit request the human approves per scope.
+    for (const scope of ["dpf.business", "dpf.operate", "dpf.admin"] as const) {
+      expect(ADVERTISED_SCOPES).not.toContain(scope);
+    }
+    expect(coarseScopeForPublicScopes([...ADVERTISED_SCOPES])).not.toBe("admin");
   });
 
   it("advertises only scopes from the public vocabulary", () => {
