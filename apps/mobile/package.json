@@ -28,7 +28,7 @@
     "expo-secure-store": "~56.0.4",
     "expo-sqlite": "~56.0.6",
     "expo-status-bar": "~56.0.4",
-    "nativewind": "^4.2.6",
+    "nativewind": "^4.2.7",
     "react": "19.2.8",
     "react-native": "0.85.3",
     "react-native-reanimated": "4.3.1",
