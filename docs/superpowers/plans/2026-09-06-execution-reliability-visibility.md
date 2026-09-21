@@ -4,6 +4,12 @@ status: active
 
 # Execution reliability and process visibility
 
+## September 21 selected Workroom context (BI-06AE6833, WC-99AECC86)
+
+Live navigation on both 0961596 and 5cdafb1 drops the selected capsule at the canonical-case redirect. Preserve the capsule as navigation context while retaining one case per WorkItem. Constrain the existing room query by both WorkItem and selected capsule, refuse an unavailable selection before reading execution evidence, and return the resolved row identity for the workforce reader. Remove the independent oldest-room lookup so process, participants, evidence and workforce use the same selection. Reuse the existing WorkItem and standalone content authorization; do not grant access through a query parameter.
+
+Use the existing process inspector and navigation primitives, with no new control or route. First reproduce lost selection and cross-case refusal, then verify selected-only journal and participant reads, canonical query round-trip, existing unselected behavior, and standalone authorization. Reuse the shared evidence adapter from PR5470. Approximately one fifth of this repair consolidates selection and removes duplicated room resolution. Protected CI and deployed enterprise-to-room acceptance remain required; PR5470's combined release is independent of this follow-up.
+
 Status: implementation in progress; broader execution/portal coverage remains pending.
 Workroom: WC-4A72DC95. Parent delivery item: BI-06AE6833.
 Decision: DI-515AD614CCF6, harden existing DPF/Inngest execution.

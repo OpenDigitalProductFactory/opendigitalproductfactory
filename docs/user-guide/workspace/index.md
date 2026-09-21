@@ -18,6 +18,10 @@ when the room's recorded status has not changed. Missing or incomplete evidence
 is labeled rather than treated as verified completion. See [Workrooms](work-rooms.md)
 for access, process inspection and boundary details.
 
+Opening a room by its ID retains that selection within its parent case. Process,
+room evidence and workforce use the same room; shared messages are labelled as
+case context. A missing or mismatched room selection does not substitute another room.
+
 ## Operations and Performance
 
 The main rail separates two different decisions:

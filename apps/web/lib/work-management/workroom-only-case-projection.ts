@@ -195,6 +195,7 @@ export async function loadWorkroomOnlyCaseDetail({
     sourceRefs: detail.summary.sourceRefs,
     workItemId: null,
     workItemTitle: null,
+    workroomRowId: room.id,
     room: roomView,
   };
 }

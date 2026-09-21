@@ -34,16 +34,20 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
   });
 
   const { caseKey } = await params;
+  const query = await searchParams;
 
   // A room addressed by capsule id is the same case as the WorkItem it anchors
   // to, not a second one. Send it to the canonical key so every surface that
   // links a room by capsule id lands on the one case (BI-EBEB77E2).
   const canonicalKey = await resolveCanonicalWorkCaseKey(prisma, caseKey);
-  if (canonicalKey) redirect(canonicalWorkCaseHref(canonicalKey, await searchParams));
+  if (canonicalKey) redirect(canonicalWorkCaseHref(canonicalKey, query, caseKey));
+  const selectedWorkroomId = typeof query.workroom === "string" ? query.workroom : undefined;
+  if (query.workroom !== undefined && !selectedWorkroomId) notFound();
 
   const detail = await loadWorkspaceWorkCaseDetail({
     prismaClient: prisma,
     caseKey,
+    selectedWorkroomId,
     userId: session.user.id,
     authContext: {
       principalId: effectiveAuth.principalId,
@@ -64,27 +68,10 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
     (await loadRoomOnlyCase(caseKey, effectiveAuth));
   if (!detailOrRoom) notFound();
 
-  // The room's accountable human and its named workers, loaded here rather than
-  // inside the detail loader so the panel stays independent of that projection.
-  // A case is addressed either by its capsule id — how the portfolio activity
-  // tree links a room — or through the WorkItem it anchors to. Resolve both,
-  // capsule first, so a room reached from the tree finds its own row.
-  const ref = decodeWorkCaseKey(caseKey);
-  const anchoredRoom =
-    ref?.sourceType === "work-capsule"
-      ? await prisma.workroom.findFirst({
-          where: { capsuleId: ref.sourceId },
-          select: { id: true },
-        })
-      : detailOrRoom.workItemId
-        ? await prisma.workroom.findFirst({
-            where: { workItemId: detailOrRoom.workItemId },
-            select: { id: true },
-            orderBy: { createdAt: "asc" },
-          })
-        : null;
-  const workforce = anchoredRoom
-    ? await loadRoomWorkforce(prisma as never, { workroomId: anchoredRoom.id })
+  // Reuse the authorized selection that supplied process and evidence. A second
+  // oldest-room lookup can display a different workforce for the same page.
+  const workforce = detailOrRoom.workroomRowId
+    ? await loadRoomWorkforce(prisma as never, { workroomId: detailOrRoom.workroomRowId })
     : null;
 
   return (

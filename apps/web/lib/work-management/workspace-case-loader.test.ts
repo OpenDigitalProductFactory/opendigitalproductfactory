@@ -80,6 +80,41 @@ const baseEngagement: CoworkerEngagementFixture = {
 };
 
 describe("workspace Work Case loader", () => {
+  it("keeps a selected room's process, evidence and workforce identity together", async () => {
+    const db = prismaFor([baseItem]);
+    const selected = { id: "room-selected", capsuleId: "WC-SELECTED", status: "ready", title: "Selected reviewer",
+      scopeClaims: [{ workShape: "delivery-small@1.0.0", source: "declared" }] };
+    const other = { id: "room-other", capsuleId: "WC-OTHER", status: "blocked", title: "Another room" };
+    const findRooms = vi.fn(async (args: unknown) =>
+      (args as { where: { capsuleId?: string } }).where.capsuleId === selected.capsuleId ? [selected] : [other, selected]);
+    db.workroom.findMany = findRooms;
+    const readJournal = vi.fn(async () => []);
+    db.workroomActivity = { findMany: readJournal };
+    const participants = vi.fn(async () => []);
+    const detail = await loadWorkspaceWorkCaseDetail({ prismaClient: db, caseKey: "booking%3ABK-1",
+      selectedWorkroomId: "WC-SELECTED", userId: "user-1", participantLoader: participants });
+    expect(findRooms).toHaveBeenCalledWith(expect.objectContaining({ where: { workItemId: "row-1", capsuleId: "WC-SELECTED" } }));
+    expect(detail?.workroomRowId).toBe("room-selected");
+    expect(participants).toHaveBeenCalledWith(expect.objectContaining({ workroomIds: ["room-selected"] }));
+    expect(readJournal).toHaveBeenCalledWith(expect.objectContaining({ where: { workCapsuleId: { in: ["room-selected"] } } }));
+    expect(detail?.sourceRefs.some(ref => ref.id === "WC-OTHER")).toBe(false);
+    expect(detail?.room?.processOverseer?.shapeKey).toBe("delivery-small");
+    expect(detail?.room?.activity).toContainEqual(expect.objectContaining({
+      summary: "Case context: Need a human confirmation before booking.",
+    }));
+  });
+
+  it("refuses a selected room outside the addressed case before loading its evidence", async () => {
+    const db = prismaFor([baseItem]);
+    db.workroom.findMany = vi.fn(async () => []);
+    const readJournal = vi.fn(async () => []);
+    db.workroomActivity = { findMany: readJournal };
+    const detail = await loadWorkspaceWorkCaseDetail({ prismaClient: db, caseKey: "booking%3ABK-1",
+      selectedWorkroomId: "WC-OTHER-CASE", userId: "user-1" });
+    expect(detail).toBeNull();
+    expect(readJournal).not.toHaveBeenCalled();
+  });
+
   it("resolves a Workroom URL through its canonical anchor even when the case source is a backlog item", async () => {
     const anchored = { ...baseItem, sourceType: "backlog-item", sourceId: "BI-06AE6833" };
     const db = prismaFor([anchored]);
