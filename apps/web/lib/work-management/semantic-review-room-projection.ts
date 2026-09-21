@@ -57,7 +57,8 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
     const freshness = state === "terminal" ? "historical" : age === null || age < 0 ? "unknown" : age >= SEMANTIC_REVIEW_HEARTBEAT_STALE_MS ? "stale" : "recent";
     runs.push({ taskRunId: row.taskRunId, recordId: row.id, status: row.status, requesterId: row.userId,
       reason: typeof progress.reason === "string" ? progress.reason : null,
-      nextAction: typeof progress.action === "string" ? progress.action : next,
+      nextAction: typeof progress.action === "string" ? progress.action
+        : typeof progress.nextAction === "string" ? progress.nextAction : next,
       readAt: now.toISOString(), lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
       heartbeat: freshness, recoveryWait: isSemanticReviewRecoveryWait(row.status),
       budget: readSemanticReviewBudget(row.progressPayload),

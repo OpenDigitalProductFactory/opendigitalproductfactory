@@ -3,8 +3,7 @@
   "decidedOption": "shared-room-inspection",
   "decisionInteractionId": "DI-E1D9AF1E894D",
   "scope": { "files": [
-    "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx",
-    "apps/web/components/workspace/workroom/WorkroomShape.tsx"
+    "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx"
   ] },
   "evidence": { "kind": "propose-n-pick", "consideredOptions": ["shared-room-inspection", "map-only-recovery"] }
 }

@@ -10,6 +10,12 @@ const run = (status: string): ReviewerRunSnapshot => ({
 });
 
 describe("reviewer state in its Workroom", () => {
+  it("preserves the next action recorded by review settlement", async () => {
+    const row = run("input-required");
+    row.progressPayload = { semanticReview: { nextAction: "retry-review" } };
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] } }, ["WC-1"], now);
+    expect(view.runs[0].nextAction).toBe("retry-review");
+  });
   it("projects a wait for inspection using recorded authority and budget facts", async () => {
     const row = run("input-required");
     row.progressPayload = { semanticReview: { schemaVersion: 1, reason: "provider-outcome-uncertain-after-restart",
