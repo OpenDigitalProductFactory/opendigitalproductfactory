@@ -29,6 +29,13 @@ Implementation sequence: reproduce the old plan and timeout, replace only the
 query aggregation, run source and real PostgreSQL checks, publish through the
 protected PR path, then include the merged fix in the coordinated release.
 
+Read-only verification on 2026-09-21: the old 40,000-tick fixture exceeded its
+five-second statement timeout; the replacement has no correlated subplan and
+finishes within budget. The replacement over the live history ranked 67,141
+rows and returned 73 stalled rooms in 161 ms. This verifies the SQL, not its
+deployment. The PostgreSQL regression suite also runs automatically against
+the existing CI database when `CI=true`.
+
 **Epics:** `EP-WORKFORCE-TRANSITION` · `EP-WORK-CONVERGENCE` · `EP-32B0E693` (capability completeness)
 **Predecessor:** [Proactive Workrooms](2026-08-29-proactive-workrooms-design.md) — that design made rooms *wake*; this one makes them *owned and coordinated*
 **Kernel consult:** `DI-306B742EFD74` — `derive-with-explicit-override`, composite 12.061, margin
