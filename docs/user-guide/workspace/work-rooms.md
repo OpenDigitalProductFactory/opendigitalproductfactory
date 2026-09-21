@@ -73,6 +73,8 @@ exists without a verified completion verdict. **Cancelled** is distinct from
 success. The projection check time and latest evidence time are separate; an
 unknown timestamp does not imply a fresh observation.
 
+Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
+
 Native reviewer runs also appear under **Observed execution** while queued or
 waiting, before a final receipt exists. Expand a run or checkpoint for its recorded
 state, requester or reviewer, last recorded reason, and source reference. Heartbeat
@@ -346,3 +348,9 @@ An unavailable evidence source or a history longer than the displayed window is
 marked partial. Missing purpose and scope remain boundary gaps. Access to a room's
 contents requires admission and sufficient sensitivity clearance; following a
 coordination link does not grant that access.
+
+For a review marked **auth-required**, open **Activity projection details** in the
+Operations Map and select the review. Its requester must inspect the authority
+saved with the request. Signing in again does not replace those saved credentials.
+The inspector retains the original deadline and recovery count; the server checks
+authority again before accepting recovery.
