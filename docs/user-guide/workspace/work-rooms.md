@@ -362,3 +362,9 @@ authority again before accepting recovery.
 When a case has several Workrooms, choose a room to inspect its own process and
 owners. Links from the operation view keep the selected room and navigation
 context. The case does not combine coordinators from different rooms.
+From Enterprise Architecture's Workrooms view, open Coordination and choose
+**Find a room** to search by title or room ID, filter by operation, or filter by
+room status. **Next rooms** continues through open rooms; the count is for the
+displayed page. Selecting **Operation** from a room's process returns to the
+same filters and page. Recorded stage waits are shown when the drive has named
+the stage and responsible role.

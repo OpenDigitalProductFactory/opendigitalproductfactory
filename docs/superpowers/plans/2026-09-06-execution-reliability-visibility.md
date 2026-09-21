@@ -765,3 +765,30 @@ unsupported capabilities without inventing positive capability claims for other
 image models. Verify discovery, cards and routing exclusion, then refresh through
 the governed metadata path after release. The raw malformed answer remains
 unavailable; classification is a verified defect, not proof of its exact syntax.
+### Coordination discovery and return context (2026-09-21)
+
+Live acceptance found 381 open rooms but only the first 200 reachable from
+Coordination, with no search or next page. Extend the existing architecture
+loader with database-side title/identity search, canonical status filtering and
+stable identity keyset pagination. Keep the 200-row bound, label each page as an
+observation, and preserve operation, search, status and cursor through the
+canonical case redirect and the process return link. Reuse FilterBar and the
+stored drive observation projection for recorded waits; never infer execution
+from updatedAt or assignment. Verify combined unmapped-operation/search filters,
+page boundaries, malformed input and round-trip navigation before release.
+
+UX fit: fits with guardrails, recorded as DI-4A3C8C3C9ACC (high-confidence
+proceed). Platform EA is the canonical home; the operator uses local filters
+and read-only room links. FilterBar, StatusBadge and the drive projection remain
+shared. Preserve collapsed discovery controls on initial arrival, report page
+counts rather than totals, and show an actionable empty result. No prompt send
+or dispatch is attached to navigation. Source checks and deployed desktop/mobile,
+keyboard, theme and return-context acceptance remain required.
+
+The intentional disclosure and paging structure is measured by successful cloud
+UX sweep 35570886614 against source 6509aecaed0ba2584e82b9f0588334d7b53633d1.
+Re-freeze only `/ea/workrooms` from its emitted baseline under this PR's review:
+arrival text falls from 237 to 162 words; all other numeric axes are unchanged.
+The two existing axe violations remain unresolved, not an accessibility pass.
+No other route baseline or sweep rule changes. The architecture guide now
+documents the same search, paging and return-context behavior.
