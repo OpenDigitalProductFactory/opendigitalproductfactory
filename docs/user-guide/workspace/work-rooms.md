@@ -354,3 +354,7 @@ Operations Map and select the review. Its requester must inspect the authority
 saved with the request. Signing in again does not replace those saved credentials.
 The inspector retains the original deadline and recovery count; the server checks
 authority again before accepting recovery.
+
+When a case has several Workrooms, choose a room to inspect its own process and
+owners. Links from the operation view keep the selected room and navigation
+context. The case does not combine coordinators from different rooms.

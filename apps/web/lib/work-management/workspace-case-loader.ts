@@ -234,6 +234,8 @@ export type WorkspaceWorkCaseDetailView = {
   workItemTitle: string | null;
   /** The same resolved room used by process/evidence and the workforce panel. */
   workroomRowId?: string | null;
+  roomChoices?: { capsuleId: string; title: string; status: string }[];
+  roomChoicesPartial?: boolean;
   // Transitional compatibility seam. The loader always returns the room
   // projection; the optional marker lets the existing detail component remain
   // unchanged until BI-32E26F62 replaces its composition on the same route.
@@ -599,11 +601,21 @@ export async function loadWorkspaceWorkCaseDetail({
         decisionScope: true,
         workspaceState: true,
       },
-      orderBy: [{ updatedAt: "desc" }],
+      orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
+      take: 201,
     }),
   ]);
   // A stale or cross-case selection must not silently become an aggregate case.
   if (selectedCapsuleId && !capsules.some((capsule) => capsule.capsuleId === selectedCapsuleId)) return null;
+  if (!selectedCapsuleId && capsules.length > 1) {
+    return {
+      summary: toListItem(item, userId, now, capsules),
+      evidenceTimeline: [], sourceRefs: [],
+      workItemId: item.id, workItemTitle: item.title, workroomRowId: null,
+      roomChoices: capsules.slice(0, 200).map(({ capsuleId, title, status }) => ({ capsuleId, title, status })),
+      roomChoicesPartial: capsules.length > 200,
+    };
+  }
   const participants = await (participantLoader?.({
     workItemId: item.id,
     assignedToUserId: item.assignedToUserId,

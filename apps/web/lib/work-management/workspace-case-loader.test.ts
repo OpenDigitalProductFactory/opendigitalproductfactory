@@ -80,6 +80,33 @@ const baseEngagement: CoworkerEngagementFixture = {
 };
 
 describe("workspace Work Case loader", () => {
+  it.each([2, 201])("offers bounded choices from %i rooms before loading participants or execution", async (count) => {
+    const db = prismaFor([baseItem]);
+    const rooms = Array.from({ length: count }, (_, index) => ({
+      id: `room-${index}`, capsuleId: `WC-${index}`, title: `Reviewer ${index}`, status: "ready",
+    }));
+    db.workroom.findMany = vi.fn(async () => rooms);
+    const journal = vi.fn(async () => []);
+    db.workroomActivity = { findMany: journal };
+    const participants = vi.fn(async () => { throw new Error("Multiple room coordinators must not be combined"); });
+    const detail = await loadWorkspaceWorkCaseDetail({ prismaClient: db, caseKey: "booking%3ABK-1",
+      userId: "user-1", participantLoader: participants });
+    expect(detail).toMatchObject({ roomChoices: rooms.slice(0, 200).map(({ capsuleId, title, status }) => ({ capsuleId, title, status })),
+      roomChoicesPartial: count > 200, workroomRowId: null });
+    expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 201,
+      orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }] }));
+    expect(detail?.room).toBeUndefined();
+    expect(participants).not.toHaveBeenCalled();
+    expect(journal).not.toHaveBeenCalled();
+  });
+
+  it("checks content authorization before reading room choices", async () => {
+    const db = prismaFor([{ ...baseItem, assignedToUserId: "someone-else" }]);
+    db.workroom.findMany = vi.fn(async () => []);
+    expect(await loadWorkspaceWorkCaseDetail({ prismaClient: db, caseKey: "booking%3ABK-1", userId: "user-1" })).toBeNull();
+    expect(db.workroom.findMany).not.toHaveBeenCalled();
+  });
+
   it("keeps a selected room's process, evidence and workforce identity together", async () => {
     const db = prismaFor([baseItem]);
     const selected = { id: "room-selected", capsuleId: "WC-SELECTED", status: "ready", title: "Selected reviewer",
