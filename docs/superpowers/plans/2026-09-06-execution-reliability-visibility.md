@@ -882,3 +882,22 @@ adds only the collapsed owner/link disclosure to its accessibility structure.
 Refresh that route's structural baseline alone: all numeric axes remain unchanged
 (162 visible words, 22 lead words, one primary action, zero visible fields).
 The two existing axe violations remain recorded; this is not an accessibility pass.
+
+### Reviewer response contract and safe failure diagnosis
+
+Release3 review TR-GATE-6B57503C6CF9DF933ADE9985 records one truncated branch
+and two invalid-JSON branches. Strict validation correctly withheld a verdict.
+The response prompt itself demonstrates invalid JSON (`"pass" or "fail"`) and
+the operation appends an additional object-shaped failure-analysis instruction.
+These are verified contract defects; they do not establish the exact syntax of
+the unretained provider responses. Extend BI-801313EB and the existing review
+contract: emit one valid JSON example including required failure analysis, keep
+enum guidance outside it, and remove the duplicate appended instruction. Preserve
+the Build Studio compatibility profile. Add only content-free JSON structure
+counts to invalid-response diagnostics and validate their checkpoint readback.
+Never store source excerpts, arbitrary parser messages or provider text; never
+accept malformed JSON, reset an attempt budget, or infer a semantic pass.
+First-failing tests must cover the complete prompt example and bounded diagnostic
+round-trip, including quoted braces and malformed/untrusted checkpoints. Run the
+graph-linked reviewer, publication and recovery tests before governed release;
+then verify the actual provider result and confirmed recovery on the live install.
