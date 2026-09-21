@@ -784,3 +784,11 @@ shared. Preserve collapsed discovery controls on initial arrival, report page
 counts rather than totals, and show an actionable empty result. No prompt send
 or dispatch is attached to navigation. Source checks and deployed desktop/mobile,
 keyboard, theme and return-context acceptance remain required.
+
+The intentional disclosure and paging structure is measured by successful cloud
+UX sweep 35570886614 against source 6509aecaed0ba2584e82b9f0588334d7b53633d1.
+Re-freeze only `/ea/workrooms` from its emitted baseline under this PR's review:
+arrival text falls from 237 to 162 words; all other numeric axes are unchanged.
+The two existing axe violations remain unresolved, not an accessibility pass.
+No other route baseline or sweep rule changes. The architecture guide now
+documents the same search, paging and return-context behavior.
