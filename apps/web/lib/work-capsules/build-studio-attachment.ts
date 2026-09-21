@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   createWorkCapsule,
   type CapsuleDb,
@@ -132,7 +133,7 @@ export async function attachBuildStudioWorkCapsule(args: {
       const bound = await bindBuildStudioDeliveryShape({ db: args.db, capsuleId: capsule.capsuleId, backlogItem: args.backlogItem });
       shapeNote = bound.bound ? ` Delivery shape ${bound.bound} bound (${bound.reason}).` : ` Unshaped: ${bound.reason}`;
     } catch (err) {
-      shapeNote = ` Unshaped: shape binding failed (${err instanceof Error ? err.message : String(err)}).`;
+      shapeNote = ` Unshaped: shape binding failed (${getErrorMessage(err)}).`;
     }
     await args.db.backlogItemActivity.create({
       data: {
