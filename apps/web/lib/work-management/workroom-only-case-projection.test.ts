@@ -80,13 +80,16 @@ describe("loadWorkroomOnlyCaseDetail", () => {
       summary: "Provider failure recorded", recordedAt: NOW, payload: {},
     }]);
     const db = {
-      ...client(room({ id: "row-1", scopeClaims: [{ workShape: "delivery-small@1.0.0" }] })),
+      ...client(room({ id: "row-1", scopeClaims: [{ workShape: "delivery-small@1.0.0" }],
+        workspaceState: { workroomDrive: { action: "attention", stageKey: "implement",
+          pendingAttention: { stageKey: "implement", principalRef: "role:author" } } } })),
       workroomActivity: { findMany },
       taskRun: { findMany: vi.fn().mockResolvedValue([]) },
     };
     const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH, prismaClient: db,
       sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW });
     expect(detail!.room!.processOverseer.shapeKey).toBe("delivery-small");
+    expect(detail!.summary.attentionReason).toContain("Stage implement is waiting on role:author.");
     expect(detail!.room!.receipts).toEqual(expect.arrayContaining([
       expect.objectContaining({ rawRef: { table: "WorkroomActivity", id: "journal-1" }, status: "observed" }),
     ]));

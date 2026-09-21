@@ -61,6 +61,13 @@ function completeBoundary(): BuildWorkroomViewInput["boundary"] {
 }
 
 describe("Work Room read model", () => {
+  it.each([false, true])("projects a recorded drive wait only for nonterminal work (terminal=%s)", (terminal) => {
+    const room = buildWorkroomView({ caseKey: "booking%3ABK-100", detail: caseDetail({ terminal }),
+      processOverseerObservation: { attentionReason: "Stage design-note is waiting on role:author." } });
+    expect(room.work.attentionRequired).toBe(!terminal);
+    expect(room.work.attentionReason).toBe(terminal ? null : "Stage design-note is waiting on role:author.");
+    expect(room.work.nextAction).toBe(terminal ? "Continue work" : "Stage design-note is waiting on role:author.");
+  });
   it.each(["closed", "cancelled"] as const)("does not reopen a %s room because its current coordinator is missing", (state) => {
     const room = buildWorkroomView({
       caseKey: "booking%3ABK-100",

@@ -110,6 +110,8 @@ describe("workspace Work Case loader", () => {
   it("keeps a selected room's process, evidence and workforce identity together", async () => {
     const db = prismaFor([baseItem]);
     const selected = { id: "room-selected", capsuleId: "WC-SELECTED", status: "ready", title: "Selected reviewer",
+      workspaceState: { workroomDrive: { action: "attention", stageKey: "implement",
+        pendingAttention: { stageKey: "implement", principalRef: "role:author" } } },
       scopeClaims: [{ workShape: "delivery-small@1.0.0", source: "declared" }] };
     const other = { id: "room-other", capsuleId: "WC-OTHER", status: "blocked", title: "Another room" };
     const findRooms = vi.fn(async (args: unknown) =>
@@ -122,6 +124,7 @@ describe("workspace Work Case loader", () => {
       selectedWorkroomId: "WC-SELECTED", userId: "user-1", participantLoader: participants });
     expect(findRooms).toHaveBeenCalledWith(expect.objectContaining({ where: { workItemId: "row-1", capsuleId: "WC-SELECTED" } }));
     expect(detail?.workroomRowId).toBe("room-selected");
+    expect(detail?.summary.attentionReason).toContain("Stage implement is waiting on role:author.");
     expect(participants).toHaveBeenCalledWith(expect.objectContaining({ workroomIds: ["room-selected"] }));
     expect(readJournal).toHaveBeenCalledWith(expect.objectContaining({ where: { workCapsuleId: { in: ["room-selected"] } } }));
     expect(detail?.sourceRefs.some(ref => ref.id === "WC-OTHER")).toBe(false);

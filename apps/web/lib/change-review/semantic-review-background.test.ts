@@ -185,14 +185,34 @@ describe("durable semantic review worker", () => {
     expect(mocks.publish).toHaveBeenCalledWith("room-1", "activity-1");
     expect(transactionCommitted).toBe(true);
   });
-  it("restarts from a completed branch without another provider call", async () => {
-    mocks.db.taskNode.findUnique.mockResolvedValue({ status: "completed", outputSnapshot: { requestDigest: packet.digest, result } });
+  it.each([0, 1])("reuses a completed verdict in recovery generation %i without another provider call", async (generation) => {
+    (row.progressPayload as any).semanticReview.recoveryAttempt = generation;
+    mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) =>
+      where.taskNodeId.endsWith(":recovery-1") ? null : { status: "completed", outputSnapshot: { requestDigest: packet.digest, result } });
     await executePersistedSemanticReview("TR-1");
     expect(providerCalls).toBe(0);
     expect(row.status).toBe("completed");
     expect(mocks.evidence).toHaveBeenCalledOnce();
   });
-  it("retains parse failure diagnostics when resuming a completed branch", async () => {
+  it("replaces a prior inconclusive checkpoint after authorized recovery and retains its diagnostics", async () => {
+    (row.progressPayload as any).semanticReview.recoveryAttempt = 1;
+    const failed = { decision: "inconclusive", issues: [], summary: "Response validation failed.",
+      parseError: true, inconclusiveReason: "unparseable-review-response",
+      parseDiagnostics: [{ agentId: "change-reviewer", stage: "invalid-json" }] };
+    mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) =>
+      where.taskNodeId.endsWith(":recovery-1") ? null : { taskNodeId: where.taskNodeId, status: "completed",
+        outputSnapshot: { requestDigest: packet.digest, result: failed } });
+    await executePersistedSemanticReview("TR-1");
+    expect(providerCalls).toBe(1);
+    expect(row.status).toBe("completed");
+    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      status: "superseded", supersededByNodeId: "node-new", outputSnapshot: expect.objectContaining({
+        result: failed, providerOutcome: "inconclusive", recoveryAttempt: 1,
+      }),
+    }) }));
+  });
+  it.each([0, 1])("retains inconclusive results within the same generation %i without another provider call", async (generation) => {
+    (row.progressPayload as any).semanticReview.recoveryAttempt = generation;
     const failed = { decision: "inconclusive", issues: [], summary: "Response validation failed.",
       parseError: true, inconclusiveReason: "unparseable-review-response",
       parseDiagnostics: [{ agentId: "change-reviewer", stage: "invalid-json" }] };

@@ -26,7 +26,7 @@ import { buildWorkroomView } from "./room-read-model";
 import { loadWorkroomExecutionEvidence, type WorkroomExecutionClient } from "./workroom-execution-evidence";
 import { projectDeclaredBoundary } from "./room-boundary";
 import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
-import { readStoredWorkroomDriveState } from "./workroom-drive-state";
+import { projectStoredWorkroomDriveObservation } from "./workroom-drive-state";
 import { readWorkroomShapeClaim } from "./workroom-shape-claim";
 import { authorizeWorkroomAccess } from "./room-participation";
 import type { WorkspaceWorkCaseDetailView, WorkspaceWorkCaseListItem } from "./workspace-case-loader";
@@ -138,7 +138,6 @@ export async function loadWorkroomOnlyCaseDetail({
 
   const objective = room.objective?.trim() || null;
   const execution = await loadWorkroomExecutionEvidence(prismaClient, [room], now);
-  const drive = readStoredWorkroomDriveState(room.workspaceState);
   detail.summary.sourceRefs.push(...execution.sourceRefs);
   const roomView = buildWorkroomView({
     executionAttentionReason: execution.attentionReason,
@@ -148,11 +147,7 @@ export async function loadWorkroomOnlyCaseDetail({
     scopeClaims: room.scopeClaims,
     shapeKey: readWorkroomShapeClaim(room.scopeClaims),
     activityKind: room.activityKind,
-    processOverseerObservation: {
-      currentStageKey: drive.currentStageKey, proposedStageKey: drive.currentStageKey,
-      receipts: drive.receipts, budgetUsage: drive.budgetUsage,
-      stopConditionHits: drive.stopConditionHits, reviewDue: drive.reviewDue,
-    },
+    processOverseerObservation: projectStoredWorkroomDriveObservation(room.workspaceState),
     boundary: projectDeclaredBoundary({
       claim: boundaryClaim,
       fallbackPurpose: objective,
