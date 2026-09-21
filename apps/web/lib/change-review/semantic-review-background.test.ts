@@ -97,22 +97,22 @@ describe("durable semantic review worker", () => {
     expect(currentInferenceOrigin()).toBe("interactive");
   });
 
-  it("requires the original requester and explicit uncertain-inference confirmation", async () => {
-    row.status = "input-required";
+  it.each(["input-required", "auth-required"])("requires the original requester and explicit confirmation for %s", async (status) => {
+    row.status = status;
     await expect(retryPersistedSemanticReview("TR-1", "other-user", true)).rejects.toThrow("authority");
     await expect(retryPersistedSemanticReview("TR-1", "user-1", false)).rejects.toThrow("confirmation");
     expect(mocks.send).not.toHaveBeenCalled();
   });
-  it("resumes an authorized wait on the same task and persists recovery before enqueue", async () => {
-    row.status = "input-required";
+  it.each(["input-required", "auth-required"])("resumes an authorized %s wait on the same task and persists recovery before enqueue", async (status) => {
+    row.status = status;
     expect(await retryPersistedSemanticReview("TR-1", "user-1", true)).toMatchObject({ newTaskRunId: "TR-1" });
     expect(row.status).toBe("submitted");
     expect(row.progressPayload).toMatchObject({ semanticReview: { recoveryAttempt: 1, generation: null } });
     expect(mocks.activity).toHaveBeenCalledOnce();
     expect(mocks.send).toHaveBeenCalledOnce();
   });
-  it("refuses exhausted recovery and revoked authority without emitting work", async () => {
-    row.status = "input-required";
+  it.each(["input-required", "auth-required"])("refuses exhausted recovery and revoked authority from %s without emitting work", async (status) => {
+    row.status = status;
     (row.progressPayload as any).semanticReview.recoveryAttempt = 3;
     await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("exhausted");
     (row.progressPayload as any).semanticReview.recoveryAttempt = 0;
@@ -120,8 +120,8 @@ describe("durable semantic review worker", () => {
     await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("authority");
     expect(mocks.send).not.toHaveBeenCalled();
   });
-  it("does not create two recovery events for concurrent operator requests", async () => {
-    row.status = "input-required";
+  it.each(["input-required", "auth-required"])("does not create two recovery events for concurrent %s requests", async (status) => {
+    row.status = status;
     const outcomes = await Promise.allSettled([
       retryPersistedSemanticReview("TR-1", "user-1", true),
       retryPersistedSemanticReview("TR-1", "user-1", true),

@@ -16,7 +16,7 @@ import { validateFailureAnalysis } from "./failure-analysis";
 import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
-import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget } from "./semantic-review-recovery-policy";
+import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait } from "./semantic-review-recovery-policy";
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -131,7 +131,7 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   if (!row || !native(row)) return null;
   if (row.userId !== operatorUserId) throw new Error("semantic-review-recovery-authority-denied");
   if (!confirmed) throw new Error("semantic-review-recovery-confirmation-required: replacing uncertain inference can incur another provider charge");
-  if (!["input-required", "stalled"].includes(row.status)) throw new Error("semantic-review-not-awaiting-recovery");
+  if (!isSemanticReviewRecoveryWait(row.status)) throw new Error("semantic-review-not-awaiting-recovery");
   const packet = await requestFor(row);
   if (!packet) throw new Error("semantic-review-request-unavailable");
   const previousAttempt = state(row).recoveryAttempt ?? 0;
@@ -151,7 +151,7 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
     const capsule = await tx.workroom.findUnique({ where: { capsuleId: packet.input.identity.capsuleId }, select: { id: true } });
     if (!capsule) throw new Error("semantic-review-workroom-missing");
     const activity = await recordWorkCapsuleEvidence({ db: tx, capsuleId: packet.input.identity.capsuleId,
-      evidence: { kind: "note", summary: `Authorized reviewer recovery ${attempt}; previous provider outcome remains unknown.`,
+      evidence: { kind: "note", summary: `Authorized reviewer recovery ${attempt}; previous execution evidence retained.`,
         targetId: taskRunId, result: { recoveryAttempt: attempt, requestDigest: packet.digest, deadlineAt: packet.deadlineAt } },
       actor: { userId: operatorUserId, agentId: null, principalId: null }, deferPublication: true });
     return { capsuleId: capsule.id, activityId: activity.id };

@@ -1,6 +1,7 @@
 import type { AuditClass } from "@/lib/audit-classes";
 import { slugify } from "@/lib/shared/slugify";
 import { isRecord } from "@/lib/shared/coerce";
+import { isSemanticReviewRecoveryWait } from "@/lib/change-review/semantic-review-recovery-policy";
 import type { TaskState } from "@/lib/tak/task-states";
 import { SOFTWARE_PLATFORM_MAP_TEMPLATE } from "./templates";
 import { classifyRunStatus } from "./operations-run-read-model";
@@ -225,7 +226,7 @@ export function projectTaskRun(
 
   return {
     id: `task-run:${row.id}`,
-    recovery: nativeReview && ["input-required", "stalled"].includes(row.status)
+    recovery: nativeReview && isSemanticReviewRecoveryWait(row.status)
       ? "semantic-review" : row.status === "stalled" ? "stalled" : undefined,
     reviewBudget: nativeReview ? {
       deadlineAt: typeof budget?.deadlineAt === "string" ? budget.deadlineAt : null,
@@ -240,7 +241,9 @@ export function projectTaskRun(
     },
     severity: severityForTaskRunStatus(row.status),
     label,
-    summary: `${row.title} (${row.status})`,
+    summary: `${row.title} (${row.status})${nativeReview && row.status === "auth-required"
+      ? ". The original requester must inspect the submitting authority before recovery. Signing in again does not replace this request's saved credentials; the server rechecks their validity and grants."
+      : ""}`,
     refs: {
       taskRunId: row.taskRunId,
     },
