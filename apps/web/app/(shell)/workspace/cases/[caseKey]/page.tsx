@@ -61,7 +61,7 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
   // the loader, which is at its module-size ceiling and should not grow.
   const detailOrRoom =
     detail ??
-    (await loadRoomOnlyCase(caseKey));
+    (await loadRoomOnlyCase(caseKey, effectiveAuth));
   if (!detailOrRoom) notFound();
 
   // The room's accountable human and its named workers, loaded here rather than
@@ -106,7 +106,9 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
 }
 
 /** The case for a Workroom addressed by capsule id that anchors no WorkItem. */
-async function loadRoomOnlyCase(caseKey: string) {
+async function loadRoomOnlyCase(caseKey: string, authContext: {
+  principalId: string | null; sensitivityClearance: readonly string[]; isSuperuser: boolean;
+}) {
   const ref = decodeWorkCaseKey(caseKey);
   if (ref?.sourceType !== "work-capsule") return null;
   return loadWorkroomOnlyCaseDetail({
@@ -114,5 +116,6 @@ async function loadRoomOnlyCase(caseKey: string) {
     sourceId: ref.sourceId,
     caseKey,
     now: new Date(),
+    authContext,
   });
 }

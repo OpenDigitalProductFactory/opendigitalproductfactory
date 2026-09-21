@@ -23,16 +23,30 @@
 import { buildWorkCaseDetail } from "./case-read-model";
 import { encodeWorkCaseKey } from "./case-key";
 import { buildWorkroomView } from "./room-read-model";
+import { loadWorkroomExecutionEvidence, type WorkroomExecutionClient } from "./workroom-execution-evidence";
+import { projectDeclaredBoundary } from "./room-boundary";
+import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
+import { readStoredWorkroomDriveState } from "./workroom-drive-state";
+import { readWorkroomShapeClaim } from "./workroom-shape-claim";
+import { authorizeWorkroomAccess } from "./room-participation";
 import type { WorkspaceWorkCaseDetailView, WorkspaceWorkCaseListItem } from "./workspace-case-loader";
 
 /** The capsule fields this projection reads. */
 export type WorkroomOnlyRecord = {
+  id?: string;
   capsuleId: string;
   title: string;
   status: string;
   objective?: string | null;
   workItemId?: string | null;
   updatedAt?: Date | string | null;
+  scopeClaims?: unknown;
+  workspaceState?: unknown;
+  activityKind?: string | null;
+  createdByPrincipal?: { principalId: string } | null;
+  leaseHolderPrincipal?: { principalId: string } | null;
+  requestedByPrincipal?: { principalId: string } | null;
+  participants?: { principal: { principalId: string } }[];
 };
 
 export type WorkroomOnlyPrismaClient = {
@@ -42,7 +56,7 @@ export type WorkroomOnlyPrismaClient = {
    * throwing. Same guard `canonical-case-key.ts` applies.
    */
   workroom: { findFirst?(args: unknown): Promise<WorkroomOnlyRecord | null> };
-};
+} & WorkroomExecutionClient;
 
 const SOURCE_TYPE = "work-capsule";
 
@@ -58,28 +72,54 @@ export async function loadWorkroomOnlyCaseDetail({
   sourceId,
   caseKey,
   now,
+  authContext,
 }: {
   prismaClient: WorkroomOnlyPrismaClient;
   sourceId: string;
   caseKey: string;
   now: Date;
+  authContext?: { principalId: string | null; sensitivityClearance: readonly string[]; isSuperuser: boolean };
 }): Promise<WorkspaceWorkCaseDetailView | null> {
+  if (!authContext) return null;
   if (!prismaClient.workroom?.findFirst) return null;
   const room = await prismaClient.workroom.findFirst({
     where: { capsuleId: sourceId },
     select: {
+      id: true,
       capsuleId: true,
       title: true,
       status: true,
       objective: true,
       workItemId: true,
       updatedAt: true,
+      scopeClaims: true,
+      workspaceState: true,
+      activityKind: true,
+      createdByPrincipal: { select: { principalId: true } },
+      leaseHolderPrincipal: { select: { principalId: true } },
+      requestedByPrincipal: { select: { principalId: true } },
+      participants: {
+        where: { lifecycle: "active", principal: { principalId: authContext.principalId ?? "" } },
+        select: { principal: { select: { principalId: true } } },
+        take: 1,
+      },
     },
   });
   if (!room) return null;
   // An anchored room's case is its WorkItem's. Resolving it here as well would
   // give one unit of work two cases.
   if (room.workItemId) return null;
+  const boundaryClaim = readWorkroomBoundaryClaim(room.scopeClaims);
+  const admission = authorizeWorkroomAccess({
+    requested: "content", principalRef: authContext.principalId,
+    assignedPrincipalRefs: [room.createdByPrincipal, room.leaseHolderPrincipal, room.requestedByPrincipal,
+      ...(room.participants ?? []).map(entry => entry.principal)]
+      .flatMap(principal => principal ? [principal.principalId] : []),
+    sensitivityCeiling: boundaryClaim?.sensitivityCeiling ?? "internal",
+    sensitivityClearance: authContext.sensitivityClearance,
+    isSuperuser: authContext.isSuperuser,
+  });
+  if (admission.level !== "content") return null;
 
   const source = { sourceType: SOURCE_TYPE, sourceId: room.capsuleId, status: room.status };
   const detail = buildWorkCaseDetail({
@@ -97,19 +137,30 @@ export async function loadWorkroomOnlyCaseDetail({
   };
 
   const objective = room.objective?.trim() || null;
+  const execution = await loadWorkroomExecutionEvidence(prismaClient, [room], now);
+  const drive = readStoredWorkroomDriveState(room.workspaceState);
+  detail.summary.sourceRefs.push(...execution.sourceRefs);
   const roomView = buildWorkroomView({
     caseKey,
     detail: titledDetail,
-    boundary: {
-      // The room's own objective is its purpose. Where none was recorded the
-      // boundary says so rather than restating the title as if it were intent.
-      purpose: objective ?? "No objective was recorded for this Workroom.",
-      outcome: objective ?? "No objective was recorded for this Workroom.",
-      scopeIncluded: [room.title],
-      sourceRefs: detail.summary.sourceRefs,
+    sourceHealth: execution.partial ? "partial" : "ok",
+    scopeClaims: room.scopeClaims,
+    shapeKey: readWorkroomShapeClaim(room.scopeClaims),
+    activityKind: room.activityKind,
+    processOverseerObservation: {
+      currentStageKey: drive.currentStageKey, proposedStageKey: drive.currentStageKey,
+      receipts: drive.receipts, budgetUsage: drive.budgetUsage,
+      stopConditionHits: drive.stopConditionHits, reviewDue: drive.reviewDue,
     },
+    boundary: projectDeclaredBoundary({
+      claim: boundaryClaim,
+      fallbackPurpose: objective,
+      fallbackOutcome: objective,
+      sourceRefs: detail.summary.sourceRefs,
+    }),
     participants: [],
-    activities: [],
+    activities: execution.activities,
+    receipts: execution.receipts,
     context: {
       refs: detail.summary.sourceRefs,
       digest: objective,
@@ -117,6 +168,11 @@ export async function loadWorkroomOnlyCaseDetail({
     },
     now,
   });
+  if (execution.attentionReason) {
+    roomView.work.attentionRequired = true;
+    roomView.work.attentionReason = execution.attentionReason;
+    roomView.work.nextAction = "Inspect Observed execution for the reviewer status and required action.";
+  }
 
   // The list-item fields the detail summary does not carry are stated, not
   // guessed: this projection knows the room's status and nothing about urgency,
@@ -127,8 +183,8 @@ export async function loadWorkroomOnlyCaseDetail({
     urgencyLabel: "Not recorded",
     effortLabel: "Not recorded",
     assignmentLabel: "Not recorded",
-    attentionRequired: room.status === "blocked",
-    attentionReason: room.status === "blocked" ? "This Workroom is blocked." : null,
+    attentionRequired: Boolean(execution.attentionReason) || room.status === "blocked",
+    attentionReason: execution.attentionReason ?? (room.status === "blocked" ? "This Workroom is blocked." : null),
     description: objective,
     dueAt: detail.summary.dueAt ?? null,
   };

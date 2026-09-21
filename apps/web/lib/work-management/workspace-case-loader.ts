@@ -5,7 +5,8 @@ import type {
   WorkCaseTimelineEvent,
 } from "./case-types";
 import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
-import { loadSemanticReviewRoomProjection, type ReviewerRoomClient } from "./semantic-review-room-projection";
+import type { ReviewerRoomClient } from "./semantic-review-room-projection";
+import { loadWorkroomExecutionEvidence } from "./workroom-execution-evidence";
 import {
   buildWorkCaseDetail,
   buildWorkCaseSummary,
@@ -30,9 +31,8 @@ import { readWorkroomPostureClaim } from "./workroom-posture-claim";
 import { readStoredWorkroomDriveState } from "./workroom-drive-state";
 import { deriveWorkroomShape } from "./derive-workroom-shape";
 import type { WorkroomParticipantView, WorkroomView } from "./room-types";
-import { roomActivitiesFromCapsuleActivity } from "./room-activity";
 import { getWorkCaseSourceEntry } from "./source-registry";
-import { fromWorkItemMessage, fromWorkCapsuleActivity, type WorkCapsuleActivityRow } from "./receipt-envelope";
+import { fromWorkItemMessage, type WorkCapsuleActivityRow } from "./receipt-envelope";
 import {
   authorizeWorkspaceRoomItem,
   readWorkspaceRoomPolicy,
@@ -607,21 +607,7 @@ export async function loadWorkspaceWorkCaseDetail({
     policyParticipants: roomPolicy.participants ?? [],
     workroomIds: capsules.map((capsule) => capsule.id).filter((id): id is string => Boolean(id)),
   }) ?? Promise.resolve([]));
-  // BI-1CF7B600: the capsule's own execution journal (WorkroomActivity rows) so a
-  // capsule-sourced room shows its activity instead of "No activity yet". Keyed on the
-  // capsule row ids just fetched — one bounded query, newest first.
-  const capsuleRowIds = capsules.map((capsule) => capsule.id).filter((id): id is string => Boolean(id));
-  const capsuleActivityRows = capsuleRowIds.length
-    ? await prismaClient.workroomActivity.findMany({
-        where: { workCapsuleId: { in: capsuleRowIds } },
-        orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
-        take: 21,
-      })
-    : [];
-  const capsuleIdByRowId = new Map<string, string>();
-  for (const capsule of capsules) {
-    if (capsule.id) capsuleIdByRowId.set(capsule.id, capsule.capsuleId);
-  }
+  const execution = await loadWorkroomExecutionEvidence(prismaClient, capsules, now);
   const source = sourceForItem(item);
   const evidence = [
     ...evidenceFromWorkItem(item),
@@ -646,8 +632,7 @@ export async function loadWorkspaceWorkCaseDetail({
     evidence,
   });
   const sourceRefs = detail.summary.sourceRefs;
-  const reviewerRuns = await loadSemanticReviewRoomProjection(prismaClient, capsules.map((capsule) => capsule.capsuleId), now);
-  sourceRefs.push(...reviewerRuns.sourceRefs);
+  sourceRefs.push(...execution.sourceRefs);
   const cycleCandidates = projectWorkItemCycleCarriers({
     items: item.childItems ?? [],
     messages,
@@ -692,7 +677,7 @@ export async function loadWorkspaceWorkCaseDetail({
 
   const room = buildWorkroomView({
     caseKey: resolvedCaseKey,
-    sourceHealth: capsuleActivityRows.length > 20 || reviewerRuns.partial ? "partial" : undefined,
+    sourceHealth: execution.partial ? "partial" : undefined,
     detail,
     structure,
     postureContext: postureContext ? { ...postureContext, editable: editablePosture } : null,
@@ -731,17 +716,15 @@ export async function loadWorkspaceWorkCaseDetail({
     }),
     activities: [
       ...roomActivitiesFromMessages(item, messages),
-      ...roomActivitiesFromCapsuleActivity(capsuleActivityRows, capsuleIdByRowId),
+      ...execution.activities,
     ].sort((a, b) => new Date(b.occurredAt ?? 0).getTime() - new Date(a.occurredAt ?? 0).getTime()),
     currentCycle,
     completedCycles,
     cycleProjectionError,
     outcomePacket: storedPackets[0] ?? null,
     receipts: [
-      ...reviewerRuns.receipts,
+      ...execution.receipts,
       ...roomReceiptsFromMessages(item, messages),
-      ...capsuleActivityRows.filter((row) => ["evidence-recorded", "verification", "receipt"].includes(row.kind))
-        .map((row) => fromWorkCapsuleActivity(row, { capsuleId: capsuleIdByRowId.get(row.workCapsuleId) })),
     ],
     participants,
     context: {
@@ -751,9 +734,9 @@ export async function loadWorkspaceWorkCaseDetail({
     },
   });
 
-  if (reviewerRuns.attentionReason) {
+  if (execution.attentionReason) {
     room.work.attentionRequired = true;
-    room.work.attentionReason = [reviewerRuns.attentionReason, room.work.attentionReason].filter(Boolean).join(" · ");
+    room.work.attentionReason = [execution.attentionReason, room.work.attentionReason].filter(Boolean).join(" · ");
     room.work.nextAction = "Inspect Observed execution for the reviewer status and required action.";
   }
   return {
