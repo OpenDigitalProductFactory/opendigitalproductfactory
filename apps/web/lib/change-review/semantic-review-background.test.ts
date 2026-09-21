@@ -78,6 +78,39 @@ beforeEach(() => {
 });
 
 describe("durable semantic review worker", () => {
+  it("does not retain arbitrary error names, codes or messages in failure evidence", async () => {
+    mocks.db.taskNode.findUnique.mockRejectedValueOnce(Object.assign(new Error("private content"), {
+      name: "private name", code: "private code",
+    }));
+    await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("private content");
+    expect(row.progressPayload).toMatchObject({ semanticReview: { branchFailure: {
+      errorKind: "unclassified", errorCode: null,
+    } } });
+    expect(JSON.stringify(row)).not.toContain("private");
+    expect(providerCalls).toBe(0);
+  });
+
+  it.each(["checkpoint-read", "provider-call", "checkpoint-write"])("retains safe %s failure context without retrying", async phase => {
+    const error = Object.assign(new Error("private credential and source"), { code: "P2028" });
+    if (phase === "checkpoint-read") mocks.db.taskNode.findUnique.mockRejectedValueOnce(error);
+    if (phase === "checkpoint-write") mocks.db.taskNode.update.mockRejectedValueOnce(error);
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
+      try { return await branch("change-reviewer", async () => {
+        providerCalls++;
+        if (phase === "provider-call") throw error;
+        return result;
+      }); } catch { return { decision: "inconclusive", issues: [], summary: "Unknown outcome." }; }
+    });
+    await executePersistedSemanticReview("TR-1");
+    expect(row.status).toBe("input-required");
+    expect(row.progressPayload).toMatchObject({ semanticReview: { branchFailure: {
+      agentId: "change-reviewer", phase, errorKind: "Error", errorCode: "P2028",
+    } } });
+    expect(JSON.stringify(row)).not.toContain("private");
+    expect(providerCalls).toBe(phase === "checkpoint-read" ? 0 : 1);
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+
   it("propagates autonomous inference origin through concurrent reviewer branches without leaking it", async () => {
     const origins: string[] = [];
     mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {

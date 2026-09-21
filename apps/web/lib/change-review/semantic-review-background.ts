@@ -81,8 +81,19 @@ async function requestFor(row: Run): Promise<SemanticReviewRequest | null> {
     && packet.input.identity.capsuleId === metadata.capsuleId && packet.digest === state(row).requestDigest ? packet : null;
 }
 
+type BranchPhase = "checkpoint-read" | "provider-call" | "checkpoint-write";
+function safeBranchFailure(error: unknown, agentId: string, phase: BranchPhase) {
+  const record = object(error);
+  const name = error instanceof Error ? error.name : null;
+  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError"];
+  const knownCodes = ["P2002", "P2024", "P2028", "P2034", "ETIMEDOUT", "ECONNRESET"];
+  return { agentId, phase, errorKind: name && knownKinds.includes(name) ? name : "unclassified",
+    errorCode: typeof record.code === "string" && knownCodes.includes(record.code) ? record.code : null };
+}
+
 async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generation: string,
-  agentId: string, execute: () => Promise<SemanticReviewResult>): Promise<SemanticReviewResult> {
+  agentId: string, execute: () => Promise<SemanticReviewResult>,
+  onPhase: (phase: BranchPhase) => void): Promise<SemanticReviewResult> {
   const recoveryAttempt = state(row).recoveryAttempt ?? 0;
   if (typeof recoveryAttempt !== "number" || !Number.isSafeInteger(recoveryAttempt) || recoveryAttempt < 0 || recoveryAttempt > MAX_DISPATCH_ATTEMPTS) {
     throw new Error("semantic-review-recovery-counter-invalid");
@@ -121,7 +132,9 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   if (prior) return prior;
   // A running node is durable before the provider call. If the process dies,
   // reconciliation exposes uncertainty instead of silently repeating the call.
+  onPhase("provider-call");
   const result = await execute();
+  onPhase("checkpoint-write");
   await prisma.$transaction(async (tx) => {
     await assertFence(tx, row.taskRunId, generation);
     await tx.taskNode.update({ where: { taskNodeId }, data: { status: "completed", completedAt: new Date(),
@@ -199,11 +212,13 @@ export async function executePersistedSemanticReview(taskRunId: string) {
   return withHeartbeatTicker(taskRunId, async () => {
     const outcome = await withInferenceOrigin("autonomous", () => runSemanticChangeReview(packet.input, { dispatch: (prompt, context) =>
       dispatchRoutedSemanticReview(prompt, context, async (agentId, execute) => {
-        try { return await checkpointBranch(row, packet, generation, agentId, execute); }
+        let phase: BranchPhase = "checkpoint-read";
+        try { return await checkpointBranch(row, packet, generation, agentId, execute, value => { phase = value; }); }
         catch (error) {
           await prisma.taskRun.updateMany({ where: fence(taskRunId, generation),
             data: { status: "input-required", progressPayload: progress(row, { state: "input-required", generation,
-              reason: "provider-outcome-uncertain", action: "Reconcile the recorded branch before authorizing recovery." }) } });
+              reason: "provider-outcome-uncertain", branchFailure: safeBranchFailure(error, agentId, phase),
+              action: "Reconcile the recorded branch before authorizing recovery." }) } });
           throw error;
         }
       }) }));

@@ -24,6 +24,38 @@ const identity = (overrides: Partial<SemanticReviewIdentity> = {}): SemanticRevi
 });
 
 describe("semantic review receipt freshness", () => {
+  it("reports content-free structure for malformed responses without accepting them", () => {
+    const raw = '{"summary":"private } { \\\" content"}{"summary":"private"}';
+    const result = parseSemanticReviewResponse(raw);
+    expect(result.decision).toBe("inconclusive");
+    expect(result.parseDiagnostics?.[0]).toMatchObject({ stage: "invalid-json", structure: {
+      characters: raw.length, completedObjects: 2, openDepth: 0, unterminatedString: false, scanTruncated: false,
+    } });
+    expect(JSON.stringify(result)).not.toContain("private");
+    expect(restoreSemanticReviewCheckpoint(result, "change-reviewer").parseDiagnostics)
+      .toEqual(result.parseDiagnostics?.map(d => ({ ...d, agentId: "change-reviewer" })));
+  });
+
+  it("bounds structural scanning and rejects untrusted checkpoint counts", () => {
+    const result = parseSemanticReviewResponse('{"summary":"' + "x".repeat(1_000_010));
+    expect(result.parseDiagnostics?.[0]).toMatchObject({ stage: "missing-json", structure: {
+      characters: 1_000_000, scanTruncated: true, openDepth: 1, unterminatedString: true,
+    } });
+    const forged = { ...result, parseDiagnostics: [{ stage: "invalid-json",
+      structure: { characters: -1, completedObjects: 0, openDepth: 0, unterminatedString: false, scanTruncated: false } }] };
+    expect(restoreSemanticReviewCheckpoint(forged, "change-reviewer").parseDiagnostics).toBeUndefined();
+  });
+
+  it("provides one valid JSON response example including the required failure challenge", () => {
+    const prompt = buildSemanticChangeReviewPrompt({ title: "Review", artifact: "diff",
+      verificationEvidence: "Test evidence", requireFailureAnalysis: true });
+    const example = prompt.split("RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):\n")[1];
+    expect(JSON.parse(example)).toMatchObject({ decision: "pass", issues: [],
+      failureAnalysisReview: { adequate: true, rationale: expect.any(String) } });
+    expect(prompt).not.toContain("Also return");
+    expect(prompt).toContain('"cannot-verify"');
+  });
+
   it.each([
     ["private prose", "missing-json"],
     ['{"summary":"private",}', "invalid-json"],

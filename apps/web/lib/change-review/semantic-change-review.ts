@@ -41,6 +41,7 @@ export interface SemanticReviewParseDiagnostic {
   agentId?: string;
   stage: "missing-json" | "invalid-json" | "schema-mismatch";
   violations?: Array<{ field: string; code: string }>;
+  structure?: z.infer<typeof responseStructureSchema>;
 }
 
 export interface SemanticReviewIdentity {
@@ -171,6 +172,7 @@ export function buildSemanticChangeReviewPrompt(input: {
   verificationEvidence: string;
   /** Keeps the pre-existing Build Studio prompt byte-for-byte compatible. */
   promptProfile?: "surface-neutral" | "build-studio-v1";
+  requireFailureAnalysis?: boolean;
 }): string {
   const buildStudio = input.promptProfile === "build-studio-v1";
   const introduction = buildStudio
@@ -178,6 +180,17 @@ export function buildSemanticChangeReviewPrompt(input: {
     : "You are reviewing a semantic code change produced by an authoring surface.";
   const titleLabel = buildStudio ? "TASK" : "CHANGE";
   const evidenceLabel = buildStudio ? "TEST OUTPUT" : "VERIFICATION EVIDENCE";
+  const responseContract = buildStudio ? `{
+  "decision": "pass" or "fail" or "cannot-verify",
+  "issues": [{"severity": "critical|important|minor", "description": "..."}],
+  "summary": "one sentence summary"
+}` : JSON.stringify({
+    decision: "pass", issues: [], summary: "Replace with your review summary.",
+    ...(input.requireFailureAnalysis ? { failureAnalysisReview: {
+      adequate: true, rationale: "Replace with the omission challenge and evidence supporting recovery readiness.",
+    } } : {}),
+  }, null, 2);
+  const responseGuidance = buildStudio ? "" : `Choose decision \"pass\", \"fail\" or \"cannot-verify\" from the evidence. For findings, issues contains objects with severity (\"critical\", \"important\" or \"minor\") and description. The example values are placeholders, not a verdict.${input.requireFailureAnalysis ? " Include failureAnalysisReview in the same object. Set adequate to your assessment; explain the omission challenge and why final-change evidence supports recovery readiness. A bare assurance is insufficient." : ""}\n\n`;
 
   return `${introduction}
 
@@ -202,12 +215,8 @@ CANNOT VERIFY: if the change described above is not actually present in what you
 
 DECISION DISCIPLINE: report the genuine BLOCKING issues in a single response — be comprehensive about real blockers so there are no surprises on re-review, but do NOT pad the list with nice-to-haves. Reserve "critical" for issues that would cause data loss, security holes, or broken functionality; "important"/"minor" do not block. If the change is correct and tested at a level appropriate to its scope, return "pass". A short, converging review beats an exhaustive one.
 
-RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
-{
-  "decision": "pass" or "fail" or "cannot-verify",
-  "issues": [{"severity": "critical|important|minor", "description": "..."}],
-  "summary": "one sentence summary"
-}`;
+${responseGuidance}RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
+${responseContract}`;
 }
 
 /**
@@ -242,13 +251,13 @@ const reviewerResponseSchema = z.object({
 
 export function parseSemanticReviewResponse(raw: string): SemanticReviewResult {
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return unparseableReview({ stage: "missing-json" });
+  if (!jsonMatch) return unparseableReview({ stage: "missing-json", structure: responseStructure(raw) });
   let value: unknown;
   try {
     value = JSON.parse(jsonMatch[0]);
   } catch {
     // JSON parser messages can quote source or credentials. Never retain them.
-    return unparseableReview({ stage: "invalid-json" });
+    return unparseableReview({ stage: "invalid-json", structure: responseStructure(raw) });
   }
   const validation = reviewerResponseSchema.safeParse(value);
   if (!validation.success) {
@@ -294,6 +303,32 @@ const REVIEW_RESPONSE_FIELDS = new Set([
   "summary", "failureAnalysisReview", "adequate", "rationale",
 ]);
 
+const STRUCTURE_SCAN_LIMIT = 1_000_000;
+const boundedCount = z.number().int().min(0).max(STRUCTURE_SCAN_LIMIT);
+const responseStructureSchema = z.object({
+  characters: boundedCount, completedObjects: boundedCount, openDepth: boundedCount,
+  unterminatedString: z.boolean(), scanTruncated: z.boolean(),
+}).strict();
+
+/** Diagnostic counts only: never source excerpts, parser messages or JSON repair. */
+function responseStructure(raw: string): z.infer<typeof responseStructureSchema> {
+  const characters = Math.min(raw.length, STRUCTURE_SCAN_LIMIT);
+  let openDepth = 0, completedObjects = 0;
+  let quoted = false, escaped = false;
+  for (let i = 0; i < characters; i++) {
+    const char = raw[i];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (char === "{") openDepth++;
+    else if (char === "}" && openDepth > 0 && --openDepth === 0) completedObjects++;
+  }
+  return { characters, completedObjects, openDepth, unterminatedString: quoted,
+    scanTruncated: raw.length > characters };
+}
+
 /** A persisted normalized result is not a new provider response. Validate the
  * common review fields, then restore only bounded, content-free diagnostics. */
 export function restoreSemanticReviewCheckpoint(value: unknown, agentId: string): SemanticReviewResult {
@@ -303,6 +338,7 @@ export function restoreSemanticReviewCheckpoint(value: unknown, agentId: string)
     parseError: z.literal(true),
     parseDiagnostics: z.array(z.object({
       stage: z.enum(["missing-json", "invalid-json", "schema-mismatch"]),
+      structure: responseStructureSchema.optional(),
       violations: z.array(z.object({
         field: z.string().max(80).refine(field => field === "response" || field.split(".").every(part => REVIEW_RESPONSE_FIELDS.has(part))),
         code: z.enum(z.ZodIssueCode),
