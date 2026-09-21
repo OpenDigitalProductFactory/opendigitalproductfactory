@@ -10,6 +10,14 @@ const run = (status: string): ReviewerRunSnapshot => ({
 });
 
 describe("reviewer state in its Workroom", () => {
+  it("reads the requester's recorded profile name while retaining stable identity", async () => {
+    const findMany = vi.fn(async () => [{ ...run("input-required"), user: { employeeProfile: { displayName: "Alex" } } }]);
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany } }, ["WC-1"], now);
+    expect(view.runs[0]).toMatchObject({ requesterName: "Alex", requesterId: "requester-1" });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({
+      user: { select: { employeeProfile: { select: { displayName: true } } } },
+    }) }));
+  });
   it("preserves the next action recorded by review settlement", async () => {
     const row = run("input-required");
     row.progressPayload = { semanticReview: { nextAction: "retry-review" } };

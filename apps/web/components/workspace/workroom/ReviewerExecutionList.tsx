@@ -2,6 +2,8 @@
 
 import { ButtonLink } from "@/components/ui/Button";
 import { StalledTaskRecoveryActions } from "@/components/platform/StalledTaskRecoveryActions";
+import { useSemanticReviewRecoveryBudget } from "@/components/platform/useSemanticReviewRecoveryBudget";
+import { semanticReviewActionLabel, semanticReviewReasonLabel, semanticReviewRecoveryPresentation } from "@/lib/change-review/semantic-review-presentation";
 import type { ReviewerExecutionObservation } from "@/lib/work-management/semantic-review-room-projection";
 
 /** Same task facts and recovery action as Operations Map, scoped to this room. */
@@ -10,14 +12,21 @@ export function ReviewerExecutionList({ runs }: { runs: readonly ReviewerExecuti
   return <section aria-label="Reviewer executions" className="space-y-2">
     <h4 className="font-medium">Reviewer executions</h4>
     <p>Recorded task state does not verify the Workroom outcome.</p>
-    <ul className="space-y-2">{runs.map(run => <li key={run.taskRunId}>
+    <ul className="space-y-2">{runs.map(run => <ReviewerExecutionItem key={run.taskRunId} run={run} />)}</ul>
+  </section>;
+}
+
+function ReviewerExecutionItem({ run }: { run: ReviewerExecutionObservation }) {
+  const { budgetState } = useSemanticReviewRecoveryBudget(run.budget, run.recoveryWait);
+  const next = run.recoveryWait ? semanticReviewRecoveryPresentation(budgetState).nextAction : semanticReviewActionLabel(run.nextAction);
+  return <li>
       <details className="rounded border border-[var(--dpf-border)] p-3">
         <summary className="min-h-11 cursor-pointer break-words py-2">{run.taskRunId} · {run.status}</summary>
         <dl className="grid gap-3 break-words sm:grid-cols-2">
           <div><dt className="font-medium">Where are we?</dt><dd>Recorded {run.status}. Heartbeat {run.heartbeat}: {run.lastHeartbeatAt ?? "unknown"}. Read at {run.readAt}.</dd></div>
-          <div><dt className="font-medium">Why are we here?</dt><dd>{run.reason ?? "No reason recorded."}</dd></div>
-          <div><dt className="font-medium">What can happen next?</dt><dd>{run.nextAction}</dd></div>
-          <div><dt className="font-medium">Who owns the action?</dt><dd>{run.recoveryWait ? "Requester" : "Request owner"}: {run.requesterId ?? "unknown"}. The server owns dispatch.</dd></div>
+          <div><dt className="font-medium">Why are we here?</dt><dd>{semanticReviewReasonLabel(run.reason)}</dd></div>
+          <div><dt className="font-medium">What can happen next?</dt><dd aria-live="polite" aria-atomic="true">{next}</dd></div>
+          <div><dt className="font-medium">Who owns the action?</dt><dd>{run.recoveryWait ? "Requester" : "Request owner"}: {run.requesterName ?? run.requesterId ?? "unknown"}. The server owns dispatch.</dd></div>
           <div><dt className="font-medium">What evidence supports this?</dt><dd>
             <p>TaskRun:{run.recordId}</p>
             <ButtonLink variant="ghost" className="min-h-11" href={`/api/internal/tasks/${encodeURIComponent(run.taskRunId)}`}>Request history</ButtonLink>
@@ -33,6 +42,5 @@ export function ReviewerExecutionList({ runs }: { runs: readonly ReviewerExecuti
         </div> : <p className="mt-3">No checkpoint observations available.</p>}
         {run.recoveryWait ? <StalledTaskRecoveryActions taskRunId={run.taskRunId} phase={null} nativeReview reviewBudget={run.budget} /> : null}
       </details>
-    </li>)}</ul>
-  </section>;
+    </li>;
 }

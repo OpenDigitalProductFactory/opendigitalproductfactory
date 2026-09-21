@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 
 import { EaTabNav } from "@/components/ea/EaTabNav";
+import { WorkroomCoordinationContext } from "@/components/ea/WorkroomCoordinationContext";
 import { Surface } from "@/components/ui/Surface";
 import { EmptyState, FilterBar, StatCard, StatusBadge } from "@/components/ui/report-kit";
 import { WORK_CAPSULE_STATUSES } from "@/lib/work-capsules";
@@ -128,6 +129,8 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
                 <p className="text-xs text-[var(--dpf-muted)]">{definitions.find((definition) => definition.id === room.teamId)?.name ?? "No value stream linked"}</p>
                 <p className="text-xs text-[var(--dpf-muted)]">{room.roomId}</p>
                 {room.waitReason ? <p className="mt-1 text-sm text-[var(--dpf-text)]">{room.waitReason}</p> : null}
+                <WorkroomCoordinationContext accountability={room.accountability} accountableName={room.accountableName}
+                  relationships={room.relationships} partial={coordination.contextPartial} />
               </div>
               <StatusBadge domain="workroom" status={room.status} size="md" uppercase={false} />
             </li>)}

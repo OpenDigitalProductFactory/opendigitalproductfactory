@@ -835,3 +835,69 @@ instead of falling back. Keep explicit room/nearest-ancestor assignments and
 ordinary organization fallback intact. Share these facts between the drive and
 room workforce reader; change no authority or relationship writes. Reproduce both
 counterexamples and test overrides, complete lineage, cycles and dependencies.
+
+### Coordination ownership and relationships
+
+Extend the existing Coordination list under BI-06AE6833 and BI-9DC43E17 with
+recorded accountable ownership and bounded WorkroomRelation observations.
+DI-2CB67542C613 selects shared-coordination-context over opening every room
+individually, with high-confidence proceed. Use one batched ancestor/participant
+read and the existing human-accountability resolver; share that reader with the
+single-room drive path. Assignment never substitutes for accountability.
+
+Disclose parent, child and dependency links within each existing row, preserving
+operation/search/status/page context. Render missing readers, failed queries and
+truncated relationships explicitly. Do not infer blocking from an edge alone or
+call recorded containment successful delegation. Reuse native disclosures,
+theme tokens and canonical case identity. Test shared ancestors, query bounds,
+unknown ownership, dependency direction and navigation context before release.
+At least one fifth of this batch consolidates ancestry/accountability reads.
+
+### External requester's native recovery adapter
+
+BI-801313EB already requires durable resume without the original client. Current
+main exposes retryPersistedSemanticReview only through the portal session action;
+the MCP change-review pack can admit a request but cannot submit its confirmed
+recovery. A virtual surface requires a separate governed coworker context and is
+not an alternate grant. Extend the existing change-review pack with a thin
+retry_semantic_review adapter to the same recovery function. Bind identity from
+the authenticated user, never a payload user ID; require explicit confirmation
+of replacement inference cost. Keep current tool grants, original requester,
+saved authority, deadline, attempts, quiescence and concurrent-generation fences.
+No new execution, ledger, retry policy or privilege is introduced. Test missing
+confirmation, another requester, expired/revoked authority, non-native tasks and
+successful forwarding. A denied call remains denied and is not accepted evidence.
+
+Deployed inspection on c6e5718 found that an expired review still answers
+"retry-review" under its next-action question, contradicting the disabled Resume
+control. Share the recovery budget clock and presentation between that answer
+and the action control. Test expiration during an open page, exhausted and unknown
+budgets. Preserve raw recorded actions in request history; describe permitted
+recovery in plain language. Read the requester's existing employee display name
+when present, retaining the user identity and an explicit unknown-name fallback.
+Translate known reason codes without inferring a provider failure cause.
+
+The reviewed `/ea/workrooms` route measurement from workflow 35580754120
+adds only the collapsed owner/link disclosure to its accessibility structure.
+Refresh that route's structural baseline alone: all numeric axes remain unchanged
+(162 visible words, 22 lead words, one primary action, zero visible fields).
+The two existing axe violations remain recorded; this is not an accessibility pass.
+
+### Reviewer response contract and safe failure diagnosis
+
+Release3 review TR-GATE-6B57503C6CF9DF933ADE9985 records one truncated branch
+and two invalid-JSON branches. Strict validation correctly withheld a verdict.
+The response prompt itself demonstrates invalid JSON (`"pass" or "fail"`) and
+the operation appends an additional object-shaped failure-analysis instruction.
+These are verified contract defects; they do not establish the exact syntax of
+the unretained provider responses. Extend BI-801313EB and the existing review
+contract: emit one valid JSON example including required failure analysis, keep
+enum guidance outside it, and remove the duplicate appended instruction. Preserve
+the Build Studio compatibility profile. Add only content-free JSON structure
+counts to invalid-response diagnostics and validate their checkpoint readback.
+Never store source excerpts, arbitrary parser messages or provider text; never
+accept malformed JSON, reset an attempt budget, or infer a semantic pass.
+First-failing tests must cover the complete prompt example and bounded diagnostic
+round-trip, including quoted braces and malformed/untrusted checkpoints. Run the
+graph-linked reviewer, publication and recovery tests before governed release;
+then verify the actual provider result and confirmed recovery on the live install.

@@ -261,7 +261,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 91 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 89 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-110` — portfolio-rationalization-agent · deliberately-unstaffed · 48% attainable
@@ -301,7 +301,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 91 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 89 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-121` — architecture-definition-agent · deliberately-unstaffed · 48% attainable
