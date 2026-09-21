@@ -232,6 +232,8 @@ export type WorkspaceWorkCaseDetailView = {
   // a comment (WorkItemMessage.workItemId) with @mention notification.
   workItemId: string | null;
   workItemTitle: string | null;
+  /** The same resolved room used by process/evidence and the workforce panel. */
+  workroomRowId?: string | null;
   // Transitional compatibility seam. The loader always returns the room
   // projection; the optional marker lets the existing detail component remain
   // unchanged until BI-32E26F62 replaces its composition on the same route.
@@ -503,6 +505,7 @@ function roomReceiptsFromMessages(
 export async function loadWorkspaceWorkCaseDetail({
   prismaClient,
   caseKey,
+  selectedWorkroomId,
   userId,
   authContext,
   participantLoader,
@@ -512,6 +515,7 @@ export async function loadWorkspaceWorkCaseDetail({
 }: {
   prismaClient: WorkspaceCasePrismaClient;
   caseKey: string;
+  selectedWorkroomId?: string;
   userId: string;
   authContext?: WorkspaceRoomAuthContext;
   participantLoader?: WorkspaceRoomParticipantLoader;
@@ -528,6 +532,7 @@ export async function loadWorkspaceWorkCaseDetail({
   const decoded = decodeWorkCaseKey(caseKey);
   if (!decoded) return null;
   if (decoded.sourceType === "coworker-engagement") {
+    if (selectedWorkroomId) return null;
     return loadCoworkerEngagementDetail({
       prismaClient,
       sourceId: decoded.sourceId,
@@ -562,6 +567,7 @@ export async function loadWorkspaceWorkCaseDetail({
   });
   if (access.level !== "content" && access.level !== "action") return null;
   const roomPolicy = readWorkspaceRoomPolicy(item.evidence);
+  const selectedCapsuleId = decoded.sourceType === "work-capsule" ? decoded.sourceId : selectedWorkroomId;
 
   const [messages, capsules] = await Promise.all([
     prismaClient.workItemMessage.findMany({
@@ -573,7 +579,7 @@ export async function loadWorkspaceWorkCaseDetail({
     // so a coding carrier surfaces in its case instead of as a disjoint row.
     prismaClient.workroom.findMany({
       where: { workItemId: item.id,
-        ...(decoded.sourceType === "work-capsule" ? { capsuleId: decoded.sourceId } : {}),
+        ...(selectedCapsuleId ? { capsuleId: selectedCapsuleId } : {}),
       },
       // EP-WORK-POSTURE Slice D (BI-4F468192): scopeClaims carries the room's
       // declared collaboration shape AND its declared posture; activityKind is
@@ -596,6 +602,8 @@ export async function loadWorkspaceWorkCaseDetail({
       orderBy: [{ updatedAt: "desc" }],
     }),
   ]);
+  // A stale or cross-case selection must not silently become an aggregate case.
+  if (selectedCapsuleId && !capsules.some((capsule) => capsule.capsuleId === selectedCapsuleId)) return null;
   const participants = await (participantLoader?.({
     workItemId: item.id,
     assignedToUserId: item.assignedToUserId,
@@ -715,7 +723,9 @@ export async function loadWorkspaceWorkCaseDetail({
       sourceRefs,
     }),
     activities: [
-      ...roomActivitiesFromMessages(item, messages),
+      ...roomActivitiesFromMessages(item, messages).map((activity) => selectedCapsuleId
+        ? { ...activity, summary: `Case context: ${activity.summary}` }
+        : activity),
       ...execution.activities,
     ].sort((a, b) => new Date(b.occurredAt ?? 0).getTime() - new Date(a.occurredAt ?? 0).getTime()),
     currentCycle,
@@ -748,6 +758,7 @@ export async function loadWorkspaceWorkCaseDetail({
     sourceRefs: detail.summary.sourceRefs,
     workItemId: item.id,
     workItemTitle: item.title,
+    workroomRowId: anchoredCapsule?.id ?? null,
     room,
   };
 }
