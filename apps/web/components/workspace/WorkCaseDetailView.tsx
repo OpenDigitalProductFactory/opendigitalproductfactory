@@ -4,12 +4,14 @@ import { EmptyState } from "@/components/ui/report-kit";
 import { WorkroomBody } from "@/components/workspace/workroom/WorkroomBody";
 import { WorkroomHeader } from "@/components/workspace/workroom/WorkroomHeader";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
+import type { RoomWorkforce } from "@/lib/work-management/room-workforce.server";
 
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
+  workforce?: Pick<RoomWorkforce, "accountability" | "accountableDisplayName"> | null;
 };
 
-export function WorkCaseDetailView({ detail }: Props) {
+export function WorkCaseDetailView({ detail, workforce }: Props) {
   if (!detail.room) {
     return (
       <div className="space-y-5 text-[var(--dpf-text)]">
@@ -39,7 +41,7 @@ export function WorkCaseDetailView({ detail }: Props) {
 
   return (
     <div className="space-y-5 text-[var(--dpf-text)]">
-      <WorkroomHeader room={detail.room} summary={detail.summary} />
+      <WorkroomHeader room={detail.room} summary={detail.summary} workforce={workforce} />
       <WorkroomBody detail={detail} room={detail.room} />
     </div>
   );

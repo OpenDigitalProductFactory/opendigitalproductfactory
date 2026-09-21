@@ -23,7 +23,7 @@ import type { WorkerGroup } from "@/lib/work-management/worker-rollup";
  * as unknown parentage, not as a plausible parent.
  */
 
-function AccountabilityStatement({
+export function AccountabilityStatement({
   accountability,
   displayName,
 }: {

@@ -57,6 +57,12 @@ owner, supporting evidence, and affected work. Required evidence is not proof
 that the evidence has been recorded. Where a receipt cannot be linked to an
 individual step, the view reports that gap and keeps it in the room evidence.
 
+**Observed execution** counts activity events and receipts separately. Expand a
+record for its source identity, actor and timestamp. An event records what was
+observed; it does not verify a step. A process pause appears in the room's
+attention summary, and a step's intended advance condition does not override
+the current permitted-transition check.
+
 Use **Map** or **List**, search by step or owner, and filter by state. Arrow keys
 move between visible steps; Home and End select the first and last. The selected
 step and filters stay in the URL so returning to the room preserves context.
@@ -80,7 +86,7 @@ The **Activity** stream distinguishes messages, asks, coworker handoffs, work ch
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:
 
 - **Accountable** owns the room outcome.
-- **Coordinator** keeps the room on-task to its outcome—curating who is in the room, sequencing turns, and driving to a decision, close, or escalation. A room has exactly one Coordinator; it may be the same person or coworker as the Accountable, or a different one. When no one is named, the Accountable coordinates by default.
+- **Coordinator** keeps the room on-task to its outcome—curating who is in the room, sequencing turns, and driving to a decision, close, or escalation. An executable room requires one explicitly named Coordinator; it may be the same person or coworker as the Accountable, or a different one. Missing assignment pauses execution.
 - **Contributor** performs work in the room.
 - **Reviewer** verifies work or an outcome.
 - **Observer** follows the room without changing it.
@@ -295,6 +301,9 @@ Each room states the person accountable for it — the human answerable for the 
 that answer came from: recorded on this room, inherited from a room further up, or inherited from
 the organization's recorded owner. Knowing which one it is matters, because it tells you where to
 go to change it.
+
+The header and workforce panel use the same accountability result, including
+its recorded or inherited source.
 
 If nobody is recorded, the room says setup is required rather than naming whoever happens to be
 handy. The install's first administrator, the person who created the room and whoever holds the

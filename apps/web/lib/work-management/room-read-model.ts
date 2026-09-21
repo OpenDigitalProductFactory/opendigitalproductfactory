@@ -68,6 +68,7 @@ export interface BuildWorkroomViewInput {
   outcomeHealth?: WorkroomOutcomeView["health"];
   receipts?: readonly ReceiptEnvelope[];
   sourceHealth?: WorkroomView["projection"]["sourceHealth"];
+  executionAttentionReason?: string | null;
   /**
    * The subject's value-stream + lifecycle structure, pre-resolved by the loader via
    * `resolveWorkroomStructure` (kept out of this pure build, like `sourceHealth`).
@@ -277,6 +278,12 @@ export function buildWorkroomView(
           checkedAt: now,
         });
 
+  const processNeedsAttention = !input.detail.summary.terminal
+    && ["pause", "escalate", "stop"].includes(processOverseer.disposition);
+  const processAttention = processNeedsAttention
+    ? processOverseer.interventionReason ?? "The process check requires attention before work continues."
+    : null;
+
   return {
     roomKey: input.caseKey,
     caseRef,
@@ -309,11 +316,15 @@ export function buildWorkroomView(
     participants,
     activity: normalizeWorkroomActivities(input.activities ?? []),
     work: {
-      nextAction: standingIdle
+      nextAction: processNeedsAttention
+        ? "Resolve the process check before continuing"
+        : input.executionAttentionReason
+        ? "Inspect Observed execution for the reviewer status and required action."
+        : standingIdle
         ? "Open next cycle"
         : input.detail.summary.nextAction,
-      attentionRequired: input.detail.summary.attention.required,
-      attentionReason: input.detail.summary.attention.reason,
+      attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || input.detail.summary.attention.required,
+      attentionReason: [processAttention, input.executionAttentionReason, input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,
       blockingActorKind: blockingActorKindForState(input.detail.summary.state),
       activeCapsuleRefs,
       activeTaskRunSummary: null,

@@ -22,6 +22,10 @@ Opening a room by its ID retains that selection within its parent case. Process,
 room evidence and workforce use the same room; shared messages are labelled as
 case context. A missing or mismatched room selection does not substitute another room.
 
+Process pauses appear in the room's attention summary. Observed execution
+separates activity events from receipts, and the header shows the same recorded
+or inherited human accountability as the workforce panel.
+
 ## Operations and Performance
 
 The main rail separates two different decisions:
