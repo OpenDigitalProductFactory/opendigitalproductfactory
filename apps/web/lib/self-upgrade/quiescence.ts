@@ -458,7 +458,7 @@ export async function isShipForceEscalated(runId: string): Promise<boolean> {
  * SSE first so any connected operator banner dismisses immediately, then the
  * Inngest event so suspended functions wake. Best-effort on the SSE leg.
  */
-async function broadcastQuiescenceCleared(payload: {
+export async function broadcastQuiescenceCleared(payload: {
   runId: string;
   outcome: "succeeded" | "failed";
   triggerRefId: string | null;

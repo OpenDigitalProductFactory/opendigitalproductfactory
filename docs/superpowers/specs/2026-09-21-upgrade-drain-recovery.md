@@ -32,7 +32,13 @@ or authorize a failed coordinator to resume writes.
 3. Fence watchdog writes on the state and heartbeat originally observed. Clear
    the global drain level only if that run still owns it. An old coordinator
    cannot release a newer drain.
-4. Run affected tests, typecheck, source guards, independent review, protected
+4. Preserve timestamps when an already-committed step repeats before its durable
+   checkpoint lands. A same-state terminal retry can finish cleanup without
+   changing terminal evidence. Watchdog comparisons remain strict.
+5. Recover a ready-to-swap or swapping orphan only when its parent upgrade has
+   definitively failed for over an hour. Use the existing clear-event broadcaster
+   to wake suspended work and clear the operator banner; preserve active parents.
+6. Run affected tests, typecheck, source guards, independent review, protected
    publication and the canonical upgrade path. A green source test is not live
    upgrade verification.
 
@@ -50,7 +56,12 @@ QR-2026-09-06-nzm0l2n4 was still ready-to-swap while its parent SUR-E18E0141
 had failed on September 6. After saving a before-image, an operator-authorized
 conditional transaction reconciled it to failed, requiring the parent still be
 failed and no active upgrade exist. There are no remaining nonterminal drain
-rows. Before-image: D:/DPF-backups/upgrade-repair-20260921/quiescence-before.jsonl.
+rows at reconciliation time. Before-image:
+D:/DPF-backups/upgrade-repair-20260921/quiescence-before.jsonl.
+
+A subsequent manual upgrade, SUR-3CB41940, succeeded to 5cdafb1e4ea and its
+drain completed. The browser now shows the installed release as current.
+This establishes live recovery, not deployment of this branch's safeguards.
 
 The deployedSha field is populated from expectedDeployedSha at admission; it
 does not itself prove a swap happened. Preserve that contract during this repair.

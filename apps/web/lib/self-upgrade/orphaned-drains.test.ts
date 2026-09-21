@@ -1,8 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ candidates: vi.fn(), parent: vi.fn(), transition: vi.fn(), level: vi.fn(), send: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { quiescenceRun: { findMany: mocks.candidates }, selfUpgradeRun: { findUnique: mocks.parent } } }));
-vi.mock("./quiescence", () => ({ transitionState: mocks.transition, setQuiescenceLevel: mocks.level }));
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: mocks.send } }));
+vi.mock("./quiescence", () => ({ transitionState: mocks.transition, setQuiescenceLevel: mocks.level, broadcastQuiescenceCleared: mocks.send }));
 import { recoverOrphanedUpgradeDrains } from "./orphaned-drains";
 const now = new Date("2026-09-21T02:00:00Z");
 beforeEach(() => {

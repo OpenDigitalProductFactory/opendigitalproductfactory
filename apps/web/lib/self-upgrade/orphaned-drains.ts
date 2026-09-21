@@ -1,6 +1,5 @@
 import { prisma } from "@dpf/db";
-import { transitionState, setQuiescenceLevel } from "./quiescence";
-import { inngest } from "@/lib/queue/inngest-client";
+import { transitionState, setQuiescenceLevel, broadcastQuiescenceCleared } from "./quiescence";
 
 /** A failed caller cannot finish the swap handshake. Do not infer failure from
  * heartbeat silence: healthy promoters deliberately wait without heartbeats. */
@@ -23,7 +22,7 @@ export async function recoverOrphanedUpgradeDrains(now = new Date()): Promise<nu
         outcomeNotes: `Orphaned swap: parent ${row.triggerRefId} has been failed for over one hour`,
       }, now, { status: row.status, lastHeartbeatAt: row.lastHeartbeatAt });
       await setQuiescenceLevel("normal", null, now, row.runId);
-      await inngest.send({ name: "platform.quiescence-cleared", data: { runId: row.runId, outcome: "failed", triggerRefId: row.triggerRefId, reason: "failed-upgrade-parent" } });
+      await broadcastQuiescenceCleared({ runId: row.runId, outcome: "failed", triggerRefId: row.triggerRefId, reason: "failed-upgrade-parent" });
       recovered++;
     } catch (error) {
       console.warn("[quiescence] orphan recovery did not complete", row.runId, error);

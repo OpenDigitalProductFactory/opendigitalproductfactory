@@ -6,6 +6,20 @@ import { heartbeatQuiescenceRun, transitionState, setQuiescenceLevel } from "./q
 
 beforeEach(() => vi.resetAllMocks());
 describe("quiescence terminal ownership (BI-7289199B)", () => {
+  it("preserves the original drain start if a committed step is retried before checkpointing", async () => {
+    const enteredStateAt = { draining: "2026-09-21T01:36:14.994Z" };
+    db.findUnique.mockResolvedValue({ status: "draining", enteredStateAt });
+    db.update.mockResolvedValue({ status: "draining", enteredStateAt: { draining: "2026-09-21T01:40:00.000Z" } });
+    await expect(transitionState("QR-retry", "draining", {}, new Date("2026-09-21T01:40:00Z")))
+      .resolves.toEqual({ status: "draining", enteredStateAt });
+    expect(db.update).not.toHaveBeenCalled();
+  });
+  it("allows a committed terminal step to finish cleanup when its checkpoint was lost", async () => {
+    const enteredStateAt = { deferred: "2026-09-21T01:41:14.994Z" };
+    db.findUnique.mockResolvedValue({ status: "deferred", enteredStateAt });
+    await expect(transitionState("QR-retry", "deferred")).resolves.toEqual({ status: "deferred", enteredStateAt });
+    expect(db.update).not.toHaveBeenCalled();
+  });
   it("does not let a resumed coordinator overwrite watchdog failure", async () => {
     db.findUnique.mockResolvedValue({ status: "failed", enteredStateAt: {} });
     db.update.mockResolvedValue({ status: "deferred", enteredStateAt: {} });

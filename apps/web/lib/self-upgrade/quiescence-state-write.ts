@@ -26,13 +26,17 @@ export async function transitionState(
     select: { enteredStateAt: true, status: true },
   });
   if (!row) throw new Error(`Quiescence run ${runId} is missing`);
+  const prior = (row.enteredStateAt as unknown as EnteredStateAt | null) ?? {};
+  // A step can commit before its durable checkpoint lands. Replaying that
+  // transition must preserve its deadline and allow the following cleanup.
+  if (!expected && row.status === toStatus && prior[toStatus]) {
+    return { status: row.status, enteredStateAt: prior };
+  }
   const correctingLandedSwap = row.status === "failed" && toStatus === "completed"
     && patches.completionSource === "boot-reconciler" && patches.outcome === "succeeded";
   if (isTerminalQuiescenceStatus(row.status) && !correctingLandedSwap) {
     throw new Error(`Quiescence run ${runId} is terminal (${row.status})`);
   }
-  const prior =
-    (row.enteredStateAt as unknown as EnteredStateAt | null | undefined) ?? {};
   const enteredStateAt: EnteredStateAt = { ...prior, [toStatus]: now.toISOString() };
 
   const updated = await prisma.quiescenceRun.update({
