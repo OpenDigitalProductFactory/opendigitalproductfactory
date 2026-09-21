@@ -852,3 +852,18 @@ call recorded containment successful delegation. Reuse native disclosures,
 theme tokens and canonical case identity. Test shared ancestors, query bounds,
 unknown ownership, dependency direction and navigation context before release.
 At least one fifth of this batch consolidates ancestry/accountability reads.
+
+### External requester's native recovery adapter
+
+BI-801313EB already requires durable resume without the original client. Current
+main exposes retryPersistedSemanticReview only through the portal session action;
+the MCP change-review pack can admit a request but cannot submit its confirmed
+recovery. A virtual surface requires a separate governed coworker context and is
+not an alternate grant. Extend the existing change-review pack with a thin
+retry_semantic_review adapter to the same recovery function. Bind identity from
+the authenticated user, never a payload user ID; require explicit confirmation
+of replacement inference cost. Keep current tool grants, original requester,
+saved authority, deadline, attempts, quiescence and concurrent-generation fences.
+No new execution, ledger, retry policy or privilege is introduced. Test missing
+confirmation, another requester, expired/revoked authority, non-native tasks and
+successful forwarding. A denied call remains denied and is not accepted evidence.
