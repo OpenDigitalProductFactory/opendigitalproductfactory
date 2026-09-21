@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { semanticReviewRecoveryBudget, SEMANTIC_REVIEW_MAX_ATTEMPTS, type SemanticReviewBudgetSnapshot } from "@/lib/change-review/semantic-review-recovery-policy";
+import { semanticReviewRecoveryPresentation } from "@/lib/change-review/semantic-review-presentation";
+import { useSemanticReviewRecoveryBudget } from "./useSemanticReviewRecoveryBudget";
 import { useRouter } from "next/navigation";
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
@@ -31,25 +33,14 @@ export function StalledTaskRecoveryActions({
   const [status, setStatus] = useState<{ kind: "idle" } | { kind: "error"; message: string } | { kind: "success"; message: string }>({ kind: "idle" });
 
   const isShipPhase = phase === "ship";
-  const [clockTick, setClockTick] = useState(0);
-  const budgetState = semanticReviewRecoveryBudget(reviewBudget?.deadlineAt, reviewBudget?.recoveryAttempt);
-  const budgetTitle = {
-    available: "Review awaiting recovery",
-    expired: "Review window expired",
-    exhausted: "Recovery limit reached",
-    unknown: "Recovery availability unknown",
-  }[budgetState];
+  const { budgetState, refreshBudget } = useSemanticReviewRecoveryBudget(reviewBudget, nativeReview);
+  const { title: budgetTitle, nextAction } = semanticReviewRecoveryPresentation(budgetState);
   const deadline = reviewBudget?.deadlineAt ? Date.parse(reviewBudget.deadlineAt) : NaN;
   const recoveryAttempt = reviewBudget?.recoveryAttempt;
-  useEffect(() => {
-    if (!nativeReview || !Number.isFinite(deadline) || deadline <= Date.now()) return;
-    const timer = setTimeout(() => setClockTick((tick) => tick + 1), Math.min(deadline - Date.now(), 2_147_483_647));
-    return () => clearTimeout(timer);
-  }, [nativeReview, deadline, clockTick]);
 
   const onRetry = async () => {
     if (nativeReview && semanticReviewRecoveryBudget(reviewBudget?.deadlineAt, reviewBudget?.recoveryAttempt) !== "available") {
-      setClockTick((tick) => tick + 1);
+      refreshBudget();
       return;
     }
     if (isShipPhase || nativeReview) {
@@ -63,7 +54,7 @@ export function StalledTaskRecoveryActions({
       if (!ok) return;
     }
     if (nativeReview && semanticReviewRecoveryBudget(reviewBudget?.deadlineAt, reviewBudget?.recoveryAttempt) !== "available") {
-      setClockTick((tick) => tick + 1);
+      refreshBudget();
       return;
     }
     startTransition(async () => {
@@ -121,7 +112,7 @@ export function StalledTaskRecoveryActions({
       {nativeReview && <div className="space-y-1 text-xs text-[var(--dpf-muted)]">
         {Number.isFinite(deadline) && <p>Deadline: <time dateTime={new Date(deadline).toISOString()}>{new Date(deadline).toLocaleString()}</time></p>}
         {typeof recoveryAttempt === "number" && Number.isSafeInteger(recoveryAttempt) && recoveryAttempt >= 0 && <p>Recovery attempts: {recoveryAttempt} / {SEMANTIC_REVIEW_MAX_ATTEMPTS}</p>}
-        <p>{budgetState === "available" ? "The original requester can confirm recovery; authority is checked again when submitted." : budgetState === "unknown" ? "Recovery limits could not be read. Inspect the request history before further action." : "This request cannot resume. Its deadline and recovery limit stay unchanged; inspect history with the requester."}</p>
+        <p>{nextAction}</p>
       </div>}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" size="sm" className="min-h-11"

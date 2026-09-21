@@ -867,3 +867,18 @@ saved authority, deadline, attempts, quiescence and concurrent-generation fences
 No new execution, ledger, retry policy or privilege is introduced. Test missing
 confirmation, another requester, expired/revoked authority, non-native tasks and
 successful forwarding. A denied call remains denied and is not accepted evidence.
+
+Deployed inspection on c6e5718 found that an expired review still answers
+"retry-review" under its next-action question, contradicting the disabled Resume
+control. Share the recovery budget clock and presentation between that answer
+and the action control. Test expiration during an open page, exhausted and unknown
+budgets. Preserve raw recorded actions in request history; describe permitted
+recovery in plain language. Read the requester's existing employee display name
+when present, retaining the user identity and an explicit unknown-name fallback.
+Translate known reason codes without inferring a provider failure cause.
+
+The reviewed `/ea/workrooms` route measurement from workflow 35580754120
+adds only the collapsed owner/link disclosure to its accessibility structure.
+Refresh that route's structural baseline alone: all numeric axes remain unchanged
+(162 visible words, 22 lead words, one primary action, zero visible fields).
+The two existing axe violations remain recorded; this is not an accessibility pass.
