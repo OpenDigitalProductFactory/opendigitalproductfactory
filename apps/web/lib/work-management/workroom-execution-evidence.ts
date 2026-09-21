@@ -24,6 +24,7 @@ export async function loadWorkroomExecutionEvidence(
   ]);
   const rows = (journal ?? []).slice(0, 20);
   return {
+    reviewerRuns: reviewers.runs,
     activities: roomActivitiesFromCapsuleActivity(rows, identities),
     receipts: [
       ...reviewers.receipts,

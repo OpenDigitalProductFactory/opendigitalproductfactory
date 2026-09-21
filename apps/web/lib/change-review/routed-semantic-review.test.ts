@@ -18,6 +18,16 @@ beforeEach(() => {
 });
 
 describe("routed semantic review", () => {
+  it("does not accept a parseable verdict from a provider-truncated response", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({ truncated: true,
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Incomplete private response." }),
+    } as never);
+    const result = await dispatchRoutedSemanticReview("review this", {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: [], surface: "external",
+    });
+    expect(result).toMatchObject({ decision: "inconclusive", issues: [], inconclusiveReason: "review-response-truncated" });
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
   it("requests completed non-streaming results for the reviewer and every specialist", async () => {
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),

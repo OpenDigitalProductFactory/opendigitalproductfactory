@@ -6,6 +6,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { FilterBar } from "@/components/ui/report-kit/FilterBar";
 import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
+import { ReviewerExecutionList } from "./ReviewerExecutionList";
 import type { ShapeGraph, ShapeNodeState, ShapeRow } from "@/lib/work-management/shape-projection";
 
 const STATE_LABEL: Record<ShapeNodeState, string> = {
@@ -147,6 +148,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
     {graph.process ? <details className="rounded border border-[var(--dpf-border)] p-3">
       <summary className="cursor-pointer font-medium">Observed execution · {graph.process.events?.length ?? 0} events · {graph.process.receipts.length} receipts</summary>
       <div className="mt-3 space-y-3">
+        <ReviewerExecutionList runs={graph.process.reviewerRuns ?? []} />
         <h4 className="font-medium">Events</h4>
         <Evidence rows={graph.process.events ?? []} />
         <h4 className="font-medium">Receipts</h4>

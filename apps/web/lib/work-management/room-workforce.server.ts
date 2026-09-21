@@ -97,7 +97,7 @@ function displayNameOf(principal: Record<string, unknown> | null | undefined): s
 export async function loadAncestorClosure(
   db: RoomWorkforceDb,
   workroomId: string,
-): Promise<{ roomIds: string[]; edges: AccountabilityEdge[] }> {
+): Promise<{ roomIds: string[]; edges: AccountabilityEdge[]; unresolvedRoomIds: string[] }> {
   const roomIds = new Set<string>([workroomId]);
   const edges: AccountabilityEdge[] = [];
   let frontier = [workroomId];
@@ -129,7 +129,7 @@ export async function loadAncestorClosure(
     frontier = next;
   }
 
-  return { roomIds: [...roomIds], edges };
+  return { roomIds: [...roomIds], edges, unresolvedRoomIds: frontier };
 }
 
 /**
@@ -167,7 +167,7 @@ export async function resolveRoomAccountabilityFromDb(
   db: RoomWorkforceDb,
   input: { workroomId: string; organizationId?: string },
 ): Promise<EffectiveHumanAccountability> {
-  const { roomIds, edges } = await loadAncestorClosure(db, input.workroomId);
+  const { roomIds, edges, unresolvedRoomIds } = await loadAncestorClosure(db, input.workroomId);
   const participantRows = await db.workroomParticipant.findMany({
     where: { workroomId: { in: roomIds }, lifecycle: "active" },
     select: { workroomId: true, principalId: true, roles: true },
@@ -176,6 +176,7 @@ export async function resolveRoomAccountabilityFromDb(
     workroomId: input.workroomId,
     rooms: accountabilityRoomsFrom(roomIds, participantRows),
     edges,
+    unresolvedRoomIds,
     organizationTopAccountablePrincipalId: await readOrganizationTopAccountablePrincipalId(
       db,
       input.organizationId,
@@ -187,7 +188,7 @@ export async function loadRoomWorkforce(
   db: RoomWorkforceDb,
   input: { workroomId: string; organizationId?: string; query?: string | null; now?: Date },
 ): Promise<RoomWorkforce> {
-  const { roomIds, edges } = await loadAncestorClosure(db, input.workroomId);
+  const { roomIds, edges, unresolvedRoomIds } = await loadAncestorClosure(db, input.workroomId);
 
   const participantRows = await db.workroomParticipant.findMany({
     where: { workroomId: { in: roomIds }, lifecycle: "active" },
@@ -206,6 +207,7 @@ export async function loadRoomWorkforce(
     workroomId: input.workroomId,
     rooms,
     edges,
+    unresolvedRoomIds,
     organizationTopAccountablePrincipalId: await readOrganizationTopAccountablePrincipalId(
       db,
       input.organizationId,

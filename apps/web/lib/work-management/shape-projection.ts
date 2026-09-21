@@ -17,7 +17,7 @@
 //      the ledger, because when they disagree the picture is what people believe.
 
 import type { ReceiptEnvelope } from "./receipt-envelope";
-import type { WorkCaseState } from "./case-types";
+import type { WorkCaseActorRef, WorkCaseState } from "./case-types";
 import type { WorkroomView } from "./room-types";
 import type { WorkCaseSourceRef } from "./case-types";
 import { getWorkShape } from "./work-shapes";
@@ -87,6 +87,7 @@ export interface ShapeGraph {
     gaps: string[];
     receipts: ShapeRow[];
     events?: ShapeRow[];
+    reviewerRuns?: WorkroomView["reviewerRuns"];
   };
 }
 
@@ -141,11 +142,9 @@ function receiptState(receipt: ReceiptEnvelope): ShapeNodeState {
   return receipt.status === "valid" ? "passed" : "observed";
 }
 
-function actorLabel(receipt: ReceiptEnvelope): string | null {
-  const actor = receipt.actorRef;
+function actorLabel(actor: WorkCaseActorRef | null | undefined): string | null {
   if (!actor) return null;
-  const named = actor as { displayName?: string | null; id?: string | null; kind?: string | null };
-  return named.displayName ?? named.id ?? named.kind ?? null;
+  return actor.displayName ?? actor.actorId ?? actor.actorKind ?? null;
 }
 
 function rowFromReceipt(receipt: ReceiptEnvelope): ShapeRow {
@@ -155,7 +154,7 @@ function rowFromReceipt(receipt: ReceiptEnvelope): ShapeRow {
     state: receiptState(receipt),
     detail: receipt.sourceRef.status ?? receipt.status,
     receiptRef: receipt.rawRef,
-    actor: actorLabel(receipt),
+    actor: actorLabel(receipt.actorRef),
     occurredAt: receipt.occurredAt,
     summary: receipt.summary,
   };
@@ -303,10 +302,11 @@ export function projectRoomShape(
       sourceHealth: view.projection.sourceHealth,
       gaps,
       receipts: view.receipts.map(rowFromReceipt),
+      reviewerRuns: view.reviewerRuns ?? [],
       events: view.activity.map((event) => ({
         key: event.eventId, label: event.summary, summary: event.summary,
         state: "observed", detail: event.kind, receiptRef: null, sourceRef: event.sourceRef,
-        actor: event.actorRef?.actorId ?? event.actorRef?.actorKind ?? null,
+        actor: actorLabel(event.actorRef),
         ...(event.occurredAt ? { occurredAt: event.occurredAt } : {}),
       })),
     },

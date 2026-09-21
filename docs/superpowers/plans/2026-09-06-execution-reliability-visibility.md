@@ -792,3 +792,46 @@ arrival text falls from 237 to 162 words; all other numeric axes are unchanged.
 The two existing axe violations remain unresolved, not an accessibility pass.
 No other route baseline or sweep rule changes. The architecture guide now
 documents the same search, paging and return-context behavior.
+
+### Reviewer execution inspection in the existing room
+
+Live release de6f45 shows a stored requester as Unknown and makes a reviewer wait
+readable only as a generic receipt. Extend the existing bounded reviewer reader
+with a typed observation of the same TaskRun, checkpoint identities, reason,
+requester, recorded next action, read time and immutable recovery budget. Carry
+that observation through both room loaders. Keep intended definition steps and
+observed runs separate; a completed checkpoint is not a verified verdict.
+
+Reuse StalledTaskRecoveryActions inside the existing Observed execution disclosure.
+The server retains requester, saved authority, confirmation, deadline, attempt
+and concurrency checks. Share budget extraction with Operations Map and use the
+canonical actor fields for both events and receipts. This consolidation is part
+of the refactoring allocation, not a second recovery implementation. Test missing
+and corrupt budgets, terminal runs, failed reads, room isolation, and requester
+identity before the source repair. Review runtime source and UI independently;
+do not label an authorization rejection or stale read as successful recovery.
+
+UX fit DI-E1D9AF1E894D recommends shared-room-inspection over map-only-recovery
+with high confidence. Details stay inside the existing disclosure, use theme
+tokens and native keyboard controls, and name unknown facts. Register the new
+component's measured 63-word source-copy budget without growing existing entries.
+Runtime acceptance and existing accessibility defects remain open.
+
+The completed provider response also carries a truncation flag. The reviewer
+currently ignores it, so even syntactically valid partial output can be treated
+as a verdict. Fail that branch as inconclusive with a specific recorded reason
+before parsing; retain no response text and do not change output budgets or relax
+the parser. This is a verified source gap, not a claim that truncation caused the
+current live invalid-JSON responses. Prove it using valid JSON marked truncated.
+
+### Nested responsibility must remain evidence-based
+
+PWA-04 requires ambiguous parents to be correctable setup, but the current
+resolver silently returns the organization owner. Its bounded ancestor reader
+also drops the unresolved frontier after ten levels, making an unseen delegated
+owner look absent. Preserve the frontier and report incomplete lineage only if
+resolution reaches it without an explicit assignment. Report competing parents
+instead of falling back. Keep explicit room/nearest-ancestor assignments and
+ordinary organization fallback intact. Share these facts between the drive and
+room workforce reader; change no authority or relationship writes. Reproduce both
+counterexamples and test overrides, complete lineage, cycles and dependencies.

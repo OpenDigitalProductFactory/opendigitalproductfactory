@@ -90,6 +90,11 @@ export async function dispatchRoutedSemanticReview(
         requiresStreaming: false,
       },
     );
+    if (response.truncated) return {
+      decision: "inconclusive" as const, issues: [],
+      summary: "The provider stopped before the review response was complete.",
+      inconclusiveReason: "review-response-truncated",
+    };
     const result = parseSemanticReviewResponse(response.content);
     return {
       ...result,
