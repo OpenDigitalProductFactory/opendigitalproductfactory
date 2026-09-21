@@ -48,6 +48,20 @@ const worker = (over: Partial<Participant> & { workroomId: string; principalId: 
 });
 
 describe("loadRoomWorkforce — accountability", () => {
+  it("reads the recorded organization owner's name without inventing a room participant", async () => {
+    const findMany = vi.fn().mockResolvedValue([{ id: "org-owner", displayName: "Recorded owner" }]);
+    const database = { ...db({ owner: "org-owner" }), principal: { findMany } };
+    const batch = await loadRoomAccountabilityBatch(database, ["one", "two"]);
+    expect(batch.get("one")?.accountableDisplayName).toBe("Recorded owner");
+    expect(batch.get("two")?.accountableDisplayName).toBe("Recorded owner");
+    expect(findMany).toHaveBeenCalledOnce();
+    expect(findMany).toHaveBeenCalledWith({ where: { id: { in: ["org-owner"] } }, select: { id: true, displayName: true } });
+    const room = await loadRoomWorkforce(database, { workroomId: "one" });
+    expect(room.accountableDisplayName).toBe("Recorded owner");
+    expect(room.accountability).toMatchObject({ principalId: "org-owner", source: "organization-owner" });
+    expect(room.groups).toEqual([]);
+  });
+
   it("bounds wide ancestry and reports an incomplete read", async () => {
     const database = db({ owner: "org-owner" });
     vi.spyOn(database.workroomRelation, "findMany").mockResolvedValue(Array.from({ length: 2001 }, (_, i) => ({

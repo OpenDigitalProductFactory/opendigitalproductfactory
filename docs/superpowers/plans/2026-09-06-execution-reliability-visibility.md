@@ -910,3 +910,33 @@ First-failing tests must cover the complete prompt example and bounded diagnosti
 round-trip, including quoted braces and malformed/untrusted checkpoints. Run the
 graph-linked reviewer, publication and recovery tests before governed release;
 then verify the actual provider result and confirmed recovery on the live install.
+
+### Open-page projection freshness
+
+Release4 acceptance recorded a stale open page showing zero recovery attempts
+while the authoritative request had advanced to one. Extend the existing
+Workspace process inspection with an explicit snapshot-age warning and a
+read-only Refresh action. Read time remains the server-provided readAt, never a
+client click timestamp. Missing, invalid or future read times are unknown; after
+one minute the snapshot is labeled stale. This is a display freshness threshold,
+not a claim that the server or underlying evidence stopped progressing.
+
+UX fit: fits-with-guardrails in the existing Workroom detail, for an operator
+checking waits. Reuse Button, LocalTime and the existing deadline-clock behavior;
+extract the clock so recovery expiry and snapshot expiry share timer cleanup and
+visibility handling. Refresh preserves URL, selection, filters and disclosure
+state. It starts no inference or recovery. No automatic execution depends on it.
+Keep the latest evidence time separate from snapshot age and retain projection
+gaps. Tests must show aging without navigation, unknown times, failed/no-change
+refresh remaining stale, and a newer server read clearing the warning. Live
+verification and measured UX-fit evidence remain required before delivery.
+
+The same acceptance run exposed raw accountable principal IDs. Live readback
+confirms the organization's top accountable Principal has displayName admin.
+Both batch coordination and single-room readers only look for names in room
+participant rows, so they miss organization owners who are not participants.
+Share one bounded name resolver across both readers: reuse participant names,
+then batch-read only unresolved accountable IDs from Principal. Do not add a
+participant, infer another owner, or change inherited responsibility. Preserve
+unknown names when the principal cannot be resolved; verify the page performs
+one lookup for a shared organization owner.

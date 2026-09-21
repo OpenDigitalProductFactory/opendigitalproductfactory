@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "shared-snapshot-expiry",
+  "decisionInteractionId": "DI-5C03355FF043",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/ProjectionFreshness.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["shared-snapshot-expiry", "push-projection-stream"]
+  }
+}

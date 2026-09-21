@@ -77,6 +77,11 @@ exists without a verified completion verdict. **Cancelled** is distinct from
 success. The projection check time and latest evidence time are separate; an
 unknown timestamp does not imply a fresh observation.
 
+After a minute, the process snapshot is marked stale. **Refresh state** reads
+the room again while keeping your selected step and filters. The warning clears
+only when a newer server read arrives. Refreshing does not resume work, approve
+a transition, or prove progress. A missing or future read time remains unknown.
+
 Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
 
 Native reviewer runs also appear under **Observed execution** while queued or
