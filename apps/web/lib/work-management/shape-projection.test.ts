@@ -82,6 +82,19 @@ describe("BI-23DB08BB — the room's shape is readable without reading", () => {
 });
 
 describe("execution truth", () => {
+  it("retains observed activity separately from receipts without verifying a stage", () => {
+    const graph = projectRoomShape(view({ activity: [{
+      eventId: "work-capsule:activity-1", kind: "external-event", occurredAt: "2026-09-21T03:00:00Z",
+      actorRef: { actorKind: "system" }, summary: "Drive pause: conformance_pause",
+      sourceRef: { kind: "work-capsule", id: "WC-1" }, emphasis: "normal",
+    }] }));
+    expect(graph.process?.events).toEqual([expect.objectContaining({
+      key: "work-capsule:activity-1", state: "observed", summary: "Drive pause: conformance_pause",
+    })]);
+    expect(graph.process?.receipts).toEqual([]);
+    expect(graph.progress.passed).toBe(0);
+  });
+
   it("shows the versioned intended process separately from observed receipts", () => {
     const graph = projectRoomShape(view({ processOverseer: {
       shapeKey: "delivery-large", shapeVersion: "1.0.0", currentStageKey: null,
@@ -94,6 +107,7 @@ describe("execution truth", () => {
     expect(graph.stages.map((stage) => stage.key)).toEqual(getWorkShape("delivery-large")!.stages.map((stage) => stage.key));
     expect(graph.stages.every((stage) => stage.state === "unknown")).toBe(true);
     expect(graph.process?.nextPermittedStageKey).toBeNull();
+    expect(graph.stages.every((stage) => stage.inspection?.next.includes("No permitted transition recorded."))).toBe(true);
     expect(graph.stages.every((stage) => stage.inspection?.next.startsWith("Intended advance condition:"))).toBe(true);
     expect(graph.process?.gaps).toContain("No observed execution stage is linked to this definition.");
   });

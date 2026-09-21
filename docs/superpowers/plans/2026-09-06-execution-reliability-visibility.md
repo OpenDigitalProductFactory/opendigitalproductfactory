@@ -4,6 +4,12 @@ status: active
 
 # Execution reliability and process visibility
 
+## September 21 observed pause reconciliation (BI-06AE6833, WC-99AECC86)
+
+Runtime verification RV-EXECUTION-5969966-20260921 found that WC-9CECAF46 displays a missing-coordinator pause in Details while Overview says no immediate attention is needed. Reconcile attention and next action in the existing shared room read model from its conformance result; preserve independent case attention and never convert a pause into completion. Test the real missing-coordinator condition first. Keep intended advance conditions separate from currently permitted transitions even before any stage has started. The observed lane must distinguish activity events from receipts, retaining source identity and no inferred verdict. Reuse shared projections and existing disclosure primitives; no new execution authority or storage. Header accountability must consume the existing effective-human-accountability result rather than selecting a participant independently. Preserve unknown and conflicting states. This extends the same objective and allocates at least one fifth of the change to consolidating these divergent projections. Protected checks and a new canonical release with repeat live acceptance remain required.
+
+UX fit: DI-AB55BD5548FD selects extend-existing-inspector over separate-activity-page, high confidence and autonomy eligible, with no commandment conflict. Shared read-model composition and single-source accountability govern the repair. Independent review found and reproduced terminal-room attention regression; closed/cancelled rooms retain their terminal action while diagnostic conformance remains visible. The 94 affected tests and both TypeScript programs pass; these are source results, not new runtime acceptance.
+
 ## September 21 selected Workroom context (BI-06AE6833, WC-99AECC86)
 
 Live navigation on both 0961596 and 5cdafb1 drops the selected capsule at the canonical-case redirect. Preserve the capsule as navigation context while retaining one case per WorkItem. Constrain the existing room query by both WorkItem and selected capsule, refuse an unavailable selection before reading execution evidence, and return the resolved row identity for the workforce reader. Remove the independent oldest-room lookup so process, participants, evidence and workforce use the same selection. Reuse the existing WorkItem and standalone content authorization; do not grant access through a query parameter.

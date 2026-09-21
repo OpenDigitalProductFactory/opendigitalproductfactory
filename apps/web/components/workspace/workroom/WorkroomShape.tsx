@@ -20,7 +20,7 @@ function Evidence({ rows }: { rows: ShapeRow[] }) {
     <details className="rounded border border-[var(--dpf-border)] p-2">
       <summary className="cursor-pointer">{row.label} · {STATE_LABEL[row.state]}</summary>
       <dl className="mt-2 space-y-1 break-words">
-        <dt>Source</dt><dd>{row.receiptRef ? `${row.receiptRef.table}:${row.receiptRef.id}` : "Unknown"}</dd>
+        <dt>Source</dt><dd>{row.receiptRef ? `${row.receiptRef.table}:${row.receiptRef.id}` : row.sourceRef ? `${row.sourceRef.kind}:${row.sourceRef.id} · ${row.key}` : "Unknown"}</dd>
         <dt>Actor</dt><dd>{row.actor ?? "Unknown"}</dd>
         <dt>Recorded</dt><dd>{row.occurredAt ?? "Unknown"}</dd>
         {row.summary ? <><dt>Finding</dt><dd>{row.summary}</dd></> : null}
@@ -138,10 +138,15 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
           </> : "Dependencies unknown"}
         </dd></div>
       </dl>
-    </aside> : <p className="text-[var(--dpf-muted)]">Select a step to inspect its state and evidence.</p>}
+    </aside> : <p className="text-[var(--dpf-muted)]">Select a step for state and evidence.</p>}
     {graph.process ? <details className="rounded border border-[var(--dpf-border)] p-3">
-      <summary className="cursor-pointer font-medium">Observed execution · {graph.process.receipts.length} room records</summary>
-      <div className="mt-3"><Evidence rows={graph.process.receipts} /></div>
+      <summary className="cursor-pointer font-medium">Observed execution · {graph.process.events?.length ?? 0} events · {graph.process.receipts.length} receipts</summary>
+      <div className="mt-3 space-y-3">
+        <h4 className="font-medium">Events</h4>
+        <Evidence rows={graph.process.events ?? []} />
+        <h4 className="font-medium">Receipts</h4>
+        <Evidence rows={graph.process.receipts} />
+      </div>
     </details> : null}
   </section>;
 }

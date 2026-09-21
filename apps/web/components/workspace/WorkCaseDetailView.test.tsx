@@ -211,6 +211,15 @@ const detail: WorkspaceWorkCaseDetailView = {
 };
 
 describe("WorkCaseDetailView", () => {
+  it("uses effective inherited accountability in the header", () => {
+    const html = renderToStaticMarkup(<WorkCaseDetailView detail={detail} workforce={{
+      accountability: { state: "resolved", principalId: "owner-1", source: "organization-owner", inheritedFrom: [] },
+      accountableDisplayName: "Dana Reyes",
+    }} />);
+    expect(html).toContain("Dana Reyes");
+    expect(html).toContain("organization&#x27;s recorded owner");
+  });
+
   it("uses My Work and Work Room language on the existing Workspace route", () => {
     const html = renderToStaticMarkup(<WorkCaseDetailView detail={detail} />);
 

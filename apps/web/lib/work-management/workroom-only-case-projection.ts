@@ -141,6 +141,7 @@ export async function loadWorkroomOnlyCaseDetail({
   const drive = readStoredWorkroomDriveState(room.workspaceState);
   detail.summary.sourceRefs.push(...execution.sourceRefs);
   const roomView = buildWorkroomView({
+    executionAttentionReason: execution.attentionReason,
     caseKey,
     detail: titledDetail,
     sourceHealth: execution.partial ? "partial" : "ok",
@@ -168,11 +169,6 @@ export async function loadWorkroomOnlyCaseDetail({
     },
     now,
   });
-  if (execution.attentionReason) {
-    roomView.work.attentionRequired = true;
-    roomView.work.attentionReason = execution.attentionReason;
-    roomView.work.nextAction = "Inspect Observed execution for the reviewer status and required action.";
-  }
 
   // The list-item fields the detail summary does not carry are stated, not
   // guessed: this projection knows the room's status and nothing about urgency,
@@ -183,8 +179,8 @@ export async function loadWorkroomOnlyCaseDetail({
     urgencyLabel: "Not recorded",
     effortLabel: "Not recorded",
     assignmentLabel: "Not recorded",
-    attentionRequired: Boolean(execution.attentionReason) || room.status === "blocked",
-    attentionReason: execution.attentionReason ?? (room.status === "blocked" ? "This Workroom is blocked." : null),
+    attentionRequired: roomView.work.attentionRequired,
+    attentionReason: roomView.work.attentionReason,
     description: objective,
     dueAt: detail.summary.dueAt ?? null,
   };

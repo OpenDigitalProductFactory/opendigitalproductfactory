@@ -61,6 +61,33 @@ function completeBoundary(): BuildWorkroomViewInput["boundary"] {
 }
 
 describe("Work Room read model", () => {
+  it.each(["closed", "cancelled"] as const)("does not reopen a %s room because its current coordinator is missing", (state) => {
+    const room = buildWorkroomView({
+      caseKey: "booking%3ABK-100",
+      detail: caseDetail({ state, terminal: true, nextAction: "No action" }),
+      scopeClaims: [{ workShape: "delivery-small@1.0.0" }],
+      now: new Date("2026-09-21T03:00:00Z"),
+    });
+    expect(room.processOverseer.disposition).toBe("pause");
+    expect(room.work.attentionRequired).toBe(false);
+    expect(room.work.nextAction).toBe("No action");
+    expect(room.work.terminal).toBe(true);
+  });
+
+  it("exposes the missing-coordinator pause before any stage starts", () => {
+    const room = buildWorkroomView({
+      caseKey: "booking%3ABK-100",
+      detail: caseDetail(),
+      scopeClaims: [{ workShape: "delivery-small@1.0.0" }],
+      now: new Date("2026-09-21T03:00:00Z"),
+    });
+    expect(room.processOverseer.disposition).toBe("pause");
+    expect(room.work.attentionRequired).toBe(true);
+    expect(room.work.attentionReason).toContain("explicit Process Overseer");
+    expect(room.work.nextAction).not.toBe("Continue work");
+    expect(room.work.terminal).toBe(false);
+  });
+
   it("projects a finite Work Case without creating a second identity", () => {
     const room = buildWorkroomView({
       caseKey: "booking%3ABK-100",

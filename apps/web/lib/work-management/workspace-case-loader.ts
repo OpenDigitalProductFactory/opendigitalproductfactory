@@ -684,6 +684,7 @@ export async function loadWorkspaceWorkCaseDetail({
   const boundaryClaim = readWorkroomBoundaryClaim(anchoredCapsule?.scopeClaims);
 
   const room = buildWorkroomView({
+    executionAttentionReason: execution.attentionReason,
     caseKey: resolvedCaseKey,
     sourceHealth: execution.partial ? "partial" : undefined,
     detail,
@@ -744,16 +745,12 @@ export async function loadWorkspaceWorkCaseDetail({
     },
   });
 
-  if (execution.attentionReason) {
-    room.work.attentionRequired = true;
-    room.work.attentionReason = [execution.attentionReason, room.work.attentionReason].filter(Boolean).join(" · ");
-    room.work.nextAction = "Inspect Observed execution for the reviewer status and required action.";
-  }
   return {
     // Same derivation as the list (BI-2310EEE1) — feed the capsules this loader
     // already fetched so the room's headline state matches the list's instead of
     // falling back to the raw WorkItem status.
-    summary: toListItem(item, userId, now, capsules),
+    summary: { ...toListItem(item, userId, now, capsules),
+      attentionRequired: room.work.attentionRequired, attentionReason: room.work.attentionReason },
     evidenceTimeline: detail.timeline,
     sourceRefs: detail.summary.sourceRefs,
     workItemId: item.id,

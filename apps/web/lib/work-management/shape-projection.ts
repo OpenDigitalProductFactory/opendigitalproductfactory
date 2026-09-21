@@ -46,6 +46,7 @@ export interface ShapeRow {
    * so a rendered verdict can always be traced back to what recorded it.
    */
   receiptRef: { table: string; id: string } | null;
+  sourceRef?: WorkCaseSourceRef;
   /** Who acted, when the receipt named an actor. */
   actor: string | null;
   occurredAt?: string;
@@ -85,6 +86,7 @@ export interface ShapeGraph {
     sourceHealth: WorkroomView["projection"]["sourceHealth"];
     gaps: string[];
     receipts: ShapeRow[];
+    events?: ShapeRow[];
   };
 }
 
@@ -263,7 +265,7 @@ export function projectRoomShape(
         reason: stage.key === currentStageKey ? check.interventionReason ?? view.work.attentionReason ?? "The process check reports this stage." : "No step-linked execution receipt is available.",
         next: stage.key === currentStageKey
           ? `${permission}${recordedAction}`
-          : `Intended advance condition: ${stage.advance.condition}`,
+          : `Intended advance condition: ${stage.advance.condition} ${permission}`,
         owner: ownerName(stage.accountablePrincipalRef), expectedEvidence: stage.evidence, affected,
       },
     }));
@@ -301,6 +303,12 @@ export function projectRoomShape(
       sourceHealth: view.projection.sourceHealth,
       gaps,
       receipts: view.receipts.map(rowFromReceipt),
+      events: view.activity.map((event) => ({
+        key: event.eventId, label: event.summary, summary: event.summary,
+        state: "observed", detail: event.kind, receiptRef: null, sourceRef: event.sourceRef,
+        actor: event.actorRef?.actorId ?? event.actorRef?.actorKind ?? null,
+        ...(event.occurredAt ? { occurredAt: event.occurredAt } : {}),
+      })),
     },
   };
 }
