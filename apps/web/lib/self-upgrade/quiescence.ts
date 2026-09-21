@@ -18,6 +18,8 @@
  * BI-QUIESCE-002.
  */
 import { prisma } from "@dpf/db";
+import { transitionState } from "./quiescence-state-write";
+export { transitionState, heartbeatQuiescenceRun } from "./quiescence-state-write";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
@@ -154,13 +156,19 @@ export async function setQuiescenceLevel(
   level: QuiescenceLevel,
   runId: string | null,
   now: Date = new Date(),
+  expectedRunId?: string,
 ): Promise<void> {
   const config: QuiescenceConfig = {
     level,
     runId,
     enteredAt: now.toISOString(),
   };
-  await prisma.platformConfig.upsert({
+  if (expectedRunId) {
+    await prisma.platformConfig.updateMany({
+      where: { key: QUIESCENCE_CONFIG_KEY, value: { path: ["runId"], equals: expectedRunId } },
+      data: { value: config as unknown as object },
+    });
+  } else await prisma.platformConfig.upsert({
     where: { key: QUIESCENCE_CONFIG_KEY },
     create: { key: QUIESCENCE_CONFIG_KEY, value: config as unknown as object },
     update: { value: config as unknown as object },
@@ -181,84 +189,6 @@ export type QuiescenceTrigger = "self-upgrade" | "manual" | "sandbox-recovery" |
  * spot a concurrent transition that already advanced past the requested
  * state — defensive against the watchdog racing the coordinator).
  */
-export async function transitionState(
-  runId: string,
-  toStatus: QuiescenceRunStatus,
-  patches: {
-    initialSnapshot?: unknown;
-    finalSnapshot?: unknown;
-    swapStartedAt?: Date;
-    swapCompletedAt?: Date;
-    completedAt?: Date;
-    deferReason?: string;
-    deferSurface?: string;
-    forcedSurfaces?: unknown[];
-    outcome?: string;
-    completionSource?: string;
-    outcomeNotes?: string;
-    actualWaitMs?: number;
-  } = {},
-  now: Date = new Date(),
-): Promise<{ status: string; enteredStateAt: EnteredStateAt } | null> {
-  const row = await prisma.quiescenceRun.findUnique({
-    where: { runId },
-    select: { enteredStateAt: true },
-  });
-  if (!row) return null;
-  const prior =
-    (row.enteredStateAt as unknown as EnteredStateAt | null | undefined) ?? {};
-  const enteredStateAt: EnteredStateAt = { ...prior, [toStatus]: now.toISOString() };
-
-  const updated = await prisma.quiescenceRun.update({
-    where: { runId },
-    data: {
-      status: toStatus,
-      enteredStateAt: enteredStateAt as unknown as object,
-      ...(patches.initialSnapshot !== undefined
-        ? { initialSnapshot: patches.initialSnapshot as unknown as object }
-        : {}),
-      ...(patches.finalSnapshot !== undefined
-        ? { finalSnapshot: patches.finalSnapshot as unknown as object }
-        : {}),
-      ...(patches.swapStartedAt !== undefined ? { swapStartedAt: patches.swapStartedAt } : {}),
-      ...(patches.swapCompletedAt !== undefined ? { swapCompletedAt: patches.swapCompletedAt } : {}),
-      ...(patches.completedAt !== undefined ? { completedAt: patches.completedAt } : {}),
-      ...(patches.deferReason !== undefined ? { deferReason: patches.deferReason } : {}),
-      ...(patches.deferSurface !== undefined ? { deferSurface: patches.deferSurface } : {}),
-      ...(patches.forcedSurfaces !== undefined
-        ? { forcedSurfaces: patches.forcedSurfaces as unknown as object }
-        : {}),
-      ...(patches.outcome !== undefined ? { outcome: patches.outcome } : {}),
-      ...(patches.completionSource !== undefined
-        ? { completionSource: patches.completionSource }
-        : {}),
-      ...(patches.outcomeNotes !== undefined ? { outcomeNotes: patches.outcomeNotes } : {}),
-      ...(patches.actualWaitMs !== undefined ? { actualWaitMs: patches.actualWaitMs } : {}),
-    },
-    select: { status: true, enteredStateAt: true },
-  });
-
-  return {
-    status: updated.status,
-    enteredStateAt: (updated.enteredStateAt as unknown as EnteredStateAt | null) ?? {},
-  };
-}
-
-/**
- * Coordinator function heartbeat — fired every wait-loop tick. Cheap update;
- * the watchdog (BI-QUIESCE-007) scans `lastHeartbeatAt` to detect crashed
- * coordinators.
- */
-export async function heartbeatQuiescenceRun(
-  runId: string,
-  now: Date = new Date(),
-): Promise<void> {
-  await prisma.quiescenceRun.update({
-    where: { runId },
-    data: { lastHeartbeatAt: now },
-  });
-}
-
 /**
  * Flips every actively-working TaskRun to 'quiescing' status. Triggered on
  * the normal→draining transition. The cooperative-cancel pathway in
