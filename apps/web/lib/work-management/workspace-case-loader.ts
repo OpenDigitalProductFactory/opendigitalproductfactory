@@ -741,6 +741,7 @@ export async function loadWorkspaceWorkCaseDetail({
       ...execution.receipts,
       ...roomReceiptsFromMessages(item, messages),
     ],
+    reviewerRuns: execution.reviewerRuns,
     participants,
     context: {
       refs: sourceRefs,

@@ -67,6 +67,7 @@ export interface BuildWorkroomViewInput {
   outcomePacket?: WorkroomOutcomePacket | null;
   outcomeHealth?: WorkroomOutcomeView["health"];
   receipts?: readonly ReceiptEnvelope[];
+  reviewerRuns?: WorkroomView["reviewerRuns"];
   sourceHealth?: WorkroomView["projection"]["sourceHealth"];
   executionAttentionReason?: string | null;
   /**
@@ -339,6 +340,7 @@ export function buildWorkroomView(
     posture,
     processOverseer,
     receipts: [...(input.receipts ?? [])],
+    reviewerRuns: input.reviewerRuns ?? [],
     sourceRefs,
     structure: input.structure ?? null,
     projection: {

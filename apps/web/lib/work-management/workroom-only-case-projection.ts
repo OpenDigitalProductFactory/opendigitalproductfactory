@@ -157,6 +157,7 @@ export async function loadWorkroomOnlyCaseDetail({
     participants: [],
     activities: execution.activities,
     receipts: execution.receipts,
+    reviewerRuns: execution.reviewerRuns,
     context: {
       refs: detail.summary.sourceRefs,
       digest: objective,

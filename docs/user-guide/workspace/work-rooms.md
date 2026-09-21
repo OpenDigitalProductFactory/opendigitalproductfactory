@@ -359,6 +359,15 @@ saved with the request. Signing in again does not replace those saved credential
 The inspector retains the original deadline and recovery count; the server checks
 authority again before accepting recovery.
 
+You can also inspect a reviewer under the room's **Observed execution**. Expand
+its request to see the recorded state, reason, next action, requester and history.
+Checkpoint rows identify the reviewing agents; completed checkpoints alone do not
+prove a successful verdict. The read time and heartbeat show how fresh the view is.
+For a waiting request, the shared recovery controls show its original deadline
+and attempts. Only the original requester can submit recovery, and the server
+rechecks saved authority. An expired window or exhausted limit cannot be reset
+from the room. Intended steps remain separate from these execution observations.
+
 When a case has several Workrooms, choose a room to inspect its own process and
 owners. Links from the operation view keep the selected room and navigation
 context. The case does not combine coordinators from different rooms.

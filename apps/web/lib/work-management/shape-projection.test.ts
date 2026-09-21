@@ -82,6 +82,15 @@ describe("BI-23DB08BB — the room's shape is readable without reading", () => {
 });
 
 describe("execution truth", () => {
+  it("preserves canonical requester and agent identities on observed receipts", () => {
+    const graph = projectRoomShape(view({ receipts: [
+      receipt({ id: "request", actorRef: { actorKind: "person", actorId: "requester-1" } }),
+      receipt({ id: "checkpoint", actorRef: { actorKind: "agent", actorId: "AGT-181" } }),
+      receipt({ id: "system", actorRef: { actorKind: "system" } }),
+    ] }));
+    expect(graph.process?.receipts.map(row => row.actor)).toEqual(["requester-1", "AGT-181", "system"]);
+  });
+
   it("retains observed activity separately from receipts without verifying a stage", () => {
     const graph = projectRoomShape(view({ activity: [{
       eventId: "work-capsule:activity-1", kind: "external-event", occurredAt: "2026-09-21T03:00:00Z",
