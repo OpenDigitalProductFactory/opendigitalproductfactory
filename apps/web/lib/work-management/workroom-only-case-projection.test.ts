@@ -6,6 +6,8 @@ import {
   type WorkroomOnlyRecord,
 } from "./workroom-only-case-projection";
 
+const AUTH = { principalId: "PRN-OWNER", sensitivityClearance: ["internal"], isSuperuser: false };
+
 const NOW = new Date("2026-09-07T12:00:00.000Z");
 
 function client(room: WorkroomOnlyRecord | null): WorkroomOnlyPrismaClient {
@@ -19,6 +21,7 @@ function client(room: WorkroomOnlyRecord | null): WorkroomOnlyPrismaClient {
 }
 
 const room = (over: Partial<WorkroomOnlyRecord> = {}): WorkroomOnlyRecord => ({
+  createdByPrincipal: { principalId: "PRN-OWNER" },
   capsuleId: "WC-ALPHA",
   title: "Reconcile the ledger",
   status: "working",
@@ -29,7 +32,7 @@ const room = (over: Partial<WorkroomOnlyRecord> = {}): WorkroomOnlyRecord => ({
 });
 
 const load = (r: WorkroomOnlyRecord | null, sourceId = "WC-ALPHA") =>
-  loadWorkroomOnlyCaseDetail({
+  loadWorkroomOnlyCaseDetail({ authContext: AUTH,
     prismaClient: client(r),
     sourceId,
     // The route hands the loader the encoded key; buildWorkroomView enforces it.
@@ -38,6 +41,39 @@ const load = (r: WorkroomOnlyRecord | null, sourceId = "WC-ALPHA") =>
   });
 
 describe("loadWorkroomOnlyCaseDetail", () => {
+  it.each([
+    { label: "not admitted", authContext: { ...AUTH, principalId: "PRN-OTHER" } },
+    { label: "insufficient clearance", authContext: { ...AUTH, sensitivityClearance: ["public"] } },
+    { label: "missing caller", authContext: undefined },
+  ])("does not read execution for a caller who is $label", async ({ authContext }) => {
+    const findMany = vi.fn();
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext,
+      prismaClient: { ...client(room()), workroomActivity: { findMany }, taskRun: { findMany } },
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail).toBeNull();
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("admits the selected active participant using canonical principal identity", async () => {
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: { ...AUTH, principalId: "PRN-MEMBER" },
+      prismaClient: client(room({ participants: [{ principal: { principalId: "PRN-MEMBER" } }] })),
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail).not.toBeNull();
+  });
+
+  it("applies the declared sensitivity ceiling even to the creator", async () => {
+    const findMany = vi.fn();
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
+      prismaClient: { ...client(room({ scopeClaims: [{ workroomBoundary: { sensitivityCeiling: "restricted" } }] })),
+        workroomActivity: { findMany }, taskRun: { findMany } },
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail).toBeNull();
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
   it("retains the standalone room's execution evidence and versioned shape", async () => {
     const findMany = vi.fn().mockResolvedValue([{
       id: "journal-1", workCapsuleId: "row-1", kind: "evidence-recorded",
@@ -48,7 +84,7 @@ describe("loadWorkroomOnlyCaseDetail", () => {
       workroomActivity: { findMany },
       taskRun: { findMany: vi.fn().mockResolvedValue([]) },
     };
-    const detail = await loadWorkroomOnlyCaseDetail({ prismaClient: db,
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH, prismaClient: db,
       sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW });
     expect(detail!.room!.processOverseer.shapeKey).toBe("delivery-small");
     expect(detail!.room!.receipts).toEqual(expect.arrayContaining([
@@ -61,7 +97,7 @@ describe("loadWorkroomOnlyCaseDetail", () => {
   });
 
   it("reports unreadable execution as partial rather than empty success", async () => {
-    const detail = await loadWorkroomOnlyCaseDetail({
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
       prismaClient: { ...client(room({ id: "row-1" })),
         workroomActivity: { findMany: async () => { throw new Error("unavailable"); } } },
       sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
@@ -71,7 +107,7 @@ describe("loadWorkroomOnlyCaseDetail", () => {
   });
 
   it("keeps a failed reviewer visible in both the case summary and room", async () => {
-    const detail = await loadWorkroomOnlyCaseDetail({
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
       prismaClient: { ...client(room({ id: "row-1" })),
         workroomActivity: { findMany: vi.fn().mockResolvedValue([]) },
         taskRun: { findMany: vi.fn().mockResolvedValue([{

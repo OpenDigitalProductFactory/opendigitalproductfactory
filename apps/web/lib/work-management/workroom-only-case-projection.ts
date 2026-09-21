@@ -28,6 +28,7 @@ import { projectDeclaredBoundary } from "./room-boundary";
 import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
 import { readStoredWorkroomDriveState } from "./workroom-drive-state";
 import { readWorkroomShapeClaim } from "./workroom-shape-claim";
+import { authorizeWorkroomAccess } from "./room-participation";
 import type { WorkspaceWorkCaseDetailView, WorkspaceWorkCaseListItem } from "./workspace-case-loader";
 
 /** The capsule fields this projection reads. */
@@ -42,6 +43,10 @@ export type WorkroomOnlyRecord = {
   scopeClaims?: unknown;
   workspaceState?: unknown;
   activityKind?: string | null;
+  createdByPrincipal?: { principalId: string } | null;
+  leaseHolderPrincipal?: { principalId: string } | null;
+  requestedByPrincipal?: { principalId: string } | null;
+  participants?: { principal: { principalId: string } }[];
 };
 
 export type WorkroomOnlyPrismaClient = {
@@ -67,12 +72,15 @@ export async function loadWorkroomOnlyCaseDetail({
   sourceId,
   caseKey,
   now,
+  authContext,
 }: {
   prismaClient: WorkroomOnlyPrismaClient;
   sourceId: string;
   caseKey: string;
   now: Date;
+  authContext?: { principalId: string | null; sensitivityClearance: readonly string[]; isSuperuser: boolean };
 }): Promise<WorkspaceWorkCaseDetailView | null> {
+  if (!authContext) return null;
   if (!prismaClient.workroom?.findFirst) return null;
   const room = await prismaClient.workroom.findFirst({
     where: { capsuleId: sourceId },
@@ -87,12 +95,31 @@ export async function loadWorkroomOnlyCaseDetail({
       scopeClaims: true,
       workspaceState: true,
       activityKind: true,
+      createdByPrincipal: { select: { principalId: true } },
+      leaseHolderPrincipal: { select: { principalId: true } },
+      requestedByPrincipal: { select: { principalId: true } },
+      participants: {
+        where: { lifecycle: "active", principal: { principalId: authContext.principalId ?? "" } },
+        select: { principal: { select: { principalId: true } } },
+        take: 1,
+      },
     },
   });
   if (!room) return null;
   // An anchored room's case is its WorkItem's. Resolving it here as well would
   // give one unit of work two cases.
   if (room.workItemId) return null;
+  const boundaryClaim = readWorkroomBoundaryClaim(room.scopeClaims);
+  const admission = authorizeWorkroomAccess({
+    requested: "content", principalRef: authContext.principalId,
+    assignedPrincipalRefs: [room.createdByPrincipal, room.leaseHolderPrincipal, room.requestedByPrincipal,
+      ...(room.participants ?? []).map(entry => entry.principal)]
+      .flatMap(principal => principal ? [principal.principalId] : []),
+    sensitivityCeiling: boundaryClaim?.sensitivityCeiling ?? "internal",
+    sensitivityClearance: authContext.sensitivityClearance,
+    isSuperuser: authContext.isSuperuser,
+  });
+  if (admission.level !== "content") return null;
 
   const source = { sourceType: SOURCE_TYPE, sourceId: room.capsuleId, status: room.status };
   const detail = buildWorkCaseDetail({
@@ -126,7 +153,7 @@ export async function loadWorkroomOnlyCaseDetail({
       stopConditionHits: drive.stopConditionHits, reviewDue: drive.reviewDue,
     },
     boundary: projectDeclaredBoundary({
-      claim: readWorkroomBoundaryClaim(room.scopeClaims),
+      claim: boundaryClaim,
       fallbackPurpose: objective,
       fallbackOutcome: objective,
       sourceRefs: detail.summary.sourceRefs,

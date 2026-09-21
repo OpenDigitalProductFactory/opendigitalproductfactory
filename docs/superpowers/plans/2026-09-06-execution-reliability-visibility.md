@@ -24,6 +24,13 @@ are not empty successful executions. Journal entries and task snapshots remain
 observations, never successful gate verdicts. Missing purpose and scope stay gaps.
 Propagate reviewer attention to both the room and case summary.
 
+The standalone route must pass the effective authenticated principal to the
+loader. Before reading execution, reuse Workroom content admission and clearance:
+resolve creator/requester/holder and active roster membership through canonical
+principal references, and enforce the declared sensitivity ceiling. Absence of
+auth context, admission or clearance returns no detail and performs no evidence
+query. Presence and structural containment do not confer admission.
+
 UX fit remains fits-with-guardrails within the existing Workspace case route and
 its shape, observed-execution and evidence components. No new navigation, actions,
 status styling or authority is introduced. The source of truth is the persisted
