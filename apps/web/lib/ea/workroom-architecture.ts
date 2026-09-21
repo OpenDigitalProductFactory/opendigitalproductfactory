@@ -1,11 +1,13 @@
 import {
   WORK_CAPSULE_PORTFOLIO_ROLES,
+  WORK_CAPSULE_STATUSES,
   type WorkCapsulePortfolioRole,
 } from "@/lib/work-capsules";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
 import { TERMINAL_CAPSULE_STATUSES } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
-import type { PrismaClient } from "@dpf/db";
+import type { Prisma, PrismaClient } from "@dpf/db";
+import { projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
 
 type ArchitectureDb = {
   valueStreamTeam: { findMany(args: unknown): Promise<any[]> };
@@ -15,29 +17,42 @@ type ArchitectureDb = {
 export async function loadWorkroomCoordination(
   db: { workroom: Pick<PrismaClient["workroom"], "findMany"> },
   now = new Date(),
-  filter: { teamId?: string | null } = {},
+  filter: { teamId?: string | null; query?: string; status?: string; after?: string } = {},
 ) {
+  const query = filter.query?.trim().slice(0, 200) ?? "";
+  const after = filter.after?.trim().slice(0, 100) ?? "";
+  const status = WORK_CAPSULE_STATUSES.find((candidate) => candidate === filter.status
+    && !TERMINAL_CAPSULE_STATUSES.includes(candidate));
+  const conditions: Prisma.WorkroomWhereInput[] = [];
+  if (filter.teamId === null) conditions.push({ OR: [{ workItem: { is: null } }, { workItem: { is: { teamId: null } } }] });
+  if (query) conditions.push({ OR: [{ title: { contains: query, mode: "insensitive" } }, { capsuleId: { contains: query, mode: "insensitive" } }] });
   const rows = await db.workroom.findMany({
-    where: { archivedAt: null, status: { notIn: TERMINAL_CAPSULE_STATUSES },
-      ...(filter.teamId === undefined ? {} : filter.teamId === null
-        ? { OR: [{ workItem: { is: null } }, { workItem: { is: { teamId: null } } }] }
-        : { workItem: { is: { teamId: filter.teamId } } }),
+    where: { archivedAt: null, status: status ?? { notIn: TERMINAL_CAPSULE_STATUSES },
+      ...(typeof filter.teamId === "string" ? { workItem: { is: { teamId: filter.teamId } } } : {}),
+      ...(conditions.length ? { AND: conditions } : {}),
+      ...(after ? { capsuleId: { gt: after } } : {}),
     },
     orderBy: { capsuleId: "asc" }, take: 201,
-    select: { capsuleId: true, title: true, status: true,
+    select: { capsuleId: true, title: true, status: true, workspaceState: true,
       workItem: { select: { teamId: true, parentItemId: true, assignedToUserId: true, assignedToAgentId: true } },
     },
   });
   return {
     readAt: now.toISOString(), truncated: rows.length > 200,
+    nextCursor: rows.length > 200 ? rows[199]!.capsuleId : null,
     rooms: rows.slice(0, 200).map((row) => {
       const teamId = row.workItem?.teamId ?? null;
       const caseKey = encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: row.capsuleId });
+      const params = new URLSearchParams({ operation: filter.teamId === undefined ? "all" : filter.teamId ?? "unmapped" });
+      if (query) params.set("coordinationQuery", query);
+      if (status) params.set("coordinationStatus", status);
+      if (after) params.set("coordinationAfter", after);
       return {
         roomId: row.capsuleId, title: row.title, status: row.status, teamId,
         parentItemId: row.workItem?.parentItemId ?? null,
         assignedActorRef: row.workItem?.assignedToUserId ?? row.workItem?.assignedToAgentId ?? null,
-        href: `/workspace/cases/${caseKey}?operation=${encodeURIComponent(teamId ?? "unmapped")}`,
+        waitReason: projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason,
+        href: `/workspace/cases/${caseKey}?${params}`,
       };
     }),
   };

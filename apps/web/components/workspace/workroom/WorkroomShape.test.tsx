@@ -6,12 +6,13 @@ import { WorkroomShape } from "./WorkroomShape";
 import type { ShapeGraph } from "@/lib/work-management/shape-projection";
 
 const replace = vi.fn();
+const navigation = vi.hoisted(() => ({ query: "operation=reviewer-recovery" }));
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams("operation=reviewer-recovery"),
+  useSearchParams: () => new URLSearchParams(navigation.query),
   usePathname: () => "/workspace/cases/reviewer",
   useRouter: () => ({ replace }),
 }));
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); navigation.query = "operation=reviewer-recovery"; });
 
 const graph: ShapeGraph = {
   stages: ["Prepare", "Review"].map((label) => ({ key: label.toLowerCase(), label, state: "unknown", parallel: false, rows: [], inspection: {
@@ -24,6 +25,12 @@ const graph: ShapeGraph = {
 };
 
 describe("Workroom process inspection", () => {
+  it("returns to the same coordination filters and page without leaking step filters", () => {
+    navigation.query = "operation=all&coordinationQuery=review&coordinationStatus=blocked&coordinationAfter=WC-099&processStep=review&processQuery=prepare";
+    render(<WorkroomShape graph={graph} />);
+    expect(screen.getByRole("link", { name: "Operation" })).toHaveAttribute("href",
+      "/ea/workrooms?operation=all&coordinationQuery=review&coordinationStatus=blocked&coordinationAfter=WC-099#coordination");
+  });
   it("previews linked records without implying established impact and reveals every identity", () => {
     const many = structuredClone(graph);
     many.stages[0].inspection!.affected = Array.from({ length: 21 }, (_, index) => ({ kind: "task-run" as const, id: `review-${index}` }));
