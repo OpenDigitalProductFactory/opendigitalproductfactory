@@ -885,6 +885,15 @@ The two existing axe violations remain recorded; this is not an accessibility pa
 
 ### Reviewer response contract and safe failure diagnosis
 
+The next actual review, TR-GATE-57C976FB4645325A907F9900, recorded three
+successful provider telemetry rows but only one completed checkpoint. The worker
+retains provider-outcome-uncertain and discards the rejected branch's error. The
+cause is unknown. Extend the existing failure record with the last attempted
+checkpoint phase and allowlisted error kind/code only, never error messages or
+provider content. Preserve the generation fence, original deadline and manual
+recovery requirement. Verify read, provider and write failures independently;
+no retry is introduced by diagnostic capture.
+
 Release3 review TR-GATE-6B57503C6CF9DF933ADE9985 records one truncated branch
 and two invalid-JSON branches. Strict validation correctly withheld a verdict.
 The response prompt itself demonstrates invalid JSON (`"pass" or "fail"`) and
