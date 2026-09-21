@@ -4,10 +4,6 @@
   "decisionInteractionId": "DI-AB55BD5548FD",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx",
-      "apps/web/components/workspace/WorkCaseDetailView.tsx",
-      "apps/web/components/workspace/workroom/RoomWorkforcePanel.tsx",
-      "apps/web/components/workspace/workroom/WorkroomHeader.tsx",
       "apps/web/components/workspace/workroom/WorkroomShape.tsx"
     ]
   },
