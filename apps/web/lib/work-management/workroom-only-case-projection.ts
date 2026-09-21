@@ -23,16 +23,25 @@
 import { buildWorkCaseDetail } from "./case-read-model";
 import { encodeWorkCaseKey } from "./case-key";
 import { buildWorkroomView } from "./room-read-model";
+import { loadWorkroomExecutionEvidence, type WorkroomExecutionClient } from "./workroom-execution-evidence";
+import { projectDeclaredBoundary } from "./room-boundary";
+import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
+import { readStoredWorkroomDriveState } from "./workroom-drive-state";
+import { readWorkroomShapeClaim } from "./workroom-shape-claim";
 import type { WorkspaceWorkCaseDetailView, WorkspaceWorkCaseListItem } from "./workspace-case-loader";
 
 /** The capsule fields this projection reads. */
 export type WorkroomOnlyRecord = {
+  id?: string;
   capsuleId: string;
   title: string;
   status: string;
   objective?: string | null;
   workItemId?: string | null;
   updatedAt?: Date | string | null;
+  scopeClaims?: unknown;
+  workspaceState?: unknown;
+  activityKind?: string | null;
 };
 
 export type WorkroomOnlyPrismaClient = {
@@ -42,7 +51,7 @@ export type WorkroomOnlyPrismaClient = {
    * throwing. Same guard `canonical-case-key.ts` applies.
    */
   workroom: { findFirst?(args: unknown): Promise<WorkroomOnlyRecord | null> };
-};
+} & WorkroomExecutionClient;
 
 const SOURCE_TYPE = "work-capsule";
 
@@ -68,12 +77,16 @@ export async function loadWorkroomOnlyCaseDetail({
   const room = await prismaClient.workroom.findFirst({
     where: { capsuleId: sourceId },
     select: {
+      id: true,
       capsuleId: true,
       title: true,
       status: true,
       objective: true,
       workItemId: true,
       updatedAt: true,
+      scopeClaims: true,
+      workspaceState: true,
+      activityKind: true,
     },
   });
   if (!room) return null;
@@ -97,19 +110,30 @@ export async function loadWorkroomOnlyCaseDetail({
   };
 
   const objective = room.objective?.trim() || null;
+  const execution = await loadWorkroomExecutionEvidence(prismaClient, [room], now);
+  const drive = readStoredWorkroomDriveState(room.workspaceState);
+  detail.summary.sourceRefs.push(...execution.sourceRefs);
   const roomView = buildWorkroomView({
     caseKey,
     detail: titledDetail,
-    boundary: {
-      // The room's own objective is its purpose. Where none was recorded the
-      // boundary says so rather than restating the title as if it were intent.
-      purpose: objective ?? "No objective was recorded for this Workroom.",
-      outcome: objective ?? "No objective was recorded for this Workroom.",
-      scopeIncluded: [room.title],
-      sourceRefs: detail.summary.sourceRefs,
+    sourceHealth: execution.partial ? "partial" : "ok",
+    scopeClaims: room.scopeClaims,
+    shapeKey: readWorkroomShapeClaim(room.scopeClaims),
+    activityKind: room.activityKind,
+    processOverseerObservation: {
+      currentStageKey: drive.currentStageKey, proposedStageKey: drive.currentStageKey,
+      receipts: drive.receipts, budgetUsage: drive.budgetUsage,
+      stopConditionHits: drive.stopConditionHits, reviewDue: drive.reviewDue,
     },
+    boundary: projectDeclaredBoundary({
+      claim: readWorkroomBoundaryClaim(room.scopeClaims),
+      fallbackPurpose: objective,
+      fallbackOutcome: objective,
+      sourceRefs: detail.summary.sourceRefs,
+    }),
     participants: [],
-    activities: [],
+    activities: execution.activities,
+    receipts: execution.receipts,
     context: {
       refs: detail.summary.sourceRefs,
       digest: objective,
@@ -117,6 +141,11 @@ export async function loadWorkroomOnlyCaseDetail({
     },
     now,
   });
+  if (execution.attentionReason) {
+    roomView.work.attentionRequired = true;
+    roomView.work.attentionReason = execution.attentionReason;
+    roomView.work.nextAction = "Inspect Observed execution for the reviewer status and required action.";
+  }
 
   // The list-item fields the detail summary does not carry are stated, not
   // guessed: this projection knows the room's status and nothing about urgency,
@@ -127,8 +156,8 @@ export async function loadWorkroomOnlyCaseDetail({
     urgencyLabel: "Not recorded",
     effortLabel: "Not recorded",
     assignmentLabel: "Not recorded",
-    attentionRequired: room.status === "blocked",
-    attentionReason: room.status === "blocked" ? "This Workroom is blocked." : null,
+    attentionRequired: Boolean(execution.attentionReason) || room.status === "blocked",
+    attentionReason: execution.attentionReason ?? (room.status === "blocked" ? "This Workroom is blocked." : null),
     description: objective,
     dueAt: detail.summary.dueAt ?? null,
   };

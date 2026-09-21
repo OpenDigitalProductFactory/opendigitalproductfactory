@@ -9,6 +9,34 @@ Workroom: WC-4A72DC95. Parent delivery item: BI-06AE6833.
 Decision: DI-515AD614CCF6, harden existing DPF/Inngest execution.
 Canonical design: [throughput design sections 8.1–8.7](../specs/2026-09-03-local-first-agentic-delivery-throughput-design.md).
 
+## September 21 standalone execution projection (WC-99AECC86)
+
+Current main 5cdafb1 exposes standalone rooms through the canonical case route,
+but its standalone loader omits scope claims, driver state and execution evidence.
+The anchored loader already reads these facts. Extend the existing standalone
+projection and extract one bounded journal/reviewer reader used by both loaders.
+This continues BI-06AE6833 and its portal coverage rather than opening an initiative.
+
+Keep persisted definition/version, declared boundary and driver observations intact.
+Read journal entries by database room identity and reviewers by stable capsule ID.
+Missing readers, failed reads and truncated windows are partial projections; they
+are not empty successful executions. Journal entries and task snapshots remain
+observations, never successful gate verdicts. Missing purpose and scope stay gaps.
+Propagate reviewer attention to both the room and case summary.
+
+UX fit remains fits-with-guardrails within the existing Workspace case route and
+its shape, observed-execution and evidence components. No new navigation, actions,
+status styling or authority is introduced. The source of truth is the persisted
+Workroom, WorkroomActivity and correlated TaskRun, through the shared read model.
+Verify both anchored and standalone readers, partial history, reviewer failures,
+and unknown boundaries, then exercise the served standalone room after release.
+
+Consolidation removes the anchored loader's separate journal query, identity map,
+receipt conversion and reviewer loading in favor of the shared reader. Source
+regressions reproduced missing shape/evidence and false healthy readback before
+repair. This is not proof of the seven runtime recovery scenarios, nesting or
+archetype coverage; those remain acceptance obligations for the overall outcome.
+
 ## 2026-09-12 reviewer source classification repair
 
 WC-C7F9AB04 extends BI-06AE6833 after the memory review exposed another routing
