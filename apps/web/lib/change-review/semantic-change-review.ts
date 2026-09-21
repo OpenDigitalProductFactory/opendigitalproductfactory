@@ -30,9 +30,17 @@ export interface SemanticReviewResult {
   issues: SemanticReviewIssue[];
   summary: string;
   parseError?: true;
+  /** Content-free diagnostics survive branch checkpoints and receipt readback. */
+  parseDiagnostics?: SemanticReviewParseDiagnostic[];
   /** Infrastructure/protocol failure, deliberately separate from semantic findings. */
   inconclusiveReason?: string;
   failureAnalysisReview?: { adequate: boolean; rationale: string };
+}
+
+export interface SemanticReviewParseDiagnostic {
+  agentId?: string;
+  stage: "missing-json" | "invalid-json" | "schema-mismatch";
+  violations?: Array<{ field: string; code: string }>;
 }
 
 export interface SemanticReviewIdentity {
@@ -233,43 +241,87 @@ const reviewerResponseSchema = z.object({
 });
 
 export function parseSemanticReviewResponse(raw: string): SemanticReviewResult {
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return unparseableReview({ stage: "missing-json" });
+  let value: unknown;
   try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found");
-    const parsed = reviewerResponseSchema.parse(JSON.parse(jsonMatch[0]));
-    const { issues, summary } = parsed;
-    // BI-82902891: a reviewer that could not see the change must never reach the
-    // pass path. Before this channel existed the response contract offered only
-    // pass|fail and the decision came from issue severity alone, so "the tree I
-    // was given does not contain this change" arrived as an `important` issue
-    // and aggregated into a PASS — an independent-review receipt for a change
-    // nobody had read. Inability to review is an INCONCLUSIVE outcome, which
-    // already fails closed downstream, not a finding about the code.
-    const stated = parsed.decision;
-    // The channel is the contract, but a reviewer that ignores it and files
-    // "I could not see this change" as a finding must not reach the pass path
-    // either — that is the exact shape of the BI-82902891 incident.
-    if (stated === "cannot-verify" || stated === "inconclusive" || reportsUnreviewableChange(issues, summary)) {
-      return {
-        decision: "inconclusive",
-        issues,
-        summary,
-        inconclusiveReason: "reviewer-could-not-verify-change",
-      };
-    }
-    return {
-      decision: issues.some((issue) => issue.severity === "critical") ? "fail" : "pass",
-      issues,
-      summary,
-      ...(parsed.failureAnalysisReview ? { failureAnalysisReview: parsed.failureAnalysisReview } : {}),
-    };
+    value = JSON.parse(jsonMatch[0]);
   } catch {
+    // JSON parser messages can quote source or credentials. Never retain them.
+    return unparseableReview({ stage: "invalid-json" });
+  }
+  const validation = reviewerResponseSchema.safeParse(value);
+  if (!validation.success) {
+    return unparseableReview({ stage: "schema-mismatch", violations:
+      validation.error.issues.slice(0, 8).map(issue => ({
+        // Only schema-owned fields; never values, arbitrary keys or messages.
+        field: issue.path.filter(part => typeof part === "string" && REVIEW_RESPONSE_FIELDS.has(part)).join(".") || "response",
+        code: issue.code,
+      })),
+    });
+  }
+  const parsed = validation.data;
+  const { issues, summary } = parsed;
+  // BI-82902891: a reviewer that could not see the change must never reach the
+  // pass path. Before this channel existed the response contract offered only
+  // pass|fail and the decision came from issue severity alone, so "the tree I
+  // was given does not contain this change" arrived as an `important` issue
+  // and aggregated into a PASS — an independent-review receipt for a change
+  // nobody had read. Inability to review is an INCONCLUSIVE outcome, which
+  // already fails closed downstream, not a finding about the code.
+  const stated = parsed.decision;
+  // The channel is the contract, but a reviewer that ignores it and files
+  // "I could not see this change" as a finding must not reach the pass path
+  // either — that is the exact shape of the BI-82902891 incident.
+  if (stated === "cannot-verify" || stated === "inconclusive" || reportsUnreviewableChange(issues, summary)) {
     return {
       decision: "inconclusive",
-      issues: [],
-      summary: "Review was inconclusive — the reviewer response could not be parsed.",
-      parseError: true,
-      inconclusiveReason: "unparseable-review-response",
+      issues,
+      summary,
+      inconclusiveReason: "reviewer-could-not-verify-change",
     };
   }
+  return {
+    decision: issues.some((issue) => issue.severity === "critical") ? "fail" : "pass",
+    issues,
+    summary,
+    ...(parsed.failureAnalysisReview ? { failureAnalysisReview: parsed.failureAnalysisReview } : {}),
+  };
+}
+
+const REVIEW_RESPONSE_FIELDS = new Set([
+  "decision", "issues", "severity", "description", "location", "suggestion",
+  "summary", "failureAnalysisReview", "adequate", "rationale",
+]);
+
+/** A persisted normalized result is not a new provider response. Validate the
+ * common review fields, then restore only bounded, content-free diagnostics. */
+export function restoreSemanticReviewCheckpoint(value: unknown, agentId: string): SemanticReviewResult {
+  const result = parseSemanticReviewResponse(JSON.stringify(value) ?? "");
+  const stored = z.object({
+    decision: z.literal("inconclusive"),
+    parseError: z.literal(true),
+    parseDiagnostics: z.array(z.object({
+      stage: z.enum(["missing-json", "invalid-json", "schema-mismatch"]),
+      violations: z.array(z.object({
+        field: z.string().max(80).refine(field => field === "response" || field.split(".").every(part => REVIEW_RESPONSE_FIELDS.has(part))),
+        code: z.enum(z.ZodIssueCode),
+      })).max(8).optional(),
+    })).max(5),
+  }).safeParse(value);
+  if (!stored.success || result.decision !== "inconclusive") return result;
+  return { ...result, parseError: true, inconclusiveReason: "unparseable-review-response",
+    parseDiagnostics: stored.data.parseDiagnostics.map(diagnostic => ({ ...diagnostic, agentId })),
+  };
+}
+
+function unparseableReview(diagnostic: SemanticReviewParseDiagnostic): SemanticReviewResult {
+  return {
+    decision: "inconclusive",
+    issues: [],
+    summary: `Review was inconclusive — reviewer response validation failed (${diagnostic.stage}).`,
+    parseError: true,
+    parseDiagnostics: [diagnostic],
+    inconclusiveReason: "unparseable-review-response",
+  };
 }

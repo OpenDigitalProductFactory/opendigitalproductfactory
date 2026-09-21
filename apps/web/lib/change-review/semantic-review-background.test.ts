@@ -192,6 +192,18 @@ describe("durable semantic review worker", () => {
     expect(row.status).toBe("completed");
     expect(mocks.evidence).toHaveBeenCalledOnce();
   });
+  it("retains parse failure diagnostics when resuming a completed branch", async () => {
+    const failed = { decision: "inconclusive", issues: [], summary: "Response validation failed.",
+      parseError: true, inconclusiveReason: "unparseable-review-response",
+      parseDiagnostics: [{ agentId: "change-reviewer", stage: "invalid-json" }] };
+    mocks.db.taskNode.findUnique.mockResolvedValue({ status: "completed",
+      outputSnapshot: { requestDigest: packet.digest, result: failed } });
+    await executePersistedSemanticReview("TR-1");
+    expect(providerCalls).toBe(0);
+    expect(JSON.stringify(mocks.evidence.mock.calls)).toContain("invalid-json");
+    expect(JSON.stringify(mocks.evidence.mock.calls)).toContain("unparseable-review-response");
+    expect(row.status).toBe("input-required");
+  });
   it("does not publish a receipt when cancellation wins during provider execution", async () => {
     mocks.dispatch.mockImplementation(async () => { row.status = "canceled"; return result; });
     await executePersistedSemanticReview("TR-1");

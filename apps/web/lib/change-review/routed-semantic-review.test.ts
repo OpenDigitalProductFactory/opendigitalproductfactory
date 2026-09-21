@@ -52,6 +52,19 @@ describe("routed semantic review", () => {
     expect(vi.mocked(routeAndCall).mock.calls[0]![3]).toMatchObject({ agentId: "AGT-903" });
   });
 
+  it("preserves the failed branch and safe diagnostics in the combined receipt", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce({ content: JSON.stringify({ decision: "pass", issues: [], summary: "Pass." }) } as never)
+      .mockResolvedValueOnce({ content: "private malformed response" } as never);
+    const result = await dispatchRoutedSemanticReview("review this", {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-903"], surface: "external",
+    });
+    expect(result).toMatchObject({ decision: "inconclusive", parseDiagnostics: [
+      { agentId: "AGT-903", stage: "missing-json" },
+    ] });
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
+
   it("reports an unsupported required specialist instead of silently claiming completion", async () => {
     vi.mocked(routeAndCall).mockResolvedValue({ content: JSON.stringify({ decision: "pass", issues: [], summary: "Pass." }) } as never);
     const result = await dispatchRoutedSemanticReview("review this", {
