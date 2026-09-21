@@ -4,6 +4,18 @@ import { EMPTY_PRICING } from "./model-card-types";
 import fixture from "./__fixtures__/gemini-models-response.json";
 
 describe("geminiAdapter", () => {
+  it.each(["gemini-3-pro-image", "gemini-2.5-flash-image", "nano-banana-pro-preview"])("classifies %s as image generation in both discovery and its card", (modelId) => {
+    const raw = { name: `models/${modelId}`, supportedGenerationMethods: ["generateContent"] };
+    expect(geminiAdapter.classifyModel(modelId, raw)).toBe("image_gen");
+    expect(geminiAdapter.extractModelCard(modelId, raw).modelClass).toBe("image_gen");
+  });
+  it("does not advertise unsupported Gemini 3 Pro Image review capabilities", () => {
+    const card = geminiAdapter.extractModelCard("gemini-3-pro-image", {
+      name: "models/gemini-3-pro-image", supportedGenerationMethods: ["generateContent"],
+    });
+    expect(card.capabilities).toMatchObject({ toolUse: false, structuredOutput: false });
+    expect(card.outputModalities).toEqual(["text", "image"]);
+  });
   // ── parseDiscoveryResponse ───────────────────────────────────────────
 
   describe("parseDiscoveryResponse", () => {

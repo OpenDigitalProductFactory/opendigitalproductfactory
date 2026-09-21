@@ -91,6 +91,7 @@ export interface BuildWorkroomViewInput {
   now?: Date;
   /** Optional observed execution state supplied by a lifecycle/drive loader. */
   processOverseerObservation?: {
+    attentionReason?: string | null;
     currentStageKey?: string | null;
     proposedStageKey?: string | null;
     receipts?: readonly { stageKey: string; kind: string }[];
@@ -283,6 +284,7 @@ export function buildWorkroomView(
   const processAttention = processNeedsAttention
     ? processOverseer.interventionReason ?? "The process check requires attention before work continues."
     : null;
+  const driveAttention = input.detail.summary.terminal ? null : observation?.attentionReason;
 
   return {
     roomKey: input.caseKey,
@@ -320,11 +322,13 @@ export function buildWorkroomView(
         ? "Resolve the process check before continuing"
         : input.executionAttentionReason
         ? "Inspect Observed execution for the reviewer status and required action."
+        : driveAttention
+        ? driveAttention
         : standingIdle
         ? "Open next cycle"
         : input.detail.summary.nextAction,
-      attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || input.detail.summary.attention.required,
-      attentionReason: [processAttention, input.executionAttentionReason, input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,
+      attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || Boolean(driveAttention) || input.detail.summary.attention.required,
+      attentionReason: [processAttention, input.executionAttentionReason, driveAttention, input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,
       blockingActorKind: blockingActorKindForState(input.detail.summary.state),
       activeCapsuleRefs,
       activeTaskRunSummary: null,

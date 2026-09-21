@@ -725,3 +725,43 @@ rooms may each have a coordinator; combining them violates the single-room
 ownership contract. Reuse the case route, shared surfaces and canonical URL
 builder, preserving operation and filter context. Bound the choices and label
 truncation. Verify selection isolation and accessible links before runtime checks.
+
+## Authorized replacement of inconclusive checkpoints
+
+On September 21, TR-GATE-90A419BE5A6A4FFB8F049AE3 recorded authorized recovery
+attempt 1 but retained only its original two invalid-JSON checkpoints. The worker
+reuses every completed checkpoint across generations, including inconclusive
+results. Extend the existing checkpoint transaction: reuse valid verdicts and
+same-generation results; replace a prior-generation inconclusive result only
+after the existing recovery admission has authorized the new generation. Retain
+the prior result and diagnostics, link its successor, and distinguish a known
+inconclusive response from an unknown provider outcome. Do not change authority,
+confirmation, deadline, attempt limits, execution fences or external effect rules.
+First reproduce the failed replacement, then cover verdict reuse, same-generation
+duplicate handling and retained evidence. Provider response validity remains a
+separate observed failure requiring diagnosis; retry is not a success claim.
+
+## Recorded role waits in the process header
+
+Live WC-0FE180F2 records a role-stage wait while its header reports no attention.
+The two case loaders retain the current stage but drop the drive's pending action.
+Consolidate their observation assembly in the existing drive-state reader and
+project only an attention action with matching stage and recorded principal.
+Use that recorded wait in the shared read model, preserving stronger process
+interventions and reviewer waits. Ignore malformed, mismatched and terminal-room
+waits. This read repair does not dispatch a role or infer progress from a tick.
+
+## Reviewer fallback model classification
+
+Native review B982 fell back to gemini-3-pro-image and returned invalid JSON.
+The live profile classifies that image model as chat and advertises tool use.
+Google's [model specification](https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image)
+states that function calling and structured outputs are unsupported. Reuse the
+existing Gemini modality derivation for classification instead of the adapter's
+hardcoded text-only input. Share classification between discovery and card
+extraction; image generation remains available to image requests, while the
+existing text-task filter excludes it from reviewer fallback. Correct known
+unsupported capabilities without inventing positive capability claims for other
+image models. Verify discovery, cards and routing exclusion, then refresh through
+the governed metadata path after release. The raw malformed answer remains
+unavailable; classification is a verified defect, not proof of its exact syntax.

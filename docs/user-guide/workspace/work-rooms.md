@@ -63,6 +63,10 @@ observed; it does not verify a step. A process pause appears in the room's
 attention summary, and a step's intended advance condition does not override
 the current permitted-transition check.
 
+A recorded wait names the stage and the role or person expected to act in the
+attention summary. That wait remains visible until the runner records another
+action; refreshing the page does not mean the work has progressed.
+
 Use **Map** or **List**, search by step or owner, and filter by state. Arrow keys
 move between visible steps; Home and End select the first and last. The selected
 step and filters stay in the URL so returning to the room preserves context.

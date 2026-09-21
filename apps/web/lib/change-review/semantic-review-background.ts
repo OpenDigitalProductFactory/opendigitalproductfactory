@@ -91,16 +91,21 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   const taskNodeId = nodeId(recoveryAttempt);
   const prior = await prisma.$transaction(async (tx) => {
     await assertFence(tx, row.taskRunId, generation);
-    const superseded: Array<{ taskNodeId: string; output: Record<string, unknown> }> = [];
+    const superseded: Array<{ taskNodeId: string; output: Record<string, unknown>; providerOutcome: "unknown" | "inconclusive" }> = [];
     for (let attempt = recoveryAttempt; attempt >= 0; attempt -= 1) {
       const node = await tx.taskNode.findUnique({ where: { taskNodeId: nodeId(attempt) } });
       if (!node) continue;
       const output = object(node.outputSnapshot);
       if (node.status === "completed" && output.requestDigest === packet.digest) {
-        return restoreSemanticReviewCheckpoint(output.result, agentId);
+        const restored = restoreSemanticReviewCheckpoint(output.result, agentId);
+        // A new admitted generation may replace an inconclusive response, but
+        // retries within this generation and valid prior verdicts reuse it.
+        if (attempt === recoveryAttempt || restored.decision !== "inconclusive") return restored;
+        superseded.push({ taskNodeId: node.taskNodeId, output, providerOutcome: "inconclusive" });
+        continue;
       }
       if (attempt === recoveryAttempt || node.status === "completed") throw new Error("semantic-review-provider-outcome-uncertain");
-      if (node.status !== "superseded") superseded.push({ taskNodeId: node.taskNodeId, output });
+      if (node.status !== "superseded") superseded.push({ taskNodeId: node.taskNodeId, output, providerOutcome: "unknown" });
     }
     if (Date.now() >= Date.parse(packet.deadlineAt)) throw new Error("semantic-review-deadline-exhausted");
     const created = await tx.taskNode.create({ data: { taskNodeId, taskRunId: row.id, nodeType: "review", workerRole: "reviewer",
@@ -109,7 +114,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
     } });
     for (const previous of superseded) await tx.taskNode.update({ where: { taskNodeId: previous.taskNodeId }, data: {
       status: "superseded", supersededByNodeId: created.id,
-      outputSnapshot: json({ ...previous.output, requestDigest: packet.digest, providerOutcome: "unknown", recoveryAttempt }),
+      outputSnapshot: json({ ...previous.output, requestDigest: packet.digest, providerOutcome: previous.providerOutcome, recoveryAttempt }),
     } });
     return null;
   });
