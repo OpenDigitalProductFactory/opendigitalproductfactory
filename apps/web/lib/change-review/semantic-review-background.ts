@@ -10,7 +10,7 @@ import { parseSemanticReviewRequest, type SemanticReviewRequest } from "./semant
 import { verifySemanticReviewAuthority } from "./semantic-review-authority";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
 import { runSemanticChangeReview } from "./semantic-change-review-operation";
-import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
+import { restoreSemanticReviewCheckpoint, type SemanticReviewResult } from "./semantic-change-review";
 import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
 import { validateFailureAnalysis } from "./failure-analysis";
 import { withInferenceOrigin } from "@/lib/inference/inference-admission";
@@ -97,7 +97,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
       if (!node) continue;
       const output = object(node.outputSnapshot);
       if (node.status === "completed" && output.requestDigest === packet.digest) {
-        return parseSemanticReviewResponse(JSON.stringify(output.result));
+        return restoreSemanticReviewCheckpoint(output.result, agentId);
       }
       if (attempt === recoveryAttempt || node.status === "completed") throw new Error("semantic-review-provider-outcome-uncertain");
       if (node.status !== "superseded") superseded.push({ taskNodeId: node.taskNodeId, output });
