@@ -81,6 +81,35 @@ No existing helper reads the GitHub compare endpoint.
 
 ## 5. Canonical artifact discovery
 
+### Break-fix completion recovery — BI-594CF003
+
+A missing post-implementation review routes through the existing immutable
+reviewer packet before objective-baseline lookup. A break-fix does not owe an
+objective baseline. The packet uses the unique live Workroom's authored head
+and the provider-verified design blob from its base-to-head range. A squash
+merge does not replace the authored head in review provenance. Missing or
+ambiguous ownership and unavailable source still produce explicit refusals.
+
+The canonical `get_backlog_item` read returns this completion recovery packet
+as `data.recovery`; attempting completion invokes the same resolver. Neither
+read creates a receipt or grants reviewer authority. Dispatch the unchanged
+`requestCoworker` packet, including both `requiredToolNames` and
+`initiativeReviewBinding`. The receipt handler supplies immutable identity
+from that binding; the independent reviewer supplies its assessment.
+
+This uses the existing terminal-writer recovery contract. Capacity loss after
+source reads leaves a bounded, resumable writer wait on that TaskRun. An exact
+request replay reuses persisted immutable evidence, and successful writer
+effects are not replayed. Generic handoffs without the binding do not acquire
+this contract. Do not churn request keys or ask the operator to reconstruct
+commit/blob fields after each refusal.
+
+Implementation sequence: reproduce the baseline-free failure; connect PIR to
+canonical discovery and the existing reviewer resolver; expose the same
+packet on the item read; test binding hydration, missing source, independent
+authority, and post-read capacity recovery; release and exercise live
+completion. No schema migration, new grant, or parallel retry mechanism.
+
 ### Existing design reuse — BI-7272643A
 
 A successor Workroom may reuse a design already merged into its base. Requiring

@@ -108,6 +108,24 @@ describe("initiative readiness reviewer tools", () => {
     expect(initiativeReadinessPack.definitions.map((definition) => definition.name)).not.toContain("record_initiative_review");
   });
 
+  it("records a PIR using the server binding without asking the model to reconstruct identity", async () => {
+    const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "2".repeat(40), providerBlobId: "3".repeat(40), path: "design.md" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
+      writerToolName: "record_initiative_post_implementation_review", itemId: "BI-PIR", gate: "post-implementation-review", expectedCurrentBaselineId: null, artifactRef,
+    } } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "PIR-RECEIPT" });
+    const result = await initiativeReadinessPack.handlers.record_initiative_post_implementation_review!(
+      { decision: "pass", reason: "The repair and verification support acceptance.", findings: [], resolvedFindingRefs: [] },
+      "reviewer-user", { taskRunId: "TR-PIR", agentId: "AGT-REVIEW" } as never,
+    );
+    expect(result).toMatchObject({ success: true, data: { receiptId: "PIR-RECEIPT" } });
+    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "BI-PIR", gate: "post-implementation-review", artifactRef,
+      requiresIndependentReviewer: true, reviewerAgentId: "AGT-REVIEW",
+    }));
+    expect(mocks.recordSpecApproval).not.toHaveBeenCalled();
+  });
+
   it("keeps objective evidence as a proposal operation on the non-approval tool", () => {
     const evidence = initiativeReadinessPack.definitions.find((definition) => definition.name === "record_initiative_evidence")!;
     expect(evidence.inputSchema.properties).toHaveProperty("objectiveMappings");
