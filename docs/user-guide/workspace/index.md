@@ -12,6 +12,12 @@ you a cross-cutting view of what is happening now without requiring you to open
 every business area. It also hosts managed documents when an operator needs the
 maintained copy of a guide, note, policy, or imported source.
 
+Open a Workroom to inspect its process and supporting evidence, including rooms
+that have no separate work item. Reviewer failures can require attention even
+when the room's recorded status has not changed. Missing or incomplete evidence
+is labeled rather than treated as verified completion. See [Workrooms](work-rooms.md)
+for access, process inspection and boundary details.
+
 ## Operations and Performance
 
 The main rail separates two different decisions:

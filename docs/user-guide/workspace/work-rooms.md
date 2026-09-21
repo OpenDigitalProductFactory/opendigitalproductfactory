@@ -326,3 +326,14 @@ A room like that shows what it holds and states what it does not. If no
 objective was recorded, it says so rather than repeating the room's title as
 though that were the objective, and urgency, effort and assignment read as not
 recorded rather than showing a value nobody set.
+
+These standalone rooms also show their recorded process shape, driver observations,
+recent activity and reviewer evidence. A failed reviewer appears as attention
+needed even when the room itself has not been marked blocked. Inspect **Observed
+execution** for its recorded reason and required action. A task status or journal
+entry is an observation, not proof that the room's outcome has been verified.
+
+An unavailable evidence source or a history longer than the displayed window is
+marked partial. Missing purpose and scope remain boundary gaps. Access to a room's
+contents requires admission and sufficient sensitivity clearance; following a
+coordination link does not grant that access.
