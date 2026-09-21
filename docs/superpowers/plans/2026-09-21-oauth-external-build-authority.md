@@ -20,8 +20,8 @@ any success claim, and dpf-pr-with-dco for handoff.
    routes and MCP identity-required responses. Consent binding, recovery and
    rotation form one atomic credential-security change. First fail V1-V3/V8
    regressions, then implement and test migration on clean/populated data.
-2. Operation policy and attribution (independently shippable; live BI mapping
-   required before implementation): govern/permissions.ts, authority resolver,
+2. Operation policy and attribution (independently shippable; BI-1E56D891):
+   govern/permissions.ts, authority resolver,
    mcp-governed-execute.ts, actions/backlog-build.ts, actions/build-release.ts,
    build/build-pipeline.ts and tak/agentic-loop.ts. Share current-human and
    operation policy without weakening any release gate. V6/V7 first. Allocate
@@ -30,8 +30,8 @@ any success claim, and dpf-pr-with-dco for handoff.
    existing task session and room admission services. Reject explicit invalid
    targets; bind narrowed task authority to human/connection/work item. V4/V5
    first, including read denial and evidence attribution.
-4. External orchestration grants (part of the accepted scope, live delivery
-   mapping to be settled at baseline review): exact operation-to-grant matrix
+4. External orchestration grants (BI-1E56D891, internal sequencing of step 2):
+   exact operation-to-grant matrix
    and source registry policy; no blanket Build Studio grant copy. Depends on
    steps 1-3; verify V1/V5/V6 without changing live authorization via DB.
 5. Connection management (BI-D6D79AC4): expose human-owned authorizations,
@@ -62,8 +62,8 @@ checks as functional proof. Release through the canonical upgrade mechanism.
 ## Backlog coverage
 
 Decision: decomposed, pending formal baseline and receipt. Existing mappings
-are listed above; step 2 needs overlap reconciliation and a distinct linked BI
-if none covers it. No coverage receipt has been minted. This draft deliberately
+are listed above; BI-1E56D891 was filed after live overlap reconciliation for
+the independent operation-policy defect. No coverage receipt has been minted. This draft deliberately
 does not claim permission to implement or mark the original item accepted.
 
 ## Risk and rollback
