@@ -25,7 +25,7 @@ function ReviewerExecutionItem({ run }: { run: ReviewerExecutionObservation }) {
         <dl className="grid gap-3 break-words sm:grid-cols-2">
           <div><dt className="font-medium">Where are we?</dt><dd>Recorded {run.status}. Heartbeat {run.heartbeat}: {run.lastHeartbeatAt ?? "unknown"}. Read at {run.readAt}.</dd></div>
           <div><dt className="font-medium">Why are we here?</dt><dd>{semanticReviewReasonLabel(run.reason)}</dd></div>
-          <div><dt className="font-medium">What can happen next?</dt><dd>{next}</dd></div>
+          <div><dt className="font-medium">What can happen next?</dt><dd aria-live="polite" aria-atomic="true">{next}</dd></div>
           <div><dt className="font-medium">Who owns the action?</dt><dd>{run.recoveryWait ? "Requester" : "Request owner"}: {run.requesterName ?? run.requesterId ?? "unknown"}. The server owns dispatch.</dd></div>
           <div><dt className="font-medium">What evidence supports this?</dt><dd>
             <p>TaskRun:{run.recordId}</p>

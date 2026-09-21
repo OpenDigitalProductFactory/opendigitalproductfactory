@@ -28,6 +28,7 @@ describe("reviewer execution inside a Workroom", () => {
     render(<ReviewerExecutionList runs={[{ ...run, nextAction: "retry-review",
       budget: { deadlineAt: "2026-09-21T07:00:01Z", recoveryAttempt: 0 } }]} />);
     expect(screen.getByText(/original requester can confirm recovery/)).toBeInTheDocument();
+    expect(screen.getByText(/original requester can confirm recovery/)).toHaveAttribute("aria-live", "polite");
     act(() => vi.advanceTimersByTime(1001));
     expect(screen.getByText(/This request cannot resume/)).toBeInTheDocument();
   });
