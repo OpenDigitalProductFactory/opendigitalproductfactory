@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { loadRoomWorkforce, resolveRoomAccountabilityFromDb, ACCOUNTABILITY_WALK_MAX_DEPTH, type RoomWorkforceDb } from "./room-workforce.server";
+import { loadRoomWorkforce, loadRoomAccountabilityBatch, resolveRoomAccountabilityFromDb, ACCOUNTABILITY_WALK_MAX_DEPTH, type RoomWorkforceDb } from "./room-workforce.server";
 
 type Relation = { fromWorkroomId: string; toWorkroomId: string; relation: string };
 type Participant = {
@@ -48,6 +48,32 @@ const worker = (over: Partial<Participant> & { workroomId: string; principalId: 
 });
 
 describe("loadRoomWorkforce — accountability", () => {
+  it("bounds wide ancestry and reports an incomplete read", async () => {
+    const database = db({ owner: "org-owner" });
+    vi.spyOn(database.workroomRelation, "findMany").mockResolvedValue(Array.from({ length: 2001 }, (_, i) => ({
+      fromWorkroomId: `parent-${i}`, toWorkroomId: "one", relation: "contains",
+    })));
+    const result = await loadRoomAccountabilityBatch(database, ["one"]);
+    expect(result.get("one")?.accountability).toMatchObject({ state: "setup-required", reason: "incomplete-responsibility-lineage" });
+  });
+  it("shares ancestor and participant reads across a coordination page", async () => {
+    const database = db({ owner: "org-owner", relations: [
+      { fromWorkroomId: "parent", toWorkroomId: "one", relation: "contains" },
+      { fromWorkroomId: "parent", toWorkroomId: "two", relation: "contains" },
+    ], participants: [worker({ workroomId: "parent", principalId: "parent-owner", roles: ["accountable"] })] });
+    const relations = vi.spyOn(database.workroomRelation, "findMany");
+    const participants = vi.spyOn(database.workroomParticipant, "findMany");
+    const owner = vi.spyOn(database.organization, "findFirst");
+    const result = await loadRoomAccountabilityBatch(database, ["one", "two"]);
+    for (const id of ["one", "two"]) expect(result.get(id)).toMatchObject({
+      accountability: { state: "resolved", principalId: "parent-owner", source: "inherited-room" },
+      accountableDisplayName: "Name parent-owner",
+    });
+    expect(relations).toHaveBeenCalledTimes(2);
+    expect(participants).toHaveBeenCalledTimes(1);
+    expect(participants).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ roles: { has: "accountable" } }) }));
+    expect(owner).toHaveBeenCalledTimes(1);
+  });
   it("reports a bounded unresolved lineage in both the inspector and drive", async () => {
     const relations = Array.from({ length: ACCOUNTABILITY_WALK_MAX_DEPTH + 1 }, (_, i) => ({
       fromWorkroomId: `r${i + 1}`, toWorkroomId: `r${i}`, relation: "contains",

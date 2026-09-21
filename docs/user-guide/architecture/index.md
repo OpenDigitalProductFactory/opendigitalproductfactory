@@ -28,6 +28,13 @@ If you change the archetype your install declares, the next seed imports the cri
 
 ## Workroom Definitions
 
+Within Coordination, **Owner and links** shows the accountable person and whether
+that responsibility is explicit, inherited from a room, or recorded for the
+organization. Conflicting or incomplete ownership remains a setup gap. Recorded
+parent, child and dependency links lead to the related room while keeping your
+filters. A dependency alone does not prove the work is waiting. An incomplete
+read is labeled; no links observed is not proof that no links exist.
+
 Open **Architecture > Workrooms** (`/ea/workrooms`) to see the rooms that are actually running and how they sit across the four portfolios. The page leads with a true count of open rooms — completed and archived rooms are excluded — and says plainly how many have no portfolio recorded. Those are reported as unclassified, never quietly filed under a portfolio nobody assigned. Where team plans exist, each is grouped under its owning portfolio with its shape, participants, queues, triggers and process view.
 
 A team is placed in a portfolio from what the platform actually records: an explicit portfolio role on the team wins, and its portfolio slug or name are used only as weaker fallbacks. When none of those decides the question, the team is listed under **Not placed in a portfolio** with the reason, instead of being shown inside a portfolio nobody assigned it to. Those teams are counted separately, so a portfolio's total only ever counts teams that genuinely belong to it. Correct a placement by setting the team's portfolio role or linking it to the right portfolio.

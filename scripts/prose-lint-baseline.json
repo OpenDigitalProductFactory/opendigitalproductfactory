@@ -5695,6 +5695,14 @@
     "longSentences": 0,
     "textMass": 3
   },
+  "apps/web/components/ea/WorkroomCoordinationContext.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
   "apps/web/components/ea/ea-nav.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

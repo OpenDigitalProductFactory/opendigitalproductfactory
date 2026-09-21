@@ -835,3 +835,20 @@ instead of falling back. Keep explicit room/nearest-ancestor assignments and
 ordinary organization fallback intact. Share these facts between the drive and
 room workforce reader; change no authority or relationship writes. Reproduce both
 counterexamples and test overrides, complete lineage, cycles and dependencies.
+
+### Coordination ownership and relationships
+
+Extend the existing Coordination list under BI-06AE6833 and BI-9DC43E17 with
+recorded accountable ownership and bounded WorkroomRelation observations.
+DI-2CB67542C613 selects shared-coordination-context over opening every room
+individually, with high-confidence proceed. Use one batched ancestor/participant
+read and the existing human-accountability resolver; share that reader with the
+single-room drive path. Assignment never substitutes for accountability.
+
+Disclose parent, child and dependency links within each existing row, preserving
+operation/search/status/page context. Render missing readers, failed queries and
+truncated relationships explicitly. Do not infer blocking from an edge alone or
+call recorded containment successful delegation. Reuse native disclosures,
+theme tokens and canonical case identity. Test shared ancestors, query bounds,
+unknown ownership, dependency direction and navigation context before release.
+At least one fifth of this batch consolidates ancestry/accountability reads.
