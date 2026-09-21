@@ -716,3 +716,12 @@ Native review TR-GATE-0DD6B07CACCAE873D4507112 was admitted with passing exact-r
 The same run is visible under Operations Map's Activity projection details, but its authorization wait omits the shared recovery explanation. Include native auth-required runs in that existing inspector, retain the original deadline and attempt count, and explain that the requester must inspect the saved authority. A new sign-in cannot replace the immutable packet's credentials. Reuse the existing recovery controls and their expiry/limit checks; do not add another recovery surface or infer that authority has been restored. The regression must fail before the projection repair and distinguish ordinary non-review authorization waits.
 
 Consolidate the recoverable-wait classifier between the server and map projection. Permit an authorization wait to resume only after the original saved authority passes current validation, with requester, confirmation, budget, quiescence and concurrent-update checks unchanged. Preserve prior execution evidence without claiming that a provider started. First-failing server coverage reproduces the previously excluded authorization state; positive restoration and denied-authority/exhausted-budget counterexamples must pass together.
+
+## Multi-Workroom case selection (DI-1544D18CEAE3)
+
+BI-06AE6833: when an authorized case has multiple rooms and no room is selected,
+show an explicit room choice before loading participants or execution. Different
+rooms may each have a coordinator; combining them violates the single-room
+ownership contract. Reuse the case route, shared surfaces and canonical URL
+builder, preserving operation and filter context. Bound the choices and label
+truncation. Verify selection isolation and accessible links before runtime checks.

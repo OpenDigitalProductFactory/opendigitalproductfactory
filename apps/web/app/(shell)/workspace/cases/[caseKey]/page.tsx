@@ -76,7 +76,7 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
 
   return (
     <>
-      <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} />
+      <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} navigationContext={query} />
       {workforce ? (
         <div className="mt-4">
           <RoomWorkforcePanel
