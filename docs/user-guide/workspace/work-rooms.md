@@ -368,6 +368,11 @@ and attempts. Only the original requester can submit recovery, and the server
 rechecks saved authority. An expired window or exhausted limit cannot be reset
 from the room. Intended steps remain separate from these execution observations.
 
+For nested rooms, accountability follows recorded responsibility links. Competing
+parents or a lineage that exceeds the read limit appear as setup gaps. They do
+not silently assign the organization owner. An explicit accountable assignment
+on the room or a known ancestor still takes precedence.
+
 When a case has several Workrooms, choose a room to inspect its own process and
 owners. Links from the operation view keep the selected room and navigation
 context. The case does not combine coordinators from different rooms.

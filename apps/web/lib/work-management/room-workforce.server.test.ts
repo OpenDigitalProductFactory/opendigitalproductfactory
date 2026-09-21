@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { loadRoomWorkforce, type RoomWorkforceDb } from "./room-workforce.server";
+import { loadRoomWorkforce, resolveRoomAccountabilityFromDb, ACCOUNTABILITY_WALK_MAX_DEPTH, type RoomWorkforceDb } from "./room-workforce.server";
 
 type Relation = { fromWorkroomId: string; toWorkroomId: string; relation: string };
 type Participant = {
@@ -48,6 +48,25 @@ const worker = (over: Partial<Participant> & { workroomId: string; principalId: 
 });
 
 describe("loadRoomWorkforce — accountability", () => {
+  it("reports a bounded unresolved lineage in both the inspector and drive", async () => {
+    const relations = Array.from({ length: ACCOUNTABILITY_WALK_MAX_DEPTH + 1 }, (_, i) => ({
+      fromWorkroomId: `r${i + 1}`, toWorkroomId: `r${i}`, relation: "contains",
+    }));
+    const database = db({ owner: "p-owner", relations,
+      participants: [worker({ workroomId: `r${ACCOUNTABILITY_WALK_MAX_DEPTH + 1}`, principalId: "p-delegated", roles: ["accountable"] })] });
+    const result = await loadRoomWorkforce(database, { workroomId: "r0" });
+    expect(result.accountability).toMatchObject({ state: "setup-required", reason: "incomplete-responsibility-lineage" });
+    expect(await resolveRoomAccountabilityFromDb(database, { workroomId: "r0" })).toEqual(result.accountability);
+  });
+
+  it("retains an explicit assignment at the read boundary", async () => {
+    const relations = Array.from({ length: ACCOUNTABILITY_WALK_MAX_DEPTH + 1 }, (_, i) => ({
+      fromWorkroomId: `r${i + 1}`, toWorkroomId: `r${i}`, relation: "contains",
+    }));
+    const result = await loadRoomWorkforce(db({ owner: "p-owner", relations,
+      participants: [worker({ workroomId: `r${ACCOUNTABILITY_WALK_MAX_DEPTH}`, principalId: "p-delegated", roles: ["accountable"] })] }), { workroomId: "r0" });
+    expect(result.accountability).toMatchObject({ state: "resolved", principalId: "p-delegated", source: "inherited-room" });
+  });
   it("prefers the room's own accountable principal", async () => {
     const result = await loadRoomWorkforce(
       db({

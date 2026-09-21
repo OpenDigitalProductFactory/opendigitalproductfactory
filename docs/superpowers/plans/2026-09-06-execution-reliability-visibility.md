@@ -823,3 +823,15 @@ as a verdict. Fail that branch as inconclusive with a specific recorded reason
 before parsing; retain no response text and do not change output budgets or relax
 the parser. This is a verified source gap, not a claim that truncation caused the
 current live invalid-JSON responses. Prove it using valid JSON marked truncated.
+
+### Nested responsibility must remain evidence-based
+
+PWA-04 requires ambiguous parents to be correctable setup, but the current
+resolver silently returns the organization owner. Its bounded ancestor reader
+also drops the unresolved frontier after ten levels, making an unseen delegated
+owner look absent. Preserve the frontier and report incomplete lineage only if
+resolution reaches it without an explicit assignment. Report competing parents
+instead of falling back. Keep explicit room/nearest-ancestor assignments and
+ordinary organization fallback intact. Share these facts between the drive and
+room workforce reader; change no authority or relationship writes. Reproduce both
+counterexamples and test overrides, complete lineage, cycles and dependencies.
