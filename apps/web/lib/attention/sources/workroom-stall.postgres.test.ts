@@ -4,7 +4,8 @@ import { loadRoomStallRows } from "./workroom-stall";
 
 // Explicit opt-in to a governed PostgreSQL target. Every statement is read-only;
 // fixture CTEs shadow the physical tables without creating or modifying records.
-const url = process.env.DPF_SQL_TEST_DATABASE_URL;
+const url = process.env.DPF_SQL_TEST_DATABASE_URL
+  ?? (process.env.CI === "true" ? process.env.DATABASE_URL : undefined);
 const databaseSuite = url ? describe : describe.skip;
 
 databaseSuite("Workroom stall SQL on PostgreSQL", () => {
