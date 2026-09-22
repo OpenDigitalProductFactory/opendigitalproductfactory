@@ -368,12 +368,20 @@ describe("dated subscription cap (BI-38064739)", () => {
     const upsert = (prisma as unknown as { providerCapacityStatus: { upsert: ReturnType<typeof vi.fn> } }).providerCapacityStatus.upsert;
     upsert.mockClear();
     await recordCliRateLimit("codex-cli", "codex", CAP_TEXT);
-    await vi.waitFor(() => expect(upsert.mock.calls.length).toBeGreaterThanOrEqual(2));
-    const providers = [...new Set(upsert.mock.calls.map((c) => (c[0] as { where: { providerId: string } }).where.providerId))].sort();
-    expect(providers).toEqual(["chatgpt", "codex"]);
-    const created = (upsert.mock.calls[0]![0] as { create: { state: string; retryAt: Date } }).create;
-    expect(created.state).toBe("quota_resets_at");
-    expect(created.retryAt.toISOString()).toBe("2026-09-26T08:57:00.000Z");
+    await vi.waitFor(() => expect(
+      upsert.mock.calls.filter((c) => ((c[0] as { create: { rawSnippet?: string | null } }).create.rawSnippet ?? "").includes("Sep 26th")).length,
+    ).toBeGreaterThanOrEqual(2));
+    type CapUpsert = { where: { providerId: string }; create: { state: string; retryAt: Date; rawSnippet: string | null } };
+    // An earlier test's "try again in 2h" also crosses the pool cap and its
+    // fire-and-forget write can land after mockClear; select this cap's calls.
+    const capCalls = upsert.mock.calls
+      .map((c) => c[0] as CapUpsert)
+      .filter((c) => c.create.state === "quota_resets_at" && (c.create.rawSnippet ?? "").includes("Sep 26th"));
+    expect([...new Set(capCalls.map((c) => c.where.providerId))].sort()).toEqual(["chatgpt", "codex"]);
+    for (const call of capCalls) {
+      // ceil-to-seconds of the parsed instant: within one second of the stated reset.
+      expect(Math.abs(call.create.retryAt.getTime() - Date.parse("2026-09-26T08:57:00Z"))).toBeLessThan(1_500);
+    }
     // The pool window itself stays capped so a misparse can never pin the pool.
     const status = await getCliPoolStatus("codex-cli");
     expect(status!.resetAt!.getTime() - status!.rateLimitedAt!.getTime()).toBeLessThanOrEqual(3_600_000);
