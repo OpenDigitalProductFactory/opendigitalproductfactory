@@ -46,7 +46,7 @@ export type PullRequestBinding = {
 export type PullRequestBindingSkip = {
   capsuleId: string;
   reason:
-    /** Already bound; this rule never overwrites an existing answer. */
+    /** Already bound to the selected identity, or no full head permits replacement. */
     | "already-bound"
     /** No branch to resolve from — nothing to derive the answer out of. */
     | "no-head-branch"
@@ -85,8 +85,9 @@ function branchKey(repositoryFullName: string, headBranch: string): string {
 /**
  * Resolve which rooms should be bound to which pull request.
  *
- * Never overwrites an existing `pullRequestNumber`: a room that already carries
- * an answer keeps it, so a stale observation cannot rewrite delivery history.
+ * A replacement requires the room's full authored head to match the observation.
+ * The caller journals the prior binding atomically so current identity can change
+ * without rewriting delivery history. Legacy rooms without a full head retain it.
  * Every room that is not bound appears in `skipped` with the reason, so a caller
  * can report its own coverage instead of implying it looked everywhere.
  */
@@ -106,7 +107,8 @@ export function resolvePullRequestBindings(input: {
   const skipped: PullRequestBindingSkip[] = [];
 
   for (const room of [...input.rooms].sort((a, b) => a.capsuleId.localeCompare(b.capsuleId))) {
-    if (room.pullRequestNumber != null && room.pullRequestUrl) {
+    const exactHead = /^[a-f0-9]{40}$/i.test(room.headSha ?? "");
+    if (!exactHead && room.pullRequestNumber != null && room.pullRequestUrl) {
       skipped.push({ capsuleId: room.capsuleId, reason: "already-bound" });
       continue;
     }
@@ -118,12 +120,16 @@ export function resolvePullRequestBindings(input: {
       (byBranch.get(branchKey(room.repositoryFullName, room.headBranch)) ?? []).filter(
         (observation) =>
           (!room.headSha || observation.headSha.toLowerCase() === room.headSha.toLowerCase()) &&
-          (room.pullRequestNumber == null || observation.number === room.pullRequestNumber) &&
-          (!room.pullRequestUrl || observation.url === room.pullRequestUrl),
+          (exactHead || room.pullRequestNumber == null || observation.number === room.pullRequestNumber) &&
+          (exactHead || !room.pullRequestUrl || observation.url === room.pullRequestUrl),
       ),
     );
     if (!chosen) {
       skipped.push({ capsuleId: room.capsuleId, reason: "no-observation-for-branch" });
+      continue;
+    }
+    if (room.pullRequestNumber === chosen.number && room.pullRequestUrl === chosen.url) {
+      skipped.push({ capsuleId: room.capsuleId, reason: "already-bound" });
       continue;
     }
     bindings.push({

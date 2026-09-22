@@ -910,3 +910,115 @@ First-failing tests must cover the complete prompt example and bounded diagnosti
 round-trip, including quoted braces and malformed/untrusted checkpoints. Run the
 graph-linked reviewer, publication and recovery tests before governed release;
 then verify the actual provider result and confirmed recovery on the live install.
+
+### Open-page projection freshness
+
+Release4 acceptance recorded a stale open page showing zero recovery attempts
+while the authoritative request had advanced to one. Extend the existing
+Workspace process inspection with an explicit snapshot-age warning and a
+read-only Refresh action. Read time remains the server-provided readAt, never a
+client click timestamp. Missing, invalid or future read times are unknown; after
+one minute the snapshot is labeled stale. This is a display freshness threshold,
+not a claim that the server or underlying evidence stopped progressing.
+
+UX fit: fits-with-guardrails in the existing Workroom detail, for an operator
+checking waits. Reuse Button, LocalTime and the existing deadline-clock behavior;
+extract the clock so recovery expiry and snapshot expiry share timer cleanup and
+visibility handling. Refresh preserves URL, selection, filters and disclosure
+state. It starts no inference or recovery. No automatic execution depends on it.
+Keep the latest evidence time separate from snapshot age and retain projection
+gaps. Tests must show aging without navigation, unknown times, failed/no-change
+refresh remaining stale, and a newer server read clearing the warning. Live
+verification and measured UX-fit evidence remain required before delivery.
+
+The same acceptance run exposed raw accountable principal IDs. Live readback
+confirms the organization's top accountable Principal has displayName admin.
+Both batch coordination and single-room readers only look for names in room
+participant rows, so they miss organization owners who are not participants.
+Share one bounded name resolver across both readers: reuse participant names,
+then batch-read only unresolved accountable IDs from Principal. Do not add a
+participant, infer another owner, or change inherited responsibility. Preserve
+unknown names when the principal cannot be resolved; verify the page performs
+one lookup for a shared organization owner.
+
+### Checkpoint transaction failure containment
+
+Release5 review TR-GATE-9AC60ECCAFAA6A344BB254BA failed with Prisma P2028
+on checkpoint read and, after one authorized recovery, checkpoint write. The
+underlying timeout cause is unknown. Source inspection confirms that one branch
+failure immediately parks the entire TaskRun, preventing successful siblings
+from saving their results. Delay that wait until the existing all-settled
+dispatcher has drained its branches. Keep cancellation and generation fencing.
+
+Share a bounded database-only retry wrapper between checkpoint reads and writes.
+Retry only Prisma transaction errors P2028/P2034, at most three times within the
+original deadline, with short backoff. Never wrap provider execution or final
+receipt publication in this retry. An ambiguously committed read must still see
+the running checkpoint and refuse another provider call. Repeated writes save
+the same result under the generation fence. Retain unknown outcomes on exhaustion.
+First-failing tests cover sibling retention, transient read/write failure and
+retry exhaustion; add cancellation, deadline and ambiguous-read cases before
+the functional gate. Reuse existing checkpoint records and recovery policy.
+
+### Current change identity and retained PR history
+
+WC-99AECC86 still records PR 5470 after advancing its head to cfc451d7.
+The inventory binder excludes fully bound rooms, while the backlog PR actuator
+updates by repository and branch without checking the authored head. Inventory
+also drops the provider head before calling that actuator. A reused branch can
+therefore preserve or restore an earlier delivery as the current one.
+
+Extend BI-06AE6833 and the existing verified observation contract. Consolidate
+binding writes behind the current repository, branch and full head identity,
+with compare-and-swap and an atomic activity entry retaining the previous PR.
+An absent head cannot authorize replacement; an observation for another head
+cannot alter current binding. Preserve idempotency, bounded inventory batches,
+provider freshness checks and explicit incomplete coverage. Keep backlog status
+transitions separate from PR binding so they cannot become a second writer.
+Test a reused branch, late older delivery, duplicate observation, concurrent
+head advance and journal rollback before implementation is accepted. This is
+not permission to edit runtime rows or infer that a merged PR completes the
+overarching initiative.
+
+The reviewer projection has the same identity risk: late activity on an old
+request can dominate current attention. Read only bounded identity fields from
+the existing immutable TaskArtifact, correlated by TaskRun, actor, request digest,
+gate key and Workroom. Compare source commit SHA with the Workroom commit SHA,
+never with a tree hash. The latest issued request for that head is current;
+earlier requests remain historical. Missing correlation is unknown and partial.
+Do not load full review prompts into the portal. Display the classification in
+the existing disclosure, and do not offer recovery for historical requests.
+Working generations must describe server continuation, not the previous wait.
+Show a bounded verdict summary only from the correlated ExternalEvidenceRecord,
+matching request head, diff, policy and reviewer version. Its observed verdict
+does not confer publication permission or complete a Workroom stage.
+
+The required UX sweep for PR 5482 measured the added Refresh state button as
+an intentional accessibility-tree change. Workflow 35670278421 remeasured the
+exact published UI head. Adopt only the case route's measurement: 385 visible
+words (down from 397), one primary action, zero visible fields, and the additional
+button. The two existing axe violations remain recorded. This baseline update
+does not claim that the full live execution experience has passed acceptance.
+
+## September 22 compact snapshot follow-up
+
+The exact761ec56 UX sweep35671984175 measured392 arrival words against385,
+with no structural or other numeric regression. Its screenshot retains the
+freshness sentence and localized timestamp; the earlier385 measurement is not
+proof of every hydrated state. DI-584304A4B6C8 selected compact shared inspector
+copy and numeric localized dates over raising the arrival budget. The initial
+DI-208F89A7300F consultation lacked feature scores and supplied no usable choice.
+
+Keep recent, stale and unknown explicit. Preserve date, time and timezone via
+LocalTime, the original sixty-second expiry and read-only Refresh state action.
+Current/historical request labels and correlated receipt summaries remain inside
+Observed execution. The updated UX manifest covers both changed components.
+The385-word limit remains; the next protected sweep must verify the result.
+
+### Captured route reading load, 2026-09-22
+
+Protected run 35673719251 measured 392 arrival words against the retained 385 baseline. Its captured text omits the live freshness sentence and timestamp numbers; compacting those did not change the count. Under DI-584304A4B6C8, shorten the shared workforce accountability explanation from 23 to 12 words, preserving the distinction between answering for outcomes, coordination, and permissions. Owner identity and missing-owner guidance remain visible. The final protected route measurement is still required; no baseline increase or passed runtime claim is made. This copy clarification needs no separate user-guide change.
+
+Run exception: the operator's existing Sept21 authorization to bypass the three known Windows Bash PKI mode-0600 fixtures applies to this same Workroom's copy follow-up gate. The Release Asset Contract host fixture verdict is skipped, never passed; canonical Linux and protected PR/release gates remain mandatory. Git Bash must be on PATH so the separate Janitor shell tests actually run. The copy-only workforce file is intentionally absent from the control manifest because the UX classifier rejects it as over-broad; its design reasoning is recorded above.
+
+Local-CI-Override: docs-adjacent: Only the shared workforce explanatory prose, its existing text assertion, and verification notes changed after canonical PASS5415282865288589979dfcf5b4aa273d8e9ca97d (cmubylf5019jk01ru8lq2o1if). Nine affected tests and both TypeScript programs passed. Same-head50b6 retries ended without gate verdict despite first-run2865 tests and completed BuildKit build stage; they remain inconclusive. This exception uses docs/testing/pre-pr-gate.md's prose-in-code route, not a claim that the current full gate passed. Protected cloud build, route sweep, DCO and merge queue remain required. The prose reduction is eleven words; the earlier absolute23-to12 count was off by one at each end.

@@ -65,6 +65,7 @@ export const ACCOUNTABILITY_WALK_MAX_DEPTH = 10;
 export const ROOM_WORKER_PAGE_SIZE = 20;
 
 export type RoomWorkforceDb = {
+  principal?: { findMany(args: unknown): Promise<Array<Record<string, unknown>>> };
   workroomRelation: { findMany(args: unknown): Promise<Array<Record<string, unknown>>> };
   workroomParticipant: { findMany(args: unknown): Promise<Array<Record<string, unknown>>> };
   organization: { findFirst(args: unknown): Promise<{ topAccountablePrincipalId: string | null } | null> };
@@ -85,6 +86,26 @@ function displayNameOf(principal: Record<string, unknown> | null | undefined): s
   if (!principal) return null;
   const name = principal["displayName"];
   return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
+/** An organization owner need not be a participant in any of the rooms read. */
+async function accountabilityNames(db: RoomWorkforceDb, accountabilities: readonly EffectiveHumanAccountability[],
+  participantRows: readonly Record<string, unknown>[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  for (const row of participantRows) {
+    const name = displayNameOf(row["principal"] as Record<string, unknown> | null);
+    if (name) names.set(String(row["principalId"]), name);
+  }
+  const missing = [...new Set(accountabilities.flatMap(owner => owner.state === "resolved"
+    && !names.has(owner.principalId) ? [owner.principalId] : []))];
+  if (missing.length && db.principal) {
+    const principals = await db.principal.findMany({ where: { id: { in: missing } }, select: { id: true, displayName: true } });
+    for (const principal of principals) {
+      const name = displayNameOf(principal);
+      if (name) names.set(String(principal["id"]), name);
+    }
+  }
+  return names;
 }
 
 /**
@@ -184,13 +205,12 @@ export async function loadRoomAccountabilityBatch(
   });
   const rooms = accountabilityRoomsFrom(roomIds, participantRows);
   const organizationTopAccountablePrincipalId = await readOrganizationTopAccountablePrincipalId(db, organizationId);
-  return new Map([...new Set(workroomIds)].map(workroomId => {
-    const accountability = resolveEffectiveHumanAccountability({ workroomId, rooms, edges,
-      unresolvedRoomIds, organizationTopAccountablePrincipalId });
-    const principal = accountability.state === "resolved"
-      ? participantRows.find(row => row["principalId"] === accountability.principalId)?.["principal"] : null;
-    return [workroomId, { accountability, accountableDisplayName: displayNameOf(principal as Record<string, unknown> | null) }];
-  }));
+  const resolved = [...new Set(workroomIds)].map(workroomId => ({ workroomId,
+    accountability: resolveEffectiveHumanAccountability({ workroomId, rooms, edges,
+      unresolvedRoomIds, organizationTopAccountablePrincipalId }) }));
+  const names = await accountabilityNames(db, resolved.map(row => row.accountability), participantRows);
+  return new Map(resolved.map(({ workroomId, accountability }) => [workroomId, { accountability,
+    accountableDisplayName: accountability.state === "resolved" ? names.get(accountability.principalId) ?? null : null }]));
 }
 
 export async function loadRoomWorkforce(
@@ -247,14 +267,8 @@ export async function loadRoomWorkforce(
   const workers = rollUpNamedWorkers(sessions, input.now ?? new Date());
   const page = selectWorkerPage({ workers, pageSize: ROOM_WORKER_PAGE_SIZE, query: input.query ?? null });
 
-  const accountableDisplayName =
-    accountability.state === "resolved"
-      ? displayNameOf(
-          participantRows.find((row) => row["principalId"] === accountability.principalId)?.[
-            "principal"
-          ] as Record<string, unknown> | null,
-        )
-      : null;
+  const names = await accountabilityNames(db, [accountability], participantRows);
+  const accountableDisplayName = accountability.state === "resolved" ? names.get(accountability.principalId) ?? null : null;
 
   return {
     accountability,

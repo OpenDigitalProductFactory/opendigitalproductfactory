@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { FilterBar } from "@/components/ui/report-kit/FilterBar";
 import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
 import { ReviewerExecutionList } from "./ReviewerExecutionList";
+import { ProjectionFreshness } from "./ProjectionFreshness";
 import type { ShapeGraph, ShapeNodeState, ShapeRow } from "@/lib/work-management/shape-projection";
 
 const STATE_LABEL: Record<ShapeNodeState, string> = {
@@ -80,7 +81,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
       </div>
     </div>
     {graph.process ? <div className="text-[var(--dpf-muted)]">
-      <p>Projection checked: {graph.process.readAt ?? "Freshness unknown"} · Latest evidence: {graph.process.lastEvidenceAt ?? "Unknown"}</p>
+      <ProjectionFreshness readAt={graph.process.readAt} lastEvidenceAt={graph.process.lastEvidenceAt} />
       {graph.process.gaps.length ? <details className="mt-2 rounded border border-[var(--dpf-border)] p-3">
         <summary className="cursor-pointer">Projection gaps ({graph.process.gaps.length})</summary>
         <ul className="mt-2 list-disc space-y-1 pl-5">{graph.process.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul>

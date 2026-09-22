@@ -121,19 +121,6 @@ async function loadLinkedItems(event: GitHubPullRequestEvent): Promise<{
   });
 }
 
-async function stampWorkroomPr(event: GitHubPullRequestEvent): Promise<void> {
-  await prisma.workroom.updateMany({
-    where: {
-      repositoryFullName: event.repositoryFullName,
-      headBranch: event.headBranch,
-    },
-    data: {
-      pullRequestNumber: event.pullRequestNumber,
-      pullRequestUrl: event.pullRequestUrl,
-    },
-  });
-}
-
 async function transitionItem(args: {
   id: string;
   itemId: string;
@@ -180,7 +167,8 @@ export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise
   const event = parseGitHubPullRequestEvent(payload);
   if (!event) return { moved: [], skipped: 0, reason: "unparseable-pull-request" };
 
-  await stampWorkroomPr(event);
+  // The verified inventory binder owns Workroom PR identity and its history.
+  // A backlog status event cannot overwrite it using a reusable branch name.
   const items = await loadLinkedItems(event);
   if (items.length === 0) return { moved: [], skipped: 0, reason: "no-linked-items" };
 

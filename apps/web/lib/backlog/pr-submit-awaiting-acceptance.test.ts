@@ -101,6 +101,13 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     expect(extractBacklogItemIdsFromText("no ids here")).toEqual([]);
   });
 
+  it("never overwrites current Workroom PR identity from a branch-only delivery event", async () => {
+    mockWorkroomFindMany.mockResolvedValue([]);
+    mockBacklogFindMany.mockResolvedValue([]);
+    await applyGitHubPullRequestToBacklog(prPayload());
+    expect(mockWorkroomUpdateMany).not.toHaveBeenCalled();
+  });
+
   it("marks non-draft opened/ready PRs as submit", () => {
     const opened = parseGitHubPullRequestEvent(prPayload());
     expect(opened).not.toBeNull();
@@ -129,7 +136,7 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     expect(shouldReopenFromWithdrawnPr(merged!)).toBe(false);
   });
 
-  it("moves linked coding-pool items to awaiting-acceptance and stamps the Workroom PR", async () => {
+  it("moves linked coding-pool items without becoming another PR binding writer", async () => {
     mockWorkroomFindMany.mockResolvedValue([
       { id: "room-1", backlogItemId: "BI-CA54ACC8", pullRequestNumber: null },
     ]);
@@ -139,7 +146,7 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
 
     const result = await applyGitHubPullRequestToBacklog(prPayload());
 
-    expect(mockWorkroomUpdateMany).toHaveBeenCalled();
+    expect(mockWorkroomUpdateMany).not.toHaveBeenCalled();
     expect(result.moved).toEqual(["BI-CA54ACC8"]);
     expect(mockBacklogUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -198,7 +205,7 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     expect(CODING_POOL_STATUSES).toEqual(["triaging", "open", "in-progress"]);
   });
 
-  it("stamps a CLI workroom from an observed merged PR on the same head branch", async () => {
+  it("processes a CLI delivery without overwriting its current PR binding", async () => {
     mockWorkroomFindMany.mockResolvedValue([
       { id: "room-cli", backlogItemId: "BI-CA54ACC8", pullRequestNumber: null },
     ]);
@@ -219,7 +226,7 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     ]);
 
     expect(result.moved).toEqual(["BI-CA54ACC8"]);
-    expect(mockWorkroomUpdateMany).toHaveBeenCalled();
+    expect(mockWorkroomUpdateMany).not.toHaveBeenCalled();
   });
 
   it("creates one corrective BI and leaves the original awaiting-acceptance", async () => {
