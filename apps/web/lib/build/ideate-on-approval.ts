@@ -67,7 +67,9 @@ type DispatchOutcome =
   | { kind: "skipped-already-has-design"; reason: string }
   | { kind: "skipped-no-provider"; reason: string }
   | { kind: "dispatched-success"; designDocKeys: string[]; durationMs: number }
-  | { kind: "dispatched-failure"; error: string; durationMs: number };
+  | { kind: "dispatched-failure"; error: string; durationMs: number }
+  /** BI-5098ECEC: the host was busy; nothing is known about the design and no repair round is spent. */
+  | { kind: "deferred-capacity"; reason: string; durationMs: number };
 
 /**
  * Auto-dispatch Ideate-phase design-doc research for an approved backlog-promoted
@@ -370,6 +372,13 @@ async function dispatchIdeateForApprovedBuildInner(params: {
       // back, then re-run the SAME attempt once — before this, the build sat
       // as a "model failure" until the 20-minute stale window plus the
       // 10-minute reconciler tick re-drove it.
+      if (ideateResult.capacityDeferred) {
+        // BI-5098ECEC: the host is busy, not broken. Waiting for the sandbox or
+        // switching engines cannot help; the stranded-build reconciler re-drives
+        // this build once the host frees. Stop here without a verdict.
+        await logActivity(`Ideate deferred: ${(ideateResult.error ?? "").slice(0, 220)}`);
+        return { kind: "deferred-capacity", reason: ideateResult.error ?? "capacity deferral", durationMs: Date.now() - startedAt };
+      }
       if (ideateResult.infrastructure && !infrastructureRetried) {
         infrastructureRetried = true;
         await logActivity(
@@ -866,6 +875,13 @@ export async function dispatchDesignReviewFixLoop(params: {
       await log(`Design review failed — regenerating (round ${round}/${DESIGN_FIX_MAX_ROUNDS}) against ${review.issues?.length ?? 0} issue(s)`);
       const feedback = formatPlanReviewFeedback(review.issues ?? []);
       const regen = await dispatchIdeateForApprovedBuild({ buildId, userId, priorReviewFeedback: feedback });
+      if (regen.kind === "deferred-capacity") {
+        // BI-5098ECEC: a busy host says nothing about the design. Give the round
+        // back and stop; the reconciler resumes the loop when the host frees.
+        round -= 1;
+        await log(`Design regeneration deferred — host busy; round not consumed (${regen.reason.slice(0, 160)}).`);
+        break;
+      }
       if (regen.kind !== "dispatched-success") {
         // BI-E492F313: this used to `break`, so ONE infrastructure failure both
         // consumed a round and abandoned the rest — the advertised "round 1/2"
