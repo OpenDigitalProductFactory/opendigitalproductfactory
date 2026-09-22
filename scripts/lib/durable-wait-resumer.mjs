@@ -157,6 +157,8 @@ export function spawnDurableWaitResumer({
       cwd,
       detached: true,
       stdio: "ignore",
+      // A background waiter must never surface a window on Windows.
+      windowsHide: true,
       env: { ...env, [RESUME_MARKER_ENV]: "1" },
     });
     // Without unref the parent's event loop stays alive for the child and the
