@@ -1,4 +1,5 @@
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
+import { loadPirEvidenceContext } from "./pir-evidence-context";
 import { prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
 import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
@@ -163,7 +164,7 @@ export async function executeRemoteTaskAttempt(input: {
       ? { resumedFromTerminalWriterWait: true }
       : { resumedFromCapacity: true };
   const conversation = remoteTaskConversation({
-    systemPrompt: agent.systemPrompt,
+    systemPrompt: `${agent.systemPrompt}\n${await loadPirEvidenceContext(prisma, parsed.initiativeReviewBinding)}`,
     prompt: parsed.prompt,
     resumeKind: input.resumeKind,
     terminalWriterContext: input.terminalWriterContext,

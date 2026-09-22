@@ -136,7 +136,7 @@ describe("terminal writer context hydration", () => {
         readerExecutionIds: ["cmtd3z0ye00gz01rtjr503slt", "cmtd3zymp00hh01rtpf9ukk8z"],
         hydratedPageCount: 2,
         hydratedCharCount: 12,
-        context: expect.stringContaining("first\nsecond"),
+        context: expect.stringContaining("1 | first\n2 | second"),
       },
     });
     expect(readPage).toHaveBeenNthCalledWith(1, expect.objectContaining({ startLine: 1 }));
@@ -226,7 +226,7 @@ describe("terminal writer context hydration", () => {
       data: {
         hydratedPageCount: 2,
         hydratedCharCount: 17,
-        context: expect.stringContaining("first line\nsecond"),
+        context: expect.stringContaining("1 | first line\n2 | second"),
       },
     });
     expect(readPage).toHaveBeenNthCalledWith(2, expect.objectContaining({ cursor: "byte-cursor-6" }));
@@ -256,7 +256,7 @@ describe("terminal writer context hydration", () => {
       ok: true,
       data: {
         hydratedPageCount: 2,
-        context: expect.stringContaining("first\nsecond"),
+        context: expect.stringContaining("1 | first\n2 | second"),
       },
     });
     expect(readPage).not.toHaveBeenCalled();
@@ -283,7 +283,7 @@ describe("terminal writer context hydration", () => {
       data: {
         readerExecutionIds: executions.map((execution) => execution.id),
         hydratedPageCount: 2,
-        context: expect.stringContaining("first\nsecond"),
+        context: expect.stringContaining("1 | first\n2 | second"),
       },
     });
     expect(readPage).not.toHaveBeenCalled();
