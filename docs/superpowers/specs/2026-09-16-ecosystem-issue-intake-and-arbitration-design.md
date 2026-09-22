@@ -359,6 +359,29 @@ flag rather than dressing up an uneventful week as activity.
 
 An install is never told its own submission is "coming for you too".
 
+**The digest now has a trigger, and that mattered.** `buildWatchdogDigest` was
+merged-shaped but had zero callers, which is precisely the "delivered a mechanism
+that never fires" failure the platform already named. There is now a weekly cron
+(`ecosystem/weekly-watchdog`, Mondays 06:05, catalogued) and a runner that asks
+the resolver for the posture rather than deciding for itself.
+
+**The delivery binding is explicit, not guessed.** Posting into a room needs two
+things this wiring must not invent: the derived room's case key and the coworker
+principal that speaks. Both room paths in the codebase resolve an agent principal
+before they will write, and fabricating one would post the ecosystem digest under
+an identity nobody authorised. So the binding is read from
+`ecosystem.watchdog-binding.v1`, and until it is set the run reports `no-room`
+with an actionable message in its run data rather than failing silently.
+**Choosing the standing room and the speaking coworker is an operator decision
+this spec does not pre-empt.**
+
+**A failed delivery is reported as failed.** A digest built and lost is worse
+than one never built, because the counters suggest it arrived.
+
+The archetype this install matches on is read from the same place the regulation
+applicability classifier reads it, since it is the same question asked of a
+different artefact.
+
 ## 6. Verification
 
 - Unit: quadratic cost function; budget exhaustion; tie-break ordering; dedupe across both transports; consent gate refusal paths.

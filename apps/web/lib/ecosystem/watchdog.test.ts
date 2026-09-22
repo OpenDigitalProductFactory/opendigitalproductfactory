@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildWatchdogDigest, isClosure, type WatchdogInput } from "./watchdog";
+import { renderWatchdogMessage, runEcosystemWatchdog } from "./watchdog-runner";
 import type { BallotCandidate } from "./ballot";
 
 const candidate = (overrides: Partial<BallotCandidate> = {}): BallotCandidate => ({
@@ -104,5 +105,77 @@ describe("buildWatchdogDigest", () => {
   it("reports a quiet week as quiet rather than dressing it up", () => {
     const digest = buildWatchdogDigest(base({ candidates: [], dispositions: [], releases: [] }));
     expect(digest.empty).toBe(true);
+  });
+});
+
+describe("runEcosystemWatchdog (BI-784D20FD trigger path)", () => {
+  const viewer = {
+    installationId: "inst_me",
+    audience: "community",
+    profile: { archetypeCategories: ["trades-maintenance"], archetypeIds: [] },
+  };
+  const relevant = () => ([{
+    ref: "BI-1", title: "Dispatch board loses the second appointment",
+    summary: "Drops the later job.", submitter: "inst_peer", audience: "community",
+    forwarding: { permitted: true, audiences: ["community"] },
+    archetypeRefs: ["category:trades-maintenance"],
+  }]);
+
+  const deps = (over: Partial<Parameters<typeof runEcosystemWatchdog>[0]> = {}) => ({
+    loadViewer: async () => viewer,
+    loadCandidates: async () => relevant(),
+    resolveRoom: async () => "room:case-1",
+    deliver: vi.fn(async () => {}),
+    ...over,
+  });
+
+  it("delivers the digest to the resolved room", async () => {
+    const d = deps();
+    const outcome = await runEcosystemWatchdog(d);
+    expect(outcome).toMatchObject({ delivered: true, roomRef: "room:case-1" });
+    expect(d.deliver).toHaveBeenCalledOnce();
+  });
+
+  it("does not post on a quiet week — a weekly 'nothing' is how a coworker gets muted", async () => {
+    const d = deps({ loadCandidates: async () => [] });
+    expect(await runEcosystemWatchdog(d)).toMatchObject({ delivered: false, reason: "quiet-week" });
+    expect(d.deliver).not.toHaveBeenCalled();
+  });
+
+  it("names the missing binding rather than silently doing nothing", async () => {
+    const outcome = await runEcosystemWatchdog(deps({ resolveRoom: async () => null }));
+    expect(outcome).toMatchObject({ delivered: false, reason: "no-room" });
+    expect(outcome.delivered === false && outcome.message).toContain("not posted anywhere");
+  });
+
+  it("reports a failed delivery instead of counting it as delivered", async () => {
+    // A digest that was built and lost is worse than one never built, because
+    // the counters suggest it arrived.
+    const outcome = await runEcosystemWatchdog(deps({
+      deliver: async () => { throw new Error("room is archived"); },
+    }));
+    expect(outcome).toMatchObject({ delivered: false, reason: "delivery-failed" });
+    expect(outcome.delivered === false && outcome.message).toContain("archived");
+  });
+
+  it("reports no ecosystem voice when the install has no federation identity", async () => {
+    expect(await runEcosystemWatchdog(deps({ loadViewer: async () => null })))
+      .toMatchObject({ delivered: false, reason: "no-room" });
+  });
+});
+
+describe("renderWatchdogMessage", () => {
+  it("names the tiers a reader must act on and reports what was withheld as a count", () => {
+    const digest = buildWatchdogDigest(base({
+      candidates: [
+        candidate({ ref: "v", title: "Vote me" }),
+        candidate({ ref: "hidden", title: "Not yours", archetypeRefs: ["category:hospitality"] }),
+      ],
+    }));
+    const message = renderWatchdogMessage(digest);
+    expect(message).toContain("Open for your vote");
+    expect(message).toContain("Vote me");
+    expect(message).not.toContain("Not yours");
+    expect(message).toContain("1 not relevant to this organisation");
   });
 });

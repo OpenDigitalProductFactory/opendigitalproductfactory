@@ -344,6 +344,21 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "ecosystem-weekly-watchdog",
+    inngestId: "ecosystem/weekly-watchdog",
+    honorsEnabledGate: true,
+    name: "Ecosystem: weekly watchdog",
+    purpose:
+      "Brings the week's ecosystem ballot into the room — what applies to this organisation, "
+      + "what others raised that affects it too, what happened to what it backed, and which "
+      + "shipped releases apply. Reports a quiet week as quiet rather than posting nothing.",
+    cron: "5 6 * * 1",
+    cadence: "Weekly (Mondays, 06:05)",
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: null,
+  },
+  {
     jobId: "ecosystem-inbound-issue-triage",
     inngestId: "ecosystem/inbound-issue-triage",
     honorsEnabledGate: true,
