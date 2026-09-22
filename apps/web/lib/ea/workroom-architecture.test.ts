@@ -3,13 +3,78 @@ import { describe, expect, it, vi } from "vitest";
 import { loadRoomInventory, loadWorkroomArchitecture, loadWorkroomCoordination, resolvePortfolioPlacement } from "./workroom-architecture";
 
 describe("loadWorkroomArchitecture", () => {
+  it("reports failed ownership and relation reads as unknown context", async () => {
+    const database = { workroom: { findMany: vi.fn().mockResolvedValue([{ id: "r1", capsuleId: "WC-ONE", title: "One", status: "ready", workItem: null }]) },
+      workroomRelation: { findMany: vi.fn().mockRejectedValue(new Error("unavailable")) },
+      workroomParticipant: { findMany: vi.fn() }, organization: { findFirst: vi.fn() } };
+    const view = await loadWorkroomCoordination(database);
+    expect(view.contextPartial).toBe(true);
+    expect(view.rooms[0]).toMatchObject({ accountability: null, accountableName: null, relationships: [] });
+  });
+  it("shows recorded owners and dependency direction without inferring a wait", async () => {
+    const database = {
+      workroom: { findMany: vi.fn().mockResolvedValue([{ id: "r1", capsuleId: "WC-ONE", title: "One", status: "ready", workItem: null }]) },
+      workroomRelation: { findMany: vi.fn(async (args: any) => args.where.OR ? [{
+        id: "edge-1", fromWorkroomId: "r1", toWorkroomId: "r2", relation: "depends_on",
+        fromWorkroom: { capsuleId: "WC-ONE", title: "One" }, toWorkroom: { capsuleId: "WC-TWO", title: "Two" },
+      }] : []) },
+      workroomParticipant: { findMany: vi.fn().mockResolvedValue([{ workroomId: "r1", principalId: "p1", roles: ["accountable"], principal: { displayName: "Alex" } }]) },
+      organization: { findFirst: vi.fn().mockResolvedValue({ topAccountablePrincipalId: null }) },
+    };
+    const view = await loadWorkroomCoordination(database, new Date(), { query: "One", status: "ready" });
+    expect(view.rooms[0]).toMatchObject({ accountableName: "Alex", accountability: { state: "resolved", source: "explicit-room" }, waitReason: null,
+      relationships: [{ relation: "depends-on", direction: "outgoing", roomId: "WC-TWO", title: "Two" }] });
+    expect(view.rooms[0].relationships[0].href).toContain("coordinationQuery=One");
+    expect(view.contextPartial).toBe(false);
+    expect(database.workroomRelation.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 1001 }));
+  });
+  it("combines unmapped operation, search and cursor before the page bound", async () => {
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue([]) } };
+    await loadWorkroomCoordination(db, new Date("2026-09-21T06:00:00Z"), {
+      teamId: null, query: "  recovery  ", status: "blocked", after: "WC-099",
+    });
+    expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      take: 201, orderBy: { capsuleId: "asc" },
+      where: expect.objectContaining({
+        status: "blocked", capsuleId: { gt: "WC-099" },
+        AND: expect.arrayContaining([
+          { OR: [{ workItem: { is: null } }, { workItem: { is: { teamId: null } } }] },
+          { OR: [{ title: { contains: "recovery", mode: "insensitive" } }, { capsuleId: { contains: "recovery", mode: "insensitive" } }] },
+        ]),
+      }),
+    }));
+  });
+
+  it("retains discovery context in a room link and uses the last displayed identity for the next page", async () => {
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue(Array.from({ length: 201 }, (_, i) => ({
+      capsuleId: `WC-${String(i).padStart(3, "0")}`, title: "Recovery", status: "blocked", workItem: null,
+      workspaceState: { workroomDrive: { action: "attention", stageKey: "review", pendingAttention: { stageKey: "review", principalRef: "role:reviewer" } } },
+    }))) } };
+    const projection = await loadWorkroomCoordination(db, new Date(), { query: "Recovery", status: "blocked", after: "WC-000" });
+    expect(projection.nextCursor).toBe("WC-199");
+    const params = new URL(projection.rooms[0].href, "http://localhost").searchParams;
+    expect(params.get("coordinationQuery")).toBe("Recovery");
+    expect(params.get("coordinationStatus")).toBe("blocked");
+    expect(params.get("coordinationAfter")).toBe("WC-000");
+    expect(projection.rooms[0].waitReason).toBe("Stage review is waiting on role:reviewer.");
+  });
+
+  it("ignores unknown or terminal status filters rather than exposing closed rooms", async () => {
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue([]) } };
+    for (const status of ["invented", "complete"]) {
+      await loadWorkroomCoordination(db, new Date(), { status });
+      expect(db.workroom.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ status: { notIn: ["complete", "abandoned", "archived"] } }),
+      }));
+    }
+  });
   it("links actual rooms and reports missing architecture placement without guessing", async () => {
     const db = { workroom: { findMany: vi.fn().mockResolvedValue([
       { capsuleId: "WC-REVIEW", title: "Review change", status: "blocked", backlogItemId: "BI-ONE", workItem: { teamId: "team-1", parentItemId: "parent-1", assignedToUserId: null, assignedToAgentId: "reviewer-1" } },
       { capsuleId: "WC-UNMAPPED", title: "Unmapped work", status: "working", backlogItemId: null, workItem: null },
     ]) } };
     const projection = await loadWorkroomCoordination(db, new Date("2026-09-06T12:00:00Z"));
-    expect(projection.rooms[0]).toMatchObject({ roomId: "WC-REVIEW", teamId: "team-1", status: "blocked", parentItemId: "parent-1", href: "/workspace/cases/work-capsule%3AWC-REVIEW?operation=team-1" });
+    expect(projection.rooms[0]).toMatchObject({ roomId: "WC-REVIEW", teamId: "team-1", status: "blocked", parentItemId: "parent-1", href: "/workspace/cases/work-capsule%3AWC-REVIEW?operation=all" });
     expect(projection.rooms[1]).toMatchObject({ teamId: null, assignedActorRef: null });
     expect(projection.readAt).toBe("2026-09-06T12:00:00.000Z");
     expect(projection.truncated).toBe(false);

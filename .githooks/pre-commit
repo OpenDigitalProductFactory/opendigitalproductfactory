@@ -17,6 +17,8 @@
 #      on the affected workspaces and reject the commit if it fails. Catches
 #      missing imports, symbol drift, and type errors BEFORE they reach CI.
 #
+# The typecheck step is cached by a content hash of the TypeScript-relevant
+# tree (BI-85270E96), so an amend that changes nothing TypeScript sees is free.
 # The typecheck step is skipped when:
 #   - Only non-TS files are staged (docs-only, config-only, migration-only)
 #   - DPF_SKIP_TYPECHECK=1 is set (emergency escape hatch — use sparingly; CI
@@ -275,6 +277,35 @@ if [ -z "$STAGED_TS" ]; then
   exit 0
 fi
 
+# BI-85270E96: a content-hash cache. The typecheck verdict is a pure function
+# of the TypeScript-relevant tree (index blobs + unstaged edits to the same
+# files + the lockfile), so an amend that only touches a commit message, a
+# markdown file or a JSON fixture must not pay the ~10 minute `typecheck:all`
+# again. The fingerprint lives under .git (never committed); any mismatch
+# re-runs; a failing run never writes it.
+TC_PATTERNS='*.ts *.tsx *.mts *.cts *.d.ts tsconfig*.json package.json pnpm-lock.yaml *.prisma'
+TC_CACHE_DIR="$(git rev-parse --git-dir 2>/dev/null)"
+TC_CACHE_FILE=""
+TC_FINGERPRINT=""
+if [ -n "$TC_CACHE_DIR" ] && command -v shasum >/dev/null 2>&1; then
+  TC_CACHE_FILE="$TC_CACHE_DIR/dpf-typecheck-ok"
+  # The patterns must reach git as PATHSPECS, never as shell globs: with
+  # globbing on, `*.ts` expanded against the repo root to the one top-level
+  # file it matched (playwright-demo.config.ts) and the fingerprint stopped
+  # seeing every TypeScript file under apps/ and packages/ — a cache that
+  # never invalidated (found 2026-09-19 on a commit that changed two .ts
+  # files and was reported "cached"). `set -f` disables globbing for the
+  # word split; `set +f` restores it afterwards.
+  set -f
+  # shellcheck disable=SC2086 — the patterns are meant to split.
+  TC_FINGERPRINT="$( { git ls-files -s -- $TC_PATTERNS; git diff -- $TC_PATTERNS; } 2>/dev/null | shasum -a 256 | cut -d' ' -f1 )"
+  set +f
+  if [ -n "$TC_FINGERPRINT" ] && [ -f "$TC_CACHE_FILE" ] && [ "$(cat "$TC_CACHE_FILE" 2>/dev/null)" = "$TC_FINGERPRINT" ]; then
+    echo "[pre-commit] typecheck ok (cached — no TypeScript-relevant content changed since the last green run)"
+    exit 0
+  fi
+fi
+
 echo "[pre-commit] TypeScript files staged — running scoped typecheck..."
 echo "[pre-commit] To skip in an emergency: DPF_SKIP_TYPECHECK=1 git commit ..."
 echo ""
@@ -368,5 +399,8 @@ if [ -n "$FAILED" ]; then
   exit 1
 fi
 
+if [ -n "$TC_CACHE_FILE" ] && [ -n "$TC_FINGERPRINT" ]; then
+  printf '%s' "$TC_FINGERPRINT" >"$TC_CACHE_FILE" 2>/dev/null || true
+fi
 echo "[pre-commit] typecheck ok"
 exit 0

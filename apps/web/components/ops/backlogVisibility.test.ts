@@ -15,6 +15,7 @@ describe("isTerminalBacklogItemStatus", () => {
     expect(isTerminalBacklogItemStatus("open")).toBe(false);
     expect(isTerminalBacklogItemStatus("in-progress")).toBe(false);
     expect(isTerminalBacklogItemStatus("triaging")).toBe(false);
+    expect(isTerminalBacklogItemStatus("awaiting-acceptance")).toBe(false);
   });
 });
 
@@ -23,6 +24,7 @@ describe("summarizeBacklogStatuses (BI-6F308164)", () => {
     { status: "open" },
     { status: "in-progress" },
     { status: "triaging" },
+    { status: "awaiting-acceptance" },
     { status: "deferred" },
     { status: "deferred" },
     { status: "done" },
@@ -34,13 +36,14 @@ describe("summarizeBacklogStatuses (BI-6F308164)", () => {
       triaging: 1,
       open: 1,
       inProgress: 1,
+      awaitingAcceptance: 1,
       done: 1,
       deferred: 2,
       retired: 1,
       active: 3,
       parked: 2,
       terminal: 2,
-      total: 7,
+      total: 8,
     });
   });
 });
@@ -50,20 +53,21 @@ describe("visibleUnderActiveOnly (BI-7CB3C1CD)", () => {
     { status: "open" },
     { status: "in-progress" },
     { status: "triaging" },
+    { status: "awaiting-acceptance" },
     { status: "deferred" },
     { status: "deferred" },
     { status: "done" },
     { status: "retired" },
   ];
 
-  it("drops terminal and parked items when active-only is on", () => {
+  it("drops terminal, parked, and awaiting-acceptance items when active-only is on", () => {
     const visible = visibleUnderActiveOnly(items, true);
     expect(visible).toHaveLength(3);
     expect(visible.map((i) => i.status)).toEqual(["open", "in-progress", "triaging"]);
   });
 
   it("returns every item unchanged when active-only is off", () => {
-    expect(visibleUnderActiveOnly(items, false)).toHaveLength(7);
+    expect(visibleUnderActiveOnly(items, false)).toHaveLength(8);
   });
 
   it("returns a stable empty array when all items are terminal", () => {

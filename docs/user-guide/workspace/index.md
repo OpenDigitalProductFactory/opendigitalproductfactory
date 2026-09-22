@@ -12,6 +12,20 @@ you a cross-cutting view of what is happening now without requiring you to open
 every business area. It also hosts managed documents when an operator needs the
 maintained copy of a guide, note, policy, or imported source.
 
+Open a Workroom to inspect its process and supporting evidence, including rooms
+that have no separate work item. Reviewer failures can require attention even
+when the room's recorded status has not changed. Missing or incomplete evidence
+is labeled rather than treated as verified completion. See [Workrooms](work-rooms.md)
+for access, process inspection and boundary details.
+
+Opening a room by its ID retains that selection within its parent case. Process,
+room evidence and workforce use the same room; shared messages are labelled as
+case context. A missing or mismatched room selection does not substitute another room.
+
+Process pauses appear in the room's attention summary. Observed execution
+separates activity events from receipts, and the header shows the same recorded
+or inherited human accountability as the workforce panel.
+
 ## Operations and Performance
 
 The main rail separates two different decisions:
@@ -163,6 +177,38 @@ round that is still open two hours after it was due can be escalated the same
 way; the page shows how many are waiting. Nothing here decides treatment. It
 makes sure a person sees it.
 
+### Veterinary visits
+
+Below the care rounds, **Veterinary visits** books an animal at a partner
+practice. A practice is registered once with its contact and arrangement (a
+charity rate, a monthly account, a credit limit) and becomes both a place a
+visit can be booked at and a supplier that bills can be recorded against.
+
+Each kind of visit carries a recovery period: a spay or neuter surgery holds
+the animal for a week, a dental for a day, a check-up not at all. Until
+recovery ends the animal cannot be placed, and the intake checklist says so.
+Closing a done surgery records the vet who performed it straight onto the
+checklist, so nobody re-types it. A missed or cancelled visit needs a reason
+and lifts the recovery hold.
+
+### Adoptions
+
+**Adoptions** turns an enquiry into a decision. An application records the
+applicant and the screening answers a rescue actually decides on: housing,
+other pets, children, landlord permission, and experience. It moves through
+screening, a meet-and-greet and a home check (each a dated visit on the
+animal's work list), and then approval.
+
+Approval reserves the animal for that one applicant. Nobody else can be
+promised the same animal, and an animal that is not placement-ready, or is on a
+hold, cannot be reserved. Completing the adoption records the adopter, closes
+custody, withdraws the public listing, frees the kennel, and records the fee
+as a donation toward that animal's care. It is never a price.
+
+A returned animal always comes back. Recording the return keeps the placement
+and its reason in history, reopens custody as a return, and puts the animal
+back through the intake checklist before it can be placed again.
+
 If every place is taken, the board adds a review. It is the only time it appears.
 
 The review lists the animals that have waited longest with nobody waiting for
@@ -244,7 +290,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
 - **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you.
-- **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Workroom is the friendly Workspace view over a governed Work Case. One room means one case: however you address a room — from your inbox, the Workrooms inventory, or a link someone sent you by room ID — you arrive at the same case rather than a second copy of it.
+- **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A case can contain several rooms. Select one to see its process and owners. Links by room ID retain that selection within the canonical case, including the operation and filter context.
 
 ## What You Can Do
 

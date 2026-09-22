@@ -5,6 +5,7 @@ import { ok } from "@/lib/shared/action-result";
 const mocks = vi.hoisted(() => ({
   findTaskRun: vi.fn(),
   findReads: vi.fn(),
+  readSource: vi.fn(),
   recordGateReceipt: vi.fn(),
   recordSpecApproval: vi.fn(),
   recordObjectiveMapping: vi.fn(),
@@ -41,6 +42,61 @@ const expected = {
 } as const;
 
 describe("initiative readiness reviewer tools", () => {
+  it("validates a real failure citation after metrics-only source auditing without retaining source in the audit", async () => {
+    const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), providerBlobId: "b".repeat(40), path: "design.md" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
+      writerToolName: "record_initiative_post_implementation_review", itemId: "BI-PIR", gate: "post-implementation-review", artifactRef,
+    } } });
+    mocks.findReads.mockResolvedValue([{ id: "read-1", toolName: "read_source_at_version", success: true, createdAt: new Date(), result: {},
+      parameters: { repositoryFullName: "owner/repo", path: "design.md", version: artifactRef.commitSha, expectedBlobId: artifactRef.providerBlobId } }]);
+    mocks.readSource.mockResolvedValue({ success: true, message: "Exact source", data: {
+      repositoryFullName: "owner/repo", path: "design.md", version: artifactRef.commitSha, blobId: artifactRef.providerBlobId,
+      content: "Verification: TBD", startLine: 2, endLine: 2, totalLines: 2, hasMore: false, nextCursor: null,
+    } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "real-failure" });
+    const assessment = { decision: "fail", reason: "Verification remains unspecified.", resolvedFindingRefs: [], findings: [{
+      issue: "Verification is unspecified.", severity: "important", evidence: { blobId: artifactRef.providerBlobId, startLine: 2, endLine: 2, quote: "Verification: TBD" },
+    }] };
+    const handler = initiativeReadinessPack.handlers.record_initiative_post_implementation_review!;
+    const context = { taskRunId: "TR-PIR", agentId: "AGT-REVIEW", governedDispatch: mocks.readSource } as never;
+    expect(await handler(assessment, "user", context))
+      .toMatchObject({ success: true, data: { receiptId: "real-failure" } });
+    expect(mocks.readSource).toHaveBeenCalledTimes(1);
+    expect(mocks.readSource).toHaveBeenCalledWith("read_source_at_version", expect.objectContaining({
+      version: artifactRef.commitSha, expectedBlobId: artifactRef.providerBlobId, path: artifactRef.path,
+    }));
+    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ decision: "fail", findings: assessment.findings }));
+    mocks.recordGateReceipt.mockClear();
+    assessment.findings[0]!.evidence.quote = "invented quote";
+    expect(await handler(assessment, "user", context))
+      .toMatchObject({ success: false, error: "malformed-receipt" });
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
+    mocks.readSource.mockResolvedValue({ success: false, error: "insufficient_token_scope", message: "Reader grant was revoked." });
+    expect(await handler(assessment, "user", context)).toMatchObject({ success: false, error: "insufficient_token_scope" });
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
+  });
+
+  it("validates a short cited range without hydrating a design larger than 64k", async () => {
+    const lines = Array.from({ length: 1000 }, (_, index) => index === 49 ? "Verification: TBD" : "x".repeat(80));
+    expect(lines.join("\n").length).toBeGreaterThan(64_000);
+    const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), providerBlobId: "b".repeat(40), path: "large.md" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
+      writerToolName: "record_initiative_post_implementation_review", itemId: "BI-PIR", gate: "post-implementation-review", artifactRef,
+    } } });
+    mocks.findReads.mockResolvedValue([{ id: "read-large", toolName: "read_source_at_version", success: true, createdAt: new Date(), result: {},
+      parameters: { repositoryFullName: "owner/repo", path: "large.md", version: artifactRef.commitSha, expectedBlobId: artifactRef.providerBlobId, startLine: 50 } }]);
+    mocks.readSource.mockImplementation(async (_name, args) => args.startLine === 50 ? { success: true, message: "Cited range", data: {
+      repositoryFullName: "owner/repo", path: "large.md", version: artifactRef.commitSha, blobId: artifactRef.providerBlobId,
+      content: lines[49] + "\n", startLine: 50, endLine: 50, totalLines: lines.length, hasMore: true, nextCursor: "remaining-document",
+    } } : { success: false, error: "unexpected-full-read", message: "Only the cited range is needed." });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "large-failure" });
+    const result = await initiativeReadinessPack.handlers.record_initiative_post_implementation_review!({ decision: "fail",
+      reason: "Verification remains unspecified.", resolvedFindingRefs: [], findings: [{ issue: "Verification is unspecified.", severity: "important",
+        evidence: { blobId: artifactRef.providerBlobId, startLine: 50, endLine: 50, quote: lines[49] } }] },
+      "user", { taskRunId: "TR-PIR", agentId: "AGT-REVIEW", governedDispatch: mocks.readSource } as never);
+    expect(result).toMatchObject({ success: true, data: { receiptId: "large-failure" } });
+    expect(mocks.readSource).toHaveBeenCalledTimes(1);
+  });
   it("BI-31159978 rejects positive observations encoded as passing research findings without deleting them", async () => {
     mocks.findTaskRun.mockResolvedValue({ a2aMetadata: {
       trigger: "external-mcp",
@@ -106,6 +162,24 @@ describe("initiative readiness reviewer tools", () => {
 
   it("does not expose a parameterized cross-lane reviewer tool", () => {
     expect(initiativeReadinessPack.definitions.map((definition) => definition.name)).not.toContain("record_initiative_review");
+  });
+
+  it("records a PIR using the server binding without asking the model to reconstruct identity", async () => {
+    const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "2".repeat(40), providerBlobId: "3".repeat(40), path: "design.md" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
+      writerToolName: "record_initiative_post_implementation_review", itemId: "BI-PIR", gate: "post-implementation-review", expectedCurrentBaselineId: null, artifactRef,
+    } } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "PIR-RECEIPT" });
+    const result = await initiativeReadinessPack.handlers.record_initiative_post_implementation_review!(
+      { decision: "pass", reason: "The repair and verification support acceptance.", findings: [], resolvedFindingRefs: [] },
+      "reviewer-user", { taskRunId: "TR-PIR", agentId: "AGT-REVIEW" } as never,
+    );
+    expect(result).toMatchObject({ success: true, data: { receiptId: "PIR-RECEIPT" } });
+    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "BI-PIR", gate: "post-implementation-review", artifactRef,
+      requiresIndependentReviewer: true, reviewerAgentId: "AGT-REVIEW",
+    }));
+    expect(mocks.recordSpecApproval).not.toHaveBeenCalled();
   });
 
   it("keeps objective evidence as a proposal operation on the non-approval tool", () => {

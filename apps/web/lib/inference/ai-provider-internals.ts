@@ -459,7 +459,7 @@ export async function upsertDiscoveredModels(
 
 // BI-7F2FBDA3: what a provider lists under THIS account is the truth about what
 // it supports; re-admit each listed model (clearing any runtime refusal). Advisory.
-async function readmitListedModels(providerId: string, authMethod: string, modelIds: string[]): Promise<void> {
+export async function readmitListedModels(providerId: string, authMethod: string, modelIds: string[]): Promise<void> {
   await recordDiscoveredAuthEligibility(prisma, { providerId, authMethod, modelIds })
     .catch((err: unknown) => console.warn(`[discovery] auth-eligibility re-admission skipped for ${JSON.stringify(providerId)}: ${getErrorMessage(err)}`));
 }
@@ -500,29 +500,12 @@ export async function discoverModelsInternal(
     }
   }
 
-  // Codex and ChatGPT subscription providers use the ChatGPT backend
-  // /backend-api/models endpoint (not the standard /v1/models). Discover
-  // models from the live API so capabilities come from the provider, not
-  // from hardcoded seed data.
+  // Codex/ChatGPT subscription providers discover through the ChatGPT backend
+  // (see chatgpt-codex-catalog-mirror for the chatgpt fallback, BI-AA618693).
   if (provider.authMethod === "oauth2_authorization_code" &&
       (provider.category === "agent" || providerId === "chatgpt")) {
-    const tokenResult = await getProviderBearerToken(providerId);
-    if ("error" in tokenResult) {
-      return { discovered: 0, newCount: 0, error: tokenResult.error };
-    }
-    const headers = { Authorization: `Bearer ${tokenResult.token}` };
-    const result = await discoverChatGptBackendModels(
-      providerId,
-      headers,
-      provider.baseUrl ?? undefined,
-    );
-    if (result.error && result.models.length === 0) {
-      return { discovered: 0, newCount: 0, error: result.error };
-    }
-
-    const newCount = await upsertDiscoveredModels(providerId, result.models);
-
-    return { discovered: result.models.length, newCount };
+    const { discoverViaChatGptBackend } = await import("@/lib/inference/chatgpt-codex-catalog-mirror");
+    return discoverViaChatGptBackend({ providerId, authMethod: provider.authMethod, baseUrl: provider.baseUrl ?? undefined });
   }
 
   const providerRow = {
@@ -1048,7 +1031,8 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
       };
     } else {
       // Codex inventory is account-specific; a static catalog must never impersonate success.
-      const knownModels = providerId === "codex" ? undefined : KNOWN_PROVIDER_MODELS[providerId];
+      // Codex inventory is account-specific (chatgpt rides the same account): never impersonate success.
+      const knownModels = providerId === "codex" || providerId === "chatgpt" ? undefined : KNOWN_PROVIDER_MODELS[providerId];
       if (knownModels) {
         console.log(
           `[auto-discover] Dynamic discovery returned 0 for ${JSON.stringify(providerId)}` +

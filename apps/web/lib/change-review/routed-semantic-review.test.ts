@@ -18,6 +18,16 @@ beforeEach(() => {
 });
 
 describe("routed semantic review", () => {
+  it("does not accept a parseable verdict from a provider-truncated response", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({ truncated: true,
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Incomplete private response." }),
+    } as never);
+    const result = await dispatchRoutedSemanticReview("review this", {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: [], surface: "external",
+    });
+    expect(result).toMatchObject({ decision: "inconclusive", issues: [], inconclusiveReason: "review-response-truncated" });
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
   it("requests completed non-streaming results for the reviewer and every specialist", async () => {
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
@@ -50,6 +60,19 @@ describe("routed semantic review", () => {
     expect(checkpoint.mock.calls.map(([id]) => id)).toEqual(["change-reviewer", "AGT-903"]);
     expect(routeAndCall).toHaveBeenCalledOnce();
     expect(vi.mocked(routeAndCall).mock.calls[0]![3]).toMatchObject({ agentId: "AGT-903" });
+  });
+
+  it("preserves the failed branch and safe diagnostics in the combined receipt", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce({ content: JSON.stringify({ decision: "pass", issues: [], summary: "Pass." }) } as never)
+      .mockResolvedValueOnce({ content: "private malformed response" } as never);
+    const result = await dispatchRoutedSemanticReview("review this", {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-903"], surface: "external",
+    });
+    expect(result).toMatchObject({ decision: "inconclusive", parseDiagnostics: [
+      { agentId: "AGT-903", stage: "missing-json" },
+    ] });
+    expect(JSON.stringify(result)).not.toContain("private");
   });
 
   it("reports an unsupported required specialist instead of silently claiming completion", async () => {

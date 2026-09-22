@@ -431,6 +431,37 @@ writes are the nondeterminism. Production and dev boots (flag unset) are
 unchanged; the classification lives in `apps/web/lib/runtime/measurement-runtime.ts`
 and the gating in `apps/web/instrumentation.ts`.
 
+The portal's **measurement clock is pinned** (`DPF_MEASUREMENT_NOW`,
+BI-99909E53). Some copy is calendar arithmetic over facts that live in code, not
+in the database: the provider-compliance source registry stamps each source with
+a retrieval date and a trust window, and the inbox renders "lapses in N days",
+"lapses after today" or "lapsed N days ago" from it. On 2026-09-18
+`/workspace/inbox` moved 418 → 425 words on `main` with no code change and
+failed every open PR; wall-clock text normalisation cannot cover it because the
+state changed, not just a phrasing. Under measurement runtime the portal reads
+the pinned instant through `measurementNow()`
+(`apps/web/lib/runtime/measurement-runtime.ts`) for those renders, and the sweep
+records the value in `route-sweep-execution.json` as `measurementNow`. It is
+deliberately not a global `Date` shim — seeded rows, heartbeats and session
+tokens are written at real time, and a process-wide fake clock would put all of
+them in the future — and it is ignored outside measurement runtime. The instant
+is the day the current baselines were frozen, so the pin changed no measurement
+when it landed; moving it is a deliberate act paired with a baseline refresh.
+Renewing a compliance source (updating its `retrievedAt`) is a code change that
+legitimately re-shapes the inbox, and re-freezes that route like any other.
+
+Live regions are excluded from the default-visible word scope
+(`apps/web/lib/ux-budget/scope.ts`, `isLiveRegion`): an `aria-live` container or a
+`status`/`alert`/`log`/`marquee`/`timer` role announces transient state, so whether
+it holds words at capture time is a hydration race rather than a property of the
+surface. A live region that holds a control — the report-kit `EmptyState` is
+`role="status"` and carries `/performance`'s primary action — is a surface, not an
+announcement, and stays counted. The structure projection already ignored those
+roles; the word count now agrees. The sweep also writes the normalised default-visible text of every
+measured route to `apps/web/test-results/ux-route-sweep/visible-text/`, uploaded
+with the budget report, so a same-tree word-count flap is a one-line diff between
+two runs instead of a by-hand reproduction.
+
 Fixture-facing health copy must also be semantically stable. The Communications
 speech-to-text card classifies transport failures as `endpoint unavailable`
 instead of rendering Node/undici's platform-specific DNS or socket error text.

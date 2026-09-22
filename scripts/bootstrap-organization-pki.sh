@@ -18,6 +18,13 @@ PACKAGE_OUTPUT=""
 PACKAGE_TTL_SECONDS=900
 ORG_NAME="${DPF_PKI_NAME:-DPF Organization CA}"
 START_TLS=1
+# The portal leaf certificate lifetime. The dpf-installer provisioner shipped
+# with step-ca's 24h default, so authority.crt expired one day after every
+# bootstrap and nothing renewed it: LDAPS refused verifying clients and an https
+# front for MCP OAuth would have died overnight (BI-5727522F, BI-FA2C46D7). The
+# provisioner claims below are raised to match, and a leaf shorter than this is
+# re-issued rather than renewed (renewal keeps the original 24h lifetime).
+PORTAL_CERT_DURATION="${DPF_PKI_PORTAL_CERT_DURATION:-8760h}"
 SANS=""
 EDGE_ACTION_CONFIGURED=0
 
@@ -73,7 +80,10 @@ valid_private_ca_url() {
 read_join_package() {
   package_path="$1"
   [ -f "$package_path" ] || { echo "Join package was not found" >&2; exit 64; }
-  package_mode="$(stat -f '%Lp' "$package_path" 2>/dev/null || stat -c '%a' "$package_path" 2>/dev/null || echo unknown)"
+  # GNU first: `stat -f` is a filesystem query on GNU (it succeeds with the
+  # wrong output), while `stat -c` is an illegal option on BSD (it fails and
+  # falls through). The BSD-first order read every package as not-0600 on Linux.
+  package_mode="$(stat -c '%a' "$package_path" 2>/dev/null || stat -f '%Lp' "$package_path" 2>/dev/null || echo unknown)"
   [ "$package_mode" = "600" ] || { echo "Join package must have mode 0600" >&2; exit 77; }
 
   package_header=""
@@ -309,6 +319,42 @@ ensure_edge_client_provisioner() {
   wait_for_step_ca
 }
 
+# The dpf-installer provisioner is created by the container's init with no
+# claims, i.e. step-ca's 24h TLS default. Raise it once so the portal leaf can
+# be issued for PORTAL_CERT_DURATION; idempotent, restarts the CA only on change.
+ensure_installer_provisioner_claims() {
+  installer_block="$(compose exec -T step-ca step ca provisioner list --ca-url https://127.0.0.1:9000 \
+    --root /home/step/certs/root_ca.crt 2>/dev/null \
+    | awk '/"name"[[:space:]]*:[[:space:]]*"dpf-installer"/{f=1} f&&/"name"[[:space:]]*:/&&!/dpf-installer/{f=0} f{print}')"
+  wanted="$(printf '%s' "$PORTAL_CERT_DURATION" | sed -E 's/^([0-9]+)h$/\1h0m0s/')"
+  if printf '%s' "$installer_block" | grep -q "\"maxTLSCertDuration\"[[:space:]]*:[[:space:]]*\"$wanted\""; then
+    return 0
+  fi
+  compose exec -T step-ca step ca provisioner update dpf-installer \
+    --x509-min-dur 5m --x509-default-dur "$PORTAL_CERT_DURATION" --x509-max-dur "$PORTAL_CERT_DURATION" \
+    --ca-config /home/step/config/ca.json >/dev/null
+  compose restart step-ca >/dev/null
+  wait_for_step_ca
+}
+# True when the host copy of the portal leaf was issued for less than
+# PORTAL_CERT_DURATION (a legacy 24h leaf) or has under 30 days left: such a
+# leaf must be re-issued, because `step ca renew` preserves its lifetime.
+portal_leaf_needs_reissue() {
+  [ -f "$AUTHORITY_CERT" ] || return 0
+  start="$(openssl x509 -in "$AUTHORITY_CERT" -noout -startdate 2>/dev/null | sed 's/^notBefore=//')"
+  end="$(openssl x509 -in "$AUTHORITY_CERT" -noout -enddate 2>/dev/null | sed 's/^notAfter=//')"
+  [ -n "$start" ] && [ -n "$end" ] || return 0
+  start_s="$(date -j -f '%b %e %H:%M:%S %Y %Z' "$start" +%s 2>/dev/null || date -d "$start" +%s 2>/dev/null || echo 0)"
+  end_s="$(date -j -f '%b %e %H:%M:%S %Y %Z' "$end" +%s 2>/dev/null || date -d "$end" +%s 2>/dev/null || echo 0)"
+  [ "$start_s" -gt 0 ] && [ "$end_s" -gt 0 ] || return 0
+  wanted_s="$(( $(printf '%s' "$PORTAL_CERT_DURATION" | sed -E 's/h$//') * 3600 ))"
+  lifetime_s="$(( end_s - start_s ))"
+  remaining_s="$(( end_s - $(date +%s) ))"
+  [ "$lifetime_s" -lt "$(( wanted_s - 3600 ))" ] && return 0
+  [ "$remaining_s" -lt "$(( 30 * 24 * 3600 ))" ] && return 0
+  return 1
+}
+
 generate_local_action_material() {
   if [ ! -f "$ACTION_SIGNING_PASSWORD" ]; then
     umask 077
@@ -342,6 +388,7 @@ if [ "$MODE" = "authority" ]; then
   compose up -d step-ca
   wait_for_step_ca
   ensure_edge_client_provisioner
+  ensure_installer_provisioner_claims
   compose cp step-ca:/home/step/certs/root_ca.crt "$ROOT_CERT" >/dev/null
   FINGERPRINT="$(compose exec -T step-ca step certificate fingerprint /home/step/certs/root_ca.crt | tr -d '\r\n')"
 
@@ -351,18 +398,21 @@ if [ "$MODE" = "authority" ]; then
   for san in $SANS; do san_args="$san_args --san $san"; done
   IFS="$old_ifs"
   if compose exec -T step-ca test -f /home/step/certs/dpf-portal.crt && \
-     compose exec -T step-ca test -f /home/step/secrets/dpf-portal.key; then
+     compose exec -T step-ca test -f /home/step/secrets/dpf-portal.key && \
+     ! portal_leaf_needs_reissue; then
     compose exec -T step-ca step ca renew /home/step/certs/dpf-portal.crt \
       /home/step/secrets/dpf-portal.key --ca-url https://127.0.0.1:9000 \
       --root /home/step/certs/root_ca.crt --force >/dev/null
   else
+    # First issuance, or a leaf issued for less than PORTAL_CERT_DURATION:
+    # issue fresh for the full lifetime instead of renewing a 24h certificate.
     # shellcheck disable=SC2086 # Values passed by word splitting were validated above.
     token="$(compose exec -T step-ca step ca token "$HOSTNAME_VALUE" $san_args \
       --provisioner dpf-installer --password-file /run/secrets/step-ca-password)"
     # shellcheck disable=SC2086
     compose exec -T step-ca step ca certificate "$HOSTNAME_VALUE" \
       /home/step/certs/dpf-portal.crt /home/step/secrets/dpf-portal.key \
-      --token "$token" --ca-url https://127.0.0.1:9000 \
+      --token "$token" --not-after "$PORTAL_CERT_DURATION" --ca-url https://127.0.0.1:9000 \
       --root /home/step/certs/root_ca.crt --force >/dev/null
     unset token
   fi
@@ -429,7 +479,7 @@ else
     PASSWORD_FILE_EFFECTIVE="$AUTHORITY_KEY"
   else
     [ -f "$TOKEN_FILE" ] || { echo "first join requires an existing --token-file" >&2; exit 64; }
-    token_mode="$(stat -f '%Lp' "$TOKEN_FILE" 2>/dev/null || stat -c '%a' "$TOKEN_FILE" 2>/dev/null || echo unknown)"
+    token_mode="$(stat -c '%a' "$TOKEN_FILE" 2>/dev/null || stat -f '%Lp' "$TOKEN_FILE" 2>/dev/null || echo unknown)"
     [ "$token_mode" = "600" ] || { echo "Enrollment token file must have mode 0600" >&2; exit 77; }
     PASSWORD_FILE_EFFECTIVE="$TOKEN_FILE"
   fi

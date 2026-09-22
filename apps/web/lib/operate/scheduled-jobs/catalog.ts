@@ -447,6 +447,20 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "pr-submit-awaiting-acceptance-reconcile",
+    inngestId: "backlog/pr-submit-awaiting-acceptance-reconcile",
+    ungatedReason:
+      "Module does not call gateAtEntry yet — not wired to the kill switch (BI-7E49FA15).",
+    name: "PR-submit awaiting-acceptance reconcile",
+    purpose:
+      "Moves coding-pool backlog items whose Workroom already has a pull request number to awaiting-acceptance. Live PR submit is the GitHub webhook; this cron is the post-upgrade backstop.",
+    cron: "7,22,37,52 * * * *",
+    cadence: "Every 15 minutes, offset by 7 minutes",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "material-freshness-decay",
     inngestId: "decision/material-freshness-decay",
     ungatedReason:

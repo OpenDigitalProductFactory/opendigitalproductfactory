@@ -13,6 +13,7 @@ import { prisma } from "@dpf/db";
 import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 
 import type { ToolResult } from "@/lib/mcp-tools";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPackHandler } from "./tool-pack";
 import {
   logBuildActivity,
@@ -54,18 +55,32 @@ async function attestIdeateResearch(
   userId: string,
   agentId: string | null,
 ): Promise<void> {
+  let outcome: { recorded: boolean; reason: string };
   try {
     const { recordIdeateResearchReceipt } = await import("@/lib/build/record-ideate-research-receipt");
-    await recordIdeateResearchReceipt({
+    outcome = await recordIdeateResearchReceipt({
       buildId,
       designDoc,
       revisionId: `review:${buildId}`,
       authorUserId: userId,
       authorAgentId: agentId,
     });
-  } catch {
-    // A missing receipt leaves the build exactly where it already was.
+  } catch (err) {
+    outcome = { recorded: false, reason: `attestation threw: ${getErrorMessage(err)}` };
   }
+  // A missing receipt leaves the build exactly where it already was — but it
+  // must never leave it there silently (BI-CA7C0C48: the swallowed refusal is
+  // what made ten builds look stuck for no reason). The outcome is a build
+  // activity row either way.
+  await prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "ideate_research_attestation",
+      summary: outcome.recorded
+        ? "Research receipt recorded for the governed backlog subject (author-accountable lane)."
+        : `Research receipt NOT recorded: ${outcome.reason.slice(0, 400)}`,
+    },
+  }).catch(() => undefined);
 }
 
 export async function reviewDesignDoc(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {
@@ -180,9 +195,21 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // `Build: <title>. <description>`. This is the same context, on the path
       // the pipeline actually uses.
       const ownerContext = ownerAskContext(build.title, build.description);
+      // Founder ruling 2026-08-12 (mapBuildDeliverableToRoutingSensitivity):
+      // ordinary platform builds route as development work; only elevated/high
+      // deliverables demand internal/confidential clearance. The literal
+      // "internal" these reviewers used to send excluded every public-cleared
+      // cloud dev engine, so reviews landed on the local model and came back
+      // without JSON.
+      const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } =
+        await import("@/lib/explore/build-process-matrix");
+      const reviewSensitivity = mapBuildDeliverableToRoutingSensitivity(
+        deriveDeliverableSensitivity({ text: `${build.title}\n${build.description ?? ""}`, workType: build.kind }),
+      );
       const prompt = buildDesignReviewPrompt(designDocTyped, ownerContext, priorContext);
       const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, ownerContext);
       const { routeAndCall } = await import("@/lib/routed-inference");
+      const { buildPhaseRouteOptions } = await import("@/lib/build/build-phase-route-options");
       const messages = [{ role: "user" as const, content: prompt }];
       // Run the two checklist reviewers PLUS the advisory architecture reviewer
       // (chief-architect / Enterprise Architect lens) in parallel. The
@@ -200,18 +227,18 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
         buildId,
       };
       const [r1settled, r2settled, archSettled] = await Promise.allSettled([
-        routeAndCall(messages, "You are a design reviewer.", "internal", attribution),
+        routeAndCall(messages, "You are a design reviewer.", reviewSensitivity, buildPhaseRouteOptions(attribution)),
         routeAndCall(
           messages,
           "You are an independent design reviewer. Focus especially on security, data integrity, edge cases, and accessibility gaps the primary reviewer may have missed.",
-          "internal",
-          { ...attribution, budgetClass: "minimize_cost" },
+          reviewSensitivity,
+          buildPhaseRouteOptions({ ...attribution, budgetClass: "minimize_cost" }),
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
           `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.`,
-          "internal",
-          { ...attribution, budgetClass: "minimize_cost" },
+          reviewSensitivity,
+          buildPhaseRouteOptions({ ...attribution, budgetClass: "minimize_cost" }),
         ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
@@ -260,7 +287,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           doc: typeof build.designDoc === "string" ? build.designDoc : JSON.stringify(designDocTyped),
           db: prisma,
           transport: (messages, systemPrompt) =>
-            routeAndCall(messages, systemPrompt, "internal", { budgetClass: "minimize_cost" }),
+            routeAndCall(messages, systemPrompt, reviewSensitivity, buildPhaseRouteOptions({ budgetClass: "minimize_cost" })),
         });
         if (!daAdvisory.skipped && daAdvisory.findings.length > 0) {
           review = Object.assign({}, review, { dataArchitectureAdvisory: daAdvisory }) as typeof review;

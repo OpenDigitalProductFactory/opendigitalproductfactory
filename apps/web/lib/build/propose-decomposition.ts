@@ -258,7 +258,10 @@ async function defaultCallAgent(prompt: string): Promise<string> {
   const messages = [{ role: "user" as const, content: prompt }];
   const systemPrompt =
     "You are a Build Studio Software Engineer asked to propose 2-4 candidate decompositions of an xlarge design into smaller coordinated builds. Output JSON only — no prose, no markdown around the JSON.";
-  const result = await routeAndCall(messages, systemPrompt, "internal");
+  // Decomposing a platform design into builds is source-design work: the
+  // development class (founder ruling 2026-08-12), not internal business data.
+  const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
+  const result = await routeAndCall(messages, systemPrompt, "development", { ...BUILD_PHASE_ROUTE_OPTIONS });
   return result.content ?? "";
 }
 

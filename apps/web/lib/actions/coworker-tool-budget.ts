@@ -322,6 +322,19 @@ export function selectCoworkerToolBudget(params: {
   roleGrants: readonly string[];
   /** Extra names to force into tier 0 (e.g. load_tools). */
   alwaysIncludeNames?: ReadonlySet<string>;
+  /**
+   * BI-EC82C48B. The EXACT tools a governed run cannot proceed without — the
+   * writer that records its receipt and the immutable reader it must read the
+   * artifact through. These outrank every other tier-0 name WITHIN the cap; they
+   * are deliberately NOT cap-exempt (BI-95D74DE9 — exemption put a floor under
+   * the surface and disqualified local serving). Downstream,
+   * narrowInitiativeReviewTools filters the attached set to exactly these names,
+   * so a deferred required tool does not degrade the run, it EMPTIES it: the
+   * model is handed zero schemas and can only answer in prose, which the
+   * dispatch contract then misreports as the provider ignoring the writer
+   * contract. Ranking them first is what keeps that from happening.
+   */
+  requiredNames?: ReadonlySet<string>;
   cap?: number;
   /** EP-27FD96BC · P3 (BI-ACE1EBA4). The current turn's intent (the user
    *  message). When present, tools are ranked by relevance to it WITHIN their
@@ -332,9 +345,13 @@ export function selectCoworkerToolBudget(params: {
   const cap = params.cap ?? MAX_COWORKER_ATTACHED_TOOLS;
   const pageActions = params.pageActionNames ?? new Set<string>();
   const always = params.alwaysIncludeNames ?? new Set<string>();
+  const required = params.requiredNames ?? new Set<string>();
   const roleGrants = [...params.roleGrants];
 
   const tierOf = (t: ToolDefinition): number => {
+    // Tier -1: the run's required tools. Above the generic surface, still inside
+    // the cap (BI-EC82C48B).
+    if (required.has(t.name)) return -1;
     if (always.has(t.name) || pageActions.has(t.name)) return 0;
     if (isToolAllowedByGrants(t.name, roleGrants)) return 1;
     if (CORE_MCP_TOOL_NAMES.has(t.name)) return 2;

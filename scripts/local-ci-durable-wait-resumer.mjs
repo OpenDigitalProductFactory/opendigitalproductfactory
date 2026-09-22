@@ -128,10 +128,16 @@ export function parseResumerArgs(argv) {
 // re-claim, which looked identical to the defect it was written to fix.
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
+// windowsHide is load-bearing on Windows. This process is detached, so it owns
+// no console, and a console child started without the flag is given a new
+// VISIBLE one: every re-claim opened a terminal window that stole the
+// operator's focus (observed 2026-09-22, six resumers, a window every few
+// seconds). The gate's own children inherit the hidden console.
 function runGateOnce({ gateArgv, env, spawnFn }) {
   return new Promise((resolve) => {
     const child = spawnFn(process.execPath, gateArgv, {
       stdio: "ignore",
+      windowsHide: true,
       env: { ...env, [RESUME_MARKER_ENV]: "1" },
     });
     child.once("error", () => resolve(null));

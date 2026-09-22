@@ -26,6 +26,7 @@ const BACKLOG_STATUS_TO_WORK_ITEM_STATUS: Record<string, string> = {
   triaging: "queued",
   open: "queued",
   "in-progress": "in-progress",
+  "awaiting-acceptance": "awaiting-approval",
   done: "completed",
   deferred: "deferred",
   retired: "cancelled",

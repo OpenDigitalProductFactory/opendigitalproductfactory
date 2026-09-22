@@ -211,6 +211,25 @@ const detail: WorkspaceWorkCaseDetailView = {
 };
 
 describe("WorkCaseDetailView", () => {
+  it("offers room links that preserve operation and filter context", () => {
+    const html = renderToStaticMarkup(<WorkCaseDetailView detail={{ ...detail, room: undefined,
+      roomChoices: [{ capsuleId: "WC-ONE", title: "First reviewer", status: "ready" }] }}
+      navigationContext={{ operation: "unmapped", filter: "waiting" }} />);
+    expect(html).toContain("Choose a Workroom");
+    expect(html).toContain("operation=unmapped&amp;filter=waiting&amp;workroom=WC-ONE");
+    expect(html).toContain("First reviewer");
+    expect(html).not.toContain("Work Room unavailable");
+  });
+
+  it("uses effective inherited accountability in the header", () => {
+    const html = renderToStaticMarkup(<WorkCaseDetailView detail={detail} workforce={{
+      accountability: { state: "resolved", principalId: "owner-1", source: "organization-owner", inheritedFrom: [] },
+      accountableDisplayName: "Dana Reyes",
+    }} />);
+    expect(html).toContain("Dana Reyes");
+    expect(html).toContain("organization&#x27;s recorded owner");
+  });
+
   it("uses My Work and Work Room language on the existing Workspace route", () => {
     const html = renderToStaticMarkup(<WorkCaseDetailView detail={detail} />);
 

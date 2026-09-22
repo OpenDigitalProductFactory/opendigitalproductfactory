@@ -20,6 +20,17 @@
 #   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="why" git push
 # The skip reason is persisted into the gate state file so `pnpm pr:health`
 # can surface it as an explicit operator attestation at PR time.
+#
+# One code is evidence-gated rather than attestation-gated (BI-02E5F2A1,
+# DI-FC5699629694): `gate-infrastructure-unavailable` is accepted ONLY when
+# this hook can itself capture machine evidence that the gate's infrastructure
+# failed. It re-attempts the gate's own lease claim
+# (scripts/pre-push-gate-infrastructure-probe.mjs) and embeds the failure
+# response — HTTP 401 `unauthorized: invalid or expired token`, connection
+# refused, server error — in the record. Prose in the reason is not evidence.
+# If the claim SUCCEEDS the gate can run, so the code is refused. The record is
+# gate-UNRUN, never a pass; cloud CI stays the safety net. Per push; nothing
+# persists beyond the record.
 
 set -eu
 
@@ -149,6 +160,9 @@ if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
     echo "[pre-push-gate] DPF_SKIP_PREPUSH_GATE=1 requires DPF_SKIP_PREPUSH_GATE_REASON." >&2
     echo "[pre-push-gate] Use a closed reason code (BI-563F6AB6), e.g.:" >&2
     echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"operator-emergency: brief why\" git push" >&2
+    echo "[pre-push-gate] When the gate's own infrastructure is down (lease unclaimable: dead token, portal unreachable), the hook" >&2
+    echo "[pre-push-gate] captures that failure itself and records the push as gate-UNRUN (never passed):" >&2
+    echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"gate-infrastructure-unavailable: brief why\" git push" >&2
     exit 1
   fi
   # Validate allowlisted code before writing the skip record (BI-563F6AB6).
@@ -162,6 +176,7 @@ const codes = new Set([
   "operator-emergency",
   "external-contribution-no-install",
   "install-bootstrap-recovery",
+  "gate-infrastructure-unavailable",
 ]);
 const raw = reason.trim();
 const m = raw.match(/^([a-z0-9-]+)(?:\s*[:\u2014\-]\s*(.*))?$/i);
@@ -176,20 +191,60 @@ if (!m || !codes.has(m[1].toLowerCase())) {
 ' "$reason"; then
     exit 1
   fi
+  # gate-infrastructure-unavailable is evidence-gated (BI-02E5F2A1): the hook
+  # re-attempts the gate's lease claim and accepts the code only when that
+  # attempt fails for an infrastructure reason. The probe's JSON result is
+  # embedded in the record as `infrastructureEvidence`; a checkout without the
+  # probe cannot capture evidence, so the code is refused there.
+  infra_evidence=""
+  if node -e '
+const raw = (process.argv[1] || "").trim();
+const m = raw.match(/^([a-z0-9-]+)/i);
+process.exit(m && m[1].toLowerCase() === "gate-infrastructure-unavailable" ? 0 : 1);
+' "$reason"; then
+    if [ ! -f "scripts/pre-push-gate-infrastructure-probe.mjs" ]; then
+      echo "[pre-push-gate] gate-infrastructure-unavailable needs scripts/pre-push-gate-infrastructure-probe.mjs to capture the failure; this checkout has none — refusing." >&2
+      exit 1
+    fi
+    echo "[pre-push-gate] gate-infrastructure-unavailable: re-attempting the local-CI lease claim to capture the failure..."
+    if probe_json="$(node scripts/pre-push-gate-infrastructure-probe.mjs --branch "$branch" --sha "$sha")"; then
+      infra_evidence="$probe_json"
+    else
+      echo "[pre-push-gate] gate-infrastructure-unavailable refused: no infrastructure failure was captured (see above)." >&2
+      echo "[pre-push-gate] If the lease claim succeeded the gate can run:  pnpm run pregate" >&2
+      exit 1
+    fi
+  fi
   mkdir -p "$(dirname "$state_file")"
   node -e '
 const fs = require("node:fs");
-const [file, branch, sha, reason] = process.argv.slice(1);
-fs.writeFileSync(file, JSON.stringify({
+const [file, branch, sha, reason, probeJson] = process.argv.slice(1);
+const record = {
   branch,
   sha,
   gatePassed: false,
   skipped: true,
   skipReason: reason,
   recordedAt: new Date().toISOString()
-}, null, 2) + "\n");
-' "$state_file" "$branch" "$sha" "$reason"
-  echo "[pre-push-gate] override recorded for $branch@$sha: $reason"
+};
+if (probeJson) {
+  const probe = JSON.parse(probeJson);
+  if (probe.ok !== true || !probe.evidence) {
+    console.error("[pre-push-gate] probe returned no evidence; refusing to record gate-infrastructure-unavailable.");
+    process.exit(1);
+  }
+  // Gate-UNRUN, never passed: the status names it and the evidence proves it.
+  record.status = "gate-unrun";
+  record.gateUnrun = true;
+  record.infrastructureEvidence = probe.evidence;
+}
+fs.writeFileSync(file, JSON.stringify(record, null, 2) + "\n");
+' "$state_file" "$branch" "$sha" "$reason" "$infra_evidence" || exit 1
+  if [ -n "$infra_evidence" ]; then
+    echo "[pre-push-gate] gate-UNRUN recorded for $branch@$sha (infrastructure unavailable; evidence captured) — cloud CI is the safety net."
+  else
+    echo "[pre-push-gate] override recorded for $branch@$sha: $reason"
+  fi
   echo "[pre-push-gate] NOTE: pnpm pr:health accepts only allowlisted override codes."
 
   # A recorded sandbox-gate skip — the standard source-only agent path via
@@ -288,6 +343,8 @@ if [ -f "scripts/pregate-status.mjs" ]; then
   echo "[pre-push-gate]  CI-equivalent runner, records MCP evidence, writes the gate record)" >&2
   echo "[pre-push-gate] Recorded override for a verified-clean push:" >&2
   echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"<code>: why\" git push" >&2
+  echo "[pre-push-gate] Gate infrastructure itself down (lease unclaimable)? The hook captures the failure and records gate-UNRUN:" >&2
+  echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"gate-infrastructure-unavailable: why\" git push" >&2
   exit 1
 fi
 

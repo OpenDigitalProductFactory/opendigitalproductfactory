@@ -266,6 +266,25 @@ export async function seedProfessionProfiles(
   return { seeded, skipped };
 }
 
+/** Keys the operator owns; the seed never overwrites them. */
+export const OPERATOR_OWNED_AUTONOMY_POLICY_KEYS = ["workroomPostureDefault", "goldenTriangle"] as const;
+
+export function mergeAutonomyPolicy(
+  existing: unknown,
+  seeded: Prisma.InputJsonValue,
+): Prisma.InputJsonValue {
+  const current = existing && typeof existing === "object" && !Array.isArray(existing)
+    ? (existing as Record<string, unknown>)
+    : {};
+  const base = seeded && typeof seeded === "object" && !Array.isArray(seeded)
+    ? { ...(seeded as Record<string, unknown>) }
+    : {};
+  for (const key of OPERATOR_OWNED_AUTONOMY_POLICY_KEYS) {
+    if (current[key] !== undefined) base[key] = current[key];
+  }
+  return base as Prisma.InputJsonValue;
+}
+
 export async function seedDecisionPerspective(db: DecisionPerspectiveSeedClient): Promise<{
   profileId: string;
   versionId: string;
@@ -273,6 +292,16 @@ export async function seedDecisionPerspective(db: DecisionPerspectiveSeedClient)
 }> {
   const seed = buildDecisionPerspectiveSeed();
 
+  // Operator-decreed keys inside autonomyPolicy (the room-posture default and
+  // the Golden Triangle posture) are the operator's decisions, not the seed's.
+  // The seed used to overwrite the whole column on every boot and self-upgrade,
+  // silently reverting a preauthorized room default within hours (observed
+  // 2026-09-18, BI-397157EA). Seed keys are refreshed; operator keys survive.
+  const existing = await db.decisionPerspectiveProfile.findUnique({
+    where: { profileId: seed.profile.profileId },
+    select: { autonomyPolicy: true },
+  });
+  const mergedAutonomyPolicy = mergeAutonomyPolicy(existing?.autonomyPolicy, seed.profile.autonomyPolicy);
   await db.decisionPerspectiveProfile.upsert({
     where: { profileId: seed.profile.profileId },
     update: {
@@ -281,7 +310,7 @@ export async function seedDecisionPerspective(db: DecisionPerspectiveSeedClient)
       scope: seed.profile.scope,
       fallbackProfileId: seed.profile.fallbackProfileId,
       defaultResolver: seed.profile.defaultResolver,
-      autonomyPolicy: seed.profile.autonomyPolicy,
+      autonomyPolicy: mergedAutonomyPolicy,
       status: seed.profile.status,
     },
     create: seed.profile,

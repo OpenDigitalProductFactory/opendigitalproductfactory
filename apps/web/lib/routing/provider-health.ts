@@ -20,6 +20,9 @@
  *                                       mutates any of them.
  */
 
+import { capacityRoutingExclusionReason } from "./capacity-routing-exclude";
+
+
 /** Low-cardinality, operator-facing reachability label. */
 export type ProviderHealthStatus =
   | "healthy" // recent successful calls; reachable now
@@ -67,6 +70,8 @@ export interface ProviderCapacityHealthInput {
   state: string;
   action: string;
   retryAt: Date | null;
+  /** When the snapshot was last observed; bounds a retryAt-less temporary limit. */
+  lastObservedAt?: Date | null;
   safeSummary: string;
   isHumanActionRequired: boolean;
 }
@@ -160,7 +165,21 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
     };
   }
 
-  if (input.capacityStatus && input.capacityStatus.state !== "available") {
+  // Same lift rule as routing: a retryAt that has passed, or a retryAt-less
+  // temporary limit whose observation is stale, no longer describes the
+  // provider — do not badge it (or exclude it from Build Studio) on it.
+  if (
+    input.capacityStatus
+    && input.capacityStatus.state !== "available"
+    && capacityRoutingExclusionReason(
+      {
+        state: input.capacityStatus.state,
+        retryAtMs: input.capacityStatus.retryAt?.getTime() ?? null,
+        observedAtMs: input.capacityStatus.lastObservedAt?.getTime() ?? null,
+      },
+      input.now,
+    ) !== null
+  ) {
     const capacityHealth = mapCapacityStatusToHealth(input.capacityStatus, input.providerId);
     if (capacityHealth) return capacityHealth;
   }

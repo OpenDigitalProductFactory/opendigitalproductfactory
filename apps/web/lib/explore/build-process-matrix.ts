@@ -461,11 +461,11 @@ function escalatePolicy(
  * to keep this module decoupled from govern/risk-posture; an unknown value is
  * treated as the balanced (no-floor) default.
  */
-// Bare "card"/"charge" are deliberately excluded — they over-match benign UI
-// copy ("dashboard card", "charge up"). Payment exposure is caught by the
-// billing/payment/PCI/cardholder/credit-card terms instead.
+// Bare "card"/"charge"/"token" are deliberately excluded — they over-match benign
+// prose ("dashboard card", "charge up", LLM "token/cost"). Payment and credential
+// exposure are caught by the billing/PCI/card and auth/api/bearer-token terms.
 const HIGH_SENSITIVITY_PATTERN =
-  /\b(auth|authn|authz|authentication|authorization|login|sign[- ]?in|password|credential|secret|token|api[- ]?key|billing|payment|invoice|pci|cardholder|credit[- ]?card|debit[- ]?card|customer[- ]?data|pii|personal[- ]?data|gdpr|hipaa|security|vulnerab|encrypt|crypto|kernel|governance|rbac|permission|access[- ]?control|compliance)\b/i;
+  /\b(auth|authn|authz|authentication|authorization|login|sign[- ]?in|password|credential|secret|(?:auth|access|bearer|refresh|session|oauth|api)[- ]?tokens?|api[- ]?key|billing|payment|invoice|pci|cardholder|credit[- ]?card|debit[- ]?card|customer[- ]?data|pii|personal[- ]?data|gdpr|hipaa|security|vulnerab|encrypt|crypto|kernel|governance|rbac|permission|access[- ]?control|compliance)\b/i;
 const ELEVATED_SENSITIVITY_PATTERN =
   /\b(database|migration|schema|prisma|integration|external|webhook|email|outbound|federation|edge|endpoint|deploy|infrastructure)\b/i;
 
