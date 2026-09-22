@@ -121,11 +121,13 @@ describe("recordCliRateLimit", () => {
     expect(status!.retryAfterSeconds).toBe(120);
   });
 
-  it("truncates errorSnippet to 300 characters", async () => {
-    const longError = "x".repeat(400);
+  it("bounds errorSnippet but keeps the tail, where the CLI states the limit (BI-EA13B5BA)", async () => {
+    const longError = `${"banner ".repeat(60)}ERROR: you've hit your usage limit; try again in 2h`;
     await recordCliRateLimit("codex-cli", "chatgpt", longError);
     const status = await getCliPoolStatus("codex-cli");
-    expect(status!.errorSnippet).toHaveLength(300);
+    expect(status!.errorSnippet!.length).toBeLessThanOrEqual(340);
+    expect(status!.errorSnippet).toContain("hit your usage limit");
+    expect(status!.errorSnippet).toContain("chars elided");
   });
 
   it("backs off with a default cooldown when Retry-After is unparseable", async () => {
