@@ -93,8 +93,8 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
       </Surface>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <StatCard label="Open rooms" value={inventory.openTotal} href="#coordination" hint="Open only" />
-        <StatCard label="No portfolio recorded" value={inventory.unclassified} hint="Never defaulted" />
+        <StatCard label="Open rooms" value={inventory.openTotal} href="#coordination" />
+        <StatCard label="No portfolio recorded" value={inventory.unclassified} />
         <StatCard label="Team plans" value={definitions.length} hint={definitions.length === 0 ? "Not configured on this install" : "Active value stream teams"} />
       </div>
 
