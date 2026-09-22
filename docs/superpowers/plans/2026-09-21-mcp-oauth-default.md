@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # OAuth defaults for MCP client setup
 
 Owner: BI-A5307F9E. Design: [MCP client self-authentication, section 11](../specs/2026-08-26-mcp-client-self-authentication-design.md#11-oauth-setup-convergence--bi-a5307f9e).

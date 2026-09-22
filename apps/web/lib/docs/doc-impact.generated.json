@@ -553,6 +553,9 @@
     "apps/web/lib/attention/owner-projection.ts": [
       "docs/user-guide/workspace/attention-inbox.md"
     ],
+    "apps/web/lib/auth/oauth-scope-map.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/autonomy/regulatory-ceiling.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -2746,6 +2749,7 @@
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
+      "apps/web/lib/auth/oauth-scope-map.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
       "apps/web/lib/govern/manager-scope.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
