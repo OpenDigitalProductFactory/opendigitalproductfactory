@@ -356,6 +356,22 @@ separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
 
+**The heartbeat is protected from the gate's own work.** A renewal timer only
+helps if the process is free to run it, and for a period it was not: the
+in-run descendant scan used a synchronous `ps` on a fixed interval, so on a
+host where that scan cost more than its interval the event loop saturated and
+no timer fired at all — the lease expired unrenewed and the deadline then
+fenced a run that was progressing normally. The signature was unmistakable:
+no heartbeat events for the length of the build, then every starved timer
+firing at once the moment the scan stopped, and the renewal that finally ran
+succeeding. The scan is now asynchronous and self-rescheduling — the next
+scan is scheduled only once the previous has returned — so it cannot queue
+behind itself or block the renewal. One synchronous observation remains,
+immediately before a fence kills the tree, because a descendant reparents to
+init the moment its parent dies and could otherwise escape the reap. If a
+long run is ever fenced for lease authority again, this is the first thing to
+re-measure (BI-04AECD8A).
+
 **Equivalent gate requests are single-flight.** Before admission, the gate
 builds the exact merge-tree evidence plan and fingerprints the host toolchain.
 The server derives one immutable key from repository, integration tree, plan
