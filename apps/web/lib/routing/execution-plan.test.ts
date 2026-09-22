@@ -17,6 +17,7 @@ import type { ActivityContract } from "./activity-contract";
 import type { RecipeRow } from "./recipe-types";
 import type { RequestContract } from "./request-contract";
 import type { EndpointManifest } from "./types";
+import { EMPTY_CAPABILITIES } from "./model-card-types";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -483,5 +484,98 @@ describe("terminalWriterDispatchContractForProvider", () => {
     expect(terminalWriterDispatchContractForProvider("anthropic-sub")).toBe("receipt-verified");
     expect(terminalWriterDispatchContractForProvider("codex")).toBe("receipt-verified");
     expect(terminalWriterDispatchContractForProvider("anthropic")).toBe("required-tool-call");
+  });
+});
+
+// ── Situational parameters on BOTH paths (BI-1F5DAABC / BI-DBAFEC10) ─────────
+//
+// The defect this guards: buildDefaultPlan sent `providerSettings: {}` and no
+// sampling, and it is the path any non-champion winner takes. The only parameter
+// logic in the tree lived in the champion-recipe maintenance job.
+describe("buildDefaultPlan carries situational parameters", () => {
+  const qwenEndpoint = () =>
+    makeEndpoint({
+      providerId: "local",
+      modelId: "huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M",
+      modelFamily: "qwen3",
+      maxOutputTokens: 32000,
+    });
+
+  it("no longer sends an empty parameter set", () => {
+    const plan = buildDefaultPlan(qwenEndpoint(), makeContract());
+    expect(plan.sampling).toBeDefined();
+    expect(Object.keys(plan.sampling!.values).length).toBeGreaterThan(0);
+  });
+
+  it("applies Qwen3's documented THINKING sampling when effort turns thinking on", () => {
+    // Engine defaults (temp ~0.8-1.0, top_k 40, repeat_penalty 1.1) are the
+    // configuration Qwen documents as causing repetition loops. A medium-depth
+    // local call enables Ollama's `think`, so the vendor's thinking profile
+    // applies — and its temperature outranks our intent table, because Qwen is
+    // explicit that thinking mode needs 0.6 rather than something lower.
+    const plan = buildDefaultPlan(qwenEndpoint(), makeContract({ contractFamily: "sync.code_gen" }));
+    expect(plan.sampling!.mode).toBe("thinking");
+    expect(plan.providerSettings.think).toBe(true);
+    expect(plan.sampling!.values).toMatchObject({
+      temperature: 0.6, topP: 0.95, topK: 20, minP: 0,
+    });
+    expect(plan.sampling!.provenance.temperature).toBe("vendor");
+  });
+
+  it("applies the default profile and lets the task narrow it when not thinking", () => {
+    const plan = buildDefaultPlan(
+      qwenEndpoint(),
+      makeContract({ contractFamily: "sync.extraction", reasoningDepth: "low" }),
+    );
+    expect(plan.sampling!.mode).toBe("default");
+    expect(plan.providerSettings.think).toBeUndefined();
+    expect(plan.sampling!.values.topP).toBe(0.8);
+    expect(plan.sampling!.values.topK).toBe(20);
+    // Deterministic extraction — this is the case the superseded budget-class
+    // rule gave temperature 1.0 on a quality_first budget.
+    expect(plan.temperature).toBe(0);
+    expect(plan.sampling!.provenance.topP).toBe("vendor");
+    expect(plan.sampling!.provenance.temperature).toBe("contract");
+  });
+
+  it("records each value's provenance so the choice can be explained", () => {
+    const plan = buildDefaultPlan(qwenEndpoint(), makeContract());
+    for (const key of Object.keys(plan.sampling!.values)) {
+      expect(plan.sampling!.provenance[key as "temperature"]).toBeTruthy();
+    }
+  });
+
+  it("asserts nothing for a model with no published guidance and an unknown family", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint({ providerId: "someprovider", modelId: "mystery-1", modelFamily: null }),
+      makeContract({ contractFamily: "sync.unmapped" }),
+    );
+    expect(plan.sampling!.values).toEqual({});
+    expect(plan.temperature).toBeUndefined();
+  });
+
+  it("raises max_tokens to cover an Anthropic thinking budget", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint({
+        providerId: "anthropic",
+        modelId: "claude-opus-4-5",
+        modelFamily: "claude",
+        capabilities: { ...EMPTY_CAPABILITIES, thinking: true },
+      }),
+      makeContract({ reasoningDepth: "high", estimatedInputTokens: 20000 }),
+    );
+    const budget = (plan.providerSettings.thinking as { budget_tokens: number }).budget_tokens;
+    expect(budget).toBeGreaterThan(0);
+    expect(plan.maxTokens).toBe(4096 + budget);
+    // Anthropic rejects temperature with thinking on, and the card says so.
+    expect(plan.temperature).toBeUndefined();
+  });
+
+  it("flags a provider that cannot express the requested effort", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint({ providerId: "someprovider", modelId: "plain-1", modelFamily: null }),
+      makeContract({ reasoningDepth: "high" }),
+    );
+    expect(plan.effortUnexpressed).toBe(true);
   });
 });

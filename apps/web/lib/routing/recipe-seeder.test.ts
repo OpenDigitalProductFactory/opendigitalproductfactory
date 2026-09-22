@@ -143,40 +143,24 @@ describe("buildSeedRecipe – OpenAI reasoning", () => {
 // ── OpenAI chat ──────────────────────────────────────────────────────────────
 
 describe("buildSeedRecipe – OpenAI chat", () => {
-  it("minimize_cost → temperature 0.3", () => {
-    const result = buildSeedRecipe(
-      "openai",
-      "gpt-4o",
-      "gpt-4o",
-      baseModelCard({ modelClass: "chat" }),
-      baseContract({ budgetClass: "minimize_cost" }),
-    );
-
-    expect(result.providerSettings).toHaveProperty("temperature", 0.3);
-  });
-
-  it("balanced → temperature 0.7", () => {
-    const result = buildSeedRecipe(
-      "openai",
-      "gpt-4o",
-      "gpt-4o",
-      baseModelCard({ modelClass: "chat" }),
-      baseContract({ budgetClass: "balanced" }),
-    );
-
-    expect(result.providerSettings).toHaveProperty("temperature", 0.7);
-  });
-
-  it("quality_first → temperature 1.0", () => {
-    const result = buildSeedRecipe(
-      "openai",
-      "gpt-4o",
-      "gpt-4o",
-      baseModelCard({ modelClass: "chat" }),
-      baseContract({ budgetClass: "quality_first" }),
-    );
-
-    expect(result.providerSettings).toHaveProperty("temperature", 1.0);
+  it("no longer sets temperature at all — budget class does not govern variance", () => {
+    // BI-40DA6D05: this block asserted minimize_cost→0.3, balanced→0.7,
+    // quality_first→1.0. Budget class says what we will SPEND; temperature says
+    // how much we will VARY, and that mapping was inverted for the case that
+    // matters most — a deterministic extraction on a quality_first budget got
+    // temperature 1.0. Temperature is now resolved per dispatch from the model's
+    // vendor profile and the contract family (sampling-profile.ts), so a seeded
+    // recipe no longer freezes it.
+    for (const budgetClass of ["minimize_cost", "balanced", "quality_first"] as const) {
+      const result = buildSeedRecipe(
+        "openai",
+        "gpt-4o",
+        "gpt-4o",
+        baseModelCard({ modelClass: "chat" }),
+        baseContract({ budgetClass }),
+      );
+      expect(result.providerSettings).not.toHaveProperty("temperature");
+    }
   });
 });
 

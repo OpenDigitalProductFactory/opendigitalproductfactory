@@ -41,7 +41,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STUCK_PR_THRESHOLD_HOURS: "4"
+<<<<<<< Updated upstream
           # Env indirection, never `${{ }}` inside `run:` (actions-injection audit, CWE-094).
+=======
+>>>>>>> Stashed changes
           DRY_RUN: ${{ inputs.dry_run == true }}
         run: |
           if [ "$DRY_RUN" = "true" ]; then
