@@ -127,7 +127,7 @@ describe("org-decision pack — evaluate_org_business_decision optionFeatures (B
         options: ["Full refund", "Store credit"],
         optionFeatures: [{ speed_to_value: 0.8 }], // only one, options has two
         domainClass: "risk-assessment",
-        riskTier: "medium",
+        riskTier: "medium", decisionScope: "wwwd",
       },
       "user-1",
     );
@@ -154,7 +154,7 @@ describe("org-decision pack — evaluate_org_business_decision optionFeatures (B
           { customer_consent_state: 0.4, cost_efficiency: 0.8 },
         ],
         domainClass: "risk-assessment",
-        riskTier: "medium",
+        riskTier: "medium", decisionScope: "wwwd",
       },
       "user-1",
     );
@@ -178,11 +178,75 @@ describe("org-decision pack — evaluate_org_business_decision optionFeatures (B
     });
 
     await orgDecisionPack.handlers.evaluate_org_business_decision!(
-      { question: "Refund?", options: ["yes", "no"], domainClass: "risk-assessment", riskTier: "medium" },
+      { question: "Refund?", options: ["yes", "no"], domainClass: "risk-assessment", riskTier: "medium", decisionScope: "wwwd" },
       "user-1",
     );
 
     const gateArgs = gateMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(gateArgs.scoredOptions).toBeUndefined();
+  });
+});
+
+describe("evaluate_org_business_decision — scope admission (BI-13C38318)", () => {
+  const run = (params: Record<string, unknown>) =>
+    orgDecisionPack.handlers["evaluate_org_business_decision"]!(params, "user-1", undefined as never) as Promise<{
+      success: boolean; error?: string; data?: unknown;
+    }>;
+
+  const base = {
+    question: "For field-service employee mobile features, under what conditions should the app collect an employee's location?",
+    options: ["Coarse, on-duty-only", "Precise continuous tracking"],
+    domainClass: "risk-assessment",
+    riskTier: "high",
+  };
+
+  it("refuses an undeclared question with a pick list instead of defaulting to the business gate", async () => {
+    const result = await run(base);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("decision_scope_required");
+    expect((result.data as { pickList: unknown[] }).pickList).toHaveLength(3);
+  });
+
+  it("routes a craft question to the profession gate rather than the owner's queue", async () => {
+    const result = await run({ ...base, decisionScope: "wsid" });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("decision_scope_mismatch");
+    expect((result.data as { route: string }).route).toBe("evaluate_profession_decision");
+  });
+
+  it("routes a platform question to the founder kernel", async () => {
+    const result = await run({ ...base, decisionScope: "wwmd" });
+    expect(result.error).toBe("decision_scope_mismatch");
+    expect((result.data as { route: string }).route).toBe("principle_decide");
+  });
+
+  it("records nothing to the decision ledger when the scope is not this organization's", async () => {
+    await run({ ...base, decisionScope: "wsid" });
+    await run(base);
+    // A refused question must not become an unanswerable row in the owner's queue.
+    expect(gateMock).not.toHaveBeenCalled();
+  });
+
+  it("still answers a declared business decision", async () => {
+    gateMock.mockResolvedValue({
+      interactionId: "DI-OK",
+      allowed: true,
+      orgProfileSelected: true,
+      evaluation: { outcomeType: "recommend", rationale: "ok", confidenceScore: 0.9, recommendedOptionId: null },
+    });
+    const result = await run({
+      question: "Should we raise our support subscription price by 10%?",
+      options: ["Raise it", "Hold"],
+      domainClass: "risk-assessment",
+      riskTier: "medium",
+      decisionScope: "wwwd",
+    });
+    expect(result.success).toBe(true);
+    expect(gateMock).toHaveBeenCalled();
+  });
+
+  it("reports a malformed param before asking for the scope", async () => {
+    const result = await run({ ...base, domainClass: "nonsense" });
+    expect(result.error).toBe("invalid_params");
   });
 });

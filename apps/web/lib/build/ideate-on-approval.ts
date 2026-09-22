@@ -34,6 +34,31 @@
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { classifyRetrySafePreDispatchFailure } from "./build-engine-selection";
+
+/** BI-0B95D268: poll the sandbox container until it runs again (bounded). */
+export async function waitForSandboxRunning(opts: {
+  timeoutMs?: number;
+  intervalMs?: number;
+  isRunning?: () => Promise<boolean>;
+  sleep?: (ms: number) => Promise<void>;
+} = {}): Promise<boolean> {
+  const timeoutMs = opts.timeoutMs ?? 3 * 60 * 1000;
+  const intervalMs = opts.intervalMs ?? 10_000;
+  const isRunning = opts.isRunning ?? (async () => {
+    const [{ isSandboxRunning }, { SANDBOX_CONTAINER }] = await Promise.all([
+      import("./sandbox/sandbox"),
+      import("./sandbox/agent-cli-runtime"),
+    ]);
+    return isSandboxRunning(SANDBOX_CONTAINER);
+  });
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await isRunning()) return true;
+    if (Date.now() >= deadline) return false;
+    await sleep(intervalMs);
+  }
+}
 import { formatBuildEngineSelectionEvidence } from "./build-engine-selection-runtime";
 
 type DispatchOutcome =
@@ -317,6 +342,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const attemptCandidates = [selection.selected, ...selection.fallbackChain.slice(0, 1)];
     let ideateResult: Awaited<ReturnType<typeof dispatchIdeateResearch>> | null = null;
     let resolvedAttempt = selection.selected;
+    let infrastructureRetried = false;
     for (let attemptIndex = 0; attemptIndex < attemptCandidates.length; attemptIndex += 1) {
       const attempt = attemptCandidates[attemptIndex]!;
       resolvedAttempt = attempt;
@@ -338,6 +364,24 @@ export async function dispatchIdeateForApprovedBuild(params: {
         sensitivity: routingSensitivity,
       });
       if (ideateResult.success) break;
+      // BI-0B95D268: the harness killed the engine (a sandbox restart during a
+      // self-upgrade swap is the common case). Wait for the sandbox to come
+      // back, then re-run the SAME attempt once — before this, the build sat
+      // as a "model failure" until the 20-minute stale window plus the
+      // 10-minute reconciler tick re-drove it.
+      if (ideateResult.infrastructure && !infrastructureRetried) {
+        infrastructureRetried = true;
+        await logActivity(
+          `Infrastructure failure, not a model verdict: ${(ideateResult.error ?? "").slice(0, 160)} — waiting for the sandbox, then retrying the same engine once.`,
+        );
+        const ready = await waitForSandboxRunning();
+        if (ready) {
+          attemptIndex -= 1;
+          continue;
+        }
+        await logActivity("Sandbox did not come back within the wait window; leaving the build for the stranded-build reconciler.");
+        break;
+      }
       const retryClass = classifyRetrySafePreDispatchFailure({
         message: ideateResult.error ?? "",
         durationMs: ideateResult.durationMs,
@@ -692,7 +736,7 @@ export async function dispatchDesignReviewFixLoop(params: {
   try {
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { id: true, title: true, kind: true, originatingBacklogItemId: true, designReview: true },
+      select: { id: true, title: true, kind: true, originatingBacklogItemId: true, designReview: true, brief: true },
     });
     if (!build) return { kind: "build-not-found", rounds: 0 };
 
@@ -700,10 +744,95 @@ export async function dispatchDesignReviewFixLoop(params: {
     if (review?.decision !== "fail") return { kind: "no-failed-review", rounds: 0 };
 
     // Fix builds: regenerating the designDoc cannot fill the missing fixContext
-    // ("Incomplete fix diagnosis"), so escalate to a human directly.
+    // ("Incomplete fix diagnosis"). That used to escalate to a human at round 0
+    // — and on an unattended install nobody answers, so the build is reaped at
+    // seven days. Measured on this install: 14 of 16 abandoned fix builds had an
+    // incomplete diagnosis, making this the single largest cause of abandonment
+    // (14 of 45).
+    //
+    // The brief is not empty: it carries a "## Problem" narrative naming dates,
+    // entity ids and observed symptoms. So attempt the diagnosis first, bounded
+    // by the same round budget the feature path uses, and escalate only when the
+    // investigation genuinely does not land.
+    //
+    // The safety rule lives in fix-context-diagnosis.ts: a diagnosis is either
+    // grounded or refused. A refusal escalates exactly as before — a guess
+    // recorded as fact would become the evidence the plan phase builds on.
     if (build.kind === "fix") {
-      await escalate(build, review, 0);
-      return { kind: "escalated-fix-diagnosis", rounds: 0 };
+      const { executeTool: runTool } = await import("@/lib/mcp-tools");
+      const { buildFixDiagnosisPrompt, parseFixDiagnosis, isDiagnosisRefusal } = await import(
+        "@/lib/build/fix-context-diagnosis"
+      );
+      const briefForDiagnosis = (build as { brief?: unknown }).brief as
+        | { problem?: string; summary?: string; fixContext?: unknown }
+        | null;
+      const problem =
+        (typeof briefForDiagnosis?.problem === "string" && briefForDiagnosis.problem.trim())
+        || (typeof briefForDiagnosis?.summary === "string" && briefForDiagnosis.summary.trim())
+        || "";
+
+      let diagnosisRounds = 0;
+      let lastRefusal = "no diagnosis attempted";
+
+      while (review?.decision === "fail" && diagnosisRounds < DESIGN_FIX_MAX_ROUNDS && problem) {
+        diagnosisRounds += 1;
+        await log(
+          `Fix diagnosis incomplete — investigating (round ${diagnosisRounds}/${DESIGN_FIX_MAX_ROUNDS}) rather than escalating.`,
+        );
+        const prompt = buildFixDiagnosisPrompt({
+          title: build.title,
+          problem,
+          priorIssues: (review?.issues ?? []).map((i) => i.description),
+        });
+
+        let raw: unknown = null;
+        try {
+          const { routeAndCall } = await import("@/lib/inference/routed-inference");
+          const answer = await routeAndCall(
+            [{ role: "user", content: prompt }],
+            "You are the design author diagnosing a defect you will then plan against.",
+            "development",
+            { taskType: "conversation" },
+          );
+          raw = answer?.content ?? null;
+        } catch (err) {
+          const { getErrorMessage } = await import("@/lib/shared/get-error-message");
+          await log(`Fix diagnosis round ${diagnosisRounds} could not dispatch (${getErrorMessage(err)}) — retrying if rounds remain.`);
+          continue;
+        }
+
+        const parsed = parseFixDiagnosis(raw);
+        if (isDiagnosisRefusal(parsed)) {
+          lastRefusal = parsed.reason;
+          await log(`Fix diagnosis round ${diagnosisRounds} refused: ${parsed.reason}`);
+          continue;
+        }
+
+        await runTool("update_feature_brief", { buildId, fixContext: parsed }, userId, {
+          featureBuildId: buildId,
+        });
+        await log(
+          `Fix diagnosis recorded by the design author (round ${diagnosisRounds}): reproduction, root cause and approach.`,
+        );
+        await runTool("reviewDesignDoc", { buildId }, userId, {
+          featureBuildId: buildId,
+          suppressDesignReviewAutoRepair: true,
+        });
+        const rechecked = await prisma.featureBuild.findUnique({
+          where: { buildId },
+          select: { designReview: true },
+        });
+        review = rechecked?.designReview as DesignReviewVerdict;
+      }
+
+      if (review?.decision !== "fail") {
+        return { kind: "self-repaired", rounds: diagnosisRounds };
+      }
+      await log(
+        `Fix diagnosis still incomplete after ${diagnosisRounds} round(s) (${problem ? lastRefusal : "brief carries no problem statement to investigate"}) — escalating to a human.`,
+      );
+      await escalate(build, review, diagnosisRounds);
+      return { kind: "escalated-fix-diagnosis", rounds: diagnosisRounds };
     }
 
     const { formatPlanReviewFeedback } = await import("@/lib/build/plan-on-approval");

@@ -142,13 +142,20 @@ describe("resolveBusinessProfile", () => {
 });
 
 describe("resolveStanceVectors (BI-70ADC71F)", () => {
-  it("returns the generic set for an unknown industry, with all 5 vectors present", () => {
+  it("returns the generic set for an unknown industry, with every vector present", () => {
     const v = resolveStanceVectors({ archetypeId: null, industry: "no-such-industry" });
     expect(Object.keys(v).sort()).toEqual([
       "customer-goodwill",
+      // BI-7728C3B7: the classes that actually reached the owner unanswered.
+      "data-handling",
+      "decision-scope",
       "growth-vs-stability",
+      // BI-0902BAE9: activity-triggered, resolved for every archetype but
+      // seeded only where the activity is derived (see seededStanceVectorKeys).
+      "on-site-work-conduct",
       "pricing-integrity",
       "quality-bar",
+      "routine-operations",
       "spend-authority",
     ]);
     expect(v["customer-goodwill"].ceilingUsd).toBe(100);

@@ -4,6 +4,7 @@
 // apps/web/scripts/issue-mcp-token.ts (CLI).
 
 import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
+import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 export type McpSnippetFormat = "claude-code" | "codex" | "grok" | "antigravity" | "vscode" | "raw";
 
@@ -55,16 +56,19 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
   const url = `${clientBaseUrl}/api/mcp/v1`;
   const lazyHostUrl = withDpfMcpCatalogTier(url, "full");
   const refreshUrl = `${clientBaseUrl}/api/mcp/token/refresh`;
+  // BI-46B636B0: the header fallback is the only credential path over plain
+  // http (the client refuses OAuth there); over https it would disable OAuth.
+  const headerRequired = mcpClientBearerHeaderRequired(url);
   const httpEntry = {
     type: "http",
     url,
-    headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` },
+    ...(headerRequired ? { headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}),
   };
   const lazyHostHttpEntry = { ...httpEntry, url: lazyHostUrl };
   const vscodeHttpEntry = {
     type: "http",
     url,
-    headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` },
+    ...(headerRequired ? { headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}),
   };
   // Claude Code: .mcp.json uses the mcpServers key.
   const claudeCode = JSON.stringify({ mcpServers: { dpf: lazyHostHttpEntry } }, null, 2);
@@ -117,4 +121,45 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
     envLaunchctl,
     runtimeRefreshPowerShell,
   };
+}
+
+// ── client_credentials clients (BI-EDB67A2B) ────────────────────────────────
+//
+// The headless credential is NOT a bearer for the MCP transport: it is
+// exchanged at /api/oauth/token for a short-lived access token. The gate
+// scripts read it from ONE of two places, and this is the single statement of
+// both — scripts/lib/mcp-credential.mjs resolves the same file path and env
+// names (kept in lockstep by its tests, not by import: the script has no build
+// step and cannot import the web bundle).
+
+export const MCP_CLIENT_ID_ENV_VAR = "DPF_MCP_CLIENT_ID";
+export const MCP_CLIENT_SECRET_ENV_VAR = "DPF_MCP_CLIENT_SECRET";
+/** Home-relative on purpose: outside every checkout, so it can never be committed. */
+export const MCP_CLIENT_CREDENTIALS_FILE = "~/.dpf/mcp-client-credentials.json";
+
+export type McpCredentialsClientSnippets = {
+  /** Where the gate looks by default. */
+  credentialsFilePath: string;
+  /** The exact file body: {"clientId","clientSecret"}. */
+  credentialsFileJson: string;
+  /** One POSIX line that writes the file with owner-only permissions. */
+  writeFilePosix: string;
+  /** One PowerShell line that writes the file. */
+  writeFilePowerShell: string;
+  /** Environment-variable alternative for CI secret stores. */
+  envPosix: string;
+  envPowerShell: string;
+};
+
+export function buildCredentialsClientSnippets(clientId: string, clientSecret: string): McpCredentialsClientSnippets {
+  const credentialsFileJson = JSON.stringify({ clientId, clientSecret }, null, 2);
+  const writeFilePosix =
+    `mkdir -p ~/.dpf && umask 077 && printf '%s\n' '${shSingleQuoted(credentialsFileJson.replace(/\n\s*/g, " "))}' > ${MCP_CLIENT_CREDENTIALS_FILE}`;
+  const writeFilePowerShell =
+    `New-Item -ItemType Directory -Force "$HOME\\.dpf" | Out-Null; Set-Content -Path "$HOME\\.dpf\\mcp-client-credentials.json" -Value '${psSingleQuoted(credentialsFileJson.replace(/\n\s*/g, " "))}'`;
+  const envPosix = `export ${MCP_CLIENT_ID_ENV_VAR}='${shSingleQuoted(clientId)}' ${MCP_CLIENT_SECRET_ENV_VAR}='${shSingleQuoted(clientSecret)}'`;
+  const envPowerShell =
+    `[System.Environment]::SetEnvironmentVariable('${MCP_CLIENT_ID_ENV_VAR}', '${psSingleQuoted(clientId)}', 'User'); ` +
+    `[System.Environment]::SetEnvironmentVariable('${MCP_CLIENT_SECRET_ENV_VAR}', '${psSingleQuoted(clientSecret)}', 'User')`;
+  return { credentialsFilePath: MCP_CLIENT_CREDENTIALS_FILE, credentialsFileJson, writeFilePosix, writeFilePowerShell, envPosix, envPowerShell };
 }

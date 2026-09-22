@@ -18,6 +18,7 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { spawn } from "node:child_process";
+import { materializeBearer } from "./mcp-credential.mjs";
 
 let callId = 0;
 
@@ -77,6 +78,10 @@ export async function mcpCall(toolName, args, {
 } = {}) {
   if (!mcpUrl) throw new Error("mcpCall: mcpUrl is required");
   if (!bearerToken) throw new Error("mcpCall: bearerToken is required");
+  // BI-78B653D5: `bearerToken` is a PAT string or a self-refreshing
+  // client_credentials bearer (scripts/lib/mcp-credential.mjs). Materialize
+  // it once per call so a long-running gate always sends a live token.
+  const bearerValue = await materializeBearer(bearerToken);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("mcpCall: timeoutMs must be a positive number");
   }
@@ -126,7 +131,7 @@ export async function mcpCall(toolName, args, {
     ? await callInjectedCurlTransport({
       command: injectedTransport,
       mcpUrl,
-      bearerToken,
+      bearerToken: bearerValue,
       body,
       timeoutMs,
     })
@@ -135,7 +140,7 @@ export async function mcpCall(toolName, args, {
       method: "POST",
       agent: false,
       headers: {
-        Authorization: `Bearer ${bearerToken}`,
+        Authorization: `Bearer ${bearerValue}`,
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(body),
         Connection: "close",

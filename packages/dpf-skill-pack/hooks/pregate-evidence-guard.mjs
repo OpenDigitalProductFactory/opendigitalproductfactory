@@ -24,7 +24,11 @@ import {
   shellCommandFromInput,
 } from "./lib/hook-io.mjs";
 import { executableCommandText } from "./command-text.mjs";
-import { classifyLocalCiOverride } from "./lib/local-ci-override.mjs";
+import {
+  GATE_INFRASTRUCTURE_UNAVAILABLE_CODE,
+  classifyGateInfrastructureEvidence,
+  classifyLocalCiOverride,
+} from "./lib/local-ci-override.mjs";
 
 /** Commands that publish runtime code and must carry pregate evidence. */
 const PUBLISH_PATTERNS = [
@@ -208,8 +212,13 @@ export function evaluateGateRecord(statePath, headSha) {
   }
   if (rec.skipped && rec.skipReason) {
     const c = classifyLocalCiOverride(rec.skipReason);
-    if (c.ok) return { ok: true };
-    return { ok: false, reason: c.reason };
+    if (!c.ok) return { ok: false, reason: c.reason };
+    if (c.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE) {
+      // BI-02E5F2A1: evidence-gated — the record must carry the probe's capture.
+      const e = classifyGateInfrastructureEvidence(rec.infrastructureEvidence);
+      return e.ok ? { ok: true } : { ok: false, reason: e.reason };
+    }
+    return { ok: true };
   }
   return { ok: false, reason: "gate record present but not passed" };
 }

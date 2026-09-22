@@ -10,6 +10,8 @@ title: Verification-depth shadow report — what the depth binding would have de
 - **Design:** [`2026-08-28-verification-first-workroom-gates-design.md`](../specs/2026-08-28-verification-first-workroom-gates-design.md) §4.1.
 - **Backlog:** BI-30165EB4 (Phase 2), BI-4FF872FB (the defect this report found).
 - **Decision:** DI-A940A9467E9E — the phase-aware fix, §3.1.
+- **Retrospective run:** §4.1, added 2026-09-15 — the post-build sample the live ledger never produced.
+- **Blast radius:** §4.2, added 2026-09-15 — the exhaustive measurement Phase 2 exists to produce. Pinned by `verification-depth-blast-radius.test.ts`.
 - **Source of truth:** the canonical runtime's `BuildActivity` ledger, `tool = 'verification-depth-shadow'`. Live query, not seed data.
 
 ---
@@ -98,11 +100,76 @@ Two candidates went to `principle_decide` on the platform-development (WWMD) pro
 1. ~~**BI-4FF872FB must land first.**~~ **Addressed 2026-09-15** (§3.1). The false positive is fixed and the ledger now distinguishes not-yet-evaluable from pass.
 2. **The report still needs a real sample, and this is now the only thing standing in Phase 3's way.** Two builds on one transition cannot calibrate anything — and both of those builds were abandoned. Zero `shallow` observations and zero observations at `build->review` or `review->ship` means the transitions where the depth table actually bites have never been exercised even once. Either the build pipeline starts moving work across phase boundaries again, or the shadow window runs long enough to observe them. The 43-abandoned-of-48 build population is a separate health problem that this report surfaces but does not own — though it is now the binding constraint on Phase 2 finishing its job.
 
+## 4.1 The retrospective run — the sample the ledger could not produce
+
+The live ledger has never recorded a decision at `build->review` or `review->ship`, and it never will on its own: the build pipeline is **quiet**, not slow. One `BuildActivity` row in the 48 hours to 2026-09-15, and the auto-resume loop that kept the last build alive has already been capped by its own age-out guard — the runtime recorded "aged out stranded ideate build to abandoned (>7d old, no progress) — capped the auto-resume loop". Waiting produces nothing.
+
+  *(That runtime message cites a backlog id which does not exist in the live backlog — the same unbacked-reference pattern as `BI-4BD81F3B` in §10 of the design. Not chased here; noted because it is the second instance.)*
+
+So the sample was reconstructed instead. Six live builds carry an object-valued `verificationOut`; the real `checkVerificationDepthSatisfied` was run over their stored evidence at both post-build transitions and both declared depths — the actual function, not a model of it.
+
+| build | phase | verdict | why |
+| --- | --- | --- | --- |
+| `FB-4591D1EB` | abandoned | **BLOCK** — correct | `typecheckPassed: false` |
+| `FB-B7BA303E` | abandoned | **BLOCK** — correct | `typecheckPassed: false`, 1185 tests failed |
+| `FB-C1CE0E72` | ship | ALLOW | green, and non-vacuous `uxTestResults` (9) satisfy `deep` |
+| `FB-041879CD` | complete | **BLOCK** — spurious | `tests: {failed: 0}`, no `testsFailed` key |
+| `FB-FC7A7249` | abandoned | **BLOCK** — spurious | `tests: {failed: 0, passed: 7}`, `typecheck: "pass"`, no `testsFailed` key |
+| `FB-E50E3024` | ship | ALLOW | green, and non-vacuous `uxTestResults` (7) satisfy `deep` |
+
+Identical at `build->review` and `review->ship`, and at both `shallow` and `deep`.
+
+**Three things this establishes that the live ledger could not.**
+
+1. **The `deep` tier is satisfiable on real evidence.** Both shipped builds clear it, via non-vacuous `uxTestResults` rather than a golden journey. The deep tier was never exercised before, so this was an open question.
+2. **A second false-positive class exists, distinct from BI-4FF872FB.** That one was about transitions where the evidence *cannot exist yet*; this is about transitions where the evidence exists **under another name**. `verificationOut` has no canonical shape — four key sets across six builds, with only `typecheckPassed` common to all. `testsFailed` is absent from two of them, so the check blocks builds that recorded zero failures. **33% spurious at the transitions that matter.** Filed as `BI-397F87A9`.
+3. **The one hard runtime gate has already passed an unverified build.** `FB-041879CD` shipped to `complete` carrying `typecheckPassed: true` next to `typecheck: "not_run"`, zero tests run, and a recorded sandbox failure. `verification-typecheck-passed` reads only that scalar, so the single load-bearing check on the workroom tier was satisfied by a flag its own evidence contradicts. Filed as `BI-E4E70B9A` — and unlike everything else in this report, **that gate is blocking today**.
+
+Finding 3 is the design's own thesis landing harder than the design put it. §1.1 says the workroom tier has "exactly one hard check: the code compiles." On this evidence it does not reliably have that one.
+
+**What Phase 3 should conclude.** Not "bind `testsFailed`". On the only post-build sample that exists, binding it as written would spuriously block a third of builds while the typecheck flag it leans on is itself unreliable. `BI-397F87A9` and `BI-E4E70B9A` are now preconditions for Phase 3, alongside a real sample.
+
+## 4.2 The blast radius — the measurement Phase 2 exists to produce
+
+§1 reports what the ledger observed; §4.1 reconstructs what six historical builds would have done. Neither answers the question Phase 2 is actually for: **across the whole matrix, what would binding this requirement turn on?**
+
+That question does not need a running pipeline. It is a property of the matrix, the depth table and the evidence shapes that occur — all three of which can be enumerated. So it was enumerated: every `kind × processSize × transition × declared depth`, against every `verificationOut` shape observed on the canonical runtime. **1,152 cells**, evaluated with the real `checkPhaseGate` and the real `checkVerificationDepthSatisfied`.
+
+A cell "newly blocks" when today's gate **allows** it and the depth requirement would refuse. That is exactly the set Phase 3 would be switching on.
+
+**256 of 1,152 cells newly block.** All 256 are at `build->review` or `review->ship`; none at `ideate->plan` or `plan->build`, which is the phase-aware fix (§3.1) holding across the entire matrix rather than just the observed cell.
+
+| evidence shape | newly blocks | verdict |
+| --- | --- | --- |
+| `canonical-green` — `typecheckPassed: true`, `testsFailed: 0` | **0** | the only shape that clears, at both depths |
+| `canonical-tests-failed` — 1185 failing | 64 | **correct** — the binding working as designed |
+| `nested-tests-green` — `tests: {failed: 0, passed: 7}`, `typecheck: "pass"` | 64 | **spurious** — zero failures, refused because the count sits under another key |
+| `contradictory-not-run` — `typecheckPassed: true` beside `typecheck: "not_run"` | 64 | right outcome, **wrong reason** — caught by the tests arm, not the typecheck arm |
+| `canonical-typecheck-failed` | 32 | correct; already refused at `build->review`, so new only at ship |
+| `absent` | 32 | correct; no verification evidence at all |
+
+### What the enumeration settles that no sample could
+
+**One quarter of everything Phase 3 would turn on is a false positive.** 64 of 256 — the `nested-tests-green` shape: a passing typecheck and zero failed tests, refused purely because the producer wrote `tests.failed` instead of `testsFailed` (`BI-397F87A9`). This is not an edge case in the tail; it is a fixed 25% of the new blocking surface.
+
+**The requirement is completely insensitive to `kind` and `processSize`.** Every `(transition, depth, profile)` triple resolves identically across all sixteen `(kind, size)` cells — the depth check reads neither axis. The right-sizing matrix therefore offers **no leverage** over this requirement: adding it to a policy cell is all-or-nothing, and a `doc/small` build is held to exactly the bar a `feature/xlarge` build is. For a matrix whose entire premise is right-sizing ceremony to the work, that is a structural mismatch Phase 3 has to answer deliberately rather than inherit.
+
+**The real tightening lands at ship, not at review.** `build->review` already requires `verification-typecheck-passed`, so it refuses the `typecheck-failed` and `absent` shapes today — 96 cells never reach the depth check at all. `review->ship` carries no typecheck requirement, so that is where the binding adds genuinely new enforcement. Anyone reasoning about this as "tests block at review" has the transition wrong.
+
+**`deep` costs nothing extra over `shallow` on real evidence.** Both depths block the same shapes. Every build carrying a complete UX verification with non-vacuous results satisfies the mechanical-verdict arm, so the `deep` tier's additional requirement is, on the shapes that occur today, never the reason anything fails.
+
+### Why this is pinned in a test, not only written here
+
+`apps/web/lib/explore/verification-depth-blast-radius.test.ts` computes the table above on every run and asserts it. A document records what was true once; the test makes the measurement **re-derivable and self-invalidating**. When `BI-397F87A9` lands, the spurious 64 should go to zero — and the test is where that shows up, before any policy cell changes.
+
 ## 5. Method
 
 - Ledger read directly from the canonical runtime Postgres (`dpf-postgres-1`, database `dpf`), table `BuildActivity`, `tool = 'verification-depth-shadow'`. Read-only.
 - Phase distribution from `FeatureBuild`; room posture inputs from `WorkCapsule` (the `Workroom` Prisma model maps to that table).
 - Code substrate verified at `433d90325`: `build-process-matrix.ts`, `verification-depth-requirement.ts`, `verification-depth-shadow.ts`, `work-posture/verification-depth-gate.ts`, `work-posture/derive.ts`, `work-posture/resolve.ts`.
 - Acceptance re-run at the same SHA: 156 tests across 9 files, all passing, including the byte-identical back-compat invariant.
+- §4.1 retrospective: the six builds with an object-valued `verificationOut` were read from `FeatureBuild`, and the real `checkVerificationDepthSatisfied` was executed over their stored `verificationOut`, `uxVerificationStatus` and `uxTestResults` at both post-build transitions and both depths. Scratch harness only — no analysis script was added to the repo.
+
+- §4.2 blast radius: `apps/web/lib/explore/verification-depth-blast-radius.test.ts` enumerates the full cross-product with the real `checkPhaseGate` and `checkVerificationDepthSatisfied`, and asserts every figure quoted in that section.
 
 **2026-09-15 revision.** Ledger re-read at `757d30ea8` (250 rows, 2 builds, retry spacing confirmed per build per day). Fix proven red-then-green: 11 tests failing before the change, 345 passing across 25 files after, the back-compat invariant among them.

@@ -159,9 +159,23 @@ export const PLANE_CONTRACT = {
     ceiling: 3,
     blocker: null,
     criteria: {
-      0: "No recurring trigger — any Proactivity setting is a silent no-op.",
+      // These rungs described a PER-COWORKER "Proactivity setting" that
+      // BI-87C9C91C removed: it deleted the control, deleted the save path, and
+      // took the `agent:` scope out of the resolver ladder. Proactivity is
+      // room-owned (DI-81E47BDA59F1). The rungs still grade the same substrate
+      // — a self-task entry, then a cadence on the skill — but they no longer
+      // name a control that does not exist.
+      //
+      // WHY LEVEL 2 IS STILL WORTH REACHING, AND WHY IT IS NOT SUFFICIENT: an
+      // entry DECLARES that this coworker holds standing work at a rhythm.
+      // Whether that work can be switched on is a separate, open defect
+      // (BI-4CE4F52F): the reconciler still selects its level from
+      // `aiCoworkerProactivity:agent:*` facts no operator can write. Declaring
+      // entries before that is fixed would raise this plane while changing
+      // nothing about whether anything runs.
+      0: "No recurring trigger — nothing makes this coworker act unasked.",
       1: "Named by a scheduled job, but owns no self-task of its own.",
-      2: "Has a COWORKER_SELF_TASKS entry driven by its Proactivity setting.",
+      2: "Declares a self-task entry, so a rhythm exists to be driven.",
       3: "Self-task PLUS a cadence declared on the skill itself.",
     },
   },
@@ -243,6 +257,13 @@ export const IDENTITY_CLASSES = {
   "roster-only": "On the workforce roster but absent from the canonical agent registry.",
   "defined-roster": "Declared in the canonical registry (not active) and seeded onto the roster.",
   "declared-only": "Declared in the canonical registry and never seeded anywhere.",
+  // Two postures carried on the registry entry itself (`staffing_posture`).
+  // NEITHER hides an identity: both appear in the report with their gaps
+  // listed. What changes is whether those gaps count as OPEN — a superseded
+  // role's capability is not missing (another identity holds it), and a
+  // deliberately-unstaffed role is a decision rather than a defect.
+  superseded: "Declared, but the work is done by another ACTIVE identity named in its posture.",
+  "deliberately-unstaffed": "Declared and consciously not staffed, with a recorded reason and review date.",
 };
 
 // ─────────────────────────── source readers ───────────────────────────
@@ -641,8 +662,14 @@ export function buildInventory(s) {
 
   for (const ident of identities.values()) {
     const status = ident.registry?.status ?? null;
+    // A posture is only meaningful for a role that is NOT active; the guard in
+    // workforce-staffing-posture.test.ts refuses one on an active role, so a
+    // working coworker can never be classified out of the open-gap count.
+    const posture = status !== "active" ? ident.registry?.staffing_posture ?? null : null;
+    ident.staffingPosture = posture;
     ident.identityClass =
-      status === null ? "roster-only"
+      posture ? posture.state
+      : status === null ? "roster-only"
         : status === "active" ? (ident.onRoster ? "active-roster" : "active-registry-only")
         : ident.onRoster ? "defined-roster"
         : "declared-only";
@@ -972,6 +999,22 @@ export function measure(s) {
         note: "Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.",
       },
       byClass,
+      // THE NUMBER THAT MATTERS, and the two it separates. Every gap stays
+      // listed on its agent; this says how many are a HOLE versus how many are
+      // a recorded decision. Before the posture classes existed these were one
+      // number, and a standards-derived role catalogue nobody had staffed read
+      // as four-fifths of the platform being broken.
+      gaps: (() => {
+        const excused = new Set(["superseded", "deliberately-unstaffed"]);
+        const count = (list) => list.reduce((n, a) => n + a.gaps.length, 0);
+        const postured = agents.filter((a) => excused.has(a.identityClass));
+        return {
+          listed: count(agents),
+          open: count(agents.filter((a) => !excused.has(a.identityClass))),
+          postured: count(postured),
+          posturedAgents: postured.length,
+        };
+      })(),
       atFullAttainable: agents.filter((a) => a.score.attainablePct === 100).length,
       medianAttainablePct: agents.length === 0 ? 0
         : agents.map((a) => a.score.attainablePct).sort((x, y) => x - y)[Math.floor(agents.length / 2)],
@@ -1217,6 +1260,12 @@ function main() {
   console.log("  class breakdown:");
   for (const [cls, v] of Object.entries(S.byClass)) {
     console.log(`    ${cls.padEnd(24)} ${String(v.count).padStart(3)}  median ${v.medianAttainablePct ?? "—"}%`);
+  }
+  if (S.gaps) {
+    console.log(
+      `  gaps: ${S.gaps.open} OPEN · ${S.gaps.postured} postured across ${S.gaps.posturedAgents} `
+      + `role(s) (superseded or deliberately unstaffed) · ${S.gaps.listed} listed in total`,
+    );
   }
   console.log("  plane levels (L0/L1/L2/L3, ceiling):");
   for (const [, v] of Object.entries(S.planeLevels)) {

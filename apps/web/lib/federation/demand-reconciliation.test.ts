@@ -71,6 +71,7 @@ describe("runDemandReconciliation", () => {
         {
           itemId: "BI-PLATFORM", title: "Platform capability", body: "Reusable across installations",
           workType: "feature", occurrenceCount: 1,
+          scopeKind: "platform", archetypeCategories: [], archetypeIds: [],
           createdAt: new Date("2026-07-20T06:00:00Z"), updatedAt: new Date("2026-07-20T06:01:00Z"),
           digitalProduct: { productId: "dpf-portal" },
         },
@@ -94,6 +95,47 @@ describe("runDemandReconciliation", () => {
       audience: "internal",
       attribution: "organization",
     });
+  });
+
+  it("forwards the item's archetype scope to the projector (BI-7ED79807)", async () => {
+    // The projector was never the defect — the CALL SITE was. It selected neither
+    // scopeKind nor the archetype arrays, so every envelope left archetype-blind
+    // and no receiver could scope relevance to itself. Pin the pass-through here,
+    // because the projector's own tests mock this boundary away.
+    const queueProjection = vi.fn().mockResolvedValue({ action: "queued" });
+    const db = {
+      federationLink: { findMany: vi.fn().mockResolvedValue(links) },
+      backlogItem: { findMany: vi.fn().mockResolvedValue([
+        {
+          itemId: "BI-ARCHETYPE", title: "Dispatch board gap", body: "Shared across trades installs",
+          workType: "feature", occurrenceCount: 4,
+          scopeKind: "archetype-category",
+          archetypeCategories: ["trades-maintenance"],
+          archetypeIds: ["mobile-locksmith"],
+          createdAt: new Date("2026-07-20T06:00:00Z"), updatedAt: new Date("2026-07-20T06:01:00Z"),
+          digitalProduct: { productId: "dpf-portal" },
+        },
+      ]) },
+      federatedRecordMirror: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as DemandReconciliationDb;
+
+    await runDemandReconciliation(db, {
+      resolveIdentity: vi.fn().mockResolvedValue({ installationId: `inst_${"a".repeat(32)}`, projectionSecret: "b".repeat(64) }),
+      queueProjection,
+      queueWithdrawal: vi.fn(),
+      reconcileDigests: vi.fn().mockResolvedValue({ linksChecked: 0, requeued: 0, confirmed: 0, failedLinks: 0 }),
+      dispatch: vi.fn().mockResolvedValue({ attempted: 0, delivered: 0, deferred: 0, deadLettered: 0 }),
+    });
+
+    expect(queueProjection.mock.calls[0][1].source).toMatchObject({
+      scopeKind: "archetype-category",
+      archetypeCategories: ["trades-maintenance"],
+      archetypeIds: ["mobile-locksmith"],
+    });
+
+    // And the query must actually ASK for those columns — selecting them is the fix.
+    const select = (db.backlogItem.findMany as unknown as { mock: { calls: Array<Array<{ select: Record<string, unknown> }>> } }).mock.calls[0][0].select;
+    expect(select).toMatchObject({ scopeKind: true, archetypeCategories: true, archetypeIds: true });
   });
 
   it("projects only open backlog items — closed work is excluded from the query", async () => {

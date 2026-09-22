@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "extend-existing-inspector",
+  "decisionInteractionId": "DI-AB55BD5548FD",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomShape.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["extend-existing-inspector", "separate-activity-page"]
+  }
+}

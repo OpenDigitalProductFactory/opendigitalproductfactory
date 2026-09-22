@@ -3,6 +3,7 @@ import { can } from "@/lib/permissions";
 import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
 import { getAgentToolGrantsAsync, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { resolveServerOwnedAsyncOperationAuthority } from "@/lib/inference/async-operation-authority";
+import { isCurrentOAuthAccessToken } from "@/lib/auth/oauth-tokens";
 import type { SemanticReviewRequest } from "./semantic-review-request";
 
 /** Re-evaluate durable actor references against current authority before dispatch. */
@@ -15,16 +16,20 @@ export async function verifySemanticReviewAuthority(packet: SemanticReviewReques
   if (!user?.isActive || !can({ userId: actor.userId, isSuperuser: user.isSuperuser,
     platformRole: resolveWorkforcePlatformRole(user.groups) }, "view_platform")) return false;
 
-  if (actor.authSource === "pat") {
+  if (actor.authSource === "pat" || actor.authSource === "oauth") {
     if (!actor.apiTokenId) return false;
     const token = await db.mcpApiToken.findFirst({
       where: { id: actor.apiTokenId, userId: actor.userId, agentId: actor.agentId, revokedAt: null,
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-      select: { scope: true, capability: true, scopes: true },
+      select: { scope: true, capability: true, scopes: true, kind: true, revokedAt: true,
+        expiresAt: true, oauthClient: { select: { revokedAt: true } } },
     });
     const scope = token?.scope ?? token?.capability;
     if (!token || (scope !== "write" && scope !== "admin")
       || !isToolAllowedByGrants("review_semantic_change", token.scopes)) return false;
+    // Audience was checked on admission; this immutable actor names that same
+    // token row. Recheck its current lifetime and client revocation before work.
+    if (actor.authSource === "oauth" && !isCurrentOAuthAccessToken(token)) return false;
   } else if (actor.authSource !== null && actor.authSource !== "session-jwt") {
     return false;
   }

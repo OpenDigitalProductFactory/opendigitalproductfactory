@@ -78,6 +78,39 @@ beforeEach(() => {
 });
 
 describe("durable semantic review worker", () => {
+  it("does not retain arbitrary error names, codes or messages in failure evidence", async () => {
+    mocks.db.taskNode.findUnique.mockRejectedValueOnce(Object.assign(new Error("private content"), {
+      name: "private name", code: "private code",
+    }));
+    await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("private content");
+    expect(row.progressPayload).toMatchObject({ semanticReview: { branchFailure: {
+      errorKind: "unclassified", errorCode: null,
+    } } });
+    expect(JSON.stringify(row)).not.toContain("private");
+    expect(providerCalls).toBe(0);
+  });
+
+  it.each(["checkpoint-read", "provider-call", "checkpoint-write"])("retains safe %s failure context without retrying", async phase => {
+    const error = Object.assign(new Error("private credential and source"), { code: "P2028" });
+    if (phase === "checkpoint-read") mocks.db.taskNode.findUnique.mockRejectedValueOnce(error);
+    if (phase === "checkpoint-write") mocks.db.taskNode.update.mockRejectedValueOnce(error);
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
+      try { return await branch("change-reviewer", async () => {
+        providerCalls++;
+        if (phase === "provider-call") throw error;
+        return result;
+      }); } catch { return { decision: "inconclusive", issues: [], summary: "Unknown outcome." }; }
+    });
+    await executePersistedSemanticReview("TR-1");
+    expect(row.status).toBe("input-required");
+    expect(row.progressPayload).toMatchObject({ semanticReview: { branchFailure: {
+      agentId: "change-reviewer", phase, errorKind: "Error", errorCode: "P2028",
+    } } });
+    expect(JSON.stringify(row)).not.toContain("private");
+    expect(providerCalls).toBe(phase === "checkpoint-read" ? 0 : 1);
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+
   it("propagates autonomous inference origin through concurrent reviewer branches without leaking it", async () => {
     const origins: string[] = [];
     mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
@@ -97,22 +130,22 @@ describe("durable semantic review worker", () => {
     expect(currentInferenceOrigin()).toBe("interactive");
   });
 
-  it("requires the original requester and explicit uncertain-inference confirmation", async () => {
-    row.status = "input-required";
+  it.each(["input-required", "auth-required"])("requires the original requester and explicit confirmation for %s", async (status) => {
+    row.status = status;
     await expect(retryPersistedSemanticReview("TR-1", "other-user", true)).rejects.toThrow("authority");
     await expect(retryPersistedSemanticReview("TR-1", "user-1", false)).rejects.toThrow("confirmation");
     expect(mocks.send).not.toHaveBeenCalled();
   });
-  it("resumes an authorized wait on the same task and persists recovery before enqueue", async () => {
-    row.status = "input-required";
+  it.each(["input-required", "auth-required"])("resumes an authorized %s wait on the same task and persists recovery before enqueue", async (status) => {
+    row.status = status;
     expect(await retryPersistedSemanticReview("TR-1", "user-1", true)).toMatchObject({ newTaskRunId: "TR-1" });
     expect(row.status).toBe("submitted");
     expect(row.progressPayload).toMatchObject({ semanticReview: { recoveryAttempt: 1, generation: null } });
     expect(mocks.activity).toHaveBeenCalledOnce();
     expect(mocks.send).toHaveBeenCalledOnce();
   });
-  it("refuses exhausted recovery and revoked authority without emitting work", async () => {
-    row.status = "input-required";
+  it.each(["input-required", "auth-required"])("refuses exhausted recovery and revoked authority from %s without emitting work", async (status) => {
+    row.status = status;
     (row.progressPayload as any).semanticReview.recoveryAttempt = 3;
     await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("exhausted");
     (row.progressPayload as any).semanticReview.recoveryAttempt = 0;
@@ -120,8 +153,8 @@ describe("durable semantic review worker", () => {
     await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("authority");
     expect(mocks.send).not.toHaveBeenCalled();
   });
-  it("does not create two recovery events for concurrent operator requests", async () => {
-    row.status = "input-required";
+  it.each(["input-required", "auth-required"])("does not create two recovery events for concurrent %s requests", async (status) => {
+    row.status = status;
     const outcomes = await Promise.allSettled([
       retryPersistedSemanticReview("TR-1", "user-1", true),
       retryPersistedSemanticReview("TR-1", "user-1", true),
@@ -185,12 +218,44 @@ describe("durable semantic review worker", () => {
     expect(mocks.publish).toHaveBeenCalledWith("room-1", "activity-1");
     expect(transactionCommitted).toBe(true);
   });
-  it("restarts from a completed branch without another provider call", async () => {
-    mocks.db.taskNode.findUnique.mockResolvedValue({ status: "completed", outputSnapshot: { requestDigest: packet.digest, result } });
+  it.each([0, 1])("reuses a completed verdict in recovery generation %i without another provider call", async (generation) => {
+    (row.progressPayload as any).semanticReview.recoveryAttempt = generation;
+    mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) =>
+      where.taskNodeId.endsWith(":recovery-1") ? null : { status: "completed", outputSnapshot: { requestDigest: packet.digest, result } });
     await executePersistedSemanticReview("TR-1");
     expect(providerCalls).toBe(0);
     expect(row.status).toBe("completed");
     expect(mocks.evidence).toHaveBeenCalledOnce();
+  });
+  it("replaces a prior inconclusive checkpoint after authorized recovery and retains its diagnostics", async () => {
+    (row.progressPayload as any).semanticReview.recoveryAttempt = 1;
+    const failed = { decision: "inconclusive", issues: [], summary: "Response validation failed.",
+      parseError: true, inconclusiveReason: "unparseable-review-response",
+      parseDiagnostics: [{ agentId: "change-reviewer", stage: "invalid-json" }] };
+    mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) =>
+      where.taskNodeId.endsWith(":recovery-1") ? null : { taskNodeId: where.taskNodeId, status: "completed",
+        outputSnapshot: { requestDigest: packet.digest, result: failed } });
+    await executePersistedSemanticReview("TR-1");
+    expect(providerCalls).toBe(1);
+    expect(row.status).toBe("completed");
+    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      status: "superseded", supersededByNodeId: "node-new", outputSnapshot: expect.objectContaining({
+        result: failed, providerOutcome: "inconclusive", recoveryAttempt: 1,
+      }),
+    }) }));
+  });
+  it.each([0, 1])("retains inconclusive results within the same generation %i without another provider call", async (generation) => {
+    (row.progressPayload as any).semanticReview.recoveryAttempt = generation;
+    const failed = { decision: "inconclusive", issues: [], summary: "Response validation failed.",
+      parseError: true, inconclusiveReason: "unparseable-review-response",
+      parseDiagnostics: [{ agentId: "change-reviewer", stage: "invalid-json" }] };
+    mocks.db.taskNode.findUnique.mockResolvedValue({ status: "completed",
+      outputSnapshot: { requestDigest: packet.digest, result: failed } });
+    await executePersistedSemanticReview("TR-1");
+    expect(providerCalls).toBe(0);
+    expect(JSON.stringify(mocks.evidence.mock.calls)).toContain("invalid-json");
+    expect(JSON.stringify(mocks.evidence.mock.calls)).toContain("unparseable-review-response");
+    expect(row.status).toBe("input-required");
   });
   it("does not publish a receipt when cancellation wins during provider execution", async () => {
     mocks.dispatch.mockImplementation(async () => { row.status = "canceled"; return result; });
@@ -211,6 +276,32 @@ describe("durable semantic review worker", () => {
     expect(row.status).toBe("input-required");
     expect(providerCalls).toBe(0);
     expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+  it("records an inconclusive review as a wait, not a failed run (BI-FF63D266)", async () => {
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+      providerCalls += 1;
+      return { decision: "inconclusive", issues: [], summary: "Provider could not determine a verdict.",
+        inconclusiveReason: "provider-capacity-exhausted" };
+    }));
+    await executePersistedSemanticReview("TR-1");
+    // AGENTS.md §4: a gate that could not run is recorded as inconclusive and
+    // re-runs on the same SHA — never a FAIL against the diff.
+    expect(providerCalls).toBe(1);
+    expect(row.status).toBe("input-required");
+    // A non-verdict is not terminal, so it must not be stamped complete. The
+    // previous write marked an inconclusive run both failed AND completed.
+    expect(row.completedAt).toBeUndefined();
+    // The review still produced a receipt; its evidence is durable regardless.
+    expect(mocks.evidence).toHaveBeenCalled();
+    const payload = row.progressPayload as { resultClass?: string; semanticReview: Record<string, unknown> };
+    expect(payload.resultClass).toBe("inconclusive");
+    expect(payload.semanticReview.state).toBe("input-required");
+    expect(payload.semanticReview.reason).toBe("provider-capacity-exhausted");
+  });
+  it("still completes and stamps a decided review", async () => {
+    await executePersistedSemanticReview("TR-1");
+    expect(row.status).toBe("completed");
+    expect(row.completedAt).toBeInstanceOf(Date);
   });
   it("refuses a missing immutable request and revoked authority before dispatch", async () => {
     mocks.db.taskArtifact.findUnique.mockResolvedValue(null);

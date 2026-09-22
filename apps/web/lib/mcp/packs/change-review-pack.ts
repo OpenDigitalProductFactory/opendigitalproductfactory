@@ -1,7 +1,7 @@
 import { prisma, type Prisma } from "@dpf/db";
 
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
-import { enqueueSemanticReview } from "@/lib/change-review/semantic-review-background";
+import { enqueueSemanticReview, retryPersistedSemanticReview } from "@/lib/change-review/semantic-review-background";
 import { resolveFailureAnalysisEvidence } from "@/lib/change-review/failure-analysis-evidence";
 import { createSemanticReviewRequest, REVIEW_ARTIFACT_TYPES, REVIEW_RISKS, REVIEW_PROFILES } from "@/lib/change-review/semantic-review-request";
 import {
@@ -31,6 +31,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
+import { CHANGE_REVIEW_TOOL_GRANTS } from "@/lib/tak/change-review-tool-grants";
 
 const ARTIFACT_TYPES = [...REVIEW_ARTIFACT_TYPES];
 const RISKS = [...REVIEW_RISKS];
@@ -107,6 +108,15 @@ const definitions: ToolDefinition[] = [{
   requiredCapability: "view_platform",
   executionMode: "immediate",
   sideEffect: true,
+  buildPhases: ["review", "ship"],
+}, {
+  name: "retry_semantic_review",
+  description: "Confirm one bounded replacement inference for your own waiting native semantic review. Replacement can incur another provider charge. Reuses the original immutable request, deadline and attempt budget; current requester and saved authority are rechecked. Does not override an authorization refusal or restart unrelated tasks.",
+  inputSchema: { type: "object", properties: {
+    taskRunId: { type: "string", description: "Existing TR-* identity returned by review_semantic_change." },
+    confirmed: { type: "boolean", description: "Explicit confirmation that replacement inference may incur another provider charge." },
+  }, required: ["taskRunId", "confirmed"], additionalProperties: false },
+  requiredCapability: "view_platform", executionMode: "immediate", sideEffect: true,
   buildPhases: ["review", "ship"],
 }];
 
@@ -366,15 +376,27 @@ const recordSemanticReviewOutcome: ToolPackHandler = async (params, userId, cont
   return { success: true, entityId: evidence.id, message: projection.activity.summary, data: { outcome } };
 };
 
+const retrySemanticReview: ToolPackHandler = async (params, userId) => {
+  const taskRunId = stringParam(params, "taskRunId");
+  if (!taskRunId || params.confirmed !== true) return { success: false,
+    error: "recovery_confirmation_required", message: "A task identity and explicit replacement-inference confirmation are required." };
+  try {
+    const result = await retryPersistedSemanticReview(taskRunId, userId, true);
+    return result ? { success: true, entityId: result.newTaskRunId, data: result,
+      message: "Confirmed recovery queued under the original request and budget." }
+      : { success: false, error: "native_review_not_found", message: "No native review matches this task identity." };
+  } catch (error) {
+    return { success: false, error: "semantic_review_recovery_refused", message: getErrorMessage(error) };
+  }
+};
+
 export const changeReviewPack: ToolPack = {
   packId: "change-review",
   definitions,
   handlers: {
     review_semantic_change: reviewSemanticChange,
     record_semantic_review_outcome: recordSemanticReviewOutcome,
+    retry_semantic_review: retrySemanticReview,
   },
-  grants: {
-    review_semantic_change: ["backlog_write"],
-    record_semantic_review_outcome: ["backlog_write"],
-  },
+  grants: CHANGE_REVIEW_TOOL_GRANTS,
 };

@@ -673,6 +673,11 @@ export async function orchestrateDeliberation(
         requestedBy: input.userId,
         actualDiversity,
         budgetHalted,
+        // Carried through: this write REPLACES metadata, so omitting the brief
+        // here silently erased it before the runner could read it — branches
+        // then convened with nothing and reported insufficient evidence.
+        ...(input.brief ? { brief: input.brief } : {}),
+        ...(input.subject ? { subject: input.subject } : {}),
       },
     },
   });

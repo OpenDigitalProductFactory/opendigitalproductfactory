@@ -4,6 +4,7 @@ import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surfac
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
+import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -187,8 +188,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_execution_evidence: ["build_evidence"],
   // Non-build evidence stays on backlog_write because it coordinates the whole backlog surface.
   record_external_development_evidence: ["backlog_write"],
-  review_semantic_change: ["backlog_write"],
-  record_semantic_review_outcome: ["backlog_write"],
+  ...CHANGE_REVIEW_TOOL_GRANTS,
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
   ...INITIATIVE_READINESS_TOOL_GRANTS,

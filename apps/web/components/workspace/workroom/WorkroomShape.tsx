@@ -6,6 +6,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { FilterBar } from "@/components/ui/report-kit/FilterBar";
 import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
+import { ReviewerExecutionList } from "./ReviewerExecutionList";
 import type { ShapeGraph, ShapeNodeState, ShapeRow } from "@/lib/work-management/shape-projection";
 
 const STATE_LABEL: Record<ShapeNodeState, string> = {
@@ -20,7 +21,7 @@ function Evidence({ rows }: { rows: ShapeRow[] }) {
     <details className="rounded border border-[var(--dpf-border)] p-2">
       <summary className="cursor-pointer">{row.label} · {STATE_LABEL[row.state]}</summary>
       <dl className="mt-2 space-y-1 break-words">
-        <dt>Source</dt><dd>{row.receiptRef ? `${row.receiptRef.table}:${row.receiptRef.id}` : "Unknown"}</dd>
+        <dt>Source</dt><dd>{row.receiptRef ? `${row.receiptRef.table}:${row.receiptRef.id}` : row.sourceRef ? `${row.sourceRef.kind}:${row.sourceRef.id} · ${row.key}` : "Unknown"}</dd>
         <dt>Actor</dt><dd>{row.actor ?? "Unknown"}</dd>
         <dt>Recorded</dt><dd>{row.occurredAt ?? "Unknown"}</dd>
         {row.summary ? <><dt>Finding</dt><dd>{row.summary}</dd></> : null}
@@ -36,6 +37,11 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
   const pathname = usePathname();
   const params = useSearchParams().toString();
   const operation = new URLSearchParams(params).get("operation");
+  const coordinationContext = new URLSearchParams();
+  for (const key of ["operation", "coordinationQuery", "coordinationStatus", "coordinationAfter"]) {
+    const value = new URLSearchParams(params).get(key);
+    if (value) coordinationContext.set(key, value);
+  }
   const [selected, setSelected] = useState(() => new URLSearchParams(params).get("processStep") ?? graph.process?.currentStageKey ?? "");
   const [layout, setLayout] = useState(() => new URLSearchParams(params).get("processLayout") ?? "map");
   const [filters, setFilters] = useState<Record<string, string>>(() => ({ processQuery: new URLSearchParams(params).get("processQuery") ?? "", processState: new URLSearchParams(params).get("processState") ?? "" }));
@@ -69,7 +75,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
       <div><h2 id={titleId} className="text-base font-semibold">{graph.process?.title ?? "Process"}</h2>
         <p className="text-[var(--dpf-muted)]">{graph.process?.definitionRef ?? "Definition unavailable"}</p></div>
       <div aria-label="Process layout" className="flex gap-2">
-        {operation ? <ButtonLink variant="ghost" href={`/ea/workrooms?operation=${encodeURIComponent(operation)}#coordination`}>Operation</ButtonLink> : null}
+        {operation ? <ButtonLink variant="ghost" href={`/ea/workrooms?${coordinationContext}#coordination`}>Operation</ButtonLink> : null}
         {(["map", "list"] as const).map((value) => <Button key={value} variant="secondary" className="min-h-11" aria-pressed={layout === value} onClick={() => navigate(selected, value)}>{value === "map" ? "Map" : "List"}</Button>)}
       </div>
     </div>
@@ -138,10 +144,16 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
           </> : "Dependencies unknown"}
         </dd></div>
       </dl>
-    </aside> : <p className="text-[var(--dpf-muted)]">Select a step to inspect its state and evidence.</p>}
+    </aside> : <p className="text-[var(--dpf-muted)]">Select a step for state and evidence.</p>}
     {graph.process ? <details className="rounded border border-[var(--dpf-border)] p-3">
-      <summary className="cursor-pointer font-medium">Observed execution · {graph.process.receipts.length} room records</summary>
-      <div className="mt-3"><Evidence rows={graph.process.receipts} /></div>
+      <summary className="cursor-pointer font-medium">Observed execution · {graph.process.events?.length ?? 0} events · {graph.process.receipts.length} receipts</summary>
+      <div className="mt-3 space-y-3">
+        <ReviewerExecutionList runs={graph.process.reviewerRuns ?? []} />
+        <h4 className="font-medium">Events</h4>
+        <Evidence rows={graph.process.events ?? []} />
+        <h4 className="font-medium">Receipts</h4>
+        <Evidence rows={graph.process.receipts} />
+      </div>
     </details> : null}
   </section>;
 }

@@ -17,6 +17,7 @@
  */
 
 import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
+import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 // Mirrors MCP_BEARER_TOKEN_ENV_VAR in apps/web/lib/auth/mcp-setup-snippets.ts.
 const MCP_BEARER_TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN";
@@ -57,15 +58,22 @@ export function mcpClientConfigPaths(repoRoot: string): {
   };
 }
 
+// BI-46B636B0: the bearer-header fallback is written only for an endpoint the
+// client cannot authorize over OAuth (plain http). On https the header would
+// disable OAuth, which is the outage #5416 removed it to prevent; on http it is
+// the only credential path, which is the outage #5416 caused by removing it.
 function claudeCodeContent(mcpEndpoint: string): string {
   const lazyHostEndpoint = withDpfMcpCatalogTier(mcpEndpoint, "full");
+  const headerFallback = mcpClientBearerHeaderRequired(mcpEndpoint)
+    ? { headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` } }
+    : {};
   return JSON.stringify(
     {
       mcpServers: {
         dpf: {
           type: "http",
           url: lazyHostEndpoint,
-          headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` },
+          ...headerFallback,
         },
       },
     },
@@ -75,13 +83,16 @@ function claudeCodeContent(mcpEndpoint: string): string {
 }
 
 function vscodeContent(mcpEndpoint: string): string {
+  const headerFallback = mcpClientBearerHeaderRequired(mcpEndpoint)
+    ? { headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` } }
+    : {};
   return JSON.stringify(
     {
       servers: {
         dpf: {
           type: "http",
           url: mcpEndpoint,
-          headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` },
+          ...headerFallback,
         },
       },
     },
@@ -105,15 +116,20 @@ export function planMcpClientConfig(
 ): McpClientConfigPlan {
   const writes: McpClientConfigPlan["writes"] = [];
 
+  // A trailing newline (editors, `git` hygiene) is not drift; compare the
+  // JSON bodies so a converged tracked file is never rewritten for it.
+  const same = (existing: string | null, desired: string) =>
+    existing !== null && existing.trimEnd() === desired.trimEnd();
+
   const mcpPath = joinPath(repoRoot, ".mcp.json");
   const desiredMcp = claudeCodeContent(mcpEndpoint);
-  if (existingMcpJson !== desiredMcp) {
+  if (!same(existingMcpJson, desiredMcp)) {
     writes.push({ path: mcpPath, content: desiredMcp });
   }
 
   const vscodePath = joinPath(repoRoot, ".vscode", "mcp.json");
   const desiredVscode = vscodeContent(mcpEndpoint);
-  if (existingVscodeJson !== desiredVscode) {
+  if (!same(existingVscodeJson, desiredVscode)) {
     writes.push({ path: vscodePath, content: desiredVscode });
   }
 

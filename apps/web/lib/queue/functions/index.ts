@@ -6,6 +6,7 @@ import { rateRecovery } from "./rate-recovery";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
+import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
 import { backlogTriageDrain } from "./backlog-triage-drain";
@@ -15,6 +16,7 @@ import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { materialFreshnessDecay } from "./material-freshness-decay";
+import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
 import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
@@ -133,6 +135,7 @@ import {
 } from "./data-control-operation";
 import { indexIntegritySweep } from "./index-integrity-sweep";
 import { localModelInstall } from "./local-model-install";
+import { providerCatalogRefresh } from "./provider-catalog-refresh";
 import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
 import {
   mcpTaskRunDispatchReconciliation,
@@ -155,6 +158,7 @@ export const scheduledFunctions = [
   infraPrune,
   codeGraphReconcileScheduled,
   issueReportTriage,
+  ecosystemInboundTriage,
   backlogTriageDrain,
   coworkerRegressionDetect,
   agentTaskDispatch,
@@ -176,6 +180,7 @@ export const scheduledFunctions = [
   workPatternProfileReview,
   researchScheduleScan,
   materialFreshnessDecay,
+  prSubmitAwaitingAcceptanceReconcile,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
@@ -226,6 +231,7 @@ export const eventFunctions = [
   pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
   localModelInstall,
+  providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
   mcpCatalogSync,
   codeGraphReconcileEvent,

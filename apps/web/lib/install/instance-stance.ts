@@ -42,7 +42,7 @@ export const OPERATING_INTENT_CONFIG_KEY = "installation.operating-intent.v1";
 export const BACKLOG_CAPTURE_CONFIG_KEY = "installation.backlog-capture.v1";
 
 /** Backlog statuses whose work is not yet finished, and so cannot be recreated. */
-const UNFINISHED_STATUSES = ["triaging", "open", "in-progress"] as const;
+const UNFINISHED_STATUSES = ["triaging", "open", "in-progress", "awaiting-acceptance"] as const;
 
 /**
  * A durable capture receipt written by the backlog exporter.

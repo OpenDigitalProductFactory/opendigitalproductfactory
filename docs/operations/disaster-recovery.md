@@ -164,6 +164,7 @@ Steps:
 - Redis backs the Inngest job queue and its state, so a Redis outage stops scheduled and event-driven work while leaving platform data intact.
 - Restart first: `docker compose logs redis`, then `docker compose restart redis`.
 - Redis holds **no system of record**. If its volume is gone, bring it back empty — in-flight job state is lost and Inngest re-establishes from its own durable records. There is nothing to restore from a backup.
+- `loki_data` and `alloy_data` hold **no system of record** either. If either volume is gone, bring it back empty: you lose up to 14 days of captured container logs, and capture resumes on the next discovery refresh. Detected log issues already promoted to `PlatformIssueReport` / `PortfolioQualityIssue` rows live in Postgres and survive independently — the log volume is the evidence trail, not the finding.
 
 ### 3.4 Graph or vector data looks wrong (Postgres OK)
 

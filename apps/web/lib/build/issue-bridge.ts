@@ -386,3 +386,210 @@ export async function escalateToUpstreamIssue(
 
   return { status: "created", issueNumber: result.number, url: result.url };
 }
+
+// ─── Terminal closure (BI-AE9FCB4C) ─────────────────────────────────────────
+//
+// The bridge used to write in one direction only: it filed the upstream issue
+// and stamped `upstreamIssueNumber`, and nothing ever read that stamp back. Every
+// item that later reached done or retired left its mirror open on the hive —
+// nine of them, some retired for weeks, on 2026-09-17. This is the reverse path.
+//
+// Idempotency lives in two places. The adapter reports an already-closed issue
+// without commenting or patching. The candidate filter reads `upstreamSyncedAt`
+// against `completedAt`: escalation stamps the sync time before completion, a
+// successful close stamps it after, so a closed mirror stops being a candidate
+// and a reopened item (`completedAt` cleared) never is one.
+
+export type TerminalMirrorKind = "backlog" | "epic";
+
+export interface TerminalMirrorRow {
+  id: string;
+  humanId: string;
+  status: string;
+  triageOutcome: string | null;
+  resolution: string | null;
+  completedAt: Date | null;
+  upstreamIssueNumber: number | null;
+  upstreamSyncedAt: Date | null;
+}
+
+export type UpstreamClosureResult =
+  | { status: "closed"; issueNumber: number; outcome: "closed" | "already-closed" }
+  | { status: "skipped"; reason: string }
+  | { status: "failed"; error: string };
+
+const TERMINAL_STATUSES = new Set(["done", "retired"]);
+
+/** A terminal row whose mirror has not been synced since it completed. */
+export function isUpstreamClosureCandidate(row: TerminalMirrorRow): boolean {
+  if (!TERMINAL_STATUSES.has(row.status)) return false;
+  if (row.upstreamIssueNumber == null) return false;
+  if (!row.completedAt) return false;
+  return !row.upstreamSyncedAt || row.upstreamSyncedAt < row.completedAt;
+}
+
+/**
+ * GitHub's two closed-issue reasons. `done` is delivered work; `retired` covers
+ * discard, duplicate and superseded demand, none of which was implemented.
+ */
+export function closeReasonForStatus(status: string): "completed" | "not_planned" {
+  return status === "done" ? "completed" : "not_planned";
+}
+
+/**
+ * The closing comment. Pure — the resolution is the item's own text, redacted
+ * like every other user-originated string that leaves the install.
+ */
+export function buildClosureComment(row: TerminalMirrorRow): string {
+  const verb = row.status === "done" ? "completed" : "retired";
+  const outcome = row.status === "retired" && row.triageOutcome ? ` (${row.triageOutcome})` : "";
+  const lines = [`Closing: \`${row.humanId}\` was ${verb}${outcome} on the filing install.`];
+  if (row.resolution?.trim()) {
+    lines.push("", "Resolution recorded there:", "", `> ${redactHostnames(row.resolution.trim()).replace(/\n/g, "\n> ")}`);
+  }
+  lines.push("", "*Closed automatically by the Digital Product Factory issue bridge when the local item reached a terminal status.*");
+  return lines.join("\n");
+}
+
+export async function loadTerminalMirror(
+  kind: TerminalMirrorKind,
+  id: string,
+): Promise<TerminalMirrorRow | null> {
+  if (kind === "backlog") {
+    const row = await prisma.backlogItem.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        itemId: true,
+        status: true,
+        triageOutcome: true,
+        resolution: true,
+        completedAt: true,
+        upstreamIssueNumber: true,
+        upstreamSyncedAt: true,
+      },
+    });
+    return row ? { ...row, humanId: row.itemId } : null;
+  }
+  const row = await prisma.epic.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      epicId: true,
+      status: true,
+      completedAt: true,
+      upstreamIssueNumber: true,
+      upstreamSyncedAt: true,
+    },
+  });
+  return row ? { ...row, humanId: row.epicId, triageOutcome: null, resolution: null } : null;
+}
+
+async function resolveUpstreamTarget(): Promise<
+  { coordinates: RepoCoordinates; token: string } | { skipped: string }
+> {
+  const config = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { contributionMode: true, upstreamRemoteUrl: true },
+  });
+  if (!config) return { skipped: "platform development policy not configured" };
+  if (config.contributionMode === "private" || config.contributionMode === "fork_only") {
+    return { skipped: "install is private — no upstream escalation" };
+  }
+  if (!config.upstreamRemoteUrl) return { skipped: "upstreamRemoteUrl not configured on PlatformDevConfig" };
+  const coordinates = parseGitHubRepo(config.upstreamRemoteUrl);
+  if (!coordinates) return { skipped: `could not parse GitHub coordinates from ${config.upstreamRemoteUrl}` };
+  const token = await resolveHiveToken();
+  if (!token) return { skipped: "no hive contribution token available" };
+  return { coordinates, token };
+}
+
+/**
+ * Closes the upstream mirror of one terminal item. Best-effort and non-fatal:
+ * callers on the transition path fire it after the local write has committed
+ * and never let its outcome change the transition. A failure is left as a
+ * candidate for the next sweep.
+ */
+export async function closeUpstreamIssueForTerminal(input: {
+  kind: TerminalMirrorKind;
+  id: string;
+}): Promise<UpstreamClosureResult> {
+  const row = await loadTerminalMirror(input.kind, input.id);
+  if (!row) return { status: "failed", error: `${input.kind} ${input.id} not found` };
+  if (row.upstreamIssueNumber == null) return { status: "skipped", reason: "no upstream issue" };
+  if (!isUpstreamClosureCandidate(row)) {
+    return { status: "skipped", reason: `${row.humanId} is not a terminal item awaiting upstream sync` };
+  }
+
+  const target = await resolveUpstreamTarget();
+  if ("skipped" in target) return { status: "skipped", reason: target.skipped };
+
+  const adapter = new GitHubForgeAdapter({ token: target.token });
+  const result = await adapter.closeIssue({
+    repository: { forge: "github", ...target.coordinates },
+    number: row.upstreamIssueNumber,
+    comment: buildClosureComment(row),
+    reason: closeReasonForStatus(row.status),
+    egressClass: "public-hive",
+  });
+  if (!result.ok) return { status: "failed", error: `GitHub API error: ${result.message}` };
+
+  const data = { upstreamSyncedAt: new Date() };
+  if (input.kind === "backlog") await prisma.backlogItem.update({ where: { id: row.id }, data });
+  else await prisma.epic.update({ where: { id: row.id }, data });
+  return { status: "closed", issueNumber: row.upstreamIssueNumber, outcome: result.outcome };
+}
+
+/** Fire-and-forget wrapper for the transition path: logs, never throws. */
+export function closeUpstreamIssueInBackground(input: { kind: TerminalMirrorKind; id: string }): void {
+  void closeUpstreamIssueForTerminal(input)
+    .then((result) => {
+      if (result.status === "failed") {
+        console.warn(`[issue-bridge] upstream close failed for ${input.kind} ${input.id}: ${result.error}`);
+      }
+    })
+    .catch((err) => {
+      console.warn(`[issue-bridge] upstream close threw for ${input.kind} ${input.id}: ${(err as Error).message}`);
+    });
+}
+
+/**
+ * Periodic safety net: every terminal row whose mirror is still unsynced.
+ * Covers writes that bypass the MCP adapters and closes that failed on the
+ * network the first time. Bounded per run so a backlog of misses drains over
+ * a few sweeps instead of one long one.
+ */
+export async function sweepUpstreamIssueClosures(options: { limit?: number } = {}): Promise<{
+  candidates: number;
+  closed: number;
+  failed: number;
+  skipped: number;
+}> {
+  const limit = options.limit ?? 50;
+  const where = { status: { in: [...TERMINAL_STATUSES] }, upstreamIssueNumber: { not: null }, completedAt: { not: null } };
+  const select = { id: true, status: true, completedAt: true, upstreamIssueNumber: true, upstreamSyncedAt: true };
+  const [items, epics] = await Promise.all([
+    prisma.backlogItem.findMany({ where, select: { ...select, itemId: true } }),
+    prisma.epic.findMany({ where, select: { ...select, epicId: true } }),
+  ]);
+  const candidates: { kind: TerminalMirrorKind; id: string }[] = [
+    ...items
+      .filter((row) => isUpstreamClosureCandidate({ ...row, humanId: row.itemId, triageOutcome: null, resolution: null }))
+      .map((row) => ({ kind: "backlog" as const, id: row.id })),
+    ...epics
+      .filter((row) => isUpstreamClosureCandidate({ ...row, humanId: row.epicId, triageOutcome: null, resolution: null }))
+      .map((row) => ({ kind: "epic" as const, id: row.id })),
+  ];
+  const summary = { candidates: candidates.length, closed: 0, failed: 0, skipped: 0 };
+  for (const candidate of candidates.slice(0, limit)) {
+    const result = await closeUpstreamIssueForTerminal(candidate);
+    if (result.status === "closed") summary.closed += 1;
+    else if (result.status === "failed") summary.failed += 1;
+    else {
+      summary.skipped += 1;
+      // A skipped target (private install, no token) applies to every row; stop early.
+      if (result.reason.includes("private") || result.reason.includes("token") || result.reason.includes("not configured")) break;
+    }
+  }
+  return summary;
+}

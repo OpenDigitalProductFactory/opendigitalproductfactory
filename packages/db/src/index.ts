@@ -647,6 +647,9 @@ export * from "./installation-operating-intent";
 export * from "./installation-instance-stance";
 export * from "./reference-freshness";
 export * from "./performer-allocation";
+export * from "./workforce-staffing-posture";
+export * from "./coworker-job-definition";
+export * from "./archetype-job-definition-projection";
 
 // Contributor-inventory-sync ScheduledJob constants — shared between the
 // seed helper and the apps/web Inngest runner so the heartbeat row's name +

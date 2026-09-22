@@ -145,7 +145,7 @@ export type InitiativeReviewerRecovery = {
      * caller hunting for missing grants instead of supplying what is actually
      * missing.
      */
-    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact" | "no-eligible-evidence";
+    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact" | "no-eligible-evidence" | "research-evidence-required";
     nextAction: string;
   }>;
   /**
@@ -198,6 +198,24 @@ const IMMUTABLE_READER_GRANT = "file_read";
 function isBindableReviewWriter(toolName: string): boolean {
   return toolName.startsWith("record_initiative_");
 }
+
+/**
+ * BI-3B323B6A: a small or medium shape owes NO canonical design (gate table,
+ * 2026-09-02 proportional-gates design §4): research is the reproduction plus
+ * the failing-to-passing proof, recorded by the author. Routing that lane
+ * through the spec-bound reviewer packet asked the author to commit a spec
+ * solely to receive a route — the terminal path already refuses to do that
+ * (terminal-recovery.ts researchLaneEscalation, BI-7876699F); the claim path
+ * now says the same thing. The escalation names the author's writer and the
+ * evidence it needs; it grants nothing.
+ */
+function isAuthorResearchLane(decision: InitiativeReadinessDecision, entry: ReadinessRequirementResult): boolean {
+  const shape = decision.shapeDecision?.effective;
+  return entry.code === "RESEARCH_REQUIRED" && (shape === "small" || shape === "medium");
+}
+
+const AUTHOR_RESEARCH_NEXT_ACTION =
+  "Research for this delivery shape is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect or gap on a named ref (commit or branch + file + line) and the failing-to-passing proof. No canonical design is required — the shape does not owe one — so do not commit a spec to obtain a reviewer route.";
 
 /** Resolve actionable, exact-grant reviewer routes without changing readiness. */
 export async function resolveInitiativeReviewerRecovery(input: {
@@ -278,6 +296,16 @@ export async function resolveInitiativeReviewerRecovery(input: {
   const reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"] = [];
   const escalations: InitiativeReviewerRecovery["escalations"] = [];
   for (const entry of distinct) {
+    if (isAuthorResearchLane(input.decision, entry.entry)) {
+      escalations.push({
+        accountableRole: entry.role,
+        toolName: entry.route.toolName,
+        grant: entry.route.lane.grant,
+        reason: "research-evidence-required",
+        nextAction: AUTHOR_RESEARCH_NEXT_ACTION,
+      });
+      continue;
+    }
     const bindable = isBindableReviewWriter(entry.route.toolName);
     const requiredGrants = bindable
       ? [entry.route.lane.grant, IMMUTABLE_READER_GRANT]
@@ -431,7 +459,7 @@ function sequenceBaselineBeforePlanCoverage(
  * carrying a DCO trailer owned by the Workroom principal, not by anyone
  * recording a receipt. Inventing a lane would invent an approver.
  */
-const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
+const UNROUTABLE_REMEDIES: Record<ReadinessCode, string | null> = {
   ARTIFACT_AUTHOR_REQUIRED: ARTIFACT_AUTHOR_RECOVERY,
   CLASSIFICATION_REQUIRED: "Classify the demand before shaping it: set the investment bucket and score inputs on the backlog item.",
   AUTHORIZATION_DENIED: "The caller's authority does not cover this transition. Re-run from a principal holding the required capability.",
@@ -442,9 +470,28 @@ const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
   OBJECTIVE_BASELINE_CONFLICT: "Two objective baselines disagree. Supersede the stale baseline, leaving exactly one chain head.",
   READINESS_PROJECTION_FAILED: "Readiness projection failed to read this item's evidence. Report it; do not retry blindly.",
   STALE_EVIDENCE: "Recorded evidence is bound to a superseded artifact. Re-record it against the current immutable head.",
+
+  // BI-174DB909: null = this requirement HAS a writer lane, so it is never unroutable and needs no unroutable remedy. Total by construction.
+  CANONICAL_DESIGN_REQUIRED: null,
+  RESEARCH_REQUIRED: null,
+  SPEC_APPROVAL_REQUIRED: null,
+  CANONICAL_DESIGN_AMBIGUOUS: null,
+  REVIEW_REQUIRED: null,
+  REVIEW_FAILED: null,
+  BLOCKING_FINDINGS_OPEN: null,
+  PLAN_REQUIRED: null,
+  PLAN_REVIEW_REQUIRED: null,
+  PLAN_COVERAGE_REQUIRED: null,
+  TRACEABILITY_INCOMPLETE: null,
+  DEPENDENCY_UNRESOLVED: null,
+  OBJECTIVE_BASELINE_REQUIRED: null,
+  ARCHETYPE_PROVISIONING_INCOMPLETE: null,
+  ARCHETYPE_COMPLETENESS_FAILED: null,
+  POST_IMPLEMENTATION_REVIEW_REQUIRED: null,
+  DECOMPOSITION_REQUIRED: null,
 };
 
-const REQUIREMENT_GATES: Partial<Record<ReadinessCode, InitiativeRecoveryGate>> = {
+const REQUIREMENT_GATES: Record<ReadinessCode, InitiativeRecoveryGate | null> = {
   CANONICAL_DESIGN_REQUIRED: "design-spec",
   RESEARCH_REQUIRED: "research",
   SPEC_APPROVAL_REQUIRED: "spec-approval",
@@ -457,6 +504,23 @@ const REQUIREMENT_GATES: Partial<Record<ReadinessCode, InitiativeRecoveryGate>> 
   ARCHETYPE_COMPLETENESS_FAILED: "archetype-completeness",
   ACCEPTANCE_EVIDENCE_REQUIRED: "objective-mapping",
   OBJECTIVE_RECONCILIATION_REQUIRED: "objective-mapping",
+
+  // BI-174DB909: null = no single gate owns this requirement. Some are satisfied without a receipt at all (ARTIFACT_AUTHOR_REQUIRED is the commit's DCO trailer), and recoveryGate() already falls back to the lane's only gate where there is exactly one. Total by construction.
+  CLASSIFICATION_REQUIRED: null,
+  CANONICAL_DESIGN_AMBIGUOUS: null,
+  REVIEW_REQUIRED: null,
+  REVIEW_FAILED: null,
+  BLOCKING_FINDINGS_OPEN: null,
+  PLAN_REQUIRED: null,
+  AUTHORIZATION_DENIED: null,
+  ARTIFACT_AUTHOR_REQUIRED: null,
+  CAPSULE_IDENTITY_MISMATCH: null,
+  DELIVERY_EVIDENCE_REQUIRED: null,
+  OBJECTIVE_BASELINE_CONFLICT: null,
+  READINESS_PROJECTION_FAILED: null,
+  STALE_EVIDENCE: null,
+  POST_IMPLEMENTATION_REVIEW_REQUIRED: null,
+  DECOMPOSITION_REQUIRED: null,
 };
 
 function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadinessLane): InitiativeRecoveryGate | null {

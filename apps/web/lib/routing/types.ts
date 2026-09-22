@@ -224,6 +224,9 @@ export interface RoutePreferenceResolution {
     kind: RoutePreferenceKind;
     value: string;
     endpointId: string;
+    /** BI-7F2FBDA3: set when this model was chosen as the successor of an unavailable preference. */
+    successorOf?: string;
+    successorBasis?: "same-family" | "same-provider";
   }>;
   unavailable: Array<{ kind: RoutePreferenceKind; value: string }>;
   fallbackUsed: boolean;

@@ -14,6 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
@@ -1051,8 +1052,18 @@ async function main() {
     process.exit(0); // exit-0: --dry-run routing probe; changes nothing and records nothing
   }
 
-  const bearerToken = process.env.DPF_MCP_BEARER_TOKEN;
-  if (!bearerToken) die("DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease");
+  // BI-78B653D5: the gate speaks the same authorization server as every other
+  // client — a client_credentials client first (self-refreshing, so a long gate
+  // never strands on a stale token), the legacy PAT until its retirement
+  // horizon, and an actionable refusal naming both when neither is configured.
+  let credential;
+  try {
+    credential = resolveMcpCredential({ mcpUrl: options.mcpUrl });
+  } catch (error) {
+    die(`cannot claim the local-CI lease: ${error.message}`);
+  }
+  const bearerToken = credential.bearer;
+  process.stdout.write(`[gate-worktree] MCP credential: ${credential.kind} (${credential.source})\n`);
 
   const candidateGitDir = dirname(gitPath(gitBin, worktreePath, "dpf-local-ci-gate.json"));
   const gitCommonDir = resolvePath(

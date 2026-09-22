@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "decidedOption": "extend-existing-coordination",
+  "decisionInteractionId": "DI-4A3C8C3C9ACC",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ea/workrooms/page.tsx",
+      "apps/web/components/workspace/workroom/WorkroomShape.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["extend-existing-coordination", "separate-coordination-dashboard"]
+  }
+}

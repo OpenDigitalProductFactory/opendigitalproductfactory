@@ -10,6 +10,33 @@ const run = (status: string): ReviewerRunSnapshot => ({
 });
 
 describe("reviewer state in its Workroom", () => {
+  it("reads the requester's recorded profile name while retaining stable identity", async () => {
+    const findMany = vi.fn(async () => [{ ...run("input-required"), user: { employeeProfile: { displayName: "Alex" } } }]);
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany } }, ["WC-1"], now);
+    expect(view.runs[0]).toMatchObject({ requesterName: "Alex", requesterId: "requester-1" });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({
+      user: { select: { employeeProfile: { select: { displayName: true } } } },
+    }) }));
+  });
+  it("preserves the next action recorded by review settlement", async () => {
+    const row = run("input-required");
+    row.progressPayload = { semanticReview: { nextAction: "retry-review" } };
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] } }, ["WC-1"], now);
+    expect(view.runs[0].nextAction).toBe("retry-review");
+  });
+  it("projects a wait for inspection using recorded authority and budget facts", async () => {
+    const row = run("input-required");
+    row.progressPayload = { semanticReview: { schemaVersion: 1, reason: "provider-outcome-uncertain-after-restart",
+      action: "Inspect the provider outcome before recovery.", deadlineAt: "2026-09-08T20:10:00Z", recoveryAttempt: 1 } };
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] } }, ["WC-1"], now);
+    expect(view.runs).toEqual([expect.objectContaining({ taskRunId: "TR-1", status: "input-required",
+      requesterId: "requester-1", reason: "provider-outcome-uncertain-after-restart",
+      nextAction: "Inspect the provider outcome before recovery.", recoveryWait: true,
+      budget: { deadlineAt: "2026-09-08T20:10:00Z", recoveryAttempt: 1 },
+      readAt: now.toISOString(), heartbeat: "unknown",
+      checkpoints: [expect.objectContaining({ taskNodeId: "TN-1", actorId: "AGT-181", status: "running" })],
+    })]);
+  });
   it("reads only native reviews correlated to the selected rooms with bounded history", async () => {
     const findMany = vi.fn(async () => [run("input-required")]);
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany } }, ["WC-1"], now);

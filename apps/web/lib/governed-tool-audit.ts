@@ -3,7 +3,7 @@ import { prisma } from "@dpf/db";
 import type { AlignmentGateDecision } from "./tak/alignment-tool-gate";
 import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-gate";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
-import { boundLargeStrings } from "./evidence/bounded-output";
+import { boundLargeStrings } from "./evidence/bounded-evidence-output";
 import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute";
 import type { ToolDefinition, ToolResult } from "./mcp-tools";
 

@@ -3,9 +3,20 @@ import { isRecord } from "@/lib/shared/coerce";
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS } from "@/lib/change-review/semantic-review-request";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkCaseSourceRef } from "./case-types";
+import { isSemanticReviewRecoveryWait, readSemanticReviewBudget, type SemanticReviewBudgetSnapshot } from "@/lib/change-review/semantic-review-recovery-policy";
+
+/** Read-only facts from existing tasks; neither a verdict nor a new execution ledger. */
+export type ReviewerExecutionObservation = {
+  taskRunId: string; recordId: string; status: string; requesterId: string | null; requesterName?: string | null;
+  reason: string | null; nextAction: string; readAt: string; lastHeartbeatAt: string | null;
+  heartbeat: "historical" | "unknown" | "stale" | "recent";
+  recoveryWait: boolean; budget: SemanticReviewBudgetSnapshot;
+  checkpoints: Array<{ taskNodeId: string; recordId: string; title: string; status: string; actorId: string | null }>;
+};
 
 export type ReviewerRunSnapshot = {
   id: string; taskRunId: string; userId: string | null; status: string;
+  user?: { employeeProfile: { displayName: string } | null } | null;
   updatedAt: Date; lastHeartbeatAt: Date | null; progressPayload: unknown;
   nodes?: Array<{ id: string; taskNodeId: string; title: string; status: string; updatedAt: Date; requestContract?: unknown }>;
 };
@@ -14,23 +25,25 @@ export type ReviewerRoomClient = { taskRun?: { findMany(args: unknown): Promise<
 /** Read-model snapshots of existing records, never new completion receipts or a task ledger. */
 export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, capsuleIds: string[], now: Date) {
   const receipts: ReceiptEnvelope[] = [];
+  const runs: ReviewerExecutionObservation[] = [];
   const sourceRefs: WorkCaseSourceRef[] = [];
   let attentionReason: string | null = null;
   let partial = false;
-  if (!capsuleIds.length) return { receipts, sourceRefs, attentionReason, partial };
-  if (!db.taskRun) return { receipts, sourceRefs, attentionReason, partial: true };
+  if (!capsuleIds.length) return { runs, receipts, sourceRefs, attentionReason, partial };
+  if (!db.taskRun) return { runs, receipts, sourceRefs, attentionReason, partial: true };
   const rows = await db.taskRun.findMany({
     where: { archivedAt: null, AND: [
       { a2aMetadata: { path: ["gateKind"], equals: "semantic-review" } },
       { OR: [...new Set(capsuleIds)].map((capsuleId) => ({ a2aMetadata: { path: ["capsuleId"], equals: capsuleId } })) },
     ] },
     select: { id: true, taskRunId: true, userId: true, status: true, updatedAt: true,
+      user: { select: { employeeProfile: { select: { displayName: true } } } },
       lastHeartbeatAt: true, progressPayload: true,
       nodes: { select: { id: true, taskNodeId: true, title: true, status: true, updatedAt: true, requestContract: true },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 13 } },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 21,
   }).catch(() => null);
-  if (!rows) return { receipts, sourceRefs, partial: true, attentionReason: "Reviewer execution could not be read. Recheck its evidence before advancing." };
+  if (!rows) return { runs, receipts, sourceRefs, partial: true, attentionReason: "Reviewer execution could not be read. Recheck its evidence before advancing." };
   partial = rows.length > 20 || rows.some((row) => !row.nodes || row.nodes.length > 12);
   for (const row of rows.slice(0, 20)) {
     const state = projectRecordedTaskState(row.status);
@@ -44,6 +57,18 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
     const heartbeat = row.lastHeartbeatAt ? row.lastHeartbeatAt.toISOString() : "unknown";
     const age = row.lastHeartbeatAt ? now.getTime() - row.lastHeartbeatAt.getTime() : null;
     const freshness = state === "terminal" ? "historical" : age === null || age < 0 ? "unknown" : age >= SEMANTIC_REVIEW_HEARTBEAT_STALE_MS ? "stale" : "recent";
+    runs.push({ taskRunId: row.taskRunId, recordId: row.id, status: row.status, requesterId: row.userId,
+      requesterName: row.user?.employeeProfile?.displayName.trim() || null,
+      reason: typeof progress.reason === "string" ? progress.reason : null,
+      nextAction: typeof progress.action === "string" ? progress.action
+        : typeof progress.nextAction === "string" ? progress.nextAction : next,
+      readAt: now.toISOString(), lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
+      heartbeat: freshness, recoveryWait: isSemanticReviewRecoveryWait(row.status),
+      budget: readSemanticReviewBudget(row.progressPayload),
+      checkpoints: (row.nodes ?? []).slice(0, 12).map(node => ({ taskNodeId: node.taskNodeId,
+        recordId: node.id, title: node.title, status: node.status,
+        actorId: isRecord(node.requestContract) && typeof node.requestContract.agentId === "string" ? node.requestContract.agentId : null })),
+    });
     const ref: WorkCaseSourceRef = { kind: "task-run", id: row.taskRunId, status: row.status, sourceType: "task-run" };
     sourceRefs.push(ref);
     if (!attentionReason && (state === "waiting" || state === "unknown" || row.status === "failed")) {
@@ -66,5 +91,5 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
     });
     }
   }
-  return { receipts, sourceRefs, attentionReason, partial };
+  return { runs, receipts, sourceRefs, attentionReason, partial };
 }

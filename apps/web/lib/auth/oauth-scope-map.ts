@@ -20,52 +20,10 @@
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 import type { McpTokenScope } from "@/lib/auth/mcp-api-token";
 
-/** The public scope vocabulary. This is an external API contract: adding a
- *  value is a compatible change, renaming or removing one is not. */
-export const PUBLIC_SCOPES = [
-  "dpf.read",
-  "dpf.work",
-  "dpf.build",
-  "dpf.business",
-  "dpf.operate",
-  "dpf.admin",
-] as const;
-
-export type PublicScope = (typeof PUBLIC_SCOPES)[number];
-
-/** Human-facing text for the consent screen. Deliberately describes what the
- *  holder can DO to the operator's business, not which internal grants are
- *  involved — the operator is approving an outcome, not a data structure. */
-export const PUBLIC_SCOPE_COPY: Record<PublicScope, { title: string; detail: string }> = {
-  "dpf.read": {
-    title: "Read your platform",
-    detail:
-      "See backlog, work, documents, code, architecture, customers and operational data — everything you can see. Cannot change anything.",
-  },
-  "dpf.work": {
-    title: "Do governed work",
-    detail:
-      "Create and update backlog items, workrooms, threads, documents, decisions and evidence, and drive portal screens on your behalf.",
-  },
-  "dpf.build": {
-    title: "Run Build Studio",
-    detail:
-      "Write build plans, advance phases, record evidence, promote builds, and execute code in the sandbox.",
-  },
-  "dpf.business": {
-    title: "Act on business records",
-    detail: "Update customers, CRM, marketing and stock, and produce financial reports.",
-  },
-  "dpf.operate": {
-    title: "Operate the platform",
-    detail:
-      "Create release and deployment plans, tune and investigate security monitoring, respond to incidents, and execute infrastructure changes.",
-  },
-  "dpf.admin": {
-    title: "Administer the platform",
-    detail: "Read and change platform administration, policy and integration configuration.",
-  },
-};
+// The vocabulary itself lives in the pure module so client components can use
+// it; re-exported here so every existing server import keeps working.
+export { PUBLIC_SCOPES, PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-public-scopes";
+import { PUBLIC_SCOPES, type PublicScope } from "@/lib/auth/oauth-public-scopes";
 
 /** The coarse tier each public scope implies. The tier is DERIVED from the
  *  granted scope set (see `coarseScopeForPublicScopes`) — a client never
@@ -268,14 +226,46 @@ export function publicScopesGrantingGrant(grant: string): PublicScope[] {
 
 /**
  * The scopes advertised in `scopes_supported` on the Protected Resource
- * Metadata document.
+ * Metadata document — and, through `oauth-metadata.ts`, the `scope=` on the
+ * 401 challenge and the default for an authorize request that names none.
  *
- * READ ONLY, deliberately. MCP `2025-11-25` (`authorization.mdx:344-347`)
- * defines this field as "the minimal set of scopes necessary for basic
- * functionality", and tells clients to request all of it when the challenge
- * carries no `scope`. Advertising only `dpf.read` is what makes that default
- * behaviour SAFE: a client that asks for everything advertised gets read
- * access, and every escalation above it is a separate, named, human-approved
- * step-up decision.
+ * MCP `2025-11-25` (`authorization.mdx:344-347`) defines this field as "the
+ * minimal set of scopes necessary for BASIC FUNCTIONALITY", and tells clients
+ * to request all of it when the challenge carries no `scope`. The question is
+ * therefore what basic functionality means for THIS resource, and the answer
+ * is not read.
+ *
+ * This MCP server exists to do development work: claim a workroom, record
+ * evidence, move a backlog item, adopt a worktree. A grant that can do none
+ * of those is not a reduced version of the product, it is a client that
+ * cannot perform the task it connected to perform. Advertising read alone
+ * was not a smaller promise, it was a broken one.
+ *
+ * WHY THE PREVIOUS READ-ONLY FLOOR COULD NOT STAND (BI-CE5F8C0A):
+ * The floor was safe only because escalation was assumed reachable. It is
+ * not. The 403 `insufficient_scope` step-up fires solely on `tools/call` of
+ * a tool the grant does not cover, and `load_tools` filters by grant first,
+ * answering "not-granted" as a plain HTTP 200 — so a read-only client never
+ * sees the write tool, never calls it, and is never told a scope is missing.
+ * Measured on a production install: every OAuth client landed read-only and no
+ * step-up ever fired.
+ *
+ * Nor could a client work around it. Claude Code can pin `oauth.scopes` in
+ * `.mcp.json`; Grok cannot — it derives its request from this very challenge
+ * ("WWW-Authenticate challenge contains scope:") and has no scope setting at
+ * all. A per-client pin fixes one of four peer delivery surfaces (AGENTS.md
+ * §12) and strands the rest.
+ *
+ * WHAT IS DELIBERATELY NOT HERE: `dpf.business`, `dpf.operate` and
+ * `dpf.admin`. Development is the basic functionality of this resource;
+ * running the organization and administering the platform are not. Those
+ * stay behind an explicit request, which a client may still make — widening
+ * the floor does not cap the ceiling. The consent screen continues to list
+ * every requested scope as its own checkbox, so the human still approves
+ * each one.
  */
-export const ADVERTISED_SCOPES: readonly PublicScope[] = ["dpf.read"];
+export const ADVERTISED_SCOPES: readonly PublicScope[] = [
+  "dpf.read",
+  "dpf.work",
+  "dpf.build",
+];

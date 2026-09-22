@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { isCurrentOAuthAccessToken } from "@/lib/auth/oauth-tokens";
 import type { Prisma } from "@dpf/db";
 import {
   enqueuePrismaAsyncOperationWake,
@@ -403,9 +404,11 @@ export async function executePersistedRemoteTask(input: {
         revokedAt: null,
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
-      select: { id: true, capability: true },
+      select: { id: true, capability: true, kind: true, revokedAt: true, expiresAt: true,
+        oauthClient: { select: { revokedAt: true } } },
     });
     const capabilityStillSufficient = activeToken
+      && (reconstructed.data.token.source !== "oauth" || isCurrentOAuthAccessToken(activeToken))
       && (reconstructed.data.token.capability === "read" || activeToken.capability === "write");
     if (!capabilityStillSufficient) {
       const failure = {

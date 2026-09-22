@@ -81,6 +81,65 @@ No existing helper reads the GitHub compare endpoint.
 
 ## 5. Canonical artifact discovery
 
+### Break-fix completion recovery — BI-594CF003
+
+A missing post-implementation review routes through the existing immutable
+reviewer packet before objective-baseline lookup. A break-fix does not owe an
+objective baseline. The packet uses the unique live Workroom's authored head
+and the provider-verified design blob from its base-to-head range. A squash
+merge does not replace the authored head in review provenance. Missing or
+ambiguous ownership and unavailable source still produce explicit refusals.
+
+The canonical `get_backlog_item` read returns this completion recovery packet
+as `data.recovery`; attempting completion invokes the same resolver. Neither
+read creates a receipt or grants reviewer authority. Dispatch the unchanged
+`requestCoworker` packet, including both `requiredToolNames` and
+`initiativeReviewBinding`. The receipt handler supplies immutable identity
+from that binding; the independent reviewer supplies its assessment.
+
+This uses the existing terminal-writer recovery contract. Capacity loss after
+source reads leaves a bounded, resumable writer wait on that TaskRun. An exact
+request replay reuses persisted immutable evidence, and successful writer
+effects are not replayed. Generic handoffs without the binding do not acquire
+this contract. Do not churn request keys or ask the operator to reconstruct
+commit/blob fields after each refusal.
+
+Implementation sequence: reproduce the baseline-free failure; connect PIR to
+canonical discovery and the existing reviewer resolver; expose the same
+packet on the item read; test binding hydration, missing source, independent
+authority, and post-read capacity recovery; release and exercise live
+completion. No schema migration, new grant, or parallel retry mechanism.
+
+### Existing design reuse — BI-7272643A
+
+A successor Workroom may reuse a design already merged into its base. Requiring
+a new spec diff to issue its research route forces an unrelated document edit.
+The governed claim therefore supplies the live backlog body to discovery. If it
+references one distinct repository-relative Markdown file under
+`docs/superpowers/specs/`, discovery verifies that exact regular file through
+`GET /contents/<path>?ref=<headSha>` and takes the blob id from the provider.
+Repeated links or section anchors to the same file count as one reference.
+
+Ambiguous references, traversal paths, missing files, mismatched returned paths,
+non-file objects and invalid blob ids do not produce a binding. A broken explicit
+reference never falls back to a different changed design. With no explicit
+reference, the compare-range discovery below remains unchanged.
+
+This is artifact selection, not a research verdict or approval. The existing
+writer re-verifies the immutable locator and authorship; the reviewer still
+assesses sufficiency. No grant, receipt schema, readiness rule, database model or
+customer configuration changes. General item-body research snapshots and
+shape-aware plan coverage are outside this repair.
+
+Acceptance: a medium Phase D claim referencing the existing coordinated-workrooms
+design returns an executable research route at its recorded head without a new
+design commit. Tests cover discovery and the claim-to-discovery seam, plus the
+failure cases above. Live acceptance follows governed deployment; a green unit
+test alone does not close the repair. Rollback reverts selection and claim wiring
+together; existing receipts retain their immutable identities.
+
+### Changed design discovery
+
 New module `apps/web/lib/backlog/initiative-readiness/canonical-artifact-discovery.ts`.
 
 ```

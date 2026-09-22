@@ -317,6 +317,9 @@
       "docs/security/README.md",
       "docs/security/secrets-scan.md"
     ],
+    ".github/workflows/stuck-auto-merge-alarm.yml": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     ".github/workflows/ux-route-sweep.yml": [
       "docs/platform-usability-standards.md",
       "docs/testing/ci-evidence.md"
@@ -717,7 +720,7 @@
     "apps/web/lib/ea/table-growth.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
-    "apps/web/lib/evidence/bounded-output.ts": [
+    "apps/web/lib/evidence/bounded-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/explore/backlog.ts": [
@@ -903,6 +906,9 @@
     "apps/web/lib/nonprod/host-resource-profiles.json": [
       "docs/architecture/dpf-patterns.md",
       "docs/user-guide/contributing/agent-dev-environments.md"
+    ],
+    "apps/web/lib/observability/monitor-source-reachability.ts": [
+      "docs/operations/observability-coverage.md"
     ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -1193,6 +1199,9 @@
     ],
     "apps/web/lib/ux-budget/measure.ts": [
       "docs/platform-usability-standards.md"
+    ],
+    "apps/web/lib/ux-budget/scope.ts": [
+      "docs/testing/ci-evidence.md"
     ],
     "apps/web/lib/voice-synthesis/tts-health-contract.test.ts": [
       "docs/operations/observability-coverage.md"
@@ -1503,6 +1512,9 @@
     "packages/db/src/provider-compliance-source-registry.ts": [
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
     ],
+    "packages/db/src/quality-issue-registry.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
     "packages/db/src/reference-model-applicability.ts": [
       "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md"
     ],
@@ -1554,6 +1566,9 @@
     "packages/db/src/wiki-taxonomy.ts": [
       "docs/founder-kernel/AUTHORING.md",
       "docs/founder-kernel/SCHEMA.md"
+    ],
+    "packages/db/src/workforce-staffing-posture.test.ts": [
+      "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md"
     ],
     "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs": [
       "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md"
@@ -1721,6 +1736,9 @@
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/check-guard-diff-honesty.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/check-guards.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/testing/pre-pr-gate.md"
@@ -1782,6 +1800,9 @@
     "scripts/check-no-provider-local-connector-lifecycle.mjs": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "scripts/check-no-server-imports-in-client.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/check-no-unattributable-deferral.mjs": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -1810,6 +1831,9 @@
     ],
     "scripts/check-stewardship-scope.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "scripts/check-stuck-auto-merge.mjs": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/check-style-drift.mjs": [
       "docs/architecture/ui-token-styling.md",
@@ -1862,6 +1886,7 @@
     ],
     "scripts/gate-worktree.mjs": [
       "docs/architecture/context-engineering-standards.md",
+      "docs/architecture/mcp-tool-authorization-runbook.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/gate-worktree.sh": [
@@ -1933,6 +1958,12 @@
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
     ],
+    "scripts/lib/gate-exit-classification.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
+    "scripts/lib/git-changed-files.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/lib/hooks-dir.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -1953,6 +1984,9 @@
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/mcp-client.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "scripts/lib/mcp-credential.mjs": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/lib/mermaid-renderer.mjs": [
@@ -2022,6 +2056,9 @@
       "docs/architecture/build-gate-runbook.md",
       "docs/founder-kernel/wiki/principles/dco-sign-off-required.md"
     ],
+    "scripts/pre-push-gate-infrastructure-probe.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/pre-push-gate-slot-contract.test.mjs": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -2030,6 +2067,9 @@
     ],
     "scripts/pregate-status.mjs": [
       "docs/architecture/build-gate-runbook.md"
+    ],
+    "scripts/pregate.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/probes/marketing-media/local-render-receipt.json": [
       "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md"
@@ -2401,7 +2441,8 @@
       "scripts/check-application-boundaries.mjs"
     ],
     "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md": [
-      "apps/web/lib/tak/decision-routing-governance-hook.ts"
+      "apps/web/lib/tak/decision-routing-governance-hook.ts",
+      "packages/db/src/workforce-staffing-posture.test.ts"
     ],
     "docs/architecture/2026-08-20-governed-autonomy-architecture.md": [
       "apps/web/lib/work-management/room-cycle-adapter.ts",
@@ -2517,15 +2558,20 @@
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
+      ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
       "scripts/check-build-script-policy.mjs",
+      "scripts/check-no-server-imports-in-client.mjs",
+      "scripts/check-stuck-auto-merge.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
+      "scripts/lib/gate-exit-classification.mjs",
       "scripts/pre-push-dco-check.mjs",
+      "scripts/pre-push-gate-infrastructure-probe.mjs",
       "scripts/pre-push-gate-slot-contract.test.mjs",
       "scripts/pregate-preflight.mjs",
       "scripts/pregate-status.mjs"
@@ -2583,7 +2629,7 @@
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
       "apps/web/lib/ea/table-growth.ts",
-      "apps/web/lib/evidence/bounded-output.ts",
+      "apps/web/lib/evidence/bounded-evidence-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
       "apps/web/lib/operate/retention/obligation-floors.ts",
       "apps/web/lib/routes.ts",
@@ -2661,9 +2707,11 @@
       "scripts/check-doc-reference-integrity.mjs",
       "scripts/check-docs-impact.mjs",
       "scripts/check-failure-readiness.mjs",
+      "scripts/check-guard-diff-honesty.mjs",
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
+      "scripts/lib/git-changed-files.mjs",
       "scripts/lib/mermaid-renderer.mjs",
       "scripts/lib/published-doc-roots.mjs"
     ],
@@ -2704,8 +2752,11 @@
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
+      "scripts/gate-worktree.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
-      "scripts/lib/mcp-client.mjs"
+      "scripts/lib/mcp-client.mjs",
+      "scripts/lib/mcp-credential.mjs",
+      "scripts/pregate.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
@@ -3032,10 +3083,12 @@
       "apps/mobile/eas.json"
     ],
     "docs/operations/observability-coverage.md": [
+      "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
       "docker-compose.macos.yml",
-      "monitoring/prometheus/prometheus.yml"
+      "monitoring/prometheus/prometheus.yml",
+      "packages/db/src/quality-issue-registry.ts"
     ],
     "docs/operations/oss-repo-identity-hygiene.md": [
       "scripts/check-no-private-identity.mjs"
@@ -3205,6 +3258,7 @@
       ".github/workflows/ux-route-sweep.yml",
       "apps/web/instrumentation.ts",
       "apps/web/lib/runtime/measurement-runtime.ts",
+      "apps/web/lib/ux-budget/scope.ts",
       "docs/testing/ci-observation-baseline.json",
       "scripts/ci-evidence-plan.mjs",
       "scripts/ci-shadow-selection.mjs"

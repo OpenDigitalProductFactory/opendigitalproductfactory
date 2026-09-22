@@ -106,6 +106,14 @@ describe("backlog enum parity between backlog.ts and mcp-tools.ts", () => {
     expect(toolInputEnum("query_backlog", "status")).toEqual([...BACKLOG_STATUS_VALUES]);
   });
 
+  it("update_backlog_item_status.status matches shared backlog statuses", () => {
+    expect(toolInputEnum("update_backlog_item_status", "status")).toEqual([...BACKLOG_STATUS_VALUES]);
+  });
+
+  it("list_backlog_items.status matches shared backlog statuses", () => {
+    expect(toolInputEnum("list_backlog_items", "status")).toEqual([...BACKLOG_STATUS_VALUES]);
+  });
+
   it("create_epic.status matches shared epic statuses", () => {
     expect(toolInputEnum("create_epic", "status")).toEqual([...EPIC_STATUSES]);
   });

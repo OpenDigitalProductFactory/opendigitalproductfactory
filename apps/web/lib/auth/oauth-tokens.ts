@@ -74,6 +74,18 @@ export type ResolvedOAuthToken = {
   clientId: string | null;
 };
 
+/** Shared by bearer resolution and server-owned work using an admitted actor. */
+export function isCurrentOAuthAccessToken(row: {
+  kind: string;
+  revokedAt: Date | null;
+  expiresAt: Date | null;
+  oauthClient?: { revokedAt: Date | null } | null;
+}, now = Date.now()): boolean {
+  return row.kind === "oauth_access" && !row.revokedAt
+    && (!row.expiresAt || row.expiresAt.getTime() > now)
+    && Boolean(row.oauthClient) && !row.oauthClient?.revokedAt;
+}
+
 /**
  * Resolve a presented bearer credential as an OAuth access token.
  *
@@ -100,12 +112,8 @@ export async function resolveOAuthAccessToken(
     include: { oauthClient: { select: { id: true, oAuthClientId: true, revokedAt: true } } },
   });
   if (!row) return null;
-  if (row.kind !== "oauth_access") return null;
-  if (row.revokedAt) return null;
-  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
+  if (!isCurrentOAuthAccessToken(row)) return null;
   if (!row.resource || !resourceMatches(row.resource, origin)) return null;
-  // Revoking a client revokes what it holds, without needing to hunt rows.
-  if (row.oauthClient?.revokedAt) return null;
 
   const publicScopes = row.publicScopes.filter(isPublicScope);
 

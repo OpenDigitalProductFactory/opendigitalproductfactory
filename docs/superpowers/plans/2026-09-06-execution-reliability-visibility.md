@@ -4,10 +4,57 @@ status: active
 
 # Execution reliability and process visibility
 
+## September 21 observed pause reconciliation (BI-06AE6833, WC-99AECC86)
+
+Runtime verification RV-EXECUTION-5969966-20260921 found that WC-9CECAF46 displays a missing-coordinator pause in Details while Overview says no immediate attention is needed. Reconcile attention and next action in the existing shared room read model from its conformance result; preserve independent case attention and never convert a pause into completion. Test the real missing-coordinator condition first. Keep intended advance conditions separate from currently permitted transitions even before any stage has started. The observed lane must distinguish activity events from receipts, retaining source identity and no inferred verdict. Reuse shared projections and existing disclosure primitives; no new execution authority or storage. Header accountability must consume the existing effective-human-accountability result rather than selecting a participant independently. Preserve unknown and conflicting states. This extends the same objective and allocates at least one fifth of the change to consolidating these divergent projections. Protected checks and a new canonical release with repeat live acceptance remain required.
+
+UX fit: DI-AB55BD5548FD selects extend-existing-inspector over separate-activity-page, high confidence and autonomy eligible, with no commandment conflict. Shared read-model composition and single-source accountability govern the repair. Independent review found and reproduced terminal-room attention regression; closed/cancelled rooms retain their terminal action while diagnostic conformance remains visible. The 94 affected tests and both TypeScript programs pass; these are source results, not new runtime acceptance.
+
+## September 21 selected Workroom context (BI-06AE6833, WC-99AECC86)
+
+Live navigation on both 0961596 and 5cdafb1 drops the selected capsule at the canonical-case redirect. Preserve the capsule as navigation context while retaining one case per WorkItem. Constrain the existing room query by both WorkItem and selected capsule, refuse an unavailable selection before reading execution evidence, and return the resolved row identity for the workforce reader. Remove the independent oldest-room lookup so process, participants, evidence and workforce use the same selection. Reuse the existing WorkItem and standalone content authorization; do not grant access through a query parameter.
+
+Use the existing process inspector and navigation primitives, with no new control or route. First reproduce lost selection and cross-case refusal, then verify selected-only journal and participant reads, canonical query round-trip, existing unselected behavior, and standalone authorization. Reuse the shared evidence adapter from PR5470. Approximately one fifth of this repair consolidates selection and removes duplicated room resolution. Protected CI and deployed enterprise-to-room acceptance remain required; PR5470's combined release is independent of this follow-up.
+
 Status: implementation in progress; broader execution/portal coverage remains pending.
 Workroom: WC-4A72DC95. Parent delivery item: BI-06AE6833.
 Decision: DI-515AD614CCF6, harden existing DPF/Inngest execution.
 Canonical design: [throughput design sections 8.1–8.7](../specs/2026-09-03-local-first-agentic-delivery-throughput-design.md).
+
+## September 21 standalone execution projection (WC-99AECC86)
+
+Current main 5cdafb1 exposes standalone rooms through the canonical case route,
+but its standalone loader omits scope claims, driver state and execution evidence.
+The anchored loader already reads these facts. Extend the existing standalone
+projection and extract one bounded journal/reviewer reader used by both loaders.
+This continues BI-06AE6833 and its portal coverage rather than opening an initiative.
+
+Keep persisted definition/version, declared boundary and driver observations intact.
+Read journal entries by database room identity and reviewers by stable capsule ID.
+Missing readers, failed reads and truncated windows are partial projections; they
+are not empty successful executions. Journal entries and task snapshots remain
+observations, never successful gate verdicts. Missing purpose and scope stay gaps.
+Propagate reviewer attention to both the room and case summary.
+
+The standalone route must pass the effective authenticated principal to the
+loader. Before reading execution, reuse Workroom content admission and clearance:
+resolve creator/requester/holder and active roster membership through canonical
+principal references, and enforce the declared sensitivity ceiling. Absence of
+auth context, admission or clearance returns no detail and performs no evidence
+query. Presence and structural containment do not confer admission.
+
+UX fit remains fits-with-guardrails within the existing Workspace case route and
+its shape, observed-execution and evidence components. No new navigation, actions,
+status styling or authority is introduced. The source of truth is the persisted
+Workroom, WorkroomActivity and correlated TaskRun, through the shared read model.
+Verify both anchored and standalone readers, partial history, reviewer failures,
+and unknown boundaries, then exercise the served standalone room after release.
+
+Consolidation removes the anchored loader's separate journal query, identity map,
+receipt conversion and reviewer loading in favor of the shared reader. Source
+regressions reproduced missing shape/evidence and false healthy readback before
+repair. This is not proof of the seven runtime recovery scenarios, nesting or
+archetype coverage; those remain acceptance obligations for the overall outcome.
 
 ## 2026-09-12 reviewer source classification repair
 
@@ -661,3 +708,205 @@ The c448 live reviewer probe recorded six screening receipts and six correlated 
 ## September 13 reviewer source-analysis intent (WC-132508EC, BI-06AE6833)
 
 Canonical c448 probe logs show the exact failure: the first model answer described the supplied historical source diff, then the /build evidence classifier injected a live-operational-data nudge. Subsequent calls searched for monitoring tools and lost the original task. Repair the existing shared intent classifier, not the prompt or evidence authority: recognize explicit analysis of supplied source as source-based work, excluding quoted code from intent cues. Preserve requests for live state before or after the artifact, mixed requests, ordinary build/backlog/provider questions and the existing no-evidence refusal. Do not treat 'no tools' as an exemption. Reuse one source-analysis classifier at the taxonomy and fallback evidence boundary. Test the original request shape, fenced and unified diffs, mixed/live counterexamples, and the actual agentic loop returning the first grounded source answer without a recovery call. No tool grants, dispatch authority, payload screening or terminal writer checks change. After protected deployment, one bounded original-artifact acceptance must return the requested cap, reserve and limitation; source tests alone do not complete that acceptance.
+
+## September 21 OAuth reviewer authority (WC-99AECC86, BI-06AE6833)
+
+Native review TR-GATE-0DD6B07CACCAE873D4507112 was admitted with passing exact-revision local integration evidence, then stopped before provider dispatch. Its immutable actor uses OAuth; the worker recognizes only PAT/session authentication. Extend the existing durable authority reader to resolve OAuth's same McpApiToken record. Reuse a shared current-token predicate with transport resolution; preserve token expiry, reject token/client revocation and missing clients, and retain coarse scope, tool grants, current user, agent grants and TaskRun ownership. Admission already validates the resource audience; the worker uses only the server-persisted actor reference. Do not substitute credentials, refresh a token on behalf of the client, or accept expired authority. Test active OAuth and revoked, expired, wrong-kind, read-scope and grant/assignment counterexamples before implementation. This fixes authentication compatibility; it does not claim the seven recovery scenarios passed. Keep this source repair separate from the observed-state UI PR and verify a fresh native run after canonical release.
+
+The same run is visible under Operations Map's Activity projection details, but its authorization wait omits the shared recovery explanation. Include native auth-required runs in that existing inspector, retain the original deadline and attempt count, and explain that the requester must inspect the saved authority. A new sign-in cannot replace the immutable packet's credentials. Reuse the existing recovery controls and their expiry/limit checks; do not add another recovery surface or infer that authority has been restored. The regression must fail before the projection repair and distinguish ordinary non-review authorization waits.
+
+Consolidate the recoverable-wait classifier between the server and map projection. Permit an authorization wait to resume only after the original saved authority passes current validation, with requester, confirmation, budget, quiescence and concurrent-update checks unchanged. Preserve prior execution evidence without claiming that a provider started. First-failing server coverage reproduces the previously excluded authorization state; positive restoration and denied-authority/exhausted-budget counterexamples must pass together.
+
+## Multi-Workroom case selection (DI-1544D18CEAE3)
+
+BI-06AE6833: when an authorized case has multiple rooms and no room is selected,
+show an explicit room choice before loading participants or execution. Different
+rooms may each have a coordinator; combining them violates the single-room
+ownership contract. Reuse the case route, shared surfaces and canonical URL
+builder, preserving operation and filter context. Bound the choices and label
+truncation. Verify selection isolation and accessible links before runtime checks.
+
+## Authorized replacement of inconclusive checkpoints
+
+On September 21, TR-GATE-90A419BE5A6A4FFB8F049AE3 recorded authorized recovery
+attempt 1 but retained only its original two invalid-JSON checkpoints. The worker
+reuses every completed checkpoint across generations, including inconclusive
+results. Extend the existing checkpoint transaction: reuse valid verdicts and
+same-generation results; replace a prior-generation inconclusive result only
+after the existing recovery admission has authorized the new generation. Retain
+the prior result and diagnostics, link its successor, and distinguish a known
+inconclusive response from an unknown provider outcome. Do not change authority,
+confirmation, deadline, attempt limits, execution fences or external effect rules.
+First reproduce the failed replacement, then cover verdict reuse, same-generation
+duplicate handling and retained evidence. Provider response validity remains a
+separate observed failure requiring diagnosis; retry is not a success claim.
+
+## Recorded role waits in the process header
+
+Live WC-0FE180F2 records a role-stage wait while its header reports no attention.
+The two case loaders retain the current stage but drop the drive's pending action.
+Consolidate their observation assembly in the existing drive-state reader and
+project only an attention action with matching stage and recorded principal.
+Use that recorded wait in the shared read model, preserving stronger process
+interventions and reviewer waits. Ignore malformed, mismatched and terminal-room
+waits. This read repair does not dispatch a role or infer progress from a tick.
+
+## Reviewer fallback model classification
+
+Native review B982 fell back to gemini-3-pro-image and returned invalid JSON.
+The live profile classifies that image model as chat and advertises tool use.
+Google's [model specification](https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image)
+states that function calling and structured outputs are unsupported. Reuse the
+existing Gemini modality derivation for classification instead of the adapter's
+hardcoded text-only input. Share classification between discovery and card
+extraction; image generation remains available to image requests, while the
+existing text-task filter excludes it from reviewer fallback. Correct known
+unsupported capabilities without inventing positive capability claims for other
+image models. Verify discovery, cards and routing exclusion, then refresh through
+the governed metadata path after release. The raw malformed answer remains
+unavailable; classification is a verified defect, not proof of its exact syntax.
+### Coordination discovery and return context (2026-09-21)
+
+Live acceptance found 381 open rooms but only the first 200 reachable from
+Coordination, with no search or next page. Extend the existing architecture
+loader with database-side title/identity search, canonical status filtering and
+stable identity keyset pagination. Keep the 200-row bound, label each page as an
+observation, and preserve operation, search, status and cursor through the
+canonical case redirect and the process return link. Reuse FilterBar and the
+stored drive observation projection for recorded waits; never infer execution
+from updatedAt or assignment. Verify combined unmapped-operation/search filters,
+page boundaries, malformed input and round-trip navigation before release.
+
+UX fit: fits with guardrails, recorded as DI-4A3C8C3C9ACC (high-confidence
+proceed). Platform EA is the canonical home; the operator uses local filters
+and read-only room links. FilterBar, StatusBadge and the drive projection remain
+shared. Preserve collapsed discovery controls on initial arrival, report page
+counts rather than totals, and show an actionable empty result. No prompt send
+or dispatch is attached to navigation. Source checks and deployed desktop/mobile,
+keyboard, theme and return-context acceptance remain required.
+
+The intentional disclosure and paging structure is measured by successful cloud
+UX sweep 35570886614 against source 6509aecaed0ba2584e82b9f0588334d7b53633d1.
+Re-freeze only `/ea/workrooms` from its emitted baseline under this PR's review:
+arrival text falls from 237 to 162 words; all other numeric axes are unchanged.
+The two existing axe violations remain unresolved, not an accessibility pass.
+No other route baseline or sweep rule changes. The architecture guide now
+documents the same search, paging and return-context behavior.
+
+### Reviewer execution inspection in the existing room
+
+Live release de6f45 shows a stored requester as Unknown and makes a reviewer wait
+readable only as a generic receipt. Extend the existing bounded reviewer reader
+with a typed observation of the same TaskRun, checkpoint identities, reason,
+requester, recorded next action, read time and immutable recovery budget. Carry
+that observation through both room loaders. Keep intended definition steps and
+observed runs separate; a completed checkpoint is not a verified verdict.
+
+Reuse StalledTaskRecoveryActions inside the existing Observed execution disclosure.
+The server retains requester, saved authority, confirmation, deadline, attempt
+and concurrency checks. Share budget extraction with Operations Map and use the
+canonical actor fields for both events and receipts. This consolidation is part
+of the refactoring allocation, not a second recovery implementation. Test missing
+and corrupt budgets, terminal runs, failed reads, room isolation, and requester
+identity before the source repair. Review runtime source and UI independently;
+do not label an authorization rejection or stale read as successful recovery.
+
+UX fit DI-E1D9AF1E894D recommends shared-room-inspection over map-only-recovery
+with high confidence. Details stay inside the existing disclosure, use theme
+tokens and native keyboard controls, and name unknown facts. Register the new
+component's measured 63-word source-copy budget without growing existing entries.
+Runtime acceptance and existing accessibility defects remain open.
+
+The completed provider response also carries a truncation flag. The reviewer
+currently ignores it, so even syntactically valid partial output can be treated
+as a verdict. Fail that branch as inconclusive with a specific recorded reason
+before parsing; retain no response text and do not change output budgets or relax
+the parser. This is a verified source gap, not a claim that truncation caused the
+current live invalid-JSON responses. Prove it using valid JSON marked truncated.
+
+### Nested responsibility must remain evidence-based
+
+PWA-04 requires ambiguous parents to be correctable setup, but the current
+resolver silently returns the organization owner. Its bounded ancestor reader
+also drops the unresolved frontier after ten levels, making an unseen delegated
+owner look absent. Preserve the frontier and report incomplete lineage only if
+resolution reaches it without an explicit assignment. Report competing parents
+instead of falling back. Keep explicit room/nearest-ancestor assignments and
+ordinary organization fallback intact. Share these facts between the drive and
+room workforce reader; change no authority or relationship writes. Reproduce both
+counterexamples and test overrides, complete lineage, cycles and dependencies.
+
+### Coordination ownership and relationships
+
+Extend the existing Coordination list under BI-06AE6833 and BI-9DC43E17 with
+recorded accountable ownership and bounded WorkroomRelation observations.
+DI-2CB67542C613 selects shared-coordination-context over opening every room
+individually, with high-confidence proceed. Use one batched ancestor/participant
+read and the existing human-accountability resolver; share that reader with the
+single-room drive path. Assignment never substitutes for accountability.
+
+Disclose parent, child and dependency links within each existing row, preserving
+operation/search/status/page context. Render missing readers, failed queries and
+truncated relationships explicitly. Do not infer blocking from an edge alone or
+call recorded containment successful delegation. Reuse native disclosures,
+theme tokens and canonical case identity. Test shared ancestors, query bounds,
+unknown ownership, dependency direction and navigation context before release.
+At least one fifth of this batch consolidates ancestry/accountability reads.
+
+### External requester's native recovery adapter
+
+BI-801313EB already requires durable resume without the original client. Current
+main exposes retryPersistedSemanticReview only through the portal session action;
+the MCP change-review pack can admit a request but cannot submit its confirmed
+recovery. A virtual surface requires a separate governed coworker context and is
+not an alternate grant. Extend the existing change-review pack with a thin
+retry_semantic_review adapter to the same recovery function. Bind identity from
+the authenticated user, never a payload user ID; require explicit confirmation
+of replacement inference cost. Keep current tool grants, original requester,
+saved authority, deadline, attempts, quiescence and concurrent-generation fences.
+No new execution, ledger, retry policy or privilege is introduced. Test missing
+confirmation, another requester, expired/revoked authority, non-native tasks and
+successful forwarding. A denied call remains denied and is not accepted evidence.
+
+Deployed inspection on c6e5718 found that an expired review still answers
+"retry-review" under its next-action question, contradicting the disabled Resume
+control. Share the recovery budget clock and presentation between that answer
+and the action control. Test expiration during an open page, exhausted and unknown
+budgets. Preserve raw recorded actions in request history; describe permitted
+recovery in plain language. Read the requester's existing employee display name
+when present, retaining the user identity and an explicit unknown-name fallback.
+Translate known reason codes without inferring a provider failure cause.
+
+The reviewed `/ea/workrooms` route measurement from workflow 35580754120
+adds only the collapsed owner/link disclosure to its accessibility structure.
+Refresh that route's structural baseline alone: all numeric axes remain unchanged
+(162 visible words, 22 lead words, one primary action, zero visible fields).
+The two existing axe violations remain recorded; this is not an accessibility pass.
+
+### Reviewer response contract and safe failure diagnosis
+
+The next actual review, TR-GATE-57C976FB4645325A907F9900, recorded three
+successful provider telemetry rows but only one completed checkpoint. The worker
+retains provider-outcome-uncertain and discards the rejected branch's error. The
+cause is unknown. Extend the existing failure record with the last attempted
+checkpoint phase and allowlisted error kind/code only, never error messages or
+provider content. Preserve the generation fence, original deadline and manual
+recovery requirement. Verify read, provider and write failures independently;
+no retry is introduced by diagnostic capture.
+
+Release3 review TR-GATE-6B57503C6CF9DF933ADE9985 records one truncated branch
+and two invalid-JSON branches. Strict validation correctly withheld a verdict.
+The response prompt itself demonstrates invalid JSON (`"pass" or "fail"`) and
+the operation appends an additional object-shaped failure-analysis instruction.
+These are verified contract defects; they do not establish the exact syntax of
+the unretained provider responses. Extend BI-801313EB and the existing review
+contract: emit one valid JSON example including required failure analysis, keep
+enum guidance outside it, and remove the duplicate appended instruction. Preserve
+the Build Studio compatibility profile. Add only content-free JSON structure
+counts to invalid-response diagnostics and validate their checkpoint readback.
+Never store source excerpts, arbitrary parser messages or provider text; never
+accept malformed JSON, reset an attempt budget, or infer a semantic pass.
+First-failing tests must cover the complete prompt example and bounded diagnostic
+round-trip, including quoted braces and malformed/untrusted checkpoints. Run the
+graph-linked reviewer, publication and recovery tests before governed release;
+then verify the actual provider result and confirmed recovery on the live install.

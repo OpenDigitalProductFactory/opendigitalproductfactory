@@ -106,9 +106,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "No advisory reaching a recorded dependency remains without an open finding." },
-      { kind: "failure", condition: "The advisory source or the dependency manifest cannot be read — the run stops and reports, and does NOT raise findings from an empty read." },
-      { kind: "budget", condition: "More than 100 findings would be raised in one run — the run stops and escalates rather than burying the ledger." },
+      { kind: "success", condition: "No advisory reaching a recorded dependency remains without an open finding.", disposition: "proceed" },
+      { kind: "failure", condition: "The advisory source or the dependency manifest cannot be read — the run stops and reports, and does NOT raise findings from an empty read.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 findings would be raised in one run — the run stops and escalates rather than burying the ledger.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -163,9 +163,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Enforced policy matches declared policy for every repository in scope." },
-      { kind: "failure", condition: "The forge is unreachable or the declared policy is absent — the run stops and reports, and does NOT infer a drift from a failed read." },
-      { kind: "budget", condition: "More than 50 drift findings in one run — the run stops and escalates." },
+      { kind: "success", condition: "Enforced policy matches declared policy for every repository in scope.", disposition: "proceed" },
+      { kind: "failure", condition: "The forge is unreachable or the declared policy is absent — the run stops and reports, and does NOT infer a drift from a failed read.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 50 drift findings in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -211,9 +211,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "No recorded credential is past its age threshold or carries an exposure signal." },
-      { kind: "failure", condition: "The credential inventory cannot be read — the run stops and reports, and never reports an unread credential as healthy." },
-      { kind: "budget", condition: "More than 50 credentials would be reported in one run — the run stops and escalates." },
+      { kind: "success", condition: "No recorded credential is past its age threshold or carries an exposure signal.", disposition: "proceed" },
+      { kind: "failure", condition: "The credential inventory cannot be read — the run stops and reports, and never reports an unread credential as healthy.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 50 credentials would be reported in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -268,9 +268,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open pull request carries a current classification and a named blocking reason." },
-      { kind: "failure", condition: "The forge is unreachable or returns no pull requests where the repository is known to have them — the run stops and reports rather than declaring the queue clear." },
-      { kind: "budget", condition: "More than 100 pull requests in one run — the run stops and escalates." },
+      { kind: "success", condition: "Every open pull request carries a current classification and a named blocking reason.", disposition: "proceed" },
+      { kind: "failure", condition: "The forge is unreachable or returns no pull requests where the repository is known to have them — the run stops and reports rather than declaring the queue clear.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 pull requests in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -326,9 +326,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "No untriaged issue remains without a classification and a duplicate check." },
-      { kind: "failure", condition: "The issue source or the backlog cannot be read — the run stops and reports, and never proposes items from an unread backlog." },
-      { kind: "budget", condition: "More than 50 proposals in one run — the run stops and escalates rather than flooding triage." },
+      { kind: "success", condition: "No untriaged issue remains without a classification and a duplicate check.", disposition: "proceed" },
+      { kind: "failure", condition: "The issue source or the backlog cannot be read — the run stops and reports, and never proposes items from an unread backlog.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 50 proposals in one run — the run stops and escalates rather than flooding triage.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -383,9 +383,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every required gate is either evidenced or named as missing." },
-      { kind: "failure", condition: "The gate evidence store cannot be read — the run stops and reports, and never records an unread gate as satisfied." },
-      { kind: "budget", condition: "More than 20 release candidates assessed in one run — the run stops and escalates." },
+      { kind: "success", condition: "Every required gate is either evidenced or named as missing.", disposition: "proceed" },
+      { kind: "failure", condition: "The gate evidence store cannot be read — the run stops and reports, and never records an unread gate as satisfied.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 20 release candidates assessed in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -432,9 +432,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "No waiting inquiry is without a draft reply." },
-      { kind: "failure", condition: "The inquiry store cannot be read — the run stops and reports, and never drafts a reply to an inquiry it could not read." },
-      { kind: "budget", condition: "More than 25 drafts in one run — the run stops and escalates rather than generating a queue nobody can review." },
+      { kind: "success", condition: "No waiting inquiry is without a draft reply.", disposition: "proceed" },
+      { kind: "failure", condition: "The inquiry store cannot be read — the run stops and reports, and never drafts a reply to an inquiry it could not read.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 25 drafts in one run — the run stops and escalates rather than generating a queue nobody can review.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -489,9 +489,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every recorded adopter relationship has a current health report." },
-      { kind: "failure", condition: "The adopter records cannot be read — the run stops and reports, and never reports an unread relationship as healthy." },
-      { kind: "budget", condition: "More than 100 relationships assessed in one run — the run stops and escalates." },
+      { kind: "success", condition: "Every recorded adopter relationship has a current health report.", disposition: "proceed" },
+      { kind: "failure", condition: "The adopter records cannot be read — the run stops and reports, and never reports an unread relationship as healthy.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 relationships assessed in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -548,9 +548,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every recorded obligation inside the horizon is reported with a due date and an owner." },
-      { kind: "failure", condition: "The finance substrate cannot be read — the run stops and reports, and NEVER presents an absent amount as zero." },
-      { kind: "budget", condition: "More than 100 obligations reported in one run — the run stops and escalates." },
+      { kind: "success", condition: "Every recorded obligation inside the horizon is reported with a due date and an owner.", disposition: "proceed" },
+      { kind: "failure", condition: "The finance substrate cannot be read — the run stops and reports, and NEVER presents an absent amount as zero.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 obligations reported in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -604,9 +604,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every renewal inside the horizon is reported with its spend position." },
-      { kind: "failure", condition: "Supplier records cannot be read — the run stops and reports, and never infers a renewal from an unread agreement." },
-      { kind: "budget", condition: "More than 50 agreements assessed in one run — the run stops and escalates." },
+      { kind: "success", condition: "Every renewal inside the horizon is reported with its spend position.", disposition: "proceed" },
+      { kind: "failure", condition: "Supplier records cannot be read — the run stops and reports, and never infers a renewal from an unread agreement.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 50 agreements assessed in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -662,9 +662,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every observed contributor is recorded with their sign-off and licence status." },
-      { kind: "failure", condition: "The contribution history cannot be read — the run stops and reports, and never records a contributor it could not observe." },
-      { kind: "budget", condition: "More than 200 contributors reconciled in one run — the run stops and escalates." },
+      { kind: "success", condition: "Every observed contributor is recorded with their sign-off and licence status.", disposition: "proceed" },
+      { kind: "failure", condition: "The contribution history cannot be read — the run stops and reports, and never records a contributor it could not observe.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 200 contributors reconciled in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [
@@ -720,9 +720,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every registered coworker has a current capability and qualification report." },
-      { kind: "failure", condition: "The coworker registry cannot be read — the run stops and reports, and never reports an unread coworker as fit." },
-      { kind: "budget", condition: "More than 100 coworkers assessed in one run — the run stops and escalates." },
+      { kind: "success", condition: "Every registered coworker has a current capability and qualification report.", disposition: "proceed" },
+      { kind: "failure", condition: "The coworker registry cannot be read — the run stops and reports, and never reports an unread coworker as fit.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 coworkers assessed in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [

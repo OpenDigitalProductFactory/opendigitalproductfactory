@@ -1,11 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { createHash, randomBytes } from "crypto";
 
-// These modules only need prisma to exist at import time; every function under
-// test here is pure. The DB-touching paths are covered by the route tests.
-vi.mock("@dpf/db", () => ({ prisma: {} }));
+const tokenDb = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn().mockResolvedValue({}) }));
+vi.mock("@dpf/db", () => ({ prisma: { mcpApiToken: tokenDb } }));
 
-import { secretMatches, verifyPkceS256 } from "./oauth-tokens";
+import { isCurrentOAuthAccessToken, resolveOAuthAccessToken, secretMatches, verifyPkceS256 } from "./oauth-tokens";
 import { isRedirectUriAllowed, isRegisterableRedirectUri } from "./oauth-clients";
 
 function challengeFor(verifier: string): string {
@@ -15,6 +14,42 @@ function challengeFor(verifier: string): string {
 function freshVerifier(): string {
   return randomBytes(48).toString("base64url"); // 64 chars, within 43..128
 }
+
+describe("shared OAuth token lifetime", () => {
+  const now = Date.now();
+  const live = { kind: "oauth_access", revokedAt: null, expiresAt: new Date(now + 1),
+    oauthClient: { revokedAt: null } };
+  it("accepts an unrevoked token before its expiry", () => {
+    expect(isCurrentOAuthAccessToken(live, now)).toBe(true);
+  });
+  it("refuses the exact expiry boundary", () => {
+    expect(isCurrentOAuthAccessToken(live, now + 1)).toBe(false);
+  });
+  it("refuses token and client revocation independently", () => {
+    expect(isCurrentOAuthAccessToken({ ...live, revokedAt: new Date(now) }, now)).toBe(false);
+    expect(isCurrentOAuthAccessToken({ ...live, oauthClient: { revokedAt: new Date(now) } }, now)).toBe(false);
+  });
+  it("does not accept a PAT as OAuth authority", () => {
+    expect(isCurrentOAuthAccessToken({ ...live, kind: "pat" }, now)).toBe(false);
+  });
+  it("refuses an OAuth token whose client was deleted or is unavailable", () => {
+    expect(isCurrentOAuthAccessToken({ ...live, oauthClient: null }, now)).toBe(false);
+    expect(isCurrentOAuthAccessToken({ ...live, oauthClient: undefined }, now)).toBe(false);
+  });
+});
+
+describe("OAuth bearer client boundary", () => {
+  it.each([false, true])("resolves only a present client (deleted=%s)", async (deleted) => {
+    tokenDb.findUnique.mockResolvedValue({ id: "token", userId: "user", agentId: null,
+      kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      resource: "http://127.0.0.1:3000/api/mcp/v1", publicScopes: ["dpf.work"],
+      scope: "write", scopes: ["backlog_write"],
+      oauthClient: deleted ? null : { id: "client", oAuthClientId: "client", revokedAt: null } });
+    const resolved = await resolveOAuthAccessToken("dpfoat_test_fixture", "http://127.0.0.1:3000");
+    if (deleted) expect(resolved).toBeNull();
+    else expect(resolved?.resolved.tokenId).toBe("token");
+  });
+});
 
 describe("PKCE S256 verification", () => {
   it("accepts a correct verifier", () => {

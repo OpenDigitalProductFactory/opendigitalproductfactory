@@ -4,6 +4,38 @@ status: active
 
 # Coordinated Workrooms — every room has an owner, and someone watches every room
 
+## Stall-query repair (BI-70B2ED84, 2026-09-21)
+
+Observed: ten concurrent stall-attention reads accumulated for up to twenty
+minutes while the portal displayed its loading skeleton. Cancelling nine reads
+and reloading restored Operations; health checks alone had remained green.
+
+The existing activity trail remains authoritative. Filter terminal/archived
+rooms before ranking their ticks, compute the first advancing tick once per
+room, then count refusal ticks before that boundary. This replaces a correlated
+full-history scan per tick with grouped relational operations. No table, index,
+writer, grant, or new attention policy is introduced. Missing/null actions still
+reset a streak; pause and escalation share the existing threshold of four.
+
+Acceptance: PostgreSQL fixtures cover resets, mixed actions, terminal exclusion,
+and growing histories; the query plan has no correlated subplan; 40,000 ticks
+finish within a five-second statement budget. Preserve descending streak order
+and the 100-room limit. Run the PostgreSQL suite with
+`DPF_SQL_TEST_DATABASE_URL` pointing to the governed verification target (the
+suite forces read-only transactions and uses CTE fixtures). Verify the deployed
+portal after the canonical release. Temporary cancellation is not deployment.
+
+Implementation sequence: reproduce the old plan and timeout, replace only the
+query aggregation, run source and real PostgreSQL checks, publish through the
+protected PR path, then include the merged fix in the coordinated release.
+
+Read-only verification on 2026-09-21: the old 40,000-tick fixture exceeded its
+five-second statement timeout; the replacement has no correlated subplan and
+finishes within budget. The replacement over the live history ranked 67,141
+rows and returned 73 stalled rooms in 161 ms. This verifies the SQL, not its
+deployment. The PostgreSQL regression suite also runs automatically against
+the existing CI database when `CI=true`.
+
 **Epics:** `EP-WORKFORCE-TRANSITION` · `EP-WORK-CONVERGENCE` · `EP-32B0E693` (capability completeness)
 **Predecessor:** [Proactive Workrooms](2026-08-29-proactive-workrooms-design.md) — that design made rooms *wake*; this one makes them *owned and coordinated*
 **Kernel consult:** `DI-306B742EFD74` — `derive-with-explicit-override`, composite 12.061, margin

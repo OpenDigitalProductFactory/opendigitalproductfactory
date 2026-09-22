@@ -137,6 +137,17 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-guard-conformance-marks.test.mjs"),
       node("scripts/check-guard-conformance-marks.mjs"),
     ]),
+    // BI-FACB7C05 / BI-B6433DC6. `git diff <base>...HEAD` exits 128 with EMPTY
+    // stdout when the base cannot be resolved, so a guard whose wrapper collapses
+    // a failed git call into "" reports "nothing changed" — a clean line from a
+    // guard that never saw the diff. The class was closed by hand four times and
+    // came back each time, most recently on two --diff-filter=AM holdouts the
+    // ten-guard sweep missed while claiming completeness. This guard detects the
+    // shape statically so the next one cannot land.
+    guard("guard-diff-honesty", "Guard Diff Honesty", [
+      node("--test", "scripts/check-guard-diff-honesty.test.mjs"),
+      node("scripts/check-guard-diff-honesty.mjs"),
+    ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
       // Drives the real POSIX guard under bash: a cached binary path goes stale on
@@ -152,6 +163,16 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // out of the install dir must ship in the image's /dpf-release-assets.
       conformanceTest("scripts/check-release-asset-contract.test.mjs"),
       node("--test", "scripts/installer/local-model-policy-contract.test.mjs"),
+      // BI-FA2C46D7: the PKI bootstrap and toolchain bootstrap ARE release assets
+      // (the image copies them by name). Pins, in both the Bash and PowerShell
+      // twins, that the portal leaf is issued for a year on a provisioner whose
+      // claims allow it, that the toolchain bootstrap persists the organization
+      // root + https endpoint beside the token, and that the session-start
+      // health hook reads the OAuth challenge on https. The PKI contract test
+      // rejoins CI here: it had been allowlisted while two of its assertions
+      // were stale (they now read compose-chain.ps1).
+      conformanceTest("scripts/installer/mcp-loopback-tls-contract.test.mjs"),
+      conformanceTest("scripts/installer/pki-contract.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -243,6 +264,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/pr-health.test.mjs",
+        "scripts/check-stuck-auto-merge.test.mjs",
         "scripts/check-failure-readiness.test.mjs",
         "scripts/check-ci-build-cache.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
@@ -271,6 +293,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/gate-context.test.mjs",
+        "scripts/gate-wait.test.mjs",
+        "scripts/gate-local.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
       ),
       // Split out of the command above because these three read the real
@@ -284,9 +308,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/report-principle-vectors.test.mjs",
         "scripts/check-authoring-cost-dimensions.test.mjs",
         "scripts/pre-push-gate-slot-contract.test.mjs",
+        "scripts/lib/pre-push-gate-infrastructure-probe.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
+      // BI-78B653D5: the gate's credential resolution (client_credentials
+      // first, PAT until retirement, actionable refusal) against a loopback
+      // stub authorization server.
+      node("--test", "scripts/lib/mcp-credential.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -446,6 +475,16 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
     ], { inputs: ["code"] }),
+    // BI-25EF1456: a "use client" module that reaches @dpf/db / server-only /
+    // a Node built-in through a lib import passes vitest and tsc and fails only
+    // `next build` ("Module not found: fs"), twenty minutes into CI. Diff-scoped:
+    // only client modules the change affects are walked. The touched-route
+    // sweep beside it is a local convenience, not a gate; only its logic is tested.
+    guard("client-server-boundary-guard", "Client/Server Boundary Guard", [
+      node("--test", "scripts/check-no-server-imports-in-client.test.mjs"),
+      node("--test", "scripts/ux-sweep-touched.test.mjs"),
+      node("scripts/check-no-server-imports-in-client.mjs"),
+    ], { inputs: ["code"] }),
     // BI-5CC4159D: `new URL(..., import.meta.url).pathname` is "/D:/..." on
     // Windows, so every filesystem call built on it fails on every Windows host
     // while Linux CI stays green. Third recurrence (#4736, workroom-stall,
@@ -568,6 +607,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-no-unattributable-deferral.mjs"),
     ], { inputs: ["code"] }),
     guard("janitor-tests", "Janitor Tests", [
+      // BI-062F5687: a guard-run git fixture must never inherit the hook's
+      // GIT_DIR; runs the janitor freshness fixture under one, against the live
+      // tree, and proves the inherited repository is untouched.
+      conformanceTest("scripts/lib/git-hook-env.test.mjs"),
       node(
         "--test",
         "scripts/lib/runtime-artifact-janitor.test.mjs",
@@ -647,6 +690,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // reads the repository's own hook files, so it is a conformance assertion
       // and must not be stripped from the host-side preflight (BI-7B249AFE).
       conformanceTest("scripts/hooks/converge-git-hooks.test.mjs"),
+      // BI-9A46E89C. CONFORMANCE, not a plain self-test: one case asserts on the
+      // live hook source (that it never fetches at SessionStart), so stripping it
+      // host-side would remove the only check of a contract that protects session
+      // startup. The hook is also the only thing that tells a session its RULEBOOK
+      // is stale -- a condition the session cannot detect itself, because the
+      // stale AGENTS.md does not know it is stale. 6s.
+      conformanceTest("scripts/hooks/worktree-freshness.test.mjs"),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
     ]),
   ]),

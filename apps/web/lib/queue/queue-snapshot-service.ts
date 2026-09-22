@@ -25,6 +25,19 @@ export interface QueueSnapshotView {
   firstPassYield: number | null;
   slaAttainment: number | null;
   abandonmentRate: number | null;
+  /**
+   * When this queue last ATTEMPTED an item, as opposed to completing one.
+   * Null when the producer records no attempts at all.
+   *
+   * throughput === 0 cannot separate the two failure shapes an operator must
+   * act on differently: work being tried and failing, versus work not being
+   * tried. On the install this was found (2026-09-15) a federation outbox held
+   * 2,011 items with its last attempt 12 days earlier, and read as "no
+   * completions with backlog" — the same phrase a healthy-but-blocked queue
+   * produces. The operator was away from the peer and reasonably read the
+   * backlog as expected; the silence underneath it was not.
+   */
+  lastAttemptAt?: string | null;
   computedAt: string;
 }
 
@@ -46,6 +59,13 @@ const LOW_FIRST_PASS_YIELD = 0.7; // 70% — below this, rework is eating capaci
 const LOW_SLA_ATTAINMENT = 0.8; // 80% on-time
 const HIGH_ABANDONMENT = 0.2; // 20% balk/renege
 const WAIT_P95_SLO_MS = 60 * 60 * 1000;
+/**
+ * How long a queue may hold work without attempting any before it is called
+ * stalled. One hour: long enough that an ordinary backoff or a quiet period is
+ * not mistaken for a stopped consumer, short enough that a stall is caught the
+ * same day rather than the same fortnight.
+ */
+const QUEUE_STALL_MS = 60 * 60 * 1000;
 
 /** Assess a snapshot's health. Pure — no I/O. */
 export function assessQueueHealth(s: QueueSnapshotView): QueueHealthAssessment {
@@ -66,6 +86,23 @@ export function assessQueueHealth(s: QueueSnapshotView): QueueHealthAssessment {
   const noCompletionsWithBacklog = s.depth > 0 && s.throughput === 0;
   if (noCompletionsWithBacklog) reasons.push("no completions with backlog");
 
+  // Not merely failing — not running. A queue with work in it that has not been
+  // TRIED inside the stall window has lost its consumer, and that is a different
+  // fault from a consumer that is trying and being refused. Reported separately
+  // so "my peer is unreachable this week" stays legible next to "nothing has
+  // driven this queue since the third".
+  const stalled = s.depth > 0
+    && s.lastAttemptAt != null
+    && Date.now() - Date.parse(s.lastAttemptAt) > QUEUE_STALL_MS;
+  if (stalled) {
+    const hours = Math.floor((Date.now() - Date.parse(s.lastAttemptAt!)) / 3_600_000);
+    reasons.push(
+      hours >= 24
+        ? `no attempt in ${Math.floor(hours / 24)}d — consumer may have stopped`
+        : `no attempt in ${hours}h — consumer may have stopped`,
+    );
+  }
+
   // Idle: nothing waiting and nothing flowing — not a problem, just quiet.
   if (reasons.length === 0 && s.depth === 0 && s.throughput === 0 && s.arrivals === 0) {
     return { health: "idle", reasons };
@@ -73,7 +110,7 @@ export function assessQueueHealth(s: QueueSnapshotView): QueueHealthAssessment {
   if (reasons.length === 0) return { health: "healthy", reasons };
   // A deep backlog OR two-plus concurrent problems ⇒ at-risk; a single softer
   // signal ⇒ watch.
-  const atRisk = s.depth >= DEEP_BACKLOG_DEPTH || noCompletionsWithBacklog || reasons.length >= 2;
+  const atRisk = s.depth >= DEEP_BACKLOG_DEPTH || noCompletionsWithBacklog || stalled || reasons.length >= 2;
   return { health: atRisk ? "at-risk" : "watch", reasons };
 }
 
@@ -159,11 +196,49 @@ export async function readQueueSnapshots(
 }
 
 /** Snapshots whose health is at-risk (for attention signals / alerts). */
+/**
+ * Latest attempt per queue, read live rather than from the snapshot row.
+ *
+ * QueueMetricSnapshot carries no attempt column and adding one is a migration;
+ * WorkItem.lastAttemptAt is already the authoritative record of when a consumer
+ * last TOUCHED an item, so the stall signal reads it directly. Null for any queue
+ * whose items record no attempt — indistinguishable from a queue that has never
+ * needed one, so the stall check treats null as "no evidence" and stays quiet.
+ */
+export type WorkItemAttemptFinder = {
+  groupBy: (args: never) => Promise<unknown>;
+};
+
+export async function readLastAttemptByQueue(
+  finder: WorkItemAttemptFinder | undefined,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!finder?.groupBy) return out;
+  const rows = (await (finder.groupBy as (a: unknown) => Promise<unknown>)({
+    by: ["queueId"],
+    _max: { lastAttemptAt: true },
+    where: { status: { in: ["queued", "in-progress"] } },
+  })) as Array<Record<string, unknown>>;
+  for (const row of rows) {
+    const queueId = row["queueId"];
+    const max = (row["_max"] as { lastAttemptAt?: unknown } | undefined)?.lastAttemptAt;
+    if (typeof queueId !== "string" || !max) continue;
+    out.set(`cwq:${queueId}`, max instanceof Date ? max.toISOString() : String(max));
+  }
+  return out;
+}
+
 export async function readAtRiskQueues(
-  deps?: QueueSnapshotReadDeps,
+  deps?: QueueSnapshotReadDeps & { workItemFinder?: WorkItemAttemptFinder },
 ): Promise<Array<{ snapshot: QueueSnapshotView; assessment: QueueHealthAssessment }>> {
   const snapshots = await readQueueSnapshots({}, deps);
+  const lastAttempts = await readLastAttemptByQueue(deps?.workItemFinder);
   return snapshots
-    .map((snapshot) => ({ snapshot, assessment: assessQueueHealth(snapshot) }))
+    .map((snapshot) => {
+      const enriched = lastAttempts.has(snapshot.queueKey)
+        ? { ...snapshot, lastAttemptAt: lastAttempts.get(snapshot.queueKey)! }
+        : snapshot;
+      return { snapshot: enriched, assessment: assessQueueHealth(enriched) };
+    })
     .filter((x) => x.assessment.health === "at-risk");
 }

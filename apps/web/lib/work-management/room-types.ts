@@ -238,6 +238,7 @@ export interface WorkroomView {
   work: WorkroomWorkView;
   context: WorkroomContextView;
   receipts: ReceiptEnvelope[];
+  reviewerRuns?: import("./semantic-review-room-projection").ReviewerExecutionObservation[];
   sourceRefs: WorkCaseSourceRef[];
   /**
    * The value stream + lifecycle the room's SUBJECT sits in — the structure the

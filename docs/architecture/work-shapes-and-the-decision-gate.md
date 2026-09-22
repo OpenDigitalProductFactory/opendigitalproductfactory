@@ -309,7 +309,7 @@ The shape registry spans SEVEN modules, merged into `ALL_SHAPES` at runtime:
 | `coworker-standing-shapes-operate.ts` | coworker standing work in the `operate` stream — split when the file above reached its 800-LOC ceiling |
 | `coworker-standing-shapes-craft.ts` | the read-and-propose craft roles, whose shapes all close on a human gate because their grants withhold the write |
 | `delivery-shapes.ts` | the five delivery shapes: size and what each owes before it is done (BI-B90F7CBB) |
-| `orchestration-shapes.ts` | one cycle per IT4IT value stream, for the value-stream orchestrators |
+| `orchestration-shapes.ts` | one cycle per IT4IT value stream, plus the two cross-cutting shapes that sit ACROSS the streams (the COO standup and the finance position) |
 
 A static reader must consult all seven. (This sentence and the count above have
 themselves drifted twice — the table said "three" while listing five. That is the
@@ -817,6 +817,20 @@ confident falsehood — which is why the governed-evidence requirement is the lo
 -bearing guard here, not the prompt.
 
 ## Related references
+
+The room read model carries bounded reviewer execution observations alongside
+its versioned shape. TaskRun and TaskNode identities, requester, recorded wait,
+next action and read time remain separate from prescribed stage transitions.
+Operations Map and the room share recovery-budget parsing and the same recovery
+action; displaying either grants no authority. A completed checkpoint is not a
+verified verdict, and a provider-truncated response cannot establish one.
+
+Human accountability uses the same bounded lineage reader in the room and drive.
+Its unresolved frontier survives projection: reaching it without an explicit
+assignment produces a setup gap. Multiple responsibility parents also require
+correction, as PWA-04 specifies. Neither condition establishes organization-owner
+fallback or grants execution authority.
+
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
 - [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI and the composition rule

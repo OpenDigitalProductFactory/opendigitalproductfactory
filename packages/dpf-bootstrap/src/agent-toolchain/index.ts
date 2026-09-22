@@ -39,7 +39,13 @@ export {
 export {
   planMcpReadinessProbe,
   interpretMcpReadinessResponse,
+  interpretScopeCoverageProbe,
+  interpretTokenAuthProbe,
+  SCOPE_COVERAGE_PROBE,
+  TOKEN_AUTH_PROBE,
   type McpReadinessProbePlan,
+  type ScopeCoverageResult,
+  type TokenAuthProbeResult,
 } from "./mcp-readiness-probe";
 
 export {

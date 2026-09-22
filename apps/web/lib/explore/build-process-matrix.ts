@@ -1,3 +1,4 @@
+import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // apps/web/lib/explore/build-process-matrix.ts
 //
 // Right-sizing matrix for Build Studio. Maps (work-type, work-size) -> a
@@ -88,6 +89,9 @@ export const GATE_REQUIREMENTS = [
   "happyPathIntake-ready",
 ] as const;
 export type GateRequirement = (typeof GATE_REQUIREMENTS)[number];
+
+import { GATE_REQUIREMENT_DISPOSITION } from "./phase-gate-disposition";
+export { GATE_REQUIREMENT_DISPOSITION }; // classification lives there (module-size ratchet)
 
 // ─── Lifecycle policy ───────────────────────────────────────────────────────
 
@@ -457,11 +461,11 @@ function escalatePolicy(
  * to keep this module decoupled from govern/risk-posture; an unknown value is
  * treated as the balanced (no-floor) default.
  */
-// Bare "card"/"charge" are deliberately excluded — they over-match benign UI
-// copy ("dashboard card", "charge up"). Payment exposure is caught by the
-// billing/payment/PCI/cardholder/credit-card terms instead.
+// Bare "card"/"charge"/"token" are deliberately excluded — they over-match benign
+// prose ("dashboard card", "charge up", LLM "token/cost"). Payment and credential
+// exposure are caught by the billing/PCI/card and auth/api/bearer-token terms.
 const HIGH_SENSITIVITY_PATTERN =
-  /\b(auth|authn|authz|authentication|authorization|login|sign[- ]?in|password|credential|secret|token|api[- ]?key|billing|payment|invoice|pci|cardholder|credit[- ]?card|debit[- ]?card|customer[- ]?data|pii|personal[- ]?data|gdpr|hipaa|security|vulnerab|encrypt|crypto|kernel|governance|rbac|permission|access[- ]?control|compliance)\b/i;
+  /\b(auth|authn|authz|authentication|authorization|login|sign[- ]?in|password|credential|secret|(?:auth|access|bearer|refresh|session|oauth|api)[- ]?tokens?|api[- ]?key|billing|payment|invoice|pci|cardholder|credit[- ]?card|debit[- ]?card|customer[- ]?data|pii|personal[- ]?data|gdpr|hipaa|security|vulnerab|encrypt|crypto|kernel|governance|rbac|permission|access[- ]?control|compliance)\b/i;
 const ELEVATED_SENSITIVITY_PATTERN =
   /\b(database|migration|schema|prisma|integration|external|webhook|email|outbound|federation|edge|endpoint|deploy|infrastructure)\b/i;
 
@@ -634,7 +638,7 @@ import type { FixContext, ReviewResult } from "./feature-build-types";
 
 type GateEvidence = Record<string, unknown>;
 
-export type RequirementResult = { allowed: true } | { allowed: false; reason: string };
+export type RequirementResult = { allowed: true } | { allowed: false; reason: string; disposition?: OutcomeDisposition };
 
 function missingHappyPathAnchorsFromState(state: ReturnType<typeof normalizeHappyPathState>): string[] {
   const missing: string[] = [];
@@ -665,6 +669,7 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
           reason: isFix
             ? "Fix review failed. Revise the diagnosis and re-run the review before advancing."
             : describeDesignReviewFailure(review),
+          disposition: "refused", // a review that RAN and said no is a verdict
         };
       }
       return { allowed: true };
@@ -676,6 +681,7 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
         return {
           allowed: false,
           reason: "Fix review failed. Revise the diagnosis and re-run the review before advancing.",
+          disposition: "refused",
         };
       }
       return { allowed: true };
@@ -697,7 +703,7 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       const planReview = evidence.planReview as ReviewResult | undefined;
       if (!planReview) return { allowed: false, reason: "Plan review is required before building." };
       if ((planReview as { decision?: string }).decision === "fail") {
-        return { allowed: false, reason: describePlanReviewFailure(planReview) };
+        return { allowed: false, reason: describePlanReviewFailure(planReview), disposition: "refused" };
       }
       return { allowed: true };
     }
@@ -733,7 +739,8 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       const status = evidence.uxVerificationStatus as
         | "running" | "complete" | "failed" | "skipped" | null | undefined;
       if (status === "running") {
-        return { allowed: false, reason: "UX verification is still running. Retry in a moment." };
+        // Not finished, so nothing was determined: re-run unchanged (AGENTS.md §4).
+        return { allowed: false, reason: "UX verification is still running. Retry in a moment.", disposition: "inconclusive" };
       }
       return { allowed: true };
     }
@@ -824,7 +831,11 @@ export function checkPhaseGate(
 
   for (const req of required) {
     const result = checkRequirement(req, evidenceWithVerb);
-    if (!result.allowed) return result;
+    if (!result.allowed) {
+      // The branch's own answer wins where it knows more; otherwise the
+      // requirement's declared kind, which is total by construction.
+      return { ...result, requirement: req, disposition: result.disposition ?? GATE_REQUIREMENT_DISPOSITION[req] };
+    }
   }
   return { allowed: true };
 }
