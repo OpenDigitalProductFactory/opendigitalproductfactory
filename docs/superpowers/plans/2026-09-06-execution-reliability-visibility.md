@@ -1014,3 +1014,7 @@ LocalTime, the original sixty-second expiry and read-only Refresh state action.
 Current/historical request labels and correlated receipt summaries remain inside
 Observed execution. The updated UX manifest covers both changed components.
 The385-word limit remains; the next protected sweep must verify the result.
+
+### Captured route reading load, 2026-09-22
+
+Protected run 35673719251 measured 392 arrival words against the retained 385 baseline. Its captured text omits the live freshness sentence and timestamp numbers; compacting those did not change the count. Under DI-584304A4B6C8, shorten the shared workforce accountability explanation from 23 to 12 words, preserving the distinction between answering for outcomes, coordination, and permissions. Owner identity and missing-owner guidance remain visible. The final protected route measurement is still required; no baseline increase or passed runtime claim is made. This copy clarification needs no separate user-guide change.
