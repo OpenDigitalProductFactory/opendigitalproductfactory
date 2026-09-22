@@ -5,8 +5,7 @@
   "scope": {
     "files": [
       "apps/web/components/workspace/workroom/ProjectionFreshness.tsx",
-      "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx",
-      "apps/web/components/workspace/workroom/RoomWorkforcePanel.tsx"
+      "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx"
     ]
   },
   "evidence": {
