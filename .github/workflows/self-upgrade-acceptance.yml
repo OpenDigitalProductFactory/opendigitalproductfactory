@@ -214,6 +214,19 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             candidate_ref="refs/pull/${EVENT_PR_NUMBER}/merge"
           fi
+          # BI-DC04048A: when the runner is reclaimed mid-step nothing after it
+          # runs — no artifact upload, no always() step — but THIS step's log
+          # survives. Sample into it every 20 s so the last lines before a
+          # shutdown name the memory and disk state that preceded it.
+          ( while true; do
+              printf '[resources %s] mem: %s | disk: %s | docker: %s\n' \
+                "$(date -u +%T)" \
+                "$(free -m | awk 'NR==2{printf "%s/%s MB used, %s avail", $3, $2, $7}')" \
+                "$(df -h / | awk 'NR==2{printf "%s used of %s (%s)", $3, $2, $5}')" \
+                "$(docker system df --format '{{.Type}} {{.Size}} ({{.Reclaimable}})' 2>/dev/null | tr '\n' ';')"
+              sleep 20
+            done ) &
+          sampler=$!
           node scripts/test-n-minus-one-upgrade.mjs \
             --base-sha "${{ steps.baseline.outputs.base_sha }}" \
             --candidate-sha "$GITHUB_SHA" \
@@ -223,6 +236,7 @@ jobs:
             --candidate-ref "$candidate_ref" \
             --project "$DPF_N1_PROJECT" \
             --evidence-dir "$DPF_N1_EVIDENCE"
+          kill "$sampler" 2>/dev/null || true
       # BI-D47955AF: deliberately sends NO DPF_HOST_* env, because the real N-1 caller
       # (a portal built before the host-identity contract) cannot send it. Readiness must
       # derive identity from the mounted install-state or every existing install wedges.
