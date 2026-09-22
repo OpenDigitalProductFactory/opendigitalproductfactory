@@ -142,3 +142,34 @@ describe("initiative-readiness.v3 — gates keyed by (shape, sensitivity, target
     }
   });
 });
+
+// BI-BD60DC91: raising a FIX to large produced a requirement with no legal
+// route. `large` delegates to the v2 profile tables, and the fix profile there
+// owes OBJECTIVE_BASELINE_REQUIRED at completion while carrying no
+// SPEC_APPROVAL_REQUIRED gate to mint it — spec-approval refuses a fix-profile
+// item with CLASSIFICATION_REQUIRED. Proven live on BI-1F69D3F8, where the only
+// remaining exit was to relabel a UX correction as a feature.
+describe("a sensitivity raise never lands a profile in a table it cannot satisfy", () => {
+  it("caps a fix at medium, whose baseline the author can supply from the item body", () => {
+    const highFix = evaluateInitiativeReadiness(facts({ shape: "small", sensitivity: "high", profile: "fix" }), "completion");
+    expect(highFix.shapeDecision).toMatchObject({ declared: "small", effective: "medium", raised: true });
+    // Medium's baseline lane, not large's spec-approval lane.
+    const baseline = highFix.unmet.find((entry) => entry.code === "OBJECTIVE_BASELINE_REQUIRED");
+    expect(baseline?.accountableRole).toBe("product-owner");
+    expect(baseline?.nextAction).toMatch(/item body/);
+    expect(codes(highFix)).not.toContain("SPEC_APPROVAL_REQUIRED");
+    // The raise still bites: medium owes an independent acceptance receipt.
+    expect(highFix.unmet.find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED")?.accountableRole).toBe("acceptance-reviewer");
+  });
+
+  it("leaves every other profile's range untouched", () => {
+    expect(effectiveShape("small", "high", "feature")).toBe("large");
+    expect(effectiveShape("medium", "elevated", "feature")).toBe("large");
+    expect(effectiveShape("small", "high")).toBe("large");
+    // A fix already declared large is not lowered — sensitivity never lowers.
+    expect(effectiveShape("large", "high", "fix")).toBe("large");
+    expect(effectiveShape("medium", "elevated", "fix")).toBe("medium");
+    expect(effectiveShape("small", "elevated", "fix")).toBe("medium");
+    expect(effectiveShape("break-fix", "high", "fix")).toBe("break-fix");
+  });
+});
