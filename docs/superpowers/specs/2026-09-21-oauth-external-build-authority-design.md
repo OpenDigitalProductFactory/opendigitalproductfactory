@@ -198,5 +198,34 @@ rendering, with keyboard, light/dark and refusal/recovery verification.
 
 ## Review status
 
+## Ordered implementation and backlog coverage
+
+Implementation parent: BI-B986A18B. This fix design is its canonical ordered
+implementation artifact; the companion plan is explanatory only.
+
+1. BI-B986A18B: consent binding, code/access/refresh custody and safe recovery
+   implement C1/C2 and F1-F3; verify V1-V3/V8. These are atomic internal steps.
+2. BI-1E56D891: shared current-human operation policy, queue attribution and
+   the explicit external development grant profile implement C3; verify V6/V7.
+   This is independently shippable and is not a new authority substrate.
+3. BI-D4C110BC: narrowed task credentials and exact build/workroom association
+   implement C4/F4; verify V4/V5. Integrate after identity and operation policy.
+4. BI-D6D79AC4: human-owned connection management and recovery presentation
+   integrate F2 with the existing connection UI; verify V2/V9 after step 1.
+5. BI-B986A18B acceptance: exercise V1-V9 on the deployed candidate, reusing
+   BI-FB58767A's already-merged OAuth handoff repair. No phase grants room access
+   automatically. Formal live coverage receipt is pending.
+
+### Reproduction evidence
+
+On source ee44d214b7cbbefc9725121b7de0b562c0999282, the new isolated
+oauth-identity-binding.test.ts reproducer failed: createAuthorizationCode
+omits authorityBindingId from its persisted data. The existing oauth-security,
+oauth-authorize-request and oauth-scope-map suites passed 74 tests in the same
+worktree. Those runs distinguish binding loss from broken PKCE/request parsing
+or scope mapping. They do not establish a passing implementation or live proof.
+
+## Review state
+
 Draft for immutable design review. No implementation, migration or acceptance
 gate has passed. Formal baseline and coverage receipts remain prerequisites.
