@@ -178,6 +178,25 @@ export const GOLDEN_SCENARIOS: GoldenScenario[] = [
       },
     ],
   },
+  {
+    id: "adopt-vs-absorb-capability",
+    rationale:
+      "Founder direction 2026-09-22 (absorb-dont-adopt commandment): a capability an open-source project already provides. Running the upstream stack beside the platform is faster, better proven, lower-blast and less operator effort; absorbing it into owned substrate is slower but removes the dependency. The kernel must prefer absorption. If this flips, the corpus has drifted back toward assembling rather than hybridizing.",
+    expectedWinner: "absorb-into-spine",
+    marginFloor: 0.3,
+    options: [
+      {
+        id: "adopt-upstream-stack",
+        description: "Run the upstream project as a pinned third-party service beside DPF — fast to value and mature, but a new always-on dependency the platform does not own.",
+        features: { speed_to_value: 0.9, evidence_density: 0.85, long_term_maintainability: 0.6, schema_grounding: 0.45, reusability: 0.6, operational_independence: 0.4, vendor_lock_in: 0.6, blast_radius: 0.2, operator_effort: 0.3, cost_efficiency: 0.6, governance_compliance: 0.7 },
+      },
+      {
+        id: "absorb-into-spine",
+        description: "Absorb the capability into substrate DPF already owns behind a platform contract, retiring the packages it replaces — slower, but the dependency surface shrinks.",
+        features: { speed_to_value: 0.25, evidence_density: 0.55, long_term_maintainability: 0.8, schema_grounding: 0.75, reusability: 0.7, operational_independence: 0.9, vendor_lock_in: 0.1, blast_radius: 0.5, operator_effort: 0.6, cost_efficiency: 0.6, governance_compliance: 0.6 },
+      },
+    ],
+  },
 ];
 
 // ─── Scoring + snapshot shape ────────────────────────────────────────────────

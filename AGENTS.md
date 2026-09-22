@@ -98,6 +98,7 @@ Tooling detail, hygiene cadence and the enforced-gate list: [backlog & planning 
 
 Checklist detail and worked examples: [design research runbook](docs/architecture/design-research-runbook.md). Per-tool setup and invocation: [contributor procedure runbook](docs/architecture/contributor-procedure-runbook.md).
 
+- **Absorb, don't adopt; the dependency surface only shrinks.** A package, image, service or subscription that is added must retire more than it adds, or justify itself against an absorption option. **Commandment tier.** → [kernel principle](docs/founder-kernel/wiki/principles/absorb-dont-adopt.md)
 - **Evaluate an external tool before adopting it** — security, architecture fit, compliance and integration — via the `tool-evaluation` skill. → [kernel principle](docs/professions/software-engineer/wiki/tool-evaluation-pipeline.md)
 - **Every new feature spec must include a "Research & Benchmarking" section before finalization** — compare 2–3 open-source leaders and state what DPF adopts or rejects. → [kernel principle](docs/founder-kernel/wiki/principles/design-research-required.md)
 - **Finalizing a spec runs the §1 check at spec altitude:** deployment contracts, canonical identity, no parallel utilities, no second home for a rule already stated here or in a kernel principle.
