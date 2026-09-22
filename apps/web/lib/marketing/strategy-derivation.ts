@@ -226,3 +226,90 @@ export function buildConstraints(input: {
   if (cleanText(input.companyStage)) constraints.productMaturity = input.companyStage;
   return Object.keys(constraints).length > 0 ? constraints : null;
 }
+
+/** A persisted strategy's seedable fields, as stored. */
+export type PersistedStrategySeedFields = {
+  targetSegments?: unknown;
+  idealCustomerProfiles?: unknown;
+  entryOffers?: unknown;
+  serviceTerritories?: unknown;
+};
+
+function stillEmpty(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  return Array.isArray(value) && value.length === 0;
+}
+
+/**
+ * The seed fields a strategy row is still missing (EP-5CC9C184).
+ *
+ * The bootstrap upsert seeds on CREATE and passes `update: {}`, so a row that
+ * predates the archetype seed never receives it. On the reference install the
+ * strategy row was created 2026-08-24 and still read
+ * `targetSegments 0 | idealCustomerProfiles 0` a month later, while the seed
+ * logic sat one branch away — which is the install whose marketing coworker
+ * produced nothing.
+ *
+ * Backfill is strictly additive. A field the organization has already answered
+ * is never touched, because a derived default must never overwrite an observed
+ * fact — the same rule the seed descriptions carry in their own labelling. A
+ * field that is empty was never an answer, so filling it takes nothing away.
+ */
+export function backfillableSeedFields(
+  existing: PersistedStrategySeedFields,
+  derived: {
+    targetSegments: NamedItem[];
+    idealCustomerProfiles: Profile[];
+    entryOffers: Offer[];
+    serviceTerritories: Territory[];
+  },
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (stillEmpty(existing.targetSegments) && derived.targetSegments.length > 0) {
+    patch["targetSegments"] = derived.targetSegments;
+  }
+  if (
+    stillEmpty(existing.idealCustomerProfiles)
+    && derived.idealCustomerProfiles.length > 0
+  ) {
+    patch["idealCustomerProfiles"] = derived.idealCustomerProfiles;
+  }
+  if (stillEmpty(existing.entryOffers) && derived.entryOffers.length > 0) {
+    patch["entryOffers"] = derived.entryOffers;
+  }
+  if (stillEmpty(existing.serviceTerritories) && derived.serviceTerritories.length > 0) {
+    patch["serviceTerritories"] = derived.serviceTerritories;
+  }
+  return patch;
+}
+
+/**
+ * Read the persisted strategy and return only the seed fields it still lacks.
+ * Kept here so lib/marketing.ts stays inside its size ratchet.
+ */
+export async function resolveSeedBackfill(
+  store: {
+    findUnique(args: {
+      where: { organizationId: string };
+      select: Record<string, boolean>;
+    }): Promise<PersistedStrategySeedFields | null>;
+  },
+  organizationId: string,
+  derived: {
+    targetSegments: NamedItem[];
+    idealCustomerProfiles: Profile[];
+    entryOffers: Offer[];
+    serviceTerritories: Territory[];
+  },
+): Promise<Record<string, unknown>> {
+  const existing = await store.findUnique({
+    where: { organizationId },
+    select: {
+      targetSegments: true,
+      idealCustomerProfiles: true,
+      entryOffers: true,
+      serviceTerritories: true,
+    },
+  });
+  return existing ? backfillableSeedFields(existing, derived) : {};
+}

@@ -1,3 +1,4 @@
+import { backfillableSeedFields } from "@/lib/marketing/strategy-derivation";
 import { describe, it, expect } from "vitest";
 import {
   getPlaybook,
@@ -213,5 +214,48 @@ describe("seed segments stay inside the surface's word budget", () => {
     for (const segment of leaf.seedSegments ?? []) {
       expect(segment.description.split(/\s+/).length, segment.name).toBeLessThanOrEqual(12);
     }
+  });
+});
+
+describe("seed backfill is additive (EP-5CC9C184)", () => {
+  const derived = {
+    targetSegments: [{ name: "Adopters", description: "d (archetype default)" }],
+    idealCustomerProfiles: [{ name: "Adopters", traits: [], painPoints: [] }],
+    entryOffers: [],
+    serviceTerritories: [],
+  };
+
+  it("fills a field the organization never answered", () => {
+    // The reference install's strategy row was created 2026-08-24 and still
+    // read 0 segments a month later, because the bootstrap upsert seeds on
+    // CREATE and passed `update: {}`.
+    expect(backfillableSeedFields({ targetSegments: [] }, derived)).toEqual({
+      targetSegments: derived.targetSegments,
+      idealCustomerProfiles: derived.idealCustomerProfiles,
+    });
+  });
+
+  it("never overwrites an answer the organization already gave", () => {
+    const observed = [{ name: "Local shelters", description: "what we actually see" }];
+    expect(
+      backfillableSeedFields(
+        { targetSegments: observed, idealCustomerProfiles: observed },
+        derived,
+      ),
+    ).toEqual({});
+  });
+
+  it("treats null as unanswered and an empty array as unanswered", () => {
+    expect(backfillableSeedFields({ targetSegments: null }, derived).targetSegments)
+      .toEqual(derived.targetSegments);
+  });
+
+  it("adds nothing when the archetype seeds nothing", () => {
+    expect(
+      backfillableSeedFields(
+        { targetSegments: [] },
+        { targetSegments: [], idealCustomerProfiles: [], entryOffers: [], serviceTerritories: [] },
+      ),
+    ).toEqual({});
   });
 });

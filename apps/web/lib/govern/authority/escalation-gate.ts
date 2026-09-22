@@ -65,11 +65,27 @@ export const DAMAGING_SENSITIVITIES: readonly PrincipalSensitivity[] = ["restric
  *    `propose` supplies NO steering, so a room can only narrow, never widen.
  *  • wwmd — a recorded `principle_decide` outcome that is autonomy-eligible
  *    for this exact action.
+ *  • scheduled-mandate — the turn is a governed scheduled task whose registry
+ *    entry names this exact tool among the writes its cadence authorizes.
+ *    Installing the cadence IS the recorded decision: an operator declared what
+ *    this coworker may write, how often, and with which tool, before any run
+ *    existed. Server-resolved from the self-task registry, never asserted by a
+ *    model or a client, and scoped to the declared tools alone — a scheduled
+ *    task gets no licence for anything it did not declare.
+ *
+ *    This is the branch a cadence needs to function at all. A scheduled run
+ *    carries no Workroom (the scheduler never sets one), so before this it
+ *    reached `unsteered-side-effect` and minted an envelope on every write —
+ *    to a person who, on an unattended cadence, is by definition not there.
+ *    Measured on the reference install: the marketing coworker reached its
+ *    brief-writing tool on 2026-09-21, was parked on a fifteen-minute envelope
+ *    twice, and produced nothing, as it had every week since 2026-08-31.
  */
 export const ESCALATION_STEERING = [
   "independent-reviewer",
   "room-authority",
   "wwmd",
+  "scheduled-mandate",
   "none",
 ] as const;
 export type EscalationSteering = (typeof ESCALATION_STEERING)[number];
@@ -80,6 +96,7 @@ export const ESCALATION_REASON_CODES = [
   "steered-by-independent-reviewer",
   "steered-by-room-authority",
   "steered-by-wwmd",
+  "steered-by-scheduled-mandate",
   "damaging-consequence",
   "damaging-sensitivity",
   "damaging-work-case",
@@ -138,6 +155,7 @@ const STEERED_REASON: Record<
   "independent-reviewer": "steered-by-independent-reviewer",
   "room-authority": "steered-by-room-authority",
   wwmd: "steered-by-wwmd",
+  "scheduled-mandate": "steered-by-scheduled-mandate",
 };
 
 /**
@@ -196,6 +214,7 @@ export function describeEscalationRule(): string[] {
     `An action is damaging when it declares a consequence (${["outward", "irreversible", "authority"].join(", ")}), when a Work Case declares it consequential, or when its data sensitivity is ${DAMAGING_SENSITIVITIES.join(" or ")}.`,
     "A damaging action is decided by a person; a coworker's steering does not decide damage.",
     `Automated steering is a recorded, server-resolved fact about the action itself: ${ESCALATION_STEERING.filter((s) => s !== "none").join(", ")}.`,
+    "A governed scheduled task steers only the tools its registry entry declares; it gets no licence for anything it did not declare.",
     "A non-damaging action with steering is decided automatically and mints no approval envelope.",
     "A non-damaging action with no steering reaches a human only when it has a side effect; an immediate read never escalates.",
     "A tool declared as a proposal is always put to a person, because that is its declared shape.",

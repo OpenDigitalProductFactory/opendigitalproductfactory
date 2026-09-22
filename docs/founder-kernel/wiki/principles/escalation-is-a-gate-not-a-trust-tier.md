@@ -41,7 +41,11 @@ An action is damaging when it declares a consequence (outward, irreversible, aut
 
 A damaging action is decided by a person; a coworker's steering does not decide damage.
 
-Automated steering is a recorded, server-resolved fact about the action itself: independent-reviewer, room-authority, wwmd.
+Automated steering is a recorded, server-resolved fact about the action itself: independent-reviewer, room-authority, wwmd, scheduled-mandate.
+
+A governed scheduled task steers only the tools its registry entry declares; it gets no licence for anything it did not declare.
+
+A cadence is a recorded decision. Installing one declares what a coworker may write, how often, and with which tool, before any run exists — so a declared write on an unattended cadence is not put to a person who, by definition, is not there. A scheduled run carries no Workroom, so without this it could never reach any steering branch at all: the marketing coworker reached its brief-writing tool on 2026-09-21, was parked on a fifteen-minute approval envelope twice, and produced nothing, as it had every week since 2026-08-31.
 
 A non-damaging action with steering is decided automatically and mints no approval envelope.
 

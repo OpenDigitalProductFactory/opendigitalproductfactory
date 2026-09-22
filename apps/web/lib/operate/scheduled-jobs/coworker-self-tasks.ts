@@ -44,6 +44,8 @@ export type CoworkerSelfTask = {
     balanced: string;
     assertive: string;
   };
+  /** Side-effecting tools this cadence authorizes; see coworker-self-task-mandate.ts. */
+  mandatedTools?: readonly string[];
 };
 
 /**
@@ -95,6 +97,8 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       "Keep it grounded in real saved context; do not invent customers or numbers.",
     ].join("\n"),
     routeContext: "/customer/marketing",
+    // The two writes step 2 of the prompt asks for (BI-6B3DA9DD).
+    mandatedTools: ["create_marketing_campaign_brief", "create_marketing_asset_task"],
     cadence: {
       // Weekly Monday and daily, both at 14:07 UTC — an off-peak minute the
       // allocator is unlikely to collide, and deconflictCron shifts it if it does.
