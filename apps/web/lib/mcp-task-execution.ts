@@ -97,15 +97,33 @@ export async function executeRemoteTaskAttempt(input: {
   });
   const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
   const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
-  const routingConfig = await prisma.agentModelConfig?.findUnique({
-    where: { agentId: modelRoutingAgentId },
-    select: {
-      minimumTier: true,
-      budgetClass: true,
-      pinnedProviderId: true,
-      pinnedModelId: true,
-    },
-  }).catch(() => null) ?? null;
+  const requestedAgentId = parsed.agentId;
+  const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
+  let routingConfig: {
+    minimumTier: string;
+    budgetClass: string;
+    pinnedProviderId: string | null;
+    pinnedModelId: string | null;
+  } | null = null;
+  // An explicit alias is itself an operator-selectable coworker identity, so
+  // its assignment wins. A canonical request keeps the established resolved
+  // slug first because the coworker management surface stores assignments by
+  // slug. Grants and audit remain canonical in both cases.
+  const configAgentIds = requestedAgentId === requestedCanonicalAgentId
+    ? [modelRoutingAgentId, requestedAgentId]
+    : [requestedAgentId, modelRoutingAgentId];
+  for (const configAgentId of new Set(configAgentIds)) {
+    routingConfig = await prisma.agentModelConfig?.findUnique({
+      where: { agentId: configAgentId },
+      select: {
+        minimumTier: true,
+        budgetClass: true,
+        pinnedProviderId: true,
+        pinnedModelId: true,
+      },
+    }).catch(() => null) ?? null;
+    if (routingConfig) break;
+  }
   const modelRequirements = routingConfig
     ? {
         defaultMinimumTier: routingConfig.minimumTier,

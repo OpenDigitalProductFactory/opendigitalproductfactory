@@ -128,6 +128,112 @@ describe("remote task terminal-writer postcondition", () => {
     autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
   });
 
+  it("keeps the requested reviewer alias model assignment while using canonical grants", async () => {
+    const aliasParsed = { ...parsed, agentId: "change-reviewer" };
+    autonomous.resolveAgent.mockResolvedValue({
+      agentId: "AGT-WS-REVIEW",
+      displayName: "Change Reviewer",
+      systemPrompt: "Review independently.",
+      sensitivity: "internal",
+    });
+    db.findModelConfig.mockImplementation(async ({ where }: { where: { agentId: string } }) =>
+      where.agentId === "change-reviewer"
+        ? {
+            minimumTier: "strong",
+            budgetClass: "quality_first",
+            pinnedProviderId: "alternate-provider",
+            pinnedModelId: "alternate-model",
+          }
+        : null,
+    );
+    autonomous.execute.mockResolvedValue({
+      content: "Approved.",
+      executedTools: [{
+        name: writerToolName,
+        result: {
+          success: true,
+          entityId: "receipt-alias-review",
+          data: { receiptId: "receipt-alias-review" },
+        },
+      }],
+    });
+
+    await executeRemoteTaskAttempt({
+      run: { id: "run-alias", taskRunId: "TR-MCP-ALIAS-ROUTING", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-ALIAS", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed: aliasParsed,
+      idempotentReplay: false,
+      capacityAttempt: 1,
+    });
+
+    expect(db.findModelConfig).toHaveBeenCalledWith(expect.objectContaining({
+      where: { agentId: "change-reviewer" },
+    }));
+    expect(autonomous.resolveTools).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: "AGT-WS-REVIEW",
+    }));
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: "AGT-WS-REVIEW",
+      modelRequirements: expect.objectContaining({
+        preferredProviderId: "alternate-provider",
+        preferredModelId: "alternate-model",
+      }),
+    }));
+  });
+
+  it("falls back to the canonical model assignment when the requested alias has none", async () => {
+    const aliasParsed = { ...parsed, agentId: "change-reviewer" };
+    autonomous.resolveAgent.mockResolvedValue({
+      agentId: "AGT-WS-REVIEW",
+      displayName: "Change Reviewer",
+      systemPrompt: "Review independently.",
+      sensitivity: "internal",
+    });
+    db.findModelConfig.mockImplementation(async ({ where }: { where: { agentId: string } }) =>
+      where.agentId === "AGT-WS-REVIEW"
+        ? {
+            minimumTier: "strong",
+            budgetClass: "quality_first",
+            pinnedProviderId: "canonical-provider",
+            pinnedModelId: null,
+          }
+        : null,
+    );
+    autonomous.execute.mockResolvedValue({
+      content: "Approved.",
+      executedTools: [{
+        name: writerToolName,
+        result: {
+          success: true,
+          entityId: "receipt-canonical-review",
+          data: { receiptId: "receipt-canonical-review" },
+        },
+      }],
+    });
+
+    await executeRemoteTaskAttempt({
+      run: { id: "run-canonical", taskRunId: "TR-MCP-CANONICAL-ROUTING", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-CANONICAL", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed: aliasParsed,
+      idempotentReplay: false,
+      capacityAttempt: 1,
+    });
+
+    expect(db.findModelConfig).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: { agentId: "change-reviewer" },
+    }));
+    expect(db.findModelConfig).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { agentId: "AGT-WS-REVIEW" },
+    }));
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      modelRequirements: expect.objectContaining({ preferredProviderId: "canonical-provider" }),
+    }));
+  });
+
   it("parks a duration exit after a failed read retry when the required writer is absent", async () => {
     autonomous.execute.mockResolvedValue({
       content: "The first read failed due to a malformed version string in my call. Retrying with clean, exactly-bound parameters.",
