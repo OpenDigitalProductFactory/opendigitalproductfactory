@@ -24,6 +24,7 @@
 //
 // Called from: reviewDesignDoc success path in mcp-tools.ts (fire-and-forget).
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { denialForNextAttempt, denyAfterUnparseable } from "@/lib/build/plan-generation-retry";
 import { normalizeBuildPlanPaths } from "./build-plan-paths";
@@ -299,7 +300,7 @@ async function runPlanReview(buildId: string, userId: string, log: (s: string) =
  * advanced from ideate → plan. Designed to be called fire-and-forget from the
  * reviewDesignDoc success path; never throws.
  */
-export async function dispatchPlanForApprovedBuild(params: {
+async function dispatchPlanForApprovedBuildInner(params: {
   buildId: string;
   userId: string;
   /** Local-tuning: when a build is RESUMED with an existing plan that already
@@ -559,4 +560,11 @@ export async function dispatchPlanForApprovedBuild(params: {
     try { await log(`Plan dispatch failed: ${msg}`); } catch (_) { /**/ }
     return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
   }
+}
+
+/** Build-phase entry: runs under the autonomous inference origin (BI-2F9DE752). */
+export function dispatchPlanForApprovedBuild(
+  params: Parameters<typeof dispatchPlanForApprovedBuildInner>[0],
+): ReturnType<typeof dispatchPlanForApprovedBuildInner> {
+  return runAsBuildPhase(() => dispatchPlanForApprovedBuildInner(params));
 }

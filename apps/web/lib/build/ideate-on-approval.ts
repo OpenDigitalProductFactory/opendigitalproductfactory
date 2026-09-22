@@ -31,6 +31,7 @@
 //   was a structural success that produced no functional truth. This wires
 //   the structural success to the functional dispatch.
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { classifyRetrySafePreDispatchFailure } from "./build-engine-selection";
@@ -76,7 +77,7 @@ type DispatchOutcome =
  * @param buildId  FB-* semantic build id
  * @param userId   the approving user — used as the actor for the saveBuildEvidence call
  */
-export async function dispatchIdeateForApprovedBuild(params: {
+async function dispatchIdeateForApprovedBuildInner(params: {
   buildId: string;
   userId: string;
   /** Design-review fix loop: prior reviewer issues appended to the research
@@ -920,4 +921,11 @@ export async function dispatchDesignReviewFixLoop(params: {
     await log(`Design fix loop error: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`);
     return { kind: "error", rounds: 0 };
   }
+}
+
+/** Build-phase entry: runs under the autonomous inference origin (BI-2F9DE752). */
+export function dispatchIdeateForApprovedBuild(
+  params: Parameters<typeof dispatchIdeateForApprovedBuildInner>[0],
+): ReturnType<typeof dispatchIdeateForApprovedBuildInner> {
+  return runAsBuildPhase(() => dispatchIdeateForApprovedBuildInner(params));
 }
