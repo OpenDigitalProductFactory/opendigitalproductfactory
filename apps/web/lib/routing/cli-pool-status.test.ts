@@ -29,12 +29,16 @@ vi.mock("@dpf/db", () => {
         }),
         _rows: rows,
       },
+      providerCapacityStatus: {
+        upsert: vi.fn(async ({ create }: { create: Record<string, unknown> }) => create),
+      },
     },
   };
 });
 
 import {
   parseRetryAfterSeconds,
+  parseAbsoluteResetAt,
   recordCliRateLimit,
   recordCliWeeklyQuota,
   captureAnthropicWeeklyQuota,
@@ -341,5 +345,45 @@ describe("formatWeeklyAllocationHint", () => {
       NOW,
     );
     expect(hint).toBeNull();
+  });
+});
+
+describe("dated subscription cap (BI-38064739)", () => {
+  const CAP_TEXT = "banner\nERROR: You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 26th, 2026 8:57 AM.";
+
+  it("parses an absolute 'try again at <date time>' phrase", () => {
+    const at = parseAbsoluteResetAt(CAP_TEXT);
+    expect(at?.toISOString()).toBe("2026-09-26T08:57:00.000Z");
+  });
+
+  it("turns the dated reset into seconds instead of misreading the clock as minutes", () => {
+    const secs = parseRetryAfterSeconds(CAP_TEXT);
+    const expected = Math.ceil((Date.parse("2026-09-26T08:57:00Z") - Date.now()) / 1000);
+    expect(secs).not.toBe(57 * 60);
+    expect(Math.abs((secs ?? 0) - Math.max(0, expected))).toBeLessThan(5);
+  });
+
+  it("records the cap as quota_resets_at capacity on both shared-account providers", async () => {
+    const { prisma } = await import("@dpf/db");
+    const upsert = (prisma as unknown as { providerCapacityStatus: { upsert: ReturnType<typeof vi.fn> } }).providerCapacityStatus.upsert;
+    upsert.mockClear();
+    await recordCliRateLimit("codex-cli", "codex", CAP_TEXT);
+    await vi.waitFor(() => expect(
+      upsert.mock.calls.filter((c) => ((c[0] as { create: { rawSnippet?: string | null } }).create.rawSnippet ?? "").includes("Sep 26th")).length,
+    ).toBeGreaterThanOrEqual(2));
+    type CapUpsert = { where: { providerId: string }; create: { state: string; retryAt: Date; rawSnippet: string | null } };
+    // An earlier test's "try again in 2h" also crosses the pool cap and its
+    // fire-and-forget write can land after mockClear; select this cap's calls.
+    const capCalls = upsert.mock.calls
+      .map((c) => c[0] as CapUpsert)
+      .filter((c) => c.create.state === "quota_resets_at" && (c.create.rawSnippet ?? "").includes("Sep 26th"));
+    expect([...new Set(capCalls.map((c) => c.where.providerId))].sort()).toEqual(["chatgpt", "codex"]);
+    for (const call of capCalls) {
+      // ceil-to-seconds of the parsed instant: within one second of the stated reset.
+      expect(Math.abs(call.create.retryAt.getTime() - Date.parse("2026-09-26T08:57:00Z"))).toBeLessThan(1_500);
+    }
+    // The pool window itself stays capped so a misparse can never pin the pool.
+    const status = await getCliPoolStatus("codex-cli");
+    expect(status!.resetAt!.getTime() - status!.rateLimitedAt!.getTime()).toBeLessThanOrEqual(3_600_000);
   });
 });
