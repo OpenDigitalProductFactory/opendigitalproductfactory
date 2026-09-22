@@ -4,7 +4,7 @@ import { can } from "@/lib/govern/permissions";
 import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
 import type { PublicScope } from "./oauth-public-scopes";
 
-type Db = Prisma.TransactionClient;
+type Db = Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding">;
 export const OAUTH_SETUP_REQUIRED =
   "Reconnect to approve an assistant role before starting work.";
 

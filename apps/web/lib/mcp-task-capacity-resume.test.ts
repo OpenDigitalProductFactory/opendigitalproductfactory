@@ -12,6 +12,7 @@ const db = vi.hoisted(() => ({
   findTaskMessage: vi.fn(),
   findMcpToken: vi.fn(),
   findUser: vi.fn(),
+  findConsent: vi.fn(),
 }));
 const autonomous = vi.hoisted(() => ({
   create: vi.fn(),
@@ -24,6 +25,7 @@ const records = vi.hoisted(() => ({ create: vi.fn() }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    authorityBinding: { findUnique: (...args: unknown[]) => db.findConsent(...args) },
     taskRun: {
       findFirst: (...args: unknown[]) => db.findFirst(...args),
       findUnique: (...args: unknown[]) => db.findUnique(...args),
@@ -89,7 +91,7 @@ beforeEach(() => {
   });
   db.findTaskMessage.mockResolvedValue(null);
   db.findMcpToken.mockResolvedValue(null);
-  db.findUser.mockResolvedValue({ isSuperuser: false, groups: [] });
+  db.findUser.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });
   db.upsertThread.mockResolvedValue({ id: "thread-external" });
   db.update.mockResolvedValue({});
   db.updateMany.mockResolvedValue({ count: 1 });
@@ -303,7 +305,7 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     });
   });
 
-  it.each(["pat", "oauth", "oauth-revoked", "oauth-missing-client", "oauth-expired", "oauth-read"])("revalidates %s on a trusted capacity event", async scenario => {
+  it.each(["pat", "oauth", "oauth-revoked", "oauth-missing-client", "oauth-expired", "oauth-read", "oauth-missing-binding", "oauth-revoked-consent", "oauth-disabled-human"])("revalidates %s on a trusted capacity event", async scenario => {
     const source = scenario === "pat" ? "pat" : "oauth";
     const params = {
       ...immutableParams,
@@ -365,10 +367,13 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
       revokedAt: null,
       expiresAt: scenario === "oauth-expired" ? new Date(0) : null,
       kind: source === "oauth" ? "oauth_access" : "pat",
+      authorityBindingId: scenario === "oauth-revoked-consent" ? "binding" : null,
+      oauthClientId: "client", resource: "https://dpf.example/api/mcp/v1", publicScopes: ["dpf.work"],
       oauthClient: source === "oauth" && scenario !== "oauth-missing-client"
-        ? { revokedAt: scenario === "oauth-revoked" ? new Date() : null } : null,
+        ? { registrationKind: scenario === "oauth-missing-binding" ? "dcr" : "credentials", revokedAt: scenario === "oauth-revoked" ? new Date() : null } : null,
     });
-    db.findUser.mockResolvedValue({ isSuperuser: false, groups: [] });
+    db.findUser.mockResolvedValue({ isActive: scenario !== "oauth-disabled-human", isSuperuser: false, groups: [] });
+    db.findConsent.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
     db.findModelConfig.mockResolvedValue({
@@ -406,7 +411,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         revokedAt: true,
         expiresAt: true,
         kind: true,
-        oauthClient: { select: { revokedAt: true } },
+        agentId: true, authorityBindingId: true, oauthClientId: true, resource: true, publicScopes: true,
+        oauthClient: { select: { revokedAt: true, registrationKind: true } },
       },
     });
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({

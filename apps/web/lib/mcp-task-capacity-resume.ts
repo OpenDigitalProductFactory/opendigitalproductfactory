@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { isCurrentOAuthAccessToken } from "@/lib/auth/oauth-tokens";
+import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
 import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
 import type { UserContext } from "@/lib/permissions";
 import {
@@ -164,15 +164,14 @@ export async function resumeRemoteCoworkerTaskById(
 
   const storedToken = await prisma.mcpApiToken.findUnique({
     where: { id: tokenId },
-    select: { userId: true, capability: true, revokedAt: true, expiresAt: true, kind: true,
-      oauthClient: { select: { revokedAt: true } } },
+    select: { capability: true, ...OAUTH_EXECUTION_AUTHORITY_SELECT },
   });
   if (
     !storedToken
     || storedToken.userId !== existing.userId
     || storedToken.capability !== tokenCapability
     || storedToken.revokedAt !== null
-    || (tokenSource === "oauth" && !isCurrentOAuthAccessToken(storedToken))
+    || (tokenSource === "oauth" && !await isCurrentOAuthExecutionAuthority(storedToken))
     || (storedToken.expiresAt !== null && storedToken.expiresAt <= new Date())
   ) {
     return refusal(taskRunId, "The original MCP token authority is no longer valid.");
@@ -180,9 +179,9 @@ export async function resumeRemoteCoworkerTaskById(
 
   const user = await prisma.user.findUnique({
     where: { id: existing.userId },
-    select: { isSuperuser: true, groups: { include: { platformRole: true } } },
+    select: { isActive: true, isSuperuser: true, groups: { include: { platformRole: true } } },
   });
-  if (!user) return refusal(taskRunId, "The original submitting user no longer exists.");
+  if (!user?.isActive) return refusal(taskRunId, "The original submitting user is no longer active.");
   const userContext: UserContext = {
     userId: existing.userId,
     platformRole: resolveWorkforcePlatformRole(user.groups),

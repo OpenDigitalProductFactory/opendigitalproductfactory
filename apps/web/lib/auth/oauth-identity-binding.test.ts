@@ -9,7 +9,7 @@ const identityDb = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: { oAuthAuthorizationCode: db, ...identityDb } }));
 
 import { resolveOAuthConsent } from "./oauth-identity-binding";
-import { createAuthorizationCode } from "./oauth-tokens";
+import { createAuthorizationCode, isCurrentOAuthExecutionAuthority } from "./oauth-tokens";
 
 describe("OAuth consent identity custody", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -70,5 +70,33 @@ describe("approved coworker identity", () => {
   it("rejects a coworker whose current eligibility was removed", async () => {
     identityDb.agent.findMany.mockResolvedValue([]);
     expect(await resolveOAuthConsent(request)).toBeNull();
+  });
+});
+
+describe("current OAuth execution authority", () => {
+  const token = { kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
+    userId: "human", agentId: "AGT-EXT-CODEX", authorityBindingId: "binding", oauthClientId: "client",
+    resource: "https://dpf.example/api/mcp/v1", publicScopes: ["dpf.work"],
+    oauthClient: { revokedAt: null, registrationKind: "dcr" as const } };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    identityDb.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] });
+    identityDb.agent.findMany.mockResolvedValue([{ id: "agent-row", agentId: token.agentId }]);
+    identityDb.authorityBinding.findUnique.mockResolvedValue({ oauthPurpose: "consent", status: "active",
+      oauthUserId: token.userId, oauthClientId: token.oauthClientId, resourceRef: token.resource,
+      appliedAgentId: "agent-row", appliedAgent: { id: "agent-row", agentId: token.agentId, status: "active", archived: false },
+      grants: [{ grantKey: "dpf.work", mode: "allow" }] });
+  });
+  it("permits still-approved queued work", async () => {
+    expect(await isCurrentOAuthExecutionAuthority(token)).toBe(true);
+  });
+  it.each(["revoked-consent", "disabled-human", "missing-binding", "wrong-agent", "removed-delegation"])("rejects %s before queued execution", async state => {
+    const current = { ...token };
+    if (state === "revoked-consent") identityDb.authorityBinding.findUnique.mockResolvedValue(null);
+    if (state === "disabled-human") identityDb.user.findUnique.mockResolvedValue({ isActive: false });
+    if (state === "missing-binding") current.authorityBindingId = "";
+    if (state === "wrong-agent") current.agentId = "AGT-OTHER";
+    if (state === "removed-delegation") identityDb.agent.findMany.mockResolvedValue([]);
+    expect(await isCurrentOAuthExecutionAuthority(current)).toBe(false);
   });
 });

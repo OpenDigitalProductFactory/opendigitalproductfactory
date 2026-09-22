@@ -88,6 +88,27 @@ export function isCurrentOAuthAccessToken(row: {
     && Boolean(row.oauthClient) && !row.oauthClient?.revokedAt;
 }
 
+/** Fields required to revalidate a persisted OAuth actor before queued work. */
+export const OAUTH_EXECUTION_AUTHORITY_SELECT = {
+  kind: true, revokedAt: true, expiresAt: true, userId: true, agentId: true,
+  authorityBindingId: true, oauthClientId: true, resource: true, publicScopes: true,
+  oauthClient: { select: { revokedAt: true, registrationKind: true } },
+} satisfies Prisma.McpApiTokenSelect;
+
+type OAuthAuthorityRow = Prisma.McpApiTokenGetPayload<{ select: typeof OAUTH_EXECUTION_AUTHORITY_SELECT }>;
+
+/** Admission does not preserve revoked consent while a request waits in a queue. */
+export async function isCurrentOAuthExecutionAuthority(row: OAuthAuthorityRow,
+  db: Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding"> = prisma,
+): Promise<boolean> {
+  if (!isCurrentOAuthAccessToken(row) || !await currentOAuthHuman(row.userId, db)) return false;
+  if (!row.authorityBindingId) return row.oauthClient?.registrationKind === "credentials";
+  if (!row.oauthClientId || !row.resource) return false;
+  const consent = await resolveOAuthConsent({ bindingId: row.authorityBindingId,
+    userId: row.userId, clientId: row.oauthClientId, resource: row.resource, scopes: row.publicScopes }, db);
+  return Boolean(consent && consent.agentId === row.agentId);
+}
+
 /**
  * Resolve a presented bearer credential as an OAuth access token.
  *
