@@ -162,6 +162,7 @@ describe("loadProviderHealth", () => {
         state: true,
         action: true,
         retryAt: true,
+        lastObservedAt: true,
         safeSummary: true,
         isHumanActionRequired: true,
       },
