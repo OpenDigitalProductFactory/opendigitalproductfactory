@@ -8,6 +8,26 @@ const binding = {
 };
 
 describe("PIR evidence context", () => {
+  it("bounds aggregate context without hiding failed observations or provenance", async () => {
+    const findUnique = vi.fn().mockResolvedValue({ id: "item-row" });
+    const findFirst = vi.fn().mockResolvedValue({ id: "room-row", runtimeVerifications: Array.from({ length: 10 }, (_, index) => ({
+      verificationId: `RV-${index}`, status: index === 9 ? "failed" : "passed", createdAt: new Date("2026-09-22"),
+      result: { detail: "x".repeat(4000) }, url: null, evidenceUrl: null,
+    })) });
+    const findMany = vi.fn().mockResolvedValue(Array.from({ length: 20 }, (_, index) => ({
+      id: `activity-${index}`, summary: "Result", recordedAt: new Date("2026-09-22"), recordedByAgentId: "AGT-TEST",
+      payload: { evidenceKind: index === 19 ? "test_fail" : "manual_check", body: "x".repeat(4000), url: null },
+    })));
+    const context = await loadPirEvidenceContext({ workroom: { findFirst }, backlogItem: { findUnique }, backlogItemActivity: { findMany } } as never, binding);
+    expect(context.length).toBeLessThan(17_000);
+    const observations = JSON.parse(context.split("\n").at(-1)!);
+    expect(observations.detailsCompacted).toBe(true);
+    expect(observations.evidence).toHaveLength(20);
+    expect(observations.runtimeVerifications).toHaveLength(10);
+    expect(observations.evidence[19]).toMatchObject({ activityId: "activity-19", evidenceKind: "test_fail", recordedByAgentId: "AGT-TEST" });
+    expect(observations.runtimeVerifications[9]).toMatchObject({ verificationId: "RV-9", status: "failed" });
+    expect(context).toContain("truncated; do not infer omitted evidence");
+  });
   it("includes later live observations with provenance and failure evidence instead of judging deployment from an earlier design", async () => {
     const findFirst = vi.fn().mockResolvedValue({ id: "room-row", backlogItemId: "item-row", runtimeVerifications: [
       { verificationId: "RV-LIVE", kind: "ux", status: "passed", createdAt: new Date("2026-09-22"), completedAt: null,

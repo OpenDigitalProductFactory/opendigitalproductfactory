@@ -1,4 +1,5 @@
 import { sourcePageEndLine, sourcePageNextLine } from "./source-page-lines";
+import { findingEvidenceMatchesRead, type InitiativeFindingEvidence } from "./backlog/initiative-readiness/disposition-contract";
 import {
   normalizeTerminalToolArguments,
   type TerminalToolPolicy,
@@ -38,7 +39,6 @@ type HydrationPage = {
 
 type HydratedTerminalWriterContext = {
   context: string;
-  sourcePage: HydrationPage;
   readerExecutionIds: string[];
   hydratedPageCount: number;
   hydratedCharCount: number;
@@ -367,8 +367,6 @@ export async function hydrateTerminalWriterContext(input: {
       readerExecutionIds: validated.data.ids,
       hydratedPageCount: persistedPages.length,
       hydratedCharCount: persistedAttempt.totalChars,
-      sourcePage: { ...persistedPages[0]!, content: persistedAttempt.content, startLine: 1,
-        endLine: persistedPages.at(-1)!.endLine, hasMore: false, nextCursor: null },
     });
   }
 
@@ -417,8 +415,6 @@ export async function hydrateTerminalWriterContext(input: {
         readerExecutionIds: validated.data.ids,
         hydratedPageCount: pages.length,
         hydratedCharCount: assessment.data.totalChars,
-        sourcePage: { ...pages[0]!.page, content, startLine: 1,
-          endLine: page.endLine, hasMore: false, nextCursor: null },
       });
     }
     cursor = page.nextCursor!;
@@ -428,4 +424,39 @@ export async function hydrateTerminalWriterContext(input: {
     "terminal_writer_context_truncated",
     "The immutable source remained truncated after the bounded hydration budget.",
   );
+}
+
+/** Verify only the cited range; a large artifact must not make a short finding unverifiable. */
+export async function verifyTerminalWriterCitation(input: {
+  policy: TerminalToolPolicy;
+  executions: readonly PersistedTerminalReaderExecution[];
+  evidence: InitiativeFindingEvidence;
+  readPage: ReadPage;
+}): Promise<ActionSuccess<boolean> | TerminalWriterContextFailure> {
+  const validated = validateReaderExecutions(input.policy, input.executions);
+  if (!validated.ok) return validated;
+  const binding = input.policy.immutableReaderArguments!;
+  const { evidence } = input;
+  if (!positiveInteger(evidence.startLine) || !positiveInteger(evidence.endLine)
+    || evidence.endLine < evidence.startLine || evidence.blobId !== binding.expectedBlobId) return ok(false);
+  const pages: HydrationPageEvidence[] = [];
+  let cursor: string | undefined;
+  for (let index = 0; index < MAX_HYDRATION_PAGES; index += 1) {
+    const args = { ...binding, maxLines: Math.min(200, evidence.endLine - evidence.startLine + 1),
+      maxChars: MAX_PAGE_CHARS, ...(cursor ? { cursor } : { startLine: evidence.startLine }) };
+    const result = await input.readPage(args);
+    if (!result.success) return hydrationFailure(result.error ?? "terminal_writer_context_read_failed", result.message);
+    const page = parseHydrationPage(result.data, binding);
+    if (!page || (index === 0 && page.startLine !== evidence.startLine)) {
+      return hydrationFailure("terminal_writer_context_page_invalid", "The cited source range does not match its immutable binding.");
+    }
+    pages.push({ page, requestArguments: args });
+    const assessment = assessPageSet(pages);
+    if (!assessment.ok) return assessment;
+    const content = pages.map((entry) => entry.page.content).join("");
+    if (findingEvidenceMatchesRead(evidence, { ...page, startLine: evidence.startLine, content }, binding.expectedBlobId)) return ok(true);
+    if (!page.hasMore || sourcePageNextLine(page.endLine, page.content) > evidence.endLine) return ok(false);
+    cursor = page.nextCursor!;
+  }
+  return hydrationFailure("terminal_writer_context_truncated", "The cited range exceeds the bounded source-verification budget.");
 }
