@@ -462,3 +462,83 @@ Not hidden assumptions. Each changes behaviour and none should be settled by an 
 - Making DPF an MCP **client** with OAuth (outbound to third-party servers) — related, separately owned, out of scope here.
 - Building a general-purpose OAuth provider for non-MCP surfaces. The AS is scoped to the MCP resource; broadening it is `EP-24741BBF`'s directory work, not this item.
 - Re-specifying the consumer bootstrap (`BI-ED1BBC9E`). Sequenced ahead of this, designed elsewhere, amended on its own item.
+
+## 11. OAuth setup convergence — BI-A5307F9E
+
+This amendment implements the remaining setup portion of Slice 5. The operator
+requested OAuth as the default for future installs on 2026-09-20. Fresh-server
+reinstall acceptance is reserved for the operator's planned reinstall; it is not
+a prerequisite to publishing the source fix and must not be reported as passed.
+
+**OBJ-OAUTH-SETUP:** A supported interactive client receives OAuth configuration
+on a fresh install and retains it after every bootstrap or updater run.
+
+**OBJ-OAUTH-COMPAT:** An explicitly selected compatibility credential remains
+usable without revoking existing credentials or silently replacing browser consent.
+
+| Acceptance | Objectives | Required outcome |
+| --- | --- | --- |
+| AC-OAUTH-DEFAULT | OBJ-OAUTH-SETUP | Fresh Codex configuration uses the MCP URL without a bearer override, including HTTP loopback verified in this task. |
+| AC-OAUTH-RERUN | OBJ-OAUTH-SETUP | Bootstrap and updater reruns preserve OAuth and do not mint a PAT merely because authorization is pending. |
+| AC-OAUTH-CLIENTS | OBJ-OAUTH-SETUP, OBJ-OAUTH-COMPAT | Every shipped client writer uses an explicit credential policy; an unsupported client receives a truthful compatibility requirement instead of an unusable OAuth success claim. |
+| AC-OAUTH-LEGACY | OBJ-OAUTH-COMPAT | Explicit compatibility mode preserves credential references; migration removes only the managed DPF override and never revokes a credential. |
+| AC-OAUTH-STATE | OBJ-OAUTH-SETUP | Setup distinguishes configuration written, authorization pending, and a verified authenticated connection. |
+| AC-OAUTH-REINSTALL | OBJ-OAUTH-SETUP | Fresh server install, browser consent, restart, refresh and governed read/write calls are verified during the planned reinstall, with pending evidence retained until then. |
+
+### Evidence and design choice
+
+On this install, removing Codex's `bearer_token_env_var` and completing
+`codex mcp login dpf` succeeded against `http://127.0.0.1:3000/api/mcp/v1`.
+After restart, governed reads and ordinary writes succeeded. That refutes the
+shared policy's blanket assertion that every MCP client requires a PAT on HTTP.
+It does not establish the behavior of every other client. Preserve that distinction
+in the policy and its tests rather than replacing one unsupported generalization
+with another. Sections 3 and 7.5 remain the standards and comparison basis.
+
+Keep `packages/integration-shared/src/mcp-client-credential-policy.ts` as the
+policy owner. Extend its inputs to represent the supported client and explicit
+compatibility choice. Its Python consumer must have matching fixture coverage.
+Codex uses OAuth on HTTPS and loopback HTTP; non-loopback HTTP must never be
+presented as a secure OAuth configuration. Other client adapters must follow
+verified host capability, with a named compatibility state when needed.
+
+Rejected alternatives: a one-time edit to the operator's config is undone by
+bootstrap; removing headers indiscriminately can strand clients; minting a PAT
+when consent is pending silently defeats the requested OAuth default. Reuse the
+existing authorization server, scope mapping and client-owned token storage.
+This amendment adds no identity store, grant, scope, or database migration.
+
+### Ordered implementation and verification
+
+The following are internal stages of one configuration-convergence deliverable,
+owned by BI-A5307F9E. They are not separately shippable: an unchanged updater or
+bootstrap would restore the old configuration and invalidate the default.
+
+1. Add failing fresh/rerun/explicit-compatibility cases to the shared policy and
+   Codex configuration tests. Cover HTTPS, IPv4/IPv6 loopback, remote HTTP and
+   malformed URLs. Check that unrelated user settings survive convergence.
+2. Refactor the existing configuration writers and Python updater to consume the
+   policy. Reserve roughly 20% of implementation effort for removing duplicated
+   credential decisions and testing agreement across adapters.
+3. Update both bootstrap entry points and shipped descriptors so OAuth setup
+   avoids PAT minting and reports pending authorization honestly. Preserve the
+   explicit compatibility and headless client-credentials paths.
+4. Update setup guidance and the authorization runbook in the same change. Run
+   affected TypeScript and Python tests, source guards, type checking and required
+   semantic review. Exercise generation in a temporary user home; never use the
+   operator's real config as an automated-test fixture.
+5. Publish through the protected PR flow. Verify the delivered client configuration
+   and existing live OAuth read/write path. Keep AC-OAUTH-REINSTALL pending until
+   the planned server reinstall; capture backlog before any eventual teardown.
+
+Rollback restores the prior generators through a source revert. Existing tokens
+and consent records remain intact throughout. Governed author receipts and
+PAT-only reviewer handoff are separate runtime authorization defects tracked with
+BI-3B323B6A; setup must not report those workflows verified merely because login
+or a read succeeded.
+
+### Backlog coverage
+
+Implementation owner: BI-A5307F9E. Coverage is pending the independent approval
+of this immutable amendment and its scope baseline. No implementation permission
+or passing coverage receipt is claimed by this text.

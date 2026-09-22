@@ -1,3 +1,4 @@
+import { mcpClientBearerHeaderRequired, type McpAuthMode, type McpClient } from "@dpf/integration-shared/mcp-client-credential-policy";
 /**
  * Node bridge for the agent-toolchain bootstrap planning library.
  *
@@ -42,6 +43,7 @@ import {
 import type { ReadinessState } from "./types";
 
 export type AgentToolchainPlan = {
+  compatibilityClients: McpClient[];
   /** Repo root the plan was computed against (echo for adapter diagnostics). */
   repoRoot: string;
   /** Whether the host has Claude CLI on PATH (caller-supplied detection). */
@@ -97,6 +99,7 @@ export type AgentToolchainPlan = {
 };
 
 export type ComputeAgentToolchainPlanOptions = {
+  authMode?: McpAuthMode;
   /** Absolute path to the contributor's DPF repo root (this worktree). */
   repoRoot: string;
   /** Path to `~/.codex/config.toml`. */
@@ -177,6 +180,7 @@ export function computeAgentToolchainPlan(
       // Platform-owned, not planner-owned: the base is resolved once and handed
       // to each client (spec 2026-09-02-platform-owned-client-configuration §1).
       options.worktreeBase,
+      options.authMode,
     );
   }
 
@@ -246,6 +250,7 @@ export function computeAgentToolchainPlan(
     options.mcpEndpoint,
     _exists(mcpJsonPath) ? _readFile(mcpJsonPath, "utf8") : null,
     _exists(vscodeJsonPath) ? _readFile(vscodeJsonPath, "utf8") : null,
+    options.authMode,
   );
 
   const mcpProbe = planMcpReadinessProbe(options.mcpEndpoint, options.hasToken);
@@ -267,6 +272,7 @@ export function computeAgentToolchainPlan(
   // every write applies cleanly but probes haven't run yet. This lets the
   // install banner pre-warn for missing CLIs / tokens.
   const previewReadiness = computeReadinessState({
+    mcpAuthorization: { mode: options.authMode ?? "oauth", verified: false },
     claudeCodeWired: options.claudeCliPresent,
     codexWired: options.codexCliPresent,
     grokWired: options.grokCliPresent,
@@ -278,6 +284,10 @@ export function computeAgentToolchainPlan(
   });
 
   return {
+    compatibilityClients: ([
+      ["codex", options.codexCliPresent], ["claude", options.claudeCliPresent],
+      ["grok", options.grokCliPresent], ["antigravity", options.antigravityCliPresent],
+    ] as Array<[McpClient, boolean | undefined]>).filter(([client, present]) => present && mcpClientBearerHeaderRequired(options.mcpEndpoint, client, options.authMode)).map(([client]) => client),
     repoRoot: options.repoRoot,
     claudeCliPresent: options.claudeCliPresent,
     codexCliPresent: options.codexCliPresent,

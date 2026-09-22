@@ -30,8 +30,10 @@ param(
     [switch]$ShowSubstrate,
     [switch]$DryRun,
     # Auto-mint an MCP token (in the portal container) and persist it durably
-    # when none is present. On by default for the contributor bootstrap.
+    # when none is present. Only enabled in explicit legacy compatibility mode.
     [switch]$NoAutoMint,
+    [ValidateSet("oauth", "legacy")]
+    [string]$AuthMode = $(if ($env:DPF_MCP_AUTH_MODE) { $env:DPF_MCP_AUTH_MODE } else { "oauth" }),
     # Scope of the auto-minted token: read | write | admin. `write` gives an
     # external coding agent all side-effecting MCP tools without admin powers.
     [string]$MintScope = "write",
@@ -42,6 +44,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:DPF_MCP_AUTH_MODE = $AuthMode
 
 function Write-Ok    { param($msg) Write-Host "  [OK] $msg"     -ForegroundColor Green }
 function Write-Info  { param($msg) Write-Host "  [..] $msg"     -ForegroundColor Cyan }
@@ -137,7 +140,7 @@ if ((Test-Path -LiteralPath $ProcessSpineCheck) -and ($null -ne (Get-Command nod
 # container (it reaches the DB over the compose network and always matches the
 # migrated schema; the host may lack DB access). Mirrors the Edge Node bootstrap
 # pattern in fresh-install.ps1. The plaintext is never logged; only persisted.
-$AutoMint = -not $NoAutoMint.IsPresent
+$AutoMint = ($AuthMode -eq "legacy") -and -not $NoAutoMint.IsPresent
 
 function Resolve-PortalContainer {
     $c = (& docker compose -f (Join-Path $RepoRoot "docker-compose.yml") ps -q portal 2>$null | Select-Object -First 1)
@@ -291,6 +294,7 @@ $nodeArgs = @(
     "--contributor-memory", $ContributorMemoryDir,
     "--project-slug", $ProjectSlug,
     "--mcp-endpoint", $McpEndpoint,
+    "--auth-mode", $AuthMode,
     "--expected-dpf-platform-version", $expectedVersion
 )
 if ($ClaudePresent)        { $nodeArgs += "--claude-cli-present" }
@@ -314,6 +318,7 @@ if ($LASTEXITCODE -ne 0 -or -not $planJson) {
 
 $plan = $planJson | ConvertFrom-Json
 Write-Info "Plan preview: $($plan.preview.readinessState)"
+if ($plan.compatibilityClients.Count -gt 0) { Write-Warn2 "Compatibility credentials required for: $($plan.compatibilityClients -join ', '). Select legacy setup explicitly; OAuth consent will not mint a PAT." }
 
 # --- Apply plan ---------------------------------------------------------------
 $claudeWired = $false
@@ -539,6 +544,7 @@ $state = [ordered]@{
     grokWired           = $grokWired
     antigravityWired    = $agyWired
     memorySeededAt      = $memorySeededAt
+    mcpAuthorization    = @{ mode = $AuthMode; verified = $false }
     mcpReadiness        = $mcpReadiness
     smokeTest           = $smokeResult
     readinessState      = if ($plan.preview.readinessState -eq 'ready' -and (-not $claudeWired -or -not $codexWired)) { 'partial' } else { $plan.preview.readinessState }
@@ -549,6 +555,8 @@ $state = [ordered]@{
 # is most-fundamental-first so the primary remediation is unambiguous.
 if (-not $claudeWired -and -not $codexWired -and -not $grokWired -and -not $agyWired) {
     $state.readinessState = "missing_cli"
+} elseif ($AuthMode -eq "oauth") {
+    $state.readinessState = "authorization_pending"
 } elseif (-not $mcpReadiness.ok) {
     if ($mcpReadiness.reason -in @("no_token", "scope_insufficient")) {
         $state.readinessState = "missing_token"
@@ -572,6 +580,7 @@ if (-not $DryRun.IsPresent) {
 
 # --- Readiness banner ---------------------------------------------------------
 $copyTable = @{
+    "authorization_pending" = @{ message = "MCP configuration is written. Sign in through your client and verify the connection; bootstrap has not verified OAuth."; primaryAction = "Sign in to DPF MCP" }
     "ready"          = @{ message = "Claude Code and Codex are ready for DPF work.";                                     primaryAction = "Open readiness" }
     "partial"        = @{ message = "One contributor client is ready; the other needs setup.";                           primaryAction = "Repair toolchain" }
     "missing_cli"    = @{ message = "Install the selected agent client to enable contributor sessions.";                 primaryAction = "Open setup guide" }

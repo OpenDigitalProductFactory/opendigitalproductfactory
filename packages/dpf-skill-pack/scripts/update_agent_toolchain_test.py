@@ -386,10 +386,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
 
             codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text())
             self.assertTrue(codex_config["plugins"]["dpf-platform@personal"]["enabled"])
-            self.assertEqual(
-                codex_config["mcp_servers"]["dpf"]["bearer_token_env_var"],
-                "DPF_MCP_BEARER_TOKEN",
-            )
+            self.assertNotIn("bearer_token_env_var", codex_config["mcp_servers"]["dpf"])
             codex_hooks = json.loads((home / ".codex" / "hooks.json").read_text())
             write_groups = [
                 group for group in codex_hooks["hooks"]["PreToolUse"]
@@ -668,10 +665,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
 
             codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text())
             self.assertTrue(codex_config["plugins"]["dpf-platform@personal"]["enabled"])
-            self.assertEqual(
-                codex_config["mcp_servers"]["dpf"]["bearer_token_env_var"],
-                "DPF_MCP_BEARER_TOKEN",
-            )
+            self.assertNotIn("bearer_token_env_var", codex_config["mcp_servers"]["dpf"])
 
 
 class GrokInstallTest(unittest.TestCase):
@@ -1217,6 +1211,29 @@ class ClaudeMcpConfigSchemeAwarenessTest(unittest.TestCase):
             generated = (pack / "claude.mcp.json").read_text()
         self.assertEqual(generated, repo_descriptor.read_text())
 
+
+
+
+class OAuthDefaultTest(unittest.TestCase):
+    def test_policy_agrees_with_shared_fixtures(self):
+        cases = json.loads(Path(__file__).with_name("mcp-credential-policy-cases.json").read_text())
+        for case in cases:
+            with self.subTest(case=case):
+                self.assertEqual(updater.mcp_client_bearer_header_required(case["endpoint"], case["client"], case["mode"]), case["required"])
+
+    def test_codex_updater_preserves_oauth_and_user_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            path.write_text('[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\nbearer_token_env_var="DPF_MCP_BEARER_TOKEN"\nstartup_timeout_sec=45\n[mcp_servers.other]\nurl="https://other.example/mcp"\n')
+            updater.ensure_codex_config(home, "http://127.0.0.1:3000/api/mcp/v1", False)
+            first = path.read_text()
+            self.assertNotIn("bearer_token_env_var", first)
+            self.assertIn("startup_timeout_sec=45", first)
+            self.assertIn("https://other.example/mcp", first)
+            updater.ensure_codex_config(home, "http://127.0.0.1:3000/api/mcp/v1", False)
+            self.assertEqual(first, path.read_text())
 
 if __name__ == "__main__":
     unittest.main()

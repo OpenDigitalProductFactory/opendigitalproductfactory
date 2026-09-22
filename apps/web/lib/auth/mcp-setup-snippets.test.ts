@@ -98,7 +98,7 @@ describe("buildSetupSnippets", () => {
   });
 
   it("constructs the url from a non-localhost baseUrl", () => {
-    const { claudeCode, runtimeRefreshPowerShell } = buildSetupSnippets(TOKEN, "https://dpf.example.com");
+    const { claudeCode, runtimeRefreshPowerShell } = buildSetupSnippets(TOKEN, "https://dpf.example.com", "oauth");
     expect(claudeCode).toContain("https://dpf.example.com/api/mcp/v1");
     // BI-46B636B0: over https the client authorizes itself; a pinned header
     // would switch that off, so the snippet carries none.
@@ -144,4 +144,10 @@ describe("buildCredentialsClientSnippets (BI-EDB67A2B)", () => {
     expect(s.envPosix).toBe("export DPF_MCP_CLIENT_ID='dpfoc_abc' DPF_MCP_CLIENT_SECRET='s3cr'\\''et'");
     expect(s.envPowerShell).toContain("'s3cr''et'");
   });
+});
+
+it("offers OAuth Codex config while keeping explicitly issued PAT snippets usable", () => {
+  expect(buildSetupSnippets(TOKEN, BASE, "oauth").codex).not.toContain("bearer_token_env_var");
+  expect(buildSetupSnippets(TOKEN, "https://dpf.example.com", "legacy").codex).toContain("bearer_token_env_var");
+  expect(JSON.parse(buildSetupSnippets(TOKEN, "https://dpf.example.com", "legacy").claudeCode).mcpServers.dpf.headers.Authorization).toContain("DPF_MCP_BEARER_TOKEN");
 });
