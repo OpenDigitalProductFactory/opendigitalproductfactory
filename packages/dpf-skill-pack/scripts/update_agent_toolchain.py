@@ -606,6 +606,35 @@ def disable_competitive_codex_plugins(text: str, plugin_ids: list[str]) -> str:
     return text
 
 
+def codex_mcp_body(text: str, endpoint: str) -> list[str]:
+    """Change managed keys only; retain operator-owned options and credentials."""
+    retained: list[str] = []
+    active = False
+    seen = False
+    custom_bearer = False
+    for line in text.splitlines():
+        if _is_table_boundary(line):
+            active = not seen and canonical_toml_table_header(line) == "mcp_servers.dpf"
+            if active:
+                seen = True
+            continue
+        if not active:
+            continue
+        key, separator, value = line.partition("=")
+        if separator and key.strip() in ("url", "enabled"):
+            continue
+        if separator and key.strip() == "bearer_token_env_var":
+            if value.strip().strip('"').strip("'") == TOKEN_ENV_VAR:
+                continue
+            custom_bearer = True
+        if line.strip():
+            retained.append(line)
+    body = [f'url = "{endpoint}"', "enabled = true", *retained]
+    if not custom_bearer and mcp_client_bearer_header_required(endpoint, "codex"):
+        body.append(f'bearer_token_env_var = "{TOKEN_ENV_VAR}"')
+    return body
+
+
 def ensure_codex_config(
     home: Path,
     mcp_url: str,
@@ -645,45 +674,30 @@ def ensure_codex_config(
     text = upsert_toml_table(
         text,
         "[mcp_servers.dpf]",
-        [
-            f'url = "{lazy_host_mcp_url}"',
-            f'bearer_token_env_var = "{TOKEN_ENV_VAR}"',
-            "enabled = true",
-        ],
+        codex_mcp_body(text, lazy_host_mcp_url),
     )
     if dry_run:
         return True
     return write_text_if_changed(path, text)
 
 
-def mcp_client_bearer_header_required(endpoint: str) -> bool:
-    """Whether a Claude MCP client config for `endpoint` must carry the header.
-
-    Python mirror of mcpClientBearerHeaderRequired() in
-    packages/integration-shared/src/mcp-client-credential-policy.ts (BI-46B636B0).
-    This script cannot import the TypeScript workspace, so the rule is mirrored
-    here and pinned by a test that asserts both directions. Keep the two in
-    lockstep - the JSON shape is mirrored the same way and for the same reason.
-
-    The two credential paths are mutually exclusive, and the URL scheme decides:
-
-      https -> NO header. The MCP client runs OAuth only over https; a pinned
-               Authorization header disables its OAuth fallback outright, so
-               leaving one here would silently prevent the self-renewing
-               credential path from ever engaging.
-      http  -> KEEP the header. The client will not run OAuth over plain http
-               even on loopback, so the ${DPF_MCP_BEARER_TOKEN} reference is the
-               ONLY credential path; dropping it leaves the install with none.
-
-    Fails safe, exactly as the TypeScript does: an endpoint that will not parse
-    keeps the header, because losing a credential is worse than keeping one that
-    is merely redundant.
-    """
+def mcp_client_bearer_header_required(endpoint: str, client: str = "claude", auth_mode: str | None = None) -> bool:
+    """Mirror the shared TypeScript policy; shared fixtures guard agreement."""
+    mode = auth_mode or os.environ.get("DPF_MCP_AUTH_MODE", "oauth")
+    if mode not in ("oauth", "legacy"):
+        raise ValueError("DPF_MCP_AUTH_MODE must be oauth or legacy")
+    if mode == "legacy" or client == "grok":
+        return True
     try:
         parsed = urlparse(endpoint)
+        if not parsed.hostname or parsed.username or parsed.password:
+            return True
+        if parsed.scheme == "https":
+            return False
+        return not (client == "codex" and parsed.scheme == "http"
+                    and parsed.hostname in ("localhost", "127.0.0.1", "::1"))
     except ValueError:
         return True
-    return parsed.scheme != "https"
 
 
 def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
@@ -1029,7 +1043,7 @@ def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool) -> st
     servers["dpf"] = {
         "type": "http",
         "url": mcp_url,
-        "headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"},
+        **({"headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}} if mcp_client_bearer_header_required(mcp_url, "antigravity") else {}),
     }
     data["mcpServers"] = servers
     if dry_run:
@@ -1658,6 +1672,7 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL", DEFAULT_MCP_URL))
+    parser.add_argument("--auth-mode", choices=("oauth", "legacy"), default=os.environ.get("DPF_MCP_AUTH_MODE", "oauth"))
     parser.add_argument("--codex-only", action="store_true")
     parser.add_argument("--claude-only", action="store_true")
     parser.add_argument("--skip-codex-cli-install", action="store_true")
@@ -1678,6 +1693,7 @@ def main(argv: list[str]) -> int:
     reference_mode.add_argument("--write-hook-reference", action="store_true")
     reference_mode.add_argument("--check-hook-reference", action="store_true")
     args = parser.parse_args(argv)
+    os.environ["DPF_MCP_AUTH_MODE"] = args.auth_mode
 
     if args.write_hook_reference or args.check_hook_reference:
         root = Path(args.skill_pack_path).expanduser().resolve()
@@ -1784,6 +1800,7 @@ def main(argv: list[str]) -> int:
         print(f"  Claude competitive: {claude_competitive_status}")
 
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
+    print("  MCP auth   : OAuth configuration written; sign in and verify through the client. Unverified clients/transports require explicit legacy compatibility." if args.auth_mode == "oauth" else "  MCP auth   : explicit legacy compatibility")
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
     for line in guard_liveness_advisory():
         print(line)

@@ -83,3 +83,14 @@ describe("planMcpClientConfig", () => {
     expect(plan.writes[0].path).toBe("/Users/dev/dpf/.mcp.json");
   });
 });
+
+
+it("preserves unrelated JSON servers while removing only managed OAuth-blocking headers", () => {
+  const original = JSON.stringify({mcpServers: {other: {url: "https://other.example"}, dpf: {url: "https://old.example", timeout: 45, headers: {Authorization: "Bearer ${DPF_MCP_BEARER_TOKEN}", "X-Tenant": "sample"}}}});
+  const plan = planMcpClientConfig("/tmp/repo", "https://dpf.example/api/mcp/v1", original, null);
+  const content = JSON.parse(plan.writes.find(w => w.path.endsWith("/.mcp.json"))!.content);
+  expect(content.mcpServers.other.url).toBe("https://other.example");
+  expect(content.mcpServers.dpf.timeout).toBe(45);
+  expect(content.mcpServers.dpf.headers).toEqual({"X-Tenant": "sample"});
+  expect(planMcpClientConfig("/tmp/repo", "https://dpf.example/api/mcp/v1", JSON.stringify(content, null, 2), plan.writes.find(w => w.path.endsWith("/.vscode/mcp.json"))!.content).writes).toEqual([]);
+});

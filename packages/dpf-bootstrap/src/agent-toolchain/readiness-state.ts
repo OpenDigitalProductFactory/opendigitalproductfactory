@@ -15,6 +15,10 @@ export type ReadinessCopy = {
 };
 
 const COPY: Record<ReadinessState, ReadinessCopy> = {
+  authorization_pending: {
+    message: "MCP configuration is written. Sign in through your client and verify the connection; bootstrap has not verified OAuth.",
+    primaryAction: "Sign in to DPF MCP",
+  },
   ready: {
     message: "Claude Code and Codex are ready for DPF work.",
     primaryAction: "Open readiness",
@@ -69,6 +73,8 @@ export function computeReadinessState(
   if (!claudeWired && !codexWired && !grokWired && !antigravityWired) {
     return "missing_cli";
   }
+
+  if (state.mcpAuthorization?.mode === "oauth" && !state.mcpAuthorization.verified) return "authorization_pending";
 
   const mcp = state.mcpReadiness;
   if (mcp && !mcp.ok) {

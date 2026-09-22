@@ -28,6 +28,7 @@
 
 import { parse, stringify } from "smol-toml";
 import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
+import { mcpClientBearerHeaderRequired, type McpAuthMode } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 export type CodexConfigConvergenceChange = {
   /** Substrate kind that changed. */
@@ -94,17 +95,20 @@ const GENERIC_MCP_SERVERS_TO_DISABLE = ["nanobanana-mcp", "youtube_transcript"] 
 const LEGACY_WORKTREE_BASE_FALLBACK = "D:\\DPF-worktrees";
 
 /** Desired `[mcp_servers.dpf]` shape (secret-free -- references the env var). */
-function desiredMcpServerBlock(mcpEndpoint: string): Record<string, string> {
-  return { url: mcpEndpoint, bearer_token_env_var: MCP_BEARER_TOKEN_ENV_VAR };
+function desiredMcpServerBlock(mcpEndpoint: string, authMode: McpAuthMode): Record<string, string> {
+  return { url: mcpEndpoint, ...(mcpClientBearerHeaderRequired(mcpEndpoint, "codex", authMode)
+    ? { bearer_token_env_var: MCP_BEARER_TOKEN_ENV_VAR } : {}) };
 }
 
 function mcpBlockConverged(
   existing: { url?: string; bearer_token_env_var?: string } | undefined,
   mcpEndpoint: string,
+  authMode: McpAuthMode,
 ): boolean {
   return (
     existing?.url === mcpEndpoint &&
-    existing?.bearer_token_env_var === MCP_BEARER_TOKEN_ENV_VAR
+    (existing?.bearer_token_env_var === desiredMcpServerBlock(mcpEndpoint, authMode).bearer_token_env_var ||
+      (authMode === "oauth" && !!existing?.bearer_token_env_var && existing.bearer_token_env_var !== MCP_BEARER_TOKEN_ENV_VAR))
   );
 }
 
@@ -247,6 +251,7 @@ export function planCodexConfig(
    * its clients, never the reverse.
    */
   worktreeBase?: string,
+  authMode: McpAuthMode = "oauth",
 ): CodexConfigPlan {
   const canonicalWorktreeBase =
     worktreeBase && worktreeBase.trim().length > 0
@@ -286,7 +291,7 @@ export function planCodexConfig(
     ? withDpfMcpCatalogTier(mcpEndpoint!, "full")
     : undefined;
   const mcpConverged =
-    !wantMcp || mcpBlockConverged(existingMcp, desiredMcpEndpoint!);
+    !wantMcp || mcpBlockConverged(existingMcp, desiredMcpEndpoint!, authMode);
 
   // --- Compute convergence deltas (idempotent, conservative) ----------------
 
@@ -373,8 +378,11 @@ export function planCodexConfig(
     if (wantMcp && !mcpConverged) {
       nextMcpServers["dpf"] = {
         ...(existingMcp ?? {}),
-        ...desiredMcpServerBlock(desiredMcpEndpoint!),
+        ...desiredMcpServerBlock(desiredMcpEndpoint!, authMode),
       };
+      if (!mcpClientBearerHeaderRequired(desiredMcpEndpoint!, "codex", authMode) && existingMcp?.bearer_token_env_var === MCP_BEARER_TOKEN_ENV_VAR) {
+        delete (nextMcpServers["dpf"] as Record<string, unknown>).bearer_token_env_var;
+      }
       rationaleParts.push("upsert [mcp_servers.dpf]");
     }
     for (const name of genericMcpToDisable) {

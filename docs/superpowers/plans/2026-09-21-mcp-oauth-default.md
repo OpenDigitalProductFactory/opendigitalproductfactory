@@ -46,4 +46,9 @@ The main risks are updater drift restoring bearer overrides, an unsupported host
 
 ## Backlog coverage
 
-Implementation parent and sole deliverable owner: BI-A5307F9E. Deliverable `oauth-setup-convergence` has no dependencies and is atomic for the reason above. Live coverage must be recorded against this immutable plan before implementation; the current text does not claim a passing coverage receipt.
+Implementation parent and sole deliverable owner: BI-A5307F9E. Deliverable `oauth-setup-convergence` has no dependencies and is atomic for the reason above. Live atomic coverage was recorded as cmubyae7m148m01ru94sswxhr against plan commit 06e9fb31ebbf3af2f41dbc290b18bb110fc5ae8f. Independent plan approval initiative-0865097c-8c64-458d-b6ce-0ad327b64605 followed, and the implementation claim returned allowed. These identify the approved planning artifact; they are not implementation or reinstall acceptance.
+
+
+## UX fit review
+
+Decision: fits-with-guardrails. Owning area: Platform contributor setup; primary persona: installation operator. This change reuses the existing CLI readiness banner and setup snippets, with no new route, navigation, field, dashboard or coworker-launch action. Source truth remains the generated configuration and an explicitly separate authentication verification result. The pending message must not imply that a PAT probe verifies OAuth; compatibility clients are named with a legacy setup action. Bootstrap and updater tests exercise fresh and repeated setup in temporary homes; isolated execution of both script argument/mint-selection blocks verifies default no-mint and explicit legacy behavior. No browser layout measurement is claimed for this CLI/configuration-only change.

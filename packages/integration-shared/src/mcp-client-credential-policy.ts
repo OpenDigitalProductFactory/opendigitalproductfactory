@@ -2,25 +2,28 @@
  * Whether a DPF MCP client config for `endpoint` must carry the bearer-header
  * fallback (BI-46B636B0).
  *
- * The MCP client runs OAuth only over https; on a plain-http endpoint the
- * authorization server is unreachable from the client no matter how healthy
- * it is server-side, and a pinned `headers.Authorization` disables OAuth. So
- * the two are exclusive and the URL scheme decides:
- *   - https  → no header; the client discovers the AS and authorizes itself.
- *   - http   → the `${DPF_MCP_BEARER_TOKEN}` header reference is the ONLY
- *              credential path; omitting it leaves the install with none.
+ * OAuth support is client-specific. Codex loopback OAuth is verified; other
+ * clients retain their existing compatibility behavior until verified.
+ * A generated configuration is not evidence of authenticated readiness.
  *
  * Both writers of the client config (the portal's setup snippets and the
  * toolchain bootstrap planner) consult this one predicate; the SessionStart
  * health hooks apply the same rule to diagnose a config that cannot
  * authenticate.
  */
-export function mcpClientBearerHeaderRequired(endpoint: string): boolean {
+export type McpClient = "codex" | "claude" | "vscode" | "grok" | "antigravity";
+export type McpAuthMode = "oauth" | "legacy";
+
+export function mcpClientBearerHeaderRequired(endpoint: string, client: McpClient = "claude", authMode: McpAuthMode = "oauth"): boolean {
+  if (authMode === "legacy" || client === "grok") return true;
   let parsed: URL;
   try {
     parsed = new URL(endpoint);
   } catch {
     return true;
   }
-  return parsed.protocol !== "https:";
+  if (parsed.username || parsed.password) return true;
+  if (parsed.protocol === "https:") return false;
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  return !(client === "codex" && parsed.protocol === "http:" && loopback);
 }

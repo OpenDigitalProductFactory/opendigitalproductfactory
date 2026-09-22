@@ -86,7 +86,7 @@ describe("computeAgentToolchainPlan", () => {
     expect(plan.claude!.writes).toHaveLength(1);
     expect(plan.memory.writes.length).toBeGreaterThan(0);
     expect("skipReason" in plan.mcpProbe).toBe(false);
-    expect(plan.preview.readinessState).toBe("ready");
+    expect(plan.preview.readinessState).toBe("authorization_pending");
   });
 
   it("skips codex plan entirely when Codex CLI is absent", () => {
@@ -96,7 +96,7 @@ describe("computeAgentToolchainPlan", () => {
 
     expect(plan.codex).toBeNull();
     expect(plan.claude).not.toBeNull();
-    expect(plan.preview.readinessState).toBe("partial");
+    expect(plan.preview.readinessState).toBe("authorization_pending");
   });
 
   it("skips claude plan entirely when Claude CLI is absent", () => {
@@ -106,7 +106,7 @@ describe("computeAgentToolchainPlan", () => {
 
     expect(plan.claude).toBeNull();
     expect(plan.codex).not.toBeNull();
-    expect(plan.preview.readinessState).toBe("partial");
+    expect(plan.preview.readinessState).toBe("authorization_pending");
   });
 
   it("returns missing_cli preview when neither CLI is present", () => {
@@ -121,14 +121,14 @@ describe("computeAgentToolchainPlan", () => {
     expect(plan.preview.readinessState).toBe("missing_cli");
   });
 
-  it("returns missing_token preview when no token is configured", () => {
+  it("returns authorization_pending without requiring a PAT", () => {
     const plan = computeAgentToolchainPlan(baseOptions({ hasToken: false }));
 
     expect("skipReason" in plan.mcpProbe).toBe(true);
     if ("skipReason" in plan.mcpProbe) {
       expect(plan.mcpProbe.skipReason).toBe("no_token");
     }
-    expect(plan.preview.readinessState).toBe("missing_token");
+    expect(plan.preview.readinessState).toBe("authorization_pending");
   });
 
   it("emits zero writes when Claude is already installed at the expected version (idempotent)", () => {
@@ -179,7 +179,7 @@ describe("summarizePlan", () => {
     expect(summary).toMatch(/claude=present/);
     expect(summary).toMatch(/codex=present/);
     expect(summary).toMatch(/token=present/);
-    expect(summary).toMatch(/preview-state=ready/);
+    expect(summary).toMatch(/preview-state=authorization_pending/);
 
     // No bearer-shaped content.
     expect(summary).not.toMatch(/Bearer\s+\w/);
@@ -195,6 +195,6 @@ describe("summarizePlan", () => {
     expect(summary).toMatch(/claude=missing/);
     expect(summary).toMatch(/token=missing/);
     expect(summary).toMatch(/mcp-probe=skip:no_token/);
-    expect(summary).toMatch(/preview-state=missing_token/);
+    expect(summary).toMatch(/preview-state=authorization_pending/);
   });
 });

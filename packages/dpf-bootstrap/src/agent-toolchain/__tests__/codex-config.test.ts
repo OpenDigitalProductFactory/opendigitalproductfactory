@@ -21,6 +21,23 @@ const LOCAL_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 const LOCAL_FULL_ENDPOINT = `${LOCAL_ENDPOINT}?tier=full`;
 
 describe("planCodexConfig", () => {
+  it("retains an explicitly selected legacy credential", () => {
+    const plan = planCodexConfig("", REPO, CONFIG_PATH, LOCAL_ENDPOINT, undefined, "legacy");
+    expect((parse(plan.writes[0].content) as any).mcp_servers.dpf.bearer_token_env_var).toBe("DPF_MCP_BEARER_TOKEN");
+  });
+  it("preserves a user-owned credential override", () => {
+    const plan = planCodexConfig('[mcp_servers.dpf]\nurl="' + LOCAL_FULL_ENDPOINT + '"\nbearer_token_env_var="MY_TOKEN"\n', REPO, CONFIG_PATH, LOCAL_ENDPOINT);
+    expect((parse(plan.writes[0].content) as any).mcp_servers.dpf.bearer_token_env_var).toBe("MY_TOKEN");
+  });
+  it("migrates the managed bearer override to OAuth and preserves unrelated settings on rerun", () => {
+    const text = '[mcp_servers.dpf]\nurl = "' + LOCAL_FULL_ENDPOINT + '"\nbearer_token_env_var = "DPF_MCP_BEARER_TOKEN"\nstartup_timeout_sec = 45\n[mcp_servers.other]\nurl = "https://other.example/mcp"\n';
+    const first = planCodexConfig(text, REPO, CONFIG_PATH, LOCAL_ENDPOINT);
+    const parsed = parse(first.writes[0].content) as any;
+    expect(parsed.mcp_servers.dpf.bearer_token_env_var).toBeUndefined();
+    expect(parsed.mcp_servers.dpf.startup_timeout_sec).toBe(45);
+    expect(parsed.mcp_servers.other.url).toBe("https://other.example/mcp");
+    expect(planCodexConfig(first.writes[0].content, REPO, CONFIG_PATH, LOCAL_ENDPOINT).writes).toEqual([]);
+  });
   it("upserts [plugins.\"dpf-platform@personal\"] enabled=true on the operator-current fixture", () => {
     const plan = planCodexConfig(operatorRedacted, REPO, CONFIG_PATH);
 
@@ -220,7 +237,6 @@ describe("planCodexConfig", () => {
     };
     expect(parsed.mcp_servers.dpf).toEqual({
       url: LOCAL_FULL_ENDPOINT,
-      bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
     });
     expect(parsed.mcp_servers.node_repl.command).toBe("node");
   });
@@ -256,7 +272,6 @@ describe("planCodexConfig", () => {
     expect(parsed.plugins["dpf-platform@personal"]).toEqual({ enabled: true });
     expect(parsed.mcp_servers["dpf"]).toEqual({
       url: LOCAL_FULL_ENDPOINT,
-      bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
     });
   });
 
@@ -292,7 +307,6 @@ describe("planCodexConfig", () => {
     expect(parsed.plugins["dpf-platform@personal"].enabled).toBe(false);
     expect(parsed.mcp_servers["dpf"]).toEqual({
       url: `${novelEndpoint}?tier=full`,
-      bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
     });
   });
 });
