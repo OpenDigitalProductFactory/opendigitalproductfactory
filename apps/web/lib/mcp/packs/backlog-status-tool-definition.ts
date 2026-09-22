@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { DEFERRAL_INPUT_SCHEMA } from "@/lib/backlog/deferral-contract";
+import { BACKLOG_STATUS_VALUES } from "@/lib/explore/backlog";
 
 export const backlogStatusToolDefinition: ToolDefinition = {
   name: "update_backlog_item_status",
@@ -8,7 +9,7 @@ export const backlogStatusToolDefinition: ToolDefinition = {
     type: "object",
     properties: {
       itemId: { type: "string", description: "Semantic backlog item id" },
-      status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred", "retired"], description: "Target status. 'triaging' from a triaged status is allowed and clears the prior triage decision." },
+      status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Target status. 'awaiting-acceptance' is coding close-out at PR submit; 'done' is verification acceptance. 'triaging' from a triaged status is allowed and clears the prior triage decision." },
       reason: { type: "string", description: "Free-text rationale captured in the activity row. Required when status=triaging from a triaged status." },
       resolution: { type: "string", description: "Outcome summary, required when status=done" },
       force: { type: "boolean", description: "When moving to in-progress, take over a claim already held by another active session (default false). The takeover is recorded on the status_change activity row." },

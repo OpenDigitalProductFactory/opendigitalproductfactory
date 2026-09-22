@@ -126,6 +126,14 @@ action; it never fabricates a critical code finding. GitHub/CI correlation is
 written to the same evidence streams as `semantic-change-review.outcome`, and
 inconclusive samples are excluded from precision and unique-yield denominators.
 
+An external requester can submit confirmed recovery through `retry_semantic_review`
+using the returned TaskRun identity. This calls the portal's existing native
+recovery function. The authenticated user must be the original requester; saved
+authority, current grants, deadline, attempt budget, quiescence and the concurrent
+generation fence still apply. Confirmation acknowledges that replacement inference
+can incur another provider charge. The adapter does not renew an expired request,
+override a refusal, accept a payload user identity or dispatch unrelated tasks.
+
 Nor can a reviewer pass a change it could not read. Where the change is not
 present in what the reviewer can see, it answers `cannot-verify`, which is
 recorded as `inconclusive` with reason `reviewer-could-not-verify-change` and

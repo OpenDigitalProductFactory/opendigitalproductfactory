@@ -61,3 +61,53 @@ export async function settleBootSyncs(
     await settleBootSync(measurementRuntime, task);
   }
 }
+
+// ─── Pinned measurement clock (BI-99909E53) ──────────────────────────────────
+//
+// Some surfaces render CALENDAR arithmetic over facts that live in code, not in
+// the database: the provider-compliance source registry stamps each source with
+// a retrieval date and a trust window, and the inbox projects "lapses in N
+// days" / "lapses after today" / "lapsed N days ago" from it. On 2026-09-18
+// /workspace/inbox drifted 418 → 425 words on `main` with no code change —
+// three seeded sources crossed from "expiring" to "lapses after today" — and
+// the frozen baseline failed every open PR. Wall-clock text normalisation
+// (ratchet.ts) cannot cover this: the STATE changed, not just a phrasing.
+//
+// The remedy is the same shape as the boot contract above: under measurement
+// runtime the portal reads a pinned instant from DPF_MEASUREMENT_NOW for those
+// calendar-relative renders, so the sweep measures the same page on any day.
+// It is deliberately NOT a global Date shim — database rows are written at real
+// time (seed, heartbeats, session tokens) and a process-wide fake clock would
+// put every one of them in the future. The pin reaches only code-defined
+// calendar facts, through `measurementNow()`.
+//
+// Outside measurement runtime the variable is ignored entirely: a production
+// or dev portal can never be pinned to a date by a stray environment value.
+
+export const MEASUREMENT_NOW_ENV = "DPF_MEASUREMENT_NOW";
+
+/**
+ * The pinned instant, or null when the portal is not under measurement, the
+ * variable is unset, or its value is not an ISO instant. An unparsable pin is
+ * ignored rather than fatal: a sweep against the real clock is degraded, not
+ * broken, and the execution record carries the value so the degradation shows.
+ */
+export function measurementClockPin(
+  env: Record<string, string | undefined> = process.env,
+): Date | null {
+  if (!isMeasurementRuntime(env)) return null;
+  const raw = env[MEASUREMENT_NOW_ENV]?.trim();
+  if (!raw) return null;
+  const pinned = new Date(raw);
+  return Number.isNaN(pinned.getTime()) ? null : pinned;
+}
+
+/**
+ * "Now" for calendar-relative renders of code-defined facts. The pinned instant
+ * under measurement runtime; the real clock everywhere else.
+ */
+export function measurementNow(
+  env: Record<string, string | undefined> = process.env,
+): Date {
+  return measurementClockPin(env) ?? new Date();
+}

@@ -59,6 +59,31 @@ test("a queued gate hands its claim to a resumer instead of exiting bare", () =>
   // gate is about to free.
   assert.equal(calls[0].options.detached, true);
   assert.equal(calls[0].options.stdio, "ignore");
+  // Windows: a console-less process must never open a terminal window.
+  assert.equal(calls[0].options.windowsHide, true);
+});
+
+// Observed live 2026-09-22: six resumers re-claiming every 20s each opened a
+// Windows Terminal window that took keyboard focus from the operator. The
+// resumer is detached, so it has no console; a console child it starts without
+// windowsHide gets a brand-new VISIBLE one on every attempt.
+test("every re-claim runs the gate with its console hidden", async () => {
+  const seen = [];
+  await resumeUntilAdmitted({
+    gateArgv: ["/repo/scripts/gate-worktree.mjs"],
+    intervalMs: 1,
+    deadlineMs: 3_600_000,
+    env: {},
+    now: () => 0,
+    sleepFn: async () => {},
+    spawnFn: (_command, _args, options) => {
+      seen.push(options);
+      const code = seen.length < 2 ? 75 : 0;
+      return { once(event, handler) { if (event === "exit") queueMicrotask(() => handler(code)); } };
+    },
+  });
+  assert.equal(seen.length, 2);
+  for (const options of seen) assert.equal(options.windowsHide, true);
 });
 
 test("the resumer replays the gate's own argv rather than a reconstructed one", () => {

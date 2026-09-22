@@ -502,6 +502,8 @@ export async function promoteBacklogItemToBuildDraft(
       epicId: epicRowId,
       epicSemanticId,
       taxonomyNodeId: item.taxonomyNodeId ?? null,
+      effortSize: item.effortSize ?? null,
+      workType: item.workType ?? null,
     },
     actor: { userId, agentId: null, principalId: null },
   });

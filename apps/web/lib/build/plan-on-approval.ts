@@ -180,7 +180,7 @@ export function parsePlanJson(
  * failed review's blocking issues back so the model produces a REVISED plan that
  * resolves them. Returns the normalized plan or a human-readable error.
  */
-async function generateNormalizedPlan(args: {
+export async function generateNormalizedPlan(args: {
   title: string;
   designDoc: Record<string, unknown>;
   biTitle: string | null;
@@ -189,12 +189,15 @@ async function generateNormalizedPlan(args: {
   priorReviewIssues?: ReadonlyArray<PlanReviewIssue>;
   /** EP-MODEL-TIER-ROUTING: capability tier for plan generation. */
   modelTier?: "local" | "robust";
+  /** Routing sensitivity from mapBuildDeliverableToRoutingSensitivity; defaults to development (source code). */
+  sensitivity?: "development" | "internal" | "confidential";
   /** FeatureBuild this generation belongs to — threaded into AdapterRunTelemetry
    *  so completeBuildPhaseRun can meter the plan phase (BI-0A6B8B38). */
   buildId?: string;
   log: (summary: string) => Promise<void>;
 }): Promise<{ plan: { fileStructure?: unknown[]; tasks?: unknown[] } } | { error: string }> {
   const { routeAndCall } = await import("@/lib/inference/routed-inference");
+  const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
   const prompt = buildPlanGenerationPrompt({
     title: args.title,
     designDoc: args.designDoc,
@@ -222,8 +225,9 @@ async function generateNormalizedPlan(args: {
     const response = await routeAndCall(
       [{ role: "user" as const, content: prompt }],
       systemPrompt,
-      "internal",
+      args.sensitivity ?? "development",
       {
+        ...BUILD_PHASE_ROUTE_OPTIONS,
         budgetClass: "quality_first",
         ...(args.modelTier ? { modelTier: args.modelTier } : {}),
         ...(args.buildId ? { buildId: args.buildId } : {}),
@@ -371,12 +375,17 @@ export async function dispatchPlanForApprovedBuild(params: {
     // BI-B24D4C84: pass the rightsizing opts (as the autonomous callers do) so
     // this takes the quality-first branch rather than the legacy size-only one,
     // which pinned every small/medium build to the local tier.
-    const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const { getModelTier, deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
     const { isModelTierRoutingEnabled, isQualityFirstRightsizingEnabled } = await import("./build-studio-config");
     const planSensitivity = deriveDeliverableSensitivity({
       text: `${build.title ?? ""}\n${build.description ?? ""}`,
       workType: build.kind,
     });
+    // Founder ruling 2026-08-12: ordinary builds route as development work; only
+    // elevated/high deliverables demand internal/confidential clearance. The
+    // literal "internal" this used to send excluded every public-cleared cloud
+    // dev engine from plan generation.
+    const planRouteSensitivity = mapBuildDeliverableToRoutingSensitivity(planSensitivity);
     const planQualityFirst = await isQualityFirstRightsizingEnabled();
     const planModelTier = (await isModelTierRoutingEnabled())
       ? getModelTier(build.kind, biEffortSize, {
@@ -428,6 +437,7 @@ export async function dispatchPlanForApprovedBuild(params: {
       biBody,
       verifiedPaths,
       modelTier: planModelTier,
+      sensitivity: planRouteSensitivity,
       log,
     });
     if ("error" in gen) {
@@ -468,6 +478,7 @@ export async function dispatchPlanForApprovedBuild(params: {
         verifiedPaths,
         priorReviewIssues: review.issues,
         modelTier: planModelTier,
+        sensitivity: planRouteSensitivity,
         log,
       });
       if ("error" in revised) {

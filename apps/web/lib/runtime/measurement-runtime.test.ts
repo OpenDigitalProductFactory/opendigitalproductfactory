@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   isMeasurementRuntime,
+  measurementClockPin,
+  measurementNow,
   settleBootSync,
   settleBootSyncs,
 } from "./measurement-runtime";
@@ -116,5 +118,31 @@ describe("settleBootSyncs", () => {
     expect(started).toEqual(["workforce", "catalog", "discovery"]);
     release();
     await gate;
+  });
+});
+
+describe("measurementClockPin / measurementNow (BI-99909E53)", () => {
+  const PIN = "2026-09-18T12:00:00.000Z";
+
+  it("ignores the pin outside measurement runtime — a production portal can never be pinned", () => {
+    expect(measurementClockPin({ DPF_MEASUREMENT_NOW: PIN })).toBeNull();
+    expect(measurementClockPin({ DPF_MEASUREMENT_RUNTIME: "0", DPF_MEASUREMENT_NOW: PIN })).toBeNull();
+    const before = Date.now();
+    const now = measurementNow({ DPF_MEASUREMENT_NOW: PIN }).getTime();
+    expect(now).toBeGreaterThanOrEqual(before);
+  });
+
+  it("returns the pinned instant under measurement runtime", () => {
+    const env = { DPF_MEASUREMENT_RUNTIME: "1", DPF_MEASUREMENT_NOW: PIN };
+    expect(measurementClockPin(env)?.toISOString()).toBe(PIN);
+    expect(measurementNow(env).toISOString()).toBe(PIN);
+  });
+
+  it("falls back to the real clock when the pin is unset or unparsable", () => {
+    expect(measurementClockPin({ DPF_MEASUREMENT_RUNTIME: "1" })).toBeNull();
+    expect(measurementClockPin({ DPF_MEASUREMENT_RUNTIME: "1", DPF_MEASUREMENT_NOW: "  " })).toBeNull();
+    expect(
+      measurementClockPin({ DPF_MEASUREMENT_RUNTIME: "1", DPF_MEASUREMENT_NOW: "yesterday" }),
+    ).toBeNull();
   });
 });

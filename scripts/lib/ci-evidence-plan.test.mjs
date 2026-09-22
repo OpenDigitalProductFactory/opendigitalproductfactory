@@ -52,6 +52,70 @@ function escalationCodes(plan) {
 }
 
 describe("createEvidencePlan", () => {
+  // Python was invisible to the classifier: neither convention matched, so any
+  // change touching a .py file fell through to `unmapped-file` and escalated the
+  // whole run to exhaustive — which switches on the portal UX sweep for a diff
+  // that cannot affect a route. Observed on PR #5436: two skill-pack Python
+  // files, affectedRoutes [], and a 10-minute UX sweep.
+  it("classifies a Python test by its own naming convention, not the JS one", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+      knownTests: ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+    }));
+    assert.equal(
+      plan.escalations.some((e) => e.code === "unmapped-file"),
+      false,
+      "a *_test.py file is a test, not an unclassifiable file",
+    );
+    // Assert the CLASSIFICATION, not merely the absence of an escalation.
+    // Production patterns now cover .py too, so a *_test.py would stop
+    // escalating even without the test pattern — by being mislabelled
+    // production rather than by being understood. Only `kind` catches that.
+    const disposition = plan.fileDispositions.find(
+      (f) => f.path === "packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py",
+    );
+    assert.equal(disposition?.kind, "test", "a Python test must classify as a test, not as production");
+  });
+
+  it("maps a Python source file to its colocated <stem>_test.py", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["packages/dpf-skill-pack/scripts/update_agent_toolchain.py"],
+      knownTests: ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+    }));
+    assert.deepEqual(
+      plan.affectedTests,
+      ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+      "Python colocates as <stem>_test.py; the JS `.test.` prefixes never match it",
+    );
+    assert.equal(
+      plan.escalations.some((e) => e.code.startsWith("unmapped")),
+      false,
+    );
+  });
+
+  it("does not claim a Python route, because .py files serve none", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: [
+        "packages/dpf-skill-pack/scripts/update_agent_toolchain.py",
+        "packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py",
+      ],
+      knownTests: ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+    }));
+    assert.deepEqual(plan.affectedRoutes, []);
+  });
+
+  it("still escalates a Python source file that has no colocated test", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["packages/dpf-skill-pack/scripts/lonely.py"],
+      knownTests: [],
+    }));
+    assert.equal(
+      plan.escalations.some((e) => e.code === "unmapped-production"),
+      true,
+      "untested production Python must still widen the run — this is not a way to opt out of coverage",
+    );
+  });
+
   it("emits a versioned deterministic semantic plan and digest", () => {
     const first = createEvidencePlan(input({
       changedFiles: [

@@ -79,12 +79,47 @@ case "$url" in
     ;;
 esac
 
+# BI-FA2C46D7: on https the client authorizes itself over OAuth, so no token is
+# expected here. Probe anonymously with the organization root bundle and read
+# the challenge: a 401 that names resource_metadata is the healthy answer.
+cacert_args=""
+if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "${NODE_EXTRA_CA_CERTS}" ]; then
+  cacert_args="--cacert ${NODE_EXTRA_CA_CERTS}"
+fi
+case "$url" in
+  https://*)
+    if [ -z "${DPF_MCP_BEARER_TOKEN:-}" ] || [ "$has_header" != "1" ]; then
+      # shellcheck disable=SC2086 # cacert_args is a single option pair.
+      challenge="$(curl -s -o /dev/null -D - --max-time 4 $cacert_args -X POST "$url" \
+        -H 'Content-Type: application/json' \
+        -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>/dev/null | tr -d '\r')"
+      case "$challenge" in
+        *"HTTP/"*" 401"*resource_metadata*)
+          printf '%s\n' "OK: dpf MCP endpoint reachable over https at $url; it advertises OAuth (resource_metadata in the challenge) and the client authorizes itself -- no bearer token is needed or expected."
+          ;;
+        *"HTTP/"*)
+          printf '%s\n' "WARNING: dpf MCP endpoint at $url answered without an OAuth challenge (resource_metadata missing). The client cannot authorize over OAuth against it. Runbook: $runbook."
+          ;;
+        *)
+          if [ -z "$cacert_args" ]; then
+            printf '%s\n' "WARNING: dpf MCP endpoint at $url did not answer. On https the client must trust the organization root: NODE_EXTRA_CA_CERTS is not set in this environment. Re-run the toolchain bootstrap (it persists the bundle), then restart the client. Runbook: $runbook."
+          else
+            printf '%s\n' "WARNING: dpf MCP endpoint at $url did not answer (TLS front not running, or the certificate is not issued by the trusted root at $NODE_EXTRA_CA_CERTS). Runbook: $runbook."
+          fi
+          ;;
+      esac
+      exit 0
+    fi
+    ;;
+esac
+
 if [ -z "${DPF_MCP_BEARER_TOKEN:-}" ]; then
   printf '%s\n' "NOTE: DPF MCP -- DPF_MCP_BEARER_TOKEN is not set in this environment; the dpf server cannot authenticate. Set the user env var, then restart the client. Runbook: $runbook (Token rotation). Silence: DPF_SKIP_MCP_HEALTH=1."
   exit 0
 fi
 
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 -X POST "$url" \
+# shellcheck disable=SC2086 # cacert_args is a single option pair.
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 $cacert_args -X POST "$url" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>/dev/null || echo 000)"

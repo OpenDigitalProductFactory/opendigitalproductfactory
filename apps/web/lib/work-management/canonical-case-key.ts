@@ -5,12 +5,15 @@ import type { WorkspaceCasePrismaClient } from "./workspace-case-loader";
 export function canonicalWorkCaseHref(
   caseKey: string,
   searchParams: Record<string, string | string[] | undefined>,
+  requestedCaseKey?: string,
 ): string {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams)) {
     if (value === undefined) continue;
     for (const entry of Array.isArray(value) ? value : [value]) query.append(key, entry);
   }
+  const requested = requestedCaseKey ? decodeWorkCaseKey(requestedCaseKey) : null;
+  if (requested?.sourceType === "work-capsule") query.set("workroom", requested.sourceId);
   const suffix = query.toString();
   return `/workspace/cases/${caseKey}${suffix ? `?${suffix}` : ""}`;
 }

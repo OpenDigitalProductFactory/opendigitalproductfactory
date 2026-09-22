@@ -23,7 +23,7 @@ import type { WorkerGroup } from "@/lib/work-management/worker-rollup";
  * as unknown parentage, not as a plausible parent.
  */
 
-function AccountabilityStatement({
+export function AccountabilityStatement({
   accountability,
   displayName,
 }: {
@@ -106,8 +106,7 @@ export function RoomWorkforcePanel({
         />
       </div>
       <p className="mt-2 text-xs text-[var(--dpf-muted)]">
-        Accountability is answerability for the work. It is separate from who coordinates it and
-        from what any coworker is permitted to do.
+        Accountability means answering for outcomes; coordination and permissions are recorded separately.
       </p>
 
       <h3 className="mt-4 text-sm font-semibold text-[var(--dpf-text)]">Workers in this Workroom</h3>

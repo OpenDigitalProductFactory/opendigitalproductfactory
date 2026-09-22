@@ -303,7 +303,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     });
   });
 
-  it("lets a trusted capacity event resume by TaskRun ID from server-owned immutable state", async () => {
+  it.each(["pat", "oauth", "oauth-revoked", "oauth-missing-client", "oauth-expired", "oauth-read"])("revalidates %s on a trusted capacity event", async scenario => {
+    const source = scenario === "pat" ? "pat" : "oauth";
     const params = {
       ...immutableParams,
       riskClass: "bounded-write",
@@ -319,7 +320,7 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
       executedTools: [],
       failure: { kind: "busy", message: "Provider busy." },
     });
-    await submit("PAT-EVENT", params);
+    await submitRemoteCoworkerTask({ token: { tokenId: "PAT-EVENT", userId: "user-1", capability: "write", source }, userContext, params });
     const createInput = autonomous.create.mock.calls[0]?.[0] as {
       taskRunId: string;
       metadata: Record<string, unknown>;
@@ -360,9 +361,12 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     });
     db.findMcpToken.mockResolvedValue({
       userId: "user-1",
-      capability: "write",
+      capability: scenario === "oauth-read" ? "read" : "write",
       revokedAt: null,
-      expiresAt: null,
+      expiresAt: scenario === "oauth-expired" ? new Date(0) : null,
+      kind: source === "oauth" ? "oauth_access" : "pat",
+      oauthClient: source === "oauth" && scenario !== "oauth-missing-client"
+        ? { revokedAt: scenario === "oauth-revoked" ? new Date() : null } : null,
     });
     db.findUser.mockResolvedValue({ isSuperuser: false, groups: [] });
     db.updateMany.mockResolvedValue({ count: 1 });
@@ -384,6 +388,13 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
 
     const outcome = await resumeRemoteCoworkerTaskById(createInput.taskRunId);
 
+    if (scenario !== "pat" && scenario !== "oauth") {
+      expect(outcome).toMatchObject({ kind: "result", result: { isError: true } });
+      expect(autonomous.execute).not.toHaveBeenCalled();
+      expect(autonomous.create).not.toHaveBeenCalled();
+      return;
+    }
+
     expect(db.findUnique).toHaveBeenNthCalledWith(1, expect.objectContaining({
       where: { taskRunId: createInput.taskRunId },
     }));
@@ -394,6 +405,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         capability: true,
         revokedAt: true,
         expiresAt: true,
+        kind: true,
+        oauthClient: { select: { revokedAt: true } },
       },
     });
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({

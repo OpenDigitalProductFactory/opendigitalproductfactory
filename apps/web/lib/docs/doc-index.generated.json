@@ -1135,6 +1135,7 @@
       "publishedPortal": false,
       "anchors": [
         "build-gate-runbook",
+        "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205"
       ]
     },
@@ -12588,6 +12589,8 @@
         "when-the-ward-is-full",
         "admitting-an-animal",
         "daily-care-rounds",
+        "veterinary-visits",
+        "adoptions",
         "confirming-an-operational-suggestion",
         "which-installation-you-are-on",
         "correcting-the-identity",

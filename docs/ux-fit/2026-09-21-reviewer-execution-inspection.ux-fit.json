@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "decidedOption": "shared-live-recovery-explanation",
+  "decisionInteractionId": "DI-79890AC07DF4",
+  "scope": { "files": [
+    "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx"
+  ] },
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["shared-live-recovery-explanation", "persisted-next-action-only"] }
+}

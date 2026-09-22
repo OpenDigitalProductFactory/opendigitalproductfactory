@@ -10,6 +10,8 @@ const autonomous = vi.hoisted(() => ({
   resolveAgent: vi.fn(),
   resolveTools: vi.fn(),
 }));
+const pirContext = vi.hoisted(() => vi.fn(async () => ""));
+vi.mock("./pir-evidence-context", () => ({ loadPirEvidenceContext: pirContext }));
 vi.mock("./mcp-task-review-outcome", () => ({
   loadInitiativeReviewOutcome: vi.fn(async (_binding: unknown, receiptId: string) => ({
     receiptId, summary: `Receipt ${receiptId} persisted. Implementation readiness: input-required; plan coverage remains missing.`,
@@ -68,6 +70,19 @@ const parsed = {
 };
 
 describe("remote task terminal-writer postcondition", () => {
+  it.each([undefined, "terminal-writer"] as const)("supplies current PIR observations on initial execution and same-task recovery (%s)", async (resumeKind) => {
+    pirContext.mockResolvedValueOnce("Runtime observation RV-LIVE: deployed repair verified.");
+    autonomous.execute.mockResolvedValue({ content: "Need review.", executedTools: [] });
+    const review = { ...parsed, initiativeReviewBinding: { ...parsed.initiativeReviewBinding,
+      gate: "post-implementation-review" as const, writerToolName: "record_initiative_post_implementation_review" },
+      authorityScope: ["tool:read_source_at_version", "tool:record_initiative_post_implementation_review", "backlog-item:BI-FFBDDD96"] };
+    await executeRemoteTaskAttempt({ run: { id: "run", taskRunId: "TR-PIR", contextId: "thread-1" }, threadId: "thread-1",
+      token: { tokenId: "PAT", userId: "user-1", capability: "write", source: "pat" }, userContext: {} as never,
+      parsed: review, idempotentReplay: Boolean(resumeKind), resumeKind, terminalWriterContext: "1 | earlier design", capacityAttempt: 1 });
+    expect(pirContext).toHaveBeenCalledWith(expect.anything(), review.initiativeReviewBinding);
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: expect.stringContaining("RV-LIVE") }));
+    if (resumeKind) expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: expect.stringContaining("1 | earlier design") }));
+  });
   it("refuses completion from writer success without a receipt ID", async () => {
     autonomous.execute.mockResolvedValue({ content: "Approved, start implementation.", executedTools: [{ name: writerToolName, result: { success: true } }] });
     const outcome = await executeRemoteTaskAttempt({

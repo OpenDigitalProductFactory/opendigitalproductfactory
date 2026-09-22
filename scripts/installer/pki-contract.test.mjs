@@ -45,14 +45,19 @@ test("installers consume an organization join package without asking operators t
 });
 
 test("successful PKI bootstrap persists member trust and Edge actions for normal restart lifecycle", async () => {
-  const [shellBootstrap, windowsBootstrap, shellStart, windowsStart, windowsInstaller, composeLib] = await Promise.all([
+  const [shellBootstrap, windowsBootstrap, shellStart, windowsStartScript, windowsComposeChain, windowsInstaller, composeLib] = await Promise.all([
     read("scripts/bootstrap-organization-pki.sh"),
     read("scripts/bootstrap-organization-pki.ps1"),
     read("dpf-start.sh"),
     read("scripts/dpf-start.ps1"),
+    read("scripts/installer/lib/compose-chain.ps1"),
     read("install-dpf.ps1"),
     read("scripts/installer/lib/compose.sh"),
   ]);
+  // dpf-start.ps1 resolves its chain through Get-DPFComposeArgs, so the overlay
+  // names live in compose-chain.ps1; the start script must still route through it.
+  assert.match(windowsStartScript, /Get-DPFComposeArgs/);
+  const windowsStart = windowsComposeChain;
 
   for (const source of [shellBootstrap, windowsBootstrap]) {
     assert.match(source, /DPF_ORGANIZATION_TRUST_ENABLED/);
@@ -68,8 +73,11 @@ test("successful PKI bootstrap persists member trust and Edge actions for normal
   assert.match(windowsStart, /docker-compose\.tls\.yml/);
   assert.match(windowsStart, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
   assert.match(windowsStart, /docker-compose\.edge-actions\.yml/);
-  assert.match(windowsInstaller, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
-  assert.match(windowsInstaller, /docker-compose\.edge-actions\.yml/);
+  // install-dpf.ps1 also resolves its chain through Get-DPFComposeArgs, so the
+  // Edge-actions overlay is wired once in compose-chain.ps1 for both entry points.
+  assert.match(windowsInstaller, /Get-DPFComposeArgs|compose-chain\.ps1/);
+  assert.match(windowsComposeChain, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
+  assert.match(windowsComposeChain, /docker-compose\.edge-actions\.yml/);
 });
 
 test("Windows consumer release carries the verified organization-join lifecycle assets", async () => {

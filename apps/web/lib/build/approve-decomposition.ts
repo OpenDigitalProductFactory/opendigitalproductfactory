@@ -224,6 +224,44 @@ function backlogItemAlreadyDecomposed(
 // Main entry point
 // ---------------------------------------------------------------------------
 
+/**
+ * The child's own acceptance criteria, resolved from the parent design by the
+ * candidate's indices (decomposition-candidates.ts). Pure; exported for tests.
+ */
+export function childAcceptanceCriteria(
+  parentDesignDoc: unknown,
+  indices: readonly number[],
+): string[] {
+  const doc = parentDesignDoc && typeof parentDesignDoc === "object" && !Array.isArray(parentDesignDoc)
+    ? (parentDesignDoc as Record<string, unknown>)
+    : {};
+  const list = Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria : [];
+  const out: string[] = [];
+  for (const idx of indices) {
+    const raw = list[idx];
+    const text = typeof raw === "string"
+      ? raw
+      : raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).text === "string"
+        ? (raw as Record<string, string>).text
+        : raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).criterion === "string"
+          ? (raw as Record<string, string>).criterion
+          : null;
+    if (text && text.trim()) out.push(text.trim());
+  }
+  return out;
+}
+
+/**
+ * A decomposition child is one Plan's worth of work by construction (the
+ * decompose gate already split anything larger), so it is medium by default
+ * and small when it carries a handful of criteria. Never large: large owes a
+ * spec, independent approval and a plan document that a Build Studio build
+ * does not produce.
+ */
+export function childEffortSize(acceptanceCount: number): "small" | "medium" {
+  return acceptanceCount > 0 && acceptanceCount <= 3 ? "small" : "medium";
+}
+
 export async function approveDecomposition(
   args: ApproveDecompositionInput,
 ): Promise<ApproveDecompositionResult> {
@@ -483,6 +521,16 @@ export async function approveDecomposition(
       if (build.originatingBacklogItemId && build.originator) {
         const scope = args.candidate.childScopes[i]!;
         const dependencyKeys = scope.dependsOn.map((order) => `child-${order}`);
+        // BI-660E165F / gate table §4: a child carries ITS acceptance criteria in
+        // its own body (the item-body baseline for small/medium shapes) and is
+        // sized by them. Children used to be born `large` with no acceptance
+        // section, which put every one behind a spec-approval and plan-coverage
+        // gate that a Build Studio build cannot satisfy (no spec, no plan doc in
+        // git) — observed 2026-09-18 on EP-099E2CA5, four children gate-blocked.
+        const childAcceptance = childAcceptanceCriteria(
+          build.designDoc,
+          scope.acceptanceCriteriaIndices,
+        );
         childBacklogItem = await tx.backlogItem.create({
           data: {
             itemId: childBacklogLogicalIds[i]!,
@@ -490,6 +538,9 @@ export async function approveDecomposition(
             body: [
               `Build Studio decomposition child of ${build.originator.itemId}.`,
               child.designDoc.proposedApproach,
+              childAcceptance.length > 0
+                ? ["## Acceptance", ...childAcceptance.map((ac, n) => `- AC-${n + 1} ${ac}`)].join("\n")
+                : null,
               `Depends on: ${dependencyKeys.length > 0 ? dependencyKeys.join(", ") : "none"}.`,
             ].filter(Boolean).join("\n\n"),
             status: "open",
@@ -498,7 +549,7 @@ export async function approveDecomposition(
             source: build.originator.source ?? "user-request",
             triageOutcome: "build",
             proposedOutcome: "build",
-            effortSize: "large",
+            effortSize: childEffortSize(childAcceptance.length),
             epicId: createdEpic.id,
             submittedById: args.userId,
             agentId: args.agentId ?? null,

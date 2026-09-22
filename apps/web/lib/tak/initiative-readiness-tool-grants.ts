@@ -145,7 +145,7 @@ export type InitiativeReviewerRecovery = {
      * caller hunting for missing grants instead of supplying what is actually
      * missing.
      */
-    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact" | "no-eligible-evidence";
+    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact" | "no-eligible-evidence" | "research-evidence-required";
     nextAction: string;
   }>;
   /**
@@ -198,6 +198,24 @@ const IMMUTABLE_READER_GRANT = "file_read";
 function isBindableReviewWriter(toolName: string): boolean {
   return toolName.startsWith("record_initiative_");
 }
+
+/**
+ * BI-3B323B6A: a small or medium shape owes NO canonical design (gate table,
+ * 2026-09-02 proportional-gates design §4): research is the reproduction plus
+ * the failing-to-passing proof, recorded by the author. Routing that lane
+ * through the spec-bound reviewer packet asked the author to commit a spec
+ * solely to receive a route — the terminal path already refuses to do that
+ * (terminal-recovery.ts researchLaneEscalation, BI-7876699F); the claim path
+ * now says the same thing. The escalation names the author's writer and the
+ * evidence it needs; it grants nothing.
+ */
+function isAuthorResearchLane(decision: InitiativeReadinessDecision, entry: ReadinessRequirementResult): boolean {
+  const shape = decision.shapeDecision?.effective;
+  return entry.code === "RESEARCH_REQUIRED" && (shape === "small" || shape === "medium");
+}
+
+const AUTHOR_RESEARCH_NEXT_ACTION =
+  "Research for this delivery shape is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect or gap on a named ref (commit or branch + file + line) and the failing-to-passing proof. No canonical design is required — the shape does not owe one — so do not commit a spec to obtain a reviewer route.";
 
 /** Resolve actionable, exact-grant reviewer routes without changing readiness. */
 export async function resolveInitiativeReviewerRecovery(input: {
@@ -278,6 +296,16 @@ export async function resolveInitiativeReviewerRecovery(input: {
   const reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"] = [];
   const escalations: InitiativeReviewerRecovery["escalations"] = [];
   for (const entry of distinct) {
+    if (isAuthorResearchLane(input.decision, entry.entry)) {
+      escalations.push({
+        accountableRole: entry.role,
+        toolName: entry.route.toolName,
+        grant: entry.route.lane.grant,
+        reason: "research-evidence-required",
+        nextAction: AUTHOR_RESEARCH_NEXT_ACTION,
+      });
+      continue;
+    }
     const bindable = isBindableReviewWriter(entry.route.toolName);
     const requiredGrants = bindable
       ? [entry.route.lane.grant, IMMUTABLE_READER_GRANT]
