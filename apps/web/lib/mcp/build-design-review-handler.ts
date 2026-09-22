@@ -195,6 +195,17 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // `Build: <title>. <description>`. This is the same context, on the path
       // the pipeline actually uses.
       const ownerContext = ownerAskContext(build.title, build.description);
+      // Founder ruling 2026-08-12 (mapBuildDeliverableToRoutingSensitivity):
+      // ordinary platform builds route as development work; only elevated/high
+      // deliverables demand internal/confidential clearance. The literal
+      // "internal" these reviewers used to send excluded every public-cleared
+      // cloud dev engine, so reviews landed on the local model and came back
+      // without JSON.
+      const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } =
+        await import("@/lib/explore/build-process-matrix");
+      const reviewSensitivity = mapBuildDeliverableToRoutingSensitivity(
+        deriveDeliverableSensitivity({ text: `${build.title}\n${build.description ?? ""}`, workType: build.kind }),
+      );
       const prompt = buildDesignReviewPrompt(designDocTyped, ownerContext, priorContext);
       const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, ownerContext);
       const { routeAndCall } = await import("@/lib/routed-inference");
@@ -215,17 +226,17 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
         buildId,
       };
       const [r1settled, r2settled, archSettled] = await Promise.allSettled([
-        routeAndCall(messages, "You are a design reviewer.", "internal", attribution),
+        routeAndCall(messages, "You are a design reviewer.", reviewSensitivity, attribution),
         routeAndCall(
           messages,
           "You are an independent design reviewer. Focus especially on security, data integrity, edge cases, and accessibility gaps the primary reviewer may have missed.",
-          "internal",
+          reviewSensitivity,
           { ...attribution, budgetClass: "minimize_cost" },
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
           `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.`,
-          "internal",
+          reviewSensitivity,
           { ...attribution, budgetClass: "minimize_cost" },
         ),
       ]);
@@ -275,7 +286,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           doc: typeof build.designDoc === "string" ? build.designDoc : JSON.stringify(designDocTyped),
           db: prisma,
           transport: (messages, systemPrompt) =>
-            routeAndCall(messages, systemPrompt, "internal", { budgetClass: "minimize_cost" }),
+            routeAndCall(messages, systemPrompt, reviewSensitivity, { budgetClass: "minimize_cost" }),
         });
         if (!daAdvisory.skipped && daAdvisory.findings.length > 0) {
           review = Object.assign({}, review, { dataArchitectureAdvisory: daAdvisory }) as typeof review;
