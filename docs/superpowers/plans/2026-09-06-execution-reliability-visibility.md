@@ -999,3 +999,18 @@ exact published UI head. Adopt only the case route's measurement: 385 visible
 words (down from 397), one primary action, zero visible fields, and the additional
 button. The two existing axe violations remain recorded. This baseline update
 does not claim that the full live execution experience has passed acceptance.
+
+## September 22 compact snapshot follow-up
+
+The exact761ec56 UX sweep35671984175 measured392 arrival words against385,
+with no structural or other numeric regression. Its screenshot retains the
+freshness sentence and localized timestamp; the earlier385 measurement is not
+proof of every hydrated state. DI-584304A4B6C8 selected compact shared inspector
+copy and numeric localized dates over raising the arrival budget. The initial
+DI-208F89A7300F consultation lacked feature scores and supplied no usable choice.
+
+Keep recent, stale and unknown explicit. Preserve date, time and timezone via
+LocalTime, the original sixty-second expiry and read-only Refresh state action.
+Current/historical request labels and correlated receipt summaries remain inside
+Observed execution. The updated UX manifest covers both changed components.
+The385-word limit remains; the next protected sweep must verify the result.

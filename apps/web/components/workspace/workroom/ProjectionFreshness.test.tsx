@@ -18,7 +18,7 @@ describe("projection freshness", () => {
     const { rerender } = render(<ProjectionFreshness readAt="2026-09-21T11:00:00Z" lastEvidenceAt={null} />);
     act(() => vi.setSystemTime(new Date("2026-09-21T12:05:00Z")));
     rerender(<ProjectionFreshness readAt="2026-09-21T12:05:00Z" lastEvidenceAt={null} />);
-    expect(screen.getByText("Snapshot read within the last minute.")).toBeInTheDocument();
+    expect(screen.getByText("Recent snapshot.")).toBeInTheDocument();
   });
   it("rechecks elapsed time after a suspended tab returns", () => {
     render(<ProjectionFreshness readAt="2026-09-21T12:00:00Z" lastEvidenceAt={null} />);
