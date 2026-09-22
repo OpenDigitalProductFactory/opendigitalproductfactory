@@ -7,6 +7,7 @@ import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
 import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
+import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
 import { backlogTriageDrain } from "./backlog-triage-drain";
@@ -159,6 +160,7 @@ export const scheduledFunctions = [
   codeGraphReconcileScheduled,
   issueReportTriage,
   ecosystemInboundTriage,
+  ecosystemWatchdog,
   backlogTriageDrain,
   coworkerRegressionDetect,
   agentTaskDispatch,

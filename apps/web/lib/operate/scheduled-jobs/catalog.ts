@@ -42,6 +42,7 @@ import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
 import { FLOW_JOB_CATALOG_ENTRIES } from "./catalog-flow";
 import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
 import { HYGIENE_JOB_CATALOG_ENTRIES } from "./catalog-hygiene";
+import { ECOSYSTEM_JOB_CATALOG_ENTRIES } from "./catalog-ecosystem";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
@@ -49,6 +50,7 @@ export type { JobCategory, ScheduledJobCatalogEntry };
 
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
+  ...ECOSYSTEM_JOB_CATALOG_ENTRIES,
   ...DECISION_GOVERNANCE_JOBS,
   ...FLOW_JOB_CATALOG_ENTRIES,
   {
@@ -339,21 +341,6 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     purpose: "Triages inbound issue reports into the backlog. Cadence is tunable.",
     cron: "3,18,33,48 * * * *",
     cadence: "Every 15 min (at :03)",
-    category: "editable",
-    tracksRunData: true,
-    runNowEvent: null,
-  },
-  {
-    jobId: "ecosystem-inbound-issue-triage",
-    inngestId: "ecosystem/inbound-issue-triage",
-    honorsEnabledGate: true,
-    name: "Ecosystem: inbound issue triage",
-    purpose:
-      "Reads what the ecosystem submitted — upstream issues filed by the relay and peer "
-      + "federated demand — and files it into the backlog with the submitter preserved. "
-      + "No-ops unless the installation's purpose is evolve-dpf.",
-    cron: "17 6 * * 1",
-    cadence: "Weekly (Mondays, 06:17)",
     category: "editable",
     tracksRunData: true,
     runNowEvent: null,
