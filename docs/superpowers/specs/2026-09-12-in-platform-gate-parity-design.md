@@ -112,6 +112,46 @@ As a non-blocking step in the `build/review.verify` Inngest job, between
 `resolve-changed-files` and `semantic-change-review` — the point where the
 assembled change exists and before ship is dispatched.
 
+### Slice 3 - the record acquires teeth
+
+`apps/web/lib/build/preflight-record-requirement.ts` and
+`apps/web/lib/build/sandbox/guard-gauntlet-identity.ts`.
+
+Slices 1 and 2 make the checks run and make their result count. Neither has force
+on its own. On the external path `git push` is refused without a gate record, and
+that refusal IS the mechanism - the record only matters because publishing is
+impossible without it. `create_portal_pr` had no equivalent, so the in-platform
+path could put a branch on a shared repository with no verification having run.
+
+Publishing now requires a PASSING in-platform preflight record for the EXACT tree
+being published. Two properties carry the weight, and both are the way to get
+this wrong:
+
+**Exact tree.** "A gate ran for this build" is not the contract; "a gate passed
+for THIS tree" is. A record for an earlier tree of the same build does not
+satisfy it - that is precisely the case where someone fixed the guards, changed
+the code again, and published the unverified version.
+
+**Unreadable is not permission.** If the tree cannot be identified, or the plan
+or toolchain is unknown, or the key cannot be derived, publication is refused.
+The safe direction is to stop, because the cost of a wrong "yes" is unverified
+code on a shared repository.
+
+This is also where the tree keying from slice 2 pays for itself. The consumer has
+to derive the SAME key the producer wrote, before it knows anything about the
+result, purely from what is on disk now - which is why the plan digest hashes the
+plan and never the outcome. `guard-gauntlet-identity.ts` does that recomputation,
+and every field of the identity is independently nullable so a partial read is
+refused rather than silently completed with a guess.
+
+An override is an allowlisted, recorded reason mirroring the closed set the
+pre-push hook already uses, never a silent bypass, and it short-circuits before
+any I/O so a deliberate bypass does not depend on the sandbox being reachable.
+
+Sequenced last of the three deliberately: it is the only slice that can block
+real work, and a refusal arriving before the checks are trustworthy would meet a
+non-developer with a wall they did not earn.
+
 ## Scope boundary
 
 Parity is of the FAST tier plus the cloud safety net, not of the image build.
@@ -150,6 +190,9 @@ the cloud already covers.
 - AC-IPGP-005 A verification run writes a gate record keyed to the tree it checked, via the existing writer.
 - AC-IPGP-006 The record states which tier ran and does not imply coverage it lacks.
 - AC-IPGP-007 A fast-tier record derives a different gate key than the heavy tier for the same tree.
+- AC-IPGP-011 Publishing without a passing record for the exact tree is refused, with a message naming what is missing.
+- AC-IPGP-012 A record for a different tree, including an earlier tree of the same build, does not satisfy the requirement.
+- AC-IPGP-013 Any override is an allowlisted, recorded reason; an unrecognised code does not bypass the requirement.
 
 ## Tests
 
