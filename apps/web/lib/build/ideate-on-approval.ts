@@ -202,7 +202,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
       return outcome;
     }
 
-    const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const { getModelTier, deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
     const {
       getBuildStudioConfig,
       isModelTierRoutingEnabled,
@@ -224,7 +224,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
           sensitivity: deliverableSensitivity,
         })
       : undefined;
-    const routingSensitivity = deliverableSensitivity === "high" ? "confidential" as const : "internal" as const;
+    const routingSensitivity = mapBuildDeliverableToRoutingSensitivity(deliverableSensitivity);
 
     // Resolve the same task-qualified selection used by model-selection preview
     // and actual dispatch. A blocked result stops before phase work with one action.
