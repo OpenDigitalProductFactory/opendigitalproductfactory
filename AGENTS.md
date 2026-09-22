@@ -63,7 +63,7 @@ Procedure, recovery steps and rationale: [branch & worktree runbook](docs/archit
 Work is not complete until all four pass:
 
 1. **Unit tests** — `pnpm --filter <pkg> exec vitest run` for affected files.
-2. **Production build** — `pnpm --filter web build` with zero errors. TypeScript errors surface only here, not in `vitest` or IDE checks.
+2. **Production build** — `pnpm --filter web build` with zero errors. Typecheck via `pnpm --filter <pkg> typecheck`, never bare `tsc`.
 3. **UX verification** — for any UI/agent/coworker/workflow/forms change, exercise the affected path against the running app.
 4. **Migration applies cleanly** — if a migration was added.
 
