@@ -250,6 +250,28 @@ doing. Three choices, in the order that matters:
 Anything you set here applies to everyone working in that room, and you can clear it again
 to go back to following the work.
 
+### What "how hard should it push" now reaches
+
+That second setting no longer governs only the room's own turns. It also sets the pace of
+the **standing work its coworkers do on their own** — the recurring tasks that run without
+anyone asking.
+
+Before, that pace came from a per-coworker setting that had been removed from the product,
+so a coworker's recurring work ran at a rhythm nobody could change. Now the room that
+carries the work sets it, which is the same place you already decide everything else about
+that work.
+
+Two things follow from that, and both are deliberate:
+
+- **A coworker in more than one room takes the fastest.** It has one set of recurring tasks,
+  not one per room, so a room set to "pushes" is served at that pace. A quiet room does not
+  slow down what another room is pushing on.
+- **A finished room stops setting anything.** Once a room is complete or abandoned, its pace
+  no longer counts — work that is over should not keep driving a coworker.
+
+If no live room carries a coworker's standing work at all, its recurring tasks keep running
+as they were. Nothing is switched off behind your back.
+
 One rule is worth knowing before you use the third setting: **stricter always applies.**
 Choosing a looser option cannot give a coworker more freedom than its own permissions
 already allow. If a coworker is only permitted to propose, setting the room to "acts alone"

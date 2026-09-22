@@ -4,6 +4,8 @@ import { signIn } from "@/lib/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { resolveReturnPath } from "@/lib/auth/safe-return-path";
+import { UpgradeHold } from "@/components/auth/UpgradeHold";
+import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 
 type Props = {
   searchParams: Promise<{ reset?: string; error?: string; callbackUrl?: string }>;
@@ -17,6 +19,17 @@ export default async function LoginPage({ searchParams }: Props) {
   // exists to remove (BI-C7D25599). Validated to a same-origin relative path so the
   // parameter cannot become an open redirect.
   const returnPath = resolveReturnPath(callbackUrl);
+  // BI-57D91FF0: while a self-upgrade drains or swaps, the proxy refuses the
+  // sign-in POST with a 503. Say so here, on arrival, instead of letting the
+  // form submit into a refusal the client cannot explain.
+  const quiescence = await getQuiescenceConfig();
+  if (quiescence.level !== "normal") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--dpf-bg)]">
+        <UpgradeHold runId={quiescence.runId} />
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--dpf-bg)]">
       <div className="w-full max-w-sm p-8 bg-[var(--dpf-surface-1)] rounded-xl border border-[var(--dpf-border)]">
