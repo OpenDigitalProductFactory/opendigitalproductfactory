@@ -87,4 +87,28 @@ describe("terminal writer output truncation", () => {
     expect(governedExecuteTool).toHaveBeenCalledTimes(1);
     expect(outcome.failure).toBeUndefined();
   });
+
+  it.each(["receipt", "approval"])("does not continue truncated prose after a persisted %s boundary", async (boundary) => {
+    if (boundary === "approval") vi.mocked(governedExecuteTool).mockResolvedValue({
+      success: false, message: "Approval pending.", error: "approval_required", data: { envelopeId: "ENV-1" },
+    });
+    vi.mocked(routeAndCall).mockResolvedValueOnce(reply(false, [{ id: "write-1", name: writer, arguments: {} }]) as never)
+      .mockResolvedValue(reply(true) as never);
+    const outcome = await runAgenticLoop(params);
+    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    expect(governedExecuteTool).toHaveBeenCalledTimes(1);
+    expect(outcome.failure).toBeUndefined();
+    expect(outcome.executedTools[0].result.success).toBe(boundary === "receipt");
+  });
+
+  it("keeps a failed writer unverified when subsequent prose is truncated", async () => {
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: false, message: "Receipt write failed.", error: "receipt_persistence_failed" });
+    vi.mocked(routeAndCall).mockResolvedValueOnce(reply(false, [{ id: "write-1", name: writer, arguments: {} }]) as never)
+      .mockResolvedValue(reply(true) as never);
+    const outcome = await runAgenticLoop(params);
+    expect(routeAndCall).toHaveBeenCalledTimes(4);
+    expect(governedExecuteTool).toHaveBeenCalledTimes(1);
+    expect(outcome.failure?.kind).toBe("terminal-writer-missing");
+    expect(outcome.executedTools[0].result.success).toBe(false);
+  });
 });
