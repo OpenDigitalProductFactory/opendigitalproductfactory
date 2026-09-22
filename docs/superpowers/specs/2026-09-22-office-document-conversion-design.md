@@ -56,103 +56,13 @@ stub.
 
 ## Design (ordered deliverables)
 
-### S0 · Honest format detection (`BI-65D65EC0`, small, ships first)
+Implementation detail, file paths and test lists live in the plan.
 
-`parseFileContent` sniffs content before trusting the extension:
-OLE compound-file magic `D0 CF 11 E0 A1 B1 1A E1` means a legacy binary office
-file, `{\rtf` means RTF, `PK\x03\x04` means OOXML or ODF. Legacy binary and RTF
-return `{ unsupported: true, format: 'legacy-word' | 'legacy-excel' |
-'legacy-powerpoint' | 'rtf' | 'presentation' | 'odf', reason }`. A `.docx`
-misnamed `.doc` still parses. Callers show the reason in plain language. This
-is also the fallback every later slice degrades to.
-
-### S1 · `dpf-doctools` image (`BI-15D69168`)
-
-`Dockerfile.doctools`: Debian-slim, the distribution's `libreoffice-core`,
-`-writer`, `-calc` and `-impress` (no Java, no Base, no GUI), and a bounded
-font set with metric-compatible substitutes for the common Office fonts so page
-layout survives conversion. A non-root user runs the `dpf-convert` entrypoint:
-
-```
-dpf-convert --to <pdf|docx|xlsx|txt> [--from <ext>]   # stdin → stdout
-exit 0 ok · 2 bad args · 3 conversion failed · 4 input too large · 124 timeout
-```
-
-The LibreOffice user profile is baked read-only with macro security at its
-highest level, macro execution off and linked/remote content loading off.
-
-The image is built and published by `publish-image.yml` beside `dpf-promoter`,
-tagged with the release, and its digest recorded in the release manifest. It is
-**not** added to any compose file or profile. PR #5290 removed the only
-optional third-party image from Compose because `verify-compose-image-manifests`
-checks every profile, so an optional service nobody ran still froze
-`promote-latest`. A DPF-built image published with the release does not share
-that failure mode. CI asserts an image-size budget and records the measured
-size.
-
-### S2 · Converter runtime (`BI-52E565DA`)
-
-`apps/web/lib/documents/conversion/` follows the promoter precedent: the portal
-already mounts the docker socket and launches the DPF-built `dpf-promoter` image
-one-shot (`apps/web/lib/self-upgrade/promoter.ts`, `buildPromoterCommand`).
-
-- `buildConverterCommand` is a pure argv builder: `docker run --rm -i
-  --network none --read-only --tmpfs /tmp:size=512m --memory 1g
-  --pids-limit 256 --cap-drop ALL --security-opt no-new-privileges --user
-  <uid> --name dpf-doctools-<id> <image@digest> dpf-convert --to <fmt>`.
-- `convertDocument({ input, from, to })` spawns through the existing
-  `runProcessWithBudget` and streams stdin and stdout. There are no bind mounts,
-  so the host-path and named-volume differences between the source install and
-  the release install never matter. It enforces an input cap (50 MB default),
-  a wall-clock timeout (120 s, then `docker rm -f` by name) and a process-wide
-  concurrency cap (2).
-- It returns `{ ok: true, bytes, mime }` or `{ ok: false, reason:
-  'converter-unavailable' | 'input-too-large' | 'timeout' |
-  'conversion-failed' }`. Expected failures never throw.
-- `getConverterAvailability()` reports whether the socket is reachable and the
-  image present or pullable. An install without a docker socket reports
-  "unavailable by design", not an outage (the `dpf-stt` probe in PR #5290
-  published a permanent 0 for a dependency never deployed).
-- The image reference comes from the same release-manifest and platform-config
-  channel as `promoterImage`. It is never hardcoded.
-
-### S3 · Converter-backed ingestion (`BI-81524041`)
-
-Conversion normalises to a format an existing parser already reads, so no new
-parsing library enters the tree:
-
-| Input | Converted to | Parsed by |
-|---|---|---|
-| `.doc`, `.rtf`, `.odt` | `.docx` | `parseDocx` (mammoth, keeps headings) |
-| `.xls`, `.ods` | `.xlsx` | `parseXlsx` (read-excel-file) |
-| `.ppt`, `.pptx`, `.odp` | text | plain-text path |
-
-When M5's `parseDocument()` facade exists, the routing lives behind it;
-otherwise it goes into `parseFileContent` and M5 inherits it. The three callers
-(`file-upload.ts`, `onboarding/capture-business-document.ts`,
-`workbooks/sheet-import.ts`) and their upload `accept` lists widen together.
-When conversion is unavailable, the S0 result is returned.
-
-### S4 · Document renditions (`BI-9D43CBEF`)
-
-- Migration: `DocumentRendition.renditionKind` changes from `String` to the
-  Prisma enum `DocumentRenditionKind { pdf, plain_text }` (AGENTS.md §8). The
-  table has no rows today; the migration still casts safely for any data state.
-- A durable background function on the current job substrate (it moves with
-  M3 if M3 lands first) runs when a version with an office `contentFormat` is
-  saved. It converts the file to PDF and to text, writes both renditions (the
-  PDF as a `DocumentBlob`; the text inline up to
-  `DOCUMENT_TEXT_INLINE_LIMIT_BYTES`), then indexes the text through the
-  existing full-text and `storeDocumentVector` paths. It is idempotent on the
-  existing `(documentVersionId, renditionKind)` unique key.
-- A failure is written as a `DocumentLifecycleEvent` with its typed reason. A
-  document that cannot be converted is visible rather than silently unindexed.
-  Once the converter becomes available again, `converter-unavailable` is retried
-  one time. It is not retried on a timer.
-- `doc_load` returns the available renditions. The document page offers "View
-  PDF" and "Download original", built from shared UI primitives and `--dpf-*`
-  tokens.
-- A bounded one-time backfill covers office blobs that already exist.
+- **S0 · Honest format detection (`BI-65D65EC0`, ships first).** `parseFileContent` sniffs content before trusting the extension (OLE magic `D0 CF 11 E0`, `{\rtf`, ZIP header). Legacy binary, RTF and not-yet-convertible formats return a typed unsupported result with a plain-language reason; a `.docx` misnamed `.doc` still parses. Every later slice degrades to this.
+- **S1 · `dpf-doctools` image (`BI-15D69168`).** A DPF-built, Debian-slim image with the distribution's LibreOffice writer/calc/impress (no Java, Base or GUI) and metric-compatible fonts. A non-root `dpf-convert --to <pdf|docx|xlsx|txt>` entrypoint reads stdin and writes stdout, with fixed exit codes. The baked profile disables macros and linked-content loading. `publish-image.yml` publishes it beside `dpf-promoter` with a recorded digest and a size budget. It is **not** in any compose file or profile: PR #5290 removed the only optional third-party image because `verify-compose-image-manifests` checks every profile and froze `promote-latest`.
+- **S2 · Converter runtime (`BI-52E565DA`).** `apps/web/lib/documents/conversion/` follows the promoter precedent: the portal already mounts the docker socket and launches `dpf-promoter` one-shot (`buildPromoterCommand`, `runProcessWithBudget`). `convertDocument()` runs `docker run --rm -i --network none --read-only` with tmpfs, memory, pid and capability limits, streams stdin/stdout (no bind mounts, so install shapes never differ), and caps input size, wall-clock time and concurrency. It returns a typed result and never throws on expected failure (`converter-unavailable`, `input-too-large`, `timeout`, `conversion-failed`). An install with no docker socket reports "unavailable by design", not an outage. The image reference comes from the same channel as `promoterImage`.
+- **S3 · Converter-backed ingestion (`BI-81524041`).** Conversion normalises to formats existing parsers read, so no parser library is added: `.doc/.rtf/.odt` → `.docx` → `parseDocx`; `.xls/.ods` → `.xlsx` → `parseXlsx`; `.ppt/.pptx/.odp` → text. It routes behind M5's `parseDocument()` if that has landed, else `parseFileContent`. Uploads, onboarding capture and Workbooks sheet import widen their accepted types together.
+- **S4 · Document renditions (`BI-9D43CBEF`).** `renditionKind` becomes the Prisma enum `DocumentRenditionKind { pdf, plain_text }` (AGENTS.md §8). A durable background function converts office versions to PDF (a `DocumentBlob`) and text, writes both renditions idempotently on the existing unique key, and indexes the text through the existing full-text and `storeDocumentVector` paths. Failures become `DocumentLifecycleEvent`s with the typed reason. `doc_load` returns renditions; the document page offers "View PDF" and "Download original". A bounded backfill covers existing office blobs.
 
 ## Research and benchmarking
 
@@ -180,22 +90,7 @@ proposed. M2 used the upstream mermaid image instead, so the name is free.
 
 ## Security
 
-A document is untrusted input to a large C++ parser. LibreOffice has had
-advisories in exactly this class, including macro execution and the loading of
-linked or remote content. The containment rests on the container, not on
-LibreOffice being bug-free:
-
-- There is no network, so linked content cannot be fetched and nothing can leave.
-- The root filesystem is read-only, with a size-capped tmpfs.
-- All capabilities are dropped and `no-new-privileges` is set.
-- It runs as a non-root user.
-- Memory and pid limits apply, plus a wall-clock kill.
-- No host path is mounted; the only I/O is stdin and stdout.
-- Macros are disabled in the baked profile.
-
-The image rebuilds with each release, so distribution security updates travel
-with the platform version. The OSV/SBOM posture covers the image through the
-same release scanning as `dpf-promoter`.
+Documents are untrusted input to a large C++ parser, and LibreOffice has had advisories for macro execution and linked-content loading. Containment rests on the container, not on the parser: no network, read-only root, no host mounts (stdin/stdout only), all capabilities dropped, `no-new-privileges`, non-root, memory/pid limits, a wall-clock kill, and macros disabled in the baked profile. The image rebuilds each release, so distribution security fixes ship with the platform and the release SBOM/OSV scanning covers it.
 
 ## Acceptance
 
@@ -220,8 +115,4 @@ smoke test runs in the publishing workflow.
 
 ## Documentation impact
 
-- S1: release/install docs name the new published image.
-- S2: `docs/install/platform-support-watchlist.md` gets a row (targets with no
-  docker socket report the converter as unavailable by design).
-- S3: the user guide section on supported upload formats.
-- S4: the documents workspace guide (renditions and preview).
+S1 release/install docs; S2 a `platform-support-watchlist.md` row; S3 supported upload formats in the user guide; S4 the documents workspace guide.
