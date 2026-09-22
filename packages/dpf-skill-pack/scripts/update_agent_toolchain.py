@@ -1143,6 +1143,7 @@ GROK_HOOK_GUARDS = (
     "lease-guard.mjs",
     "root-clone-guard.mjs",
     "compose-guard.mjs",
+  "raw-tool-guard.mjs",
     "portal-image-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
     "pregate-evidence-guard.mjs",
