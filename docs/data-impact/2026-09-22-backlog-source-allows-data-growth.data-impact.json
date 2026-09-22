@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "BacklogItem.source closed set (packages/db/prisma/migrations)",
+    "Corrective failure capture (apps/web/lib/backlog/capture-corrective-bi.ts)",
+    "Table-growth steward filing path (apps/web/lib/ea/table-growth-apply.ts)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal platform configuration",
+    "dataSubjectRights": "not-applicable — `source` records which platform mechanism raised a backlog item. It describes no person and is never derived from one.",
+    "reviewDisposition": "No data-subject workflow is introduced or changed. The change widens the set of values a column may hold; it neither reads, writes, nor reclassifies any personal data."
+  },
+  "migration": {
+    "name": "20260922120000_backlog_source_allows_data_growth",
+    "backfill": "None required, and none possible to need. The constraint is widened, never narrowed, so no existing row can violate it: every value currently stored was already permitted by the previous set, which is a strict subset of the new one. DROP CONSTRAINT IF EXISTS then ADD makes the statement idempotent, so replaying it against a database that already has the widened form is a no-op. NOT VALID matches the sibling constraints from 20260816111000_closed_set_check_expand and skips the full-table re-check, which is safe here for the same reason: there is nothing for it to find.",
+    "rollback": "Forward-only by convention, but trivially reversible: a corrective migration re-adds the constraint without 'data-growth'. That would only be correct if the writer were also removed, because narrowing it again is what caused this defect — the writer would resume failing silently."
+  },
+  "tests": [
+    "apps/web/lib/backlog/backlog-source-closed-set.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:backlogitem#source-closed-set",
+      "prismaModel": "BacklogItem",
+      "lifecycleDisposition": "BacklogItem is a retained work record and stays one. No row is created, altered, deleted or re-identified by this change. What changes is the set of values one existing TEXT column may accept, so that an existing writer's existing value stops being rejected at insert time.",
+      "fields": [
+        {
+          "fieldId": "data:backlogitem#source",
+          "resolution": "governed",
+          "reason": "The permitted set gains 'data-growth', the value captureCorrectiveFailureBI has sent since EP-A33A5C61 slice 5 shipped. Until now every such insert failed with Postgres 23514 and was swallowed by that function's deliberate best-effort catch, so the table-growth steward detected persistent findings for eleven consecutive nights and filed none of them (BI-4C6934CF). Widening the set is what makes the steward's filing path real; the column type, its nullability and every stored value are untouched.",
+          "provenance": "BI-4C6934CF; portal log shows four 23514 rejections per night; verified on the live install by an INSERT with source='data-growth' inside a transaction that was rolled back, which the widened constraint accepted."
+        }
+      ]
+    }
+  ]
+}
