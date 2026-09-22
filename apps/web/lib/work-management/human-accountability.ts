@@ -63,21 +63,22 @@ export type EffectiveHumanAccountability =
       reason:
         | "no-organization-owner-recorded"
         | "conflicting-accountable-principals"
+        | "conflicting-responsibility-parents"
+        | "incomplete-responsibility-lineage"
         | "responsibility-cycle";
       message: string;
       /** The room the problem was found on, when it is a specific room. */
       atWorkroomId: string | null;
     };
 
-function parentOf(edges: readonly AccountabilityEdge[], childId: string): string | null {
+function parentsOf(edges: readonly AccountabilityEdge[], childId: string): string[] {
   const parents = edges
     .filter((edge) => isResponsibilityRelation(edge.relation) && edge.toWorkroomId === childId)
     .map((edge) => edge.fromWorkroomId);
-  const unique = [...new Set(parents)];
   // Two containers is an ambiguity in the graph, not a precedence question. The
   // walk stops rather than picking one, so the estate reports a correctable
   // structure instead of an arbitrary owner.
-  return unique.length === 1 ? unique[0]! : null;
+  return [...new Set(parents)];
 }
 
 function accountableOn(room: AccountabilityRoomInput | undefined): { principalId: string | null; conflict: boolean } {
@@ -97,6 +98,8 @@ export function resolveEffectiveHumanAccountability(input: {
   workroomId: string;
   rooms: readonly AccountabilityRoomInput[];
   edges: readonly AccountabilityEdge[];
+  /** Ancestors whose parents were not read because the bounded walk ended. */
+  unresolvedRoomIds?: readonly string[];
   /** The organization's recorded top accountable principal, or null when unset. */
   organizationTopAccountablePrincipalId: string | null;
 }): EffectiveHumanAccountability {
@@ -134,7 +137,18 @@ export function resolveEffectiveHumanAccountability(input: {
         inheritedFrom: walked,
       };
     }
-    current = parentOf(input.edges, current);
+    if (input.unresolvedRoomIds?.includes(current)) {
+      return { state: "setup-required", reason: "incomplete-responsibility-lineage",
+        message: `Responsibility above ${current} was not read. Inspect the lineage before assigning an owner.`,
+        atWorkroomId: current };
+    }
+    const parents = parentsOf(input.edges, current);
+    if (parents.length > 1) {
+      return { state: "setup-required", reason: "conflicting-responsibility-parents",
+        message: `${current} has multiple responsibility parents. Correct the lineage or record an explicit accountable human.`,
+        atWorkroomId: current };
+    }
+    current = parents[0] ?? null;
   }
 
   if (input.organizationTopAccountablePrincipalId?.trim()) {

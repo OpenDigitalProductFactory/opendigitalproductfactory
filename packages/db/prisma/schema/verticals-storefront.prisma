@@ -760,6 +760,8 @@ model AnimalAdoptionApplication {
   inquiryRef           String?
   applicantContactRef  String?
   applicantName        String?
+  /// Screening answers (housing, other pets, children, landlord permission, experience). Confidential applicant PII; never projected into the bounded queue.
+  screening            Json?
   status               AnimalAdoptionApplicationStatus @default(submitted)
   reviewerPrincipalRef String?
   decisionReason       String?

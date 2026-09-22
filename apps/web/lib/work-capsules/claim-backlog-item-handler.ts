@@ -79,7 +79,7 @@ async function resolveClaimShape(args: {
   return { resolution, refusal: null };
 }
 
-async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolution: DeliveryShapeResolution | null): Promise<void> {
+export async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolution: DeliveryShapeResolution | null): Promise<void> {
   if (!resolution || (resolution.kind !== "declared" && resolution.kind !== "derived")) return;
   if (!db.workroom?.findUnique) return;
   const row = await db.workroom.findUnique({ where: { capsuleId }, select: { scopeClaims: true, updatedAt: true } });

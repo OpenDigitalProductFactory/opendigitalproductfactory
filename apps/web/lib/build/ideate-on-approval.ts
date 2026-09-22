@@ -34,6 +34,31 @@
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { classifyRetrySafePreDispatchFailure } from "./build-engine-selection";
+
+/** BI-0B95D268: poll the sandbox container until it runs again (bounded). */
+export async function waitForSandboxRunning(opts: {
+  timeoutMs?: number;
+  intervalMs?: number;
+  isRunning?: () => Promise<boolean>;
+  sleep?: (ms: number) => Promise<void>;
+} = {}): Promise<boolean> {
+  const timeoutMs = opts.timeoutMs ?? 3 * 60 * 1000;
+  const intervalMs = opts.intervalMs ?? 10_000;
+  const isRunning = opts.isRunning ?? (async () => {
+    const [{ isSandboxRunning }, { SANDBOX_CONTAINER }] = await Promise.all([
+      import("./sandbox/sandbox"),
+      import("./sandbox/agent-cli-runtime"),
+    ]);
+    return isSandboxRunning(SANDBOX_CONTAINER);
+  });
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await isRunning()) return true;
+    if (Date.now() >= deadline) return false;
+    await sleep(intervalMs);
+  }
+}
 import { formatBuildEngineSelectionEvidence } from "./build-engine-selection-runtime";
 
 type DispatchOutcome =
@@ -177,7 +202,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
       return outcome;
     }
 
-    const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const { getModelTier, deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
     const {
       getBuildStudioConfig,
       isModelTierRoutingEnabled,
@@ -199,7 +224,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
           sensitivity: deliverableSensitivity,
         })
       : undefined;
-    const routingSensitivity = deliverableSensitivity === "high" ? "confidential" as const : "internal" as const;
+    const routingSensitivity = mapBuildDeliverableToRoutingSensitivity(deliverableSensitivity);
 
     // Resolve the same task-qualified selection used by model-selection preview
     // and actual dispatch. A blocked result stops before phase work with one action.
@@ -317,6 +342,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const attemptCandidates = [selection.selected, ...selection.fallbackChain.slice(0, 1)];
     let ideateResult: Awaited<ReturnType<typeof dispatchIdeateResearch>> | null = null;
     let resolvedAttempt = selection.selected;
+    let infrastructureRetried = false;
     for (let attemptIndex = 0; attemptIndex < attemptCandidates.length; attemptIndex += 1) {
       const attempt = attemptCandidates[attemptIndex]!;
       resolvedAttempt = attempt;
@@ -338,6 +364,24 @@ export async function dispatchIdeateForApprovedBuild(params: {
         sensitivity: routingSensitivity,
       });
       if (ideateResult.success) break;
+      // BI-0B95D268: the harness killed the engine (a sandbox restart during a
+      // self-upgrade swap is the common case). Wait for the sandbox to come
+      // back, then re-run the SAME attempt once — before this, the build sat
+      // as a "model failure" until the 20-minute stale window plus the
+      // 10-minute reconciler tick re-drove it.
+      if (ideateResult.infrastructure && !infrastructureRetried) {
+        infrastructureRetried = true;
+        await logActivity(
+          `Infrastructure failure, not a model verdict: ${(ideateResult.error ?? "").slice(0, 160)} — waiting for the sandbox, then retrying the same engine once.`,
+        );
+        const ready = await waitForSandboxRunning();
+        if (ready) {
+          attemptIndex -= 1;
+          continue;
+        }
+        await logActivity("Sandbox did not come back within the wait window; leaving the build for the stranded-build reconciler.");
+        break;
+      }
       const retryClass = classifyRetrySafePreDispatchFailure({
         message: ideateResult.error ?? "",
         durationMs: ideateResult.durationMs,
@@ -462,13 +506,15 @@ export async function dispatchIdeateForApprovedBuild(params: {
       try {
         const { shouldRunPreSpecResearch, conductPreSpecResearch, formatResearchReportMarkdown, makeInferenceResearchDeps } =
           await import("@/lib/build/pre-spec-research");
-        const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+        const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
         const sensitivity = deriveDeliverableSensitivity({ text: `${featureTitle}\n${featureDescription}`, workType: bi.workType });
+        const researchRouteSensitivity = mapBuildDeliverableToRoutingSensitivity(sensitivity);
         if (shouldRunPreSpecResearch({ workType: bi.workType, effortSize: bi.effortSize, sensitivity })) {
           const { searchPublicWeb, fetchPublicWebsiteEvidence } = await import("@/lib/public-web-tools");
           const { routeAndCall } = await import("@/lib/routed-inference");
+          const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
           const deps = makeInferenceResearchDeps({
-            llm: async (p) => (await routeAndCall([{ role: "user" as const, content: p }], "You are a research assistant. Follow the output format exactly.", "internal", { budgetClass: "minimize_cost" })).content,
+            llm: async (p) => (await routeAndCall([{ role: "user" as const, content: p }], "You are a research assistant. Follow the output format exactly.", researchRouteSensitivity, { ...BUILD_PHASE_ROUTE_OPTIONS, budgetClass: "minimize_cost" })).content,
             search: async (q) => (await searchPublicWeb(q)).map((r) => ({ title: r.title, url: r.url, description: r.snippet })),
             fetchSource: async (u) => { const e = await fetchPublicWebsiteEvidence(u); return { title: e.title, textExcerpt: e.textExcerpt }; },
           });
@@ -744,11 +790,12 @@ export async function dispatchDesignReviewFixLoop(params: {
         let raw: unknown = null;
         try {
           const { routeAndCall } = await import("@/lib/inference/routed-inference");
+          const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
           const answer = await routeAndCall(
             [{ role: "user", content: prompt }],
             "You are the design author diagnosing a defect you will then plan against.",
             "development",
-            { taskType: "conversation" },
+            { ...BUILD_PHASE_ROUTE_OPTIONS, taskType: "conversation" },
           );
           raw = answer?.content ?? null;
         } catch (err) {

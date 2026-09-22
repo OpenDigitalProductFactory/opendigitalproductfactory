@@ -79,6 +79,40 @@ try {
         Write-Output "WARNING: DPF MCP -- .mcp.json points dpf at plain-http '$url' with NO headers.Authorization. The client refuses OAuth over http, so this config cannot authenticate by ANY path (BI-46B636B0). Fix: re-run the toolchain bootstrap (scripts/dpf-bootstrap-agent-toolchain.ps1) to restore the `${DPF_MCP_BEARER_TOKEN} header fallback, or serve the portal over https (docker-compose.tls.yml) and point .mcp.json at it. Runbook: $runbook."
     }
 
+    # BI-FA2C46D7: on https the client authorizes itself over OAuth, so no token
+    # is expected here. Probe anonymously and read the challenge: a 401 naming
+    # resource_metadata is the healthy answer. Node clients trust the
+    # organization root through NODE_EXTRA_CA_CERTS; this PowerShell probe uses
+    # the Windows certificate store, so an untrusted root surfaces as a TLS
+    # failure and is reported as such.
+    if (($url -like 'https://*') -and ([string]::IsNullOrWhiteSpace($env:DPF_MCP_BEARER_TOKEN) -or -not $hasHeader)) {
+        $challenge = ''
+        $status = 0
+        try {
+            $null = Invoke-WebRequest -Uri $url -Method Post -UseBasicParsing -TimeoutSec 4 `
+                -ContentType 'application/json' `
+                -Body '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+            $status = 200
+        }
+        catch {
+            $resp = $_.Exception.Response
+            if ($resp -and ($resp.PSObject.Properties.Name -contains 'StatusCode')) {
+                try { $status = [int]$resp.StatusCode.value__ } catch { $status = 0 }
+                try { $challenge = [string]$resp.Headers['WWW-Authenticate'] } catch { $challenge = '' }
+            }
+        }
+        if ($status -eq 401 -and $challenge -match 'resource_metadata') {
+            Write-Output "OK: dpf MCP endpoint reachable over https at $url; it advertises OAuth (resource_metadata in the challenge) and the client authorizes itself -- no bearer token is needed or expected."
+        }
+        elseif ($status -gt 0) {
+            Write-Output "WARNING: dpf MCP endpoint at $url answered without an OAuth challenge (resource_metadata missing). The client cannot authorize over OAuth against it. Runbook: $runbook."
+        }
+        else {
+            Write-Output "WARNING: dpf MCP endpoint at $url did not answer (TLS front not running, or the organization root is not trusted by this host). Node clients trust it via NODE_EXTRA_CA_CERTS, which the toolchain bootstrap persists for an https endpoint. Runbook: $runbook."
+        }
+        exit 0
+    }
+
     if ([string]::IsNullOrWhiteSpace($env:DPF_MCP_BEARER_TOKEN)) {
         Write-Output "NOTE: DPF MCP -- DPF_MCP_BEARER_TOKEN is not set in this environment; the dpf server cannot authenticate. Set the user env var, then restart the client. Runbook: $runbook (Token rotation). Silence: DPF_SKIP_MCP_HEALTH=1."
         exit 0

@@ -42,7 +42,7 @@ DB string columns with fixed valid values are canonical enums. Source of truth: 
 | Model         | Field      | Valid values                                                                |
 | ------------- | ---------- | --------------------------------------------------------------------------- |
 | `Epic`        | `status`   | `open`, `in-progress`, `done`                                               |
-| `BacklogItem` | `status`   | `open`, `in-progress`, `done`, `deferred`                                   |
+| `BacklogItem` | `status`   | `triaging`, `open`, `in-progress`, `awaiting-acceptance`, `done`, `deferred`, `retired` |
 | `BacklogItem` | `type`     | `portfolio`, `product`                                                      |
 | `BacklogItem` | `workType` | `bug`, `feature`, `chore`, `doc`, `tool`, `skill`, `refactor`               |
 | `BacklogItem` | `source`   | `user-request`, `automated-detection`                                       |

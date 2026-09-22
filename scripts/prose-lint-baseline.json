@@ -2431,13 +2431,21 @@
     "longSentences": 0,
     "textMass": 3
   },
+  "apps/web/app/(shell)/workspace/rescue/adoptions/actions.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
   "apps/web/app/(shell)/workspace/rescue/care/actions.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 13
+    "textMass": 4
   },
   "apps/web/app/(shell)/workspace/rescue/intake/actions.ts": {
     "vocabulary": 0,
@@ -3935,6 +3943,14 @@
     "longSentences": 0,
     "textMass": 75
   },
+  "apps/web/components/admin/GovernedBacklogSettings.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 58
+  },
   "apps/web/components/admin/GraphExplorer.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -3982,6 +3998,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 47
+  },
+  "apps/web/components/admin/McpOAuthClientManager.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 169
   },
   "apps/web/components/admin/McpTokenManager.tsx": {
     "vocabulary": 1,
@@ -4287,6 +4311,14 @@
     "longSentences": 0,
     "textMass": 12
   },
+  "apps/web/components/animal-welfare/AdoptionOperations.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 136
+  },
   "apps/web/components/animal-welfare/DailyCareOperations.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -4326,6 +4358,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 22
+  },
+  "apps/web/components/animal-welfare/VeterinaryOperations.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 91
   },
   "apps/web/components/attention/AttentionInbox.tsx": {
     "vocabulary": 0,
@@ -5654,6 +5694,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 3
+  },
+  "apps/web/components/ea/WorkroomCoordinationContext.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
   },
   "apps/web/components/ea/ea-nav.ts": {
     "vocabulary": 0,
@@ -9454,6 +9502,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 17
+  },
+  "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 63
   },
   "apps/web/components/workspace/workroom/RoomWorkforcePanel.tsx": {
     "vocabulary": 0,

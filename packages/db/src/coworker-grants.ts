@@ -15,7 +15,13 @@
 // individually defensible.
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
-  "portfolio-advisor": ["portfolio_read", "registry_read", "backlog_read", "workroom_evidence_write"],
+  // BI-38678404: agent_registry.json already grants AGT-WS-PORTFOLIO
+  // initiative_evidence_write, but THIS map is the durable source and re-seeds
+  // the database on every boot, so the registry's intent was reverted at each
+  // restart and the grant reached nobody. record_initiative_evidence is the one
+  // readiness lane declared `independent: false`, with portfolio-management
+  // among its accountable roles — an author recording its own research receipt.
+  "portfolio-advisor": ["portfolio_read", "registry_read", "backlog_read", "workroom_evidence_write", "initiative_evidence_write"],
   "external-catalog-scout": ["backlog_read", "backlog_write", "registry_read"],
   // The Digital Product Estate Specialist stewards the product estate (discovery
   // triage, portfolio quality) via registry_read/registry_write + backlog. It does
@@ -114,6 +120,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // canonical read-heavy filtering case (EP-27FD96BC BI-9893614D).
     "tool_script_exec",
     "workroom_evidence_write",
+    // BI-38678404: mirrors AGT-WS-BUILD in agent_registry.json. Without it the
+    // builder cannot record the research receipt RESEARCH_REQUIRED demands, so
+    // work it has merged, released and verified on the live install can never
+    // leave awaiting-acceptance.
+    "initiative_evidence_write",
   ],
   // Read-only by construction. The reviewer may inspect the change and its
   // governed context, but cannot edit code, advance a build, waive findings,

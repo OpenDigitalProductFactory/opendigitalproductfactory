@@ -344,6 +344,21 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "ecosystem-weekly-watchdog",
+    inngestId: "ecosystem/weekly-watchdog",
+    honorsEnabledGate: true,
+    name: "Ecosystem: weekly watchdog",
+    purpose:
+      "Brings the week's ecosystem ballot into the room — what applies to this organisation, "
+      + "what others raised that affects it too, what happened to what it backed, and which "
+      + "shipped releases apply. Reports a quiet week as quiet rather than posting nothing.",
+    cron: "5 6 * * 1",
+    cadence: "Weekly (Mondays, 06:05)",
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: null,
+  },
+  {
     jobId: "ecosystem-inbound-issue-triage",
     inngestId: "ecosystem/inbound-issue-triage",
     honorsEnabledGate: true,
@@ -442,6 +457,20 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
       "Off-hours WWMD-gated merge decision for assurance remediation PRs (patch-only-auto): escalates non-auto PRs to a human. Auto-merge actuation is dark (DPF_ASSURANCE_AUTOMERGE_ENABLED, default off). If it stops, remediation PRs await manual merge.",
     cron: "47 * * * *",
     cadence: "Hourly at :47 — acts only in the 02:00–06:00 UTC off-hours window",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "pr-submit-awaiting-acceptance-reconcile",
+    inngestId: "backlog/pr-submit-awaiting-acceptance-reconcile",
+    ungatedReason:
+      "Module does not call gateAtEntry yet — not wired to the kill switch (BI-7E49FA15).",
+    name: "PR-submit awaiting-acceptance reconcile",
+    purpose:
+      "Moves coding-pool backlog items whose Workroom already has a pull request number to awaiting-acceptance. Live PR submit is the GitHub webhook; this cron is the post-upgrade backstop.",
+    cron: "7,22,37,52 * * * *",
+    cadence: "Every 15 minutes, offset by 7 minutes",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,

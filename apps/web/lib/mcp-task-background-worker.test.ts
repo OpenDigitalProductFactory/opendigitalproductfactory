@@ -149,6 +149,20 @@ beforeEach(() => {
 });
 
 describe("persisted remote TaskRun worker", () => {
+  it.each(["active", "revoked-client", "missing-client", "wrong-kind"])("revalidates OAuth %s before dispatch", async state => {
+    const original = row();
+    db.findTask.mockResolvedValue({ ...original, a2aMetadata: { ...original.a2aMetadata, tokenSource: "oauth" } });
+    db.findToken.mockResolvedValue({ id: "token-1", capability: "write", kind: state === "wrong-kind" ? "oauth_refresh" : "oauth_access",
+      revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      oauthClient: state === "missing-client" ? null : { revokedAt: state === "revoked-client" ? new Date() : null } });
+    const result = await executePersistedRemoteTask({ taskRunId: "TR-MCP-ASYNC" });
+    if (state === "active") expect(execution.run).toHaveBeenCalledOnce();
+    else {
+      expect(result).toMatchObject({ status: "failed", error: "authorization_revoked" });
+      expect(execution.run).not.toHaveBeenCalled();
+    }
+  });
+
   it("resumes a missing reviewer receipt from its persisted request without a client", async () => {
     const binding = {
       writerToolName: "record_initiative_design_review", itemId: "BI-2014236E", gate: "design",

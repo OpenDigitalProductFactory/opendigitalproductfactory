@@ -15,6 +15,7 @@
  * For API key auth, the OPENAI_API_KEY env var is used instead.
  */
 
+import { excerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler, ToolCallEntry } from "./adapter-types";
 import { InferenceError } from "@/lib/ai-inference";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
@@ -375,13 +376,13 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
           } else {
             if (looksLikeCliAuthFailure(stderr)) {
               reject(new InferenceError(
-                `Codex CLI auth failed: ${stderr.slice(0, 300)}`,
+                `Codex CLI auth failed: ${excerptHeadAndTail(stderr, 600)}`,
                 "auth",
                 providerId,
               ));
             } else if (looksLikeCliUnsupportedModel(stderr)) {
               reject(new InferenceError(
-                `Codex CLI model not found: ${stderr.slice(0, 300)}`,
+                `Codex CLI model not found: ${excerptHeadAndTail(stderr, 600)}`,
                 "model_not_found",
                 providerId,
               ));
@@ -389,13 +390,13 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
               // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
               void recordCliRateLimit("codex-cli", providerId, stderr);
               reject(new InferenceError(
-                `Codex CLI rate limited: ${stderr.slice(0, 300)}`,
+                `Codex CLI rate limited: ${excerptHeadAndTail(stderr, 600)}`,
                 "rate_limit",
                 providerId,
               ));
             } else {
               reject(new InferenceError(
-                `Codex CLI exit code ${code}: ${stderr.slice(0, 500)}`,
+                `Codex CLI exit code ${code}: ${excerptHeadAndTail(stderr, 800)}`,
                 "provider_error",
                 providerId,
               ));

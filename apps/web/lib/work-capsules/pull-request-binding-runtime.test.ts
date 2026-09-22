@@ -34,6 +34,17 @@ beforeEach(() => {
 });
 
 describe("inventory Workroom binding", () => {
+  it("retains previous PR history when the current full head selects a replacement", async () => {
+    const previousUrl = `https://github.com/${repository}/pull/41`;
+    mocks.rooms.mockResolvedValue([{ ...room, pullRequestNumber: 41, pullRequestUrl: previousUrl }]);
+    expect((await reconcileInventoryPullRequestBindings("current-run", now)).bound).toBe(1);
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      headSha: observation.headSha, pullRequestNumber: 41, pullRequestUrl: previousUrl,
+    }) }));
+    expect(mocks.journal).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      payload: expect.objectContaining({ previousPullRequestNumber: 41, previousPullRequestUrl: previousUrl }),
+    }) }));
+  });
   it("binds an external room from retained observations and records evidence atomically", async () => {
     expect((await reconcileInventoryPullRequestBindings("current-run", now)).bound).toBe(1);
     expect(mocks.snapshots).toHaveBeenCalledWith(expect.objectContaining({ where: { syncRunId: "retained-run", source: "github-pr" } }));
@@ -51,6 +62,22 @@ describe("inventory Workroom binding", () => {
     mocks.update.mockResolvedValue({ count: 0 });
     expect(await reconcileInventoryPullRequestBindings("current-run", now)).toMatchObject({ bound: 0, compareAndSwapLost: 1 });
     expect(mocks.journal).not.toHaveBeenCalled();
+  });
+
+  it("does not rewrite or journal an already current binding", async () => {
+    mocks.rooms.mockResolvedValue([{ ...room, pullRequestNumber: observation.number, pullRequestUrl: observation.url }]);
+    expect((await reconcileInventoryPullRequestBindings("current-run", now)).bound).toBe(0);
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.journal).not.toHaveBeenCalled();
+  });
+
+  it("journals the matching head when retained observations include an older head of the same PR", async () => {
+    const old = createPullRequestObservation({ ...observation, headSha: "b".repeat(40) });
+    mocks.snapshots.mockResolvedValue([{ payload: old }, { payload: observation }]);
+    expect((await reconcileInventoryPullRequestBindings("current-run", now)).bound).toBe(1);
+    expect(mocks.journal).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      payload: expect.objectContaining({ headSha: observation.headSha, observationFingerprint: observation.observationFingerprint }),
+    }) }));
   });
 
   it.each([null, { completedAt: now, perSourceResult: { "github-pr": { ok: false } } },
@@ -72,9 +99,9 @@ describe("inventory Workroom binding", () => {
     mocks.rooms.mockResolvedValue(Array.from({ length: 101 }, (_, index) => ({ ...room, id: `room-${index}`, capsuleId: `WC-${index}` })));
     expect(await reconcileInventoryPullRequestBindings("current-run", now)).toMatchObject({ bound: 100, hasMore: true });
     expect(mocks.journal).toHaveBeenCalledTimes(100);
-    expect(mocks.rooms.mock.calls[0][0].where.AND[1].OR[0]).toMatchObject({
+    expect(mocks.rooms.mock.calls[0][0].where.OR[0]).toMatchObject({
       repositoryFullName: repository, headBranch: room.headBranch,
-      AND: expect.arrayContaining([{ OR: [{ headSha: null }, { headSha: observation.headSha }] }]),
+      AND: expect.arrayContaining([expect.objectContaining({ OR: expect.arrayContaining([{ headSha: observation.headSha }]) })]),
     });
   });
 

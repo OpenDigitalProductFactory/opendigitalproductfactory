@@ -10,7 +10,18 @@ export type CapacitySnapshot = {
   state: string;
   /** Epoch ms when a temporary limit lifts; null/undefined = unknown. */
   retryAtMs?: number | null;
+  /** Epoch ms when this snapshot was last observed; null/undefined = unknown. */
+  observedAtMs?: number | null;
 };
+
+/**
+ * A temporary limit (rate_limited / cooling_down) recorded WITHOUT a retryAt
+ * stops blocking once its observation is this old. Without a bound, a provider
+ * that is never selected never gets a success observation, so a stale snapshot
+ * locks it out of routing forever (observed: a July rate limit still excluding
+ * the codex engine in September while the local floor timed out every ideate).
+ */
+export const STALE_TEMPORARY_CAPACITY_MS = 24 * 60 * 60 * 1000;
 
 /** Capacity states that should not win routing while a healthier option exists. */
 export const BLOCKING_CAPACITY_STATES = new Set([
@@ -29,8 +40,9 @@ export const BLOCKING_CAPACITY_STATES = new Set([
  * select it. Pure — no DB, no Date.now (pass `nowMs`).
  *
  * Temporary states (rate_limited / cooling_down / quota_resets_at) only block
- * while retryAt is in the future (or missing — fail closed so a stale
- * rate_limited without retryAt still defers to healthier peers).
+ * while retryAt is in the future. When retryAt is missing they fail closed
+ * (defer to healthier peers) only while the observation is younger than
+ * STALE_TEMPORARY_CAPACITY_MS; an unknown observation time stays fail-closed.
  */
 export function capacityRoutingExclusionReason(
   snapshot: CapacitySnapshot | null | undefined,
@@ -50,8 +62,15 @@ export function capacityRoutingExclusionReason(
 
   if (state === "rate_limited" || state === "cooling_down") {
     const retry = snapshot.retryAtMs;
-    if (typeof retry === "number" && retry <= nowMs) return null;
-    return `provider capacity ${state}${formatRetry(retry)}`;
+    if (typeof retry === "number") {
+      if (retry <= nowMs) return null;
+      return `provider capacity ${state}${formatRetry(retry)}`;
+    }
+    const observed = snapshot.observedAtMs;
+    if (typeof observed === "number" && nowMs - observed > STALE_TEMPORARY_CAPACITY_MS) {
+      return null;
+    }
+    return `provider capacity ${state}`;
   }
 
   // Human-action / structural: always soft-block while a peer is healthy.

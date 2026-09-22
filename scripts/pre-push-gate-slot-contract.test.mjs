@@ -64,3 +64,25 @@ test("the canonical reader is slot-aware and PASS-gated on exit code", () => {
     "pregate-status.mjs must exit non-zero for any verdict that is not a PASS for the current HEAD",
   );
 });
+
+// BI-02E5F2A1: `gate-infrastructure-unavailable` is evidence-gated in the hook.
+test("the hook allowlists gate-infrastructure-unavailable in its inline code set", () => {
+  const inlineSet = hook.slice(hook.indexOf("const codes = new Set(["), hook.indexOf("]);", hook.indexOf("const codes = new Set([")));
+  assert.match(inlineSet, /"gate-infrastructure-unavailable"/);
+});
+
+test("the hook captures the lease-claim failure BEFORE writing the override record, and refuses without the probe", () => {
+  const probe = hook.indexOf("node scripts/pre-push-gate-infrastructure-probe.mjs");
+  const writer = hook.indexOf("infrastructureEvidence = probe.evidence");
+  assert.notEqual(probe, -1, "the hook must re-attempt the lease claim via the probe");
+  assert.notEqual(writer, -1, "the record must embed the captured evidence");
+  assert.ok(probe < writer, "evidence is captured before the record is written");
+  assert.match(hook, /\[ ! -f "scripts\/pre-push-gate-infrastructure-probe\.mjs" \][\s\S]*?refusing/, "a checkout without the probe cannot capture evidence and must refuse the code");
+  assert.match(hook, /gate-infrastructure-unavailable refused: no infrastructure failure was captured/);
+});
+
+test("the gate-infrastructure-unavailable record is gate-UNRUN, never a pass", () => {
+  assert.match(hook, /record\.status = "gate-unrun";\s*\n\s*record\.gateUnrun = true;/);
+  assert.match(hook, /gate-UNRUN recorded for/);
+  assert.doesNotMatch(hook, /gatePassed:\s*true[\s\S]*infrastructureEvidence/, "the evidence path must not mint a pass");
+});

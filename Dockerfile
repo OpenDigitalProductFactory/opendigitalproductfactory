@@ -141,6 +141,9 @@ COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
 COPY scripts/restore-postgres.sh ./scripts/
 COPY scripts/postgres-trial-restore.sh ./scripts/
+# BI-3F16A430: web-src workspace linker — run at build below and re-run from the
+# host bootstrap against older images (see the script header).
+COPY scripts/link-web-src-workspace.sh ./scripts/
 COPY scripts/salvage-sweep.mjs ./scripts/
 # Work Capsule change-impact planning executes the canonical gate-context CLI
 # at runtime. Package its exact transitive source closure into the image so a
@@ -395,6 +398,11 @@ COPY --from=init /app/packages/ ./packages-src/
 RUN rm -rf /app/apps/web-src/.next \
            /app/apps/web-src/tsconfig.tsbuildinfo \
            /app/packages-src/db/generated
+# BI-3F16A430: web-src has no node_modules and /app/node_modules carries no
+# @dpf/* links (runtime dependency set above), so scripts run from web-src —
+# the MCP token issuer the host bootstrap depends on — could not resolve
+# @dpf/db or @dpf/integration-shared. Link the shipped workspace packages in.
+RUN sh /app/scripts/link-web-src-workspace.sh
 
 # Canonical platform version (Phase 1 of governed-upgrade lifecycle).
 # Hand-edited until Phase 2 CI bump automation lands. Read at boot by

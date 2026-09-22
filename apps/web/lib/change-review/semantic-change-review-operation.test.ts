@@ -46,6 +46,10 @@ describe("semantic change-review operation", () => {
     const out = await runSemanticChangeReview(input(), { dispatch });
 
     expect(dispatch).toHaveBeenCalledOnce();
+    const prompt = dispatch.mock.calls[0][0] as string;
+    const example = JSON.parse(prompt.split("RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):\n")[1]);
+    expect(example.failureAnalysisReview).toEqual({ adequate: true, rationale: expect.any(String) });
+    expect(prompt).not.toContain("Also return");
     expect(out.activation.activate).toBe(true);
     expect(out.receipt.disposition).toBe("reviewed");
     expect(out.mayPublish).toBe(true);

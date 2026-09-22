@@ -324,8 +324,14 @@ export async function resolveAutonomousWorkTools(input: {
       pageActionNames: new Set([
         ...routeDomainToolNames,
         ...AUTHORIZED_SURFACE_TOOL_NAMES,
-        ...(input.requiredToolNames ?? []).slice(0, 4),
       ]),
+      // BI-EC82C48B: the run's required tools rank ABOVE the generic surface
+      // inside the cap. They used to share tier 0 with routeDomainToolNames and
+      // every AUTHORIZED_SURFACE_TOOL_NAME, so when that set alone exceeded the
+      // cap the writer competed with the surface on intent relevance and could
+      // lose — and narrowInitiativeReviewTools then filtered the attached set to
+      // required names only, handing the model zero tools.
+      requiredNames: new Set((input.requiredToolNames ?? []).slice(0, 4)),
       alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,

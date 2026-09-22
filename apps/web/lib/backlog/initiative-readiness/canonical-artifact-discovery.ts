@@ -78,6 +78,8 @@ export async function discoverCanonicalDesignArtifact(args: {
   repositoryFullName: string;
   baseSha: string;
   headSha: string;
+  /** Read from the live item by the claim handler, never a caller-supplied blob identity. */
+  backlogBody?: string | null;
   db?: CanonicalArtifactDb;
   fetchImpl?: typeof fetch;
   transportFactory?: () => GithubReadTransport;
@@ -135,15 +137,33 @@ export async function discoverCanonicalDesignArtifact(args: {
 }
 
 async function discoverCanonicalDesignArtifactWithFetch(
-  args: { repositoryFullName: string; baseSha: string; headSha: string },
+  args: { repositoryFullName: string; baseSha: string; headSha: string; backlogBody?: string | null },
   repo: { owner: string; name: string },
   token: string | null,
   fetchImpl: typeof fetch,
 ): Promise<CanonicalArtifactDiscoveryResult> {
+  // An explicit reference is the item's scope choice, not evidence of approval.
+  // Verify its bytes at the recorded head even when this branch did not edit it.
+  const references = [...new Set((args.backlogBody ?? "")
+    .match(/docs\/superpowers\/specs\/[^\s`<>"')]+\.md(?:#[A-Za-z0-9_-]+)?/g) ?? [])]
+    .map((path) => path.split("#")[0]!);
+  const paths = [...new Set(references)];
+  if (paths.some((path) => !/^docs\/superpowers\/specs\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.md$/.test(path))) {
+    return { resolved: false, code: "no-canonical-design",
+      nextAction: "The item references an invalid canonical design path. Use a repository-relative file under docs/superpowers/specs/ without traversal segments." };
+  }
+  if (paths.length > 1) {
+    return { resolved: false, code: "ambiguous-canonical-design",
+      nextAction: `The item references more than one canonical design (${paths.join(", ")}). Identify one canonical design before requesting review.` };
+  }
+  const declaredPath = paths[0];
   let response: Response;
   try {
     response = await fetchImpl(
-      `https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/compare/${encodeURIComponent(args.baseSha)}...${encodeURIComponent(args.headSha)}`,
+      `https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/` +
+      (declaredPath
+        ? `contents/${declaredPath.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(args.headSha)}`
+        : `compare/${encodeURIComponent(args.baseSha)}...${encodeURIComponent(args.headSha)}`),
       {
         headers: {
           Accept: "application/vnd.github+json",
@@ -165,7 +185,9 @@ async function discoverCanonicalDesignArtifactWithFetch(
     return {
       resolved: false,
       code: "provider-unavailable",
-      nextAction: `Repository provider could not compare ${args.baseSha.slice(0, 12)}...${args.headSha.slice(0, 12)}. Confirm the branch is pushed, then retry.`,
+      nextAction: declaredPath
+        ? `Repository provider could not verify ${declaredPath} at ${args.headSha}. Confirm the referenced file exists at the pushed head, then retry.`
+        : `Repository provider could not compare ${args.baseSha.slice(0, 12)}...${args.headSha.slice(0, 12)}. Confirm the branch is pushed, then retry.`,
     };
   }
 
@@ -178,6 +200,17 @@ async function discoverCanonicalDesignArtifactWithFetch(
       code: "provider-unavailable",
       nextAction: "Repository provider returned unreadable comparison metadata. Retry once provider access is restored.",
     };
+  }
+
+  if (declaredPath) {
+    const file = payload && typeof payload === "object" && !Array.isArray(payload)
+      ? payload as Record<string, unknown> : null;
+    if (file?.type !== "file" || file.path !== declaredPath
+      || typeof file.sha !== "string" || !/^[a-f0-9]{40}$/i.test(file.sha)) {
+      return { resolved: false, code: "provider-unavailable",
+        nextAction: `Repository provider did not verify a regular file and immutable blob for ${declaredPath} at ${args.headSha}. No substitute design was selected.` };
+    }
+    return { resolved: true, artifact: { path: declaredPath, providerBlobId: file.sha } };
   }
 
   const files = compareFiles(payload);

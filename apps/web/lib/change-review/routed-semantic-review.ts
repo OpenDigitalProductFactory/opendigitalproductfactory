@@ -15,6 +15,7 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
   const issues = results.flatMap((result) => result.issues);
   const criticals = issues.filter((issue) => issue.severity === "critical").length;
   const inconclusive = results.filter((result) => result.decision === "inconclusive");
+  const parseDiagnostics = results.flatMap((result) => result.parseDiagnostics ?? []);
   return {
     decision: inconclusive.length > 0 ? "inconclusive" : criticals > 0 ? "fail" : "pass",
     issues,
@@ -25,6 +26,7 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
       ? results[0]!.summary
       : `${results.length} independent review branches completed; ${criticals} blocking finding${criticals === 1 ? "" : "s"}.`,
     ...(results.some((result) => result.parseError) ? { parseError: true as const } : {}),
+    ...(parseDiagnostics.length > 0 ? { parseDiagnostics } : {}),
     ...(inconclusive.length > 0
       ? { inconclusiveReason: inconclusive.map((result) => result.inconclusiveReason ?? "review-branch-incomplete").join(",") }
       : {}),
@@ -88,7 +90,18 @@ export async function dispatchRoutedSemanticReview(
         requiresStreaming: false,
       },
     );
-    return parseSemanticReviewResponse(response.content);
+    if (response.truncated) return {
+      decision: "inconclusive" as const, issues: [],
+      summary: "The provider stopped before the review response was complete.",
+      inconclusiveReason: "review-response-truncated",
+    };
+    const result = parseSemanticReviewResponse(response.content);
+    return {
+      ...result,
+      ...(result.parseDiagnostics ? { parseDiagnostics: result.parseDiagnostics.map(
+        diagnostic => ({ ...diagnostic, agentId: branch.agentId }),
+      ) } : {}),
+    };
   })));
 
   const completed = settled.flatMap((branch) => branch.status === "fulfilled" ? [branch.value] : []);

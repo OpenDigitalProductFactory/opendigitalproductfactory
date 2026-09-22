@@ -101,3 +101,31 @@ for (const [rel, prefix, bi] of CLI_CASES) {
     assert.doesNotMatch(out, /\bOK\.\s*$/m);
   });
 }
+
+test("listChangedFiles: DPF_GATE_INCLUDE_WORKING_TREE=1 unions the committed diff with staged, unstaged and untracked files", () => {
+  const calls = [];
+  const git = (args) => {
+    calls.push(args.join(" "));
+    if (args[0] === "rev-parse") return { ok: true, stdout: "abc\n", stderr: "" };
+    if (args[0] === "diff" && args.at(-1) === "origin/main...HEAD") return { ok: true, stdout: "a.ts\nb.ts\n", stderr: "" };
+    if (args[0] === "diff" && args.at(-1) === "HEAD") return { ok: true, stdout: "b.ts\nc.ts\n", stderr: "" };
+    if (args[0] === "ls-files") return { ok: true, stdout: "d.json\n", stderr: "" };
+    return { ok: false, stdout: "", stderr: "unexpected" };
+  };
+  const committedOnly = listChangedFiles("origin/main", { git, env: {} });
+  assert.deepEqual(committedOnly.files, ["a.ts", "b.ts"]);
+  const withTree = listChangedFiles("origin/main", { git, env: { DPF_GATE_INCLUDE_WORKING_TREE: "1" } });
+  assert.deepEqual(withTree, { status: "ok", files: ["a.ts", "b.ts", "c.ts", "d.json"], detail: "" });
+  assert.ok(calls.includes("ls-files --others --exclude-standard"));
+});
+
+test("listChangedFiles: a working-tree read that fails is unresolvable, never an empty union", () => {
+  const git = (args) => {
+    if (args[0] === "rev-parse") return { ok: true, stdout: "abc\n", stderr: "" };
+    if (args[0] === "diff" && args.at(-1) === "origin/main...HEAD") return { ok: true, stdout: "a.ts\n", stderr: "" };
+    return { ok: false, stdout: "", stderr: "index locked" };
+  };
+  const listed = listChangedFiles("origin/main", { git, env: { DPF_GATE_INCLUDE_WORKING_TREE: "1" } });
+  assert.equal(listed.status, "unresolvable");
+  assert.match(listed.detail, /index locked/);
+});

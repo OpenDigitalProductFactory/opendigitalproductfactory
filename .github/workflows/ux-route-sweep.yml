@@ -103,6 +103,15 @@ jobs:
       NEXTAUTH_URL: http://localhost:3000
       UX_SWEEP_BASE_URL: http://localhost:3000
       UX_SWEEP_WORKERS: ${{ inputs.workers || '2' }}
+      # Pinned measurement clock (BI-99909E53). Calendar-relative copy over
+      # code-defined dates — the inbox's compliance-evidence "lapses in N days"
+      # / "lapses after today" / "lapsed N days ago" — moved a frozen baseline
+      # with no code change. The portal honors this only under
+      # DPF_MEASUREMENT_RUNTIME (lib/runtime/measurement-runtime.ts); the sweep
+      # records it in route-sweep-execution.json. The instant is the day the
+      # current baselines were frozen, so the pin changed no measurement when it
+      # landed. Move it deliberately, together with a baseline refresh.
+      DPF_MEASUREMENT_NOW: "2026-09-18T12:00:00.000Z"
 
     steps:
       - uses: actions/checkout@v7
@@ -264,6 +273,7 @@ jobs:
           path: |
             apps/web/lib/ux-budget/route-budget-report.json
             apps/web/test-results/ux-route-sweep/route-sweep-execution.json
+            apps/web/test-results/ux-route-sweep/visible-text
           if-no-files-found: warn
 
       # Screenshots exist only for failed eligible routes. Keeping them out of green
