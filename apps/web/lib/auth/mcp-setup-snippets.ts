@@ -4,7 +4,11 @@
 // apps/web/scripts/issue-mcp-token.ts (CLI).
 
 import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
-import { mcpClientBearerHeaderRequired, type McpAuthMode } from "@dpf/integration-shared/mcp-client-credential-policy";
+import {
+  mcpClientBearerHeaderRequired,
+  mcpClientOAuthScopePin,
+  type McpAuthMode,
+} from "@dpf/integration-shared/mcp-client-credential-policy";
 
 export type McpSnippetFormat = "claude-code" | "codex" | "grok" | "antigravity" | "vscode" | "raw";
 
@@ -71,8 +75,15 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string, authMode:
     url,
     ...(mcpClientBearerHeaderRequired(url, "vscode", authMode) ? { headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}),
   };
-  // Claude Code: .mcp.json uses the mcpServers key.
-  const claudeCode = JSON.stringify({ mcpServers: { dpf: lazyHostHttpEntry } }, null, 2);
+  // Claude Code: .mcp.json uses the mcpServers key. BI-3D2FD68C: Claude Code
+  // alone understands `oauth.scopes`; without the pin an https consent grants
+  // only the advertised read scope and every write tool stays out of reach.
+  const scopePin = mcpClientOAuthScopePin(url, "claude", authMode);
+  const claudeCodeEntry = {
+    ...lazyHostHttpEntry,
+    ...(scopePin ? { oauth: { scopes: scopePin } } : {}),
+  };
+  const claudeCode = JSON.stringify({ mcpServers: { dpf: claudeCodeEntry } }, null, 2);
   const codex = [
     "[mcp_servers.dpf]",
     `url = "${lazyHostUrl}"`,
