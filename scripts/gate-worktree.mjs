@@ -61,7 +61,8 @@ export function describeLeaseCallFailure(error) {
     + "if this box regularly runs several gates at once";
 }
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_USAGE } from "./lib/sandbox-freshness.mjs";
+import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   authoritySafetyMarginMs,
@@ -1507,6 +1508,7 @@ async function main() {
         expiresAt,
         waitDeadlineAt: new Date(deadline).toISOString(),
         worktreePath,
+        gateClientRevision: GATE_CLIENT_REVISION,
         branchName: branch,
         slotManifestVersion: slotManifest.schemaVersion,
         hostPressure,
@@ -1520,6 +1522,14 @@ async function main() {
       continue;
     }
 
+    // The server retires a gate client below its revision floor (BI-69178E02).
+    // Not a verdict on the diff, and re-running this same client can only be
+    // refused again, so exit with the usage code: no resumer retries it.
+    if (claimResponse?.error === "gate_client_upgrade_required") {
+      await releaseLeaseOnce();
+      process.stderr.write(`gate-worktree: ${claimResponse.message || "this gate client is below the platform's revision floor; rebase onto main and re-run pregate"}\n`);
+      process.exit(EXIT_USAGE);
+    }
     const admission = claimResponse?.data?.admission;
     const canonicalLeaseId = claimResponse?.data?.lease?.leaseId || "";
     gateKey = claimResponse?.data?.gateKey || gateKey;
