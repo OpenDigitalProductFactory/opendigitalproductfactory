@@ -67,7 +67,6 @@ scripts/installer-state-contract.contract.test.mjs
 scripts/installer/install-state-transaction.test.mjs
 scripts/installer/migrate-install-state.test.mjs
 scripts/installer/native-edge-host-contract.test.mjs
-scripts/installer/pki-contract.test.mjs
 scripts/installer/resolve-host-identity.test.mjs
 scripts/installer/validate-install-state.test.mjs
 scripts/lib/bootstrap-worktree-deps.test.mjs

@@ -16,6 +16,7 @@ import {
   countVisibleFields,
   defaultVisibleHtml,
   extractSubtrees,
+  isLiveRegion,
   leadBandHtml,
   maxChoicesPerControl,
   measureUxBudget,
@@ -28,6 +29,38 @@ import {
 } from "./index";
 import { countWords } from "../owner-first/ux-audit";
 import { ROUTE_SWEEP_EXCLUSIONS } from "./route-shells";
+
+describe("live regions are transient state, not words visible on arrival (BI-99909E53)", () => {
+  it("excises aria-live announcements — populated by a client effect, they race the capture", () => {
+    const server = `<div><p aria-live="polite" aria-atomic="true" class="sr-only"></p><h1>Estate Discovery</h1></div>`;
+    const hydrated = `<div><p aria-live="polite" aria-atomic="true" class="sr-only">Viewing full graph (12 nodes)</p><h1>Estate Discovery</h1></div>`;
+    expect(countWords(defaultVisibleHtml(server))).toBe(2);
+    expect(countWords(defaultVisibleHtml(hydrated))).toBe(2);
+  });
+
+  it("excises implicit live-region roles — the same set the structure projection ignores", () => {
+    for (const role of ["status", "alert", "log", "marquee", "timer"]) {
+      const html = `<main><p>one two</p><div role="${role}">saved just now</div></main>`;
+      expect(countWords(defaultVisibleHtml(html)), role).toBe(2);
+    }
+    expect(isLiveRegion({ name: "div", attrs: { role: "presentation status" }, selfClosing: false })).toBe(true);
+    expect(isLiveRegion({ name: "div", attrs: { role: "region" }, selfClosing: false })).toBe(false);
+  });
+
+  it("keeps a live region that holds a control — an EmptyState's action is not an announcement", () => {
+    // /performance: report-kit EmptyState is role="status" and carries the primary action.
+    const html = `<main><section role="status"><h2>Not ready yet</h2><p>We will not show made-up numbers.</p><a href="/workspace" data-dpf-primary-action>Open Operations</a></section></main>`;
+    expect(countWords(defaultVisibleHtml(html))).toBe(11);
+    expect(measureUxBudget(html).buriedPrimaryAction).toBe(0);
+    expect(measureUxBudget(html).primaryActions).toBe(1);
+  });
+
+  it("keeps an explicit aria-live=\"off\" opt-out in the count", () => {
+    const html = `<main><p aria-live="off">one two three</p></main>`;
+    expect(countWords(defaultVisibleHtml(html))).toBe(3);
+    expect(isLiveRegion({ name: "p", attrs: { "aria-live": "off" }, selfClosing: false })).toBe(false);
+  });
+});
 
 describe("disclosure scoping — collapsed detail is excised, never taxed", () => {
   it("does not count words inside a collapsed <details>", () => {

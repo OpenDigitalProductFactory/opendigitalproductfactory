@@ -1747,6 +1747,44 @@ test("hard host-pressure loss kills the real child process tree before later mut
   }
 });
 
+// BI-04AECD8A. The descendant scan used to be a 250ms setInterval calling a
+// spawnSync `ps`. On a host where `ps` costs longer than the interval, each
+// tick was already due when the previous returned: the loop saturated and
+// NOTHING else ran, including the lease heartbeat keeping the run alive.
+// Measured signature — zero heartbeats for 17 minutes, then every starved
+// timer firing at once when the scan timer was cleared, and the renewal that
+// finally ran SUCCEEDING. These two tests pin the property that fixes it.
+test("sampleAsync yields to the event loop, so a timer due mid-scan still fires", async () => {
+  let timerFired = false;
+  const tracker = createProcessTreeTracker({
+    rootPid: 1,
+    listProcessRowsAsync: () => new Promise((resolve) => setTimeout(() => resolve([]), 40)),
+  });
+  // Stands in for the lease heartbeat: due well before the scan completes.
+  setTimeout(() => { timerFired = true; }, 5);
+  await tracker.sampleAsync();
+  assert.equal(
+    timerFired,
+    true,
+    "a scan that blocks the loop starves the heartbeat — this is the fence in BI-04AECD8A",
+  );
+});
+
+test("sampleAsync reports the same descendants as the synchronous sample", async () => {
+  const rows = [
+    { pid: 100, parentPid: 1, commandLine: "root" },
+    { pid: 101, parentPid: 100, commandLine: "child" },
+    { pid: 102, parentPid: 101, commandLine: "grandchild" },
+  ];
+  const tracker = createProcessTreeTracker({
+    rootPid: 100,
+    listProcessRows: () => rows,
+    listProcessRowsAsync: async () => rows,
+  });
+  assert.deepEqual([...tracker.sampleAsync ? await tracker.sampleAsync() : []].sort(), [101, 102]);
+  assert.deepEqual([...tracker.sample()].sort(), [101, 102]);
+});
+
 test("process tree tracker remembers descendants before they reparent", async () => {
   const snapshots = [
     [

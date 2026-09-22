@@ -1,11 +1,15 @@
 import {
   WORK_CAPSULE_PORTFOLIO_ROLES,
+  WORK_CAPSULE_STATUSES,
   type WorkCapsulePortfolioRole,
 } from "@/lib/work-capsules";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
 import { TERMINAL_CAPSULE_STATUSES } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
-import type { PrismaClient } from "@dpf/db";
+import type { Prisma, PrismaClient } from "@dpf/db";
+import { projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
+import { loadRoomAccountabilityBatch, type RoomWorkforceDb } from "@/lib/work-management/room-workforce.server";
+import { isRecord } from "@/lib/shared/coerce";
 
 type ArchitectureDb = {
   valueStreamTeam: { findMany(args: unknown): Promise<any[]> };
@@ -13,31 +17,71 @@ type ArchitectureDb = {
 
 /** A bounded observation of actual rooms; assignment never implies accountability. */
 export async function loadWorkroomCoordination(
-  db: { workroom: Pick<PrismaClient["workroom"], "findMany"> },
+  db: { workroom: Pick<PrismaClient["workroom"], "findMany"> } & Partial<RoomWorkforceDb>,
   now = new Date(),
-  filter: { teamId?: string | null } = {},
+  filter: { teamId?: string | null; query?: string; status?: string; after?: string } = {},
 ) {
+  const query = filter.query?.trim().slice(0, 200) ?? "";
+  const after = filter.after?.trim().slice(0, 100) ?? "";
+  const status = WORK_CAPSULE_STATUSES.find((candidate) => candidate === filter.status
+    && !TERMINAL_CAPSULE_STATUSES.includes(candidate));
+  const conditions: Prisma.WorkroomWhereInput[] = [];
+  if (filter.teamId === null) conditions.push({ OR: [{ workItem: { is: null } }, { workItem: { is: { teamId: null } } }] });
+  if (query) conditions.push({ OR: [{ title: { contains: query, mode: "insensitive" } }, { capsuleId: { contains: query, mode: "insensitive" } }] });
   const rows = await db.workroom.findMany({
-    where: { archivedAt: null, status: { notIn: TERMINAL_CAPSULE_STATUSES },
-      ...(filter.teamId === undefined ? {} : filter.teamId === null
-        ? { OR: [{ workItem: { is: null } }, { workItem: { is: { teamId: null } } }] }
-        : { workItem: { is: { teamId: filter.teamId } } }),
+    where: { archivedAt: null, status: status ?? { notIn: TERMINAL_CAPSULE_STATUSES },
+      ...(typeof filter.teamId === "string" ? { workItem: { is: { teamId: filter.teamId } } } : {}),
+      ...(conditions.length ? { AND: conditions } : {}),
+      ...(after ? { capsuleId: { gt: after } } : {}),
     },
     orderBy: { capsuleId: "asc" }, take: 201,
-    select: { capsuleId: true, title: true, status: true,
+    select: { id: true, capsuleId: true, title: true, status: true, workspaceState: true,
       workItem: { select: { teamId: true, parentItemId: true, assignedToUserId: true, assignedToAgentId: true } },
     },
   });
+  const ids = rows.slice(0, 200).map(row => row.id);
+  const [accountability, relations] = await Promise.all([
+    db.workroomRelation && db.workroomParticipant && db.organization
+      ? loadRoomAccountabilityBatch(db as RoomWorkforceDb, ids).catch(() => null) : null,
+    db.workroomRelation && ids.length ? db.workroomRelation.findMany({
+      where: { OR: [{ fromWorkroomId: { in: ids } }, { toWorkroomId: { in: ids } }] },
+      orderBy: { id: "asc" }, take: 1001,
+      select: { id: true, fromWorkroomId: true, toWorkroomId: true, relation: true,
+        fromWorkroom: { select: { capsuleId: true, title: true } },
+        toWorkroom: { select: { capsuleId: true, title: true } } },
+    }).catch(() => null) : ids.length ? null : [],
+  ]);
   return {
     readAt: now.toISOString(), truncated: rows.length > 200,
+    contextPartial: ids.length > 0 && (!accountability || !relations || relations.length > 1000),
+    nextCursor: rows.length > 200 ? rows[199]!.capsuleId : null,
     rooms: rows.slice(0, 200).map((row) => {
       const teamId = row.workItem?.teamId ?? null;
       const caseKey = encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: row.capsuleId });
+      const params = new URLSearchParams({ operation: filter.teamId === undefined ? "all" : filter.teamId ?? "unmapped" });
+      if (query) params.set("coordinationQuery", query);
+      if (status) params.set("coordinationStatus", status);
+      if (after) params.set("coordinationAfter", after);
+      const owner = accountability?.get(row.id);
+      const relationships = (relations ?? []).slice(0, 1000).flatMap(edge => {
+        const outgoing = edge.fromWorkroomId === row.id;
+        if (!outgoing && edge.toWorkroomId !== row.id) return [];
+        const peer = outgoing ? edge.toWorkroom : edge.fromWorkroom;
+        if (!isRecord(peer) || typeof peer.capsuleId !== "string" || typeof peer.title !== "string") return [];
+        return [{ id: String(edge.id), relation: String(edge.relation).replaceAll("_", "-"),
+          direction: outgoing ? "outgoing" as const : "incoming" as const,
+          roomId: peer.capsuleId, title: peer.title,
+          href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: peer.capsuleId })}?${params}` }];
+      });
       return {
         roomId: row.capsuleId, title: row.title, status: row.status, teamId,
+        accountability: owner?.accountability ?? null,
+        accountableName: owner?.accountableDisplayName ?? (owner?.accountability.state === "resolved" ? owner.accountability.principalId : null),
+        relationships,
         parentItemId: row.workItem?.parentItemId ?? null,
         assignedActorRef: row.workItem?.assignedToUserId ?? row.workItem?.assignedToAgentId ?? null,
-        href: `/workspace/cases/${caseKey}?operation=${encodeURIComponent(teamId ?? "unmapped")}`,
+        waitReason: projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason,
+        href: `/workspace/cases/${caseKey}?${params}`,
       };
     }),
   };

@@ -211,3 +211,49 @@ function extractToolsArray(body: unknown): unknown[] | null {
   if (result && Array.isArray(result.tools)) return result.tools;
   return null;
 }
+
+/**
+ * Present-token authentication reconciliation (BI-2F82F1A0 / BI-3F16A430).
+ *
+ * "token present" != "token accepted". A persisted token can be expired
+ * (issuer default TTL is 90 days), revoked, or unknown to the install the
+ * bootstrap now targets; in every such case the endpoint answers HTTP 401
+ * and the bootstrap must replace the token rather than report `missing_token`
+ * and continue without one.
+ *
+ * This is the SSOT for which HTTP statuses justify replacing a present token;
+ * the shell adapters (dpf-bootstrap-agent-toolchain.{sh,ps1}) mirror it.
+ *
+ * - 401 -> re-mint. The portal rejected the credential itself.
+ * - 403 -> keep. The credential is valid but under-scoped; that is the
+ *   scope-coverage reconciliation's job, and a 403 can also be a policy
+ *   refusal a fresh token would not cure.
+ * - 0 / 5xx / anything else -> keep. Unreachable or ambiguous: never destroy
+ *   a present token on a network or portal hiccup.
+ */
+export const TOKEN_AUTH_PROBE = {
+  /** Read-only, no-arg JSON-RPC method used to test the credential. */
+  method: "tools/list",
+  /** HTTP statuses that mean "this token is rejected; mint a new one". */
+  remintHttpStatuses: [401],
+} as const;
+
+export type TokenAuthProbeResult =
+  | { action: "keep"; reason: "accepted" | "unreachable" | "inconclusive" | "forbidden" }
+  | { action: "remint"; reason: "unauthorized"; httpStatus: number };
+
+export function interpretTokenAuthProbe(httpStatus: number): TokenAuthProbeResult {
+  if (httpStatus === 0 || httpStatus >= 500) {
+    return { action: "keep", reason: "unreachable" };
+  }
+  if ((TOKEN_AUTH_PROBE.remintHttpStatuses as readonly number[]).includes(httpStatus)) {
+    return { action: "remint", reason: "unauthorized", httpStatus };
+  }
+  if (httpStatus === 403) {
+    return { action: "keep", reason: "forbidden" };
+  }
+  if (httpStatus === 200) {
+    return { action: "keep", reason: "accepted" };
+  }
+  return { action: "keep", reason: "inconclusive" };
+}

@@ -65,6 +65,7 @@ export const ACCOUNTABILITY_WALK_MAX_DEPTH = 10;
 export const ROOM_WORKER_PAGE_SIZE = 20;
 
 export type RoomWorkforceDb = {
+  principal?: { findMany(args: unknown): Promise<Array<Record<string, unknown>>> };
   workroomRelation: { findMany(args: unknown): Promise<Array<Record<string, unknown>>> };
   workroomParticipant: { findMany(args: unknown): Promise<Array<Record<string, unknown>>> };
   organization: { findFirst(args: unknown): Promise<{ topAccountablePrincipalId: string | null } | null> };
@@ -87,6 +88,26 @@ function displayNameOf(principal: Record<string, unknown> | null | undefined): s
   return typeof name === "string" && name.trim() ? name.trim() : null;
 }
 
+/** An organization owner need not be a participant in any of the rooms read. */
+async function accountabilityNames(db: RoomWorkforceDb, accountabilities: readonly EffectiveHumanAccountability[],
+  participantRows: readonly Record<string, unknown>[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  for (const row of participantRows) {
+    const name = displayNameOf(row["principal"] as Record<string, unknown> | null);
+    if (name) names.set(String(row["principalId"]), name);
+  }
+  const missing = [...new Set(accountabilities.flatMap(owner => owner.state === "resolved"
+    && !names.has(owner.principalId) ? [owner.principalId] : []))];
+  if (missing.length && db.principal) {
+    const principals = await db.principal.findMany({ where: { id: { in: missing } }, select: { id: true, displayName: true } });
+    for (const principal of principals) {
+      const name = displayNameOf(principal);
+      if (name) names.set(String(principal["id"]), name);
+    }
+  }
+  return names;
+}
+
 /**
  * Walk up the responsibility graph from one room, bounded.
  *
@@ -96,11 +117,11 @@ function displayNameOf(principal: Record<string, unknown> | null | undefined): s
  */
 export async function loadAncestorClosure(
   db: RoomWorkforceDb,
-  workroomId: string,
-): Promise<{ roomIds: string[]; edges: AccountabilityEdge[] }> {
-  const roomIds = new Set<string>([workroomId]);
+  workroomId: string | readonly string[],
+): Promise<{ roomIds: string[]; edges: AccountabilityEdge[]; unresolvedRoomIds: string[] }> {
+  const roomIds = new Set<string>(typeof workroomId === "string" ? [workroomId] : workroomId);
   const edges: AccountabilityEdge[] = [];
-  let frontier = [workroomId];
+  let frontier = [...roomIds];
 
   for (let depth = 0; depth < ACCOUNTABILITY_WALK_MAX_DEPTH && frontier.length > 0; depth += 1) {
     const rows = await db.workroomRelation.findMany({
@@ -109,7 +130,9 @@ export async function loadAncestorClosure(
         relation: { in: RESPONSIBILITY_RELATION_KINDS.map((kind) => RELATION_CLIENT_BY_VALUE[kind]!) },
       },
       select: { fromWorkroomId: true, toWorkroomId: true, relation: true },
+      take: 2001,
     });
+    if (rows.length > 2000) return { roomIds: [...roomIds], edges, unresolvedRoomIds: frontier };
     const next: string[] = [];
     for (const row of rows) {
       const from = String(row["fromWorkroomId"]);
@@ -129,7 +152,7 @@ export async function loadAncestorClosure(
     frontier = next;
   }
 
-  return { roomIds: [...roomIds], edges };
+  return { roomIds: [...roomIds], edges, unresolvedRoomIds: frontier };
 }
 
 /**
@@ -167,27 +190,34 @@ export async function resolveRoomAccountabilityFromDb(
   db: RoomWorkforceDb,
   input: { workroomId: string; organizationId?: string },
 ): Promise<EffectiveHumanAccountability> {
-  const { roomIds, edges } = await loadAncestorClosure(db, input.workroomId);
+  return (await loadRoomAccountabilityBatch(db, [input.workroomId], input.organizationId)).get(input.workroomId)!.accountability;
+}
+
+/** One shared ancestry/roster read for a page, using the same resolver as the drive. */
+export async function loadRoomAccountabilityBatch(
+  db: RoomWorkforceDb, workroomIds: readonly string[], organizationId?: string,
+): Promise<Map<string, Pick<RoomWorkforce, "accountability" | "accountableDisplayName">>> {
+  if (!workroomIds.length) return new Map();
+  const { roomIds, edges, unresolvedRoomIds } = await loadAncestorClosure(db, workroomIds);
   const participantRows = await db.workroomParticipant.findMany({
-    where: { workroomId: { in: roomIds }, lifecycle: "active" },
-    select: { workroomId: true, principalId: true, roles: true },
+    where: { workroomId: { in: roomIds }, lifecycle: "active", roles: { has: "accountable" } },
+    select: { workroomId: true, principalId: true, roles: true, principal: { select: { displayName: true } } },
   });
-  return resolveEffectiveHumanAccountability({
-    workroomId: input.workroomId,
-    rooms: accountabilityRoomsFrom(roomIds, participantRows),
-    edges,
-    organizationTopAccountablePrincipalId: await readOrganizationTopAccountablePrincipalId(
-      db,
-      input.organizationId,
-    ),
-  });
+  const rooms = accountabilityRoomsFrom(roomIds, participantRows);
+  const organizationTopAccountablePrincipalId = await readOrganizationTopAccountablePrincipalId(db, organizationId);
+  const resolved = [...new Set(workroomIds)].map(workroomId => ({ workroomId,
+    accountability: resolveEffectiveHumanAccountability({ workroomId, rooms, edges,
+      unresolvedRoomIds, organizationTopAccountablePrincipalId }) }));
+  const names = await accountabilityNames(db, resolved.map(row => row.accountability), participantRows);
+  return new Map(resolved.map(({ workroomId, accountability }) => [workroomId, { accountability,
+    accountableDisplayName: accountability.state === "resolved" ? names.get(accountability.principalId) ?? null : null }]));
 }
 
 export async function loadRoomWorkforce(
   db: RoomWorkforceDb,
   input: { workroomId: string; organizationId?: string; query?: string | null; now?: Date },
 ): Promise<RoomWorkforce> {
-  const { roomIds, edges } = await loadAncestorClosure(db, input.workroomId);
+  const { roomIds, edges, unresolvedRoomIds } = await loadAncestorClosure(db, input.workroomId);
 
   const participantRows = await db.workroomParticipant.findMany({
     where: { workroomId: { in: roomIds }, lifecycle: "active" },
@@ -206,6 +236,7 @@ export async function loadRoomWorkforce(
     workroomId: input.workroomId,
     rooms,
     edges,
+    unresolvedRoomIds,
     organizationTopAccountablePrincipalId: await readOrganizationTopAccountablePrincipalId(
       db,
       input.organizationId,
@@ -236,14 +267,8 @@ export async function loadRoomWorkforce(
   const workers = rollUpNamedWorkers(sessions, input.now ?? new Date());
   const page = selectWorkerPage({ workers, pageSize: ROOM_WORKER_PAGE_SIZE, query: input.query ?? null });
 
-  const accountableDisplayName =
-    accountability.state === "resolved"
-      ? displayNameOf(
-          participantRows.find((row) => row["principalId"] === accountability.principalId)?.[
-            "principal"
-          ] as Record<string, unknown> | null,
-        )
-      : null;
+  const names = await accountabilityNames(db, [accountability], participantRows);
+  const accountableDisplayName = accountability.state === "resolved" ? names.get(accountability.principalId) ?? null : null;
 
   return {
     accountability,

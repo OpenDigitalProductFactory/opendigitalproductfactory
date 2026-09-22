@@ -23,11 +23,16 @@ relatedCode:
 
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
-From **Platform > Workrooms**, select a room ID to open this same canonical Workroom. A room has one case, never two: a room tied to backlog work resolves to that backlog case even when you arrive by its room ID, and a room without a backlog item opens its own Work Capsule case. Either way the inventory never leads to a dead route, and a link you saved or shared by room ID keeps working.
+From **Platform > Workrooms**, select a room ID to open its canonical case. A room tied to backlog work resolves to that backlog case while retaining the selected room in the URL. Its process, room journal, reviewer evidence, participants and workforce stay scoped to that room. Shared case messages are labelled **Case context**; case receipts do not prove completion of an individual room step. A stale selection or a room belonging to another case is unavailable rather than silently showing a different room. A room without a backlog item opens its own Work Capsule case.
 
 Coworker service engagements can also appear as Work Cases. When a requested coworker service needs approval, is accepted, or is in progress, the room opens around the engagement itself: the requested outcome is the room boundary, the provider coworker appears as a contributor, and approval context or audit references stay attached as evidence. These rooms do not show the WorkItem comment box until a WorkItem exists, because there is no task message thread to post into yet.
 
 ## What You See First
+
+For development work, a verified repository observation can update the room's
+pull request when it matches the room's current commit. The room journal retains
+the previous link. Reusing a branch name alone does not establish current
+delivery, and a merged pull request does not complete the whole initiative.
 
 The top of a Workroom answers four questions:
 
@@ -57,6 +62,16 @@ owner, supporting evidence, and affected work. Required evidence is not proof
 that the evidence has been recorded. Where a receipt cannot be linked to an
 individual step, the view reports that gap and keeps it in the room evidence.
 
+**Observed execution** counts activity events and receipts separately. Expand a
+record for its source identity, actor and timestamp. An event records what was
+observed; it does not verify a step. A process pause appears in the room's
+attention summary, and a step's intended advance condition does not override
+the current permitted-transition check.
+
+A recorded wait names the stage and the role or person expected to act in the
+attention summary. That wait remains visible until the runner records another
+action; refreshing the page does not mean the work has progressed.
+
 Use **Map** or **List**, search by step or owner, and filter by state. Arrow keys
 move between visible steps; Home and End select the first and last. The selected
 step and filters stay in the URL so returning to the room preserves context.
@@ -66,6 +81,13 @@ Selecting a step inspects it; it does not execute a transition or approve work.
 exists without a verified completion verdict. **Cancelled** is distinct from
 success. The projection check time and latest evidence time are separate; an
 unknown timestamp does not imply a fresh observation.
+
+After a minute, the process snapshot is marked stale. **Refresh state** reads
+the room again while keeping your selected step and filters. The warning clears
+only when a newer server read arrives. Refreshing does not resume work, approve
+a transition, or prove progress. A missing or future read time remains unknown.
+
+Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
 
 Native reviewer runs also appear under **Observed execution** while queued or
 waiting, before a final receipt exists. Expand a run or checkpoint for its recorded
@@ -80,7 +102,7 @@ The **Activity** stream distinguishes messages, asks, coworker handoffs, work ch
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:
 
 - **Accountable** owns the room outcome.
-- **Coordinator** keeps the room on-task to its outcome—curating who is in the room, sequencing turns, and driving to a decision, close, or escalation. A room has exactly one Coordinator; it may be the same person or coworker as the Accountable, or a different one. When no one is named, the Accountable coordinates by default.
+- **Coordinator** keeps the room on-task to its outcome—curating who is in the room, sequencing turns, and driving to a decision, close, or escalation. An executable room requires one explicitly named Coordinator; it may be the same person or coworker as the Accountable, or a different one. Missing assignment pauses execution.
 - **Contributor** performs work in the room.
 - **Reviewer** verifies work or an outcome.
 - **Observer** follows the room without changing it.
@@ -296,6 +318,9 @@ that answer came from: recorded on this room, inherited from a room further up, 
 the organization's recorded owner. Knowing which one it is matters, because it tells you where to
 go to change it.
 
+The header and workforce panel use the same accountability result, including
+its recorded or inherited source.
+
 If nobody is recorded, the room says setup is required rather than naming whoever happens to be
 handy. The install's first administrator, the person who created the room and whoever holds the
 lease are all available, and all of them would be a guess presented as a decision.
@@ -326,3 +351,52 @@ A room like that shows what it holds and states what it does not. If no
 objective was recorded, it says so rather than repeating the room's title as
 though that were the objective, and urgency, effort and assignment read as not
 recorded rather than showing a value nobody set.
+
+These standalone rooms also show their recorded process shape, driver observations,
+recent activity and reviewer evidence. A failed reviewer appears as attention
+needed even when the room itself has not been marked blocked. Inspect **Observed
+execution** for its recorded reason and required action. A task status or journal
+entry is an observation, not proof that the room's outcome has been verified.
+
+An unavailable evidence source or a history longer than the displayed window is
+marked partial. Missing purpose and scope remain boundary gaps. Access to a room's
+contents requires admission and sufficient sensitivity clearance; following a
+coordination link does not grant that access.
+
+For a review marked **auth-required**, open **Activity projection details** in the
+Operations Map and select the review. Its requester must inspect the authority
+saved with the request. Signing in again does not replace those saved credentials.
+The inspector retains the original deadline and recovery count; the server checks
+authority again before accepting recovery.
+
+You can also inspect a reviewer under the room's **Observed execution**. Expand
+its request to see the recorded state, reason, next action, requester and history.
+Checkpoint rows identify the reviewing agents; completed checkpoints alone do not
+prove a successful verdict. The read time and heartbeat show how fresh the view is.
+For a waiting request, the shared recovery controls show its original deadline
+and attempts. Only the original requester can submit recovery, and the server
+rechecks saved authority. An expired window or exhausted limit cannot be reset
+from the room. Intended steps remain separate from these execution observations.
+
+Requests are labeled current, historical, or version unknown. Current means the
+latest request issued for the room's recorded source commit. Older requests keep
+their evidence but do not drive current attention or offer recovery here. Missing
+identity is a projection gap. A working request describes server continuation,
+not its previous wait. Brief checkpoint database retries reuse the provider result;
+they do not spend an additional provider call. Successful sibling checkpoints are
+saved before a failed branch puts the review into a wait.
+
+For nested rooms, accountability follows recorded responsibility links. Competing
+parents or a lineage that exceeds the read limit appear as setup gaps. They do
+not silently assign the organization owner. An explicit accountable assignment
+on the room or a known ancestor still takes precedence.
+
+When a case has several Workrooms, choose a room to inspect its own process and
+owners. Links from the operation view keep the selected room and navigation
+context. The case does not combine coordinators from different rooms.
+From Enterprise Architecture's Workrooms view, open Coordination and choose
+**Find a room** to search by title or room ID, filter by operation, or filter by
+room status. **Next rooms** continues through open rooms; the count is for the
+displayed page. Selecting **Operation** from a room's process returns to the
+same filters and page. Recorded stage waits are shown when the drive has named
+the stage and responsible role.

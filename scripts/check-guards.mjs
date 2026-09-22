@@ -35,6 +35,7 @@
 
 import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { scrubGitRepoLocationEnv } from "./lib/git-hook-env.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -202,10 +203,13 @@ export function main() {
   // Self-tests are PIPED so a failure can be replayed under its own verdict
   // (BI-C5FFCCDA); guards keep stdio inherit, because their output IS the
   // finding and operators read it live.
+  // BI-062F5687: a guard or self-test must never inherit the hook's GIT_DIR,
+  // even when this loop is run by hand from inside a hook.
+  const env = scrubGitRepoLocationEnv(process.env);
   const spawn = (argv) =>
     argv[0] === "--test"
-      ? spawnSync(process.execPath, argv, { cwd: REPO_ROOT, encoding: "utf8" })
-      : spawnSync(process.execPath, argv, { cwd: REPO_ROOT, stdio: "inherit" });
+      ? spawnSync(process.execPath, argv, { cwd: REPO_ROOT, encoding: "utf8", env })
+      : spawnSync(process.execPath, argv, { cwd: REPO_ROOT, stdio: "inherit", env });
 
   const { violations, runnerFailures } = runGuards({ guards, tests, spawn });
   const { exitCode, lines } = summarizeGuardRun({ guards, tests, violations, runnerFailures });

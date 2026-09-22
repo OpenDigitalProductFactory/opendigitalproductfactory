@@ -34,17 +34,17 @@ export async function reconcileInventoryPullRequestBindings(syncRunId: string, n
   const rooms = await prisma.workroom.findMany({
     where: {
       archivedAt: null, status: { notIn: ["complete", "abandoned", "archived"] },
-      AND: [
-        { OR: [{ pullRequestNumber: null }, { pullRequestUrl: null }] },
-        { OR: observations.map((observation) => ({
+      OR: observations.map((observation) => ({
           repositoryFullName: observation.repositoryFullName, headBranch: observation.headBranch,
           AND: [
-            { OR: [{ headSha: null }, { headSha: observation.headSha }] },
-            { OR: [{ pullRequestNumber: null }, { pullRequestNumber: observation.number }] },
-            { OR: [{ pullRequestUrl: null }, { pullRequestUrl: observation.url }] },
+            { OR: [{ headSha: observation.headSha }, { headSha: null, AND: [
+              { OR: [{ pullRequestNumber: null }, { pullRequestNumber: observation.number }] },
+              { OR: [{ pullRequestUrl: null }, { pullRequestUrl: observation.url }] },
+            ] }] },
+            { OR: [{ pullRequestNumber: null }, { pullRequestUrl: null },
+              { pullRequestNumber: { not: observation.number } }, { pullRequestUrl: { not: observation.url } }] },
           ],
-        })) },
-      ],
+        })),
     },
     select: { id: true, capsuleId: true, repositoryFullName: true, headBranch: true,
       headSha: true, pullRequestNumber: true, pullRequestUrl: true, updatedAt: true },
@@ -57,7 +57,8 @@ export async function reconcileInventoryPullRequestBindings(syncRunId: string, n
   for (const binding of plan.bindings) {
     const room = batch.find((candidate) => candidate.capsuleId === binding.capsuleId)!;
     const observation = observations.find((candidate) => candidate.repositoryFullName === room.repositoryFullName
-      && candidate.headBranch === room.headBranch && candidate.number === binding.pullRequestNumber)!;
+      && candidate.headBranch === room.headBranch && candidate.number === binding.pullRequestNumber
+      && (!room.headSha || candidate.headSha.toLowerCase() === room.headSha.toLowerCase()))!;
     const saved = await prisma.$transaction(async (tx) => {
       const update = await tx.workroom.updateMany({
         where: { id: room.id, updatedAt: room.updatedAt, archivedAt: null,
@@ -71,6 +72,7 @@ export async function reconcileInventoryPullRequestBindings(syncRunId: string, n
         summary: `Observed pull request #${binding.pullRequestNumber} (${binding.state}); linked repository and branch.`,
         payload: { syncRunId, snapshotRunId, repositoryFullName: observation.repositoryFullName,
           pullRequestNumber: observation.number, pullRequestUrl: observation.url,
+          previousPullRequestNumber: room.pullRequestNumber, previousPullRequestUrl: room.pullRequestUrl,
           headSha: observation.headSha, state: observation.state,
           observationFingerprint: observation.observationFingerprint, confirmedAt: run!.completedAt!.toISOString() },
       } });

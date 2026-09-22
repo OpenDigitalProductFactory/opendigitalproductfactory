@@ -58,6 +58,7 @@ export type SmokeTestResult =
  * Source of truth for installer banner copy lives in `readiness-state.ts`.
  */
 export type ReadinessState =
+  | "authorization_pending"
   | "ready"
   | "partial"
   | "missing_cli"
@@ -72,6 +73,7 @@ export type ReadinessState =
  * (a sidecar, never a key inside `install-state.json` — BI-95DF1BFC).
  */
 export type AgentToolchainState = {
+  mcpAuthorization?: { mode: "oauth" | "legacy"; verified: boolean };
   appliedAt: string;
   dpfPlatformVersion: string;
   /**

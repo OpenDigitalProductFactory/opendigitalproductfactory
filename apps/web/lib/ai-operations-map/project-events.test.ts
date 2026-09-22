@@ -30,6 +30,15 @@ import type {
 } from "./types";
 
 describe("AI operations map projection", () => {
+  it("explains native authorization waits and preserves their recovery limits", () => {
+    const projection = projectTaskRun(makeTaskRun({ status: "auth-required", a2aMetadata: { gateKind: "semantic-review" },
+      progressPayload: { semanticReview: { schemaVersion: 1, deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 2 } } }));
+    expect(projection.recovery).toBe("semantic-review");
+    expect(projection.summary).toContain("The original requester must inspect the submitting authority");
+    expect(projection.summary).toContain("Signing in again does not replace this request's saved credentials");
+    expect(projection.reviewBudget).toEqual({ deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 2 });
+    expect(projectTaskRun(makeTaskRun({ status: "auth-required" })).recovery).toBeUndefined();
+  });
   it("projects only recorded native review budget fields", () => {
     const projection = projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" },
       progressPayload: { semanticReview: { schemaVersion: 1, deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 3, requestDigest: "not-for-display" } } }));

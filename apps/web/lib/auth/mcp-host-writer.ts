@@ -14,7 +14,7 @@ export function writeMcpJsonToHost(plaintext: string, baseUrl: string): void {
   const p = lazyPath();
   if (!fs.existsSync(mountPath)) return;
 
-  const snippets = buildSetupSnippets(plaintext, baseUrl);
+  const snippets = buildSetupSnippets(plaintext, baseUrl, "oauth");
 
   // Use path.posix so paths always use forward slashes — this code runs inside
   // a Linux Docker container regardless of the OS running the build/tests.

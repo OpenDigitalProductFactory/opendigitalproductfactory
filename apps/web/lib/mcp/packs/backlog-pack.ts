@@ -269,7 +269,7 @@ async function updateBacklogItemStatus(
     return {
       success: false,
       error: "invalid_status",
-      message: `status must be one of triaging|open|in-progress|done|deferred|retired, got ${target}`,
+      message: `status must be one of triaging|open|in-progress|awaiting-acceptance|done|deferred|retired, got ${target}`,
     };
   const deferral = target === "deferred"
     ? normalizeDeferralInput(params["deferral"])
@@ -660,7 +660,7 @@ const handlers: Record<string, ToolPackHandler> = {
   update_epic: (params, userId, context) => updateEpic(params, userId, context),
   list_epics: (params) => listEpics(params),
   list_backlog_items: (params) => listBacklogItems(params),
-  get_backlog_item: (params) => getBacklogItem(params),
+  get_backlog_item: (params, _userId, context) => getBacklogItem(params, context?.agentId ?? null),
   update_backlog_item_status: (params, userId, context) => updateBacklogItemStatus(params, userId, context),
   link_backlog_item_to_epic: (params, userId, context) => linkBacklogItemToEpic(params, userId, context),
   get_next_recommended_work: (params) => getNextRecommendedWork(params),

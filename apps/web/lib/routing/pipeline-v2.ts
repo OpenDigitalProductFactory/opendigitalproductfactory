@@ -522,13 +522,14 @@ export async function routeEndpointV2(
     try {
       const { prisma } = await import("@dpf/db");
       const rows = await prisma.providerCapacityStatus.findMany({
-        select: { providerId: true, state: true, retryAt: true },
+        select: { providerId: true, state: true, retryAt: true, lastObservedAt: true },
       });
       const map = new Map<string, CapacitySnapshot>();
       for (const row of rows) {
         map.set(row.providerId, {
           state: row.state,
           retryAtMs: row.retryAt ? row.retryAt.getTime() : null,
+          observedAtMs: row.lastObservedAt ? row.lastObservedAt.getTime() : null,
         });
       }
       capacityByProvider = map;

@@ -43,6 +43,17 @@ function room(over: Partial<BindablePullRequestRoom> = {}): BindablePullRequestR
 }
 
 describe("resolvePullRequestBindings", () => {
+  it("rebinds a reused branch only to its exact current full head", () => {
+    const headSha = "a".repeat(40);
+    const previous = room({ headSha, pullRequestNumber: 4242, pullRequestUrl: `https://github.com/${REPO}/pull/4242` });
+    const current = observation({ headSha, state: "open" });
+    const plan = resolvePullRequestBindings({ rooms: [previous], observations: [
+      observation({ number: 4242, headSha: "b".repeat(40) }), current,
+    ] });
+    expect(plan.bindings).toEqual([{ capsuleId: previous.capsuleId, pullRequestNumber: 5029, pullRequestUrl: current.url, state: "open" }]);
+    expect(resolvePullRequestBindings({ rooms: [previous], observations: [observation({ headSha: "b".repeat(40) })] }).bindings).toEqual([]);
+    expect(resolvePullRequestBindings({ rooms: [{ ...previous, headSha: "abc1234" }], observations: [observation()] }).bindings).toEqual([]);
+  });
   it("fills a missing URL only from the already-bound PR", () => {
     const plan = resolvePullRequestBindings({
       rooms: [room({ pullRequestNumber: 5029 })],

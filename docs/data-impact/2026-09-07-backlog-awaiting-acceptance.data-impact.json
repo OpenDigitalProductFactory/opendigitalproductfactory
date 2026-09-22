@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "BacklogItem.status closed set (Prisma enum BacklogItemStatus, CHECK BacklogItem_status_closed_set, BACKLOG_STATUSES, BACKLOG_STATUS_VALUES, MCP update/list/query enums)",
+    "Operations backlog visibility split (active / awaiting-acceptance / parked / terminal)",
+    "Federation demand projection allow-list (FEDERATION_SYNCABLE_BACKLOG_STATUSES)"
+  ],
+  "migration": {
+    "name": "20260907090000_add_backlog_awaiting_acceptance",
+    "backfill": "Adds Prisma/PG enum value awaiting-acceptance and recreates BacklogItem_status_closed_set to include it (legacy blocked retained). Then moves triaging/open/in-progress rows that already have a Workroom.pullRequestNumber or a BacklogItemActivity evidence payload containing /pull/N into awaiting-acceptance, writes a status_change activity, and releases an active work claim. Idempotent: already-awaiting rows are left alone. Does not mark any item done."
+  },
+  "tests": [
+    "apps/web/lib/backlog/pr-submit-awaiting-acceptance.test.ts",
+    "apps/web/lib/backlog/transitions.test.ts",
+    "apps/web/lib/backlog-visibility.test.ts",
+    "packages/db/src/backlog-awaiting-acceptance-migration.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:backlog-item#status-awaiting-acceptance",
+      "prismaModel": "BacklogItem",
+      "lifecycleDisposition": "existing rows keep their status; only coding-pool rows with an observed pull request move to awaiting-acceptance. No row is created or deleted. done remains the acceptance terminal and is not written by this migration.",
+      "fields": [
+        {
+          "fieldId": "data:backlog-item#status",
+          "resolution": "governed",
+          "reason": "Closed-set lifecycle widened by one operator-ratified value so delivered-not-accepted work is neither open coding demand nor done. Column stays String; CHECK and Prisma enum are the constraint. Legacy blocked remains in the CHECK.",
+          "provenance": "BI-7161625D; docs/superpowers/specs/2026-09-04-delivery-closeout-cost-efficiency-design.md OBJ-DC-8; kernel score 2026-09-07 merge-then-async-verify 9.52 vs merge-is-done 6.20"
+        },
+        {
+          "fieldId": "data:backlog-item#claimStatus",
+          "resolution": "governed",
+          "reason": "PR-submit close-out releases an active coding claim so the item is not held as live WIP after it leaves the coding pool.",
+          "provenance": "BI-7161625D; BI-B62B9F1E claim-on-start"
+        }
+      ]
+    }
+  ]
+}

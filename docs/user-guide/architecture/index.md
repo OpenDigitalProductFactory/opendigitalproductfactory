@@ -28,11 +28,18 @@ If you change the archetype your install declares, the next seed imports the cri
 
 ## Workroom Definitions
 
+Within Coordination, **Owner and links** shows the accountable person and whether
+that responsibility is explicit, inherited from a room, or recorded for the
+organization. Conflicting or incomplete ownership remains a setup gap. Recorded
+parent, child and dependency links lead to the related room while keeping your
+filters. A dependency alone does not prove the work is waiting. An incomplete
+read is labeled; no links observed is not proof that no links exist.
+
 Open **Architecture > Workrooms** (`/ea/workrooms`) to see the rooms that are actually running and how they sit across the four portfolios. The page leads with a true count of open rooms — completed and archived rooms are excluded — and says plainly how many have no portfolio recorded. Those are reported as unclassified, never quietly filed under a portfolio nobody assigned. Where team plans exist, each is grouped under its owning portfolio with its shape, participants, queues, triggers and process view.
 
 A team is placed in a portfolio from what the platform actually records: an explicit portfolio role on the team wins, and its portfolio slug or name are used only as weaker fallbacks. When none of those decides the question, the team is listed under **Not placed in a portfolio** with the reason, instead of being shown inside a portfolio nobody assigned it to. Those teams are counted separately, so a portfolio's total only ever counts teams that genuinely belong to it. Correct a placement by setting the team's portfolio role or linking it to the right portfolio.
 
-The room count is a real total. The plan list and the Coordination list are each a bounded read; when more exist than are shown the page says so (**Partial read**, **More rooms exist**), so a bounded list is never mistaken for the whole estate. If no team plans are configured on your install, the page says exactly that rather than implying you forgot to set one up — there is currently no in-product way to create one, so an install with none is normal.
+The overview room count is a real total. The plan list and the Coordination list are each a bounded read. **More plans exist** identifies a truncated plan list; **Next rooms** continues through matching open rooms in Coordination. Its count describes the displayed page. If no team plans are configured on your install, the page says exactly that rather than implying you forgot to set one up — there is currently no in-product way to create one, so an install with none is normal.
 
 ## What You Can Do
 
@@ -59,12 +66,15 @@ Use the AI Workforce area for everyday coworker discovery and work assignment.
 
 ## Following a Concern Across Views
 
-On **Workrooms**, expand **Coordination** to open an actual room. It shows open rooms from a bounded database read and
-reports when more exist. A room with no team plan behind it says so explicitly.
-Select a plan's room link to narrow the list to that operation first.
+On **Workrooms**, expand **Coordination** to open an actual room. Use **Find a room**
+to search by title or room ID and filter by operation or status. **Next rooms**
+continues the bounded list; changing filters starts a new first page. A room with
+no team plan behind it says so explicitly. Select a plan's room link to narrow
+the list to that operation first. Recorded stage waits name the responsible role
+when the execution source records it.
 
 Inside the room, select a process step to inspect its reason, next action, owner
-and evidence. **Operation** returns to the same architecture selection. Intended
+and evidence. **Operation** returns to the same operation, filters and page. Intended
 process and observed records remain separate: a graph alone does not establish
 BPMN execution or SysML conformance.
 

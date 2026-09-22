@@ -317,6 +317,9 @@
       "docs/security/README.md",
       "docs/security/secrets-scan.md"
     ],
+    ".github/workflows/stuck-auto-merge-alarm.yml": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     ".github/workflows/ux-route-sweep.yml": [
       "docs/platform-usability-standards.md",
       "docs/testing/ci-evidence.md"
@@ -549,6 +552,9 @@
     ],
     "apps/web/lib/attention/owner-projection.ts": [
       "docs/user-guide/workspace/attention-inbox.md"
+    ],
+    "apps/web/lib/auth/oauth-scope-map.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "apps/web/lib/autonomy/regulatory-ceiling.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1197,6 +1203,9 @@
     "apps/web/lib/ux-budget/measure.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/ux-budget/scope.ts": [
+      "docs/testing/ci-evidence.md"
+    ],
     "apps/web/lib/voice-synthesis/tts-health-contract.test.ts": [
       "docs/operations/observability-coverage.md"
     ],
@@ -1603,6 +1612,9 @@
     "packages/integration-shared/src/mcp-catalog-tier.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
+    "packages/integration-shared/src/mcp-client-credential-policy.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "packages/storefront-templates/src/archetype-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md",
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
@@ -1794,6 +1806,9 @@
     "scripts/check-no-provider-local-connector-lifecycle.mjs": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "scripts/check-no-server-imports-in-client.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/check-no-unattributable-deferral.mjs": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -1822,6 +1837,9 @@
     ],
     "scripts/check-stewardship-scope.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "scripts/check-stuck-auto-merge.mjs": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/check-style-drift.mjs": [
       "docs/architecture/ui-token-styling.md",
@@ -2043,6 +2061,9 @@
     "scripts/pre-push-dco-check.mjs": [
       "docs/architecture/build-gate-runbook.md",
       "docs/founder-kernel/wiki/principles/dco-sign-off-required.md"
+    ],
+    "scripts/pre-push-gate-infrastructure-probe.mjs": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/pre-push-gate-slot-contract.test.mjs": [
       "docs/architecture/build-gate-runbook.md"
@@ -2543,16 +2564,20 @@
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
+      ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
       "scripts/check-build-script-policy.mjs",
+      "scripts/check-no-server-imports-in-client.mjs",
+      "scripts/check-stuck-auto-merge.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/lib/gate-exit-classification.mjs",
       "scripts/pre-push-dco-check.mjs",
+      "scripts/pre-push-gate-infrastructure-probe.mjs",
       "scripts/pre-push-gate-slot-contract.test.mjs",
       "scripts/pregate-preflight.mjs",
       "scripts/pregate-status.mjs"
@@ -2727,11 +2752,13 @@
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
+      "apps/web/lib/auth/oauth-scope-map.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
       "apps/web/lib/govern/manager-scope.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
+      "packages/integration-shared/src/mcp-client-credential-policy.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
@@ -3239,6 +3266,7 @@
       ".github/workflows/ux-route-sweep.yml",
       "apps/web/instrumentation.ts",
       "apps/web/lib/runtime/measurement-runtime.ts",
+      "apps/web/lib/ux-budget/scope.ts",
       "docs/testing/ci-observation-baseline.json",
       "scripts/ci-evidence-plan.mjs",
       "scripts/ci-shadow-selection.mjs"
