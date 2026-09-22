@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock @dpf/db so providerHasConfiguredCredential can be exercised without a
 // live database. The other (pure) functions under test never touch prisma, so
@@ -78,6 +78,66 @@ describe("Codex authoritative discovery", () => {
     });
     expect(seedKnownModelsMock).not.toHaveBeenCalled();
     expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("chatgpt discovery mirrors the shared account's Codex catalog (BI-AA618693)", () => {
+  const realFetch = globalThis.fetch;
+  beforeEach(() => {
+    modelProviderMock.findUnique.mockReset();
+    seedKnownModelsMock.mockReset();
+    discoverCodexCliModelsMock.mockReset();
+    discoveredModelMock.findMany.mockReset();
+    discoveredModelMock.createMany.mockReset();
+    discoveredModelMock.updateMany.mockReset();
+    modelProviderMock.findUnique.mockResolvedValue({
+      providerId: "chatgpt",
+      authMethod: "oauth2_authorization_code",
+      category: "direct",
+      cliEngine: null,
+      baseUrl: null,
+    });
+    credState.rows.set("chatgpt", {
+      providerId: "chatgpt",
+      cachedToken: "tok",
+      tokenExpiresAt: new Date(Date.now() + 3_600_000),
+      status: "ok",
+    });
+    globalThis.fetch = vi.fn(async () => new Response("forbidden", { status: 403 })) as typeof fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    credState.rows.delete("chatgpt");
+  });
+
+  it("never seeds the static gpt-5.4 catalog when both discovery paths fail", async () => {
+    discoverCodexCliModelsMock.mockRejectedValue(new Error("app-server unavailable"));
+
+    const result = await autoDiscoverAndProfile("chatgpt");
+
+    expect(result.discovered).toBe(0);
+    expect(result.error).toMatch(/HTTP 403/);
+    expect(result.error).toMatch(/app-server unavailable/);
+    expect(seedKnownModelsMock).not.toHaveBeenCalled();
+    expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+  });
+
+  it("upserts the Codex catalog for chatgpt when the consumer backend refuses discovery", async () => {
+    discoverCodexCliModelsMock.mockResolvedValue([
+      { modelId: "gpt-5.6-terra", rawMetadata: { source: "codex_cli_model_list" } },
+    ]);
+    discoveredModelMock.findMany.mockResolvedValue([]);
+    discoveredModelMock.createMany.mockResolvedValue({ count: 1 });
+    discoveredModelMock.updateMany.mockResolvedValue({ count: 0 });
+    modelProfileMock.findMany.mockResolvedValue([]);
+
+    await autoDiscoverAndProfile("chatgpt").catch(() => undefined);
+
+    expect(discoverCodexCliModelsMock).toHaveBeenCalledWith("codex");
+    expect(seedKnownModelsMock).not.toHaveBeenCalled();
+    expect(discoveredModelMock.createMany).toHaveBeenCalledTimes(1);
+    const rows = (discoveredModelMock.createMany.mock.calls[0]?.[0] as { data: Array<{ providerId: string; modelId: string }> }).data;
+    expect(rows.map((r) => `${r.providerId}/${r.modelId}`)).toEqual(["chatgpt/gpt-5.6-terra"]);
   });
 });
 
