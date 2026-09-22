@@ -197,6 +197,7 @@ export async function generateNormalizedPlan(args: {
   log: (summary: string) => Promise<void>;
 }): Promise<{ plan: { fileStructure?: unknown[]; tasks?: unknown[] } } | { error: string }> {
   const { routeAndCall } = await import("@/lib/inference/routed-inference");
+  const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
   const prompt = buildPlanGenerationPrompt({
     title: args.title,
     designDoc: args.designDoc,
@@ -226,6 +227,7 @@ export async function generateNormalizedPlan(args: {
       systemPrompt,
       args.sensitivity ?? "development",
       {
+        ...BUILD_PHASE_ROUTE_OPTIONS,
         budgetClass: "quality_first",
         ...(args.modelTier ? { modelTier: args.modelTier } : {}),
         ...(args.buildId ? { buildId: args.buildId } : {}),

@@ -512,8 +512,9 @@ export async function dispatchIdeateForApprovedBuild(params: {
         if (shouldRunPreSpecResearch({ workType: bi.workType, effortSize: bi.effortSize, sensitivity })) {
           const { searchPublicWeb, fetchPublicWebsiteEvidence } = await import("@/lib/public-web-tools");
           const { routeAndCall } = await import("@/lib/routed-inference");
+          const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
           const deps = makeInferenceResearchDeps({
-            llm: async (p) => (await routeAndCall([{ role: "user" as const, content: p }], "You are a research assistant. Follow the output format exactly.", researchRouteSensitivity, { budgetClass: "minimize_cost" })).content,
+            llm: async (p) => (await routeAndCall([{ role: "user" as const, content: p }], "You are a research assistant. Follow the output format exactly.", researchRouteSensitivity, { ...BUILD_PHASE_ROUTE_OPTIONS, budgetClass: "minimize_cost" })).content,
             search: async (q) => (await searchPublicWeb(q)).map((r) => ({ title: r.title, url: r.url, description: r.snippet })),
             fetchSource: async (u) => { const e = await fetchPublicWebsiteEvidence(u); return { title: e.title, textExcerpt: e.textExcerpt }; },
           });
@@ -789,11 +790,12 @@ export async function dispatchDesignReviewFixLoop(params: {
         let raw: unknown = null;
         try {
           const { routeAndCall } = await import("@/lib/inference/routed-inference");
+          const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
           const answer = await routeAndCall(
             [{ role: "user", content: prompt }],
             "You are the design author diagnosing a defect you will then plan against.",
             "development",
-            { taskType: "conversation" },
+            { ...BUILD_PHASE_ROUTE_OPTIONS, taskType: "conversation" },
           );
           raw = answer?.content ?? null;
         } catch (err) {

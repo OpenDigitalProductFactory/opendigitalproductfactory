@@ -20,6 +20,8 @@ describe("generateNormalizedPlan route sensitivity (BI-20D559AD)", () => {
     });
     expect("plan" in r).toBe(true);
     expect(routeAndCall.mock.calls[0]?.[2]).toBe("internal");
+    // Non-interactive phase: never demand token streaming (BI-F84887FF).
+    expect((routeAndCall.mock.calls[0]?.[3] as { requiresStreaming?: boolean }).requiresStreaming).toBe(false);
   });
 
   it("defaults to development (source-code class) when no sensitivity is supplied", async () => {
