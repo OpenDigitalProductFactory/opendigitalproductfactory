@@ -42,6 +42,9 @@ describe("recordIdeateResearchReceipt", () => {
     const call = mockGoverned.mock.calls[0][0];
     expect(call.toolName).toBe("record_initiative_evidence");
     expect(call.rawParams).toMatchObject({ itemId: "BI-660E165F", gate: "research", decision: "pass", artifactRef: { kind: "feature-build-revision", revisionId: "rev-42" } });
+    // The gate-receipt schema requires both; a passing receipt sends them empty.
+    expect(call.rawParams.findings).toEqual([]);
+    expect(call.rawParams.resolvedFindingRefs).toEqual([]);
     expect(call.rawParams.reason).toContain("existingFunctionalityAudit");
     expect(call.context).toMatchObject({ agentId: IDEATE_ATTESTATION_AGENT_ID, featureBuildId: "FB-1", tokenScope: "write" });
     expect(call.userContext).toEqual({ userId: "u-1", platformRole: null, isSuperuser: true });
