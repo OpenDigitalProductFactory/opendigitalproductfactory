@@ -6577,7 +6577,8 @@
             "coworker_screen_read",
             "coworker_screen_drive",
             "tool_script_exec",
-            "workroom_evidence_write"
+            "workroom_evidence_write",
+            "initiative_evidence_write"
           ],
           "services": 1,
           "unbackedSkillIds": [
@@ -7535,7 +7536,8 @@
             "portfolio_read",
             "registry_read",
             "backlog_read",
-            "workroom_evidence_write"
+            "workroom_evidence_write",
+            "initiative_evidence_write"
           ],
           "services": 0,
           "unbackedSkillIds": [],
