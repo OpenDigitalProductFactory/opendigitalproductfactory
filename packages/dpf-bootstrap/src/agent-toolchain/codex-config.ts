@@ -108,7 +108,7 @@ function mcpBlockConverged(
   return (
     existing?.url === mcpEndpoint &&
     (existing?.bearer_token_env_var === desiredMcpServerBlock(mcpEndpoint, authMode).bearer_token_env_var ||
-      (authMode === "oauth" && !!existing?.bearer_token_env_var && existing.bearer_token_env_var !== MCP_BEARER_TOKEN_ENV_VAR))
+      (!!existing?.bearer_token_env_var && existing.bearer_token_env_var !== MCP_BEARER_TOKEN_ENV_VAR))
   );
 }
 
@@ -379,6 +379,8 @@ export function planCodexConfig(
       nextMcpServers["dpf"] = {
         ...(existingMcp ?? {}),
         ...desiredMcpServerBlock(desiredMcpEndpoint!, authMode),
+        ...(existingMcp?.bearer_token_env_var && existingMcp.bearer_token_env_var !== MCP_BEARER_TOKEN_ENV_VAR
+          ? { bearer_token_env_var: existingMcp.bearer_token_env_var } : {}),
       };
       if (!mcpClientBearerHeaderRequired(desiredMcpEndpoint!, "codex", authMode) && existingMcp?.bearer_token_env_var === MCP_BEARER_TOKEN_ENV_VAR) {
         delete (nextMcpServers["dpf"] as Record<string, unknown>).bearer_token_env_var;

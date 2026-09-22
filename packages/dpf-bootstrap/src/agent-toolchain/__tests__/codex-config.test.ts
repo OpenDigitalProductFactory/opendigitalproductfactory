@@ -29,6 +29,10 @@ describe("planCodexConfig", () => {
     const plan = planCodexConfig('[mcp_servers.dpf]\nurl="' + LOCAL_FULL_ENDPOINT + '"\nbearer_token_env_var="MY_TOKEN"\n', REPO, CONFIG_PATH, LOCAL_ENDPOINT);
     expect((parse(plan.writes[0].content) as any).mcp_servers.dpf.bearer_token_env_var).toBe("MY_TOKEN");
   });
+  it("preserves a user-owned credential in explicit legacy mode too", () => {
+    const plan = planCodexConfig('[mcp_servers.dpf]\nurl="https://old.example/mcp"\nbearer_token_env_var="MY_TOKEN"\n', REPO, CONFIG_PATH, LOCAL_ENDPOINT, undefined, "legacy");
+    expect((parse(plan.writes[0].content) as any).mcp_servers.dpf.bearer_token_env_var).toBe("MY_TOKEN");
+  });
   it("migrates the managed bearer override to OAuth and preserves unrelated settings on rerun", () => {
     const text = '[mcp_servers.dpf]\nurl = "' + LOCAL_FULL_ENDPOINT + '"\nbearer_token_env_var = "DPF_MCP_BEARER_TOKEN"\nstartup_timeout_sec = 45\n[mcp_servers.other]\nurl = "https://other.example/mcp"\n';
     const first = planCodexConfig(text, REPO, CONFIG_PATH, LOCAL_ENDPOINT);

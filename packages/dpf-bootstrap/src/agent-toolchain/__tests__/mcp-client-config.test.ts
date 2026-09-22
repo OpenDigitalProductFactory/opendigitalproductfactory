@@ -94,3 +94,9 @@ it("preserves unrelated JSON servers while removing only managed OAuth-blocking 
   expect(content.mcpServers.dpf.headers).toEqual({"X-Tenant": "sample"});
   expect(planMcpClientConfig("/tmp/repo", "https://dpf.example/api/mcp/v1", JSON.stringify(content, null, 2), plan.writes.find(w => w.path.endsWith("/.vscode/mcp.json"))!.content).writes).toEqual([]);
 });
+
+it("preserves custom credentials and headers when compatibility is required", () => {
+  const original = JSON.stringify({mcpServers: {dpf: {headers: {Authorization: "Bearer ${MY_TOKEN}", "X-Tenant": "sample"}}}});
+  const plan = planMcpClientConfig("/tmp/repo", "http://127.0.0.1:3000/api/mcp/v1", original, null);
+  expect(JSON.parse(plan.writes[0].content).mcpServers.dpf.headers).toEqual({Authorization: "Bearer ${MY_TOKEN}", "X-Tenant": "sample"});
+});

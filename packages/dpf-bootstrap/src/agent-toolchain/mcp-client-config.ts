@@ -36,9 +36,10 @@ function mergeManagedServer(existing: string | null, desired: string, key: "mcpS
     const after = JSON.parse(desired);
     const servers = before[key] ?? {};
     const dpf = { ...servers.dpf, ...after[key].dpf };
-    if (!after[key].dpf.headers && servers.dpf?.headers) {
+    if (servers.dpf?.headers) {
       const headers = { ...servers.dpf.headers };
       if (["Bearer ${DPF_MCP_BEARER_TOKEN}", "Bearer ${env:DPF_MCP_BEARER_TOKEN}"].includes(headers.Authorization)) delete headers.Authorization;
+      if (!headers.Authorization && after[key].dpf.headers?.Authorization) headers.Authorization = after[key].dpf.headers.Authorization;
       if (Object.keys(headers).length) dpf.headers = headers;
       else delete dpf.headers;
     }
