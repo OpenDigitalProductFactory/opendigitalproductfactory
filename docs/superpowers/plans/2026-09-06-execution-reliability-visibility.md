@@ -940,3 +940,62 @@ then batch-read only unresolved accountable IDs from Principal. Do not add a
 participant, infer another owner, or change inherited responsibility. Preserve
 unknown names when the principal cannot be resolved; verify the page performs
 one lookup for a shared organization owner.
+
+### Checkpoint transaction failure containment
+
+Release5 review TR-GATE-9AC60ECCAFAA6A344BB254BA failed with Prisma P2028
+on checkpoint read and, after one authorized recovery, checkpoint write. The
+underlying timeout cause is unknown. Source inspection confirms that one branch
+failure immediately parks the entire TaskRun, preventing successful siblings
+from saving their results. Delay that wait until the existing all-settled
+dispatcher has drained its branches. Keep cancellation and generation fencing.
+
+Share a bounded database-only retry wrapper between checkpoint reads and writes.
+Retry only Prisma transaction errors P2028/P2034, at most three times within the
+original deadline, with short backoff. Never wrap provider execution or final
+receipt publication in this retry. An ambiguously committed read must still see
+the running checkpoint and refuse another provider call. Repeated writes save
+the same result under the generation fence. Retain unknown outcomes on exhaustion.
+First-failing tests cover sibling retention, transient read/write failure and
+retry exhaustion; add cancellation, deadline and ambiguous-read cases before
+the functional gate. Reuse existing checkpoint records and recovery policy.
+
+### Current change identity and retained PR history
+
+WC-99AECC86 still records PR 5470 after advancing its head to cfc451d7.
+The inventory binder excludes fully bound rooms, while the backlog PR actuator
+updates by repository and branch without checking the authored head. Inventory
+also drops the provider head before calling that actuator. A reused branch can
+therefore preserve or restore an earlier delivery as the current one.
+
+Extend BI-06AE6833 and the existing verified observation contract. Consolidate
+binding writes behind the current repository, branch and full head identity,
+with compare-and-swap and an atomic activity entry retaining the previous PR.
+An absent head cannot authorize replacement; an observation for another head
+cannot alter current binding. Preserve idempotency, bounded inventory batches,
+provider freshness checks and explicit incomplete coverage. Keep backlog status
+transitions separate from PR binding so they cannot become a second writer.
+Test a reused branch, late older delivery, duplicate observation, concurrent
+head advance and journal rollback before implementation is accepted. This is
+not permission to edit runtime rows or infer that a merged PR completes the
+overarching initiative.
+
+The reviewer projection has the same identity risk: late activity on an old
+request can dominate current attention. Read only bounded identity fields from
+the existing immutable TaskArtifact, correlated by TaskRun, actor, request digest,
+gate key and Workroom. Compare source commit SHA with the Workroom commit SHA,
+never with a tree hash. The latest issued request for that head is current;
+earlier requests remain historical. Missing correlation is unknown and partial.
+Do not load full review prompts into the portal. Display the classification in
+the existing disclosure, and do not offer recovery for historical requests.
+Working generations must describe server continuation, not the previous wait.
+Show a bounded verdict summary only from the correlated ExternalEvidenceRecord,
+matching request head, diff, policy and reviewer version. Its observed verdict
+does not confer publication permission or complete a Workroom stage.
+
+The required UX sweep for PR 5482 measured the added Refresh state button as
+an intentional accessibility-tree change. Workflow 35670278421 remeasured the
+exact published UI head. Adopt only the case route's measurement: 385 visible
+words (down from 397), one primary action, zero visible fields, and the additional
+button. The two existing axe violations remain recorded. This baseline update
+does not claim that the full live execution experience has passed acceptance.

@@ -29,6 +29,11 @@ Coworker service engagements can also appear as Work Cases. When a requested cow
 
 ## What You See First
 
+For development work, a verified repository observation can update the room's
+pull request when it matches the room's current commit. The room journal retains
+the previous link. Reusing a branch name alone does not establish current
+delivery, and a merged pull request does not complete the whole initiative.
+
 The top of a Workroom answers four questions:
 
 1. What outcome does this room own?
@@ -372,6 +377,14 @@ For a waiting request, the shared recovery controls show its original deadline
 and attempts. Only the original requester can submit recovery, and the server
 rechecks saved authority. An expired window or exhausted limit cannot be reset
 from the room. Intended steps remain separate from these execution observations.
+
+Requests are labeled current, historical, or version unknown. Current means the
+latest request issued for the room's recorded source commit. Older requests keep
+their evidence but do not drive current attention or offer recovery here. Missing
+identity is a projection gap. A working request describes server continuation,
+not its previous wait. Brief checkpoint database retries reuse the provider result;
+they do not spend an additional provider call. Successful sibling checkpoints are
+saved before a failed branch puts the review into a wait.
 
 For nested rooms, accountability follows recorded responsibility links. Competing
 parents or a lineage that exceeds the read limit appear as setup gaps. They do

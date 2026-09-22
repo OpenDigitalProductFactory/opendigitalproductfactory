@@ -18,6 +18,19 @@ const run: ReviewerExecutionObservation = {
   checkpoints: [{ taskNodeId: "TN-1", recordId: "node-1", title: "Architecture review", status: "completed", actorId: "AGT-181" }],
 };
 describe("reviewer execution inside a Workroom", () => {
+  it("shows the correlated receipt's verdict and summary without claiming the room is complete", () => {
+    render(<ReviewerExecutionList runs={[{ ...run, receipt: { id: "receipt-1", decision: "inconclusive", summary: "A required branch could not finish." } }]} />);
+    expect(screen.getByText(/A required branch could not finish/)).toBeInTheDocument();
+    expect(screen.getByText(/receipt-1/)).toBeInTheDocument();
+    expect(screen.getByText(/does not verify the Workroom outcome/)).toBeInTheDocument();
+  });
+  it("retains historical request evidence without offering recovery for an older change", () => {
+    render(<ReviewerExecutionList runs={[{ ...run, identityScope: "historical", sourceHeadSha: "a".repeat(40) }]} />);
+    expect(screen.getByText(/Historical request/)).toBeInTheDocument();
+    expect(screen.queryByTestId("recovery")).not.toBeInTheDocument();
+    expect(screen.getByText(/Inspect the current request/)).toBeInTheDocument();
+    expect(screen.getByText(/aaaaaaaa/)).toBeInTheDocument();
+  });
   it("does not advertise a recorded retry after the request deadline", () => {
     render(<ReviewerExecutionList runs={[{ ...run, nextAction: "retry-review",
       budget: { deadlineAt: "2026-09-21T06:59:00Z", recoveryAttempt: 0 } }]} />);

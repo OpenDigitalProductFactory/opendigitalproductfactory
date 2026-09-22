@@ -100,7 +100,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   }
   const nodeId = (attempt: number) => `semantic-review:${row.taskRunId}:${agentId}${attempt ? `:recovery-${attempt}` : ""}`;
   const taskNodeId = nodeId(recoveryAttempt);
-  const prior = await prisma.$transaction(async (tx) => {
+  const prior = await checkpointTransaction(packet.deadlineAt, async (tx) => {
     await assertFence(tx, row.taskRunId, generation);
     const superseded: Array<{ taskNodeId: string; output: Record<string, unknown>; providerOutcome: "unknown" | "inconclusive" }> = [];
     for (let attempt = recoveryAttempt; attempt >= 0; attempt -= 1) {
@@ -135,12 +135,28 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   onPhase("provider-call");
   const result = await execute();
   onPhase("checkpoint-write");
-  await prisma.$transaction(async (tx) => {
+  await checkpointTransaction(packet.deadlineAt, async (tx) => {
     await assertFence(tx, row.taskRunId, generation);
     await tx.taskNode.update({ where: { taskNodeId }, data: { status: "completed", completedAt: new Date(),
       outputSnapshot: json({ requestDigest: packet.digest, result }) } });
   });
   return result;
+}
+
+/** Only fenced checkpoint DB operations belong here, never provider calls or receipts. */
+async function checkpointTransaction<T>(deadlineAt: string, operation: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  const deadline = Date.parse(deadlineAt);
+  for (let attempt = 0; ; attempt += 1) {
+    if (Date.now() >= deadline) throw new Error("semantic-review-deadline-exhausted");
+    try { return await prisma.$transaction(operation); }
+    catch (error) {
+      const retryable = error instanceof Error && error.name === "PrismaClientKnownRequestError"
+        && ["P2028", "P2034"].includes(String(object(error).code));
+      const delay = 100 * (attempt + 1);
+      if (!retryable || attempt >= 2 || Date.now() + delay >= deadline) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
 }
 
 /** Existing operator Retry adapter; never replays a tool or resets the request budget. */
@@ -210,18 +226,23 @@ export async function executePersistedSemanticReview(taskRunId: string) {
     progressPayload: progress(row, { state: "executing", generation }) });
   if (!owned) return { taskRunId, status: "duplicate" };
   return withHeartbeatTicker(taskRunId, async () => {
+    let branchFailure: ReturnType<typeof safeBranchFailure> | undefined;
     const outcome = await withInferenceOrigin("autonomous", () => runSemanticChangeReview(packet.input, { dispatch: (prompt, context) =>
       dispatchRoutedSemanticReview(prompt, context, async (agentId, execute) => {
         let phase: BranchPhase = "checkpoint-read";
         try { return await checkpointBranch(row, packet, generation, agentId, execute, value => { phase = value; }); }
         catch (error) {
-          await prisma.taskRun.updateMany({ where: fence(taskRunId, generation),
-            data: { status: "input-required", progressPayload: progress(row, { state: "input-required", generation,
-              reason: "provider-outcome-uncertain", branchFailure: safeBranchFailure(error, agentId, phase),
-              action: "Reconcile the recorded branch before authorizing recovery." }) } });
+          branchFailure ??= safeBranchFailure(error, agentId, phase);
           throw error;
         }
-      }) }));
+      }) })).finally(async () => {
+        // The dispatcher settles every branch first. Parking inside a branch
+        // would revoke siblings' write fences and lose already-paid-for results.
+        if (branchFailure) await prisma.taskRun.updateMany({ where: fence(taskRunId, generation),
+          data: { status: "input-required", progressPayload: progress(row, { state: "input-required", generation,
+            reason: "provider-outcome-uncertain", branchFailure,
+            action: "Reconcile the recorded branch before authorizing recovery." }) } });
+      });
     const persisted = await prisma.$transaction(async (tx) => {
       if (Date.now() >= Date.parse(packet.deadlineAt)) {
         await tx.taskRun.updateMany({ where: fence(taskRunId, generation), data: {

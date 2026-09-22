@@ -68,6 +68,7 @@ beforeEach(() => {
   mocks.db.taskNode.findUnique.mockResolvedValue(null);
   mocks.db.taskNode.findFirst.mockResolvedValue(null);
   mocks.db.taskNode.create.mockResolvedValue({ id: "node-new" });
+  mocks.db.taskNode.update.mockReset().mockResolvedValue({});
   mocks.db.workroom.findUnique.mockResolvedValue({ id: "room-1" });
   mocks.evidence.mockResolvedValue({ id: "evidence-1" });
   mocks.activity.mockResolvedValue({ id: "activity-1" });
@@ -78,6 +79,116 @@ beforeEach(() => {
 });
 
 describe("durable semantic review worker", () => {
+  it("allows successful siblings to checkpoint before parking a failed branch", async () => {
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
+      await Promise.allSettled([
+        branch("AGT-903", async () => { throw new Error("provider failed"); }),
+        branch("change-reviewer", async () => {
+          await new Promise(resolve => setTimeout(resolve, 0));
+          expect(row.status).toBe("working");
+          return result;
+        }),
+      ]);
+      return { decision: "inconclusive", issues: [], summary: "A branch failed." };
+    });
+    await executePersistedSemanticReview("TR-1");
+    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { taskNodeId: "semantic-review:TR-1:change-reviewer" },
+      data: expect.objectContaining({ status: "completed", outputSnapshot: expect.objectContaining({ result }) }),
+    }));
+    expect(row.status).toBe("input-required");
+    expect(row.progressPayload).toMatchObject({ semanticReview: {
+      branchFailure: { agentId: "AGT-903", phase: "provider-call" },
+    } });
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["checkpoint-read", "P2028"], ["checkpoint-write", "P2028"],
+    ["checkpoint-read", "P2034"], ["checkpoint-write", "P2034"],
+  ])("retries transient %s %s transactions without repeating inference", async (phase, code) => {
+    const error = Object.assign(new Error("transaction closed"), {
+      name: "PrismaClientKnownRequestError", code,
+    });
+    if (phase === "checkpoint-read") mocks.db.$transaction.mockRejectedValueOnce(error);
+    else mocks.db.taskNode.update.mockRejectedValueOnce(error);
+    await executePersistedSemanticReview("TR-1");
+    expect(providerCalls).toBe(1);
+    expect(row.status).toBe("completed");
+    expect(mocks.evidence).toHaveBeenCalledOnce();
+  });
+
+  it("bounds checkpoint retries and leaves exhausted persistence unknown", async () => {
+    const error = Object.assign(new Error("transaction closed"), {
+      name: "PrismaClientKnownRequestError", code: "P2028",
+    });
+    mocks.db.taskNode.update.mockRejectedValue(error);
+    await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("transaction closed");
+    expect(providerCalls).toBe(1);
+    expect(mocks.db.taskNode.update).toHaveBeenCalledTimes(3);
+    expect(row.status).toBe("input-required");
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+
+  it("never applies checkpoint retries to a provider error with a Prisma code", async () => {
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+      providerCalls++;
+      throw Object.assign(new Error("provider error"), { name: "PrismaClientKnownRequestError", code: "P2028" });
+    }));
+    await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("provider error");
+    expect(providerCalls).toBe(1);
+    expect(row.status).toBe("input-required");
+    expect(mocks.db.taskNode.update).not.toHaveBeenCalled();
+  });
+
+  it("does not call the provider when an ambiguous read transaction already created its running node", async () => {
+    let node: unknown = null;
+    mocks.db.taskNode.findUnique.mockImplementation(async () => node);
+    mocks.db.taskNode.create.mockImplementation(async () => {
+      node = { status: "running", outputSnapshot: null };
+      return { id: "node-new" };
+    });
+    mocks.db.$transaction.mockImplementationOnce(async fn => {
+      await fn(mocks.db);
+      throw Object.assign(new Error("commit acknowledgement lost"), {
+        name: "PrismaClientKnownRequestError", code: "P2028",
+      });
+    });
+    await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("provider-outcome-uncertain");
+    expect(providerCalls).toBe(0);
+    expect(mocks.db.taskNode.create).toHaveBeenCalledOnce();
+    expect(row.status).toBe("input-required");
+  });
+
+  it("honors cancellation between checkpoint write attempts without replaying inference", async () => {
+    mocks.db.taskNode.update.mockImplementationOnce(async () => {
+      row.status = "canceled";
+      throw Object.assign(new Error("transaction closed"), {
+        name: "PrismaClientKnownRequestError", code: "P2028",
+      });
+    });
+    await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("generation-no-longer-owned");
+    expect(providerCalls).toBe(1);
+    expect(mocks.db.taskNode.update).toHaveBeenCalledOnce();
+    expect(row.status).toBe("canceled");
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+
+  it("stops checkpoint retries at the original deadline", async () => {
+    const clock = vi.spyOn(Date, "now");
+    mocks.db.taskNode.update.mockImplementationOnce(async () => {
+      clock.mockReturnValue(Date.parse(packet.deadlineAt));
+      throw Object.assign(new Error("transaction closed"), {
+        name: "PrismaClientKnownRequestError", code: "P2028",
+      });
+    });
+    try {
+      await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("transaction closed");
+      expect(providerCalls).toBe(1);
+      expect(mocks.db.taskNode.update).toHaveBeenCalledOnce();
+      expect(mocks.evidence).not.toHaveBeenCalled();
+    } finally { clock.mockRestore(); }
+  });
   it("does not retain arbitrary error names, codes or messages in failure evidence", async () => {
     mocks.db.taskNode.findUnique.mockRejectedValueOnce(Object.assign(new Error("private content"), {
       name: "private name", code: "private code",

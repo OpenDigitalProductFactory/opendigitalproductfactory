@@ -10,6 +10,67 @@ const run = (status: string): ReviewerRunSnapshot => ({
 });
 
 describe("reviewer state in its Workroom", () => {
+  it("keeps an older head's exhausted review out of current attention", async () => {
+    const old = { ...run("input-required"), id: "old-row", taskRunId: "TR-OLD" };
+    const current = { ...run("completed"), id: "current-row", taskRunId: "TR-CURRENT" };
+    const identity = (rowId: string, sourceHeadSha: string, issuedAt: string) => ({
+      rowId, capsuleId: "WC-1", requestBound: true, sourceHeadSha,
+      currentHeadSha: "a".repeat(40), issuedAt, receiptId: null,
+    });
+    const view = await loadSemanticReviewRoomProjection({
+      taskRun: { findMany: async () => [old, current] },
+      $queryRaw: vi.fn().mockResolvedValue([
+        identity("old-row", "b".repeat(40), "2026-09-08T19:00:00Z"),
+        identity("current-row", "a".repeat(40), "2026-09-08T19:30:00Z"),
+      ]),
+    }, ["WC-1"], now);
+    expect(view.attentionReason).toBeNull();
+    expect(view.runs.find(row => row.taskRunId === "TR-OLD")).toMatchObject({ identityScope: "historical" });
+    expect(view.runs.find(row => row.taskRunId === "TR-CURRENT")).toMatchObject({ identityScope: "current" });
+    expect(view.runs).toHaveLength(2);
+  });
+
+  it("uses request issue time instead of late activity to identify the current request on one head", async () => {
+    const view = await loadSemanticReviewRoomProjection({
+      taskRun: { findMany: async () => [run("input-required"), { ...run("completed"), id: "row-2", taskRunId: "TR-2" }] },
+      $queryRaw: vi.fn().mockResolvedValue([1, 2].map(index => ({
+        rowId: `row-${index}`, capsuleId: "WC-1", requestBound: true, sourceHeadSha: "a".repeat(40),
+        currentHeadSha: "a".repeat(40), issuedAt: `2026-09-08T19:0${index}:00Z`, receiptId: null,
+      }))),
+    }, ["WC-1"], now);
+    expect(view.attentionReason).toBeNull();
+    expect(view.runs[0]).toMatchObject({ identityScope: "historical" });
+    expect(view.runs[1]).toMatchObject({ identityScope: "current" });
+  });
+
+  it("labels missing request correlation unknown instead of claiming a current review", async () => {
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run("completed")] },
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", requestBound: false }]),
+    }, ["WC-1"], now);
+    expect(view.runs[0]).toMatchObject({ identityScope: "unknown" });
+    expect(view.partial).toBe(true);
+  });
+
+  it("does not present the previous wait as the action of a working generation", async () => {
+    const row = run("working");
+    row.progressPayload = { semanticReview: { reason: "provider-outcome-uncertain", action: "Retry the old failure." } };
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] } }, ["WC-1"], now);
+    expect(view.runs[0].reason).toBeNull();
+    expect(view.runs[0].nextAction).toContain("server owns continuation");
+  });
+
+  it("exposes a correlated receipt as evidence without promoting Workroom completion", async () => {
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run("completed")] },
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+        sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z",
+        receiptId: "receipt-1", receiptDecision: "pass", receiptSummary: "The committed change was reviewed.",
+        receiptCreatedAt: now,
+      }]),
+    }, ["WC-1"], now);
+    expect(view.runs[0]).toMatchObject({ receipt: { id: "receipt-1", decision: "pass", summary: "The committed change was reviewed." } });
+    expect(view.receipts.every(receipt => receipt.status === "observed")).toBe(true);
+    expect(view.receipts).toContainEqual(expect.objectContaining({ receiptId: "receipt-1", rawRef: { table: "ExternalEvidenceRecord", id: "receipt-1" } }));
+  });
   it("reads the requester's recorded profile name while retaining stable identity", async () => {
     const findMany = vi.fn(async () => [{ ...run("input-required"), user: { employeeProfile: { displayName: "Alex" } } }]);
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany } }, ["WC-1"], now);
