@@ -209,6 +209,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       const prompt = buildDesignReviewPrompt(designDocTyped, ownerContext, priorContext);
       const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, ownerContext);
       const { routeAndCall } = await import("@/lib/routed-inference");
+      const { buildPhaseRouteOptions } = await import("@/lib/build/build-phase-route-options");
       const messages = [{ role: "user" as const, content: prompt }];
       // Run the two checklist reviewers PLUS the advisory architecture reviewer
       // (chief-architect / Enterprise Architect lens) in parallel. The
@@ -226,18 +227,18 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
         buildId,
       };
       const [r1settled, r2settled, archSettled] = await Promise.allSettled([
-        routeAndCall(messages, "You are a design reviewer.", reviewSensitivity, attribution),
+        routeAndCall(messages, "You are a design reviewer.", reviewSensitivity, buildPhaseRouteOptions(attribution)),
         routeAndCall(
           messages,
           "You are an independent design reviewer. Focus especially on security, data integrity, edge cases, and accessibility gaps the primary reviewer may have missed.",
           reviewSensitivity,
-          { ...attribution, budgetClass: "minimize_cost" },
+          buildPhaseRouteOptions({ ...attribution, budgetClass: "minimize_cost" }),
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
           `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.`,
           reviewSensitivity,
-          { ...attribution, budgetClass: "minimize_cost" },
+          buildPhaseRouteOptions({ ...attribution, budgetClass: "minimize_cost" }),
         ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
@@ -286,7 +287,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           doc: typeof build.designDoc === "string" ? build.designDoc : JSON.stringify(designDocTyped),
           db: prisma,
           transport: (messages, systemPrompt) =>
-            routeAndCall(messages, systemPrompt, reviewSensitivity, { budgetClass: "minimize_cost" }),
+            routeAndCall(messages, systemPrompt, reviewSensitivity, buildPhaseRouteOptions({ budgetClass: "minimize_cost" })),
         });
         if (!daAdvisory.skipped && daAdvisory.findings.length > 0) {
           review = Object.assign({}, review, { dataArchitectureAdvisory: daAdvisory }) as typeof review;
