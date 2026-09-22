@@ -10,6 +10,7 @@
 //
 // Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §4d
 
+import { excerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
 import { prisma } from "@dpf/db";
 import { parseUnifiedRateLimitHeaders, type WeeklyQuotaSnapshot } from "./weekly-quota";
 
@@ -155,7 +156,7 @@ export async function recordCliRateLimit(
         rateLimitedAt: now,
         resetAt,
         retryAfterSeconds,
-        errorSnippet: errorText.slice(0, 300),
+        errorSnippet: excerptHeadAndTail(errorText, 300),
         updatedAt: now,
       },
       update: {
@@ -163,7 +164,7 @@ export async function recordCliRateLimit(
         rateLimitedAt: now,
         resetAt,
         retryAfterSeconds,
-        errorSnippet: errorText.slice(0, 300),
+        errorSnippet: excerptHeadAndTail(errorText, 300),
         updatedAt: now,
       },
     });
