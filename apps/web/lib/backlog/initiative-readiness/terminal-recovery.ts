@@ -611,6 +611,39 @@ export async function resolveTerminalInitiativeRecovery(args: {
   if (!room.repositoryFullName || !room.baseSha || !room.headBranch || !room.headSha) {
     return escalation("workroom-identity-incomplete", "The Workroom lacks repository, branch, immutable base, or immutable head. Re-sync it with adopt_worktree, then retry.");
   }
+  const dispatchContext = {
+    workroomId: room.capsuleId,
+    repositoryFullName: room.repositoryFullName,
+    branchName: room.headBranch,
+    headSha: room.headSha,
+  };
+
+  // A break-fix review assesses the repair the Workroom authored. It does not
+  // create or reconcile an objective baseline. Resolve its exact source before
+  // entering the baseline-owned acceptance path below (BI-594CF003).
+  const isPostImplementationReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+    entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED";
+  if ([...args.decision.blockers, ...args.decision.unmet].some(isPostImplementationReview)) {
+    const discovered = await ports.discoverArtifact({
+      repositoryFullName: room.repositoryFullName,
+      baseSha: room.baseSha,
+      headSha: room.headSha,
+    });
+    return ports.resolveRecovery({
+      decision: {
+        ...args.decision,
+        blockers: args.decision.blockers.filter(isPostImplementationReview),
+        unmet: args.decision.unmet.filter(isPostImplementationReview),
+      },
+      currentAgentId: args.currentAgentId,
+      db: prisma as never,
+      dispatchContext,
+      canonicalArtifact: discovered.resolved
+        ? { resolved: true, ...discovered.artifact, commitSha: room.headSha }
+        : { resolved: false, nextAction: discovered.nextAction },
+      expectedCurrentBaselineId: null,
+    });
+  }
 
   const payloads = await ports.loadBaselinePayloads(args.decision.subject.id);
   if (payloads.length === 0) {
@@ -669,12 +702,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
     decision: args.decision,
     currentAgentId: args.currentAgentId,
     db: prisma as never,
-    dispatchContext: {
-      workroomId: room.capsuleId,
-      repositoryFullName: room.repositoryFullName,
-      branchName: room.headBranch,
-      headSha: room.headSha,
-    },
+    dispatchContext,
     canonicalArtifact: { resolved: true, ...artifact },
     expectedCurrentBaselineId: baseline.baselineId,
     ...(needsObjectiveMapping

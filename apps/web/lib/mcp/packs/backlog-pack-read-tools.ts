@@ -381,7 +381,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -461,6 +461,15 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
     hasPlan,
     evaluatedAt: new Date().toISOString(),
   });
+  const completion = readiness.decisions?.completion;
+  const needsPirRecovery = completion && completion.verdict !== "allowed"
+    && [...completion.blockers, ...completion.unmet]
+      .some((entry) => entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED");
+  const recovery = needsPirRecovery
+    ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
+        decision: completion, currentAgentId, refusedWorkroomId: null,
+      })
+    : undefined;
   return {
     success: true,
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
@@ -519,6 +528,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
       workrooms: workroomOwnership.workrooms,
       activeWorkrooms: workroomOwnership.liveWorkrooms,
       readiness,
+      ...(recovery ? { recovery } : {}),
       specPlanCorpus,
       specPlanFiles: specPlanRefs.map((r) => ({
         path: r.path,
