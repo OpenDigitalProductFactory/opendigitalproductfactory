@@ -26,6 +26,14 @@ const FACETS: FacetDef[] = [
 ];
 
 describe("FilterBar", () => {
+  it("preserves opted-in navigation context without duplicating editable fields or retaining a page cursor", () => {
+    const html = renderToStaticMarkup(<FilterBar mode="url" basePath="/ea/workrooms" facets={FACETS}
+      value={{ operation: "initiative:EP-ONE", q: "recovery", after: "old-page" }} preserveKeys={["operation", "operation", "q"]} />);
+    expect(html.match(/name="operation"/g)).toHaveLength(1);
+    expect(html).toContain('type="hidden" name="operation" value="initiative:EP-ONE"');
+    expect(html.match(/name="q"/g)).toHaveLength(1);
+    expect(html).not.toContain('name="after"');
+  });
   it("renders all facet kinds with a result count", () => {
     const html = renderToStaticMarkup(
       <FilterBar

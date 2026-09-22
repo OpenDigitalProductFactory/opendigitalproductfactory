@@ -46,10 +46,10 @@ describe("Workroom process inspection", () => {
   });
 
   it("returns to the same coordination filters and page without leaking step filters", () => {
-    navigation.query = "operation=all&coordinationQuery=review&coordinationStatus=blocked&coordinationAfter=WC-099&processStep=review&processQuery=prepare";
+    navigation.query = "operation=all&coordinationQuery=review&coordinationStatus=blocked&coordinationAfter=WC-099&initiativeQuery=Reliable&processStep=review&processQuery=prepare";
     render(<WorkroomShape graph={graph} />);
     expect(screen.getByRole("link", { name: "Operation" })).toHaveAttribute("href",
-      "/ea/workrooms?operation=all&coordinationQuery=review&coordinationStatus=blocked&coordinationAfter=WC-099#coordination");
+      "/ea/workrooms?operation=all&coordinationQuery=review&coordinationStatus=blocked&coordinationAfter=WC-099&initiativeQuery=Reliable#coordination");
   });
   it("previews linked records without implying established impact and reveals every identity", () => {
     const many = structuredClone(graph);

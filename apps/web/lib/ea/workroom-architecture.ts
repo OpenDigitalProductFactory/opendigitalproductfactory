@@ -15,11 +15,76 @@ type ArchitectureDb = {
   valueStreamTeam: { findMany(args: unknown): Promise<any[]> };
 };
 
+export type InitiativeOperation = {
+  id: string; title: string; description: string | null; scopeKind: string | null;
+  storedRefs: string[]; operation: string; openRooms: number;
+};
+
+const INITIATIVE_FIELDS = { id: true, epicId: true, title: true, description: true, scopeKind: true } as const;
+const initiativeRefs = (epic: { id: string; epicId: string }) => [...new Set([epic.epicId, epic.id])].sort();
+
+/** Resolve selection independently of the inventory page; a missing identity never broadens the filter. */
+export async function loadInitiativeOperation(db: { epic: Pick<PrismaClient["epic"], "findUnique"> }, id: string) {
+  const epic = await db.epic.findUnique({ where: { epicId: id }, select: { id: true, epicId: true, title: true } }).catch(() => null);
+  return epic ? { id: epic.epicId, title: epic.title, storedRefs: initiativeRefs(epic) } : null;
+}
+
+/** Existing initiative membership is an operation context, never a value-stream assignment. */
+export async function loadWorkroomInitiatives(db: {
+  workroom: Pick<PrismaClient["workroom"], "groupBy">;
+  epic: Pick<PrismaClient["epic"], "findMany">;
+}, now = new Date(), search = ""): Promise<{
+  initiatives: InitiativeOperation[]; readAt: string; truncated: boolean; partial: boolean; unresolvedRooms: number | null;
+}> {
+  try {
+    const query = search.trim().slice(0, 200);
+    const matching = query ? await db.epic.findMany({
+      where: { OR: [{ title: { contains: query, mode: "insensitive" } }, { epicId: { contains: query, mode: "insensitive" } }] },
+      select: INITIATIVE_FIELDS, orderBy: { epicId: "asc" }, take: 201,
+    }) : null;
+    const groups = await db.workroom.groupBy({ by: ["epicId"],
+      where: { archivedAt: null, status: { notIn: TERMINAL_CAPSULE_STATUSES },
+        epicId: matching ? { in: matching.slice(0, 200).flatMap(initiativeRefs) } : { not: null } },
+      _count: { _all: true }, orderBy: { epicId: "asc" }, take: 201,
+    });
+    const page = groups.slice(0, 200);
+    const refs = page.flatMap(row => row.epicId ? [row.epicId] : []);
+    const epics = matching?.slice(0, 200) ?? (refs.length ? await db.epic.findMany({
+      where: { OR: [{ id: { in: refs } }, { epicId: { in: refs } }] },
+      select: INITIATIVE_FIELDS,
+    }) : []);
+    const byReference = new Map<string, typeof epics>();
+    for (const epic of epics) for (const ref of initiativeRefs(epic)) {
+      const matches = byReference.get(ref) ?? [];
+      matches.push(epic);
+      byReference.set(ref, matches);
+    }
+    const initiatives = new Map<string, InitiativeOperation>();
+    let unresolvedRooms = 0;
+    for (const group of page) {
+      const matches = byReference.get(group.epicId ?? "") ?? [];
+      if (matches.length !== 1) { unresolvedRooms += group._count._all; continue; }
+      const epic = matches[0]!;
+      const existing = initiatives.get(epic.epicId);
+      if (existing) existing.openRooms += group._count._all;
+      else initiatives.set(epic.epicId, { id: epic.epicId, title: epic.title,
+        description: epic.description, scopeKind: epic.scopeKind,
+        storedRefs: initiativeRefs(epic), operation: `initiative:${epic.epicId}`,
+        openRooms: group._count._all,
+      });
+    }
+    return { initiatives: [...initiatives.values()].sort((a, b) => a.id.localeCompare(b.id)),
+      readAt: now.toISOString(), truncated: groups.length > 200 || (matching?.length ?? 0) > 200, partial: false, unresolvedRooms };
+  } catch {
+    return { initiatives: [], readAt: now.toISOString(), truncated: false, partial: true, unresolvedRooms: null };
+  }
+}
+
 /** A bounded observation of actual rooms; assignment never implies accountability. */
 export async function loadWorkroomCoordination(
   db: { workroom: Pick<PrismaClient["workroom"], "findMany"> } & Partial<RoomWorkforceDb>,
   now = new Date(),
-  filter: { teamId?: string | null; query?: string; status?: string; after?: string } = {},
+    filter: { teamId?: string | null; initiative?: { id: string; storedRefs: string[] }; query?: string; status?: string; after?: string; initiativeQuery?: string } = {},
 ) {
   const query = filter.query?.trim().slice(0, 200) ?? "";
   const after = filter.after?.trim().slice(0, 100) ?? "";
@@ -30,12 +95,13 @@ export async function loadWorkroomCoordination(
   if (query) conditions.push({ OR: [{ title: { contains: query, mode: "insensitive" } }, { capsuleId: { contains: query, mode: "insensitive" } }] });
   const rows = await db.workroom.findMany({
     where: { archivedAt: null, status: status ?? { notIn: TERMINAL_CAPSULE_STATUSES },
+      ...(filter.initiative ? { epicId: { in: filter.initiative.storedRefs } } : {}),
       ...(typeof filter.teamId === "string" ? { workItem: { is: { teamId: filter.teamId } } } : {}),
       ...(conditions.length ? { AND: conditions } : {}),
       ...(after ? { capsuleId: { gt: after } } : {}),
     },
     orderBy: { capsuleId: "asc" }, take: 201,
-    select: { id: true, capsuleId: true, title: true, status: true, workspaceState: true,
+    select: { id: true, capsuleId: true, title: true, status: true, workspaceState: true, epicId: true,
       workItem: { select: { teamId: true, parentItemId: true, assignedToUserId: true, assignedToAgentId: true } },
     },
   });
@@ -58,10 +124,12 @@ export async function loadWorkroomCoordination(
     rooms: rows.slice(0, 200).map((row) => {
       const teamId = row.workItem?.teamId ?? null;
       const caseKey = encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: row.capsuleId });
-      const params = new URLSearchParams({ operation: filter.teamId === undefined ? "all" : filter.teamId ?? "unmapped" });
+      const params = new URLSearchParams({ operation: filter.initiative ? `initiative:${filter.initiative.id}`
+        : filter.teamId === undefined ? "all" : filter.teamId ?? "unmapped" });
       if (query) params.set("coordinationQuery", query);
       if (status) params.set("coordinationStatus", status);
       if (after) params.set("coordinationAfter", after);
+      if (filter.initiativeQuery) params.set("initiativeQuery", filter.initiativeQuery.trim().slice(0, 200));
       const owner = accountability?.get(row.id);
       const relationships = (relations ?? []).slice(0, 1000).flatMap(edge => {
         const outgoing = edge.fromWorkroomId === row.id;
@@ -74,7 +142,7 @@ export async function loadWorkroomCoordination(
           href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: peer.capsuleId })}?${params}` }];
       });
       return {
-        roomId: row.capsuleId, title: row.title, status: row.status, teamId,
+        roomId: row.capsuleId, title: row.title, status: row.status, teamId, initiativeRef: row.epicId ?? null,
         accountability: owner?.accountability ?? null,
         accountableName: owner?.accountableDisplayName ?? (owner?.accountability.state === "resolved" ? owner.accountability.principalId : null),
         relationships,

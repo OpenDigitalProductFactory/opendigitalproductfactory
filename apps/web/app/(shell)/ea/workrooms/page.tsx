@@ -4,10 +4,11 @@ import { prisma } from "@dpf/db";
 import { EaTabNav } from "@/components/ea/EaTabNav";
 import { WorkroomCoordinationContext } from "@/components/ea/WorkroomCoordinationContext";
 import { Surface } from "@/components/ui/Surface";
+import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
 import { EmptyState, FilterBar, StatCard, StatusBadge } from "@/components/ui/report-kit";
 import { WORK_CAPSULE_STATUSES } from "@/lib/work-capsules";
 import { TERMINAL_CAPSULE_STATUSES } from "@/lib/work-capsules/work-capsule-branch-identity";
-import { loadRoomInventory, loadWorkroomArchitecture, loadWorkroomCoordination } from "@/lib/ea/workroom-architecture";
+import { loadInitiativeOperation, loadRoomInventory, loadWorkroomArchitecture, loadWorkroomCoordination, loadWorkroomInitiatives } from "@/lib/ea/workroom-architecture";
 
 export const dynamic = "force-dynamic";
 
@@ -29,25 +30,36 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
   const params = await searchParams ?? {};
   const value = (key: string) => typeof params[key] === "string" ? params[key] : "";
   const operation = value("operation");
+  const initiativeId = operation.startsWith("initiative:") ? operation.slice("initiative:".length, 110) : null;
+  const initiativeQuery = value("initiativeQuery").trim().slice(0, 200);
   const query = value("coordinationQuery").trim().slice(0, 200);
   const status = value("coordinationStatus");
   const after = value("coordinationAfter");
-  const filters = { operation: operation === "all" ? "" : operation, coordinationQuery: query, coordinationStatus: status };
+  const filters = { operation: operation === "all" ? "" : operation, coordinationQuery: query, coordinationStatus: status, initiativeQuery };
   const coordinationHref = (cursor: string | null) => {
     const context = new URLSearchParams(Object.entries(filters).filter(([, entry]) => entry));
     if (cursor) context.set("coordinationAfter", cursor);
     return `/ea/workrooms?${context}#coordination`;
   };
-  const [architecture, coordination, inventory] = await Promise.all([
+  const [architecture, inventory, initiatives, selectedInitiative] = await Promise.all([
     loadWorkroomArchitecture(prisma),
-    loadWorkroomCoordination(prisma, new Date(), {
-      teamId: operation === "unmapped" ? null : !operation || operation === "all" ? undefined : operation,
-      query, status, after,
-    }),
     loadRoomInventory(prisma),
+    loadWorkroomInitiatives(prisma, new Date(), initiativeQuery),
+    initiativeId !== null ? loadInitiativeOperation(prisma, initiativeId) : null,
   ]);
+  const coordination = await loadWorkroomCoordination(prisma, new Date(), {
+    teamId: initiativeId !== null ? undefined : operation === "unmapped" ? null : !operation || operation === "all" ? undefined : operation,
+    ...(initiativeId !== null ? { initiative: { id: initiativeId, storedRefs: selectedInitiative?.storedRefs ?? [] } } : {}),
+    query, status, after, ...(initiativeQuery ? { initiativeQuery } : {}),
+  });
   const { bands, unplaced, truncated: architectureTruncated } = architecture;
   const definitions = bands.flatMap((band) => band.definitions);
+  const initiativeNames = new Map(initiatives.initiatives.flatMap(initiative => initiative.storedRefs.map(ref => [ref, initiative.title] as const)));
+  for (const ref of selectedInitiative?.storedRefs ?? []) initiativeNames.set(ref, selectedInitiative!.title);
+  // Choose an initiative from its named list; do not turn the filter into a second hundred-option inventory.
+  const initiativeOptions = initiativeId !== null
+    ? [{ value: operation, label: selectedInitiative ? `Initiative: ${selectedInitiative.title}` : "Initiative unavailable" }]
+    : [];
 
   return (
     <div>
@@ -107,17 +119,43 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
         </Surface>
       ) : null}
 
+      <Surface className="mb-6" rounded="xl">
+        <details open={initiativeId !== null || Boolean(initiativeQuery)}>
+          <summary className="min-h-11 cursor-pointer text-base font-semibold text-[var(--dpf-text)]">Initiatives · {initiatives.initiatives.length} shown</summary>
+          <p className="my-2 text-xs text-[var(--dpf-muted)]">Recorded initiatives with open rooms · observed {initiatives.readAt}</p>
+          <FilterBar mode="url" basePath="/ea/workrooms" value={filters}
+            preserveKeys={["operation", "coordinationQuery", "coordinationStatus"]}
+            className="my-3 [&_input]:min-h-11 [&_button]:min-h-11 [&_input]:text-sm [&_button]:text-sm"
+            facets={[{ kind: "search", key: "initiativeQuery", placeholder: "Search initiative name or ID" }]} />
+          {initiatives.partial ? <p>Initiative records are unavailable. Their state is unknown.</p> : null}
+          {initiatives.truncated ? <p>Partial view: up to 200 initiatives and membership references. Narrow the search for more.</p> : null}
+          {initiatives.unresolvedRooms ? <p>{initiatives.unresolvedRooms} observed rooms refer to an unresolved initiative.</p> : null}
+          {!initiatives.partial && !initiatives.initiatives.length ? <p>No initiative links were resolved.</p> : null}
+          <p className="text-xs text-[var(--dpf-muted)]">Value-stream and capability links require separate recorded relationships.</p>
+          <CollapsibleList previewCount={5} className="divide-y divide-[var(--dpf-border)] [&_button]:min-h-11 [&_button]:text-sm">
+            {initiatives.initiatives.map(initiative => <li key={initiative.id} className="py-3">
+              <Link className="inline-flex min-h-11 items-center text-sm font-medium text-[var(--dpf-accent)] hover:underline"
+                href={`/ea/workrooms?${new URLSearchParams({ operation: initiative.operation, ...(initiativeQuery ? { initiativeQuery } : {}) })}#coordination`}>{initiative.title}</Link>
+              {initiative.description ? <p className="text-sm">{initiative.description.slice(0, 240)}{initiative.description.length > 240 ? "…" : ""}</p> : <p className="text-sm">Outcome description not recorded.</p>}
+              <p className="text-xs text-[var(--dpf-muted)]">{initiative.id} · {initiative.scopeKind ?? "Scope not recorded"} · {initiative.openRooms} observed open rooms</p>
+            </li>)}
+          </CollapsibleList>
+        </details>
+      </Surface>
+
       <Surface id="coordination" className="mb-6" rounded="xl">
         <details open={Boolean(operation || query || status || after)}>
           <summary className="min-h-11 cursor-pointer text-base font-semibold text-[var(--dpf-text)]">Coordination · {coordination.rooms.length} shown</summary>
           <p className="my-2 text-xs text-[var(--dpf-muted)]">Open rooms · observed {coordination.readAt}</p>
+          {initiativeId !== null && !selectedInitiative ? <p>The selected initiative could not be resolved. No other operation is shown.</p> : null}
           <details open={Boolean(query || status)}>
           <summary className="min-h-11 cursor-pointer py-3 text-sm">Find a room</summary>
           <FilterBar mode="url" basePath="/ea/workrooms" value={filters}
+            preserveKeys={["initiativeQuery"]}
             className="my-3 [&_input]:min-h-11 [&_select]:min-h-11 [&_button]:min-h-11 [&_input]:text-sm [&_select]:text-sm [&_button]:text-sm"
             facets={[
               { kind: "search", key: "coordinationQuery", placeholder: "Search room title or ID" },
-              { kind: "select", key: "operation", label: "Operation", options: [{ value: "unmapped", label: "No value stream linked" }, ...definitions.map((definition) => ({ value: definition.id, label: definition.name }))] },
+              { kind: "select", key: "operation", label: "Operation", options: [{ value: "unmapped", label: "No value stream linked" }, ...definitions.map((definition) => ({ value: definition.id, label: definition.name })), ...initiativeOptions] },
               { kind: "select", key: "coordinationStatus", label: "Room status", options: WORK_CAPSULE_STATUSES.filter((candidate) => !TERMINAL_CAPSULE_STATUSES.includes(candidate)).map((candidate) => ({ value: candidate, label: candidate.replaceAll("-", " ") })) },
             ]} />
           </details>
@@ -127,6 +165,7 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
               <div className="min-w-0">
                 <Link href={room.href} className="inline-flex min-h-11 items-center text-sm font-medium text-[var(--dpf-accent)] hover:underline">{room.title}</Link>
                 <p className="text-xs text-[var(--dpf-muted)]">{definitions.find((definition) => definition.id === room.teamId)?.name ?? "No value stream linked"}</p>
+                {room.initiativeRef && initiativeNames.has(room.initiativeRef) ? <p className="text-xs text-[var(--dpf-muted)]">{initiativeNames.get(room.initiativeRef)}</p> : null}
                 <p className="text-xs text-[var(--dpf-muted)]">{room.roomId}</p>
                 {room.waitReason ? <p className="mt-1 text-sm text-[var(--dpf-text)]">{room.waitReason}</p> : null}
                 <WorkroomCoordinationContext accountability={room.accountability} accountableName={room.accountableName}
