@@ -83,7 +83,27 @@ function weeklyFields(row: {
  * Parse a Retry-After value (seconds or HTTP-date) from CLI stderr output.
  * Returns seconds as a number, or null if nothing parseable is found.
  */
+/**
+ * Absolute reset stated by the ChatGPT/Codex subscription cap, e.g.
+ * "try again at Sep 26th, 2026 8:57 AM". Ordinal suffixes are stripped before
+ * parsing. Returns the reset instant or null when no dated phrase is present.
+ * The CLI prints wall-clock time without a zone; it is read as UTC, which is
+ * the sandbox's clock and errs on the early side for western operators.
+ */
+export function parseAbsoluteResetAt(stderr: string): Date | null {
+  const match = /try again (?:at|on)\s+([A-Za-z]{3,9}\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}(?:,?\s+(?:at\s+)?\d{1,2}:\d{2}\s*(?:[AP]M)?)?)/i.exec(stderr);
+  if (!match) return null;
+  const cleaned = match[1]!.replace(/(\d{1,2})(?:st|nd|rd|th)/i, "$1").replace(/\./g, "").replace(/,/g, "");
+  const parsed = Date.parse(`${cleaned} UTC`);
+  return Number.isNaN(parsed) ? null : new Date(parsed);
+}
+
 export function parseRetryAfterSeconds(stderr: string): number | null {
+  // "try again at Sep 26th, 2026 8:57 AM" — a dated subscription cap. Checked
+  // first so the bare hour/minute patterns below cannot misread "8:57 AM".
+  const absolute = parseAbsoluteResetAt(stderr);
+  if (absolute) return Math.max(0, Math.ceil((absolute.getTime() - Date.now()) / 1000));
+
   // "Retry-After: 30" or "retry-after: 30"
   const secondsMatch = /retry-after:\s*(\d+)/i.exec(stderr);
   if (secondsMatch) {
@@ -147,6 +167,12 @@ export async function recordCliRateLimit(
       MAX_CLI_COOLDOWN_SECONDS,
     );
     const resetAt = new Date(now.getTime() + cooldownSeconds * 1_000);
+    // BI-38064739: a reset beyond the pool cap is a subscription cap, not a
+    // throttle. Record it as the provider's capacity state so routing and the
+    // provider page honor the real date instead of retrying every tick.
+    if (retryAfterSeconds !== null && retryAfterSeconds > MAX_CLI_COOLDOWN_SECONDS) {
+      void recordSubscriptionCap(providerId, new Date(now.getTime() + retryAfterSeconds * 1_000), retryAfterSeconds, errorText);
+    }
 
     await prisma.cliPoolStatus.upsert({
       where: { adapterType },
@@ -407,4 +433,40 @@ export async function collectCliWeeklyQuota(_adapterType: CliAdapterType): Promi
   // unverified subprocess path. The topology-free direct-SDK capture still feeds
   // the signal, and the policy falls back to the proxy without a fresh snapshot.
   return;
+}
+
+/**
+ * The ChatGPT subscription is one account behind two providers (codex CLI,
+ * chatgpt API): a cap on one is a cap on both.
+ */
+const SHARED_CHATGPT_ACCOUNT_PROVIDERS = new Set(["codex", "chatgpt"]);
+
+async function recordSubscriptionCap(
+  providerId: string,
+  retryAt: Date,
+  retryAfterSeconds: number,
+  errorText: string,
+): Promise<void> {
+  try {
+    const { recordProviderCapacityStatus } = await import("./provider-capacity/store");
+    const targets = SHARED_CHATGPT_ACCOUNT_PROVIDERS.has(providerId)
+      ? [...SHARED_CHATGPT_ACCOUNT_PROVIDERS]
+      : [providerId];
+    await Promise.all(targets.map((target) => recordProviderCapacityStatus({
+      providerId: target,
+      source: "cli",
+      rawSnippet: errorText,
+      classification: {
+        state: "quota_resets_at",
+        action: "retry_at",
+        retryAt,
+        retryAfterSeconds,
+        safeSummary: `The subscription's usage limit is reached; the provider says to try again at ${retryAt.toISOString()}.`,
+        confidence: "exact",
+        isHumanActionRequired: false,
+      },
+    })));
+  } catch (err) {
+    console.warn("[cli-pool-status] Failed to record subscription cap:", { providerId }, err);
+  }
 }
