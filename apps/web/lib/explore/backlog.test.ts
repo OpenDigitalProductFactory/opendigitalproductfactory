@@ -105,6 +105,7 @@ describe("BACKLOG_STATUS_COLOURS", () => {
   it("has a colour for every expected status", () => {
     expect(BACKLOG_STATUS_COLOURS["open"]).toBeDefined();
     expect(BACKLOG_STATUS_COLOURS["in-progress"]).toBeDefined();
+    expect(BACKLOG_STATUS_COLOURS["awaiting-acceptance"]).toBeDefined();
     expect(BACKLOG_STATUS_COLOURS["done"]).toBeDefined();
     expect(BACKLOG_STATUS_COLOURS["deferred"]).toBeDefined();
     expect(BACKLOG_STATUS_COLOURS["retired"]).toBeDefined();
@@ -130,6 +131,7 @@ describe("isFederationSyncableBacklogStatus()", () => {
   it("treats closed work (done) and paused work (deferred) as not syncable", () => {
     expect(isFederationSyncableBacklogStatus("done")).toBe(false);
     expect(isFederationSyncableBacklogStatus("deferred")).toBe(false);
+    expect(isFederationSyncableBacklogStatus("awaiting-acceptance")).toBe(false);
   });
 
   it("returns false for an unknown status rather than defaulting to syncable", () => {

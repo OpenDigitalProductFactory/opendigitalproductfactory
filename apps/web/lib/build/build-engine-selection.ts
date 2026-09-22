@@ -22,6 +22,8 @@ export type BuildEngineCandidate = {
   credentialExpiresAt: number | null;
   providerCapacityState: string | null;
   providerRetryAt: number | null;
+  /** Epoch ms the capacity snapshot was last observed; bounds a retryAt-less temporary limit. */
+  providerCapacityObservedAt?: number | null;
   cliRetryAt: number | null;
   providerHealth:
     | "healthy"
@@ -153,7 +155,11 @@ function rejectionForCandidate(args: {
   }
   const capacityReason = capacityRoutingExclusionReason(
     candidate.providerCapacityState
-      ? { state: candidate.providerCapacityState, retryAtMs: candidate.providerRetryAt }
+      ? {
+        state: candidate.providerCapacityState,
+        retryAtMs: candidate.providerRetryAt,
+        observedAtMs: candidate.providerCapacityObservedAt ?? null,
+      }
       : null,
     nowMs,
   );

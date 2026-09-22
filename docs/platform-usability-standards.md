@@ -188,7 +188,12 @@ redesign lands — debt recorded, never hidden.
 It boots the real portal against an ephemeral database, drives every static page route with
 Playwright, and measures the **served DOM** — not an SSR string, which has neither client
 components nor honest visibility. Computed-invisible nodes are pruned in the page first, so
-a `hidden md:block` utility is resolved by the browser that actually applied it.
+a `hidden md:block` utility is resolved by the browser that actually applied it. The portal
+under test boots in measurement runtime with a **pinned clock** (`DPF_MEASUREMENT_NOW`), so copy
+that is calendar arithmetic over code-defined dates — the inbox's compliance-evidence "lapses in
+N days" — measures the same on any day; live regions (`aria-live`, `status`/`alert` roles) are
+not counted as words visible on arrival. Details and the evidence behind both:
+[CI evidence — UX route-sweep stability](testing/ci-evidence.md#ux-route-sweep-stability).
 
 Three enforcement modes, decided by `lib/ux-budget/ratchet.ts`:
 

@@ -30,6 +30,7 @@ import type { ToolCallEntry } from "@/lib/routing/adapter-types";
 import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
+import { terminalTruncationMessage } from "./terminal-response-truncation";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
@@ -1679,7 +1680,6 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();
 
-      // Diagnostic: log raw response so we can trace stalls
       console.log(
         `[agentic-loop] thread=${JSON.stringify(threadId)} iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
@@ -1691,6 +1691,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         if (exit.kind === "complete") {
           logTurnSummary(result.providerId, result.modelId);
           return completeResult(result.content, result);
+        }
+        if (result.truncated) {
+          const exhausted = truncationContinues >= MAX_TRUNCATION_CONTINUES;
+          const message = terminalTruncationMessage(params.terminalToolPolicy, executedTools, exhausted);
+          if (exhausted) return terminalFailure(message, result);
+          truncationContinues++;
+          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: message }];
+          continue;
         }
         if (exit.kind === "nudge") {
           terminalToolNudges++;
@@ -1704,15 +1712,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         }
       }
 
-      // BI-1D144CC1: truncation stop. The provider cut generation off at the
-      // output-token ceiling (stop_reason=max_tokens / finish_reason=length /
-      // MAX_TOKENS / Responses incomplete). A reply that ends without a tool call
-      // because it RAN OUT OF TOKENS is not a natural end_turn — returning its
-      // partial text as the final answer is the defect this guards. Ask the model
-      // to finish (bounded) BEFORE the "why did you stop" contract/fabrication/
-      // nudge guards run: we already know why it stopped, so those diagnostics
-      // would misfire. This realizes the stop_reason==="end_turn" contract the
-      // loop's own header comment claims but never enforced.
+      // BI-1D144CC1: an output-token cutoff is not a natural end_turn.
       if (result.truncated && truncationContinues < MAX_TRUNCATION_CONTINUES) {
         truncationContinues++;
         // Never regress below today's behaviour: keep the longest partial as the

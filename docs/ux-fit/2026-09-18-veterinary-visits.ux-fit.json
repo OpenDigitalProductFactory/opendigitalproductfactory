@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "extend-existing-rescue-care-route-with-visits-and-partner-practices",
+  "decisionInteractionId": "DI-F289DBB51DCB",
+  "scope": { "files": ["apps/web/components/animal-welfare/VeterinaryOperations.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-F289DBB51DCB",
+    "consideredOptions": [
+      "extend-existing-rescue-care-route-with-visits-and-partner-practices",
+      "create-separate-veterinary-calendar-route",
+      "book-vet-visits-through-the-patient-appointment-surface"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. Veterinary visits live on /workspace/rescue/care under daily care, as the design lists them. Booked and recovering visits are the first surface; booking and partner practices are collapsed disclosures that open only when empty. No new route, calendar or navigation layer.",
+    "persona": "A shelter manager books a surgery at the partner practice, records that it happened and who did it, and sees which animals are still recovering and therefore cannot be placed.",
+    "reuse": "The existing RescueCockpit shell, Surface, StatusBadge and shared form primitives. CareAppointment with the animal subject seam, CareVisitType, CareLocation for the practice, Supplier for the arrangement, and the intake evidence writer for a done procedure.",
+    "sourceTruth": "CareAppointment owns the visit, its status events and its recovery footprint; CareRecord owns the procedure evidence; CareLocation plus Supplier own the practice. The readiness evaluator reads the footprint, so no separate recovery flag exists.",
+    "states": "No visits explains that nothing is booked and no animal is recovering. No animals disables booking. In recovery, Booked, Done, Missed and Cancelled are labelled badges, never color alone. A missed or cancelled visit requires a reason; a done sterilization requires the vet who performed it. Every control is at least 44px high.",
+    "aiBoundary": "No control sends a coworker prompt. Booking and closing are direct governed server commands with server-derived organization and acting principal; no coworker makes a treatment decision.",
+    "verification": "Focused repository and component tests plus web typecheck and a local production build passed. Browser verification on the governed contributor preview is recorded in the PR body; if the preview could not be leased the PR says so and the UX check is reported as unrun, not passed."
+  }
+}

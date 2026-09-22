@@ -792,3 +792,20 @@ describe("selectUnblockedChildBuildIds", () => {
     ).toEqual(["FB-A", "FB-C"]);
   });
 });
+
+describe("decomposition children carry their acceptance criteria and are never large (BI-660E165F)", () => {
+  it("resolves the child's criteria from the parent design by index, tolerating string and object forms", async () => {
+    const { childAcceptanceCriteria } = await import("./approve-decomposition");
+    const parent = { acceptanceCriteria: ["AC one", { text: "AC two" }, { criterion: "AC three" }, "   ", 42] };
+    expect(childAcceptanceCriteria(parent, [0, 1, 2, 3, 4, 9])).toEqual(["AC one", "AC two", "AC three"]);
+    expect(childAcceptanceCriteria(null, [0])).toEqual([]);
+  });
+
+  it("sizes a child small for up to three criteria and medium otherwise, never large", async () => {
+    const { childEffortSize } = await import("./approve-decomposition");
+    expect(childEffortSize(1)).toBe("small");
+    expect(childEffortSize(3)).toBe("small");
+    expect(childEffortSize(4)).toBe("medium");
+    expect(childEffortSize(0)).toBe("medium");
+  });
+});

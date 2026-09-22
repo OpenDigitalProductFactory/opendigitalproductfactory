@@ -1,3 +1,9 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach } from "vitest";
+import { loadWorkroomCoordination } from "@/lib/ea/workroom-architecture";
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -13,8 +19,8 @@ vi.mock("@/lib/ea/workroom-architecture", () => ({
     unclassified: 367,
     byRole: { foundational: 71, manufactureAndDeliver: 13, forEmployees: 0, productsAndServicesSold: 0 },
   })),
-  loadWorkroomCoordination: vi.fn(async () => ({ readAt: "2026-09-06T12:00:00.000Z", truncated: true, rooms: [
-    { roomId: "WC-REVIEW", title: "Review change", status: "blocked", teamId: null, assignedActorRef: null, parentItemId: null, href: "/workspace/cases/work-capsule%3AWC-REVIEW?operation=unmapped" },
+  loadWorkroomCoordination: vi.fn(async () => ({ readAt: "2026-09-06T12:00:00.000Z", truncated: true, contextPartial: true, nextCursor: "WC-REVIEW", rooms: [
+    { roomId: "WC-REVIEW", title: "Review change", status: "blocked", teamId: null, assignedActorRef: null, parentItemId: null, accountability: null, accountableName: null, relationships: [], href: "/workspace/cases/work-capsule%3AWC-REVIEW?operation=unmapped" },
   ] })),
   loadWorkroomArchitecture: vi.fn(async () => ({
     bands: [
@@ -48,7 +54,7 @@ describe("WorkroomArchitecturePage", () => {
     const html = renderToStaticMarkup(await WorkroomArchitecturePage());
     expect(html).toContain('href="/workspace/cases/work-capsule%3AWC-REVIEW?operation=unmapped"');
     expect(html).toContain("No value stream linked");
-    expect(html).toContain("More rooms exist");
+    expect(html).toContain("Next rooms");
     expect(html).toContain("blocked");
   });
   it("keeps the empty definition home within the high-school reading cap", async () => {
@@ -84,6 +90,27 @@ describe("WorkroomArchitecturePage", () => {
   });
   it("labels a truncated architecture read as partial rather than a total", async () => {
     const html = renderToStaticMarkup(await WorkroomArchitecturePage());
-    expect(html).toContain("Partial read");
+    expect(html).toContain("More plans exist");
+  });
+});
+
+describe("Coordination discovery", () => {
+  it("keeps search, operation and status while paging, and resets the cursor on a new search", async () => {
+    vi.mocked(loadWorkroomCoordination).mockResolvedValue({ rooms: [], nextCursor: "WC-199", truncated: true, contextPartial: false, readAt: "2026-09-21T06:00:00Z" });
+    render(await WorkroomArchitecturePage({ searchParams: Promise.resolve({ operation: "unmapped", coordinationQuery: "review", coordinationStatus: "blocked", coordinationAfter: "WC-099" }) }));
+    expect(vi.mocked(loadWorkroomCoordination)).toHaveBeenCalledWith({}, expect.any(Date), { teamId: null, query: "review", status: "blocked", after: "WC-099" });
+    expect(screen.getByRole("searchbox")).toHaveValue("review");
+    expect(screen.getByRole("combobox", { name: "Room status" })).toHaveValue("blocked");
+    expect(screen.getByRole("link", { name: "Next rooms" })).toHaveAttribute("href", "/ea/workrooms?operation=unmapped&coordinationQuery=review&coordinationStatus=blocked&coordinationAfter=WC-199#coordination");
+    expect(screen.getByRole("link", { name: "First page" })).toHaveAttribute("href", "/ea/workrooms?operation=unmapped&coordinationQuery=review&coordinationStatus=blocked#coordination");
+    expect(screen.getByRole("searchbox").closest("form")?.querySelector('[name="coordinationAfter"]')).toBeNull();
+  });
+
+  it("treats the all-operation return context as an unfiltered read and rejects array parameters", async () => {
+    vi.mocked(loadWorkroomCoordination).mockResolvedValue({ rooms: [], nextCursor: null, truncated: false, contextPartial: false, readAt: "2026-09-21T06:00:00Z" });
+    render(await WorkroomArchitecturePage({ searchParams: Promise.resolve({ operation: "all", coordinationQuery: ["one", "two"] }) }));
+    expect(vi.mocked(loadWorkroomCoordination)).toHaveBeenCalledWith({}, expect.any(Date), { teamId: undefined, query: "", status: "", after: "" });
+    expect(screen.queryByRole("link", { name: "Next rooms" })).not.toBeInTheDocument();
+    expect(screen.getByText("No matching open rooms")).toBeInTheDocument();
   });
 });

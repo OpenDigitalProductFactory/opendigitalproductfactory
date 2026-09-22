@@ -25,6 +25,14 @@ function fixture() {
 }
 beforeEach(() => { vi.mocked(getAgentToolGrantsAsync).mockResolvedValue(["backlog_write"]); });
 describe("durable review authority", () => {
+  it("revalidates an admitted OAuth actor through its stored token and client", async () => {
+    const { packet, db } = fixture();
+    packet.actor.authSource = "oauth";
+    db.mcpApiToken.findFirst.mockResolvedValue({ scope: "write", scopes: ["backlog_write"],
+      kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      oauthClient: { revokedAt: null } } as never);
+    expect(await verifySemanticReviewAuthority(packet, "TR-1", db as never)).toBe(true);
+  });
   it("uses current token, user and TaskRun authority", async () => {
     const { packet, db } = fixture();
     expect(await verifySemanticReviewAuthority(packet, "TR-1", db as never)).toBe(true);
@@ -32,6 +40,29 @@ describe("durable review authority", () => {
       id: "token-1", userId: "user-1", agentId: "agent-1", revokedAt: null,
       OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }],
     }) }));
+  });
+  it("refuses an admitted OAuth token after its client was deleted", async () => {
+    const { packet, db } = fixture();
+    packet.actor.authSource = "oauth";
+    db.mcpApiToken.findFirst.mockResolvedValue({ scope: "write", scopes: ["backlog_write"],
+      kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      oauthClient: null } as never);
+    expect(await verifySemanticReviewAuthority(packet, "TR-1", db as never)).toBe(false);
+  });
+  it.each(["revoked-token", "expired-token", "revoked-client", "wrong-kind", "read-token", "missing-tool-grant"])("refuses OAuth %s", async (condition) => {
+    const { packet, db } = fixture();
+    packet.actor.authSource = "oauth";
+    const token = { scope: "write", scopes: ["backlog_write"], kind: "oauth_access",
+      revokedAt: null as Date | null, expiresAt: new Date(Date.now() + 60_000),
+      oauthClient: { revokedAt: null as Date | null } };
+    if (condition === "revoked-token") token.revokedAt = new Date();
+    if (condition === "expired-token") token.expiresAt = new Date(Date.now() - 1);
+    if (condition === "revoked-client") token.oauthClient.revokedAt = new Date();
+    if (condition === "wrong-kind") token.kind = "pat";
+    if (condition === "read-token") token.scope = "read";
+    if (condition === "missing-tool-grant") token.scopes = [];
+    db.mcpApiToken.findFirst.mockResolvedValue(token);
+    expect(await verifySemanticReviewAuthority(packet, "TR-1", db as never)).toBe(false);
   });
   it.each(["inactive-user", "revoked-token", "read-token", "revoked-grant", "reassigned-run"])("refuses %s", async (condition) => {
     const { packet, db } = fixture();

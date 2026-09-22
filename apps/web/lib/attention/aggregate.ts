@@ -21,6 +21,7 @@ import {
 } from "./sources/coworker-memory";
 import { loadProviderCredentialItems, loadProviderSuitabilityDriftItems } from "./sources/provider-credential";
 import { loadComplianceSourceFreshnessItems } from "./sources/compliance-source-freshness";
+import { measurementNow } from "@/lib/runtime/measurement-runtime";
 import { loadReservationExceptionItems } from "./sources/reservation-exception";
 import { loadHospitalityCapacityAttentionItems } from "./sources/hospitality-capacity";
 import { loadStorefrontInquiryItems } from "./sources/storefront-inquiry";
@@ -127,9 +128,12 @@ export function attentionSourceLoaders(
     { source: "storefront-inquiry", load: () => loadStorefrontInquiryItems(db) },
     { source: "mailroom-item", load: () => loadMailroomItemAttentionItems(db) },
     {
-      // Pure registry arithmetic — no query, so it costs nothing per load.
+      // Pure registry arithmetic — no query, so it costs nothing per load. The
+      // clock is the measurement clock: real time in production, the pinned
+      // instant under the UX route sweep (BI-99909E53), because this copy is
+      // calendar arithmetic over code-defined dates and moved a frozen baseline.
       source: "compliance-source-freshness",
-      load: async () => loadComplianceSourceFreshnessItems(),
+      load: async () => loadComplianceSourceFreshnessItems({ now: measurementNow() }),
     },
     {
       source: "provider-credential",

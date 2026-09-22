@@ -30,6 +30,77 @@ function args(fetchImpl: typeof fetch) {
 }
 
 describe("canonical design artifact discovery", () => {
+  it("reuses the explicitly referenced unchanged design at the immutable head", async () => {
+    const path = "docs/superpowers/specs/2026-09-03-coordinated-workrooms-design.md";
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true,
+      json: async () => ({ type: "file", path, sha: BLOB_SHA }),
+    } as Response);
+    const result = await discoverCanonicalDesignArtifact({
+      ...args(fetchImpl as unknown as typeof fetch),
+      backlogBody: `## Design\n\`${path}\` and Phase D of the existing plan.`,
+    });
+    expect(result).toEqual({ resolved: true, artifact: { path, providerBlobId: BLOB_SHA } });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain(`/contents/${path}?ref=${HEAD_SHA}`);
+  });
+
+  it("refuses multiple explicitly referenced designs without selecting a changed file", async () => {
+    const fetchImpl = vi.fn();
+    const result = await discoverCanonicalDesignArtifact({
+      ...args(fetchImpl as unknown as typeof fetch),
+      backlogBody: "`docs/superpowers/specs/a.md` and `docs/superpowers/specs/b.md`",
+    });
+    expect(result).toMatchObject({ resolved: false, code: "ambiguous-canonical-design" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("refuses traversal in an explicit design reference before provider access", async () => {
+    const fetchImpl = vi.fn();
+    const result = await discoverCanonicalDesignArtifact({
+      ...args(fetchImpl as unknown as typeof fetch),
+      backlogBody: "`docs/superpowers/specs/../../private.md`",
+    });
+    expect(result).toMatchObject({ resolved: false, code: "no-canonical-design" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates Markdown links and section references to the same design", async () => {
+    const path = "docs/superpowers/specs/a.md";
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true,
+      json: async () => ({ type: "file", path, sha: BLOB_SHA }),
+    } as Response);
+    const result = await discoverCanonicalDesignArtifact({
+      ...args(fetchImpl as unknown as typeof fetch),
+      backlogBody: `[Design](${path}#scope) and \`${path}\``,
+    });
+    expect(result).toMatchObject({ resolved: true, artifact: { path } });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not replace a missing explicit design with an unrelated changed spec", async () => {
+    const cancel = vi.fn();
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 404, body: { cancel } } as unknown as Response);
+    const result = await discoverCanonicalDesignArtifact({
+      ...args(fetchImpl as unknown as typeof fetch), backlogBody: "`docs/superpowers/specs/missing.md`",
+    });
+    expect(result).toMatchObject({ resolved: false, code: "provider-unavailable" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { type: "dir", path: "docs/superpowers/specs/a.md", sha: BLOB_SHA },
+    { type: "file", path: "docs/superpowers/specs/other.md", sha: BLOB_SHA },
+    { type: "file", path: "docs/superpowers/specs/a.md", sha: "invalid" },
+  ])("refuses unverifiable explicit content without falling back to compare (%j)", async (content) => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => content } as Response);
+    const result = await discoverCanonicalDesignArtifact({
+      ...args(fetchImpl as unknown as typeof fetch), backlogBody: "`docs/superpowers/specs/a.md`",
+    });
+    expect(result).toMatchObject({ resolved: false, code: "provider-unavailable" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("uses and closes the isolated production transport when no fetch is injected", async () => {
     const frameworkFetch = vi.fn().mockRejectedValue(new Error("framework context unavailable"));
     vi.stubGlobal("fetch", frameworkFetch);

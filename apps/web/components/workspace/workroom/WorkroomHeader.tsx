@@ -5,6 +5,8 @@ import { Notice, StatusBadge } from "@/components/ui/report-kit";
 import { WorkroomStructurePanel } from "@/components/workspace/workroom/WorkroomStructurePanel";
 import type { WorkspaceWorkCaseListItem } from "@/lib/work-management/workspace-case-loader";
 import type { WorkroomView } from "@/lib/work-management/room-types";
+import type { RoomWorkforce } from "@/lib/work-management/room-workforce.server";
+import { AccountabilityStatement } from "./RoomWorkforcePanel";
 
 import {
   roomLabel,
@@ -13,6 +15,7 @@ import {
 type Props = {
   room: WorkroomView;
   summary: WorkspaceWorkCaseListItem;
+  workforce?: Pick<RoomWorkforce, "accountability" | "accountableDisplayName"> | null;
 };
 
 function accountableName(room: WorkroomView): string {
@@ -29,7 +32,7 @@ function participantSummary(room: WorkroomView): string {
   return `${count} ${count === 1 ? "participant" : "participants"} · ${names.join(", ")}${remainder > 0 ? ` +${remainder}` : ""}`;
 }
 
-export function WorkroomHeader({ room, summary }: Props) {
+export function WorkroomHeader({ room, summary, workforce }: Props) {
   const health = room.outcome.health;
   const purposeNeedsDisclosure = (room.purpose?.length ?? 0) > 280;
   const dueAt = room.boundary.timeBoundary.reviewAt
@@ -140,7 +143,8 @@ export function WorkroomHeader({ room, summary }: Props) {
           </section>
           <section aria-label="Accountability" className="rounded-lg border border-[var(--dpf-border)] p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">Accountable</p>
-            <p className="mt-2 text-sm font-medium text-[var(--dpf-text)]">{accountableName(room)}</p>
+            {workforce ? <div className="mt-2"><AccountabilityStatement accountability={workforce.accountability} displayName={workforce.accountableDisplayName} /></div>
+              : <p className="mt-2 text-sm font-medium text-[var(--dpf-text)]">{accountableName(room)}</p>}
           </section>
           <section aria-label="Participant summary" className="rounded-lg border border-[var(--dpf-border)] p-3">
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">

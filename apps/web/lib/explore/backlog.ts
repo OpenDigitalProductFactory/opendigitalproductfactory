@@ -209,6 +209,7 @@ export const BACKLOG_STATUS_VALUES = [
   "triaging",
   "open",
   "in-progress",
+  "awaiting-acceptance",
   "done",
   "deferred",
   "retired",
@@ -326,6 +327,7 @@ export function validateEpicInput(input: EpicInput): string | null {
 export const BACKLOG_STATUS_COLOURS: Record<string, string> = {
   "open":        "#38bdf8",
   "in-progress": "#fb923c",
+  "awaiting-acceptance": "var(--dpf-accent)",
   "done":        "#4ade80",
   "deferred":    "#8888a0",
   "retired":     "var(--dpf-muted)",

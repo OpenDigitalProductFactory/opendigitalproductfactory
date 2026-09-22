@@ -331,7 +331,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                 <p className="text-xs text-[var(--dpf-muted)]">
                   {typeItems.length === 0
                     ? `No unassigned ${label.toLowerCase()} items.`
-                    : `No active ${label.toLowerCase()} items. Turn off "Active only" to review ${statusSummary.deferred} deferred, ${statusSummary.done} done, and ${statusSummary.retired} retired.`}
+                    : `No active ${label.toLowerCase()} items. Turn off "Active only" to review ${statusSummary.awaitingAcceptance} awaiting acceptance, ${statusSummary.deferred} deferred, ${statusSummary.done} done, and ${statusSummary.retired} retired.`}
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">

@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { semanticReviewRecoveryBudget } from "./semantic-review-recovery-policy";
+import { readSemanticReviewBudget, semanticReviewRecoveryBudget } from "./semantic-review-recovery-policy";
 const now = Date.parse("2026-09-13T00:00:00Z");
 const future = "2026-09-13T00:10:00Z";
 describe("recorded reviewer recovery budget", () => {
+  it("shares versioned budget extraction without inventing corrupt counters", () => {
+    expect(readSemanticReviewBudget({ semanticReview: { schemaVersion: 1, deadlineAt: future } }))
+      .toEqual({ deadlineAt: future, recoveryAttempt: 0 });
+    expect(readSemanticReviewBudget({ semanticReview: { schemaVersion: 2, deadlineAt: future, recoveryAttempt: 1 } }))
+      .toEqual({ deadlineAt: null, recoveryAttempt: null });
+    expect(readSemanticReviewBudget({ semanticReview: { schemaVersion: 1, deadlineAt: future, recoveryAttempt: "1" } }))
+      .toEqual({ deadlineAt: future, recoveryAttempt: null });
+    expect(readSemanticReviewBudget({ semanticReview: { schemaVersion: 1, deadlineAt: future, recoveryAttempt: null } }))
+      .toEqual({ deadlineAt: future, recoveryAttempt: null });
+  });
   it("allows remaining budget without claiming actor authority", () => {
     expect(semanticReviewRecoveryBudget(future, 2, now)).toBe("available");
     expect(semanticReviewRecoveryBudget(future, undefined, now)).toBe("available");

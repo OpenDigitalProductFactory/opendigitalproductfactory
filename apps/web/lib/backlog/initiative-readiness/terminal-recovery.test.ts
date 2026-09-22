@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { err, ok } from "@/lib/shared/action-result";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
 import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
 
 import { readinessRequirement } from "./readiness-guidance";
@@ -116,6 +118,44 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
 }
 
 describe("terminal initiative recovery", () => {
+  it("routes break-fix PIR at the authored head without an objective baseline", async () => {
+    const ports = deps([room], []);
+    const reviewer = { agentId: "AGT-REVIEW", displayName: "Independent reviewer", status: "active", archived: false, lifecycleStage: "production" };
+    ports.resolveRecovery.mockImplementation((input) => resolveInitiativeReviewerRecovery({
+      ...input,
+      db: { agentToolGrant: { findMany: async () => [
+        { grantKey: "initiative_design_review", agent: reviewer },
+        { grantKey: "file_read", agent: reviewer },
+      ] } },
+    }));
+    const pirDecision: InitiativeReadinessDecision = {
+      ...decision,
+      unmet: [readinessRequirement({ code: "POST_IMPLEMENTATION_REVIEW_REQUIRED", state: "missing", accountableRole: "post-implementation-reviewer" })],
+    };
+    const result = await resolveTerminalInitiativeRecovery({ decision: pirDecision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(result.escalations).toEqual([]);
+    expect(result.reviewerRoutes).toHaveLength(1);
+    const packet = result.reviewerRoutes[0]!.requestCoworker;
+    expect(packet.requiredToolNames).toEqual(["record_initiative_post_implementation_review", "read_source_at_version"]);
+    expect(packet.initiativeReviewBinding).toMatchObject({
+      gate: "post-implementation-review", expectedCurrentBaselineId: null,
+      workroomRef: { headSha, workroomId: room.capsuleId },
+      artifactRef: { commitSha: headSha, providerBlobId: "3".repeat(40) },
+    });
+    const binding = parseInitiativeReviewBinding(packet.initiativeReviewBinding)!;
+    expect(binding).not.toBeNull();
+    expect(createInitiativeReviewTerminalToolPolicy(binding.writerToolName, packet.requiredToolNames!, binding.artifactRef))
+      .toMatchObject({ writerToolName: "record_initiative_post_implementation_review", immutableReaderArguments: { version: headSha, expectedBlobId: "3".repeat(40) } });
+    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha });
+    expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
+    expect(ports.loadEligibleEvidenceActivityIds).not.toHaveBeenCalled();
+    expect(ports.loadObjectiveMappingHistory).not.toHaveBeenCalled();
+    ports.discoverArtifact.mockResolvedValue({ resolved: false, nextAction: "The source provider is unavailable." });
+    const unavailable = await resolveTerminalInitiativeRecovery({ decision: pirDecision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(unavailable.reviewerRoutes).toEqual([]);
+    expect(unavailable.escalations).toEqual([expect.objectContaining({ reason: "no-canonical-artifact", nextAction: "The source provider is unavailable." })]);
+  });
+
   it("BI-05F8860A: a small-shape acceptance lane escalates to record_execution_evidence, never to objective mapping", async () => {
     const ports = deps();
     const smallShapeDecision: InitiativeReadinessDecision = {

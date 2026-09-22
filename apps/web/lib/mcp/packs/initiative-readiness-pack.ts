@@ -14,6 +14,8 @@ import {
   type InitiativeReadinessLane as Lane,
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-context";
+import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
 
 const artifactRefSchema = {
   type: "object",
@@ -361,17 +363,30 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     if (binding && findings.length > 0 && binding.artifactRef.kind === "repo-blob-at-commit") {
       const reads = await prisma.toolExecution.findMany({
         where: { taskRunId: context?.taskRunId, toolName: "read_source_at_version", success: true },
-        select: { id: true, result: true },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, toolName: true, parameters: true, result: true, success: true, createdAt: true },
       });
+      // Metrics-only auditing intentionally omits source bytes. Reuse recovery's
+      // exact-bound verification; never make journaling source a receipt prerequisite.
+      const contentFreeReads = reads.some((row) => row.result && typeof row.result === "object" && Object.keys(row.result).length === 0);
       for (const finding of findings) {
         const evidence = finding.evidence;
         const artifact = binding.artifactRef;
-        const matchedRead = evidence && reads.some((row) => {
+        let matchedRead = evidence && reads.some((row) => {
           const page = (row.result as { data?: Record<string, unknown> } | null)?.data;
           return page && page.version === artifact.commitSha && page.path === artifact.path
             && page.repositoryFullName === artifact.repositoryFullName
             && findingEvidenceMatchesRead(evidence, page, artifact.providerBlobId);
         });
+        if (!matchedRead && evidence && contentFreeReads) {
+          const dispatch = context?.governedDispatch;
+          if (!dispatch) return { success: false, error: "source-verification-unavailable", message: "A governed source read is required to verify content-free audit evidence." };
+          const policy = createInitiativeReviewTerminalToolPolicy(actionKey, [actionKey, "read_source_at_version"], artifact)!;
+          const verified = await verifyTerminalWriterCitation({ policy, executions: reads, evidence,
+            readPage: (args) => dispatch("read_source_at_version", args) });
+          if (!verified.ok) return { success: false, error: verified.code, message: verified.error };
+          matchedRead = verified.data;
+        }
         if (!matchedRead) {
           return { success: false, error: "malformed-receipt", message: "A finding must cite an exact quote and lines from a successful read of this bound blob. Correct unsupported or contradicted findings using the immutable evidence; do not manufacture a pass." };
         }

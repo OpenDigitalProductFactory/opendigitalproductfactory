@@ -183,6 +183,9 @@ type StallScanRow = {
  * runtime. Counting stops at
  * the most recent non-pause activity, so a room that recovered and stalled again
  * reports the NEW streak, not its lifetime total.
+ * Compute each room's advancing boundary once. A correlated boundary lookup
+ * per activity repeatedly scanned the entire materialized history, exhausting
+ * the portal pool as activity accumulated (BI-70B2ED84).
  */
 export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
   const rows = await db.$queryRaw<StallScanRow[]>`
@@ -193,22 +196,25 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
         a."payload" ->> 'action' AS action,
         ROW_NUMBER() OVER (PARTITION BY a."workCapsuleId" ORDER BY a."recordedAt" DESC) AS rn
       FROM "WorkCapsuleActivity" a
+      JOIN "WorkCapsule" active_room ON active_room."id" = a."workCapsuleId"
       WHERE a."kind" = 'workroom-drive'
+        AND active_room."archivedAt" IS NULL
+        AND active_room."status" NOT IN ('abandoned', 'archived', 'complete')
+    ),
+    boundary AS (
+      SELECT
+        "workCapsuleId",
+        MIN(rn) FILTER (WHERE action IS NULL OR action NOT IN ('pause', 'escalate')) AS first_advancing
+      FROM drive_activity
+      GROUP BY "workCapsuleId"
     ),
     streak AS (
       SELECT
         d."workCapsuleId",
         COUNT(*) AS consecutive_pauses
       FROM drive_activity d
-      WHERE d.rn <= COALESCE(
-        (
-          SELECT MIN(n.rn) - 1
-          FROM drive_activity n
-          WHERE n."workCapsuleId" = d."workCapsuleId"
-            AND (n.action IS NULL OR n.action NOT IN ('pause', 'escalate'))
-        ),
-        d.rn
-      )
+      JOIN boundary b ON b."workCapsuleId" = d."workCapsuleId"
+      WHERE (b.first_advancing IS NULL OR d.rn < b.first_advancing)
       AND d.action IN ('pause', 'escalate')
       GROUP BY d."workCapsuleId"
     )

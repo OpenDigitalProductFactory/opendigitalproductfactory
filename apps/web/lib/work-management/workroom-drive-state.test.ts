@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { readStoredWorkroomDriveState } from "./workroom-drive-state";
+import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "./workroom-drive-state";
 
 describe("readStoredWorkroomDriveState", () => {
+  it("retains a recorded role wait in the shared process observation", () => {
+    expect(projectStoredWorkroomDriveObservation({ workroomDrive: {
+      action: "attention", stageKey: "design-note",
+      pendingAttention: { reason: "role_stage", stageKey: "design-note", principalRef: "role:author" },
+    } })).toMatchObject({ currentStageKey: "design-note", proposedStageKey: "design-note",
+      attentionReason: "Stage design-note is waiting on role:author." });
+  });
+  it.each([
+    { action: "noop", stageKey: "design-note", pendingAttention: { stageKey: "design-note", principalRef: "role:author" } },
+    { action: "attention", stageKey: "implement", pendingAttention: { stageKey: "design-note", principalRef: "role:author" } },
+    { action: "attention", stageKey: "design-note", pendingAttention: { stageKey: "design-note", principalRef: 123 } },
+  ])("does not turn stale or malformed attention into an active wait", (workroomDrive) => {
+    expect(projectStoredWorkroomDriveObservation({ workroomDrive }).attentionReason).toBeNull();
+  });
   it("projects only typed verifier observations from the runner snapshot", () => {
     expect(readStoredWorkroomDriveState({
       workroomDrive: {

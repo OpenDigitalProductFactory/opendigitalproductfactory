@@ -125,6 +125,18 @@ function database(activities: unknown[] = []) {
 }
 
 describe("claimGovernedBacklogWorkspace", () => {
+  it("passes the live item's existing design reference into recovery discovery", async () => {
+    const db = database();
+    const body = `## Design\n\`${CANONICAL_DESIGN_PATH}\``;
+    const item = await db.backlogItem!.findFirst({});
+    vi.mocked(db.backlogItem!.findFirst).mockResolvedValue({ ...item, body } as never);
+    const discover = vi.fn().mockResolvedValue({ resolved: true,
+      path: CANONICAL_DESIGN_PATH, providerBlobId: CANONICAL_BLOB_SHA });
+    await claimGovernedBacklogWorkspace({ db, input, actor, workIntent: "plan",
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact: discover } });
+    expect(discover).toHaveBeenCalledWith(expect.objectContaining({ backlogBody: body }));
+  });
+
   it.each([input.repositoryFullName, "other/repository"])("routes only the current baseline's same-repository coverage plan (%s)", async (repositoryFullName) => {
     const planArtifactRef = { kind: "repo-blob-at-commit", repositoryFullName,
       path: "docs/superpowers/plans/admission.md", commitSha: "a".repeat(40), providerBlobId: "b".repeat(40) };

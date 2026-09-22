@@ -20,6 +20,11 @@ vi.mock("./ideate-dispatch", () => ({
   dispatchIdeateResearch: mockDispatchIdeateResearch,
 }));
 
+// BI-0B95D268: the infrastructure retry waits for the sandbox container; the
+// test answers "running" immediately so the wait returns on its first poll.
+vi.mock("./sandbox/sandbox", () => ({ isSandboxRunning: async () => true }));
+vi.mock("./sandbox/agent-cli-runtime", () => ({ SANDBOX_CONTAINER: "dpf-sandbox-test" }));
+
 vi.mock("@/lib/build/build-studio-config", () => ({
   getBuildStudioConfig: mockGetBuildStudioConfig,
   getAutonomousPlaybookMode: () => "off",
@@ -236,6 +241,54 @@ describe("dispatchIdeateForApprovedBuild", () => {
       data: expect.objectContaining({ summary: expect.stringMatching(/falling back once to codex/i) }),
     }));
     expect(mockExecuteTool).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-runs the SAME engine once after an infrastructure kill, once the sandbox is back (BI-0B95D268)", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({ originatingBacklogItemId: "cmpcuid1", designDoc: null, title: "T", description: "D" })
+      .mockResolvedValueOnce({ designDoc: { problemStatement: "P" } });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body.", effortSize: "medium", workType: "bug" });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "claude",
+      claudeProviderId: "anthropic-sub",
+      codexProviderId: "codex",
+      grokProviderId: "",
+      opencodeProviderId: "",
+      claudeModel: "sonnet",
+      codexModel: "",
+      grokModel: "",
+      opencodeModel: "",
+      selection: engineSelection("claude", "anthropic-sub", [{ engine: "codex", providerId: "codex" }]),
+    });
+    mockDispatchIdeateResearch
+      .mockResolvedValueOnce({ success: false, designDoc: null, rawOutput: "", durationMs: 17_300, infrastructure: true, error: "claude engine process was killed or lost its runtime (exit 137) — an infrastructure failure, not a model verdict." })
+      .mockResolvedValueOnce({ success: true, designDoc: { problemStatement: "P" }, rawOutput: "{}", durationMs: 5 });
+    mockExecuteTool.mockResolvedValue({ success: true });
+
+    const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
+
+    expect(outcome.kind).toBe("dispatched-success");
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledTimes(2);
+    expect(mockDispatchIdeateResearch).toHaveBeenNthCalledWith(2, expect.objectContaining({ dispatchEngine: "claude", providerId: "anthropic-sub" }));
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ summary: expect.stringMatching(/infrastructure failure, not a model verdict/i) }),
+    }));
+  });
+
+  it("does not retry an infrastructure kill more than once", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({ originatingBacklogItemId: "cmpcuid1", designDoc: null, title: "T", description: "D" });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body.", effortSize: "medium", workType: "bug" });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "claude", claudeProviderId: "anthropic-sub", codexProviderId: "", grokProviderId: "", opencodeProviderId: "",
+      claudeModel: "sonnet", codexModel: "", grokModel: "", opencodeModel: "",
+      selection: engineSelection("claude", "anthropic-sub", []),
+    });
+    mockDispatchIdeateResearch.mockResolvedValue({ success: false, designDoc: null, rawOutput: "", durationMs: 10, infrastructure: true, error: "killed (exit 137)" });
+
+    const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
+    expect(outcome.kind).toBe("dispatched-failure");
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledTimes(2);
   });
 
   it("dispatches research and saves designDoc evidence on the happy path", async () => {
