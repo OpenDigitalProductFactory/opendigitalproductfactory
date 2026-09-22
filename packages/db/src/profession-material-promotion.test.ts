@@ -74,20 +74,19 @@ describe("registry helpers", () => {
     expect(parseProfessionPageSlug("craft/x")).toBeNull();
   });
 
-  it("maps human-vouched EA tiers to architecture-tradeoff primary; derived stays context-grade", () => {
-    expect(professionDomainClasses("enterprise-architecture", "confirmed")).toEqual([
-      "architecture-tradeoff",
-      "professional-practice",
-    ]);
-    expect(professionDomainClasses("enterprise-architecture", "ruled")).toEqual([
-      "architecture-tradeoff",
-      "professional-practice",
-    ]);
-    // Derived B/0.6 rows score 0.45 effective — letting them share the
-    // tradeoff class would dilute confirmed rows below the recommend band.
-    expect(professionDomainClasses("enterprise-architecture", "derived")).toEqual([
-      "professional-practice",
-    ]);
+  // BI-0EB9F1D2 reversed the tier-aware rule this test used to pin. Holding
+  // derived material out of the tradeoff class prevented dilution, and cost
+  // reachability: 654 of 654 EA consults in a fortnight fell through to
+  // platform doctrine because the craft matched nothing in the class its own
+  // caller asks about. Dilution is now prevented where it occurs, by
+  // supersedeDerivedMaterial, so the mapping no longer depends on tier.
+  it("maps every EA tier to the classes its family answers", () => {
+    for (const tier of ["derived", "confirmed", "ruled"] as const) {
+      expect(professionDomainClasses("enterprise-architecture", tier)).toEqual([
+        "architecture-tradeoff",
+        "professional-practice",
+      ]);
+    }
     expect(professionDomainClasses("marketing", "confirmed")).toEqual(["professional-practice"]);
   });
 
@@ -144,7 +143,7 @@ describe("promoteProfessionPageMaterial", () => {
     expect(materials).toHaveLength(0);
   });
 
-  it("writes a gate-live B/0.6 professional-practice row for a platform-seeded EA principle", async () => {
+  it("writes gate-live B/0.6 rows in every class the EA family answers", async () => {
     const { db, materials } = makeFakeDb({ profiles: [EA_PROFILE] });
     const result = await promoteProfessionPageMaterial({
       db,
@@ -158,11 +157,17 @@ describe("promoteProfessionPageMaterial", () => {
     if (!result.ok) return;
     expect(result.gateLive).toBe(true);
     expect(result.heldForReview).toBe(false);
-    expect(materials).toHaveLength(1);
+    // Two rows now: the family answers both classes, and the primary keeps
+    // the short id (BI-0EB9F1D2).
+    expect(materials).toHaveLength(2);
+    expect(materials.map((m) => String((m as { domainClass?: unknown }).domainClass)).sort()).toEqual([
+      "architecture-tradeoff",
+      "professional-practice",
+    ]);
     expect(materials[0]).toMatchObject({
       materialId: `wsid-enterprise-architecture:${EA_PAGE.slug}`,
       profileId: "wsid-enterprise-architecture",
-      domainClass: "professional-practice",
+      domainClass: "architecture-tradeoff",
       sourceType: "principle",
       evidenceGrade: "B",
       confidenceWeight: 0.6,
