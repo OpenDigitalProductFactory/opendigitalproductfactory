@@ -4,7 +4,7 @@ status: draft
 
 # OAuth external build authority implementation plan
 
-Status: draft; implementation blocked pending reviewed baseline and coverage.
+Status: implementation in progress; no deployed fix or live acceptance yet.
 Parent: BI-B986A18B. Workroom: WC-F174CC4F.
 Design: ../specs/2026-09-21-oauth-external-build-authority-design.md.
 
@@ -54,17 +54,18 @@ transaction/concurrency tests for credential rotation and role-by-operation
 tests covering portal, MCP and resumed jobs. Confirm failures before fixes.
 
 Run affected tests and fast checks in a managed compile-ready worktree; this
-worktree currently classifies source-only. Runtime/migration/UI evidence uses
+worktree has a managed compile-ready dependency environment. Runtime/migration/UI evidence uses
 the governed shared nonproduction lease and exact candidate SHA. Cloud build,
 PR health and live DEV V1-V9 complete acceptance; do not describe structural
 checks as functional proof. Release through the canonical upgrade mechanism.
 
 ## Backlog coverage
 
-Decision: decomposed, pending formal baseline and receipt. Existing mappings
+Decision: decomposed. Reviewed baseline: baseline-3cdbe047-532c-4470-ac13-1cbdb096b6a6.
+Coverage receipt: cmubxupm50wg301ru404n27ll.
+Implementation admission: IRD-A8107E37E8CF. Existing mappings
 are listed above; BI-1E56D891 was filed after live overlap reconciliation for
-the independent operation-policy defect. No coverage receipt has been minted. This draft deliberately
-does not claim permission to implement or mark the original item accepted.
+the independent operation-policy defect. The parent remains unaccepted until the complete live matrix passes.
 
 ## Risk and rollback
 
@@ -72,3 +73,31 @@ Primary risks are authority expansion, stale permission reuse, refresh races,
 cross-task target confusion and confidential-client regression. Use the
 design's additive migration and fail-closed rollback; preserve audit and
 revocation. Popup and duplicate-hook repairs remain outside this plan.
+
+## Implementation progress
+
+Consent binding, credential-family rotation and MCP recovery responses are in
+progress in the governed source worktree. The binding uses typed nullable
+human/client foreign keys on AuthorityBinding for relational integrity and
+indexed eligibility, with no guessed backfill or duplicate subject strings.
+The public coworker identifier is carried into MCP; the database key is used
+only for refresh-token and binding relations. Consent audit links directly to
+the binding. Generic binding edits cannot rewrite issued consent.
+
+Focused tests include public/database identity custody, cross-human/client/
+audience/scope denial, disabled users, missing consent, narrowed refresh,
+replay-family isolation and actionable MCP setup refusals. These use mocked
+persistence; actual transaction concurrency, migration and browser acceptance
+still require the leased candidate runtime. Operation-policy, task isolation
+and connection-management deliverables remain open. Nothing in this note
+claims that an installation upgrade contains this unmerged implementation.
+
+### Host preflight prerequisite
+
+Three PKI contract fixtures require POSIX mode 0600, which Node chmod cannot
+establish on Windows NTFS. Keep their script checks and assertions unchanged;
+mark only those fixtures POSIX-only with an explicit Windows skip reason.
+The Linux policy-guard pipeline continues to execute them. Other static PKI
+checks and command-validation tests still run on Windows with Git Bash.
+This is a test-host correction, not a permission-check exception. Record
+Windows skips separately from Linux test evidence before claiming acceptance.

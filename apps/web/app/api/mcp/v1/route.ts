@@ -39,6 +39,7 @@ import {
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
+import { oauthSetupRequiredResult } from "@/lib/auth/oauth-setup-required";
 import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
 import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-up";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
@@ -579,6 +580,8 @@ async function handleToolsCall(
     });
   }
 
+  const setupRefusal = oauthSetupRequiredResult(token, toolName, requiredScope, required);
+  if (setupRefusal) return jsonRpcOk(id, setupRefusal);
   const quiescenceRefusal = await quiescenceRefusalResult(toolName, toolDef);
   if (quiescenceRefusal) {
     return jsonRpcOk(id, quiescenceRefusal);

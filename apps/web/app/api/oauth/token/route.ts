@@ -17,23 +17,21 @@
 // client. This is the one place the house error contract must yield to the wire
 // contract; the raw-route-error baseline records it deliberately.
 
+import { currentOAuthHuman } from "@/lib/auth/oauth-identity-binding";
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { findClientByClientId, touchClient } from "@/lib/auth/oauth-clients";
 import { canonicalResourceUri, resolveResourceOrigin, resourceMatches } from "@/lib/auth/oauth-metadata";
 import { clientCredentialsTtlSeconds } from "@/lib/auth/oauth-policy";
 import {
-  consumeAuthorizationCode,
-  consumeRefreshToken,
+  exchangeOAuthCode,
+  rotateOAuthRefreshToken,
   issueAccessToken,
-  issueRefreshToken,
-  markRefreshRotated,
   secretMatches,
 } from "@/lib/auth/oauth-tokens";
 import {
   formatScopeParam,
   parseScopeParam,
-  type PublicScope,
 } from "@/lib/auth/oauth-scope-map";
 
 export const dynamic = "force-dynamic";
@@ -145,29 +143,10 @@ async function handleAuthorizationCode(
   if (!redirectUri) return oauthError("invalid_request", "redirect_uri is required.");
   if (!codeVerifier) return oauthError("invalid_request", "code_verifier is required.");
 
-  const consumed = await consumeAuthorizationCode(code, {
-    oauthClientRowId: client.rowId,
-    redirectUri,
-    codeVerifier,
-    resource: rawResource,
-  });
-  if (!consumed.accepted) return oauthError(consumed.error, consumed.detail);
-
-  const issued = await issueAccessToken({
-    userId: consumed.userId,
-    agentId: client.agentId,
-    oauthClientRowId: client.rowId,
-    clientLabel: client.clientName,
-    publicScopes: consumed.scopes,
-    origin,
-  });
-  const refresh = await issueRefreshToken({
-    userId: consumed.userId,
-    agentId: client.agentId,
-    oauthClientRowId: client.rowId,
-    publicScopes: consumed.scopes,
-    origin,
-  });
+  const result = await exchangeOAuthCode({ code, clientId: client.rowId,
+    clientLabel: client.clientName, origin, redirectUri, codeVerifier, resource: rawResource });
+  if (!result.accepted) return oauthError(result.error, result.detail);
+  const { issued, refresh } = result;
 
   touchClient(client.rowId);
   return tokenResponse({
@@ -187,38 +166,14 @@ async function handleRefresh(
   const presented = form.get("refresh_token")?.trim() ?? "";
   if (!presented) return oauthError("invalid_request", "refresh_token is required.");
 
-  const consumed = await consumeRefreshToken(presented, origin);
-  if (!consumed.accepted) return oauthError(consumed.error, consumed.detail);
-  if (consumed.oauthClientRowId !== client.rowId) {
-    return oauthError("invalid_grant", "Refresh token belongs to another client.");
-  }
-
-  // A refresh may narrow scope but never widen it (RFC 6749 §6).
-  const requested = parseScopeParam(form.get("scope")).granted;
-  const scopes: PublicScope[] =
-    requested.length > 0 ? consumed.scopes.filter((s) => requested.includes(s)) : consumed.scopes;
-  if (scopes.length === 0) {
-    return oauthError("invalid_scope", "Requested scopes exceed the granted set.");
-  }
-
-  const issued = await issueAccessToken({
-    userId: consumed.userId,
-    agentId: consumed.agentId,
-    oauthClientRowId: client.rowId,
-    clientLabel: client.clientName,
-    publicScopes: scopes,
-    origin,
+  const parsedScope = parseScopeParam(form.get("scope"));
+  if (parsedScope.unknown.length) return oauthError("invalid_scope", "Request only supported permissions.");
+  const result = await rotateOAuthRefreshToken({ token: presented,
+    clientId: client.rowId, clientLabel: client.clientName, origin,
+    ...(form.has("scope") ? { requestedScopes: parsedScope.granted } : {}),
   });
-  const rotated = await issueRefreshToken({
-    userId: consumed.userId,
-    agentId: consumed.agentId,
-    oauthClientRowId: client.rowId,
-    publicScopes: scopes,
-    origin,
-  });
-  // Link old → new so a later presentation of the old one is a detectable
-  // replay rather than an accepted renewal.
-  await markRefreshRotated(presented, rotated);
+  if (!result.accepted) return oauthError(result.error, result.detail);
+  const { issued, refresh: rotated } = result;
 
   touchClient(client.rowId);
   return tokenResponse({
@@ -272,9 +227,18 @@ async function handleClientCredentials(
     return oauthError("invalid_scope", "No requested scope is granted.");
   }
 
+  if (!await currentOAuthHuman(client.ownerUserId)) {
+    return oauthError("invalid_client", "The authorizing account is not active.");
+  }
+  const agent = client.agentId ? await prisma.agent.findUnique({
+    where: { id: client.agentId }, select: { agentId: true, status: true, archived: true },
+  }) : null;
+  if (client.agentId && (!agent || agent.status !== "active" || agent.archived)) {
+    return oauthError("invalid_client", "The approved assistant is not active.");
+  }
   const issued = await issueAccessToken({
     userId: client.ownerUserId,
-    agentId: client.agentId,
+    agentId: agent?.agentId ?? null,
     oauthClientRowId: client.rowId,
     clientLabel: client.clientName,
     publicScopes: scopes,

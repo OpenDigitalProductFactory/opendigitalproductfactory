@@ -15,6 +15,17 @@ const base = {
 };
 
 describe("consent rendering", () => {
+  it("lets a person cancel without selecting an assistant", () => {
+    expect(renderConsentPage({ ...base, coworkers: [{ agentId: "AGT-EXT-CODEX", displayName: "Codex" }] }))
+      .toContain('name="decision" value="deny" formnovalidate');
+  });
+  it("does not echo a client-supplied coworker as a hidden identity", () => {
+    const html = renderConsentPage({ ...base, hiddenParams: [["acting_coworker", "impersonated"]],
+      coworkers: [{ agentId: "AGT-EXT-CODEX", displayName: '<img src=x onerror="evil">' }] });
+    expect(html).not.toContain("impersonated");
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("does not verify the app's name or grant access to a workroom");
+  });
   it("names the client, the installation and the acting human", () => {
     const html = renderConsentPage(base);
     expect(html).toContain("Claude Code");
