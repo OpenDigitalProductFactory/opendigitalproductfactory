@@ -24,6 +24,7 @@
 //
 // Called from: reviewDesignDoc success path in mcp-tools.ts (fire-and-forget).
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { denialForNextAttempt, denyAfterUnparseable } from "@/lib/build/plan-generation-retry";
 import { normalizeBuildPlanPaths } from "./build-plan-paths";
@@ -38,7 +39,9 @@ type PlanDispatchOutcome =
   | { kind: "skipped-already-has-plan"; reason: string }
   | { kind: "skipped-wrong-phase"; reason: string }
   | { kind: "dispatched-success"; taskCount: number; durationMs: number }
-  | { kind: "dispatched-failure"; error: string; durationMs: number };
+  | { kind: "dispatched-failure"; error: string; durationMs: number }
+  /** BI-5098ECEC: the host was busy; nothing is known about the plan and no repair round is spent. */
+  | { kind: "deferred-capacity"; reason: string; durationMs: number };
 
 /** A plan-review blocking issue fed back into a revision round (BI-99B06AD1). */
 export type PlanReviewIssue = { severity: string; description: string };
@@ -180,7 +183,7 @@ export function parsePlanJson(
  * failed review's blocking issues back so the model produces a REVISED plan that
  * resolves them. Returns the normalized plan or a human-readable error.
  */
-async function generateNormalizedPlan(args: {
+export async function generateNormalizedPlan(args: {
   title: string;
   designDoc: Record<string, unknown>;
   biTitle: string | null;
@@ -189,12 +192,15 @@ async function generateNormalizedPlan(args: {
   priorReviewIssues?: ReadonlyArray<PlanReviewIssue>;
   /** EP-MODEL-TIER-ROUTING: capability tier for plan generation. */
   modelTier?: "local" | "robust";
+  /** Routing sensitivity from mapBuildDeliverableToRoutingSensitivity; defaults to development (source code). */
+  sensitivity?: "development" | "internal" | "confidential";
   /** FeatureBuild this generation belongs to — threaded into AdapterRunTelemetry
    *  so completeBuildPhaseRun can meter the plan phase (BI-0A6B8B38). */
   buildId?: string;
   log: (summary: string) => Promise<void>;
 }): Promise<{ plan: { fileStructure?: unknown[]; tasks?: unknown[] } } | { error: string }> {
   const { routeAndCall } = await import("@/lib/inference/routed-inference");
+  const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
   const prompt = buildPlanGenerationPrompt({
     title: args.title,
     designDoc: args.designDoc,
@@ -222,8 +228,9 @@ async function generateNormalizedPlan(args: {
     const response = await routeAndCall(
       [{ role: "user" as const, content: prompt }],
       systemPrompt,
-      "internal",
+      args.sensitivity ?? "development",
       {
+        ...BUILD_PHASE_ROUTE_OPTIONS,
         budgetClass: "quality_first",
         ...(args.modelTier ? { modelTier: args.modelTier } : {}),
         ...(args.buildId ? { buildId: args.buildId } : {}),
@@ -295,7 +302,7 @@ async function runPlanReview(buildId: string, userId: string, log: (s: string) =
  * advanced from ideate → plan. Designed to be called fire-and-forget from the
  * reviewDesignDoc success path; never throws.
  */
-export async function dispatchPlanForApprovedBuild(params: {
+async function dispatchPlanForApprovedBuildInner(params: {
   buildId: string;
   userId: string;
   /** Local-tuning: when a build is RESUMED with an existing plan that already
@@ -371,12 +378,17 @@ export async function dispatchPlanForApprovedBuild(params: {
     // BI-B24D4C84: pass the rightsizing opts (as the autonomous callers do) so
     // this takes the quality-first branch rather than the legacy size-only one,
     // which pinned every small/medium build to the local tier.
-    const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const { getModelTier, deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
     const { isModelTierRoutingEnabled, isQualityFirstRightsizingEnabled } = await import("./build-studio-config");
     const planSensitivity = deriveDeliverableSensitivity({
       text: `${build.title ?? ""}\n${build.description ?? ""}`,
       workType: build.kind,
     });
+    // Founder ruling 2026-08-12: ordinary builds route as development work; only
+    // elevated/high deliverables demand internal/confidential clearance. The
+    // literal "internal" this used to send excluded every public-cleared cloud
+    // dev engine from plan generation.
+    const planRouteSensitivity = mapBuildDeliverableToRoutingSensitivity(planSensitivity);
     const planQualityFirst = await isQualityFirstRightsizingEnabled();
     const planModelTier = (await isModelTierRoutingEnabled())
       ? getModelTier(build.kind, biEffortSize, {
@@ -428,6 +440,7 @@ export async function dispatchPlanForApprovedBuild(params: {
       biBody,
       verifiedPaths,
       modelTier: planModelTier,
+      sensitivity: planRouteSensitivity,
       log,
     });
     if ("error" in gen) {
@@ -468,6 +481,7 @@ export async function dispatchPlanForApprovedBuild(params: {
         verifiedPaths,
         priorReviewIssues: review.issues,
         modelTier: planModelTier,
+        sensitivity: planRouteSensitivity,
         log,
       });
       if ("error" in revised) {
@@ -544,8 +558,22 @@ export async function dispatchPlanForApprovedBuild(params: {
       durationMs: Date.now() - t0,
     };
   } catch (err) {
+    const { describeCapacityDeferral } = await import("./capacity-deferral");
+    const deferral = describeCapacityDeferral(err);
+    if (deferral) {
+      // BI-5098ECEC: a busy host is not a failed plan; the reconciler re-drives.
+      try { await log(`Plan dispatch deferred: ${deferral.message.slice(0, 220)}`); } catch (_) { /**/ }
+      return { kind: "deferred-capacity", reason: deferral.message, durationMs: Date.now() - t0 };
+    }
     const msg = String(err instanceof Error ? err.message : err).slice(0, 300);
     try { await log(`Plan dispatch failed: ${msg}`); } catch (_) { /**/ }
     return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
   }
+}
+
+/** Build-phase entry: runs under the autonomous inference origin (BI-2F9DE752). */
+export function dispatchPlanForApprovedBuild(
+  params: Parameters<typeof dispatchPlanForApprovedBuildInner>[0],
+): ReturnType<typeof dispatchPlanForApprovedBuildInner> {
+  return runAsBuildPhase(() => dispatchPlanForApprovedBuildInner(params));
 }

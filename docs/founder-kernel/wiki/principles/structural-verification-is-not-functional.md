@@ -129,6 +129,30 @@ This is a **commandment-tier** principle. The first violation that named
 it cost the operator hours of failed mic clicks plus a multi-PR CI
 cascade. There is no acceptable exception: structural ≠ functional, ever.
 
+## Amendment 2026-09-22 — this applies to a shared-state WRITE, not only to verification
+
+Everything above governs the moment of verification. The same rule governs the
+moment of ACTION: when a shared-state change has a UI affordance — promote an
+item, approve a gate, register a provider, start a build — drive that affordance
+rather than dropping to a direct write.
+
+Preference order, highest first: drive the UI; call the HTTP route the UI calls;
+call the MCP tool or business-logic function; direct SQL. Each step down exercises
+less of what a user will meet. Direct SQL is for diagnostics, migrations and
+emergency repair, never for a normal lifecycle action.
+
+The reason is not purity. **A missing UX path is the signal, and a direct write
+destroys it.** Reconciling state by SQL because the button silently no-ops removes
+the evidence that would have justified building the button. "Clean up what you
+can" authorises what the product supports, and flagging the rest as gaps — it does
+not authorise bypassing the product.
+
+Data hygiene with no UX implication — an orphaned directory, a zombie heartbeat
+carrying no semantic state — stays fine by shell or SQL. Anything a user could
+have driven by clicking must go through the product or be filed as the gap it is.
+
+Founder direction, 2026-05-19 and 2026-05-20.
+
 ## Related principles
 
 - [`never-ask-user-to-run-commands`](never-ask-user-to-run-commands.md) —

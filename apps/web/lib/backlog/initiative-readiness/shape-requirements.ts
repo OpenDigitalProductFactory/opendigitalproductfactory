@@ -15,6 +15,7 @@
  */
 
 import type {
+  ReadinessProfile,
   InitiativeReadinessFacts,
   ReadinessCode,
   ReadinessEvidenceState,
@@ -41,11 +42,40 @@ const BY_RANK: ReadinessShape[] = ["break-fix", "small", "medium", "large", "xla
  * review), and a high-sensitivity emergency is still an emergency. xlarge is
  * already the ceiling.
  */
-export function effectiveShape(shape: ReadinessShape, sensitivity: ReadinessSensitivity | null | undefined): ReadinessShape {
+export function effectiveShape(
+  shape: ReadinessShape,
+  sensitivity: ReadinessSensitivity | null | undefined,
+  profile?: ReadinessProfile | null,
+): ReadinessShape {
   if (shape === "break-fix" || shape === "xlarge") return shape;
-  if (sensitivity === "high") return RANK[shape] < RANK.large ? "large" : shape;
-  if (sensitivity === "elevated") return BY_RANK[Math.min(RANK[shape] + 1, RANK.large)]!;
-  return shape;
+  const ceiling = raiseCeilingFor(profile);
+  const raised = sensitivity === "high"
+    ? (RANK[shape] < RANK.large ? "large" : shape)
+    : sensitivity === "elevated"
+      ? BY_RANK[Math.min(RANK[shape] + 1, RANK.large)]!
+      : shape;
+  return RANK[raised] > RANK[ceiling] && RANK[shape] <= RANK[ceiling] ? ceiling : raised;
+}
+
+/**
+ * How far sensitivity may raise an item of this profile (BI-BD60DC91).
+ *
+ * `large` delegates to the v2 profile tables, and the fix profile there owes
+ * OBJECTIVE_BASELINE_REQUIRED at completion while carrying no
+ * SPEC_APPROVAL_REQUIRED gate that could ever mint that baseline — spec-approval
+ * refuses a fix-profile item outright with CLASSIFICATION_REQUIRED. So raising a
+ * fix to large produced a requirement with no legal route: proven on
+ * BI-1F69D3F8, whose only remaining exit was to relabel a UX correction as a
+ * feature. Medium is the ceiling for a fix, and medium's baseline is the
+ * acceptance criteria in the item body, which its author can supply. The raise
+ * still bites — medium owes an independent acceptance receipt that small does
+ * not — it simply stays satisfiable.
+ *
+ * Every other profile keeps the full range: a feature raised to large owes the
+ * spec approval it is already able to obtain.
+ */
+function raiseCeilingFor(profile: ReadinessProfile | null | undefined): ReadinessShape {
+  return profile === "fix" ? "medium" : "large";
 }
 
 function req(
@@ -131,7 +161,7 @@ export function shapeRequirements(
   target: ReadinessTarget,
   v2: (facts: InitiativeReadinessFacts, target: ReadinessTarget) => ShapeRequirement[],
 ): ShapeRequirement[] {
-  const shape = effectiveShape(facts.shape!, facts.sensitivity);
+  const shape = effectiveShape(facts.shape!, facts.sensitivity, facts.profile);
   if (shape === "break-fix") return breakFix(facts, target);
   if (shape === "small") return small(facts, target);
   if (shape === "medium") return medium(facts, target);

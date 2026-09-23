@@ -19,6 +19,10 @@ vi.mock("@dpf/db", () => ({
       create: vi.fn().mockResolvedValue({}),
     },
     marketingCampaignBrief: { findFirst: vi.fn().mockResolvedValue(null) },
+    // Room-owned cadence (DI-81E47BDA59F1): agentId -> principal alias ->
+    // workroom participation -> that room's declared posture.
+    principalAlias: { findFirst: vi.fn().mockResolvedValue(null) },
+    workroomParticipant: { findMany: vi.fn().mockResolvedValue([]) },
     knowledgeArticle: { findFirst: vi.fn().mockResolvedValue(null) },
     document: { findFirst: vi.fn().mockResolvedValue(null) },
   },
@@ -406,5 +410,98 @@ describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
 
     expect(r.orphansObserved).toBe(0);
     expect(prisma.userFact.create as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  // ── Room-owned cadence (DI-81E47BDA59F1, BI-4CE4F52F slice 2) ─────────────
+
+  function inRoom(level: string | null, status = "working") {
+    return async () => {
+      const { prisma } = await import("@dpf/db");
+      (prisma.principalAlias.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ principalId: "p1" });
+      (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+        {
+          workroom: {
+            status,
+            scopeClaims: level
+              ? [{ workroomPosture: { proactivityLevel: level }, recordedAt: "2026-09-18T00:00:00.000Z" }]
+              : [],
+          },
+        },
+      ]);
+    };
+  }
+
+  it("takes the pace from the ROOM, overriding the agent-scoped fact", async () => {
+    const { prisma } = await import("@dpf/db");
+    // The fact says quiet; the room that carries the work says assertive.
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([factRow("u1", MKT, "quiet")]);
+    await inRoom("assertive")();
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    // Room wins: the coworker is scheduled, not stood down.
+    expect(r.created).toBe(1);
+    expect(r.deactivated).toBe(0);
+    // And it did NOT come from the fallback.
+    expect(r.unroomedFallback).toBe(0);
+  });
+
+  it("stands a coworker down when its room says quiet, whatever the fact says", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([factRow("u1", MKT, "assertive")]);
+    await inRoom("quiet")();
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({ isActive: true });
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.deactivated).toBe(1);
+    expect(r.unroomedFallback).toBe(0);
+  });
+
+  it("ignores a FINISHED room — work that is over drives nothing", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([factRow("u1", MKT, "balanced")]);
+    await inRoom("assertive", "complete")();
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    // The completed room contributed nothing, so this fell back to the fact —
+    // and said so.
+    expect(r.unroomedFallback).toBe(1);
+  });
+
+  it("counts the fallback when NO room carries the coworker", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([factRow("u1", MKT, "balanced")]);
+    (prisma.principalAlias.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    // The residual dependency on facts no operator can write, made visible.
+    // When this reaches zero across the estate the fallback is dead code.
+    expect(r.unroomedFallback).toBe(1);
+    expect(r.created).toBe(1);
+  });
+
+  it("takes the most assertive room when a coworker sits in several", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([factRow("u1", MKT, "quiet")]);
+    (prisma.principalAlias.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ principalId: "p1" });
+    (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { workroom: { status: "working", scopeClaims: [{ workroomPosture: { proactivityLevel: "quiet" } }] } },
+      { workroom: { status: "working", scopeClaims: [{ workroomPosture: { proactivityLevel: "assertive" } }] } },
+    ]);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    // A coworker holds ONE self-task, not one per room. Running it slower than
+    // the fastest room asked would silently under-serve that room; a quiet room
+    // does not drag the others down.
+    expect(r.created).toBe(1);
+    expect(r.unroomedFallback).toBe(0);
   });
 });

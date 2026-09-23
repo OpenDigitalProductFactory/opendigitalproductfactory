@@ -71,6 +71,24 @@ This is a fit review, not a visual taste review. Decide where the feature belong
 - `kernel/principles/compose-report-kit-for-reporting-ux` - reporting/data-display UI composes report-kit unless a domain primitive is explicitly justified.
 - `kernel/principles/design-research-required` - user-facing feature specs include research and benchmarking before finalization.
 
+## The reviewable unit is a prototype, not a plan
+
+**Build a working HTML prototype FIRST, before the markdown plan and before the
+code.** Deliver something the reviewer can open and click, with realistic data,
+and iterate on that.
+
+A plan is not reviewable as UX. A diagram or a mockup widget is not either. The
+founder rejected exactly that pairing in 2026-08-05 — "I don't see a prototype UX
+here" — and the current practice is HTML because it is the first artifact that can
+be exercised rather than imagined.
+
+Engage the UX-specialist coworker for the design work rather than doing it solo;
+the platform staffed one deliberately. Reach it through the coworker service
+catalog (`list_coworker_offers`, then `request_coworker_engagement`), which is the
+path callable from an external client.
+
+Then review that prototype with the steps below.
+
 ## Review Steps
 
 1. **Name the feature and proposed surface.** Capture the exact route(s), component(s), and user-facing labels in the spec or plan.

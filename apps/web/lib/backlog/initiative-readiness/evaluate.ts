@@ -145,6 +145,11 @@ function result(
   state: ReadinessEvidenceState | "blocked",
   accountableRole: string,
 ): ReadinessRequirementResult {
+  // Guidance must describe the table that was actually applied. A declared
+  // small raised to medium owes medium's item-body baseline, and saying
+  // "spec-approval" there sends the author to a lane its shape never uses
+  // (BI-BD60DC91).
+  const appliedShape = facts.shape ? effectiveShape(facts.shape, facts.sensitivity, facts.profile) : null;
   const unreadEvidenceRefs = state === "pass" ? [] : facts.unreadEvidenceRefs?.[code] ?? [];
   return {
     code,
@@ -156,7 +161,7 @@ function result(
     nextAction: requirementNextAction({
       code,
       profile: facts.profile,
-      shape: facts.shape ?? null,
+      shape: appliedShape,
       state,
       unreadEvidenceRefs,
       reasons: facts.requirementReasons?.[code],
@@ -174,7 +179,7 @@ function result(
  * raise legible to the operator and to the recovery packet.
  */
 function shapeDecisionOf(facts: InitiativeReadinessFacts): NonNullable<InitiativeReadinessDecision["shapeDecision"]> {
-  const effective = effectiveShape(facts.shape!, facts.sensitivity);
+  const effective = effectiveShape(facts.shape!, facts.sensitivity, facts.profile);
   return {
     declared: facts.shape!,
     effective,

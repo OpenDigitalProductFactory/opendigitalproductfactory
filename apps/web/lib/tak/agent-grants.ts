@@ -288,6 +288,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // the evidence behind a decision must not need a higher grant than making the
   // decision did, or the check is less reachable than the thing it checks.
   reverify_decision_evidence: ["registry_read"],
+  // BI-F302B80E: appends what the caller did with a kernel recommendation.
+  // Same grant as propose_improvement — it records, it never re-decides.
+  record_decision_outcome: ["decision_record_create"],
 
   // Two more doors sealed the same way as evaluate_profession_decision, found
   // by the registry-wide sweep the BI-88B77204 fix added. Both packs already

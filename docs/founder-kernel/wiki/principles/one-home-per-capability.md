@@ -78,3 +78,26 @@ Closest existing principle by the kernel-evolution discipline's overlap scan
 0.56 — both below the 0.70 additivity bar, so this ships as a new principle.
 Paired-but-distinct from [[principles/single-source-of-truth]]: that governs the
 data (one system of record), this governs the navigation (one route home).
+
+## Amendment 2026-09-22 — background work has a named home: the coworker
+
+Applying the rule above to one capability, because the canonical home had never
+been written down.
+
+Long-running work — an extraction, an eval, a probe, a build, a codebase scan,
+a provider calibration — surfaces through the **AI coworker**, not through a
+bespoke progress bar or a separate job dashboard. The coworker accepts the task,
+shows a busy state while it runs in the background, and resurfaces with a
+notification and a result summary: an employee going off to do work and returning
+when it is done.
+
+So the first design question for a new long-running feature is "which coworker
+owns this, and how does it narrate the work?" — never "what does the progress UI
+look like?". Anything taking more than a few seconds routes through the coworker,
+and the completion message ends with the next action rather than internal status.
+
+A separate job dashboard for such work is exactly the second home this principle
+refuses, and the coworker panel is the filtered view of the existing home that
+replaces it.
+
+Founder direction, 2026-04-18.

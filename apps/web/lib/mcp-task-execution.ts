@@ -2,6 +2,7 @@ import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { loadPirEvidenceContext } from "./pir-evidence-context";
 import { prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
+import type { RequestContract } from "@/lib/routing/request-contract";
 import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import {
@@ -104,6 +105,7 @@ export async function executeRemoteTaskAttempt(input: {
     budgetClass: string;
     pinnedProviderId: string | null;
     pinnedModelId: string | null;
+    residencyPolicy: string | null;
   } | null = null;
   // An explicit alias is itself an operator-selectable coworker identity, so
   // its assignment wins. A canonical request keeps the established resolved
@@ -120,6 +122,7 @@ export async function executeRemoteTaskAttempt(input: {
         budgetClass: true,
         pinnedProviderId: true,
         pinnedModelId: true,
+        residencyPolicy: true,
       },
     }).catch(() => null) ?? null;
     if (routingConfig) break;
@@ -134,8 +137,16 @@ export async function executeRemoteTaskAttempt(input: {
         ...(routingConfig.pinnedModelId
           ? { preferredModelId: routingConfig.pinnedModelId }
           : {}),
-        ...(routingConfig.pinnedProviderId === "local"
-          ? { residencyPolicy: "local_only" as const }
+        // BI-8CFA1CA8: residency is read as the stated policy it is. This used
+        // to be inferred from `pinnedProviderId === "local"`, which let a
+        // routing preference silently set — or silently clear — a data
+        // guarantee. The migration wrote the policy explicitly for every
+        // config that was local-pinned, so behaviour is unchanged.
+        ...(routingConfig.residencyPolicy
+          ? {
+              residencyPolicy:
+                routingConfig.residencyPolicy as RequestContract["residencyPolicy"],
+            }
           : {}),
       }
     : null;

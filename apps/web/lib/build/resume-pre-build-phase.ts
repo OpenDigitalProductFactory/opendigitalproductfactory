@@ -357,6 +357,9 @@ export async function resumePreBuildPhase(params: {
         plan: true,
         originatingBacklogItemId: true,
         parentEpicId: true,
+        // BI-0B7C1A9E: author of record for the child's backfilled design
+        // artifact, so the minted revision carries real provenance.
+        createdById: true,
       },
     });
     if (!build) {
@@ -538,6 +541,27 @@ export async function resumePreBuildPhase(params: {
             };
           }
         }
+        // BI-9B2E7154: a passed design blocked only by phase readiness is not
+        // stranded, and re-reviewing it cannot clear the refusal. Each re-run
+        // fed the reviewers the prior round's issues until the verdict drifted to
+        // fail on an unchanged document, and the fix loop escalated and abandoned
+        // the build (FB-650326BC: passed at 01:36, re-reviewed every ~30 min,
+        // abandoned at 17:06). Ask the gate first; re-review only once it would
+        // let the build through, since the review is what advances it.
+        const { enforceBuildInitiativeReadiness } = await import("@/lib/build/build-entry-gate");
+        const readiness = await enforceBuildInitiativeReadiness({
+          buildId,
+          target: "plan",
+          targetPhase: "plan",
+          expectedPhase: "ideate",
+        });
+        if (!readiness.allowed) {
+          return {
+            kind: "skipped",
+            phase,
+            reason: `design passed review; parked on phase readiness (NOT re-running reviewDesignDoc): ${readiness.message}`,
+          };
+        }
       }
       const { executeTool } = await import("@/lib/mcp-tools");
       const result = await executeTool("reviewDesignDoc", { buildId }, userId, { featureBuildId: buildId });
@@ -583,6 +607,37 @@ export async function resumePreBuildPhase(params: {
         } catch (err) {
           // Non-fatal — fall through to the normal plan resume path.
           console.warn("[resume-pre-build-phase] child intake heal failed:", { buildId }, err);
+        }
+
+        // Self-heal (BI-0B7C1A9E): the same gap, one field over. A child's
+        // designDoc lives on the column but never as a BuildArtifactRevision,
+        // and initiative readiness reads only the revision — so the child
+        // blocks on CANONICAL_DESIGN_REQUIRED forever. Mint the artifact from
+        // the design it already carries. Idempotent: no-op once an accepted
+        // revision exists. Fixed forward at child-creation time in
+        // approve-decomposition.ts; this heals children created before it.
+        try {
+          const { healDecompositionChildDesignArtifact } = await import(
+            "@/lib/build/decomposition-child-design-artifact"
+          );
+          const healed = await healDecompositionChildDesignArtifact({
+            child: {
+              buildId,
+              parentEpicId: build.parentEpicId,
+              designDoc: (build as { designDoc?: unknown }).designDoc ?? null,
+              createdById: (build as { createdById?: string | null }).createdById ?? null,
+            },
+          });
+          if (healed) {
+            return {
+              kind: "resumed",
+              phase,
+              via: "healDecompositionChildDesignArtifact",
+              detail: "minted the child's canonical design artifact; readiness can now resolve it",
+            };
+          }
+        } catch (err) {
+          console.warn("[resume-pre-build-phase] child design artifact heal failed:", { buildId }, err);
         }
       }
       if (!hasPlanTasks(build.buildPlan)) {

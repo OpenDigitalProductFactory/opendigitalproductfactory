@@ -648,6 +648,9 @@
     "apps/web/lib/change-review/semantic-change-review.ts": [
       "docs/architecture/agent-client-governance.md"
     ],
+    "apps/web/lib/compliance/format-retention-minimum.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/contracts/entity-contract-drift.ts": [
       "docs/architecture/package-boundaries.md"
     ],
@@ -901,6 +904,10 @@
     "apps/web/lib/navigation/section-nav-model.ts": [
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
+    ],
+    "apps/web/lib/nonprod/gate-client-revision.ts": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/install/platform-support-watchlist.md"
     ],
     "apps/web/lib/nonprod/host-resource-policy.ts": [
       "docs/architecture/dpf-patterns.md",
@@ -1611,6 +1618,9 @@
     ],
     "packages/integration-shared/src/mcp-catalog-tier.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
+    "packages/integration-shared/src/mcp-client-credential-policy.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "packages/storefront-templates/src/archetype-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md",
@@ -2631,6 +2641,7 @@
       "packages/db/src/capability-maturity.ts"
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
+      "apps/web/lib/compliance/format-retention-minimum.ts",
       "apps/web/lib/ea/table-growth.ts",
       "apps/web/lib/evidence/bounded-evidence-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
@@ -2687,6 +2698,7 @@
       "scripts/sbom/scan-dependencies.mjs"
     ],
     "docs/architecture/dpf-patterns.md": [
+      "apps/web/lib/nonprod/gate-client-revision.ts",
       "apps/web/lib/nonprod/host-resource-policy.ts",
       "apps/web/lib/nonprod/host-resource-profiles.json",
       "packages/db/prisma/schema/build-delivery.prisma",
@@ -2755,6 +2767,7 @@
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
+      "packages/integration-shared/src/mcp-client-credential-policy.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
@@ -2999,6 +3012,7 @@
       "apps/web/components/monitoring/health-summary.ts",
       "apps/web/components/monitoring/prometheus-config.test.ts",
       "apps/web/lib/govern/auth-redirect.ts",
+      "apps/web/lib/nonprod/gate-client-revision.ts",
       "docker-compose.edge-actions.yml",
       "docker-compose.linux.yml",
       "docker-entrypoint.sh",

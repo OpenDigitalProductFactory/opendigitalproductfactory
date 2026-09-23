@@ -31,6 +31,7 @@
 //   was a structural success that produced no functional truth. This wires
 //   the structural success to the functional dispatch.
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { classifyRetrySafePreDispatchFailure } from "./build-engine-selection";
@@ -66,7 +67,9 @@ type DispatchOutcome =
   | { kind: "skipped-already-has-design"; reason: string }
   | { kind: "skipped-no-provider"; reason: string }
   | { kind: "dispatched-success"; designDocKeys: string[]; durationMs: number }
-  | { kind: "dispatched-failure"; error: string; durationMs: number };
+  | { kind: "dispatched-failure"; error: string; durationMs: number }
+  /** BI-5098ECEC: the host was busy; nothing is known about the design and no repair round is spent. */
+  | { kind: "deferred-capacity"; reason: string; durationMs: number };
 
 /**
  * Auto-dispatch Ideate-phase design-doc research for an approved backlog-promoted
@@ -76,7 +79,7 @@ type DispatchOutcome =
  * @param buildId  FB-* semantic build id
  * @param userId   the approving user — used as the actor for the saveBuildEvidence call
  */
-export async function dispatchIdeateForApprovedBuild(params: {
+async function dispatchIdeateForApprovedBuildInner(params: {
   buildId: string;
   userId: string;
   /** Design-review fix loop: prior reviewer issues appended to the research
@@ -202,7 +205,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
       return outcome;
     }
 
-    const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const { getModelTier, deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
     const {
       getBuildStudioConfig,
       isModelTierRoutingEnabled,
@@ -224,7 +227,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
           sensitivity: deliverableSensitivity,
         })
       : undefined;
-    const routingSensitivity = deliverableSensitivity === "high" ? "confidential" as const : "internal" as const;
+    const routingSensitivity = mapBuildDeliverableToRoutingSensitivity(deliverableSensitivity);
 
     // Resolve the same task-qualified selection used by model-selection preview
     // and actual dispatch. A blocked result stops before phase work with one action.
@@ -369,6 +372,13 @@ export async function dispatchIdeateForApprovedBuild(params: {
       // back, then re-run the SAME attempt once — before this, the build sat
       // as a "model failure" until the 20-minute stale window plus the
       // 10-minute reconciler tick re-drove it.
+      if (ideateResult.capacityDeferred) {
+        // BI-5098ECEC: the host is busy, not broken. Waiting for the sandbox or
+        // switching engines cannot help; the stranded-build reconciler re-drives
+        // this build once the host frees. Stop here without a verdict.
+        await logActivity(`Ideate deferred: ${(ideateResult.error ?? "").slice(0, 220)}`);
+        return { kind: "deferred-capacity", reason: ideateResult.error ?? "capacity deferral", durationMs: Date.now() - startedAt };
+      }
       if (ideateResult.infrastructure && !infrastructureRetried) {
         infrastructureRetried = true;
         await logActivity(
@@ -506,13 +516,15 @@ export async function dispatchIdeateForApprovedBuild(params: {
       try {
         const { shouldRunPreSpecResearch, conductPreSpecResearch, formatResearchReportMarkdown, makeInferenceResearchDeps } =
           await import("@/lib/build/pre-spec-research");
-        const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+        const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
         const sensitivity = deriveDeliverableSensitivity({ text: `${featureTitle}\n${featureDescription}`, workType: bi.workType });
+        const researchRouteSensitivity = mapBuildDeliverableToRoutingSensitivity(sensitivity);
         if (shouldRunPreSpecResearch({ workType: bi.workType, effortSize: bi.effortSize, sensitivity })) {
           const { searchPublicWeb, fetchPublicWebsiteEvidence } = await import("@/lib/public-web-tools");
           const { routeAndCall } = await import("@/lib/routed-inference");
+          const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
           const deps = makeInferenceResearchDeps({
-            llm: async (p) => (await routeAndCall([{ role: "user" as const, content: p }], "You are a research assistant. Follow the output format exactly.", "internal", { budgetClass: "minimize_cost" })).content,
+            llm: async (p) => (await routeAndCall([{ role: "user" as const, content: p }], "You are a research assistant. Follow the output format exactly.", researchRouteSensitivity, { ...BUILD_PHASE_ROUTE_OPTIONS, budgetClass: "minimize_cost" })).content,
             search: async (q) => (await searchPublicWeb(q)).map((r) => ({ title: r.title, url: r.url, description: r.snippet })),
             fetchSource: async (u) => { const e = await fetchPublicWebsiteEvidence(u); return { title: e.title, textExcerpt: e.textExcerpt }; },
           });
@@ -788,11 +800,12 @@ export async function dispatchDesignReviewFixLoop(params: {
         let raw: unknown = null;
         try {
           const { routeAndCall } = await import("@/lib/inference/routed-inference");
+          const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
           const answer = await routeAndCall(
             [{ role: "user", content: prompt }],
             "You are the design author diagnosing a defect you will then plan against.",
             "development",
-            { taskType: "conversation" },
+            { ...BUILD_PHASE_ROUTE_OPTIONS, taskType: "conversation" },
           );
           raw = answer?.content ?? null;
         } catch (err) {
@@ -862,6 +875,13 @@ export async function dispatchDesignReviewFixLoop(params: {
       await log(`Design review failed — regenerating (round ${round}/${DESIGN_FIX_MAX_ROUNDS}) against ${review.issues?.length ?? 0} issue(s)`);
       const feedback = formatPlanReviewFeedback(review.issues ?? []);
       const regen = await dispatchIdeateForApprovedBuild({ buildId, userId, priorReviewFeedback: feedback });
+      if (regen.kind === "deferred-capacity") {
+        // BI-5098ECEC: a busy host says nothing about the design. Give the round
+        // back and stop; the reconciler resumes the loop when the host frees.
+        round -= 1;
+        await log(`Design regeneration deferred — host busy; round not consumed (${regen.reason.slice(0, 160)}).`);
+        break;
+      }
       if (regen.kind !== "dispatched-success") {
         // BI-E492F313: this used to `break`, so ONE infrastructure failure both
         // consumed a round and abandoned the rest — the advertised "round 1/2"
@@ -917,4 +937,11 @@ export async function dispatchDesignReviewFixLoop(params: {
     await log(`Design fix loop error: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`);
     return { kind: "error", rounds: 0 };
   }
+}
+
+/** Build-phase entry: runs under the autonomous inference origin (BI-2F9DE752). */
+export function dispatchIdeateForApprovedBuild(
+  params: Parameters<typeof dispatchIdeateForApprovedBuildInner>[0],
+): ReturnType<typeof dispatchIdeateForApprovedBuildInner> {
+  return runAsBuildPhase(() => dispatchIdeateForApprovedBuildInner(params));
 }

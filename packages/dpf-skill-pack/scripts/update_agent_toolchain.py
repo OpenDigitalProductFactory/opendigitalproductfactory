@@ -700,6 +700,14 @@ def mcp_client_bearer_header_required(endpoint: str, client: str = "claude", aut
         return True
 
 
+# Python mirror of MCP_CLIENT_OAUTH_SCOPE_PIN in
+# packages/integration-shared/src/mcp-client-credential-policy.ts (BI-3D2FD68C).
+# Over https the client authorizes by OAuth and asks for only the scope the
+# portal advertises (read); this pin is what lets the consent grant the write
+# scopes platform work needs. Keep the two in lockstep, like the predicate above.
+MCP_CLIENT_OAUTH_SCOPE_PIN = "dpf.read dpf.work dpf.build"
+
+
 def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
     """Keep the packaged Claude MCP descriptor current for standalone installs.
 
@@ -716,6 +724,10 @@ def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: 
     }
     if mcp_client_bearer_header_required(lazy_host_mcp_url):
         server["headers"] = {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"}
+    else:
+        # BI-3D2FD68C: the OAuth path needs the scope pin or the consent grants
+        # read only and every write tool stays out of reach.
+        server["oauth"] = {"scopes": MCP_CLIENT_OAUTH_SCOPE_PIN}
     content = json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n"
     if dry_run:
         return True
@@ -1131,6 +1143,7 @@ GROK_HOOK_GUARDS = (
     "lease-guard.mjs",
     "root-clone-guard.mjs",
     "compose-guard.mjs",
+    "raw-tool-guard.mjs",
     "portal-image-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
     "pregate-evidence-guard.mjs",
@@ -1377,6 +1390,8 @@ CODEX_BASH_GUARDS = (
     "lease-guard.mjs",
     "root-clone-guard.mjs",
     "compose-guard.mjs",
+    # BI-F87BD9BF: raw tsc / root-level vitest / npx refused with the routine named.
+    "raw-tool-guard.mjs",
     "portal-image-guard.mjs",
     "lease-punt-guard.mjs",
     "pregate-evidence-guard.mjs",

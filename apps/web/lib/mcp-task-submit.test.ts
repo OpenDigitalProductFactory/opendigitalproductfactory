@@ -1,3 +1,4 @@
+import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "./source-page-lines";
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
@@ -79,6 +80,11 @@ beforeEach(() => {
     budgetClass: "quality_first",
     pinnedProviderId: "local",
     pinnedModelId: "huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M",
+    // BI-8CFA1CA8: residency is stated on the config, not inferred from the
+    // local pin. The migration writes exactly this for every config that was
+    // local-pinned, so this fixture is what a real post-migration row holds —
+    // and the local_only assertion below still guards the same guarantee.
+    residencyPolicy: "local_only",
   });
   db.upsertThread.mockResolvedValue({ id: "thread-external" });
   db.update.mockResolvedValue({});
@@ -357,6 +363,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         budgetClass: true,
         pinnedProviderId: true,
         pinnedModelId: true,
+        residencyPolicy: true,
       },
     });
   });
@@ -462,8 +469,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
         startLine: expect.objectContaining({ type: "number", minimum: 1 }),
         cursor: expect.objectContaining({ type: "string" }),
-        maxLines: expect.objectContaining({ type: "number", maximum: 200 }),
-        maxChars: expect.objectContaining({ type: "number", maximum: 3200 }),
+        maxLines: expect.objectContaining({ type: "number", maximum: SOURCE_READ_MAX_LINES }),
+        maxChars: expect.objectContaining({ type: "number", maximum: SOURCE_READ_MAX_CHARS }),
         expectedBlobId: { type: "string", enum: [initiativeReviewBinding.artifactRef.providerBlobId] },
       },
       required: ["repositoryFullName", "path", "version", "expectedBlobId"],

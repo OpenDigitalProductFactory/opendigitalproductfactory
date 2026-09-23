@@ -719,6 +719,14 @@ export async function runPrincipleDecision(
     optionDescriptions: Object.fromEntries(
       decisionOptions.map((o) => [o.id, o.description]),
     ),
+    // BI-F302B80E: record the MENU, not only the pick. Without it the row can
+    // be counted but never learned from — the weight-inference adapter needs
+    // the scored features beside the recommendation and the later outcome.
+    scoredOptions: decisionOptions.map((o) => ({
+      id: o.id,
+      description: o.description,
+      features: o.features,
+    })),
     appliedPrincipleCount: cappedPrinciples.length,
     callingSurface,
     routeContext: context?.routeContext ?? null,

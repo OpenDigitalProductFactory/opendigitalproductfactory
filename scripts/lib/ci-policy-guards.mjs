@@ -777,6 +777,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       ),
       node("--test", "packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
+      // BI-F87BD9BF: raw tsc / root-level vitest / npx are refused with the
+      // checked-in routine named, instead of costing an OOM and a retry.
+      node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the

@@ -1,3 +1,4 @@
+import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { persistedTerminalReaderExecutions, reserveTerminalWriterReplay } from "./mcp-task-terminal-writer-recovery";
 import { prisma, type Prisma } from "@dpf/db";
 import { loadTaskInitiativeReviewOutcome, reconcilePersistedReviewStatus } from "./mcp-task-review-outcome";
@@ -429,8 +430,8 @@ export async function submitRemoteCoworkerTask(input: {
             args: {
               ...immutableReaderArguments,
               startLine: 1,
-              maxLines: 200,
-              maxChars: 3_200,
+              maxLines: SOURCE_READ_DEFAULT_MAX_LINES,
+              maxChars: SOURCE_READ_DEFAULT_MAX_CHARS,
             },
             userId: token.userId,
             userContext,

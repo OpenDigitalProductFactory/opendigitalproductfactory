@@ -1,4 +1,4 @@
-import { sourcePageEndLine, sourcePageNextLine } from "./source-page-lines";
+import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES, sourcePageEndLine, sourcePageNextLine } from "./source-page-lines";
 import { findingEvidenceMatchesRead, type InitiativeFindingEvidence } from "./backlog/initiative-readiness/disposition-contract";
 import {
   normalizeTerminalToolArguments,
@@ -11,9 +11,13 @@ import {
   type ActionSuccess,
 } from "./shared/action-result";
 
-const MAX_PAGE_CHARS = 3_200;
+// The reader's own page ceiling (BI-E8237EAE): a page it served is never "oversize".
+const MAX_PAGE_CHARS = SOURCE_READ_MAX_CHARS;
 const MAX_HYDRATED_CHARS = 64_000;
-const MAX_HYDRATION_PAGES = Math.ceil(MAX_HYDRATED_CHARS / MAX_PAGE_CHARS);
+// A page COUNT, not derived from the page size: persisted histories read at the
+// historical 3,200-char page still need 20 pages to cover 64k, and a larger
+// reader page must never shrink how much of that history can be rehydrated.
+const MAX_HYDRATION_PAGES = 20;
 
 export type PersistedTerminalReaderExecution = {
   id: string;
@@ -378,7 +382,7 @@ export async function hydrateTerminalWriterContext(input: {
   for (let index = 0; index < MAX_HYDRATION_PAGES; index += 1) {
     const args: Record<string, unknown> = {
       ...binding,
-      maxLines: 200,
+      maxLines: SOURCE_READ_MAX_LINES,
       maxChars: MAX_PAGE_CHARS,
       ...(cursor ? { cursor } : { startLine: 1 }),
     };
@@ -442,7 +446,7 @@ export async function verifyTerminalWriterCitation(input: {
   const pages: HydrationPageEvidence[] = [];
   let cursor: string | undefined;
   for (let index = 0; index < MAX_HYDRATION_PAGES; index += 1) {
-    const args = { ...binding, maxLines: Math.min(200, evidence.endLine - evidence.startLine + 1),
+    const args = { ...binding, maxLines: Math.min(SOURCE_READ_MAX_LINES, evidence.endLine - evidence.startLine + 1),
       maxChars: MAX_PAGE_CHARS, ...(cursor ? { cursor } : { startLine: evidence.startLine }) };
     const result = await input.readPage(args);
     if (!result.success) return hydrationFailure(result.error ?? "terminal_writer_context_read_failed", result.message);
