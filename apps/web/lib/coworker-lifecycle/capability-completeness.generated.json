@@ -154,7 +154,7 @@
       "defined-roster": {
         "count": 8,
         "meaning": "Declared in the canonical registry (not active) and seeded onto the roster.",
-        "medianAttainablePct": 68
+        "medianAttainablePct": 76
       },
       "declared-only": {
         "count": 6,
@@ -179,8 +179,8 @@
       "posturedAgents": 33
     },
     "atFullAttainable": 30,
-    "medianAttainablePct": 68,
-    "medianAbsolutePct": 63,
+    "medianAttainablePct": 76,
+    "medianAbsolutePct": 70,
     "planeLevels": {
       "identity": {
         "label": "Identity",
@@ -240,9 +240,9 @@
         "ceiling": 3,
         "blocker": null,
         "distribution": {
-          "0": 52,
+          "0": 46,
           "1": 0,
-          "2": 3,
+          "2": 9,
           "3": 32
         },
         "atCeiling": 32
@@ -437,7 +437,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -487,7 +487,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -574,7 +574,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -624,7 +624,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -711,7 +711,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -760,7 +760,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -847,7 +847,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -897,7 +897,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -984,7 +984,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -1037,7 +1037,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -1124,7 +1124,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -1176,7 +1176,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -1263,7 +1263,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -1312,7 +1312,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -1399,7 +1399,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -1448,7 +1448,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -1535,7 +1535,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -1587,7 +1587,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -1674,7 +1674,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -1724,7 +1724,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -1811,7 +1811,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -1860,7 +1860,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -1947,7 +1947,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -2004,7 +2004,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -2091,7 +2091,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -2141,7 +2141,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -2228,7 +2228,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -2278,7 +2278,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -2365,7 +2365,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -2414,7 +2414,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -2501,7 +2501,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -2551,7 +2551,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -2638,7 +2638,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -2687,7 +2687,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -2774,7 +2774,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -2823,7 +2823,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -2910,7 +2910,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -2960,7 +2960,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -3047,7 +3047,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -3096,7 +3096,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -3183,7 +3183,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -3232,7 +3232,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -3319,7 +3319,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -3369,7 +3369,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -3456,7 +3456,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -3505,7 +3505,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -3592,7 +3592,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -3642,7 +3642,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -3729,7 +3729,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -3779,7 +3779,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -3866,7 +3866,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -3915,7 +3915,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -4002,7 +4002,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -4054,7 +4054,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -4141,7 +4141,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -4190,7 +4190,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -4277,7 +4277,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -4333,7 +4333,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -4420,7 +4420,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -4471,7 +4471,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -4558,7 +4558,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -4612,7 +4612,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -4699,7 +4699,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -4749,7 +4749,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -4836,7 +4836,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -4886,7 +4886,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -4973,7 +4973,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -5022,7 +5022,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -5109,7 +5109,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -5159,7 +5159,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -5246,7 +5246,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -5295,7 +5295,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -5382,7 +5382,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -5431,7 +5431,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -5518,7 +5518,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -5570,7 +5570,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -5657,7 +5657,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -5713,399 +5713,13 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "evidence",
           "level": 0,
           "ceiling": 2,
           "detail": "not on the roster, so the certification sweep never exercises it"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "AGT-906",
-      "displayName": "UX Design Critic",
-      "identityClass": "defined-roster",
-      "handles": [
-        "ux-design-critic"
-      ],
-      "registryStatus": "defined",
-      "valueStream": "evaluate",
-      "tier": "cross-cutting",
-      "score": {
-        "earned": 17,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 68,
-        "absolutePct": 63
-      },
-      "planes": {
-        "identity": {
-          "level": 2,
-          "detail": "bridged, but registry status is \"defined\"",
-          "handles": [
-            "ux-design-critic"
-          ],
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 3,
-          "professionKey": "ux-design",
-          "corpusPages": 12,
-          "missingGrants": [],
-          "detail": "12 corpus pages, reachable",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "governance": {
-          "level": 3,
-          "missingGrants": [],
-          "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 26,
-          "reachableGatedTools": 3,
-          "ungatedConsequenceNote": null,
-          "detail": "principle_decide reachable; escalates to HR-300",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "shape": {
-          "level": 2,
-          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 1,
-          "directSkills": 0,
-          "wildcardSkills": 10,
-          "reachableTools": 80,
-          "heldGrants": [
-            "browser_read",
-            "coworker_screen_read",
-            "document_read",
-            "document_write",
-            "spec_plan_read",
-            "backlog_read",
-            "portfolio_read",
-            "code_graph_read",
-            "deliberation_create",
-            "deliberation_read",
-            "decision_record_create",
-            "registry_read"
-          ],
-          "services": 1,
-          "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 80 reachable tool(s)",
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 2,
-          "detail": "curated golden journey exercising a domain act",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "bridged, but registry status is \"defined\""
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 80 reachable tool(s)"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "AGT-907",
-      "displayName": "Bookkeeper",
-      "identityClass": "defined-roster",
-      "handles": [
-        "bookkeeper"
-      ],
-      "registryStatus": "defined",
-      "valueStream": "operate",
-      "tier": "operate",
-      "score": {
-        "earned": 17,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 68,
-        "absolutePct": 63
-      },
-      "planes": {
-        "identity": {
-          "level": 2,
-          "detail": "bridged, but registry status is \"defined\"",
-          "handles": [
-            "bookkeeper"
-          ],
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 3,
-          "professionKey": "finance",
-          "corpusPages": 11,
-          "missingGrants": [],
-          "detail": "11 corpus pages, reachable",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "governance": {
-          "level": 3,
-          "missingGrants": [],
-          "escalatesTo": "HR-400",
-          "reachableSideEffectingTools": 34,
-          "reachableGatedTools": 10,
-          "ungatedConsequenceNote": null,
-          "detail": "principle_decide reachable; escalates to HR-400",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "shape": {
-          "level": 2,
-          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 1,
-          "directSkills": 0,
-          "wildcardSkills": 10,
-          "reachableTools": 77,
-          "heldGrants": [
-            "banking_read",
-            "banking_write",
-            "enrichment_write",
-            "crm_read",
-            "crm_write",
-            "document_read",
-            "work_room_read",
-            "work_room_write",
-            "registry_read",
-            "backlog_read"
-          ],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 77 reachable tool(s)",
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 2,
-          "detail": "curated golden journey exercising a domain act",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "bridged, but registry status is \"defined\""
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 77 reachable tool(s)"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "AGT-WS-INTEGRATION",
-      "displayName": "MCP & Integration Engineer",
-      "identityClass": "defined-roster",
-      "handles": [
-        "integration-engineer"
-      ],
-      "registryStatus": "draft",
-      "valueStream": "integrate",
-      "tier": "specialist",
-      "score": {
-        "earned": 17,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 68,
-        "absolutePct": 63
-      },
-      "planes": {
-        "identity": {
-          "level": 2,
-          "detail": "bridged, but registry status is \"draft\"",
-          "handles": [
-            "integration-engineer"
-          ],
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 3,
-          "professionKey": "mcp-integration",
-          "corpusPages": 4,
-          "missingGrants": [],
-          "detail": "4 corpus pages, reachable",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "governance": {
-          "level": 3,
-          "missingGrants": [],
-          "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 56,
-          "reachableGatedTools": 12,
-          "ungatedConsequenceNote": null,
-          "detail": "principle_decide reachable; escalates to AGT-ORCH-300",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "shape": {
-          "level": 2,
-          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 1,
-          "directSkills": 0,
-          "wildcardSkills": 10,
-          "reachableTools": 111,
-          "heldGrants": [
-            "file_read",
-            "architecture_read",
-            "backlog_read",
-            "backlog_write",
-            "registry_read",
-            "tool_script_exec",
-            "web_search"
-          ],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 111 reachable tool(s)",
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 2,
-          "detail": "curated golden journey exercising a domain act",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "bridged, but registry status is \"draft\""
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 111 reachable tool(s)"
         }
       ],
       "blockedPlanes": [
@@ -6180,7 +5794,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -6226,134 +5840,13 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
           "detail": "no skill authored for it (10 wildcard only), 113 reachable tool(s)"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "AGT-WS-TIME-OFF",
-      "displayName": "Time-off Advisor",
-      "identityClass": "defined-roster",
-      "handles": [
-        "time-off-advisor"
-      ],
-      "registryStatus": "draft",
-      "valueStream": "operate",
-      "tier": "specialist",
-      "score": {
-        "earned": 17,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 68,
-        "absolutePct": 63
-      },
-      "planes": {
-        "identity": {
-          "level": 2,
-          "detail": "bridged, but registry status is \"draft\"",
-          "handles": [
-            "time-off-advisor"
-          ],
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 3,
-          "professionKey": "hr-people-ops",
-          "corpusPages": 8,
-          "missingGrants": [],
-          "detail": "8 corpus pages, reachable",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "governance": {
-          "level": 3,
-          "missingGrants": [],
-          "escalatesTo": "AGT-WS-HR",
-          "reachableSideEffectingTools": 24,
-          "reachableGatedTools": 3,
-          "ungatedConsequenceNote": null,
-          "detail": "principle_decide reachable; escalates to AGT-WS-HR",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "shape": {
-          "level": 2,
-          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 1,
-          "directSkills": 0,
-          "wildcardSkills": 10,
-          "reachableTools": 38,
-          "heldGrants": [
-            "consumer_read",
-            "registry_read"
-          ],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 38 reachable tool(s)",
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 2,
-          "detail": "curated golden journey exercising a domain act",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "bridged, but registry status is \"draft\""
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 38 reachable tool(s)"
         }
       ],
       "blockedPlanes": [
@@ -6428,7 +5921,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -6469,13 +5962,520 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
           "detail": "no skill authored for it (10 wildcard only), 76 reachable tool(s)"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-906",
+      "displayName": "UX Design Critic",
+      "identityClass": "defined-roster",
+      "handles": [
+        "ux-design-critic"
+      ],
+      "registryStatus": "defined",
+      "valueStream": "evaluate",
+      "tier": "cross-cutting",
+      "score": {
+        "earned": 19,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 76,
+        "absolutePct": 70
+      },
+      "planes": {
+        "identity": {
+          "level": 2,
+          "detail": "bridged, but registry status is \"defined\"",
+          "handles": [
+            "ux-design-critic"
+          ],
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 3,
+          "professionKey": "ux-design",
+          "corpusPages": 12,
+          "missingGrants": [],
+          "detail": "12 corpus pages, reachable",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "governance": {
+          "level": 3,
+          "missingGrants": [],
+          "escalatesTo": "HR-300",
+          "reachableSideEffectingTools": 26,
+          "reachableGatedTools": 3,
+          "ungatedConsequenceNote": null,
+          "detail": "principle_decide reachable; escalates to HR-300",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "shape": {
+          "level": 2,
+          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 2,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 1,
+          "directSkills": 0,
+          "wildcardSkills": 10,
+          "reachableTools": 80,
+          "heldGrants": [
+            "browser_read",
+            "coworker_screen_read",
+            "document_read",
+            "document_write",
+            "spec_plan_read",
+            "backlog_read",
+            "portfolio_read",
+            "code_graph_read",
+            "deliberation_create",
+            "deliberation_read",
+            "decision_record_create",
+            "registry_read"
+          ],
+          "services": 1,
+          "unbackedSkillIds": [],
+          "detail": "no skill authored for it (10 wildcard only), 80 reachable tool(s)",
+          "levelKey": "declared",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "evidence": {
+          "level": 2,
+          "detail": "curated golden journey exercising a domain act",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "bridged, but registry status is \"defined\""
+        },
+        {
+          "plane": "cadence",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven"
+        },
+        {
+          "plane": "toolsAndSkills",
+          "level": 1,
+          "ceiling": 3,
+          "detail": "no skill authored for it (10 wildcard only), 80 reachable tool(s)"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-907",
+      "displayName": "Bookkeeper",
+      "identityClass": "defined-roster",
+      "handles": [
+        "bookkeeper"
+      ],
+      "registryStatus": "defined",
+      "valueStream": "operate",
+      "tier": "operate",
+      "score": {
+        "earned": 19,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 76,
+        "absolutePct": 70
+      },
+      "planes": {
+        "identity": {
+          "level": 2,
+          "detail": "bridged, but registry status is \"defined\"",
+          "handles": [
+            "bookkeeper"
+          ],
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 3,
+          "professionKey": "finance",
+          "corpusPages": 11,
+          "missingGrants": [],
+          "detail": "11 corpus pages, reachable",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "governance": {
+          "level": 3,
+          "missingGrants": [],
+          "escalatesTo": "HR-400",
+          "reachableSideEffectingTools": 34,
+          "reachableGatedTools": 10,
+          "ungatedConsequenceNote": null,
+          "detail": "principle_decide reachable; escalates to HR-400",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "shape": {
+          "level": 2,
+          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 2,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 1,
+          "directSkills": 0,
+          "wildcardSkills": 10,
+          "reachableTools": 77,
+          "heldGrants": [
+            "banking_read",
+            "banking_write",
+            "enrichment_write",
+            "crm_read",
+            "crm_write",
+            "document_read",
+            "work_room_read",
+            "work_room_write",
+            "registry_read",
+            "backlog_read"
+          ],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "no skill authored for it (10 wildcard only), 77 reachable tool(s)",
+          "levelKey": "declared",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "evidence": {
+          "level": 2,
+          "detail": "curated golden journey exercising a domain act",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "bridged, but registry status is \"defined\""
+        },
+        {
+          "plane": "cadence",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven"
+        },
+        {
+          "plane": "toolsAndSkills",
+          "level": 1,
+          "ceiling": 3,
+          "detail": "no skill authored for it (10 wildcard only), 77 reachable tool(s)"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-WS-INTEGRATION",
+      "displayName": "MCP & Integration Engineer",
+      "identityClass": "defined-roster",
+      "handles": [
+        "integration-engineer"
+      ],
+      "registryStatus": "draft",
+      "valueStream": "integrate",
+      "tier": "specialist",
+      "score": {
+        "earned": 19,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 76,
+        "absolutePct": 70
+      },
+      "planes": {
+        "identity": {
+          "level": 2,
+          "detail": "bridged, but registry status is \"draft\"",
+          "handles": [
+            "integration-engineer"
+          ],
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 3,
+          "professionKey": "mcp-integration",
+          "corpusPages": 4,
+          "missingGrants": [],
+          "detail": "4 corpus pages, reachable",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "governance": {
+          "level": 3,
+          "missingGrants": [],
+          "escalatesTo": "AGT-ORCH-300",
+          "reachableSideEffectingTools": 56,
+          "reachableGatedTools": 12,
+          "ungatedConsequenceNote": null,
+          "detail": "principle_decide reachable; escalates to AGT-ORCH-300",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "shape": {
+          "level": 2,
+          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 2,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 1,
+          "directSkills": 0,
+          "wildcardSkills": 10,
+          "reachableTools": 111,
+          "heldGrants": [
+            "file_read",
+            "architecture_read",
+            "backlog_read",
+            "backlog_write",
+            "registry_read",
+            "tool_script_exec",
+            "web_search"
+          ],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "no skill authored for it (10 wildcard only), 111 reachable tool(s)",
+          "levelKey": "declared",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "evidence": {
+          "level": 2,
+          "detail": "curated golden journey exercising a domain act",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "bridged, but registry status is \"draft\""
+        },
+        {
+          "plane": "cadence",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven"
+        },
+        {
+          "plane": "toolsAndSkills",
+          "level": 1,
+          "ceiling": 3,
+          "detail": "no skill authored for it (10 wildcard only), 111 reachable tool(s)"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-WS-TIME-OFF",
+      "displayName": "Time-off Advisor",
+      "identityClass": "defined-roster",
+      "handles": [
+        "time-off-advisor"
+      ],
+      "registryStatus": "draft",
+      "valueStream": "operate",
+      "tier": "specialist",
+      "score": {
+        "earned": 19,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 76,
+        "absolutePct": 70
+      },
+      "planes": {
+        "identity": {
+          "level": 2,
+          "detail": "bridged, but registry status is \"draft\"",
+          "handles": [
+            "time-off-advisor"
+          ],
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 3,
+          "professionKey": "hr-people-ops",
+          "corpusPages": 8,
+          "missingGrants": [],
+          "detail": "8 corpus pages, reachable",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "governance": {
+          "level": 3,
+          "missingGrants": [],
+          "escalatesTo": "AGT-WS-HR",
+          "reachableSideEffectingTools": 24,
+          "reachableGatedTools": 3,
+          "ungatedConsequenceNote": null,
+          "detail": "principle_decide reachable; escalates to AGT-WS-HR",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "shape": {
+          "level": 2,
+          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 2,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 1,
+          "directSkills": 0,
+          "wildcardSkills": 10,
+          "reachableTools": 38,
+          "heldGrants": [
+            "consumer_read",
+            "registry_read"
+          ],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "no skill authored for it (10 wildcard only), 38 reachable tool(s)",
+          "levelKey": "declared",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "evidence": {
+          "level": 2,
+          "detail": "curated golden journey exercising a domain act",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "bridged, but registry status is \"draft\""
+        },
+        {
+          "plane": "cadence",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven"
+        },
+        {
+          "plane": "toolsAndSkills",
+          "level": 1,
+          "ceiling": 3,
+          "detail": "no skill authored for it (10 wildcard only), 38 reachable tool(s)"
         }
       ],
       "blockedPlanes": [
@@ -6550,7 +6550,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -6602,7 +6602,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -6683,7 +6683,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -6724,7 +6724,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "toolsAndSkills",
@@ -6805,7 +6805,7 @@
         },
         "cadence": {
           "level": 2,
-          "detail": "COWORKER_SELF_TASKS entry driven by its Proactivity setting",
+          "detail": "declares a self-task entry, so a rhythm exists to be driven",
           "levelKey": "reachable",
           "ceiling": 3,
           "atCeiling": false
@@ -6843,254 +6843,13 @@
           "plane": "cadence",
           "level": 2,
           "ceiling": 3,
-          "detail": "COWORKER_SELF_TASKS entry driven by its Proactivity setting"
+          "detail": "declares a self-task entry, so a rhythm exists to be driven"
         },
         {
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
           "detail": "no skill authored for it (10 wildcard only), 52 reachable tool(s)"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "AGT-ORCH-000",
-      "displayName": "COO",
-      "identityClass": "defined-roster",
-      "handles": [
-        "coo",
-        "coo-orchestrator"
-      ],
-      "registryStatus": "defined",
-      "valueStream": "cross-cutting",
-      "tier": "orchestrator",
-      "score": {
-        "earned": 21,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 84,
-        "absolutePct": 78
-      },
-      "planes": {
-        "identity": {
-          "level": 2,
-          "detail": "bridged, but registry status is \"defined\"",
-          "handles": [
-            "coo",
-            "coo-orchestrator"
-          ],
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 3,
-          "professionKey": "strategy-executive",
-          "corpusPages": 6,
-          "missingGrants": [],
-          "detail": "6 corpus pages, reachable",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "governance": {
-          "level": 3,
-          "missingGrants": [],
-          "escalatesTo": "HR-000",
-          "reachableSideEffectingTools": 65,
-          "reachableGatedTools": 18,
-          "ungatedConsequenceNote": null,
-          "detail": "principle_decide reachable; escalates to HR-000",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "shape": {
-          "level": 2,
-          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 3,
-          "directSkills": 5,
-          "wildcardSkills": 10,
-          "reachableTools": 106,
-          "heldGrants": [
-            "portfolio_read",
-            "registry_read",
-            "backlog_read",
-            "backlog_write",
-            "agent_control_read",
-            "email_config",
-            "thread_write"
-          ],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "5 skill(s), 106 tool(s), all service backings resolve",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "evidence": {
-          "level": 2,
-          "detail": "curated golden journey exercising a domain act",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "bridged, but registry status is \"defined\""
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "AGT-WS-FARM-RANCH",
-      "displayName": "Farm & Ranch Steward",
-      "identityClass": "defined-roster",
-      "handles": [
-        "farm-ranch-steward"
-      ],
-      "registryStatus": "draft",
-      "valueStream": "operate",
-      "tier": "specialist",
-      "score": {
-        "earned": 21,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 84,
-        "absolutePct": 78
-      },
-      "planes": {
-        "identity": {
-          "level": 2,
-          "detail": "bridged, but registry status is \"draft\"",
-          "handles": [
-            "farm-ranch-steward"
-          ],
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 3,
-          "professionKey": "agricultural-operations",
-          "corpusPages": 4,
-          "missingGrants": [],
-          "detail": "4 corpus pages, reachable",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "governance": {
-          "level": 3,
-          "missingGrants": [],
-          "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 57,
-          "reachableGatedTools": 12,
-          "ungatedConsequenceNote": null,
-          "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "shape": {
-          "level": 2,
-          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 3,
-          "directSkills": 1,
-          "wildcardSkills": 10,
-          "reachableTools": 112,
-          "heldGrants": [
-            "registry_read",
-            "backlog_read",
-            "backlog_write",
-            "consumer_read",
-            "web_search",
-            "file_read"
-          ],
-          "services": 1,
-          "unbackedSkillIds": [],
-          "detail": "1 skill(s), 112 tool(s), all service backings resolve",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "evidence": {
-          "level": 2,
-          "detail": "curated golden journey exercising a domain act",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "bridged, but registry status is \"draft\""
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
         }
       ],
       "blockedPlanes": [
@@ -7165,7 +6924,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -7206,7 +6965,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         }
       ],
       "blockedPlanes": [
@@ -7281,7 +7040,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -7322,7 +7081,7 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
         },
         {
           "plane": "evidence",
@@ -7403,7 +7162,7 @@
         },
         "cadence": {
           "level": 2,
-          "detail": "COWORKER_SELF_TASKS entry driven by its Proactivity setting",
+          "detail": "declares a self-task entry, so a rhythm exists to be driven",
           "levelKey": "reachable",
           "ceiling": 3,
           "atCeiling": false
@@ -7441,7 +7200,7 @@
           "plane": "cadence",
           "level": 2,
           "ceiling": 3,
-          "detail": "COWORKER_SELF_TASKS entry driven by its Proactivity setting"
+          "detail": "declares a self-task entry, so a rhythm exists to be driven"
         },
         {
           "plane": "toolsAndSkills",
@@ -7522,7 +7281,7 @@
         },
         "cadence": {
           "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "detail": "no recurring trigger — nothing makes this coworker act unasked",
           "levelKey": "absent",
           "ceiling": 3,
           "atCeiling": false
@@ -7559,7 +7318,248 @@
           "plane": "cadence",
           "level": 0,
           "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+          "detail": "no recurring trigger — nothing makes this coworker act unasked"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-ORCH-000",
+      "displayName": "COO",
+      "identityClass": "defined-roster",
+      "handles": [
+        "coo",
+        "coo-orchestrator"
+      ],
+      "registryStatus": "defined",
+      "valueStream": "cross-cutting",
+      "tier": "orchestrator",
+      "score": {
+        "earned": 23,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 92,
+        "absolutePct": 85
+      },
+      "planes": {
+        "identity": {
+          "level": 2,
+          "detail": "bridged, but registry status is \"defined\"",
+          "handles": [
+            "coo",
+            "coo-orchestrator"
+          ],
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 3,
+          "professionKey": "strategy-executive",
+          "corpusPages": 6,
+          "missingGrants": [],
+          "detail": "6 corpus pages, reachable",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "governance": {
+          "level": 3,
+          "missingGrants": [],
+          "escalatesTo": "HR-000",
+          "reachableSideEffectingTools": 65,
+          "reachableGatedTools": 18,
+          "ungatedConsequenceNote": null,
+          "detail": "principle_decide reachable; escalates to HR-000",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "shape": {
+          "level": 2,
+          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 2,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 3,
+          "directSkills": 5,
+          "wildcardSkills": 10,
+          "reachableTools": 106,
+          "heldGrants": [
+            "portfolio_read",
+            "registry_read",
+            "backlog_read",
+            "backlog_write",
+            "agent_control_read",
+            "email_config",
+            "thread_write"
+          ],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "5 skill(s), 106 tool(s), all service backings resolve",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "evidence": {
+          "level": 2,
+          "detail": "curated golden journey exercising a domain act",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "bridged, but registry status is \"defined\""
+        },
+        {
+          "plane": "cadence",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-WS-FARM-RANCH",
+      "displayName": "Farm & Ranch Steward",
+      "identityClass": "defined-roster",
+      "handles": [
+        "farm-ranch-steward"
+      ],
+      "registryStatus": "draft",
+      "valueStream": "operate",
+      "tier": "specialist",
+      "score": {
+        "earned": 23,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 92,
+        "absolutePct": 85
+      },
+      "planes": {
+        "identity": {
+          "level": 2,
+          "detail": "bridged, but registry status is \"draft\"",
+          "handles": [
+            "farm-ranch-steward"
+          ],
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 3,
+          "professionKey": "agricultural-operations",
+          "corpusPages": 4,
+          "missingGrants": [],
+          "detail": "4 corpus pages, reachable",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "governance": {
+          "level": 3,
+          "missingGrants": [],
+          "escalatesTo": "AGT-ORCH-000",
+          "reachableSideEffectingTools": 57,
+          "reachableGatedTools": 12,
+          "ungatedConsequenceNote": null,
+          "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "shape": {
+          "level": 2,
+          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 2,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 3,
+          "directSkills": 1,
+          "wildcardSkills": 10,
+          "reachableTools": 112,
+          "heldGrants": [
+            "registry_read",
+            "backlog_read",
+            "backlog_write",
+            "consumer_read",
+            "web_search",
+            "file_read"
+          ],
+          "services": 1,
+          "unbackedSkillIds": [],
+          "detail": "1 skill(s), 112 tool(s), all service backings resolve",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "evidence": {
+          "level": 2,
+          "detail": "curated golden journey exercising a domain act",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "bridged, but registry status is \"draft\""
+        },
+        {
+          "plane": "cadence",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "declares a self-task entry, so a rhythm exists to be driven"
         }
       ],
       "blockedPlanes": [
@@ -7859,7 +7859,7 @@
         },
         "cadence": {
           "level": 2,
-          "detail": "COWORKER_SELF_TASKS entry driven by its Proactivity setting",
+          "detail": "declares a self-task entry, so a rhythm exists to be driven",
           "levelKey": "reachable",
           "ceiling": 3,
           "atCeiling": false
@@ -7900,7 +7900,7 @@
           "plane": "cadence",
           "level": 2,
           "ceiling": 3,
-          "detail": "COWORKER_SELF_TASKS entry driven by its Proactivity setting"
+          "detail": "declares a self-task entry, so a rhythm exists to be driven"
         }
       ],
       "blockedPlanes": [

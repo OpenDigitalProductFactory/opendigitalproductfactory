@@ -414,4 +414,90 @@ export const COWORKER_STANDING_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       "a quiet mailroom.",
     ],
   ),
+
+  // ── Entries for the shapes declared in coworker-standing-shapes-operate.ts
+  //    and -craft.ts, plus the COO's cross-cutting orchestration (PRs 5357,
+  //    5377). Each of these shapes declares a `cadence` TRIGGER; a shape that
+  //    triggers only on `claim` deliberately gets no entry here, because an
+  //    entry would assert standing work the shape says it does not do.
+  //
+  //    Each drives the FIRST stage only, and stops at the shape's governed
+  //    gate — the gate is where a human decides.
+  "bookkeeper": task(
+    "Open or advance the current books period", "/finance/banking", "7 9 * * 1", "7 9 * * 1-5",
+    [
+      "Goal: the current bookkeeping period is gathered and current, ready for the owner",
+      "to close it. You do not close it — closing is the owner's, against the real",
+      "statement export.",
+      "1. Gather the period's statements and receipts. Attach each with its source.",
+      "2. Name what is MISSING. A period that cannot say what is missing does not advance.",
+      "3. Import with provenance: every transaction carries its originating document.",
+      "Never fabricate a transaction. If a required statement cannot be read, report the",
+      "gap and stop rather than reconciling against inferred rows.",
+    ],
+  ),
+  "time-off-advisor": task(
+    "Check the written leave policy against practice", "/compliance/policies", "21 4 * * 1", "21 4 * * 1,4",
+    [
+      "Goal: the published time-off policy still matches what the organisation actually",
+      "applies. You draft; a human publishes.",
+      "1. Read the published policy and the leave practice actually in force.",
+      "2. Name each divergence with the clause and the practice that contradicts it, or",
+      "   record that none was found — silence is not a finding.",
+      "3. Cite the jurisdictional constraint where one applies.",
+      "Stop and report if the applicable jurisdiction cannot be established. Drafting leave",
+      "rules against the wrong statute is worse than drafting none.",
+    ],
+  ),
+  "ux-design-critic": task(
+    "Critique the surfaces that changed", "/build", "29 5 * * 1-5", "29 5,13 * * 1-5",
+    [
+      "Goal: grounded, cited findings on what changed. You file nothing and block nothing —",
+      "a human decides which findings are real.",
+      "1. Capture the screens under review and identify each by route.",
+      "2. For each finding, cite the corpus principle it rests on. DROP any finding you",
+      "   cannot cite — an uncited finding is the failure mode this role was scoped around.",
+      "3. Stop at 30 findings and escalate rather than emitting a list nobody will read.",
+      "If the surface cannot be rendered or the corpus cannot be read, report that and stop.",
+      "Critiquing from memory is the one thing this role must never do.",
+    ],
+  ),
+  "integration-engineer": task(
+    "Inventory the live integration surface", "/platform/tools/inventory", "37 3 * * 1", "37 3 * * 1,4",
+    [
+      "Goal: what is exposed, what is reachable, what has drifted from its contract.",
+      "1. Enumerate the surface from the RUNNING registry, never from documentation.",
+      "   Documentation drift is itself a finding worth reporting.",
+      "2. Class each exposure: reachable, unreachable, or drifted from its declared",
+      "   contract, with the evidence that decided it.",
+      "3. Report an exposure nothing can reach — do not quietly retire it.",
+      "Adoption of anything new is a governed decision and is not yours to make.",
+      "If the live registry cannot be read, stop: an inventory assembled from docs is the",
+      "drift this task exists to detect.",
+    ],
+  ),
+  "farm-ranch-steward": task(
+    "Read the season and file what needs attention", "/operate", "43 4 * * 1", "43 4 * * 1,4",
+    [
+      "Goal: upcoming seasonal obligations reach the operator with enough notice to act.",
+      "1. Read the operating calendar and the external conditions bearing on it. Cite each.",
+      "2. File what needs a human, with what you observed and why it matters now.",
+      "3. Filing is your ceiling. Nothing on land, livestock or crop is committed by you.",
+      "If the operating calendar cannot be read, say so and stop. Do not infer the season",
+      "from the date — the wrong hemisphere is a plausible-looking answer.",
+    ],
+  ),
+  "coo": task(
+    "Read across the streams and name what is stalled", "/workspace/my-queue", "47 5 * * 1", "47 5 * * 1,4",
+    [
+      "Goal: the owner sees what is not moving, and what nobody owns.",
+      "1. Read portfolio and backlog state across every value stream.",
+      "2. Name anything not measurable from the record as UNKNOWN. Never estimate it.",
+      "3. For each stall: how long, and who is accountable. 'Unowned' is a finding, not a",
+      "   blank to leave empty.",
+      "4. Stop at 60 stalls and escalate — a standup that hands the owner everything has",
+      "   told them nothing.",
+      "You do not reprioritise or restaff. Those are the owner's; you surface, they decide.",
+    ],
+  ),
 };
