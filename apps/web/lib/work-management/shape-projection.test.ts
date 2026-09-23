@@ -82,6 +82,23 @@ describe("BI-23DB08BB — the room's shape is readable without reading", () => {
 });
 
 describe("execution truth", () => {
+  it("shows matched requirement evidence without promoting it to stage completion", () => {
+    const processOverseer = {
+      shapeKey: "delivery-break-fix", shapeVersion: "1.0.0", currentStageKey: null,
+      nextPermittedStageKey: null, disposition: "pause", interventionReason: "Missing coordinator",
+      checkedAt: "2026-09-23T00:00:00Z", deviations: [],
+    } as unknown as WorkroomView["processOverseer"];
+    const evidence = receipt({ id: "pir-1", status: "valid", processEvidence: {
+      definitionRef: "delivery-break-fix@1.0.0", stageKey: "post-implementation-review",
+      evidenceKind: "pir-receipt", relationship: "required-evidence",
+    } });
+    const graph = projectRoomShape(view({ processOverseer, receipts: [evidence] }));
+    expect(graph.stages.find(stage => stage.key === "post-implementation-review")?.rows)
+      .toEqual([expect.objectContaining({ state: "observed", receiptRef: { table: "DecisionInteraction", id: "pir-1" } })]);
+    expect(graph.progress.passed).toBe(0);
+    const older = { ...evidence, processEvidence: { ...evidence.processEvidence!, definitionRef: "delivery-break-fix@0.9.0" } };
+    expect(projectRoomShape(view({ processOverseer, receipts: [older] })).stages.every(stage => !stage.rows.length)).toBe(true);
+  });
   it("preserves canonical requester and agent identities on observed receipts", () => {
     const graph = projectRoomShape(view({ receipts: [
       receipt({ id: "request", actorRef: { actorKind: "person", actorId: "requester-1" } }),
