@@ -1,5 +1,15 @@
 # MCP tool authorization runbook
 
+**OAuth identity and continuing authority.** The approval binds the human,
+client, resource and approved assistant role. A client's self-declared name
+cannot choose a coworker identity. Reconnects, refreshes and new tasks reuse
+that consent without another login; each privileged action checks the human's
+current permissions, token scope, assistant grants and room admission. OAuth
+work claims retain the human owner separately from assistant attribution.
+Older connections missing approved identity need one consent repair through
+the client's reconnect flow. Never infer identity from a name, assign an old
+room to its caller, or substitute a legacy token to repair OAuth.
+
 **Status:** procedure reference. The *rules* — the authorization principle, scope escalation, and grant enforcement — live in [`AGENTS.md`](../../AGENTS.md) §8/§8a and stay always-on. This file holds transport detail, token issuance and rotation, worktree MCP sync, and the grant-intersection mechanics. Relocated from §8 by BI-0020D511 Phase 1; no rule was dropped.
 
 External coding agents use the real MCP JSON-RPC 2.0 transport at `/api/mcp/v1` (`apps/web/app/api/mcp/v1/route.ts`). The older `/api/mcp/tools` and `/api/mcp/call` endpoints remain for in-portal coworker chat and are not the external MCP client contract.
