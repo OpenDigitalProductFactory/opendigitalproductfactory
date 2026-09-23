@@ -1065,11 +1065,19 @@ remain zero, and the page's reading-grade check passes. The initiative inventory
 starts collapsed and previews five rows when opened. This does not increase the
 separate frozen live-route budget; the protected UX sweep must still pass.
 
-Local-CI-Override: operator-emergency: Mark Bodman's standing instruction to
-continue delivery and bypass malfunctioning gates applies to this follow-up.
-The prior shared-host runners disappeared repeatedly without a gate verdict;
-no memory-exhaustion cause was established. This enterprise slice does not
-claim a local production build pass. Affected tests, both TypeScript programs
-and source guards run locally; protected cloud production build, UX sweep,
-DCO and the merge queue remain required. The known Windows PKI mode fixtures
-retain their separately recorded exception. No authority or receipt is bypassed.
+Canonical integration passed on f8a895168d1086ac0ec6e45de003004479549a9a:
+715 tests in 136 files, both TypeScript programs, migrations, guards and a
+production image. Earlier host-runner interruptions remain unexplained; no
+memory-exhaustion cause was established. The later four-word copy correction
+passed all 55 focused tests, both TypeScript programs and the protected cloud
+production build. These are revision-specific results, not current deployment
+acceptance.
+
+Protected UX measurement on the copy correction records 162 arrival words,
+matching the unchanged budget, with no metric regression. Workflow 35816892791
+measured the intentional initiative search/disclosure accessibility structure.
+Review its captured page and replace only /ea/workrooms's ariaSnapshot; retain
+every numeric budget and every unrelated route. Refresh against current main
+and rerun the same 55 focused tests. Final protected checks and live navigation
+remain required. The known Windows PKI fixture exception does not turn an unrun
+or failing check into a pass.
