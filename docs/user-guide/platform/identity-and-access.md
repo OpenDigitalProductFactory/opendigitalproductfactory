@@ -81,6 +81,21 @@ action may execute and record the result for audit.
 
 ## Change Access Deliberately
 
+For an assistant connected through OAuth, sign in and approve its role once.
+Reconnects, token refreshes and new tasks reuse that connection. Every operation
+still checks the signed-in person's current permissions.
+
+If an approved assistant cannot use internal work information, an administrator
+can open **AI Coworker Identity → Data access**, select that coworker, and expand
+**Change data access**. Choose only the information it needs, record the reason, and save.
+You cannot assign access above your own. The saved setting applies to that
+coworker across connections immediately; users do not sign in again. Reducing
+access takes effect on subsequent requests too.
+
+This setting does not grant tools, waive action approvals, or invite anyone
+into a workroom. A room owner must separately admit the people and assistants
+who will work there. Signing in again cannot fix a missing invitation.
+
 1. Start with the principal you need to explain or change. Resolve duplicate or
    ambiguous aliases before changing access around them.
 2. Inspect role, group, and team membership. A group change can affect several

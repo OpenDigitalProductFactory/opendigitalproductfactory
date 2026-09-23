@@ -333,10 +333,9 @@ async function callExecuteTool(
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
   if (ctx?.authSource === "oauth") {
-    const { authorizeOAuthCapsuleTarget } = await import("./work-capsules/oauth-workroom-ownership");
-    if (!await authorizeOAuthCapsuleTarget({ params, userId, ...ctx, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false })) {
-      return { success: false, error: "workroom_access_denied", message: "You do not have access to this workroom. Ask its owner to invite you." };
-    }
+    const { oauthCapsuleTargetRefusal } = await import("./work-capsules/oauth-workroom-ownership");
+    const refusal = await oauthCapsuleTargetRefusal({ params, userId, ...ctx, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
+    if (refusal) return refusal;
   }
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);

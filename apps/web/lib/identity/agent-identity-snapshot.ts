@@ -18,6 +18,7 @@ export type AgentIdentitySnapshot = {
   lifecycleStage: string;
   humanSupervisorId: string | null;
   linkedPrincipalId: string | null;
+  dataAccess?: string[];
   gaid: string | null;
   aidoc: InternalAIDoc | null;
   authorizationClasses: GaidAuthorizationClass[];
@@ -97,6 +98,7 @@ export async function listAgentIdentitySnapshots(
         aliasType: true,
         aliasValue: true,
         principalId: true,
+        principal: { select: { sensitivityClearance: true } },
       },
     }),
     db.agentModelConfig.findMany({
@@ -129,6 +131,8 @@ export async function listAgentIdentitySnapshots(
       .filter((alias) => alias.aliasType === "agent")
       .map((alias) => [alias.aliasValue, alias.principalId]),
   );
+  const dataAccessByAgentId = new Map(aliases.filter((alias) => alias.aliasType === "agent")
+    .map((alias) => [alias.aliasValue, alias.principal?.sensitivityClearance ?? ["public"]]));
   const gaidByPrincipalId = new Map(
     aliases
       .filter((alias) => alias.aliasType === "gaid")
@@ -185,6 +189,7 @@ export async function listAgentIdentitySnapshots(
       lifecycleStage: agent.lifecycleStage,
       humanSupervisorId: agent.humanSupervisorId,
       linkedPrincipalId,
+      dataAccess: dataAccessByAgentId.get(agent.agentId) ?? ["public"],
       gaid,
       aidoc,
       authorizationClasses: aidoc?.authorization_classes ?? [],

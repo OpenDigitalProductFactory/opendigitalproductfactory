@@ -37,4 +37,13 @@ describe("human and coworker room authority intersection", () => {
     expect((await resolveAgentRoomAccess({ agentId: "shared-agent", userId: "alice", requested: "action",
       workItem: { ...workItem, assignedToAgentId: null } })).decision.level).toBe("none");
   });
+  it("rechecks saved coworker clearance for an existing connection on every request", async () => {
+    const request = { agentId: "shared-agent", userId: "alice", requested: "action" as const, workItem };
+    mocks.agent.mockResolvedValue({ principalId: "PRN-shared-agent", sensitivityClearance: ["public"] });
+    expect((await resolveAgentRoomAccess(request)).decision.reason).toBe("insufficient-clearance");
+    mocks.agent.mockResolvedValue({ principalId: "PRN-shared-agent", sensitivityClearance: ["public", "internal"] });
+    expect((await resolveAgentRoomAccess(request)).decision.level).toBe("action");
+    mocks.agent.mockResolvedValue({ principalId: "PRN-shared-agent", sensitivityClearance: ["public"] });
+    expect((await resolveAgentRoomAccess(request)).decision.reason).toBe("insufficient-clearance");
+  });
 });

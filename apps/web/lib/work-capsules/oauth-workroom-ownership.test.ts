@@ -3,7 +3,7 @@ const mocks = vi.hoisted(() => ({ room: vi.fn(), workItem: vi.fn(), actor: vi.fn
 vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room }, workItem: { findUnique: mocks.workItem } } }));
 vi.mock("./handler-actor", () => ({ workCapsuleActor: mocks.actor }));
 vi.mock("@/lib/work-management/room-agent-access.server", () => ({ resolveAgentRoomAccess: mocks.access }));
-import { authorizeOAuthCapsuleTarget } from "./oauth-workroom-ownership";
+import { authorizeOAuthCapsuleTarget, oauthCapsuleTargetRefusal } from "./oauth-workroom-ownership";
 const input = { params: { capsuleId: "WC-ONE" }, userId: "alice", agentId: "claude", authSource: "oauth", action: true };
 beforeEach(() => {
   vi.resetAllMocks();
@@ -35,4 +35,12 @@ it("leaves non-OAuth and untargeted calls to their existing policy", async () =>
   expect(await authorizeOAuthCapsuleTarget({ ...input, authSource: "pat" })).toBe(true);
   expect(await authorizeOAuthCapsuleTarget({ ...input, params: {} })).toBe(true);
   expect(mocks.actor).not.toHaveBeenCalled();
+});
+it("explains insufficient data access without prescribing another login or an invitation", async () => {
+  mocks.room.mockResolvedValue({ requestedByPrincipalId: "human-alice", createdByPrincipalId: "assistant", workItemId: "room-item" });
+  mocks.workItem.mockResolvedValue({ id: "room-item" });
+  mocks.access.mockResolvedValue({ decision: { level: "discover", reason: "insufficient-clearance" } });
+  expect(await oauthCapsuleTargetRefusal(input)).toEqual(expect.objectContaining({
+    error: "workroom_data_access_required", data: { recoveryUrl: "/platform/identity/agents" },
+  }));
 });

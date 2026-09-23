@@ -4,7 +4,7 @@ status: draft
 
 # OAuth external build authority implementation plan
 
-Status: implementation in progress; no deployed fix or live acceptance yet.
+Status: OAuth repair deployed in #5549; live acceptance remains incomplete.
 Parent: BI-B986A18B. Workroom: WC-F174CC4F.
 Design: ../specs/2026-09-21-oauth-external-build-authority-design.md.
 
@@ -14,6 +14,30 @@ implementation, dpf-local-merge-ci-before-push plus the completion gate before
 any success claim, and dpf-pr-with-dco for handoff.
 
 ## Sequence and delivery boundaries
+
+### Live acceptance follow-up: coworker data access
+
+Workroom WC-BDBAFFC7; decision DI-A8F0093A0CAF. On deployed 5c52f711,
+fresh consent, identity, silent refresh, refresh replay revocation and concurrent
+task continuity passed. New own-room writes failed after exact operation approval:
+the coworker's recorded clearance is public while the room requires internal.
+Canonical and legacy external identities share this intentional public default.
+
+1. Add a tested, audited writer for the existing Principal clearance field.
+   Require current manage_agents permission and an active human principal;
+   assigned levels must be within that human's recorded clearance. Reject stale
+   edits; commit audit and permission together. No seed, backfill or schema change.
+2. Extend the existing AI Coworker Identity page with an accessible data-access
+   setting. Show the current restriction and scope of the change before Save.
+   Preserve defaults, tool grants, approval policy and separate room admission.
+3. Explain that saved access applies to existing connections without another
+   login. A different user's permissions still bound every interaction.
+4. Test nonadministrator, inactive human/agent, out-of-scope level, stale save,
+   audit failure, revoked access and existing-token behavior. Retest positive
+   own-room evidence and negative cross-user/room cases on the canonical image.
+
+This follow-up does not claim full OAuth acceptance or change the approval
+policy. Legacy human-only rooms still need a supported explicit admission action.
 
 1. Identity lifecycle (BI-B986A18B): extend core-identity.prisma and forward
    migration; auth/oauth-tokens.ts, oauth-consent-page.ts, authorize/token

@@ -238,4 +238,28 @@ Implementation admitted under IRD-A8107E37E8CF and coverage receipt
 cmubxupm50wg301ru404n27ll. The initial committed identity lifecycle passed the
 canonical gate at afd62e4f095f1afb31a8a2bd492c468b05b746b1, evidence
 cmuc1na3g165e01mkk2eyj7jq. Subsequent human-authority and task-continuity changes
-need final review and gate evidence. Nothing is deployed or live-accepted yet.
+landed in #5549 and deployed at 5c52f711c98c22a864867b40b6dd6229b7d285ad.
+Fresh consent, old unbound recovery, silent refresh, replay revocation and two
+concurrent tasks passed live. Positive room evidence remains unaccepted.
+
+### Supported data-access setup after live acceptance
+
+Decision DI-A8F0093A0CAF extends BI-B986A18B in WC-BDBAFFC7. Agent Principal
+clearance intentionally defaults to public; new workrooms default to internal.
+The live test confirmed both canonical and legacy external identities remain
+public. No existing source/UI path writes this coworker clearance.
+
+Extend the existing AI Coworker Identity surface with one on-demand editor.
+The signed-in human must currently hold manage_agents and may assign only
+levels in their recorded Principal clearance. Keep defaults and existing rows
+unchanged until explicit Save. Use the existing typed Principal field, a
+compare-and-set update and AuthorizationDecisionLog in one serializable
+transaction. Record human, assistant, before/after access and rationale.
+
+The setting affects the selected coworker across connections, visibly explained
+before Save. Current human permissions, scopes, coworker grants, room admission
+and action approval gates remain independent intersections. Existing tokens
+pick up grants and revocations on their next operation without new consent.
+Return a data-access recovery link for an insufficient-clearance refusal;
+retain the invitation explanation for an admission refusal. Do not automatically
+admit the coworker to existing rooms or override explicit public-only limits.
