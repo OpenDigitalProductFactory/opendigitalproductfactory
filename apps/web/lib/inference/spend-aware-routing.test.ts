@@ -36,17 +36,17 @@ describe("spendAwareBudgetClass", () => {
 describe("spendAwareBudgetClass with a declared stage effort", () => {
   it("never downgrades a turn carrying a high floor, at any spend status", () => {
     for (const status of ["ok", "warning_80", "warning_95"] as const) {
-      expect(spendAwareBudgetClass("quality_first", status, "high")).toBe("quality_first");
-      expect(spendAwareBudgetClass("balanced", status, "high")).toBe("balanced");
+      expect(spendAwareBudgetClass("quality_first", status, true)).toBe("quality_first");
+      expect(spendAwareBudgetClass("balanced", status, true)).toBe("balanced");
     }
     // An absent class stays absent rather than being rewritten (no spurious downgrade event).
-    expect(spendAwareBudgetClass(undefined, "warning_95", "high")).toBeUndefined();
+    expect(spendAwareBudgetClass(undefined, "warning_95", true)).toBeUndefined();
   });
 
-  it("still downgrades low / medium declared turns exactly as an undeclared one", () => {
-    for (const declared of ["low", "medium", null, undefined] as const) {
-      expect(spendAwareBudgetClass("quality_first", "warning_80", declared)).toBe("balanced");
-      expect(spendAwareBudgetClass("quality_first", "warning_95", declared)).toBe("minimize_cost");
+  it("still downgrades a turn that may be demoted exactly as before", () => {
+    for (const neverDemote of [false, undefined] as const) {
+      expect(spendAwareBudgetClass("quality_first", "warning_80", neverDemote)).toBe("balanced");
+      expect(spendAwareBudgetClass("quality_first", "warning_95", neverDemote)).toBe("minimize_cost");
     }
   });
 });

@@ -1159,7 +1159,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     const { spendAwareBudgetClass } = await import("@/lib/inference/spend-aware-routing");
     const budget = await checkAgentBudgetFromRegistry(agentId);
     const nearBudget = budget.status === "warning_80" || budget.status === "warning_95";
-    const biased = spendAwareBudgetClass(effectiveConfig.budgetClass, budget.status, effortWarrant?.declaredEffort); // a high/governed stage is never demoted
+    const biased = spendAwareBudgetClass(effectiveConfig.budgetClass, budget.status, effortWarrant?.declaredEffort === "high"); // a high/governed stage is never demoted
     if (nearBudget && biased !== effectiveConfig.budgetClass) {
       console.log(
         `[budget-gate] spend-aware downgrade agent=${JSON.stringify(agentId)} ` +
