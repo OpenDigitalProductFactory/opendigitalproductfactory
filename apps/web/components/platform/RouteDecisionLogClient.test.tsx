@@ -121,7 +121,7 @@ describe("RoutingConfidence", () => {
 
   it("calls out a single candidate as an outcome rather than a choice", () => {
     const html = renderToStaticMarkup(<RoutingConfidence signal={{ candidateCount: 1 }} />);
-    expect(html).toContain("nothing competed for this work");
+    expect(html).toContain("nothing competed");
   });
 
   it("names a fallback win", () => {

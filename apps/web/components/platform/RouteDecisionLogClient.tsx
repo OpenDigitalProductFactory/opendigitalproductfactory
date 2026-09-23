@@ -214,9 +214,9 @@ export function RoutingConfidence({ signal }: { signal: RoutingConfidenceSignal 
         Ran with low confidence
       </div>
       <div style={{ fontSize: 11, color: "var(--dpf-muted)", display: "grid", gap: 2 }}>
-        {belowFloor && <div>No model met the quality bar; the best available ran instead.</div>}
-        {noChoice && <div>Only one model was available, so nothing competed for this work.</div>}
-        {signal.fallbackUsed && <div>The model that ran was a fallback, not the ranked choice.</div>}
+        {belowFloor && <div>No model met the quality bar; the best available ran.</div>}
+        {noChoice && <div>Only one model available — nothing competed.</div>}
+        {signal.fallbackUsed && <div>A fallback ran, not the ranked choice.</div>}
       </div>
     </div>
   );
