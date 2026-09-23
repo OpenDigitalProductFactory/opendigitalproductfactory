@@ -655,6 +655,16 @@ pressure to pass. Waiting in line does nothing for a closed pool
 (`fence reason: lease-authority-deadline`, ...) in its gate record, so a
 self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
 
+**`gate_client_upgrade_required` means rebase, not retry.** The gate client and
+its durable-wait resumer run from the branch being gated, so a client defect
+fixed on `main` keeps running in every branch cut before the fix. Every claim
+therefore reports `gateClientRevision`, and the admission server refuses a
+claim below its floor with `gate_client_upgrade_required`. Today the floor is
+revision 1, on Windows hosts only: older clients opened a focus-stealing
+terminal window on every re-claim (BI-69178E02). The refusal is not a verdict on
+the diff. Re-running the same branch is refused again, and a stale resumer stops
+after the first refusal. Rebase onto `origin/main` and run `pregate` again.
+
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
 bounded output tail, and records real compiler exits separately from opaque
