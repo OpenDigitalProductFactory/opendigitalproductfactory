@@ -43,22 +43,25 @@ function makePattern(
   };
 }
 
+/**
+ * Install the default registry mock. Shared so every describe block states its
+ * own setup instead of inheriting whatever the previous block happened to leave
+ * behind — mocks are not reset between describes, and relying on that leakage
+ * makes a test pass for the wrong reason.
+ */
+const KNOWN_PATTERNS = ["review", "debate", "multi-pass"] as const;
+
+function installRegistryMock() {
+  mockGetPattern.mockReset();
+  mockListPatterns.mockReset();
+  mockGetPattern.mockImplementation(async (slug: string) =>
+    (KNOWN_PATTERNS as readonly string[]).includes(slug) ? makePattern(slug) : null,
+  );
+  mockListPatterns.mockResolvedValue(KNOWN_PATTERNS.map((slug) => makePattern(slug)));
+}
+
 describe("deliberation activation.resolve", () => {
-  beforeEach(() => {
-    mockGetPattern.mockReset();
-    mockListPatterns.mockReset();
-    // Default: both core patterns are known to the registry.
-    mockGetPattern.mockImplementation(async (slug: string) => {
-      if (slug === "review" || slug === "debate") {
-        return makePattern(slug);
-      }
-      return null;
-    });
-    mockListPatterns.mockResolvedValue([
-      makePattern("review"),
-      makePattern("debate"),
-    ]);
-  });
+  beforeEach(installRegistryMock);
 
   describe("explicit invocation", () => {
     it("uses the explicitly requested pattern when risk/stage do not force a stronger one", async () => {
@@ -297,6 +300,8 @@ describe("deliberation activation.resolve", () => {
 // happened, because qualityFloorRelaxed was concatenated into a sentence that
 // nothing read.
 describe("resolve — routing confidence", () => {
+  beforeEach(installRegistryMock);
+
   it("activates a review when the floor was relaxed on otherwise low-risk work", async () => {
     const run = await resolve({
       riskLevel: "low",
@@ -367,6 +372,8 @@ describe("resolve — routing confidence", () => {
 
 // BI-2A67FAE2 — the cost bound, through the resolver.
 describe("resolve — escalation cost bound", () => {
+  beforeEach(installRegistryMock);
+
   it("caps a confidence escalation at one step on low-risk work", async () => {
     const run = await resolve({
       riskLevel: "low",
@@ -402,6 +409,8 @@ describe("resolve — escalation cost bound", () => {
 
 // BI-0FC71985 — the resolved run states what its review is worth.
 describe("resolve — reviewer independence", () => {
+  beforeEach(installRegistryMock);
+
   it("grades every activated run, so independence is never assumed", async () => {
     const run = await resolve({
       stage: "review",
@@ -429,5 +438,51 @@ describe("resolve — reviewer independence", () => {
     const run = await resolve({ stage: "review", riskLevel: "low", artifactType: "code-change" });
     expect(run?.independence?.verified).toBe(false);
     expect(run?.independence?.note).toContain("Not verified");
+  });
+});
+
+// BI-A8EAC294 — multi-pass is registered, and is the weakest instrument.
+describe("resolve — multi-pass ordering", () => {
+  beforeEach(installRegistryMock);
+
+  it("is available as an explicit pattern", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      explicitPatternSlug: "multi-pass",
+    });
+    expect(run?.patternSlug).toBe("multi-pass");
+    expect(run?.triggerSource).toBe("explicit");
+  });
+
+  it("never displaces a review that risk already requires", async () => {
+    // A caller explicitly asking for the cheap instrument cannot weaken policy.
+    const run = await resolve({
+      riskLevel: "medium",
+      artifactType: "code-change",
+      explicitPatternSlug: "multi-pass",
+    });
+    expect(run?.patternSlug).toBe("review");
+    expect(run?.triggerSource).toBe("combined");
+  });
+
+  it("never displaces a debate", async () => {
+    const run = await resolve({
+      riskLevel: "critical",
+      artifactType: "code-change",
+      explicitPatternSlug: "multi-pass",
+    });
+    expect(run?.patternSlug).toBe("debate");
+  });
+
+  it("declares the honest diversity mode for a same-model check", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      explicitPatternSlug: "multi-pass",
+      reviewerPool: { providerCount: 1, modelCount: 1 },
+    });
+    expect(run?.independence?.mode).toBe("single-model-multi-persona");
+    expect(run?.independence?.verified).toBe(true);
   });
 });

@@ -89,8 +89,13 @@ export interface ResolvedDeliberationRun {
 /* -------------------------------------------------------------------------- */
 
 const STRENGTH: Record<string, number> = {
-  review: 1,
-  debate: 2,
+  // BI-A8EAC294: multi-pass ranks BELOW review deliberately. A second sample from
+  // the same model measures run-to-run variance; it is a weaker instrument than an
+  // independent critic and must never displace one. Where a reviewer is available
+  // and warranted, the strengthen-but-not-weaken rule picks the reviewer.
+  "multi-pass": 1,
+  review: 2,
+  debate: 3,
 };
 
 function strengthOf(slug: string): number {
