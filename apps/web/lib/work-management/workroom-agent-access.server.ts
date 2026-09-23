@@ -45,7 +45,7 @@ export async function resolveAgentWorkroomAccess(input: {
   for (const principal of [human, assistant]) {
     if (!admitted(principal, room.participants, holders, input.requested === "action")) return fail(assistant.principalId);
     // An explicit case policy restricts admission; it never supplies a room invitation.
-    const policyRefs = input.requested === "action" ? policy.actionPrincipalRefs
+    const policyRefs = input.requested === "action" ? policy.actionPrincipalRefs ?? policy.admittedPrincipalRefs
       : policy.admittedPrincipalRefs || policy.actionPrincipalRefs
         ? [...(policy.admittedPrincipalRefs ?? []), ...(policy.actionPrincipalRefs ?? [])] : undefined;
     if (policyRefs && !policyRefs.includes(principal.principalId)) return fail(assistant.principalId);

@@ -28,7 +28,8 @@ async function ownerRoom(userId: string, workroomId: string, db: Prisma.Transact
   const membership = room.participants.find((row) => row.principalId === human.id);
   if (membership && (membership.lifecycle !== "active" || !membership.roles.some((role) => role !== "observer"))) throw denied();
   const policy = readWorkspaceRoomPolicy(room.workItem?.evidence);
-  if (policy.actionPrincipalRefs && !policy.actionPrincipalRefs.includes(human.principalId)) throw denied();
+  const policyRefs = policy.actionPrincipalRefs ?? policy.admittedPrincipalRefs;
+  if (policyRefs && !policyRefs.includes(human.principalId)) throw denied();
   for (const sensitivityCeiling of [readWorkroomBoundaryClaim(room.scopeClaims)?.sensitivityCeiling ?? "internal", ...(policy.sensitivityCeiling ? [policy.sensitivityCeiling] : [])]) {
     const access = authorizeWorkroomAccess({ requested: "action", principalRef: human.principalId,
       assignedPrincipalRefs: [human.principalId], sensitivityCeiling, sensitivityClearance: human.sensitivityClearance,

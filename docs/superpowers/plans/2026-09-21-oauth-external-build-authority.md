@@ -76,6 +76,9 @@ the fixed refusal result of oauthCapsuleTargetRefusal as a password and followed
 it into the existing transient HMAC redaction vault. Rename that result helper
 to workroomTargetAccessRefusal to describe its actual output; do not change
 cryptography, credential handling, or suppress the security rule.
+The primary rule sources are CodeQL's
+[sensitive-call classification](https://github.com/github/codeql/blob/main/javascript/ql/lib/semmle/javascript/security/SensitiveActions.qll)
+and [credential-name heuristic](https://github.com/github/codeql/blob/main/shared/concepts/codeql/concepts/internal/SensitiveDataHeuristics.qll).
 
 Grant convergence uses the existing boot seed on canonical and legacy profiles;
 both seed paths honor AgentToolGrantRevocation tombstones. The author-only grant

@@ -58,6 +58,10 @@ it("a sensitivity-only case policy does not invent an admission denial", async (
   m.room.mockResolvedValue({ ...room(), workItem: { evidence: [{ workroomPolicy: { sensitivityCeiling: "internal" } }] } });
   expect((await resolveAgentWorkroomAccess(input)).decision.level).toBe("action");
 });
+it("explicitly denied content cannot become action access when the action field is absent", async () => {
+  m.room.mockResolvedValue({ ...room(), workItem: { evidence: [{ workroomPolicy: { admittedPrincipalRefs: [] } }] } });
+  expect((await resolveAgentWorkroomAccess(input)).decision.reason).toBe("not-admitted");
+});
 it("denies disabled humans and inactive assistant identities", async () => {
   m.human.mockResolvedValue(null);
   expect((await resolveAgentWorkroomAccess(input)).decision.reason).toBe("not-admitted");

@@ -47,6 +47,11 @@ it("does not let a non-owner or disabled human manage the room", async () => {
   await expect(inviteWorkroomAssistant("alice", input)).rejects.toThrow("room owner");
   expect(m.save).not.toHaveBeenCalled();
 });
+it("a case content denial also prevents its owner granting room access", async () => {
+  m.room.mockResolvedValue({ ...room(), workItem: { evidence: [{ workroomPolicy: { admittedPrincipalRefs: [] } }] } });
+  await expect(inviteWorkroomAssistant("alice", input)).rejects.toThrow("room owner");
+  expect(m.save).not.toHaveBeenCalled();
+});
 it("requires current human clearance and active assistant identity", async () => {
   m.room.mockResolvedValue({ ...room(), scopeClaims: [{ workroomBoundary: { sensitivityCeiling: "restricted" } }] });
   await expect(inviteWorkroomAssistant("alice", input)).rejects.toThrow("information");
