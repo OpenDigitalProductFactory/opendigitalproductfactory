@@ -3,6 +3,12 @@ import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
 import { semanticReviewMinimumContextTokens } from "./semantic-review-context-floor";
 import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
+import {
+  describeSpecialistCraftContexts,
+  layerCraftOntoSpecialistPrompt,
+  resolveSpecialistCraftContexts,
+  type SpecialistCraftClient,
+} from "./specialist-craft-context";
 
 const SPECIALIST_SYSTEM_PROMPTS: Record<string, string> = {
   "AGT-903": "You are the UX Accessibility specialist. Review only accessibility and interaction risks grounded in the supplied committed diff.",
@@ -39,6 +45,10 @@ export async function dispatchRoutedSemanticReview(
   context: SemanticChangeReviewDispatchContext,
   runBranch: (agentId: string, execute: () => Promise<SemanticReviewResult>) => Promise<SemanticReviewResult>
     = (_agentId, execute) => execute(),
+  // BI-39C7D449: injectable so tests need no Prisma. Defaults to the live
+  // client inside the function, not here, so importing this module does not
+  // pull in the database client.
+  craftDb?: SpecialistCraftClient,
 ): Promise<SemanticReviewResult> {
   if (context.specialistIds.some((id) => !Object.hasOwn(SPECIALIST_SYSTEM_PROMPTS, id))) {
     return { decision: "inconclusive", issues: [],
@@ -48,6 +58,19 @@ export async function dispatchRoutedSemanticReview(
   // Capacity belongs to the actual provider dispatch, including every fallback
   // through callProvider. A local reservation must not veto an eligible remote
   // review before routing has selected its provider.
+  // BI-39C7D449: each specialist reasons from its OWN craft corpus. The
+  // persona still sets the branch's scope; the corpus supplies the doctrine
+  // that scope is judged against. Fail-open — an unmapped agent or an empty
+  // corpus runs the persona alone, exactly as before.
+  const craft = await resolveSpecialistCraftContexts({
+    db: craftDb ?? (await loadCraftClient()),
+    agentIds: context.specialistIds,
+    query: prompt,
+  }).catch(() => ({ promptBlocks: new Map<string, string>(), contexts: [] }));
+  if (craft.contexts.length > 0) {
+    console.info(`[semantic-review] specialist craft: ${describeSpecialistCraftContexts(craft.contexts)}`);
+  }
+
   const branches = [
     {
       agentId: "change-reviewer",
@@ -56,7 +79,13 @@ export async function dispatchRoutedSemanticReview(
     },
     ...[...new Set(context.specialistIds)].flatMap((agentId) => {
       const systemPrompt = SPECIALIST_SYSTEM_PROMPTS[agentId];
-      return systemPrompt ? [{ agentId, displayName: agentId, systemPrompt }] : [];
+      return systemPrompt
+        ? [{
+            agentId,
+            displayName: agentId,
+            systemPrompt: layerCraftOntoSpecialistPrompt(systemPrompt, craft.promptBlocks.get(agentId)),
+          }]
+        : [];
     }),
   ];
 
@@ -115,4 +144,13 @@ export async function dispatchRoutedSemanticReview(
     });
   }
   return mergeReviewResults(completed);
+}
+
+/**
+ * The live client, imported lazily so this module stays importable (and
+ * testable) without the database client being constructed.
+ */
+async function loadCraftClient(): Promise<SpecialistCraftClient> {
+  const { prisma } = await import("@dpf/db");
+  return prisma as unknown as SpecialistCraftClient;
 }
