@@ -289,38 +289,6 @@ export async function resetStuckQuiescenceLevelOnBoot(
  * Idempotent: a healthy or already-`failed` row yields `action: "none"` and is
  * skipped, so this is safe to run on every boot. Non-fatal. Exported for tests.
  */
-/**
- * BI-5BF650CB: how recently a build must have shown activity to count as live.
- * Both build reconcilers run on boot AND on an interval, and the auto-dispatched
- * orchestrator records its progress as BuildActivity rows — it never bumps
- * FeatureBuild.updatedAt or writes an exec step. Without this check a build that
- * was actively coding (FB-8255C0E5: 171 sandbox commands) had its checkpoint
- * cleared and a second pipeline dispatched, which wiped the shared
- * /workspace node_modules under the first.
- */
-export const BUILD_LIVENESS_WINDOW_MS = 15 * 60 * 1000;
-
-/** The reconcilers' own rows must not keep a build looking alive. */
-const RECONCILER_ACTIVITY_TOOLS = ["resumeStrandedBuildsOnBoot", "recoverContradictoryBuildExecStatesOnBoot"];
-
-async function recentlyActiveBuildIds(
-  prisma: { buildActivity: { findMany(args: unknown): Promise<Array<{ buildId: string }>> } },
-  buildIds: string[],
-  now: Date,
-): Promise<Set<string>> {
-  if (buildIds.length === 0) return new Set();
-  const rows = await prisma.buildActivity.findMany({
-    where: {
-      buildId: { in: buildIds },
-      createdAt: { gte: new Date(now.getTime() - BUILD_LIVENESS_WINDOW_MS) },
-      tool: { notIn: RECONCILER_ACTIVITY_TOOLS },
-    },
-    select: { buildId: true },
-    distinct: ["buildId"],
-  });
-  return new Set(rows.map((row) => row.buildId));
-}
-
 export async function recoverContradictoryBuildExecStatesOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<{ recovered: number; cleared: number; failedCoerced: number } | null> {
@@ -337,11 +305,8 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
     });
     let cleared = 0;
     let failedCoerced = 0;
-    const live = await recentlyActiveBuildIds(
-      prisma as unknown as Parameters<typeof recentlyActiveBuildIds>[0],
-      candidates.map((build) => build.buildId),
-      new Date(),
-    );
+    const { recentlyActiveBuildIds } = await import("@/lib/build/build-liveness");
+    const live = await recentlyActiveBuildIds(prisma, candidates.map((build) => build.buildId), new Date());
     for (const build of candidates) {
       if (live.has(build.buildId)) continue;
       const plan = planExecStateRecovery(
@@ -732,13 +697,9 @@ export async function resumeStrandedBuildsOnBoot(
     let flagged = 0;
     let advanced = 0;
     let abandoned = 0;
-    // BI-5BF650CB: updatedAt alone is not liveness — the orchestrator and the
-    // phase dispatchers record progress as BuildActivity.
-    const live = await recentlyActiveBuildIds(
-      prisma as unknown as Parameters<typeof recentlyActiveBuildIds>[0],
-      candidates.map((build) => build.buildId),
-      now,
-    );
+    // BI-5BF650CB: updatedAt is not liveness; progress is recorded as BuildActivity.
+    const { recentlyActiveBuildIds } = await import("@/lib/build/build-liveness");
+    const live = await recentlyActiveBuildIds(prisma, candidates.map((build) => build.buildId), now);
     for (const build of candidates) {
       if (live.has(build.buildId)) continue;
       // ── Pre-build phases (ideate/plan/review): no step-machine, but each
