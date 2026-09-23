@@ -308,9 +308,12 @@ describe("resolve — routing confidence", () => {
     expect(run?.reason).toContain("quality bar");
   });
 
-  it("escalates to debate when the winner is well short of the floor", async () => {
+  it("escalates to debate when the winner is well short of the floor on work that is not already low-risk", async () => {
+    // From medium: the one-rung bound (BI-2A67FAE2) permits medium -> high, and
+    // high means debate. From low the same signal is capped at review, which is
+    // the bound doing its job rather than the signal being ignored.
     const run = await resolve({
-      riskLevel: "low",
+      riskLevel: "medium",
       artifactType: "code-change",
       routingConfidence: { qualityFloorRelaxed: true, floorShortfall: 40 },
     });
@@ -359,5 +362,40 @@ describe("resolve — routing confidence", () => {
     expect(run?.patternSlug).toBe("debate");
     expect(run?.routingConfidenceEscalated).toBeUndefined();
     expect(run?.reason).not.toContain("Raised because");
+  });
+});
+
+// BI-2A67FAE2 — the cost bound, through the resolver.
+describe("resolve — escalation cost bound", () => {
+  it("caps a confidence escalation at one step on low-risk work", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      // Well short of the floor infers "high", which would mean debate.
+      routingConfidence: { qualityFloorRelaxed: true, floorShortfall: 40 },
+      costPosture: "balanced",
+    });
+    expect(run?.patternSlug).toBe("review");
+  });
+
+  it("does not escalate at all under an economy posture", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true, floorShortfall: 40 },
+      costPosture: "economy",
+    });
+    expect(run).toBeNull();
+  });
+
+  it("economy still honours a stage default — it is a cost choice, not a policy dodge", async () => {
+    const run = await resolve({
+      stage: "review",
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true },
+      costPosture: "economy",
+    });
+    expect(run?.patternSlug).toBe("review");
   });
 });

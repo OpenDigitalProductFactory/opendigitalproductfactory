@@ -28,8 +28,8 @@ import {
 import { getPattern } from "./registry";
 import type { ResolvedDeliberationPattern } from "./registry";
 import {
+  boundedConfidenceRisk,
   describeRoutingConfidence,
-  higherRisk,
   routingConfidenceRisk,
   type RoutingConfidenceSignal,
 } from "./routing-confidence";
@@ -49,6 +49,13 @@ export interface ResolveDeliberationInput {
    * what stage or declared risk already require.
    */
   routingConfidence?: RoutingConfidenceSignal | null;
+  /**
+   * BI-2A67FAE2: the caller's Cost/Quality/Time posture. `economy` opts out of
+   * confidence-driven escalation — an explicit choice to accept a weaker answer
+   * rather than pay for a second look. Declared risk and stage defaults still
+   * apply, so it is a discount on inferred escalation, never a policy dodge.
+   */
+  costPosture?: DeliberationStrategyProfile | null;
   explicitPatternSlug?: string | null;
   artifactType: DeliberationArtifactType;
   routeContext?: string | null;
@@ -191,7 +198,7 @@ export async function resolve(
   // raises the effective risk. Taking the HIGHER of the two is what makes this
   // strengthen-only: a confident route can never lower a declared risk level.
   const confidenceRisk = routingConfidenceRisk(input.routingConfidence);
-  const riskLevel = higherRisk(input.riskLevel, confidenceRisk);
+  const riskLevel = boundedConfidenceRisk(input.riskLevel, confidenceRisk, input.costPosture);
   const routingConfidenceEscalated = riskLevel !== input.riskLevel;
   const confidenceReason = routingConfidenceEscalated
     ? describeRoutingConfidence(input.routingConfidence)

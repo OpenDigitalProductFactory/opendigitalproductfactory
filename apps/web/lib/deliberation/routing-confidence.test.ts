@@ -5,6 +5,7 @@
 // already require.
 import { describe, expect, it } from "vitest";
 import {
+  boundedConfidenceRisk,
   describeRoutingConfidence,
   higherRisk,
   routingConfidenceRisk,
@@ -74,5 +75,37 @@ describe("describeRoutingConfidence", () => {
   it("says nothing when there is nothing to explain", () => {
     expect(describeRoutingConfidence({ candidateCount: 6 })).toBeNull();
     expect(describeRoutingConfidence(null)).toBeNull();
+  });
+});
+
+// BI-2A67FAE2 — escalation is real spend, so it is bounded.
+describe("boundedConfidenceRisk", () => {
+  it("raises by at most one rung, so a degraded turn cannot become the priciest", () => {
+    // Inferred "high" on low-risk work would otherwise jump straight to debate.
+    expect(boundedConfidenceRisk("low", "high")).toBe("medium");
+  });
+
+  it("still allows the full rung it is entitled to", () => {
+    expect(boundedConfidenceRisk("medium", "high")).toBe("high");
+  });
+
+  it("never lowers the declared risk", () => {
+    expect(boundedConfidenceRisk("critical", "low")).toBe("critical");
+    expect(boundedConfidenceRisk("high", "medium")).toBe("high");
+  });
+
+  it("opts out entirely under an economy posture", () => {
+    expect(boundedConfidenceRisk("low", "high", "economy")).toBe("low");
+  });
+
+  it("economy discounts inferred escalation only — declared risk still stands", () => {
+    // The posture is a cost choice, not a way to dodge a policy requirement.
+    expect(boundedConfidenceRisk("critical", "high", "economy")).toBe("critical");
+  });
+
+  it("escalates normally under the other postures", () => {
+    for (const posture of ["balanced", "high-assurance", "document-authority"]) {
+      expect(boundedConfidenceRisk("low", "medium", posture)).toBe("medium");
+    }
   });
 });

@@ -49,6 +49,33 @@ const RISK_ORDER: Record<DeliberationActivatedRiskLevel, number> = {
 /** A shortfall at or above this is a large one — worth an adversarial pass. */
 export const LARGE_SHORTFALL = 15;
 
+/**
+ * BI-2A67FAE2: escalation is real spend, so it is bounded.
+ *
+ * The confidence axis may raise the effective risk by at most ONE rung above
+ * what the caller declared. Without this a single below-floor route could take
+ * low-risk work straight to debate, and a degraded turn — exactly the turn where
+ * the platform is least healthy — would become the most expensive one.
+ *
+ * An `economy` posture opts out of confidence escalation entirely: it is an
+ * explicit choice to accept a weaker answer rather than pay for a second look.
+ * Declared risk and stage defaults still apply, so economy is a discount on
+ * inferred escalation, never a way to dodge a policy requirement.
+ */
+export function boundedConfidenceRisk(
+  declared: DeliberationActivatedRiskLevel,
+  inferred: DeliberationActivatedRiskLevel,
+  costPosture?: string | null,
+): DeliberationActivatedRiskLevel {
+  if (costPosture === "economy") return declared;
+  const ceiling = Math.min(RISK_ORDER[declared] + 1, RISK_ORDER.critical);
+  const capped = Math.min(RISK_ORDER[inferred], ceiling);
+  const target = Math.max(RISK_ORDER[declared], capped);
+  return (Object.keys(RISK_ORDER) as DeliberationActivatedRiskLevel[]).find(
+    (level) => RISK_ORDER[level] === target,
+  ) as DeliberationActivatedRiskLevel;
+}
+
 export function higherRisk(
   a: DeliberationActivatedRiskLevel,
   b: DeliberationActivatedRiskLevel,
