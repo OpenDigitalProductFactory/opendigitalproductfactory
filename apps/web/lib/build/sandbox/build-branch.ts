@@ -204,11 +204,16 @@ export function buildSandboxWorktreeAddCommand(
   // recognise), so clearing it loses nothing the branch does not hold.
   const clearOrphanedDir =
     `git -C ${path} rev-parse --git-dir >/dev/null 2>&1 || rm -rf ${path}`;
+  // BI-7FCF10FE: the repo is shared by two containers that mount it at
+  // different paths (sandbox /workspace, portal /sandbox-workspace), so a
+  // `git worktree prune` in the portal (code-graph) drops this registration —
+  // that is what orphans the directory above. The worktree is added LOCKED so
+  // no prune can drop it, and a locked worktree needs a double force to remove.
   const recreate = [
-    `git worktree remove --force ${path} 2>/dev/null || true`,
+    `git worktree remove --force --force ${path} 2>/dev/null || true`,
     `if [ -d ${path} ]; then ${clearOrphanedDir}; fi`,
     `git worktree prune`,
-    `git worktree add --force ${path} ${branchRef}`,
+    `git worktree add --force --lock --reason "Build Studio ${buildId}" ${path} ${branchRef}`,
     symlinks,
   ].join(" && ");
   // RESUME SAFETY (BI-8C6AA60E, isolation-ON half). `git worktree remove --force`
@@ -243,7 +248,8 @@ export function buildSandboxWorktreeRemoveCommand(
   const path = buildWorktreePath(buildId, workspace);
   return [
     `cd ${workspace}`,
-    `git worktree remove --force ${path} 2>/dev/null || true`,
+    // double force: build worktrees are locked against prune (BI-7FCF10FE)
+    `git worktree remove --force --force ${path} 2>/dev/null || true`,
     `git worktree prune`,
   ].join(" && ");
 }

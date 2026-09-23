@@ -252,12 +252,13 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
     // clears any stale worktree first, then prunes the registry
     expect(cmd).toContain(
-      "git worktree remove --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
+      "git worktree remove --force --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
     );
     expect(cmd).toContain("git worktree prune");
-    // attaches the build branch into the worktree
+    // BI-7FCF10FE: attaches the build branch LOCKED, so the portal's code-graph
+    // prune (the repo is mounted at a different path there) cannot drop it
     expect(cmd).toContain(
-      "git worktree add --force /workspace/.builds/FB-ABCD1234 build/FB-ABCD1234",
+      'git worktree add --force --lock --reason "Build Studio FB-ABCD1234" /workspace/.builds/FB-ABCD1234 build/FB-ABCD1234',
     );
     // node_modules shared by symlink — NOT reinstalled (verified live in dpf-sandbox-1).
     // -sfn so re-linking an already-provisioned worktree is a no-op, not an error.
@@ -336,8 +337,9 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
 
   it("tears down a build's worktree best-effort without touching the shared install", () => {
     const cmd = buildSandboxWorktreeRemoveCommand("FB-ABCD1234");
+    // double force: the worktree is locked against prune (BI-7FCF10FE)
     expect(cmd).toContain(
-      "git worktree remove --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
+      "git worktree remove --force --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
     );
     expect(cmd).toContain("git worktree prune");
     // teardown must not rm -rf anything — node_modules are symlinks, removal is git's job

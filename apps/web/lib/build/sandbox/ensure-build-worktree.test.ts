@@ -49,7 +49,7 @@ describe("ensureBuildWorktree", () => {
     expect(result).toEqual({ materialized: true, workdir: "/workspace/.builds/FB-86B4CCA3" });
     const add = state.commands.find((c) => c.includes("git worktree add"));
     expect(add).toBeDefined();
-    expect(add).toContain("git worktree add --force /workspace/.builds/FB-86B4CCA3 build/FB-86B4CCA3");
+    expect(add).toContain('git worktree add --force --lock --reason "Build Studio FB-86B4CCA3" /workspace/.builds/FB-86B4CCA3 build/FB-86B4CCA3');
     // The branch is created from the client branch only when it does not exist yet.
     const branch = state.commands.find((c) => c.includes('branch --list "build/FB-86B4CCA3"'));
     expect(branch).toContain('git -C /workspace branch "build/FB-86B4CCA3" "client/5727856b-3296-4e17-97f0-c59401ace4f2"');
