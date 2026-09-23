@@ -135,11 +135,11 @@ describe("sandbox admin MCP and coworker messaging", () => {
 
   it("executeTool routes diagnose_sandbox to the readiness diagnosis service", async () => {
     mockPrisma.featureBuild.findUnique.mockResolvedValueOnce({
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       createdById: "user-1",
     });
     mockDiagnoseSandboxReadiness.mockResolvedValueOnce({
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       state: "not_found",
       canDeploy: false,
       canContribute: false,
@@ -149,36 +149,36 @@ describe("sandbox admin MCP and coworker messaging", () => {
       inspectedAt: "2026-05-22T12:00:00.000Z",
       runtimeTargetId: null,
       containerId: null,
-      branchName: "build/FB-SANDBOX-1",
+      branchName: "build/FB-SANDBOX1",
     });
 
     const result = await executeTool("diagnose_sandbox", {
-      buildId: "FB-SANDBOX-1",
-      expectedWorkspaceRoot: "D:\\DPF\\.worktrees\\FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
+      expectedWorkspaceRoot: "D:\\DPF\\.worktrees\\FB-SANDBOX1",
     }, "user-1", { agentId: "AGT-ORCH-300" });
 
     expect(result.success).toBe(true);
     expect(result.message).toContain("Sandbox readiness: not_found");
     expect(result.data).toMatchObject({
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       state: "not_found",
     });
     expect(mockDiagnoseSandboxReadiness).toHaveBeenCalledWith(expect.objectContaining({
-      buildId: "FB-SANDBOX-1",
-      expectedWorkspaceRoot: "D:\\DPF\\.worktrees\\FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
+      expectedWorkspaceRoot: "D:\\DPF\\.worktrees\\FB-SANDBOX1",
     }));
   });
 
   it("executeTool validates and routes recover_sandbox to the recovery service", async () => {
     mockPrisma.featureBuild.findUnique.mockResolvedValueOnce({
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       createdById: "user-1",
     });
     mockRecoverSandbox.mockResolvedValueOnce({
       success: true,
       message: "Build phase reset recorded; no phase was auto-dispatched.",
       snapshot: {
-        buildId: "FB-SANDBOX-1",
+        buildId: "FB-SANDBOX1",
         state: "not_found",
         canDeploy: false,
         canContribute: false,
@@ -190,15 +190,15 @@ describe("sandbox admin MCP and coworker messaging", () => {
     });
 
     const result = await executeTool("recover_sandbox", {
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       action: "reset_build_phase",
       confirmation: { acknowledgeReset: true, reason: "stuck mid phase" },
     }, "user-1", { agentId: "AGT-ORCH-300" });
 
     expect(result.success).toBe(true);
-    expect(result.entityId).toBe("FB-SANDBOX-1");
+    expect(result.entityId).toBe("FB-SANDBOX1");
     expect(mockRecoverSandbox).toHaveBeenCalledWith(expect.objectContaining({
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       action: "reset_build_phase",
       confirmation: { acknowledgeReset: true, reason: "stuck mid phase" },
     }));
@@ -206,12 +206,12 @@ describe("sandbox admin MCP and coworker messaging", () => {
 
   it("rejects invalid recover_sandbox actions before the recovery service runs", async () => {
     mockPrisma.featureBuild.findUnique.mockResolvedValueOnce({
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       createdById: "user-1",
     });
 
     const result = await executeTool("recover_sandbox", {
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       action: "docker_shell",
     }, "user-1", { agentId: "AGT-ORCH-300" });
 
@@ -223,17 +223,17 @@ describe("sandbox admin MCP and coworker messaging", () => {
   it("blocks deploy_feature before diff extraction when sandbox readiness is red", async () => {
     mockPrisma.featureBuild.findUnique
       .mockResolvedValueOnce({
-        buildId: "FB-SANDBOX-1",
+        buildId: "FB-SANDBOX1",
         createdById: "user-1",
       })
       .mockResolvedValueOnce({
         sandboxId: "dpf-sandbox-1",
-        buildBranch: "build/FB-SANDBOX-1",
+        buildBranch: "build/FB-SANDBOX1",
         phase: "ship",
         createdById: "user-1",
       });
     mockDiagnoseSandboxReadiness.mockResolvedValueOnce({
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       state: "detached",
       canDeploy: false,
       canContribute: false,
@@ -244,7 +244,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
     });
 
     const result = await executeTool("deploy_feature", {
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
     }, "user-1", { agentId: "AGT-ORCH-400" });
 
     expect(result.success).toBe(false);
@@ -252,7 +252,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
     expect(result.data).toMatchObject({ state: "detached" });
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        buildId: "FB-SANDBOX-1",
+        buildId: "FB-SANDBOX1",
         tool: "deploy_feature",
         summary: expect.stringContaining("not ready"),
       }),
@@ -262,7 +262,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
   it("blocks contribute_to_hive before FeaturePack creation when sandbox readiness is red", async () => {
     mockPrisma.featureBuild.findUnique
       .mockResolvedValueOnce({
-        buildId: "FB-SANDBOX-1",
+        buildId: "FB-SANDBOX1",
         createdById: "user-1",
       })
       .mockResolvedValueOnce({
@@ -284,7 +284,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
     });
     mockResolveHiveToken.mockResolvedValueOnce("ghp_test");
     mockDiagnoseSandboxReadiness.mockResolvedValueOnce({
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
       state: "stale_source",
       canDeploy: false,
       canContribute: false,
@@ -295,7 +295,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
     });
 
     const result = await executeTool("contribute_to_hive", {
-      buildId: "FB-SANDBOX-1",
+      buildId: "FB-SANDBOX1",
     }, "user-1", { agentId: "AGT-ORCH-500" });
 
     expect(result.success).toBe(false);
@@ -303,7 +303,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
     expect(result.data).toMatchObject({ state: "stale_source" });
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        buildId: "FB-SANDBOX-1",
+        buildId: "FB-SANDBOX1",
         tool: "contribute_to_hive",
         summary: expect.stringContaining("upstream contribution"),
       }),
@@ -312,7 +312,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
 
   it("blocks contribute_to_hive when hive contributions are paused (master pause overrides contributionMode)", async () => {
     mockPrisma.featureBuild.findUnique.mockResolvedValueOnce({
-      buildId: "FB-PAUSE-1",
+      buildId: "FB-PAUSE1",
       createdById: "user-1",
     });
     mockPrisma.platformDevConfig.findUnique.mockResolvedValueOnce({
@@ -324,7 +324,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
     });
 
     const result = await executeTool("contribute_to_hive", {
-      buildId: "FB-PAUSE-1",
+      buildId: "FB-PAUSE1",
     }, "user-1", { agentId: "AGT-ORCH-PAUSE" });
 
     expect(result.success).toBe(false);
@@ -338,14 +338,14 @@ describe("sandbox admin MCP and coworker messaging", () => {
   it("blocks create_portal_pr when the captured diff misses files promised by the build plan", async () => {
     mockPrisma.featureBuild.findUnique
       .mockResolvedValueOnce({
-        buildId: "FB-PROMOTE-1",
+        buildId: "FB-PROMOTE1",
         createdById: "user-1",
       })
       .mockResolvedValueOnce({
         id: "feature-build-row-1",
         title: "Ollama model management",
         diffPatch: "diff --git a/packages/db/prisma/schema.prisma b/packages/db/prisma/schema.prisma\n@@ -1 +1,2 @@\n+new\n",
-        buildBranch: "build/FB-PROMOTE-1",
+        buildBranch: "build/FB-PROMOTE1",
         gitCommitHashes: ["abc1234"],
         updatedAt: new Date("2026-05-22T12:00:00.000Z"),
         buildExecState: {
@@ -354,7 +354,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
             status: "ahead",
             recommendedAction: "allow",
             workspace: "/workspace",
-            branch: "build/FB-PROMOTE-1",
+            branch: "build/FB-PROMOTE1",
             headSha: "head",
             headTreeSha: "tree-head",
             targetRef: "origin/main",
@@ -379,7 +379,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
       });
 
     const result = await executeTool("create_portal_pr", {
-      buildId: "FB-PROMOTE-1",
+      buildId: "FB-PROMOTE1",
     }, "user-1", { agentId: "AGT-ORCH-600" });
 
     expect(result.success).toBe(false);
@@ -391,7 +391,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
   it("blocks contribute_to_hive before FeaturePack creation when persisted source-currency says pause", async () => {
     mockPrisma.featureBuild.findUnique
       .mockResolvedValueOnce({
-        buildId: "FB-PROMOTE-2",
+        buildId: "FB-PROMOTE2",
         createdById: "user-1",
       })
       .mockResolvedValueOnce({
@@ -408,7 +408,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
         portfolioId: null,
         createdById: "user-1",
         createdBy: { email: "admin@dpf.local" },
-        buildBranch: "build/FB-PROMOTE-2",
+        buildBranch: "build/FB-PROMOTE2",
         gitCommitHashes: ["abc1234"],
         updatedAt: new Date("2026-05-22T12:00:00.000Z"),
         buildPlan: "## File Structure\n- Create `apps/web/lib/inference/ollama-url.ts`: URL resolver\n",
@@ -419,7 +419,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
             status: "diverged",
             recommendedAction: "pause",
             workspace: "/workspace",
-            branch: "build/FB-PROMOTE-2",
+            branch: "build/FB-PROMOTE2",
             headSha: "head",
             headTreeSha: "tree-head",
             targetRef: "origin/main",
@@ -443,7 +443,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
     });
     mockResolveHiveToken.mockResolvedValueOnce("ghp_test");
     mockDiagnoseSandboxReadiness.mockResolvedValueOnce({
-      buildId: "FB-PROMOTE-2",
+      buildId: "FB-PROMOTE2",
       state: "healthy",
       canDeploy: true,
       canContribute: true,
@@ -454,7 +454,7 @@ describe("sandbox admin MCP and coworker messaging", () => {
     });
 
     const result = await executeTool("contribute_to_hive", {
-      buildId: "FB-PROMOTE-2",
+      buildId: "FB-PROMOTE2",
     }, "user-1", { agentId: "AGT-ORCH-700" });
 
     expect(result.success).toBe(false);

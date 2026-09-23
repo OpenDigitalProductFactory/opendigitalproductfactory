@@ -132,7 +132,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   getQuiescenceConfigMock.mockResolvedValue({ level: "normal", runId: null, enteredAt: null });
   userMock.mockResolvedValue({
-    isSuperuser: true,
+    isSuperuser: true, isActive: true,
     groups: [{ platformRole: { roleId: "HR-000" } }],
   } as never);
   taskRunFindFirstMock.mockResolvedValue(null);

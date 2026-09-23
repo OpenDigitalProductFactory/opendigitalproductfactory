@@ -1,35 +1,32 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { can } from "@/lib/permissions";
-import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 import { getAgentToolGrantsAsync, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { resolveServerOwnedAsyncOperationAuthority } from "@/lib/inference/async-operation-authority";
-import { isCurrentOAuthAccessToken } from "@/lib/auth/oauth-tokens";
+import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
 import type { SemanticReviewRequest } from "./semantic-review-request";
 
 /** Re-evaluate durable actor references against current authority before dispatch. */
 export async function verifySemanticReviewAuthority(packet: SemanticReviewRequest, taskRunId: string,
-  db: Pick<Prisma.TransactionClient, "user" | "mcpApiToken" | "taskRun" | "workroom"> = prisma,
+  db: Pick<Prisma.TransactionClient, "user" | "mcpApiToken" | "taskRun" | "workroom" | "agent" | "authorityBinding"> = prisma,
 ): Promise<boolean> {
   const { actor } = packet;
-  const user = await db.user.findUnique({ where: { id: actor.userId },
-    select: { isActive: true, isSuperuser: true, groups: { include: { platformRole: true } } } });
-  if (!user?.isActive || !can({ userId: actor.userId, isSuperuser: user.isSuperuser,
-    platformRole: resolveWorkforcePlatformRole(user.groups) }, "view_platform")) return false;
+  const user = await currentUserContext(actor.userId, db);
+  if (!user || !can(user, "view_platform")) return false;
 
   if (actor.authSource === "pat" || actor.authSource === "oauth") {
     if (!actor.apiTokenId) return false;
     const token = await db.mcpApiToken.findFirst({
       where: { id: actor.apiTokenId, userId: actor.userId, agentId: actor.agentId, revokedAt: null,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-      select: { scope: true, capability: true, scopes: true, kind: true, revokedAt: true,
-        expiresAt: true, oauthClient: { select: { revokedAt: true } } },
+        ...(actor.authSource === "oauth" ? {} : { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }) },
+      select: { scope: true, capability: true, scopes: true, ...OAUTH_EXECUTION_AUTHORITY_SELECT },
     });
     const scope = token?.scope ?? token?.capability;
     if (!token || (scope !== "write" && scope !== "admin")
       || !isToolAllowedByGrants("review_semantic_change", token.scopes)) return false;
     // Audience was checked on admission; this immutable actor names that same
-    // token row. Recheck its current lifetime and client revocation before work.
-    if (actor.authSource === "oauth" && !isCurrentOAuthAccessToken(token)) return false;
+    // token row. Recheck current human, consent and client authority before work.
+    if (actor.authSource === "oauth" && !await isCurrentOAuthExecutionAuthority(token, db)) return false;
   } else if (actor.authSource !== null && actor.authSource !== "session-jwt") {
     return false;
   }

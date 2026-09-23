@@ -6,17 +6,22 @@
 // lines out of the handlers to fit under the ceiling would have kept the file
 // oversized in substance while satisfying the count.
 //
-// Behaviour is unchanged, including the deliberate swallow: a principal that
-// cannot be resolved yields a null principalId rather than failing the call, so
-// an identity-service hiccup does not take out Workroom writes.
+// OAuth ownership belongs to the authorizing human. The shared assistant is
+// attribution, never a substitute for that human's ownership.
 
 // Callers pass an optional tool context, so the parameter admits undefined —
 // narrowing it here was the one behaviour change the extraction nearly made.
-type ActorContext = { agentId?: string } | undefined;
+type ActorContext = { agentId?: string; authSource?: string } | undefined;
 
 export async function workCapsuleActor(userId: string, context: ActorContext) {
   const { ensureAgentPrincipalIdentity, syncUserPrincipal } = await import("@/lib/identity/principal-linking");
   const agentId = context?.agentId ?? null;
+  if (context?.authSource === "oauth") {
+    const human = await syncUserPrincipal(userId);
+    const agent = agentId ? await ensureAgentPrincipalIdentity(agentId) : null;
+    if (!human?.id || !agent?.id) throw new Error("Your assistant connection could not be verified. Please try again shortly.");
+    return { userId, agentId, principalId: human.id, agentPrincipalId: agent.id };
+  }
   let principalId: string | null = null;
 
   try {

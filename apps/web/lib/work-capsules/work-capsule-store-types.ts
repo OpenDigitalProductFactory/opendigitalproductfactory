@@ -2,6 +2,8 @@ export type WorkCapsuleActor = {
   userId: string;
   agentId: string | null;
   principalId: string | null;
+  /** Server-resolved attribution for an OAuth actor; principalId remains human. */
+  agentPrincipalId?: string;
 };
 
 export type CapsuleDb = {

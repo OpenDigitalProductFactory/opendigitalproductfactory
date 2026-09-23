@@ -48,6 +48,7 @@ vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: { send: (...args: unknown[]) => queue.send(...args) },
 }));
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
+import * as taskAuthority from "./auth/oauth-task-authority";
 const userContext = { platformRole: "developer", isSuperuser: false };
 const immutableParams = {
   agentId: "AGT-WS-REVIEW",
@@ -67,6 +68,24 @@ function submit(tokenId: string, params: Record<string, unknown> = immutablePara
     params,
   });
 }
+
+it("keeps OAuth idempotency stable through refresh while separating concurrent tasks", async () => {
+  const authority = vi.spyOn(taskAuthority, "resolveMcpTaskAuthorityKey").mockResolvedValue("oauth-family:approved-family");
+  try {
+    for (const [tokenId, idempotencyKey] of [["before", "task-a"], ["after", "task-a"], ["after", "task-b"]]) {
+      await submitRemoteCoworkerTask({ token: { tokenId, userId: "user-1", capability: "write", source: "oauth" },
+        userContext, params: { ...immutableParams, idempotencyKey } });
+    }
+    const requests = autonomous.create.mock.calls.map(([request]) => request);
+    expect(requests).toHaveLength(3);
+    expect(requests[0].taskRunId).toBe(requests[1].taskRunId);
+    expect(requests[2].taskRunId).not.toBe(requests[0].taskRunId);
+    expect(requests[1].metadata).toMatchObject({ taskAuthorityKey: "oauth-family:approved-family", apiTokenId: "after" });
+    expect(db.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      userId: "user-1", AND: expect.arrayContaining([{ a2aMetadata: { path: ["taskAuthorityKey"], equals: "oauth-family:approved-family" } }]),
+    }) }));
+  } finally { authority.mockRestore(); }
+});
 beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();

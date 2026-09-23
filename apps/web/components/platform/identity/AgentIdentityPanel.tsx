@@ -43,10 +43,10 @@ export function AgentIdentityPanel({
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">AI Coworker Identity</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          These are your AI coworkers, viewed as identity principals.
+          Review your AI coworkers’ identities and permissions.
         </p>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Track which AI coworkers are already anchored to the principal spine, which now resolve into a shared AIDoc projection, and which still need identity coverage before they can participate cleanly in TAK/GAID trust surfaces.
+          Check identity links, authorized tools, and memory freshness. A linked identity does not grant access to every workroom.
         </p>
       </div>
 

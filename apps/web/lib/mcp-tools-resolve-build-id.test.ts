@@ -159,7 +159,7 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
     );
   });
 
-  it("ignores hint when the user is not the build owner and falls back", async () => {
+  it("refuses a foreign explicit build without writing to a different owned build", async () => {
     const hintedBuildId = "FB-OTHEROWN";
     const ownedBuildId = "FB-OWNED001";
 
@@ -187,14 +187,13 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
       { threadId: "thread-1", routeContext: "/build" },
     );
 
-    expect(result.success).toBe(true);
-    expect(mockPrisma.featureBuild.findFirst).toHaveBeenCalled();
-    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { buildId: ownedBuildId } }),
-    );
+    expect(result.success).toBe(false);
+    expect(mockPrisma.featureBuild.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(mockSaveBuildArtifactRevision).not.toHaveBeenCalled();
   });
 
-  it("ignores malformed hints (no FB- prefix) and falls back", async () => {
+  it("refuses malformed explicit hints without selecting another build", async () => {
     const ownedBuildId = "FB-OWNED002";
 
     mockPrisma.featureBuild.findFirst.mockResolvedValue({ buildId: ownedBuildId });
@@ -215,13 +214,15 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
       { threadId: "thread-1", routeContext: "/build" },
     );
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     // Owner-check findUnique should NOT be invoked for a malformed hint.
     const ownerCheckCalls = mockPrisma.featureBuild.findUnique.mock.calls.filter(
       (call) => (call[0] as { select?: { createdById?: boolean } }).select?.createdById,
     );
     expect(ownerCheckCalls).toHaveLength(0);
-    expect(mockPrisma.featureBuild.findFirst).toHaveBeenCalled();
+    expect(mockPrisma.featureBuild.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(mockSaveBuildArtifactRevision).not.toHaveBeenCalled();
   });
 
   // Pin the select shape so the test fails loudly if someone narrows it

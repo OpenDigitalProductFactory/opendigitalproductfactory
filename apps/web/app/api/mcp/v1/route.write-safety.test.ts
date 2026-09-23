@@ -60,6 +60,7 @@ beforeEach(() => {
   });
   userMock.mockResolvedValue({
     isSuperuser: true,
+    isActive: true,
     groups: [{ platformRole: { roleId: "HR-000" } }],
   } as never);
 });

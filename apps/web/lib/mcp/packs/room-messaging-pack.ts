@@ -41,6 +41,7 @@ const ROOM_WORK_ITEM_SELECT = {
   title: true,
   evidence: true,
   assignedToAgentId: true,
+  assignedToUserId: true,
 } as const;
 
 async function resolveRoomWorkItem(caseKey: string) {
@@ -64,7 +65,7 @@ async function agentLabel(agentId: string): Promise<string> {
 
 async function postRoomMessageHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
   context?: PackContext,
 ): Promise<ToolResult> {
   const agentId = context?.agentId;
@@ -84,8 +85,9 @@ async function postRoomMessageHandler(
 
   const access = await resolveAgentRoomAccess({
     agentId,
+    userId,
     requested: "action",
-    workItem: { id: item.id, evidence: item.evidence, assignedToAgentId: item.assignedToAgentId },
+    workItem: item,
   });
   if (access.decision.level !== "action" || !access.agentPrincipalId) {
     return {
@@ -124,7 +126,7 @@ async function postRoomMessageHandler(
 
 async function readRoomMessagesHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
   context?: PackContext,
 ): Promise<ToolResult> {
   const agentId = context?.agentId;
@@ -143,8 +145,9 @@ async function readRoomMessagesHandler(
 
   const access = await resolveAgentRoomAccess({
     agentId,
+    userId,
     requested: "content",
-    workItem: { id: item.id, evidence: item.evidence, assignedToAgentId: item.assignedToAgentId },
+    workItem: item,
   });
   if (access.decision.level !== "content") {
     return {
@@ -154,9 +157,14 @@ async function readRoomMessagesHandler(
     };
   }
 
-  const children = await prisma.workItem.findMany({ where: { parentItemId: item.id }, select: { id: true } });
+  const children = await prisma.workItem.findMany({ where: { parentItemId: item.id }, select: ROOM_WORK_ITEM_SELECT });
+  const admittedChildIds: string[] = [];
+  for (const child of children) {
+    const childAccess = await resolveAgentRoomAccess({ agentId, userId, requested: "content", workItem: child });
+    if (childAccess.decision.level === "content") admittedChildIds.push(child.id);
+  }
   const rows = await prisma.workItemMessage.findMany({
-    where: { workItemId: { in: [item.id, ...children.map((child) => child.id)] } },
+    where: { workItemId: { in: [item.id, ...admittedChildIds] } },
     orderBy: [{ createdAt: "asc" }],
     take: 20,
     select: {
@@ -189,7 +197,7 @@ async function readRoomMessagesHandler(
 
 async function inviteRoomParticipantHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
   context?: PackContext,
 ): Promise<ToolResult> {
   const agentId = context?.agentId;
@@ -211,8 +219,9 @@ async function inviteRoomParticipantHandler(
   // Only a room member with action rights (the Coordinator, or an active participant) may invite.
   const caller = await resolveAgentRoomAccess({
     agentId,
+    userId,
     requested: "action",
-    workItem: { id: item.id, evidence: item.evidence, assignedToAgentId: item.assignedToAgentId },
+    workItem: item,
   });
   if (caller.decision.level !== "action") {
     return {
@@ -372,7 +381,7 @@ async function appointRoomCoordinatorHandler(
 
 async function getCoworkerRoomEngagementHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
   context?: PackContext,
 ): Promise<ToolResult> {
   const targetAgentId = str(params, "agentId") ?? context?.agentId ?? null;
@@ -380,10 +389,18 @@ async function getCoworkerRoomEngagementHandler(
     return { success: false, error: "invalid_input", message: "agentId is required (or call as a coworker)." };
   }
   const engagement = await getCoworkerRoomEngagement({ agentId: targetAgentId });
+  const rooms = [];
+  for (const room of engagement.rooms) {
+    const item = await resolveRoomWorkItem(room.caseKey);
+    if (!item) continue;
+    const access = await resolveAgentRoomAccess({ agentId: context?.agentId ?? targetAgentId,
+      userId, requested: "content", workItem: item });
+    if (access.decision.level === "content") rooms.push(room);
+  }
   return {
     success: true,
-    message: `${engagement.activeRoomCount} active Work Room(s) for ${targetAgentId}.`,
-    data: engagement as unknown as Record<string, unknown>,
+    message: `${rooms.length} active Work Room(s) for ${targetAgentId}.`,
+    data: { ...engagement, rooms, activeRoomCount: rooms.length },
   };
 }
 

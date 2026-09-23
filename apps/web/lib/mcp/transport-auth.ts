@@ -16,6 +16,7 @@ export type ResolvedMcpTransportAuth = ResolvedMcpToken & {
   /** BI-B949993E: present only on session-JWT tokens minted for a governed TaskRun. */
   taskRunId?: string | null;
   source: McpAuthSource;
+  oauthIdentitySetupRequired?: boolean;
 };
 
 export type McpAuthenticationResult =
@@ -129,7 +130,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpAuthe
   if (oauth) {
     return {
       ...ok(),
-      token: { ...oauth.resolved, source: "oauth" },
+      token: { ...oauth.resolved, source: "oauth", oauthIdentitySetupRequired: oauth.identitySetupRequired },
       oauthGrantedScopes: oauth.publicScopes,
     };
   }

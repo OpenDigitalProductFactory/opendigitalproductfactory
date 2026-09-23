@@ -1,0 +1,91 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman",
+  "summary": "BI-B986A18B: additive consent binding and indexed credential families. Existing rows stay unbound. No new secret material or copied personal attributes. Revoke rather than rewrite consent; rollback preserves restrictive validation and revocations. No data deletion or backfill. Affected copies are install-local PostgreSQL and its existing backup policy. Migration and live acceptance remain pending.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "AuthorityBinding",
+      "lifecycleDisposition": "Existing model retention and revocation policies retained. Consent bindings remain audit records; expired protocol credentials retain their existing purge windows.",
+      "fields": [
+        {
+          "name": "oauthPurpose",
+          "resolution": "not-applicable",
+          "reason": "Typed purpose distinguishes delegated eligibility from issued consent.",
+          "provenance": "Authenticated human consent, approved delegation or server-generated credential family.",
+          "flags": []
+        },
+        {
+          "name": "oauthUserId",
+          "resolution": "inherited",
+          "reason": "Nullable reference to existing consent, human or client; no identity inferred or credentials backfilled.",
+          "provenance": "Authenticated human consent, approved delegation or server-generated credential family.",
+          "flags": []
+        },
+        {
+          "name": "oauthClientId",
+          "resolution": "inherited",
+          "reason": "Nullable reference to existing consent, human or client; no identity inferred or credentials backfilled.",
+          "provenance": "Authenticated human consent, approved delegation or server-generated credential family.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "OAuthAuthorizationCode",
+      "lifecycleDisposition": "Existing model retention and revocation policies retained. Consent bindings remain audit records; expired protocol credentials retain their existing purge windows.",
+      "fields": [
+        {
+          "name": "authorityBindingId",
+          "resolution": "inherited",
+          "reason": "Nullable reference to existing consent, human or client; no identity inferred or credentials backfilled.",
+          "provenance": "Authenticated human consent, approved delegation or server-generated credential family.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "McpApiToken",
+      "lifecycleDisposition": "Existing model retention and revocation policies retained. Consent bindings remain audit records; expired protocol credentials retain their existing purge windows.",
+      "fields": [
+        {
+          "name": "authorityBindingId",
+          "resolution": "inherited",
+          "reason": "Nullable reference to existing consent, human or client; no identity inferred or credentials backfilled.",
+          "provenance": "Authenticated human consent, approved delegation or server-generated credential family.",
+          "flags": []
+        },
+        {
+          "name": "oauthFamilyKey",
+          "resolution": "inherited",
+          "reason": "Nullable reference to existing consent, human or client; no identity inferred or credentials backfilled.",
+          "provenance": "Authenticated human consent, approved delegation or server-generated credential family.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "OAuthRefreshToken",
+      "lifecycleDisposition": "Existing model retention and revocation policies retained. Consent bindings remain audit records; expired protocol credentials retain their existing purge windows.",
+      "fields": [
+        {
+          "name": "authorityBindingId",
+          "resolution": "inherited",
+          "reason": "Nullable reference to existing consent, human or client; no identity inferred or credentials backfilled.",
+          "provenance": "Authenticated human consent, approved delegation or server-generated credential family.",
+          "flags": []
+        },
+        {
+          "name": "oauthFamilyKey",
+          "resolution": "inherited",
+          "reason": "Nullable reference to existing consent, human or client; no identity inferred or credentials backfilled.",
+          "provenance": "Authenticated human consent, approved delegation or server-generated credential family.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
