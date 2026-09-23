@@ -15,6 +15,7 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   lazyExec: () => execMock,
   lazyPath: () => ({
     resolve: (...p: string[]) => p.join("/"),
+    join: (...p: string[]) => p.join("/"),
     basename: (p: string) => p.split("/").filter(Boolean).pop() ?? "",
   }),
   lazyFsPromises: () => ({ rm: rmMock }),
@@ -92,14 +93,14 @@ describe("resolveIndexSource", () => {
     execMock
       .mockResolvedValueOnce(ok(`${SHA}\n`))                        // rev-parse origin/main
       .mockRejectedValueOnce(new Error("not a git repository"))     // no usable worktree
-      .mockResolvedValueOnce(ok("\n"))                              // worktree prune
+      .mockResolvedValueOnce(ok("\n"))                              // worktree remove (own path)
       .mockResolvedValueOnce(ok("Preparing worktree\n"));           // worktree add
 
     const src = await resolveIndexSource("/sandbox-workspace");
 
     expect(src.usedDefaultBranch).toBe(true);
     const cmds = execMock.mock.calls.map((c) => String(c[0]));
-    expect(cmds.some((c) => c.includes("worktree prune"))).toBe(true);
+    expect(cmds.some((c) => c.includes(`worktree remove --force "/tmp/${CODE_GRAPH_WORKTREE_DIRNAME}"`))).toBe(true);
     expect(cmds.some((c) => c.includes("worktree add --detach --force"))).toBe(true);
   });
 
@@ -120,7 +121,7 @@ describe("resolveIndexSource", () => {
     execMock
       .mockResolvedValueOnce(ok(`${SHA}\n`))                    // origin/main
       .mockRejectedValueOnce(new Error("not a git repository")) // no worktree
-      .mockResolvedValueOnce(ok("\n"))                          // worktree prune
+      .mockResolvedValueOnce(ok("\n"))                          // worktree remove (own path)
       .mockRejectedValueOnce(new Error("fatal: cannot add"))    // add fails
       .mockRejectedValueOnce(new Error("nope"));                // worktree list
 
@@ -144,11 +145,11 @@ describe("resolveIndexSource", () => {
 // died on "fatal: '<path>' already exists" — because --force overrides a stale
 // REGISTRATION, not a leftover DIRECTORY.
 describe("orphaned worktree recovery", () => {
-  it("prunes and removes a leftover directory before recreating", async () => {
+  it("removes its own registration and leftover directory before recreating", async () => {
     execMock
       .mockResolvedValueOnce(ok(`${SHA}\n`))                     // origin/main
       .mockRejectedValueOnce(new Error("not a git repository"))  // dir exists but unusable
-      .mockResolvedValueOnce(ok("\n"))                           // worktree prune
+      .mockRejectedValueOnce(new Error("is not a working tree")) // worktree remove refuses a stale registration
       .mockResolvedValueOnce(ok("Preparing worktree\n"));        // worktree add succeeds
 
     const src = await resolveIndexSource("/sandbox-workspace");
@@ -157,7 +158,31 @@ describe("orphaned worktree recovery", () => {
       recursive: true,
       force: true,
     });
+    expect(rmMock).toHaveBeenCalledWith(`/sandbox-workspace/.git/worktrees/${CODE_GRAPH_WORKTREE_DIRNAME}`, {
+      recursive: true,
+      force: true,
+    });
     expect(src.usedDefaultBranch).toBe(true);
+  });
+
+  // The sandbox's build worktrees are registered by paths that only resolve
+  // inside the sandbox container. From the portal's mount every one of them
+  // looks missing, so a blanket prune here deleted every build's registration
+  // on each indexer pass. The indexer may only ever touch its own.
+  it("never runs a blanket `git worktree prune` against the shared registry", async () => {
+    execMock
+      .mockResolvedValueOnce(ok(`${SHA}\n`))
+      .mockRejectedValueOnce(new Error("not a git repository"))
+      .mockResolvedValueOnce(ok("\n"))
+      .mockResolvedValueOnce(ok("Preparing worktree\n"));
+
+    await resolveIndexSource("/sandbox-workspace");
+
+    const cmds = execMock.mock.calls.map((c) => String(c[0]));
+    expect(cmds.some((c) => /worktree prune/.test(c))).toBe(false);
+    for (const call of rmMock.mock.calls as unknown as Array<[string]>) {
+      expect(call[0]).toContain(CODE_GRAPH_WORKTREE_DIRNAME);
+    }
   });
 
   it("honours DPF_CODE_GRAPH_WORKTREE_DIR", async () => {
