@@ -28,6 +28,13 @@ type ResponsesMessagePart = {
   text?: string;
 };
 
+/** The parameter a 400 names as unsupported, e.g. {"detail":"Unsupported parameter: temperature"}. */
+export function unsupportedParameterName(status: number, errBody: string): string | null {
+  if (status !== 400) return null;
+  const match = /unsupported parameter:?\s*['"`]?([A-Za-z_][A-Za-z0-9_.]*)/i.exec(errBody);
+  return match ? match[1]! : null;
+}
+
 function isChatGptBackend(providerId: string, baseUrl: string): boolean {
   return providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api");
 }
@@ -251,7 +258,10 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     if (plan.maxTokens && !isChatGptBackend(providerId, provider.baseUrl)) {
       body.max_output_tokens = plan.maxTokens;
     }
-    if (plan.temperature !== undefined) {
+    // BI-EFA3869E: the Codex backend's reasoning models reject `temperature`
+    // ("Unsupported parameter: temperature", HTTP 400) — every model the
+    // ChatGPT subscription lists. Sampling is steered by reasoning.effort there.
+    if (plan.temperature !== undefined && !isChatGptBackend(providerId, provider.baseUrl)) {
       body.temperature = plan.temperature;
     }
     // EP-INF-013: explicit reasoning_effort takes precedence; fall back to effort.
@@ -289,26 +299,36 @@ export const responsesAdapter: ExecutionAdapterHandler = {
 
     const startMs = Date.now();
     let res: Response;
-    try {
-      res = await request.fetchImpl(responsesUrl, {
-        method: "POST",
-        headers: provider.headers,
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(180_000),
-      });
-    } catch (e) {
-      throw new InferenceError(
-        `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
-        "network",
-        providerId,
-      );
-    }
-    const inferenceMs = Date.now() - startMs;
-
-    if (!res.ok) {
+    // At most one narrowing retry: a provider that names an unsupported request
+    // parameter is asking for a narrower request, not refusing the work, so drop
+    // that one parameter and send again rather than turning catalog drift into
+    // a dead provider.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        res = await request.fetchImpl(responsesUrl, {
+          method: "POST",
+          headers: provider.headers,
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(180_000),
+        });
+      } catch (e) {
+        throw new InferenceError(
+          `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
+          "network",
+          providerId,
+        );
+      }
+      if (res.ok) break;
       const errBody = await res.text().catch(() => "");
+      const unsupported = unsupportedParameterName(res.status, errBody);
+      if (attempt === 0 && unsupported && unsupported in body) {
+        console.warn(`[responses-adapter] ${providerId} rejected parameter "${unsupported}" — retrying once without it.`);
+        delete body[unsupported];
+        continue;
+      }
       throw classifyHttpError(res.status, providerId, errBody, res.headers);
     }
+    const inferenceMs = Date.now() - startMs;
 
     const data = await readResponsesPayload(res, providerId, provider.baseUrl);
     const parsed = parseResponsesOutput(data.output, data.output_text);
