@@ -21,24 +21,27 @@ export function assertOAuthWorkroomOwner(room: Ownership, actor: WorkCapsuleActo
 }
 
 /** Runs at governed dispatch, before a tool can write evidence or renew a lease. */
-export async function authorizeOAuthCapsuleTarget(input: {
+type OAuthCapsuleTarget = {
   params: Record<string, unknown>; userId: string; agentId?: string; authSource?: string; action: boolean;
-}): Promise<boolean> {
-  if (input.authSource !== "oauth" || typeof input.params.capsuleId !== "string") return true;
+};
+export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
+  if (input.authSource !== "oauth" || typeof input.params.capsuleId !== "string") return null;
+  const notAdmitted = { success: false as const, error: "workroom_access_denied",
+    message: "You or your assistant are not admitted to this workroom. Ask its owner to invite you." };
   const { prisma } = await import("@dpf/db");
-  const { workCapsuleActor } = await import("./handler-actor");
-  const actor = await workCapsuleActor(input.userId, input);
-  const room = await prisma.workroom.findUnique({ where: { capsuleId: input.params.capsuleId } });
-  if (!room) return false;
-  try {
-    assertOAuthWorkroomOwner(room, actor);
-    if (!room.workItemId && [room.createdByPrincipalId, room.leaseHolderPrincipalId, room.requestedByPrincipalId].includes(actor.agentPrincipalId ?? null)) return true;
-  } catch { /* Explicit room participation may authorize a collaborator. */ }
-  if (!room.workItemId || !input.agentId) return false;
-  const workItem = await prisma.workItem.findUnique({ where: { id: room.workItemId }, select: { id: true, evidence: true, assignedToAgentId: true, assignedToUserId: true } });
-  if (!workItem) return false;
-  const { resolveAgentRoomAccess } = await import("@/lib/work-management/room-agent-access.server");
+  const room = await prisma.workroom.findUnique({ where: { capsuleId: input.params.capsuleId }, select: { id: true } });
+  if (!room || !input.agentId) return notAdmitted;
+  const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
   const requested = input.action ? "action" : "content";
-  const { decision } = await resolveAgentRoomAccess({ userId: input.userId, agentId: input.agentId, workItem, requested });
-  return decision.level === requested;
+  const { decision } = await resolveAgentWorkroomAccess({ userId: input.userId, agentId: input.agentId, workroomId: room.id, requested });
+  if (decision.level === requested) return null;
+  return decision.reason === "insufficient-clearance" ? {
+    success: false as const, error: "workroom_data_access_required",
+    message: "You or your assistant cannot use this workroom's information. Ask an administrator to review data access in AI Coworker Identity. Signing in again will not change this permission.",
+    data: { recoveryUrl: "/platform/identity/agents" },
+  } : notAdmitted;
+}
+
+export async function authorizeOAuthCapsuleTarget(input: OAuthCapsuleTarget): Promise<boolean> {
+  return await workroomTargetAccessRefusal(input) === null;
 }

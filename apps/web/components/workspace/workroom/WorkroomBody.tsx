@@ -129,14 +129,14 @@ function BoundaryNotice({ room }: { room: WorkroomView }) {
   );
 }
 
-function ContextPanels({ room }: { room: WorkroomView }) {
+function ContextPanels({ room, workroomId }: { room: WorkroomView; workroomId?: string | null }) {
   const decisions = room.activity.filter((event) =>
     event.kind === "decision-proposed" || event.kind === "decision-resolved",
   );
 
   return (
     <div className="space-y-3">
-      <WorkroomParticipants room={room} />
+      <WorkroomParticipants room={room} workroomId={workroomId} />
 
       <WorkroomProcessOverseer room={room} />
 
@@ -318,7 +318,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
         </section>
 
         <aside aria-label="Work Room context" className="space-y-3">
-          <ContextPanels room={room} />
+      <ContextPanels room={room} workroomId={detail.workroomRowId} />
         </aside>
       </div>
 

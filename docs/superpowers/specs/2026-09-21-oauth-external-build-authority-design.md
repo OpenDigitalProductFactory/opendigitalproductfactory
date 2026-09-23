@@ -238,4 +238,56 @@ Implementation admitted under IRD-A8107E37E8CF and coverage receipt
 cmubxupm50wg301ru404n27ll. The initial committed identity lifecycle passed the
 canonical gate at afd62e4f095f1afb31a8a2bd492c468b05b746b1, evidence
 cmuc1na3g165e01mkk2eyj7jq. Subsequent human-authority and task-continuity changes
-need final review and gate evidence. Nothing is deployed or live-accepted yet.
+landed in #5549 and deployed at 5c52f711c98c22a864867b40b6dd6229b7d285ad.
+Fresh consent, old unbound recovery, silent refresh, replay revocation and two
+concurrent tasks passed live. Positive room evidence remains unaccepted.
+
+### Supported data-access setup after live acceptance
+
+Decision DI-A8F0093A0CAF extends BI-B986A18B in WC-BDBAFFC7. Agent Principal
+clearance intentionally defaults to public; new workrooms default to internal.
+The live test confirmed both canonical and legacy external identities remain
+public. No existing source/UI path writes this coworker clearance.
+
+Extend the existing AI Coworker Identity surface with one on-demand editor.
+The signed-in human must currently hold manage_agents and may assign only
+levels in their recorded Principal clearance. Keep defaults and existing rows
+unchanged until explicit Save. Use the existing typed Principal field, a
+compare-and-set update and AuthorizationDecisionLog in one serializable
+transaction. Record human, assistant, before/after access and rationale.
+
+The setting affects the selected coworker across connections, visibly explained
+before Save. Current human permissions, scopes, coworker grants, room admission
+and action approval gates remain independent intersections. Existing tokens
+pick up grants and revocations on their next operation without new consent.
+Return a data-access recovery link for an insufficient-clearance refusal;
+retain the invitation explanation for an admission refusal. Do not automatically
+admit the coworker to existing rooms or override explicit public-only limits.
+
+### Existing-room recovery and author evidence
+
+DI-0F2E1820E309 extends the same repair in WC-BDBAFFC7. Add an on-demand
+assistant invitation in the selected room's Participants section. The signed-in
+owner chooses an assistant from their active, server-approved OAuth bindings.
+An active human, exact room ownership, current clearance and active assistant
+identity are checked server-side. Persist only that WorkroomParticipant row and
+an audit in one transaction; never write every room under its WorkItem.
+
+OAuth calls targeting a capsule resolve both principals against that exact
+room. Active participant roles distinguish content from action. An explicit
+inactive assignment denies access despite historical creator/holder references.
+Sibling-room holder references never supply admission. Existing case-wide
+policy remains an additional restriction, not an implicit invitation to every
+child room. Unanchored rooms use their declared boundary or the internal default
+and receive the same clearance checks; ownership is not a clearance bypass.
+
+The invitation grants no user capability, tool grant, OAuth scope or review
+authority. Saved access applies to the existing connection's next operation.
+External development author profiles gain only initiative_evidence_write under
+BI-1E56D891, preserving explicit grant revocations and independent reviewer
+grants. The existing author lane still checks manage_backlog for the current
+human. No production or administrative grant is added.
+
+Acceptance includes siblings sharing one WorkItem, foreign users sharing an
+assistant, removed participants, observer versus contributor, unanchored-room
+clearance, atomic audited invitation, and existing-token use without new consent.

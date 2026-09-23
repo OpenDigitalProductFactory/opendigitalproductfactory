@@ -4,6 +4,8 @@ import {
 } from "@/lib/identity/agent-identity-snapshot";
 
 import { IdentityProjectionSummaryGrid } from "./IdentityProjectionSummaryGrid";
+import { CoworkerDataAccessSettings } from "./CoworkerDataAccessSettings";
+import type { CoworkerDataAccessChoice } from "@/lib/identity/coworker-data-access";
 
 function formatValidationLabel(state: AgentIdentitySnapshot["validationState"]) {
   switch (state) {
@@ -34,21 +36,30 @@ function getValidationClasses(state: AgentIdentitySnapshot["validationState"]) {
 export function AgentIdentityPanel({
   agents,
   summary,
+  editableDataAccess = [],
+  dataAccessChoices,
 }: {
   agents: AgentIdentitySnapshot[];
   summary: AgentIdentitySnapshotSummary;
+  editableDataAccess?: string[];
+  dataAccessChoices?: CoworkerDataAccessChoice[];
 }) {
   return (
     <section className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">AI Coworker Identity</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Review your AI coworkers’ identities and permissions.
+          Review coworkers’ identities and permissions.
         </p>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
           Check identity links, authorized tools, and memory freshness. A linked identity does not grant access to every workroom.
         </p>
       </div>
+
+      <CoworkerDataAccessSettings allowed={editableDataAccess} coworkers={dataAccessChoices ?? agents.map((agent) => ({
+        agentId: agent.agentId, name: agent.name, levels: agent.dataAccess ?? ["public"],
+        editable: agent.status === "active" && !!agent.linkedPrincipalId,
+      }))} />
 
       <IdentityProjectionSummaryGrid summary={summary} />
 
@@ -123,6 +134,7 @@ export function AgentIdentityPanel({
                 </div>
               </div>
             </div>
+
 
             <div className="mt-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">

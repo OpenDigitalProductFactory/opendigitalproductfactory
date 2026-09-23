@@ -7988,8 +7988,8 @@
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
-    "longSentences": 1,
-    "textMass": 60
+    "longSentences": 0,
+    "textMass": 40
   },
   "apps/web/components/platform/identity/ApplicationAssignmentsPanel.tsx": {
     "vocabulary": 0,
@@ -8006,6 +8006,22 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 133
+  },
+  "apps/web/components/platform/identity/CoworkerDataAccess.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/components/platform/identity/CoworkerDataAccessSettings.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
   },
   "apps/web/components/platform/identity/DirectoryAuthoritiesPanel.tsx": {
     "vocabulary": 0,
@@ -9560,6 +9576,14 @@
     "textMass": 49
   },
   "apps/web/components/workspace/workroom/WorkroomHeader.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
+  },
+  "apps/web/components/workspace/workroom/WorkroomInviteAssistant.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,

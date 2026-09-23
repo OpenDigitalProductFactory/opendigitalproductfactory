@@ -4,7 +4,7 @@ status: draft
 
 # OAuth external build authority implementation plan
 
-Status: implementation in progress; no deployed fix or live acceptance yet.
+Status: OAuth repair deployed in #5549; live acceptance remains incomplete.
 Parent: BI-B986A18B. Workroom: WC-F174CC4F.
 Design: ../specs/2026-09-21-oauth-external-build-authority-design.md.
 
@@ -14,6 +14,76 @@ implementation, dpf-local-merge-ci-before-push plus the completion gate before
 any success claim, and dpf-pr-with-dco for handoff.
 
 ## Sequence and delivery boundaries
+
+### Live acceptance follow-up: coworker data access
+
+Workroom WC-BDBAFFC7; decision DI-A8F0093A0CAF. On deployed 5c52f711,
+fresh consent, identity, silent refresh, refresh replay revocation and concurrent
+task continuity passed. New own-room writes failed after exact operation approval:
+the coworker's recorded clearance is public while the room requires internal.
+Canonical and legacy external identities share this intentional public default.
+
+1. Add a tested, audited writer for the existing Principal clearance field.
+   Require current manage_agents permission and an active human principal;
+   assigned levels must be within that human's recorded clearance. Reject stale
+   edits; commit audit and permission together. No seed, backfill or schema change.
+2. Extend the existing AI Coworker Identity page with an accessible data-access
+   setting. Show the current restriction and scope of the change before Save.
+   Preserve defaults, tool grants, approval policy and separate room admission.
+3. Explain that saved access applies to existing connections without another
+   login. A different user's permissions still bound every interaction.
+4. Test nonadministrator, inactive human/agent, out-of-scope level, stale save,
+   audit failure, revoked access and existing-token behavior. Retest positive
+   own-room evidence and negative cross-user/room cases on the canonical image.
+
+This follow-up does not claim full OAuth acceptance or change the approval
+policy. Legacy human-only rooms still need a supported explicit admission action.
+
+### Complete existing-room recovery on the same governed branch
+
+Decision DI-0F2E1820E309; coverage BI-B986A18B (room recovery) and BI-1E56D891
+(external author profile). Extend PR #5558 before queueing its final head.
+
+1. Reproduce cross-sibling admission and unanchored-room clearance gaps. Add an
+   exact-room resolver using existing Principal, participant lifecycle/roles,
+   boundary and case policy. Keep case-wide messaging semantics separate.
+2. Add an owner-authenticated, transactional assistant invitation and audit.
+   Select only active assistants already approved in that human's OAuth setup.
+   Treat existing observer/contributor assignments explicitly; never replace
+   coordinator or reviewer assignments through this recovery control.
+3. Add the on-demand control in Participants, carrying the already selected
+   workroomRowId from the case detail. Explain room-only scope and show refusals.
+4. Add the author evidence grant to canonical and legacy external profiles;
+   test that independent review/admin/deployment grants remain absent.
+5. Run targeted negative and UI tests, exact-head canonical gate and independent
+   review. Update PR scope and evidence, pass protected checks and merge queue.
+6. Deploy canonically; verify real OAuth evidence, room recovery, denied users
+   and siblings, refresh and concurrent tasks. Keep the parent unaccepted until
+   the complete matrix passes. No DB authorization edits or token substitution.
+
+The extension now includes exact legacy identities in the administrator's
+data-access selector, without changing the deduplicated identity cards or
+requiring a replacement connection. The room editor loads current participation,
+preserves contributor access on reopen, and blocks selection changes during Save.
+Missing case admission fields differ from explicit empty restrictions; a
+sensitivity-only policy does not invent a membership denial. Removed membership
+still overrides historical ownership.
+
+CI follow-through: the identity page's deliberate new control requires the
+supported measured route-baseline refresh. Splice only that route, retaining
+its word and accessibility budgets. CodeQL's credential-name heuristic treated
+the fixed refusal result of oauthCapsuleTargetRefusal as a password and followed
+it into the existing transient HMAC redaction vault. Rename that result helper
+to workroomTargetAccessRefusal to describe its actual output; do not change
+cryptography, credential handling, or suppress the security rule.
+The primary rule sources are CodeQL's
+[sensitive-call classification](https://github.com/github/codeql/blob/main/javascript/ql/lib/semmle/javascript/security/SensitiveActions.qll)
+and [credential-name heuristic](https://github.com/github/codeql/blob/main/shared/concepts/codeql/concepts/internal/SensitiveDataHeuristics.qll).
+
+Grant convergence uses the existing boot seed on canonical and legacy profiles;
+both seed paths honor AgentToolGrantRevocation tombstones. The author-only grant
+does not add independent review, administrator or deployment authority. Data
+clearance and room admission still require explicit supported setup.
 
 1. Identity lifecycle (BI-B986A18B): extend core-identity.prisma and forward
    migration; auth/oauth-tokens.ts, oauth-consent-page.ts, authorize/token
