@@ -334,6 +334,15 @@ services:
       # DELETE_BRANCHES to 1 here: those are live/destructive and require an
       # explicit per-install operator opt-in after a clean observe soak.
       DPF_WORKTREE_JANITOR_ENABLED: ${DPF_WORKTREE_JANITOR_ENABLED:-1}
+      # BI-8914E888: the janitor can be switched ON but could never be allowed to
+      # ACT, because these two were read by the code and forwarded by nothing.
+      # Both default to today's behaviour, so converging changes nothing until an
+      # operator opts in. DPF_WORKTREE_JANITOR_MAX is the retained-worktree bound
+      # above which Tier-A reaping runs without a human decision.
+      DPF_WORKTREE_JANITOR_AUTO_REAP: ${DPF_WORKTREE_JANITOR_AUTO_REAP:-0}
+      DPF_WORKTREE_JANITOR_MAX: ${DPF_WORKTREE_JANITOR_MAX:-40}
+      DPF_ASSURANCE_AUTOMERGE_ENABLED: ${DPF_ASSURANCE_AUTOMERGE_ENABLED:-0}
+      DPF_REMOTE_ACTION_DISPATCH_ENABLED: ${DPF_REMOTE_ACTION_DISPATCH_ENABLED:-0}
       DPF_SANDBOX_BUILD_GC_ENABLED: ${DPF_SANDBOX_BUILD_GC_ENABLED:-1}
       # WS9 governed WorkCapsule reaper (BI-CBAAEA94): transitions dead capsules
       # (lease-expired / linked-build-terminal / idle-past-floor) working->abandoned
