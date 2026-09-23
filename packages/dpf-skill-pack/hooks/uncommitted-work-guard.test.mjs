@@ -140,3 +140,54 @@ describe("BI-910C37B1 — the unattributed message", () => {
     assert.equal(buildUnattributedWarning([]), "");
   });
 });
+
+// ── Stop hook re-entry ───────────────────────────────────────────────────────
+//
+// 2026-09-23: with one dirty file in a clone, every Stop re-fired the guard,
+// the guard re-emitted its context, the model answered, and the turn tried to
+// end again — nine times, until Claude Code's block cap overrode the hook.
+// The harness marks the re-entry pass with `stop_hook_active`; the guard must
+// return success silently there.
+
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+function dirtyRepo() {
+  const dir = mkdtempSync(join(tmpdir(), "uwg-"));
+  const git = (...a) => spawnSync("git", ["-C", dir, ...a], { encoding: "utf8" });
+  git("init", "-q");
+  git("config", "user.email", "t@t");
+  git("config", "user.name", "t");
+  writeFileSync(join(dir, "a.txt"), "1\n");
+  git("add", "a.txt");
+  git("commit", "-q", "-m", "init");
+  writeFileSync(join(dir, "a.txt"), "2\n");
+  return dir;
+}
+
+function runGuard(dir, payload) {
+  const script = fileURLToPath(new URL("./uncommitted-work-guard.mjs", import.meta.url));
+  return spawnSync(process.execPath, [script, "--repo-root", dir], {
+    encoding: "utf8",
+    input: JSON.stringify(payload),
+    env: { ...process.env, CLAUDE_PROJECT_DIR: "", DPF_SKIP_UNCOMMITTED_WORK_GUARD: "" },
+  });
+}
+
+describe("Stop hook re-entry (stop_hook_active)", () => {
+  it("warns on the first Stop when the tree is dirty", () => {
+    const r = runGuard(dirtyRepo(), { hook_event_name: "Stop", stop_hook_active: false });
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /uncommitted-work-guard/);
+    assert.match(r.stdout, /a\.txt/);
+  });
+
+  it("stays silent on the re-entry pass so the turn can end", () => {
+    const r = runGuard(dirtyRepo(), { hook_event_name: "Stop", stop_hook_active: true });
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, "");
+  });
+});

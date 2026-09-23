@@ -87,15 +87,25 @@ function main() {
   }
 
   let hookEventName = "SessionEnd";
+  let stopHookActive = false;
   try {
     const raw = readFileSync(0, "utf8");
     const payload = raw ? JSON.parse(raw) : {};
     if (payload?.hook_event_name === "Stop" || payload?.hookEventName === "Stop") {
       hookEventName = "Stop";
     }
+    stopHookActive = payload?.stop_hook_active === true || payload?.stopHookActive === true;
   } catch {
     // stdin optional for direct invocation — default SessionEnd shape
   }
+
+  // A Stop hook that returns context re-prompts the model, and the model's
+  // reply ends the turn again — which runs this hook again. Claude Code marks
+  // that second pass with `stop_hook_active`; answering it with more context
+  // is an unbounded loop the harness only cuts at its block cap ("A hook
+  // blocked the turn from ending 9 consecutive times"). Warn once, then stay
+  // silent: the operator has already seen the list.
+  if (stopHookActive) process.exit(0);
 
   emitClaudeWarning(warning, hookEventName);
   process.exit(0);
