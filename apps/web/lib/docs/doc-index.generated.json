@@ -82,6 +82,8 @@
         "32-the-experience-layer-exists-too-and-has-the-same-build-studio-only-problem",
         "4-the-gap-named",
         "5-design-principles-the-bar-any-long-running-process-must-clear",
+        "51-common-recovery-contract",
+        "interruption-acceptance-matrix",
         "6-target-architecture-the-durable-agentic-process-dap",
         "7-applying-dap",
         "71-build-studio-the-first-and-proving-instance",
@@ -4498,6 +4500,8 @@
         "why",
         "what-this-does-not-license",
         "how-to-apply",
+        "recovery-is-a-platform-guarantee",
+        "server-ownership",
         "decision-dimensions",
         "related"
       ]
