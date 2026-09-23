@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 714,
+  "pageCount": 715,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3588,6 +3588,19 @@
         "related-principles"
       ]
     },
+    "docs/founder-kernel/wiki/principles/autonomy-graduates-on-recorded-agreement.md": {
+      "publicHref": "/founder-kernel/wiki/principles/autonomy-graduates-on-recorded-agreement/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "what-this-page-does-not-say",
+        "how-to-apply",
+        "overlap-scan-43"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md": {
       "publicHref": "/founder-kernel/wiki/principles/branch-guard-before-implementation/",
       "portalHref": null,
@@ -3892,6 +3905,7 @@
         "decision-dimensions",
         "examples",
         "sources",
+        "amendment-2026-09-22-progressive-disclosure-hides-machinery-never-the-guarantee",
         "overlap-scan-43"
       ]
     },
@@ -3923,6 +3937,7 @@
         "decision-dimensions",
         "examples",
         "when-this-does-not-apply",
+        "amendment-2026-09-22-a-reach-limit-is-a-recorded-outcome-not-a-silent-stall",
         "see-also"
       ]
     },
@@ -4069,7 +4084,8 @@
         "how-to-apply",
         "decision-dimensions",
         "examples",
-        "sources"
+        "sources",
+        "amendment-2026-09-22-i-did-not-click-it-is-inconclusive-not-a-pass"
       ]
     },
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": {
@@ -4410,7 +4426,8 @@
         "applies-to",
         "how-to-apply",
         "decision-dimensions",
-        "overlap-scan-43"
+        "overlap-scan-43",
+        "amendment-2026-09-22-background-work-has-a-named-home-the-coworker"
       ]
     },
     "docs/founder-kernel/wiki/principles/optimize-for-the-whole.md": {
@@ -4571,7 +4588,8 @@
         "the-acknowledgement-as-state-requirement",
         "anti-pattern",
         "penalty",
-        "related-principles"
+        "related-principles",
+        "amendment-2026-09-22-a-genuine-fork-is-a-button-not-a-sentence-to-answer"
       ]
     },
     "docs/founder-kernel/wiki/principles/prose-is-not-a-control-gate.md": {
@@ -4869,6 +4887,7 @@
         "specific-tactics",
         "seed-change-pre-push-checklist",
         "penalty",
+        "amendment-2026-09-22-this-applies-to-a-shared-state-write-not-only-to-verification",
         "related-principles"
       ]
     },
@@ -4913,7 +4932,8 @@
         "the-contract",
         "anti-patterns",
         "related-principles",
-        "spec-references"
+        "spec-references",
+        "amendment-2026-09-22-surface-a-deprecation-when-you-meet-it-and-price-a-big-one"
       ]
     },
     "docs/founder-kernel/wiki/principles/supersession-is-a-mechanical-act.md": {
@@ -12613,6 +12633,7 @@
         "defining-the-room",
         "pace-and-priority",
         "changing-it",
+        "what-how-hard-should-it-push-now-reaches",
         "setting-a-default-for-every-room",
         "giving-a-room-its-shape",
         "incomplete-or-unavailable-rooms",

@@ -7,6 +7,7 @@
 // over MCP; the local error boundary mirrors executeTool's shared try/catch
 // (see build-review-handlers.ts).
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import * as crypto from "crypto";
 
 import { prisma } from "@dpf/db";
@@ -83,7 +84,7 @@ async function attestIdeateResearch(
   }).catch(() => undefined);
 }
 
-export async function reviewDesignDoc(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {
+async function reviewDesignDocInner(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {
   try {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
@@ -719,4 +720,11 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
   } catch (err) {
     return toFailureResult("reviewDesignDoc", err);
   }
+}
+
+/** Build-phase entry: the reviewers run under the autonomous inference origin (BI-2F9DE752). */
+export function reviewDesignDoc(
+  ...args: Parameters<typeof reviewDesignDocInner>
+): ReturnType<typeof reviewDesignDocInner> {
+  return runAsBuildPhase(() => reviewDesignDocInner(...args));
 }

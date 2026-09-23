@@ -424,7 +424,11 @@ OPERATING RULES:
     modelRequirements: {
       defaultMinimumTier: "strong",
       defaultBudgetClass: "balanced",
-      preferredProviderId: "anthropic",
+      // BI-8CFA1CA8: was pinned to anthropic; the need is stated so routing can
+      // pick. Kernel no-provider-pinning; guard no-literal-pins.test.ts.
+      instructionFollowing: "excellent",
+      minimumDimensions: { instructionFollowing: 85, reasoning: 80 },
+      defaultEffort: "high",
     },
   },
   "/finance": {

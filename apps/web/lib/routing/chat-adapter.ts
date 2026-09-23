@@ -28,6 +28,7 @@ import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
+import { toWireSampling } from "./sampling-profile";
 // BI-98572A51: the single-GPU admission lane is canonical in resource-lane.ts so
 // chat AND the local build engine share ONE gate. Re-exported below for callers
 // (and tests) that import it from here.
@@ -309,6 +310,24 @@ export const chatAdapter: ExecutionAdapterHandler = {
           temperature: plan.temperature,
         };
       }
+      // BI-1F5DAABC / BI-DBAFEC10: the rest of the resolved sampling, plus the
+      // thinking budget. Gemini's generationConfig is camelCase, and before this
+      // it received neither top_p/top_k nor thinkingConfig at all — reasoning
+      // depth was computed for every call and then discarded here.
+      {
+        const extra: Record<string, unknown> = {};
+        const values = plan.sampling?.values;
+        if (values?.topP !== undefined) extra.topP = values.topP;
+        if (values?.topK !== undefined) extra.topK = values.topK;
+        const thinkingConfig = plan.providerSettings?.thinkingConfig;
+        if (thinkingConfig) extra.thinkingConfig = thinkingConfig;
+        if (Object.keys(extra).length > 0) {
+          (body as Record<string, unknown>).generationConfig = {
+            ...((body as Record<string, unknown>).generationConfig as Record<string, unknown> ?? {}),
+            ...extra,
+          };
+        }
+      }
 
       // Convert OpenAI-format function tools to Gemini functionDeclarations format
       if (tools && tools.length > 0) {
@@ -402,6 +421,27 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // Apply temperature
       if (plan.temperature !== undefined) {
         (body as Record<string, unknown>).temperature = plan.temperature;
+      }
+      // BI-1F5DAABC: the rest of the resolved sampling. Vendor-published values
+      // for the served model — running at engine defaults instead is the
+      // documented cause of repetition loops on Qwen3 and DeepSeek-R1.
+      for (const [key, value] of Object.entries(toWireSampling({
+        values: plan.sampling?.values ?? {},
+        provenance: {},
+        dropped: [],
+        mode: plan.sampling?.mode ?? "default",
+      }))) {
+        if (key === "temperature") continue; // already applied above
+        (body as Record<string, unknown>)[key] = value;
+      }
+      // BI-5C48438C: constrain decoding when the contract says the response must
+      // satisfy a schema. `responsePolicy.strictSchema` was carried on the plan
+      // and never sent to any provider, so a schema-bound turn was asked for
+      // structure in the prompt and nothing else. Ollama and the OpenAI-compatible
+      // providers all honour response_format, and a constrained decode makes
+      // malformed JSON mechanically impossible rather than merely unlikely.
+      if (plan.responsePolicy?.strictSchema) {
+        (body as Record<string, unknown>).response_format = { type: "json_object" };
       }
       // Apply reasoning_effort (explicit setting takes precedence over effort)
       // EP-INF-013: fall back to deriving from effort when not explicitly set.

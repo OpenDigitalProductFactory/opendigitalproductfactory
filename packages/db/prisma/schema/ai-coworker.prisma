@@ -1238,6 +1238,14 @@ model AgentModelConfig {
   pinnedProviderId     String?
   pinnedModelId        String?
   budgetClass          String   @default("balanced") // "minimize_cost" | "balanced" | "quality_first"
+  // BI-8CFA1CA8: the agent-level data-residency policy, stated rather than
+  // inferred. It used to be read off `pinnedProviderId == "local"`, so clearing
+  // a routing preference in the portal silently relaxed a residency guarantee
+  // and setting one silently imposed it. Two decisions, one control.
+  // "local_only" | "approved_cloud" | "any_enabled"; null = "any_enabled".
+  // Composes with the per-task-type TaskRequirement.residencyPolicy — the
+  // stricter of the two wins (see RESIDENCY_RANK in ai-provider-route-context).
+  residencyPolicy      String?
   // EP-AGENT-CAP-002: Hard capability floor — model must satisfy ALL declared capabilities.
   // Null = system default { "toolUse": true }.
   // {} = passive agent (no capability floor — rare, must be explicit).

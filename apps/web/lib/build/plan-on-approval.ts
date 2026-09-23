@@ -24,6 +24,7 @@
 //
 // Called from: reviewDesignDoc success path in mcp-tools.ts (fire-and-forget).
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { denialForNextAttempt, denyAfterUnparseable } from "@/lib/build/plan-generation-retry";
 import { normalizeBuildPlanPaths } from "./build-plan-paths";
@@ -38,7 +39,9 @@ type PlanDispatchOutcome =
   | { kind: "skipped-already-has-plan"; reason: string }
   | { kind: "skipped-wrong-phase"; reason: string }
   | { kind: "dispatched-success"; taskCount: number; durationMs: number }
-  | { kind: "dispatched-failure"; error: string; durationMs: number };
+  | { kind: "dispatched-failure"; error: string; durationMs: number }
+  /** BI-5098ECEC: the host was busy; nothing is known about the plan and no repair round is spent. */
+  | { kind: "deferred-capacity"; reason: string; durationMs: number };
 
 /** A plan-review blocking issue fed back into a revision round (BI-99B06AD1). */
 export type PlanReviewIssue = { severity: string; description: string };
@@ -299,7 +302,7 @@ async function runPlanReview(buildId: string, userId: string, log: (s: string) =
  * advanced from ideate → plan. Designed to be called fire-and-forget from the
  * reviewDesignDoc success path; never throws.
  */
-export async function dispatchPlanForApprovedBuild(params: {
+async function dispatchPlanForApprovedBuildInner(params: {
   buildId: string;
   userId: string;
   /** Local-tuning: when a build is RESUMED with an existing plan that already
@@ -555,8 +558,22 @@ export async function dispatchPlanForApprovedBuild(params: {
       durationMs: Date.now() - t0,
     };
   } catch (err) {
+    const { describeCapacityDeferral } = await import("./capacity-deferral");
+    const deferral = describeCapacityDeferral(err);
+    if (deferral) {
+      // BI-5098ECEC: a busy host is not a failed plan; the reconciler re-drives.
+      try { await log(`Plan dispatch deferred: ${deferral.message.slice(0, 220)}`); } catch (_) { /**/ }
+      return { kind: "deferred-capacity", reason: deferral.message, durationMs: Date.now() - t0 };
+    }
     const msg = String(err instanceof Error ? err.message : err).slice(0, 300);
     try { await log(`Plan dispatch failed: ${msg}`); } catch (_) { /**/ }
     return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
   }
+}
+
+/** Build-phase entry: runs under the autonomous inference origin (BI-2F9DE752). */
+export function dispatchPlanForApprovedBuild(
+  params: Parameters<typeof dispatchPlanForApprovedBuildInner>[0],
+): ReturnType<typeof dispatchPlanForApprovedBuildInner> {
+  return runAsBuildPhase(() => dispatchPlanForApprovedBuildInner(params));
 }

@@ -261,6 +261,9 @@ An install on `quiet` gets tier 1 and 2 in-app and nothing else. An install on `
 | **F** — `BI-7ED79807` ✅ **delivered** | **Prerequisite.** Populate `applicability` (archetype, capability, platform range) on projection. Until this lands every envelope is archetype-blind and no ballot can be scoped. | — |
 | **G** — `BI-4D924DB4` ✅ **delivered** | Generalise the tri-state applicability evaluator; assemble the consent-gated, three-tier ballot per install. | C, F |
 | **H** — `BI-784D20FD` ✅ **delivered** | `ecosystem-participation` proactivity family; the weekly two-directional watchdog in the derived room. | G |
+| **D** — `BI-4D1CAD69` | Vote budget, quadratic weighting, tally → `DemandScoreInputs`. Votes start moving the score. | B, C, G |
+| **E** — `BI-4C8A83AB` | Arbitration ordering + capacity draw + disposition writeback to every submitter. Closes the loop. | D |
+
 | **D** — `BI-4D1CAD69` ✅ **delivered** | Vote budget, quadratic weighting, tally → `DemandScoreInputs`. Votes start moving the score. | B, C, G |
 | **E** — `BI-4C8A83AB` ✅ **delivered** | Arbitration ordering + capacity draw + disposition writeback to every submitter. Closes the loop. | D |
 
@@ -381,6 +384,7 @@ than one never built, because the counters suggest it arrived.
 The archetype this install matches on is read from the same place the regulation
 applicability classifier reads it, since it is the same question asked of a
 different artefact.
+
 
 ### 5.4 Implementation notes — Phases D and E, delivered 2026-09-18
 

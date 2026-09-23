@@ -598,3 +598,71 @@ describe("remoteTaskConversation", () => {
     });
   });
 });
+
+// BI-8CFA1CA8 — residency is a stated policy, not a side effect of a routing
+// preference. Before this, `pinnedProviderId === "local"` also set
+// residencyPolicy "local_only", so an operator clearing a provider preference
+// in the portal silently relaxed a data guarantee, and one choosing "local"
+// from a routing dropdown silently imposed one. Kernel: no-provider-pinning.
+describe("agent residency policy is read, never inferred from a pin", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.findTaskRun.mockResolvedValue({ status: "working" });
+    db.updateTaskRun.mockResolvedValue({});
+    autonomous.resolveAgent.mockResolvedValue({
+      agentId: "AGT-WS-PORTFOLIO",
+      displayName: "Portfolio Advisor",
+      systemPrompt: "Review independently.",
+      sensitivity: "internal",
+    });
+    autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
+    autonomous.execute.mockResolvedValue({ content: "done", executedTools: [] });
+  });
+
+  async function dispatchWithConfig(config: Record<string, unknown> | null) {
+    db.findModelConfig.mockResolvedValue(config);
+    await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-RESIDENCY0001", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-DURATION", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed,
+      idempotentReplay: false,
+      capacityAttempt: 1,
+    });
+    const call = autonomous.execute.mock.calls.at(-1)?.[0] as
+      | { modelRequirements?: Record<string, unknown> }
+      | undefined;
+    return call?.modelRequirements ?? null;
+  }
+
+  const base = { minimumTier: "adequate", budgetClass: "balanced", pinnedModelId: null };
+
+  it("carries a local_only policy that the config states", async () => {
+    const requirements = await dispatchWithConfig({
+      ...base, pinnedProviderId: null, residencyPolicy: "local_only",
+    });
+    expect(requirements).toMatchObject({ residencyPolicy: "local_only" });
+  });
+
+  it("does not impose local_only just because the provider preference is local", async () => {
+    const requirements = await dispatchWithConfig({
+      ...base, pinnedProviderId: "local", residencyPolicy: null,
+    });
+    expect(requirements).toMatchObject({ preferredProviderId: "local" });
+    expect(requirements).not.toHaveProperty("residencyPolicy");
+  });
+
+  it("keeps local_only when the provider preference is cleared", async () => {
+    const pinned = await dispatchWithConfig({
+      ...base, pinnedProviderId: "local", residencyPolicy: "local_only",
+    });
+    const cleared = await dispatchWithConfig({
+      ...base, pinnedProviderId: null, residencyPolicy: "local_only",
+    });
+    expect(pinned).toMatchObject({ residencyPolicy: "local_only" });
+    // The guarantee survives the preference being cleared — that is the point.
+    expect(cleared).toMatchObject({ residencyPolicy: "local_only" });
+    expect(cleared).not.toHaveProperty("preferredProviderId");
+  });
+});

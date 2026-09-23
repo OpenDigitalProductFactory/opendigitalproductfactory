@@ -16,19 +16,20 @@ A purpose in this file is not proof that an approval row displays it.
 - Hook 1 [Bash]: [lease-guard.mjs](lease-guard.mjs) — Check the environment lease before starting a server
 - Hook 2 [Bash]: [root-clone-guard.mjs](root-clone-guard.mjs) — Protect the shared source checkout from unsafe changes
 - Hook 3 [Bash]: [compose-guard.mjs](compose-guard.mjs) — Protect shared services from destructive Compose commands
-- Hook 4 [Bash]: [portal-image-guard.mjs](portal-image-guard.mjs) — Keep portal image changes on the verified release path
-- Hook 5 [Bash]: [lease-punt-guard.mjs](lease-punt-guard.mjs) — Check runtime verification has a provisioned environment
-- Hook 6 [Bash]: [pregate-evidence-guard.mjs](pregate-evidence-guard.mjs) — Check verification evidence before publishing code
-- Hook 7 [Bash]: [pregate-invocation-guard.mjs](pregate-invocation-guard.mjs) — Check the verification command can run and report its result
-- Hook 8 [Bash]: [workroom-claim-guard.mjs](workroom-claim-guard.mjs) — Check this source change belongs to a claimed Workroom
-- Hook 9 [AskUserQuestion]: [decision-routing-guard.mjs](decision-routing-guard.mjs) — Check platform guidance before asking for a decision
-- Hook 10 [Write\|Edit\|MultiEdit]: [root-clone-guard.mjs](root-clone-guard.mjs) — Protect the shared source checkout from unsafe changes
-- Hook 11 [Write\|Edit\|MultiEdit]: [plan-backlog-coverage-guard.mjs](plan-backlog-coverage-guard.mjs) — Check planned deliverables are tracked before source edits
-- Hook 12 [Write\|Edit\|MultiEdit]: [ux-fit-precheck.mjs](ux-fit-precheck.mjs) — Remind the author to review usability for UI changes
-- Hook 13 [Write\|Edit\|MultiEdit]: [spec-plan-doc-precheck.mjs](spec-plan-doc-precheck.mjs) — Remind the author to include required design and documentation
-- Hook 14 [Write\|Edit\|MultiEdit]: [design-grounding-precheck.mjs](design-grounding-precheck.mjs) — Remind the author to check existing design and implementation
-- Hook 15 [Write\|Edit\|MultiEdit]: [tool-economy-precheck.mjs](tool-economy-precheck.mjs) — Remind the author to keep tool descriptions and results bounded
-- Hook 16 [Write\|Edit\|MultiEdit]: [workroom-claim-guard.mjs](workroom-claim-guard.mjs) — Check this source change belongs to a claimed Workroom
+- Hook 4 [Bash]: [raw-tool-guard.mjs](raw-tool-guard.mjs) — Redirect raw tsc, root-level vitest and npx to the checked-in routines
+- Hook 5 [Bash]: [portal-image-guard.mjs](portal-image-guard.mjs) — Keep portal image changes on the verified release path
+- Hook 6 [Bash]: [lease-punt-guard.mjs](lease-punt-guard.mjs) — Check runtime verification has a provisioned environment
+- Hook 7 [Bash]: [pregate-evidence-guard.mjs](pregate-evidence-guard.mjs) — Check verification evidence before publishing code
+- Hook 8 [Bash]: [pregate-invocation-guard.mjs](pregate-invocation-guard.mjs) — Check the verification command can run and report its result
+- Hook 9 [Bash]: [workroom-claim-guard.mjs](workroom-claim-guard.mjs) — Check this source change belongs to a claimed Workroom
+- Hook 10 [AskUserQuestion]: [decision-routing-guard.mjs](decision-routing-guard.mjs) — Check platform guidance before asking for a decision
+- Hook 11 [Write\|Edit\|MultiEdit]: [root-clone-guard.mjs](root-clone-guard.mjs) — Protect the shared source checkout from unsafe changes
+- Hook 12 [Write\|Edit\|MultiEdit]: [plan-backlog-coverage-guard.mjs](plan-backlog-coverage-guard.mjs) — Check planned deliverables are tracked before source edits
+- Hook 13 [Write\|Edit\|MultiEdit]: [ux-fit-precheck.mjs](ux-fit-precheck.mjs) — Remind the author to review usability for UI changes
+- Hook 14 [Write\|Edit\|MultiEdit]: [spec-plan-doc-precheck.mjs](spec-plan-doc-precheck.mjs) — Remind the author to include required design and documentation
+- Hook 15 [Write\|Edit\|MultiEdit]: [design-grounding-precheck.mjs](design-grounding-precheck.mjs) — Remind the author to check existing design and implementation
+- Hook 16 [Write\|Edit\|MultiEdit]: [tool-economy-precheck.mjs](tool-economy-precheck.mjs) — Remind the author to keep tool descriptions and results bounded
+- Hook 17 [Write\|Edit\|MultiEdit]: [workroom-claim-guard.mjs](workroom-claim-guard.mjs) — Check this source change belongs to a claimed Workroom
 
 ## WorktreeCreate
 

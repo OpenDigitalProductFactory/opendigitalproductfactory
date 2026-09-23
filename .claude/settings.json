@@ -35,6 +35,10 @@
           },
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/raw-tool-guard.mjs\""
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/lease-punt-guard.mjs\""
           },
           {
