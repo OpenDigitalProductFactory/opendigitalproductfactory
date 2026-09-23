@@ -396,11 +396,7 @@ state, and its only advantage (a human-declared role when policy cannot
 decide) is covered by A's specific-choice fallback. C keeps the control the
 founder asked to remove.
 
-⟦situational: this scoring is recorded by hand because the `dpf` MCP
-connector was unauthorized in the authoring session, so `principle_decide`
-could not be called. `human_cognitive_load` is scored above as the principle
-requires. Record the kernel decision (a `DI-`) before implementation
-admission and replace this marker with its id.⟧
+**Kernel decision recorded 2026-09-23: `DI-673B7C9162D9`.** `principle_decide` scored the three options above with `human_cognitive_load` supplied as the principle requires and recommends A (confidence high, verdict proceed); the outcome is recorded as followed, A having merged in PR #5572 as e3d778b. The hand-scored table stays as the audit trail of the inputs.
 
 ### Design (approach A)
 
