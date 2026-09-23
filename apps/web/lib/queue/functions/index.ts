@@ -61,6 +61,7 @@ import { edgeNodeJanitor } from "./edge-node-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
 import { worktreeJanitor } from "./worktree-janitor";
 import { pullRequestMergedBinding } from "./pull-request-merged-binding";
+import { pullRequestMergedReap } from "./pull-request-merged-reap";
 import { sandboxBuildGc } from "./sandbox-build-gc";
 import {
   dataRetentionSweepScheduled,
@@ -233,6 +234,7 @@ export const scheduledFunctions = [
 
 export const eventFunctions = [
   pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
+  pullRequestMergedReap, // BI-848360EF: reap the merged branch's worktree, via the janitor's own rules
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
   localModelInstall,
   providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron

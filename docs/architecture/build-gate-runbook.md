@@ -91,3 +91,22 @@ The first subscriber is `build/pr-merged-binding`, which binds the room to its p
 The five-minute cron stays as a **backstop** for missed deliveries. That is the same primary/backstop split the worktree janitor documents, applied to delivery.
 
 **Operational prerequisite:** the webhook must be registered on the repository for the `pull_request` event, and `DPF_GIT_WEBHOOK_SECRET` set. Nothing depended on this receiver beyond `push`, so an install may never have configured it. `verifyGitHubSignature` returns true when no secret is set (local dev); the route itself refuses unsigned traffic in production.
+
+## Reaping the worktree when the PR merges (BI-848360EF)
+
+`build/pr-merged.received` now has a second subscriber: `build/pr-merged-reap`.
+
+The SessionEnd hook remains the primary reaper and it is correct — but it can only reap a Tier-A tree, and Tier A requires `merged`. The normal sequence is gate, push, open PR, **end the thread**, and the PR merges in the queue later. At SessionEnd the branch is unmerged, so the hook correctly declines and nothing revisits that worktree. Measured: 2026-09-09 saw 101 worktrees with 48 merged and unreaped; a manual sweep took it to 55 and it was back to 157 by 2026-09-22.
+
+**The subscriber does not implement its own rules.** It runs `scripts/worktree-janitor.mjs --branch <headRefName> --json --tier-a-only`, so every existing protection still decides: a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR, a dirty tree. Removal goes through the junction-safe helper, which matters because each worktree carries roughly 28 junctions into the root clone's `node_modules` and a recursive delete that follows one is what wiped `packages/*` on 2026-08-15.
+
+That delegation is deliberate rather than tidy. `classifyWorktree` places its liveness gate **above** the merged/Tier-A check, and says why: *"the moment a live session's PR merges, its clean tree first becomes Tier-A eligible — exactly when it must NOT be reaped."* A merge-triggered reaper is precisely the caller that walks into that window, so it must go through the classifier, never around it.
+
+`--branch` is new on the janitor and narrows the scan without changing a single verdict. An unscoped live run is refused by `assertTierAOnly`, as is a live run that could reach Tier B — a merge says nothing about stale-but-unmerged work.
+
+**Flags**, shared with the fleet backstop so there is one switch to reason about:
+
+- `DPF_WORKTREE_JANITOR_ENABLED` — run at all. Default off.
+- `DPF_WORKTREE_JANITOR_AUTO_REAP` — remove rather than report. Default off, so the event can be soaked before it deletes.
+
+A scan that cannot reach its subject logs UNHEALTHY and returns `ran: false`. It never reports success, because the fleet backstop already proved how expensive that mistake is: its script was never copied into the image, every run died with `MODULE_NOT_FOUND`, and the caught error read exactly like a clean sweep (BI-B3370CB2).
