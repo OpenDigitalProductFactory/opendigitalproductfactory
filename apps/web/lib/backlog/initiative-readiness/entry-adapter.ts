@@ -6,6 +6,7 @@ import { itemBodyBaselineState } from "./item-body-baseline";
 import type { InheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
+import { effectiveShape } from "./shape-requirements";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
@@ -435,6 +436,12 @@ export function projectBacklogItemReadiness(args: {
    * spec); this projector only applies the coercion. Kernel-ratified DI-54AECB341524.
    */
   recognizeMergeThroughGates?: boolean;
+  /**
+   * BI-0E2E3BC5: the Build Studio build's own design, when one governs this
+   * transition — whether its reviewers passed it, and how many acceptance
+   * criteria it states. Consulted only on the proportional shapes.
+   */
+  buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
   completion?: {
     deliveryEvidence: ReadinessEvidenceState;
     acceptanceEvidence: ReadinessEvidenceState;
@@ -481,10 +488,27 @@ export function projectBacklogItemReadiness(args: {
   const governed = profile !== null;
   const evidence = receipts.states;
   const shape = readinessShapeFromWorkShape(args.item.workShape);
-  // v3: small and medium mint their baseline from the item body, not a spec.
+  // The derivations below serve the proportional gate table only, so they key on
+  // the shape the gates will actually apply: sensitivity that raises small or
+  // medium to large also takes these derivations away.
+  const applied = shape ? effectiveShape(shape, args.item.deliverySensitivity, profile) : null;
+  const proportional = applied === "small" || applied === "medium";
+  // BI-0E2E3BC5: a Build Studio build records its research and acceptance
+  // criteria in the design document its reviewers passed, and writes no
+  // initiative receipt — the one writer, record_initiative_evidence, is granted
+  // to no agent the build runs as (208 of 208 attestations refused on the dev
+  // install). A reviewed design is the design note a medium item owes.
+  const reviewedBuildDesign = proportional && args.buildDesign?.reviewPassed === true;
+  // v3: small and medium mint their baseline from the item body, not a spec —
+  // or, for a build, from the acceptance criteria of its reviewed design.
   const baselineState: ReadinessEvidenceState = baseline.current
     ? "pass"
-    : shape === "small" || shape === "medium" ? itemBodyBaselineState(args.item.body) : "missing";
+    : !proportional
+      ? "missing"
+      : itemBodyBaselineState(args.item.body) === "pass"
+        || (reviewedBuildDesign && (args.buildDesign?.acceptanceCriteriaCount ?? 0) > 0)
+        ? "pass"
+        : "missing";
   const coverage = args.planCoverage ?? projectedCoverage.state;
   const dependency = state(evidence, "dependency-disposition");
   const archetypeProvisioning = state(evidence, "archetype-provisioning");
@@ -515,11 +539,15 @@ export function projectBacklogItemReadiness(args: {
   // and only where completion evidence exists — so the plan and implementation
   // gates still demand research before any delivery has happened, and a failing or
   // absent delivery lane confers nothing.
+  //
+  // BI-0E2E3BC5 adds the one earlier source: a Build Studio design its reviewers
+  // passed, which exists before any delivery and is what a medium item's research
+  // is. A failed or absent review confers nothing.
   const recordedResearch = state(evidence, "research");
   const researchState: ReadinessEvidenceState =
     recordedResearch === "missing"
-      && (shape === "small" || shape === "medium")
-      && args.completion?.deliveryEvidence === "pass"
+      && proportional
+      && (args.completion?.deliveryEvidence === "pass" || reviewedBuildDesign)
       ? "pass"
       : recordedResearch;
   const facts: InitiativeReadinessFacts = {

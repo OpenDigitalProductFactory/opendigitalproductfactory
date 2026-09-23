@@ -68,6 +68,27 @@ function orphanDecision(args: {
   };
 }
 
+/** How many acceptance criteria a Build Studio design document states. */
+function designAcceptanceCriteriaCount(designDoc: unknown): number {
+  const list = designDoc && typeof designDoc === "object" && !Array.isArray(designDoc)
+    ? (designDoc as Record<string, unknown>).acceptanceCriteria
+    : null;
+  if (!Array.isArray(list)) return 0;
+  return list.filter((entry) => {
+    const text = typeof entry === "string"
+      ? entry
+      : entry && typeof entry === "object"
+        ? (entry as Record<string, unknown>).text ?? (entry as Record<string, unknown>).criterion
+        : null;
+    return typeof text === "string" && text.trim().length > 0;
+  }).length;
+}
+
+function designReviewPassed(designReview: unknown): boolean {
+  return Boolean(designReview && typeof designReview === "object"
+    && (designReview as Record<string, unknown>).decision === "pass");
+}
+
 function codes(decision: InitiativeReadinessDecision) {
   return [...decision.blockers, ...decision.unmet].map((entry) => entry.code);
 }
@@ -90,9 +111,11 @@ export async function enforceBuildInitiativeReadiness(args: {
       buildId: true,
       kind: true,
       originatingBacklogItemId: true,
+      designDoc: true,
+      designReview: true,
       originator: {
         select: {
-          id: true, itemId: true, type: true, source: true, workType: true, scopeKind: true,
+          id: true, itemId: true, title: true, type: true, source: true, workType: true, scopeKind: true,
           body: true,
           archetypeCategories: true, archetypeIds: true,
           activities: {
@@ -132,8 +155,26 @@ export async function enforceBuildInitiativeReadiness(args: {
         .catch(() => null)
       : Promise.resolve(null),
   ]);
+  // BI-0E2E3BC5: sensitivity raises the shape here exactly as it does at the
+  // claim and at closure (item-text sensitivity), and the build's own reviewed
+  // design is handed to the projector: for small and medium it is the recorded
+  // research and, absent body criteria, the baseline.
+  const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
   const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
-    item: { ...build.originator, activeBuildKind: build.kind, workShape },
+    item: {
+      ...build.originator,
+      activeBuildKind: build.kind,
+      workShape,
+      deliverySensitivity: deriveDeliverableSensitivity({
+        text: `${build.originator.title ?? ""}
+${build.originator.body ?? ""}`,
+        workType: build.originator.workType ?? null,
+      }),
+    },
+    buildDesign: {
+      reviewPassed: designReviewPassed(build.designReview),
+      acceptanceCriteriaCount: designAcceptanceCriteriaCount(build.designDoc),
+    },
     activities: build.originator.activities as InitiativeReadinessActivity[],
     inheritedScope,
     target: args.target,

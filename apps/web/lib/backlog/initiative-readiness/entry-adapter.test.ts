@@ -614,6 +614,65 @@ describe("v3: the bound delivery shape keys the gates", () => {
     expect(completed.decision.unmet.map((entry) => entry.code)).toContain("RESEARCH_REQUIRED");
   });
 
+  // BI-0E2E3BC5: a Build Studio build writes no initiative receipts — its research
+  // and acceptance criteria live in the design document its own reviewers passed.
+  // For the proportional shapes that document IS the recorded research and, when
+  // the item body carries none, the baseline. Measured 2026-09-22: 102 builds,
+  // 0 completed, 19,466 gate-blocks, every one of them on research.
+  describe("a reviewed Build Studio design (BI-0E2E3BC5)", () => {
+    const reviewed = { reviewPassed: true, acceptanceCriteriaCount: 3 };
+    const project = (overrides: {
+      workShape?: string | null;
+      deliverySensitivity?: "low" | "elevated" | "high";
+      body?: string;
+      buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
+      target?: "plan" | "implementation";
+    }) => projectBacklogItemReadiness({
+      item: {
+        ...item,
+        workShape: overrides.workShape === undefined ? "delivery-medium@1.0.0" : overrides.workShape,
+        deliverySensitivity: overrides.deliverySensitivity ?? "low",
+        body: overrides.body ?? "just prose",
+      },
+      activities: [],
+      target: overrides.target ?? "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      buildDesign: overrides.buildDesign === undefined ? reviewed : overrides.buildDesign,
+      evaluatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    const unmet = (projected: ReturnType<typeof project>) => projected.decision.unmet.map((entry) => entry.code);
+
+    it("lets a medium build enter plan and build on its reviewed design alone", () => {
+      expect(project({ target: "plan" }).decision.verdict).toBe("allowed");
+      expect(project({ target: "implementation" }).decision.verdict).toBe("allowed");
+      expect(project({ workShape: "delivery-small@1.0.0", target: "implementation" }).decision.verdict).toBe("allowed");
+    });
+
+    it("confers nothing when the design review did not pass", () => {
+      expect(unmet(project({ buildDesign: { reviewPassed: false, acceptanceCriteriaCount: 3 } })))
+        .toEqual(["RESEARCH_REQUIRED", "OBJECTIVE_BASELINE_REQUIRED"]);
+      expect(unmet(project({ buildDesign: null }))).toEqual(["RESEARCH_REQUIRED", "OBJECTIVE_BASELINE_REQUIRED"]);
+    });
+
+    it("does not mint a baseline from a design that states no acceptance criteria", () => {
+      expect(unmet(project({ buildDesign: { reviewPassed: true, acceptanceCriteriaCount: 0 } })))
+        .toEqual(["OBJECTIVE_BASELINE_REQUIRED"]);
+    });
+
+    it("leaves large and sensitivity-raised work on the full table", () => {
+      expect(unmet(project({ workShape: "delivery-large@1.0.0" }))).toContain("RESEARCH_REQUIRED");
+      const raised = unmet(project({ deliverySensitivity: "high" }));
+      expect(raised).toContain("RESEARCH_REQUIRED");
+      expect(raised).toContain("SPEC_APPROVAL_REQUIRED");
+    });
+
+    it("leaves an unshaped item on the v2 table", () => {
+      expect(unmet(project({ workShape: null }))).toContain("RESEARCH_REQUIRED");
+    });
+  });
+
   it("raises a small item at high sensitivity to the large gates and leaves an unshaped item on v2", () => {
     const raised = projectBacklogItemReadiness({
       item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "high" },
