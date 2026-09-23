@@ -7453,7 +7453,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 51
+    "textMass": 80
   },
   "apps/web/components/platform/RoutingArchitectureOverview.tsx": {
     "vocabulary": 0,

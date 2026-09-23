@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { RouteDecisionLogClient } from "./RouteDecisionLogClient";
+import { CallParameters, RouteDecisionLogClient } from "./RouteDecisionLogClient";
+import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
 
 describe("RouteDecisionLogClient", () => {
   it("keeps route evidence inside the mobile viewport while preserving scrollable candidate detail", () => {
@@ -32,6 +33,7 @@ describe("RouteDecisionLogClient", () => {
           shadowMode: false,
           suitabilityReceipt: null,
           inferenceDataScreenReceipt: null,
+          callParameters: null,
           createdAt: new Date("2026-07-20T10:00:00.000Z"),
         }]}
       />,
@@ -40,5 +42,68 @@ describe("RouteDecisionLogClient", () => {
     expect(html).toContain("hidden sm:grid");
     expect(html).toContain("grid-cols-[minmax(0,1fr)_auto]");
     expect(html).toContain("min-w-0 max-w-full overflow-hidden");
+  });
+});
+
+// BI-B4081AA1: the audit row could say which model ran and not how it was called.
+//
+// The panel is tested directly rather than through a row: it lives inside the
+// row's collapsed detail region, which static markup never reaches.
+describe("CallParameters", () => {
+  it("shows each value with the plain-language reason it is that value", () => {
+    const html = renderToStaticMarkup(
+      <CallParameters
+        receipt={{
+          sampling: { temperature: 0.6, topP: 0.95, topK: 20 },
+          provenance: { temperature: "vendor", topP: "vendor", topK: "vendor" },
+          mode: "thinking",
+          maxTokens: 8192,
+          effort: { expressedAs: "think" },
+        }}
+      />,
+    );
+    expect(html).toContain("How it was called");
+    expect(html).toContain("Temperature");
+    expect(html).toContain("0.6");
+    expect(html).toContain("published setting for reasoning mode");
+    expect(html).toContain("some variation");
+    expect(html).toContain("8192");
+  });
+
+  it("states plainly when a provider could not accept the requested reasoning", () => {
+    const html = renderToStaticMarkup(
+      <CallParameters
+        receipt={{ sampling: {}, provenance: {}, mode: "default", maxTokens: 4096, effortUnexpressed: true }}
+      />,
+    );
+    expect(html).toContain("no way to accept it");
+    // With nothing set, say so rather than render an empty box.
+    expect(html).toContain("Provider defaults");
+  });
+
+  it("names the parameters a model refused", () => {
+    const html = renderToStaticMarkup(
+      <CallParameters
+        receipt={{
+          sampling: {}, provenance: {}, mode: "default", maxTokens: 4096,
+          dropped: ["temperature", "topP"],
+        }}
+      />,
+    );
+    expect(html).toContain("Not accepted by this model");
+    expect(html).toContain("temperature, topP");
+  });
+
+  it("reports constrained decoding when the response had to satisfy a schema", () => {
+    const html = renderToStaticMarkup(
+      <CallParameters
+        receipt={{
+          sampling: { temperature: 0 }, provenance: { temperature: "contract" },
+          mode: "default", maxTokens: 4096, constrainedDecoding: true,
+        }}
+      />,
+    );
+    expect(html).toContain("JSON constrained");
+    expect(html).toContain("no variation");
   });
 });

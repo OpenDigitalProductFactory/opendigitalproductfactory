@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-B4081AA1. Add RouteDecisionLog.callParameters (nullable JSONB) so the routing audit log records HOW a model was called, not only which one was chosen. The execution plan already resolved these values and nothing persisted them; formatDecisionForUser, the one function that could explain them, had no callers at all. The receipt holds resolved sampling values, the provenance of each (vendor / contract / recipe / operator), which vendor profile applied, parameters withheld because the model rejects them, the output ceiling, how effort was expressed, and whether the provider could carry the requested effort. Additive and non-destructive, with NO backfill: rows written before the column cannot have their parameters reconstructed, and NULL must read as 'not recorded' rather than as 'called with no parameters'. Migration: 20260923010000_route_decision_call_parameters.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "RouteDecisionLog",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        {
+          "name": "callParameters",
+          "resolution": "governed",
+          "reason": "An audit receipt of the sampling and reasoning parameters a dispatch used. Policy-safe by construction: numbers, provenance labels and provider field shapes only. It carries no prompt text, no tool payloads, no attachment content and no account identifiers, and a regression test asserts the serialized receipt contains none of those keys. It exists so an operator can see that a model ran at temperature 1.0, which was previously unanswerable from any surface.",
+          "provenance": "Derived server-side from the RoutedExecutionPlan at dispatch time by buildCallParameterReceipt. Never user-supplied. Absent on preview routes, which build no plan.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

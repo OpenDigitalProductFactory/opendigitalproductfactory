@@ -2,6 +2,11 @@
 
 import { useState, useMemo } from "react";
 import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
+import {
+  describeProvenance,
+  describeVariability,
+  type CallParameterReceipt,
+} from "@/lib/routing/call-parameter-receipt";
 import type { CandidateTrace } from "@/lib/routing/types";
 import type { ProviderSuitabilityRouteReceipt } from "@/lib/routing/provider-suitability/evidence";
 
@@ -104,6 +109,89 @@ function SuitabilityReceipt({ receipt }: { receipt: ProviderSuitabilityRouteRece
         {receipt.explanationCodes.length > 0 && <div>Decision evidence: <span style={{ color: "var(--dpf-text)" }}>{receipt.explanationCodes.join(", ")}</span></div>}
       </div>
       <div style={{ marginTop: 6, color: "var(--dpf-muted)" }}>This receipt records policy facts only—never prompts, attachments, credentials, or external account IDs.</div>
+    </div>
+  );
+}
+
+
+// ── How the model was called (BI-B4081AA1) ────────────────────────────────────
+//
+// The routing log could say WHICH model ran and never HOW it was called. Intent
+// first, numbers second, provenance last: "temperature 0.6 — the model's
+// published setting for reasoning mode" reads as a documented requirement rather
+// than an arbitrary choice, which is the difference that decides whether an
+// operator trusts it.
+
+const PARAMETER_LABELS: Record<string, string> = {
+  temperature: "Temperature",
+  topP: "Top-p",
+  topK: "Top-k",
+  minP: "Min-p",
+  repeatPenalty: "Repeat penalty",
+};
+
+export function CallParameters({ receipt }: { receipt: CallParameterReceipt }) {
+  const entries = Object.entries(receipt.sampling) as Array<[keyof typeof PARAMETER_LABELS, number]>;
+
+  return (
+    <div style={{ marginTop: 12, padding: 10, background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 6 }}>
+        How it was called
+      </div>
+
+      {entries.length === 0 ? (
+        <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>
+          Provider defaults — nothing set.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 4, fontSize: 11 }}>
+          {entries.map(([key, value]) => {
+            const origin = receipt.provenance[key as keyof typeof receipt.provenance];
+            return (
+              <div key={key} style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
+                <span style={{ color: "var(--dpf-muted)", minWidth: 96 }}>{PARAMETER_LABELS[key] ?? key}</span>
+                <span style={{ color: "var(--dpf-text)", fontFamily: "monospace", fontWeight: 600 }}>{value}</span>
+                {key === "temperature" && (
+                  <span style={{ color: "var(--dpf-muted)" }}>({describeVariability(value)})</span>
+                )}
+                {origin && (
+                  <span style={{ color: "var(--dpf-accent)" }}>
+                    — {describeProvenance(origin, receipt.mode === "thinking")}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 12, fontSize: 11, color: "var(--dpf-muted)" }}>
+        <span>Output ceiling: <span style={{ color: "var(--dpf-text)", fontFamily: "monospace" }}>{receipt.maxTokens}</span></span>
+        {receipt.effort && (
+          <span>
+            Reasoning: <span style={{ color: "var(--dpf-success)" }}>on</span>
+            {receipt.effort.budgetTokens !== undefined && (
+              <span style={{ fontFamily: "monospace" }}> ({receipt.effort.budgetTokens} tokens)</span>
+            )}
+            <span style={{ fontFamily: "monospace" }}> · {receipt.effort.expressedAs}</span>
+          </span>
+        )}
+        {receipt.constrainedDecoding && <span style={{ color: "var(--dpf-success)" }}>JSON constrained</span>}
+        {receipt.recipeId && <span>Recipe: <span style={{ fontFamily: "monospace", color: "var(--dpf-text)" }}>{receipt.recipeId.slice(0, 10)}…</span></span>}
+      </div>
+
+      {receipt.effortUnexpressed && (
+        // The honest version of a silent no-op.
+        <div style={{ marginTop: 8, fontSize: 11, color: "var(--dpf-warning)" }}>
+          Asked for extended reasoning. This model has no way to accept it, so it ran without.
+        </div>
+      )}
+
+      {receipt.dropped && receipt.dropped.length > 0 && (
+        <div style={{ marginTop: 6, fontSize: 11, color: "var(--dpf-muted)" }}>
+          Not accepted by this model: {receipt.dropped.join(", ")}.
+        </div>
+      )}
     </div>
   );
 }
@@ -232,6 +320,7 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
               <CandidateTable candidates={row.excludedTrace} />
             </>
           )}
+          {row.callParameters && <CallParameters receipt={row.callParameters} />}
           {row.suitabilityReceipt && <SuitabilityReceipt receipt={row.suitabilityReceipt} />}
         </div>
       )}

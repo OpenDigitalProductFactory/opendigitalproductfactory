@@ -6,6 +6,7 @@ import { prisma } from "@dpf/db";
 import { inCapturedProviderTransportScope, isCapturedNativeImageInputEvidence } from "../shared/captured-effect-store";
 import { providerHasConfiguredCredential } from "@/lib/ai-provider-internals";
 import { loadActiveRiskAcceptedClearances } from "@/lib/govern/clearance-overrides";
+import { buildCallParameterReceipt } from "./call-parameter-receipt";
 import type {
   EndpointManifest,
   ProviderTier,
@@ -534,6 +535,13 @@ export async function persistRouteDecision(
       shadowMode,
       suitabilityReceipt: decision.providerSuitabilityReceipt ?? undefined,
       inferenceDataScreenReceipt: decision.inferenceDataScreenReceipt ?? undefined,
+      // BI-B4081AA1: undefined when no plan was built (a preview route carries
+      // none), so an absent receipt reads as "not recorded" rather than as
+      // "called with nothing".
+      // `as any` matches candidateTrace/excludedTrace above: Prisma's JSON input
+      // type wants an index signature, and widening the receipt type to get one
+      // would lose the field names that make it readable.
+      callParameters: (buildCallParameterReceipt(decision.executionPlan) ?? undefined) as any,
     },
   });
   return record.id;
