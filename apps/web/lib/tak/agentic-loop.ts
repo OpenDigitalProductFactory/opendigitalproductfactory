@@ -2209,11 +2209,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     for (const providerToolCall of result.toolCalls) {
       let tc = providerToolCall;
       if (params.terminalToolPolicy) {
-        const normalized = normalizeTerminalToolArguments(
-          params.terminalToolPolicy,
-          tc.name,
-          tc.arguments,
-        );
+        // BI-E8237EAE: size governed reader pages to what this model can see whole.
+        const normalized = normalizeTerminalToolArguments(params.terminalToolPolicy, tc.name, tc.arguments, resolveToolResultCharCap(resolvedMaxContextTokens));
         if (normalized.kind === "refuse") {
           executedTools.push({ name: tc.name, args: tc.arguments, result: normalized.result });
           iterationResults.push({ tc, toolResult: normalized.result });
