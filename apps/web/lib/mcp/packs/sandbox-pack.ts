@@ -645,13 +645,7 @@ async function runSandboxFileTool(
   // These use Node.js fs operations — no docker exec, no shell escaping.
   const { readFile, writeFile, mkdir } = lazyFsPromises();
   const { join, dirname } = lazyPath();
-  // BI-972A386D: act on the build's own tree, where its branch, commit and
-  // verification live — materializing the worktree if its .git link is gone.
-  const { sandboxToolRoots } = await import("@/lib/build/sandbox/sandbox-tool-roots");
-  const { workdir: BUILD_WORKDIR, mount: SANDBOX_MOUNT } = sandboxToolRoots(buildId);
-  if (BUILD_WORKDIR !== "/workspace" && !(await readFile(join(SANDBOX_MOUNT, ".git"), "utf-8").then(() => true, () => false))) {
-    await (await import("@/lib/build/sandbox/build-branch")).ensureBuildWorktree(buildId).catch(() => undefined);
-  }
+  const { workdir: BUILD_WORKDIR, mount: SANDBOX_MOUNT } = await (await import("@/lib/build/sandbox/sandbox-tool-roots")).prepareSandboxToolRoots(buildId); // BI-972A386D
 
   const resolveSandboxPath = (p: string) => {
     const cleaned = p.replace(/^\/?workspace\//, "");

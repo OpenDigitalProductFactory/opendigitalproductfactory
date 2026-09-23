@@ -26,3 +26,20 @@ export function sandboxToolRoots(buildId: string): SandboxToolRoots {
   const workdir = resolveBuildWorkdir(buildId, SANDBOX_WORKSPACE);
   return { workdir, mount: PORTAL_MOUNT + workdir.slice(SANDBOX_WORKSPACE.length) };
 }
+
+/**
+ * The roots, with the build's worktree materialized first when isolation is on
+ * and its .git link is missing — so a tool never writes into a bare directory
+ * that a later worktree recreate would clear.
+ */
+export async function prepareSandboxToolRoots(buildId: string): Promise<SandboxToolRoots> {
+  const roots = sandboxToolRoots(buildId);
+  if (roots.workdir === SANDBOX_WORKSPACE) return roots;
+  const { access } = (await import("@/lib/shared/lazy-node")).lazyFsPromises();
+  const linked = await access(`${roots.mount}/.git`).then(() => true, () => false);
+  if (!linked) {
+    const { ensureBuildWorktree } = await import("./build-branch");
+    await ensureBuildWorktree(buildId).catch(() => undefined);
+  }
+  return roots;
+}
