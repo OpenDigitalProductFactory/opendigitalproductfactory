@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
+import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_MAX_CHARS } from "./source-page-lines";
 import {
   hydrateTerminalWriterContext,
   verifyTerminalWriterCitation,
@@ -694,11 +695,35 @@ describe("terminal writer context hydration", () => {
     expect(result).toMatchObject({ ok: false, code: "terminal_writer_context_cursor_repeated" });
   });
 
+  // BI-E8237EAE. The reader serves a whole medium document in one default page
+  // (#5079), but hydration still rejected any persisted page over 3,200 chars,
+  // so a reviewer that read a design in one default page lost that read on
+  // resume and had to traverse again. A page the reader itself served is
+  // authority evidence; only a page past the reader's own ceiling is oversize.
+  it("reuses a persisted page the reader served at its own default size", async () => {
+    const readPage = vi.fn();
+    const content = "y".repeat(SOURCE_READ_DEFAULT_MAX_CHARS);
+    const result = await hydrateTerminalWriterContext({
+      policy,
+      executions: [
+        reader("one-default-page", { startLine: 1 }, {
+          result: {
+            data: page({ content, startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null }),
+          },
+        }),
+      ],
+      readPage,
+    });
+
+    expect(result).toMatchObject({ ok: true, data: { hydratedPageCount: 1 } });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
   it("fails closed when one hydrated page exceeds the bounded content budget", async () => {
     const readPage = vi.fn().mockResolvedValue({
       success: true,
       message: "oversize",
-      data: page({ content: "x".repeat(3_201), startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null }),
+      data: page({ content: "x".repeat(SOURCE_READ_MAX_CHARS + 1), startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null }),
     });
 
     const result = await hydrateTerminalWriterContext({
