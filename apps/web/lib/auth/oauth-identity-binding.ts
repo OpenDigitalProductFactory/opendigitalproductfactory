@@ -186,7 +186,34 @@ export async function resolveDefaultOAuthCoworker(input: {
   if (eligible.length === 0) throw new Error(OAUTH_SETUP_REQUIRED);
   if (eligible.length === 1) return { kind: "single", selected: eligible[0], candidates: [eligible[0]] };
 
+  // Rule 1 runs BEFORE the authority-signature check, and the reason matters.
+  // A prior consent is a decision this same human already recorded for this
+  // resource, this self-asserted name and this redirect family. It is not the
+  // client's name choosing an identity; it is the human's own earlier choice
+  // being reused, which is exactly what a reconnect should do. An
+  // administrator's eligible set spans every room-write coworker, so the
+  // signatures there always differ and a rule that waited for equality could
+  // never fire for the one person most likely to reconnect (AC-OC-7 live
+  // finding, 2026-09-23). Without a prior consent the mixed set still yields
+  // a choice, least authority first, exactly as designed.
+  const prior = await db.authorityBinding.findMany({
+    where: { oauthPurpose: "consent", status: "active", oauthUserId: input.userId, resourceRef: input.resource,
+      appliedAgentId: { in: eligible.map((e) => e.id) } },
+    orderBy: { createdAt: "desc" }, take: 25,
+    select: { appliedAgentId: true, oauthClient: { select: { clientName: true, redirectUris: true } } },
+  });
+  const wanted = input.client.clientName.trim().toLowerCase();
   const signatures = await authoritySignatures(eligible, db);
+  const withDetail = (list: readonly EligibleCoworker[]): CoworkerCandidate[] =>
+    list.map((c) => ({ ...c, detail: describeSignature(signatures.get(c.id)) }));
+  for (const binding of prior) {
+    const c = binding.oauthClient;
+    if (!c || c.clientName.trim().toLowerCase() !== wanted) continue;
+    if (!sameRedirectFamily(c.redirectUris, input.client.redirectUris)) continue;
+    const match = eligible.find((e) => e.id === binding.appliedAgentId);
+    if (match) return { kind: "resolved", reason: "prior_consent", selected: match, candidates: withDetail(eligible) };
+  }
+
   const keys = new Set(eligible.map((e) => signatures.get(e.id)?.key ?? `unreadable:${e.id}`));
   if (keys.size > 1) {
     const ranked = [...eligible].sort((a, b) => {
@@ -195,26 +222,7 @@ export async function resolveDefaultOAuthCoworker(input: {
         || (sa?.clearance.length ?? 99) - (sb?.clearance.length ?? 99)
         || a.agentId.localeCompare(b.agentId);
     });
-    const candidates = ranked.map((c) => ({ ...c, detail: describeSignature(signatures.get(c.id)) }));
-    return { kind: "choice", selected: ranked[0], candidates };
-  }
-
-  // Rule 1: this human's most recent consent for the same self-asserted
-  // name and redirect family, on this resource. This is what makes a
-  // reconnect land on the same assistant without a question.
-  const prior = await db.authorityBinding.findMany({
-    where: { oauthPurpose: "consent", status: "active", oauthUserId: input.userId, resourceRef: input.resource,
-      appliedAgentId: { in: eligible.map((e) => e.id) } },
-    orderBy: { createdAt: "desc" }, take: 25,
-    select: { appliedAgentId: true, oauthClient: { select: { clientName: true, redirectUris: true } } },
-  });
-  const wanted = input.client.clientName.trim().toLowerCase();
-  for (const binding of prior) {
-    const c = binding.oauthClient;
-    if (!c || c.clientName.trim().toLowerCase() !== wanted) continue;
-    if (!sameRedirectFamily(c.redirectUris, input.client.redirectUris)) continue;
-    const match = eligible.find((e) => e.id === binding.appliedAgentId);
-    if (match) return { kind: "resolved", reason: "prior_consent", selected: match, candidates: eligible };
+    return { kind: "choice", selected: ranked[0], candidates: withDetail(ranked) };
   }
 
   // Rule 2: a registry alias that appears as a whole word in the name.
