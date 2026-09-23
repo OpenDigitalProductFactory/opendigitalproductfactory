@@ -14,6 +14,15 @@
 // capability" — so a long list here is a defect even when every entry is
 // individually defensible.
 
+// Approved external development role; human scopes and room admission remain independent.
+// No iac_execute or admin_write: deployment and administration are not implied.
+const EXTERNAL_DEVELOPMENT_GRANTS = [
+  "work_room_read", "work_room_write", "registry_read",
+  "work_capsule_read", "work_capsule_write", "work_capsule_adopt",
+  "backlog_read", "backlog_write", "file_read", "code_graph_read",
+  "build_lifecycle", "sandbox_execute", "initiative_evidence_write",
+];
+
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // BI-38678404: agent_registry.json already grants AGT-WS-PORTFOLIO
   // initiative_evidence_write, but THIS map is the durable source and re-seeds
@@ -300,9 +309,9 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   "soc-investigator": ["siem_read", "siem_investigate", "siem_tune", "registry_read"],
   "soc-threat-hunter": ["siem_read", "siem_tune", "registry_read"],
   "soc-incident-commander": ["siem_read", "siem_investigate", "incident_respond", "registry_read"],
-  "external-claude-code": ["work_room_read", "work_room_write", "registry_read"],
-  "external-codex": ["work_room_read", "work_room_write", "registry_read"],
-  "external-grok": ["work_room_read", "work_room_write", "registry_read"],
+  "external-claude-code": EXTERNAL_DEVELOPMENT_GRANTS,
+  "external-codex": EXTERNAL_DEVELOPMENT_GRANTS,
+  "external-grok": EXTERNAL_DEVELOPMENT_GRANTS,
   // Value-stream orchestrators and the cross-cutting finance specialist
   // (LIFE-001). These lists are RECONCILED with config_profile.tool_grants in
   // agent_registry.json rather than hand-picked: the registry entry was authored

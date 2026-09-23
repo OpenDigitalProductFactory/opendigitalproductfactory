@@ -32,6 +32,23 @@ function capsuleDb(): CapsuleDb {
 }
 
 describe("work capsule branch adoption", () => {
+  it("records the human owner and separate assistant on OAuth adoption", async () => {
+    db.workroom.findFirst.mockResolvedValue(null);
+    db.workroom.create.mockImplementation(async ({ data }) => ({ id: "oauth-room", ...data }));
+    const room = await adoptWorktreeCapsule({ db: capsuleDb(),
+      input: { title: "OAuth work", objective: "Authorized work", repositoryFullName: "org/repo", headBranch: "fix/oauth", worktreePath: "D:/work/oauth", executorKind: "claude-desktop" },
+      actor: { userId: "alice", agentId: "claude", principalId: "human-alice", agentPrincipalId: "assistant" },
+    });
+    expect(room).toMatchObject({ leaseHolderPrincipalId: "human-alice", createdByPrincipalId: "assistant", requestedByPrincipalId: "human-alice" });
+  });
+  it("refuses adoption of another human's room even with the same assistant and session", async () => {
+    db.workroom.findFirst.mockResolvedValue({ id: "foreign", capsuleId: "WC-FOREIGN", status: "ready", headBranch: "fix/oauth", leaseHolderPrincipalId: "human-bob", requestedByPrincipalId: "human-bob", createdByPrincipalId: "assistant" });
+    await expect(adoptWorktreeCapsule({ db: capsuleDb(),
+      input: { title: "OAuth work", objective: "Authorized work", repositoryFullName: "org/repo", headBranch: "fix/oauth", worktreePath: "D:/work/oauth" },
+      actor: { userId: "alice", agentId: "claude", principalId: "human-alice", agentPrincipalId: "assistant" },
+    })).rejects.toThrow("not authorized");
+    expect(db.workroom.update).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     db.workroom.create.mockReset();
     db.workroom.findFirst.mockReset();

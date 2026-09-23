@@ -30,8 +30,19 @@ describe("durable review authority", () => {
     packet.actor.authSource = "oauth";
     db.mcpApiToken.findFirst.mockResolvedValue({ scope: "write", scopes: ["backlog_write"],
       kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
-      oauthClient: { revokedAt: null } } as never);
+      userId: "user-1", oauthClient: { revokedAt: null, registrationKind: "credentials" } } as never);
     expect(await verifySemanticReviewAuthority(packet, "TR-1", db as never)).toBe(true);
+  });
+  it("refuses queued OAuth work whose assistant consent was revoked", async () => {
+    const { packet, db } = fixture();
+    packet.actor.authSource = "oauth";
+    const authorityBinding = { findUnique: vi.fn().mockResolvedValue(null) };
+    db.mcpApiToken.findFirst.mockResolvedValue({ scope: "write", scopes: ["backlog_write"],
+      kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      userId: "user-1", agentId: "agent-1", authorityBindingId: "revoked-binding",
+      oauthClientId: "client-1", resource: "https://dpf.example/api/mcp/v1", publicScopes: ["dpf.work"],
+      oauthClient: { revokedAt: null, registrationKind: "dcr" } } as never);
+    expect(await verifySemanticReviewAuthority(packet, "TR-1", { ...db, authorityBinding } as never)).toBe(false);
   });
   it("uses current token, user and TaskRun authority", async () => {
     const { packet, db } = fixture();

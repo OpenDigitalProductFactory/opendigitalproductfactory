@@ -105,3 +105,15 @@ This checkout is shallow (`git rev-parse --is-shallow-repository` → `true`), s
 ## Housekeeping
 
 If `SessionStart` prints `DPF HOUSEKEEPING DUE`, run it. The `janitor-throttle` hook (`scripts/hooks/janitor-throttle.{sh,ps1}`) fires at most once per 24h across all worktrees. Comply; don't skip silently. Details are in the hook's own header comment.
+
+## When a worktree is removed
+
+Three paths remove a worktree, and all three end at the same classifier so they cannot disagree:
+
+1. **SessionEnd hook** (`worktree-session-hygiene.mjs`) — the primary path. Reaps *this session's* tree when it is Tier A. It cannot help when the PR merges after the thread ends, which is the normal case.
+2. **Merge event** (`build/pr-merged-reap`, BI-848360EF) — runs the janitor scoped to the merged branch with `--branch`. This is the path that covers the gap above.
+3. **Daily fleet sweep** (`worktreeJanitor`, 05:40) — the backstop for leftovers after a crash, and for clients that write no heartbeat.
+
+Every one of them calls `classifyWorktree`, so a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR or a dirty tree refuses the reap regardless of which path asked.
+
+Removal always goes through the junction-safe helper. A worktree here carries roughly 28 junctions into the root clone's `node_modules` and `apps/web/node_modules/*`; a recursive delete that follows one destroys the root clone's dependencies, which is what happened on 2026-08-15. Unlink each reparse point first, verify none remain, and only then remove the tree.

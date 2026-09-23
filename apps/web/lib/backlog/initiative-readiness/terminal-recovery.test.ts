@@ -118,8 +118,9 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
 }
 
 describe("terminal initiative recovery", () => {
-  it("routes break-fix PIR at the authored head without an objective baseline", async () => {
+  it.each(["docs/superpowers/specs/design.md", ".github/workflows/stuck-auto-merge-alarm.yml"])("routes break-fix PIR for %s at the authored head without an objective baseline", async (path) => {
     const ports = deps([room], []);
+    ports.discoverArtifact.mockResolvedValue({ resolved: true, artifact: { path, providerBlobId: "3".repeat(40) } });
     const reviewer = { agentId: "AGT-REVIEW", displayName: "Independent reviewer", status: "active", archived: false, lifecycleStage: "production" };
     ports.resolveRecovery.mockImplementation((input) => resolveInitiativeReviewerRecovery({
       ...input,
@@ -140,13 +141,13 @@ describe("terminal initiative recovery", () => {
     expect(packet.initiativeReviewBinding).toMatchObject({
       gate: "post-implementation-review", expectedCurrentBaselineId: null,
       workroomRef: { headSha, workroomId: room.capsuleId },
-      artifactRef: { commitSha: headSha, providerBlobId: "3".repeat(40) },
+      artifactRef: { path, commitSha: headSha, providerBlobId: "3".repeat(40) },
     });
     const binding = parseInitiativeReviewBinding(packet.initiativeReviewBinding)!;
     expect(binding).not.toBeNull();
     expect(createInitiativeReviewTerminalToolPolicy(binding.writerToolName, packet.requiredToolNames!, binding.artifactRef))
       .toMatchObject({ writerToolName: "record_initiative_post_implementation_review", immutableReaderArguments: { version: headSha, expectedBlobId: "3".repeat(40) } });
-    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha });
+    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha, purpose: "post-implementation-review" });
     expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
     expect(ports.loadEligibleEvidenceActivityIds).not.toHaveBeenCalled();
     expect(ports.loadObjectiveMappingHistory).not.toHaveBeenCalled();

@@ -18,6 +18,7 @@ model User {
   mcpApiTokens                     McpApiToken[]
   ownedOAuthClients                OAuthClient[]                       @relation("OAuthClientOwner")
   oauthAuthorizationCodes          OAuthAuthorizationCode[]
+  oauthAuthorityBindings           AuthorityBinding[]
   oauthRefreshTokens               OAuthRefreshToken[]
   backlogSubmissions               BacklogItem[]                       @relation("BacklogSubmissions")
   customEvalDimsApproved           CustomEvalDimension[]               @relation("CustomEvalDimensionApprover")
@@ -290,6 +291,11 @@ model BusinessProfile {
   updatedAt         DateTime           @updatedAt
 }
 
+enum OAuthBindingPurpose {
+  delegation
+  consent
+}
+
 model AuthorityBinding {
   id                 String                     @id @default(cuid())
   bindingId          String                     @unique
@@ -309,6 +315,19 @@ model AuthorityBinding {
   subjects           AuthorityBindingSubject[]
   grants             AuthorityBindingGrant[]
   decisionLogs       AuthorizationDecisionLog[]
+  /// Interactive OAuth authority belongs to a human/client pair, never the
+  /// shared client registration. Null for existing non-OAuth bindings.
+  oauthPurpose       OAuthBindingPurpose?
+  oauthUserId        String?
+  oauthUser          User? @relation(fields: [oauthUserId], references: [id], onDelete: Restrict)
+  oauthClientId      String?
+  oauthClient        OAuthClient? @relation(fields: [oauthClientId], references: [id], onDelete: Restrict)
+  oauthCodes         OAuthAuthorizationCode[]
+  oauthAccessTokens  McpApiToken[]
+  oauthRefreshTokens OAuthRefreshToken[]
+
+  @@index([oauthUserId, oauthClientId, oauthPurpose, status])
+  @@index([oauthClientId])
 
   @@index([scopeType, status])
   @@index([resourceType, resourceRef])
@@ -731,6 +750,12 @@ model McpApiToken {
   oauthClientId String?
   resource      String?
   publicScopes  String[]  @default([])
+  authorityBindingId String?
+  authorityBinding AuthorityBinding? @relation(fields: [authorityBindingId], references: [id], onDelete: Restrict)
+  oauthFamilyKey String?
+
+  @@index([authorityBindingId])
+  @@index([oauthFamilyKey, revokedAt])
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   oauthClient OAuthClient? @relation(fields: [oauthClientId], references: [id], onDelete: SetNull)
@@ -805,6 +830,7 @@ model OAuthClient {
   tokens             McpApiToken[]
   authorizationCodes OAuthAuthorizationCode[]
   refreshTokens      OAuthRefreshToken[]
+  authorityBindings  AuthorityBinding[]
 
   @@index([ownerUserId, revokedAt])
   @@index([registrationKind, revokedAt])
@@ -821,6 +847,10 @@ model OAuthAuthorizationCode {
   codeHash            String    @unique
   oauthClientId       String
   userId              String
+  authorityBindingId  String?
+  authorityBinding AuthorityBinding? @relation(fields: [authorityBindingId], references: [id], onDelete: Restrict)
+
+  @@index([authorityBindingId])
   redirectUri         String
   codeChallenge       String
   codeChallengeMethod String    @default("S256")
@@ -850,6 +880,12 @@ model OAuthRefreshToken {
   tokenHash     String    @unique
   oauthClientId String
   userId        String
+  authorityBindingId String?
+  authorityBinding AuthorityBinding? @relation(fields: [authorityBindingId], references: [id], onDelete: Restrict)
+  oauthFamilyKey String?
+
+  @@index([authorityBindingId])
+  @@index([oauthFamilyKey, revokedAt])
   agentId       String?
   resource      String
   scopes        String[]  @default([])

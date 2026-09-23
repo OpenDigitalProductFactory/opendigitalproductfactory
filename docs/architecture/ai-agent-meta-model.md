@@ -113,6 +113,15 @@ Three layers, each with a distinct job:
    Authorization resolves on the `Principal`; the alias kind tells the platform which surface authenticated. (AGENTS.md §11; `apps/web/lib/identity/principal-linking.ts` → `syncAgentPrincipal`.)
 3. **GAID + AIDoc** — **GAID** (*Global AI Agent Identification and Governance Framework*) is the normative naming/identity/traceability standard: `docs/architecture/GAID.md`. GAID format is `gaid:<scope>:<issuer-prefix>:<agent-local-id>` (e.g. `gaid:priv:dpf.internal:coo-orchestrator`). DPF currently implements the **private** profile (`GAID-Private`); the AIDoc's `exposure_state` is always `"private"` today. The **AIDoc** (Agent Identity Document) is the projected, portable summary of an agent — see §4.
 
+The same Principal spine governs human sessions. A workforce `User` or customer
+`CustomerContact` remains the credential/profile holder, but a verified password
+or social-provider assertion cannot issue a session until its canonical active
+`Principal` authorizes it. `PrincipalAlias` carries the typed `user`,
+`customer_contact`, `partner_contact`, and lower-case `email` joins; conflicts
+fail closed instead of selecting one identity. Request authorization reloads the
+Principal and current customer/account state, so deactivation or merge state
+invalidates an existing session without treating JWT claims as authority.
+
 GAID is deliberately complementary to **TAK** (Trusted AI Kernel): *GAID says who an agent is and what claims can be made about it; TAK says how a trustworthy runtime must govern it.* See `docs/architecture/trusted-ai-kernel.md` and `docs/architecture/agent-standards-dpf-conformance.md`.
 
 ```mermaid

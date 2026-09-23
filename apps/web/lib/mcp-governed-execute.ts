@@ -37,6 +37,7 @@ import {
   executeTool,
   type ToolDefinition,
   type ToolResult,
+  type ToolExecutionContext,
 } from "./mcp-tools";
 import { coerceMcpToolArgs } from "./mcp-arg-coercion";
 import { canonicalWorkroomToolName } from "./tak/workroom-tool-aliases";
@@ -329,28 +330,13 @@ async function callExecuteTool(
   toolName: string,
   params: Record<string, unknown>,
   userId: string,
-  ctx?: {
-    agentId?: string;
-    threadId?: string;
-    routeContext?: string;
-    taskRunId?: string;
-    featureBuildId?: string;
-    callerClient?: string;
-    apiTokenId?: string;
-    authSource?: string;
-    userContext?: UserContext;
-    governedSource?: GovernedExecuteSource;
-    tokenScope?: "read" | "write" | "admin";
-    tokenGrantScopes?: string[];
-    authorizedSurfaceContext?: GovernedExecuteContext["authorizedSurfaceContext"];
-    authorityDecisionId?: string;
-    governedDispatch?: (
-      toolName: string,
-      params: Record<string, unknown>,
-      invocation?: { surfaceId: string; sessionId: string; revision: string; actionId: string },
-    ) => Promise<ToolResult>;
-  },
+  ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
+  if (ctx?.authSource === "oauth") {
+    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
+    const refusal = await workroomTargetAccessRefusal({ params, userId, ...ctx, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
+    if (refusal) return refusal;
+  }
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }

@@ -166,7 +166,7 @@ Distilled from §2–§4 and the founder kernel. These are the acceptance criter
 3. **One explicit, user-visible state machine per process**, with `awaiting-input`, `error`, and `stale` as first-class states. State is a product surface. *(Linear six-state model.)*
 4. **Workflows where you can, agents where you must.** The deterministic engine owns *what comes next and where artifacts live*; the model makes *bounded* decisions inside that frame. *(Anthropic; Praetorian/AWS consensus.)*
 5. **Side effects are idempotent, individually retryable steps.** A step that re-runs must not double-execute (no silent dropped writes, no double-published campaign asset, no double-posted journal entry).
-6. **Human accountability at a non-bypassable gate.** Consequential boundaries (ship a PR, publish a campaign, post to the GL) require a recorded human/operator approval. Governance approves *evidence, not provenance* — the gate ratifies evidence quality regardless of who produced it.
+6. **Accountability and current authority at consequential boundaries.** Apply the existing policy for publishing, financial effects and other consequential actions. Reuse valid standing authorization; obtain a human decision only when scope, authority or unresolved judgment requires one. An internal retry or executor replacement alone is not a new approval boundary. Governance approves *evidence, not provenance*.
 7. **Liveness contracts, not silent hangs.** Heartbeats + staleness thresholds + a watchdog that retries/abandons/escalates. *(Linear `stale`; DPF `StallEvent`.)*
 8. **Bounded autonomy via external circuit breakers.** Per-step timeouts, iteration caps, and spend ceilings enforced *outside* the model so a runaway run "fails small, not crashes big."
 9. **Plan as an editable, durable artifact**, with revert-and-re-plan preferred over patching an in-flight run. *(Cursor Plan Mode.)*
@@ -184,6 +184,70 @@ Distilled from §2–§4 and the founder kernel. These are the acceptance criter
 
 ---
 
+### 5.1 Common recovery contract
+
+This contract applies to every agentic process, including a short tool action
+that can outlive its caller. It extends the existing TaskRun, Workroom,
+AsyncInferenceOp and durable queue contracts. It introduces no parallel engine,
+ledger, universal approval step or client-owned recovery loop.
+
+1. **Work has stable identity.** Persist the immutable request, owning process,
+   version and relevant evidence references before dispatch. Keep business work
+   identity separate from execution attempts, sessions and credentials. Resume
+   the same operation for the same authorized request; an intentional successor
+   records its predecessor and reason. Changed intent is a new operation.
+2. **Progress survives interruption.** Persist checkpoints, pending dispatch,
+   provider handles and committed results in their existing authoritative
+   stores. Reconcile a lost response against committed state before invoking
+   inference or publishing again. A successful tool call, a saved receipt and a
+   satisfied gate are distinct facts.
+3. **Effects are reconciled before replay.** Use stable effect keys and atomic
+   state transitions where available. An ambiguous remote outcome requires
+   provider reconciliation or explicit repair, not a blind repeat. Compensation
+   is domain-specific and must not claim to undo irreversible effects.
+4. **Authority is current; ownership is durable.** Validate the current human,
+   organization, coworker, consent and resource scope on resume or reassignment.
+   Credential refresh within a valid authority family preserves task identity;
+   revoked authority pauses access. An authorized takeover records the prior
+   and new executor without discarding work or history. Executor replacement
+   alone preserves accountability; an authorized accountable-owner transfer
+   records its own before/after identity and authority.
+5. **The platform drives bounded recovery.** Queue delivery and reconciliation
+   operate without the original client. Classify transient dependency failures,
+   exhausted capacity, missing decisions, denied authority and actual defects.
+   Retain retry budgets across restarts and replacements. At exhaustion, persist
+   a specific next action and responsible owner, or a justified terminal
+   disposition. Neither an infinite loop nor silent abandonment is recovery.
+6. **Recovery is visible and verifiable.** Show the last committed progress,
+   current attempt, uncertainty, responsible owner and next action in the
+   existing work surface. Notifications wake a reader; canonical state decides
+   what happened. A replacement human or agent can continue from those records
+   without reconstructing a private conversation.
+
+#### Interruption acceptance matrix
+
+Apply relevant rows through existing failure-analysis and verification evidence;
+record why a row does not apply. This is one shared contract, not a fresh
+checklist approval on every retry.
+
+| Interruption or boundary | Required observation |
+|---|---|
+| Caller disconnects or is killed after dispatch | Server-owned work progresses or exposes a bounded wait; reconnect retrieves the same operation. |
+| Worker restarts or an upgrade interrupts a step | Completed effects are retained; the unfinished step resumes under its recorded version or an explicit migration. |
+| Response is lost after an effect or receipt commits | Reconciliation returns the committed result and advances once; no duplicate effect, inference or approval. |
+| Duplicate delivery or competing executors | A fenced claim or compare-and-set admits one valid transition; a stale worker cannot overwrite its successor. |
+| Credential rotates or an executor is reassigned | Authorized recovery retains work identity and evidence; another human, tenant, consent or resource cannot inherit access. |
+| Provider, source reader or budget becomes unavailable | Progress and real continuation cursors survive; retry is bounded and wakes on a relevant change. Exhaustion names a repair or terminal disposition. |
+| Authority is revoked or the request/artifact is superseded | Resume refuses the stale authority or evidence and supplies the supported repair; it never invents approval. |
+| No eligible replacement or a nonrepeatable effect is uncertain | Work remains visible with an accountable owner and reconciliation/compensation path; it is not silently marked successful. |
+
+Coverage belongs to the owning adapter's tests and runtime evidence. Updating
+this architecture does not establish fleet-wide conformance. The September 2026
+review incident proved the difference: receipt validation and completion were
+repaired, while access-token-based task identity still required its own OAuth
+repair. Existing async-operation recovery and provider-outage work likewise
+retain their own acceptance obligations.
+
 ## 6. Target architecture — the Durable Agentic Process (DAP)
 
 A single pattern that every long-horizon process is an instance of. It is mostly *assembly of existing DPF substrate* under one name.
@@ -200,10 +264,10 @@ A single pattern that every long-horizon process is an instance of. It is mostly
                                         │ drives
         ┌───────────────────────────────┼───────────────────────────────┐
         ▼                                ▼                                ▼
-  Inngest workflow fn            Phase gates (HITL)              Watchdog (liveness)
-  step.run per phase /           WWMD principle_decide           StallEvent +
-  per task → journaled,          + recorded operator             taskrun-watchdog →
-  retried, resumable             approval (non-bypassable)       retry/abandon/escalate
+  Inngest workflow fn            Scope-appropriate gates         Watchdog (liveness)
+  step.run per phase /           WWMD / WWWD / profession        StallEvent +
+  per task → journaled,          + current authority             taskrun-watchdog →
+  retried, resumable             + required decisions            retry/abandon/escalate
         │
         ▼
   Bounded sub-agent steps (orchestrator-workers)
@@ -223,7 +287,7 @@ A single pattern that every long-horizon process is an instance of. It is mostly
 1. **Durable object** — generalize `TaskRun` into (or alias it as) `ProcessRun` with a `kind` discriminator and a domain `phase` (§7.4). One row, stable id, owns the state machine, plan artifact, evidence, heartbeat, and version.
 2. **Durable execution** — the orchestration is an **Inngest function** with one `step.run` per phase (and per task within a phase). The journal gives resume-from-last-step *for free*, deleting the title-match resume logic and the boot-reconciliation hooks.
 3. **Explicit state machine** — the domain phase enum (Build Studio's already exists; marketing/close get their own) *plus* the cross-domain status (`working/awaiting-input/error/stale`) borrowed from `TaskRun`. Both rendered in the UI.
-4. **HITL gates** — `principle_decide` + recorded operator approval at consequential boundaries; suspend the workflow (`step.waitForEvent`) at the gate and resume on the approval event, rather than blocking a process.
+4. **Decision and authority gates** — existing policy and settled direction in the owning scope determine whether a decision is needed: WWMD for platform development, WWWD for the organization's business, profession authority for craft. Where human input is required, persist the wait and resume on its recorded response rather than blocking a process. Reuse unchanged authorization and evidence during recovery.
 5. **Liveness + circuit breakers** — `lastHeartbeatAt` + `StallEvent` watchdog + per-step timeout + iteration/spend caps.
 6. **Experience layer** — the operator-facing surface that *renders* layers 1–5 and *feeds* the gate in layer 4: a `kind`-agnostic process graph, truth-source-honest progress, a cross-process inbox + notification transport for `awaiting-input` / terminal states, recovery affordances, and an editable plan. Generalized from the Build Studio components that already exist (§3.2), not built new. **Designed in depth — trust calibration, attention/notification policy, situational-awareness gates, progressive disclosure, the cross-process inbox, and UX acceptance metrics — in the companion [`2026-06-09-dap-experience-layer-design.md`](2026-06-09-dap-experience-layer-design.md).**
 
@@ -464,3 +528,14 @@ The implication is the opposite of "lock in the subscription": **the flat-rate a
 ---
 
 *This is an assessment. Every recommendation in §7–§8 enters the backlog and is promoted through Build Studio; nothing here is authorization to write feature code directly.*
+
+## Merge-triggered subscribers (BI-A6E4D205, BI-848360EF)
+
+`build/pr-merged.received` is emitted by the signed GitHub webhook receiver when a `pull_request` closes as merged. It carries repository, number, head branch, head sha, merge commit and merge time.
+
+Two subscribers consume it, both registered in `eventFunctions` — they have no cron and must never appear in `scheduledFunctions`, which is the registry the admin Scheduled Jobs surface renders and whose parity guard requires a `SCHEDULED_JOB_CATALOG` row:
+
+- **`build/pr-merged-binding`** binds the Workroom to the pull request that delivered it, via `resolvePullRequestBindings`. It never repoints a room already bound to a different number, and a re-delivered webhook is a no-op by construction.
+- **`build/pr-merged-reap`** runs the worktree janitor scoped to the merged branch. It implements no reaping rules of its own; see the branch-and-worktree runbook for why that delegation matters.
+
+Both are idempotent, because GitHub re-delivers webhooks. Neither asserts success when it cannot reach its subject.

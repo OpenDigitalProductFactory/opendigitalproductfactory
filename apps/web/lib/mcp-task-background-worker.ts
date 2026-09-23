@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
-import { isCurrentOAuthAccessToken } from "@/lib/auth/oauth-tokens";
+import { currentUserContextFromRecord } from "@/lib/govern/current-user-context";
+import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
 import type { Prisma } from "@dpf/db";
 import {
   enqueuePrismaAsyncOperationWake,
@@ -49,6 +50,7 @@ type PersistedRemoteTask = {
   messages: Array<{ parts: unknown }>;
   user: {
     id: string;
+    isActive: boolean;
     isSuperuser: boolean;
     groups: Array<{ platformRole: { roleId: string } | null }>;
   };
@@ -157,8 +159,10 @@ export function reconstructPersistedRemoteTask(
     requestObjective = storedRequestObjective;
   }
 
+  const currentHuman = currentUserContextFromRecord(row.userId, row.user);
   if (
     !row.id
+    || !currentHuman
     || !row.taskRunId
     || !row.userId
     || !row.threadId
@@ -254,11 +258,7 @@ export function reconstructPersistedRemoteTask(
         capability: tokenCapability,
         source: tokenSource,
       },
-      userContext: {
-        userId: row.userId,
-        platformRole: row.user.groups[0]?.platformRole?.roleId ?? null,
-        isSuperuser: row.user.isSuperuser,
-      },
+      userContext: currentHuman,
       parsed,
   });
 }
@@ -350,7 +350,8 @@ export async function executePersistedRemoteTask(input: {
         select: {
           id: true,
           isSuperuser: true,
-          groups: { include: { platformRole: true }, take: 1 },
+          isActive: true,
+          groups: { include: { platformRole: true } },
         },
       },
     },
@@ -402,13 +403,12 @@ export async function executePersistedRemoteTask(input: {
         id: reconstructed.data.token.tokenId,
         userId: reconstructed.data.token.userId,
         revokedAt: null,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        ...(reconstructed.data.token.source === "oauth" ? {} : { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }),
       },
-      select: { id: true, capability: true, kind: true, revokedAt: true, expiresAt: true,
-        oauthClient: { select: { revokedAt: true } } },
+      select: { id: true, capability: true, ...OAUTH_EXECUTION_AUTHORITY_SELECT },
     });
     const capabilityStillSufficient = activeToken
-      && (reconstructed.data.token.source !== "oauth" || isCurrentOAuthAccessToken(activeToken))
+      && (reconstructed.data.token.source !== "oauth" || await isCurrentOAuthExecutionAuthority(activeToken))
       && (reconstructed.data.token.capability === "read" || activeToken.capability === "write");
     if (!capabilityStillSufficient) {
       const failure = {

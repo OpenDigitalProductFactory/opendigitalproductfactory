@@ -804,11 +804,16 @@ export function scoreIdentity(ident, s) {
     level: cadenceLevel,
     detail: cadenceLevel === 3
       ? `self-task PLUS a cadence declared on skill "${cadenceSkill.name}" (${cadenceSkill.cadence})`
+      // These strings must say what the `cadence` rungs in PLANE_CONTRACT say.
+      // They drifted once already: the rungs were corrected to stop naming the
+      // per-coworker Proactivity control BI-87C9C91C deleted, and this second
+      // copy kept the old wording — one fix, two places, exactly the defect
+      // this measure exists to catch in other registries.
       : hasSelfTask
-        ? "COWORKER_SELF_TASKS entry driven by its Proactivity setting"
+        ? "declares a self-task entry, so a rhythm exists to be driven"
         : namedInJob
           ? "named by a scheduled job, but owns no self-task"
-          : "no recurring trigger — any Proactivity setting is a silent no-op",
+          : "no recurring trigger — nothing makes this coworker act unasked",
   };
 
   // ── Plane 6: Tools + Skills ────────────────────────────────────────────

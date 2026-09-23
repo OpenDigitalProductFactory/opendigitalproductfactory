@@ -19,6 +19,40 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_agent_toolchain as updater
 
 
+class CodexCacheVersionTest(unittest.TestCase):
+    def test_changed_contents_refresh_same_source_version_and_reruns_are_stable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / ".codex-plugin" / "plugin.json"
+            manifest.parent.mkdir()
+            updater.write_json(manifest, {"name": "dpf-platform", "version": "0.2.5+codex.old"})
+            script = root / "updater.py"
+            script.write_text("legacy config")
+            first = updater.codex_content_version(root)
+            updater.write_json(manifest, {"name": "dpf-platform", "version": first})
+            self.assertEqual(updater.codex_content_version(root), first)
+            script.write_text("oauth config")
+            self.assertNotEqual(updater.codex_content_version(root), first)
+            self.assertTrue(first.startswith("0.2.5+codex."))
+
+    def test_ignored_python_files_do_not_change_version_but_rename_does(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / ".codex-plugin" / "plugin.json"
+            manifest.parent.mkdir()
+            updater.write_json(manifest, {"name": "dpf-platform", "version": "0.2.5"})
+            script = root / "a.py"
+            script.write_text("same")
+            first = updater.codex_content_version(root)
+            cache = root / "__pycache__"
+            cache.mkdir()
+            (cache / "a.pyc").write_bytes(b"cache")
+            (root / ".DS_Store").write_bytes(b"metadata")
+            self.assertEqual(updater.codex_content_version(root), first)
+            script.rename(root / "b.py")
+            self.assertNotEqual(updater.codex_content_version(root), first)
+
+
 class McpCatalogTierTest(unittest.TestCase):
     def test_adds_full_tier_without_dropping_existing_query(self) -> None:
         self.assertEqual(
@@ -62,10 +96,31 @@ class WriteTextIfChangedTest(unittest.TestCase):
                     "--skip-grok-cli-install",
                 ])
             self.assertEqual(code, 0)
+            managed_manifest = json.loads((Path(tmp) / "plugins/dpf-platform/.codex-plugin/plugin.json").read_text())
+            self.assertEqual(managed_manifest["version"], updater.codex_content_version(skill_pack))
             marketplace = json.loads(
                 (Path(tmp) / ".agents" / "plugins" / "marketplace.json").read_text(),
             )
             self.assertEqual(marketplace["plugins"][0]["name"], "dpf-platform")
+
+    def test_dry_run_leaves_source_manifest_and_home_untouched(self):
+        skill_pack = Path(__file__).resolve().parents[1]
+        manifest = skill_pack / ".codex-plugin/plugin.json"
+        before = manifest.read_bytes()
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}):
+            self.assertEqual(updater.main(["--skill-pack-path", str(skill_pack), "--codex-only", "--dry-run"]), 0)
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+        self.assertEqual(manifest.read_bytes(), before)
+
+    def test_main_fails_when_codex_cache_verification_fails(self):
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch.object(
+            updater, "install_codex_plugin", return_value="failed: Codex plugin cache does not match the delivered skill pack"
+        ):
+            self.assertEqual(updater.main([
+                "--skill-pack-path", str(skill_pack), "--codex-only",
+                "--skip-grok-cli-install", "--skip-antigravity-cli-install",
+            ]), 1)
 
 
 class InstallGrokHooksTest(unittest.TestCase):
@@ -487,7 +542,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
         self.assertEqual(codex["action"], "disable-plugin")
 
     def test_installs_and_verifies_through_codex_registry(self) -> None:
-        add_result = unittest.mock.Mock(returncode=0, stdout='{"installed":true}', stderr="")
+        add_result = unittest.mock.Mock(returncode=0, stdout='{"installedPath":"/cache/dpf-platform"}', stderr="")
         list_result = unittest.mock.Mock(
             returncode=0,
             stdout=json.dumps(
@@ -505,7 +560,9 @@ class UpdateAgentToolchainTest(unittest.TestCase):
         )
         with patch.object(
             updater, "resolve_codex_binary", return_value="/fake/codex"
-        ), patch("subprocess.run", side_effect=[add_result, list_result]) as run:
+        ), patch("subprocess.run", side_effect=[add_result, list_result]) as run, patch.object(
+            Path, "is_dir", return_value=True
+        ), patch.object(updater, "codex_content_version", return_value="0.2.5+codex.match"):
             status = updater.install_codex_plugin(Path("/operator-home"), dry_run=False)
 
         self.assertEqual(status, "installed, enabled, and verified")
@@ -533,6 +590,16 @@ class UpdateAgentToolchainTest(unittest.TestCase):
         ), patch("subprocess.run", side_effect=[add_result, list_result]):
             status = updater.install_codex_plugin(Path("/operator-home"), dry_run=False)
         self.assertIn("failed", status)
+
+    def test_refuses_stale_cache_even_when_codex_reports_install_success(self):
+        result = unittest.mock.Mock(returncode=0, stdout='{"installedPath":"/cache/dpf-platform"}')
+        with patch.object(updater, "resolve_codex_binary", return_value="/fake/codex"), patch(
+            "subprocess.run", return_value=result
+        ), patch.object(Path, "is_dir", return_value=True), patch.object(
+            updater, "codex_content_version", side_effect=["0.2.5+codex.old", "0.2.5+codex.new"]
+        ):
+            status = updater.install_codex_plugin(Path("/operator-home"), dry_run=False)
+        self.assertIn("cache does not match", status)
 
     def test_migrates_bare_codex_plugin_table_to_registry_qualified_key(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]

@@ -55,9 +55,9 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
         })
       : [];
     return {
-      admittedPrincipalRefs: strings("admittedPrincipalRefs"),
+      admittedPrincipalRefs: Object.hasOwn(record, "admittedPrincipalRefs") ? strings("admittedPrincipalRefs") : undefined,
       discoverablePrincipalRefs: strings("discoverablePrincipalRefs"),
-      actionPrincipalRefs: strings("actionPrincipalRefs"),
+      actionPrincipalRefs: Object.hasOwn(record, "actionPrincipalRefs") ? strings("actionPrincipalRefs") : undefined,
       sensitivityCeiling: typeof record.sensitivityCeiling === "string"
         ? record.sensitivityCeiling
         : "internal",

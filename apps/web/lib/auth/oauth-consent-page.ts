@@ -64,6 +64,7 @@ dt{font-weight:600;flex:0 0 92px}
 dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
 .actions{display:flex;gap:10px;margin-top:22px}
 button{flex:1;padding:10px 16px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
+select{width:100%;padding:10px;border:1px solid GrayText;border-radius:6px;background:Field;color:FieldText;font:inherit}
 button.primary{background:Highlight;color:HighlightText;border:1px solid Highlight}
 button.secondary{background:ButtonFace;color:ButtonText;border:1px solid GrayText}
 .foot{font-size:12px;margin-top:18px}
@@ -95,6 +96,8 @@ export type ConsentView = {
   redirectUri: string;
   /** Echoed back verbatim so the POST re-validates the same request. */
   hiddenParams: Array<[string, string]>;
+  nextAssistantsUrl?: string;
+  coworkers?: Array<{ agentId: string; displayName: string }>;
 };
 
 export function renderConsentPage(view: ConsentView): string {
@@ -108,6 +111,7 @@ export function renderConsentPage(view: ConsentView): string {
     .join("");
 
   const hidden = view.hiddenParams
+    .filter(([key]) => key !== "acting_coworker")
     .map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`)
     .join("");
 
@@ -125,6 +129,16 @@ export function renderConsentPage(view: ConsentView): string {
 ${selfAssertedNote}
 <form method="post" action="/api/oauth/authorize">
 ${hidden}
+${view.coworkers ? `<fieldset><legend>Choose the assistant you authorize</legend>
+<p>This assigns a role to this connection. It does not verify the app's name or grant access to a workroom.</p>
+${view.coworkers.length === 1 && !view.nextAssistantsUrl
+  ? `<p><strong>${esc(view.coworkers[0].displayName)}</strong></p><input type="hidden" name="acting_coworker" value="${esc(view.coworkers[0].agentId)}">`
+  : `<select name="acting_coworker" aria-label="Assistant role" required>
+<option value="">Choose an approved assistant</option>
+${view.coworkers.map((agent) => `<option value="${esc(agent.agentId)}">${esc(agent.displayName)}</option>`).join("")}
+</select>`}
+${view.nextAssistantsUrl ? `<p><a href="${esc(view.nextAssistantsUrl)}">More approved assistants</a></p>` : ""}
+</fieldset>` : ""}
 <fieldset><legend>It is asking to:</legend>
 ${scopeRows}
 <p class="scope-detail">Unticking a permission grants less. You cannot grant more than was asked for.</p>
@@ -135,7 +149,7 @@ ${scopeRows}
 </dl>
 <div class="actions">
 <button class="primary" type="submit" name="decision" value="approve">Approve</button>
-<button class="secondary" type="submit" name="decision" value="deny">Cancel</button>
+<button class="secondary" type="submit" name="decision" value="deny" formnovalidate>Cancel</button>
 </div>
 </form>
 <p class="foot">You can revoke this at any time in Admin &rsaquo; Platform Development &rsaquo; MCP.</p>`,

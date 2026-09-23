@@ -1,8 +1,27 @@
 # MCP tool authorization runbook
 
+**OAuth identity and continuing authority.** The approval binds the human,
+client, resource and approved assistant role. A client's self-declared name
+cannot choose a coworker identity. Reconnects, refreshes and new tasks reuse
+that consent without another login; each privileged action checks the human's
+current permissions, token scope, assistant grants and room admission. OAuth
+work claims retain the human owner separately from assistant attribution.
+Older connections missing approved identity need one consent repair through
+the client's reconnect flow. Never infer identity from a name, assign an old
+room to its caller, or substitute a legacy token to repair OAuth.
+
 **Status:** procedure reference. The *rules* — the authorization principle, scope escalation, and grant enforcement — live in [`AGENTS.md`](../../AGENTS.md) §8/§8a and stay always-on. This file holds transport detail, token issuance and rotation, worktree MCP sync, and the grant-intersection mechanics. Relocated from §8 by BI-0020D511 Phase 1; no rule was dropped.
 
 External coding agents use the real MCP JSON-RPC 2.0 transport at `/api/mcp/v1` (`apps/web/app/api/mcp/v1/route.ts`). The older `/api/mcp/tools` and `/api/mcp/call` endpoints remain for in-portal coworker chat and are not the external MCP client contract.
+
+The agent-toolchain updater gives its managed Codex plugin copy a content-derived
+cache version. New delivered files therefore replace a stale client cache even
+when the source package version is unchanged; identical updates keep the same
+version. Installation succeeds only after the cached files match the managed
+copy. A dry run leaves both source and client configuration untouched. Restart
+the client to load the refreshed plugin; an existing connection is not proof of
+the new OAuth configuration. This prevents a stale updater from restoring the
+managed bearer override after OAuth setup.
 
 Authorized product surfaces use the six generic `surface_*` MCP tools rather than page-specific side doors. `surface_open` compiles a principal-bound session; every later read or action revalidates the human role, coworker grants, work context, token scope, approval policy, revision, and TTL. Persistent actions re-enter `governedExecuteTool`, so the surface contract never bypasses the authorization path described here.
 

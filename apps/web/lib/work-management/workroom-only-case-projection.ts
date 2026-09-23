@@ -33,6 +33,9 @@ import type { WorkspaceWorkCaseDetailView, WorkspaceWorkCaseListItem } from "./w
 
 /** The capsule fields this projection reads. */
 export type WorkroomOnlyRecord = {
+  backlogItemId?: string | null;
+  repositoryFullName?: string | null;
+  headSha?: string | null;
   id?: string;
   capsuleId: string;
   title: string;
@@ -90,6 +93,9 @@ export async function loadWorkroomOnlyCaseDetail({
       title: true,
       status: true,
       objective: true,
+      backlogItemId: true,
+      repositoryFullName: true,
+      headSha: true,
       workItemId: true,
       updatedAt: true,
       scopeClaims: true,

@@ -1,7 +1,6 @@
 import { prisma } from "@dpf/db";
-import { isCurrentOAuthAccessToken } from "@/lib/auth/oauth-tokens";
-import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
-import type { UserContext } from "@/lib/permissions";
+import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 import {
   parseInitiativeReviewBinding,
   parseRemoteTaskSubmitParams,
@@ -158,36 +157,27 @@ export async function resumeRemoteCoworkerTaskById(
   if (typeof parsed === "string" || remoteTaskRequestDigest(parsed) !== requestDigest) {
     return refusal(taskRunId, "Stored request state does not match its immutable digest.");
   }
-  if (deterministicExternalTaskRunId(tokenId, idempotencyKey) !== existing.taskRunId) {
+  if (deterministicExternalTaskRunId(optionalString(metadata?.["taskAuthorityKey"]) ?? tokenId, idempotencyKey) !== existing.taskRunId) {
     return refusal(taskRunId, "Stored TaskRun identity does not match its token-scoped request key.");
   }
 
   const storedToken = await prisma.mcpApiToken.findUnique({
     where: { id: tokenId },
-    select: { userId: true, capability: true, revokedAt: true, expiresAt: true, kind: true,
-      oauthClient: { select: { revokedAt: true } } },
+    select: { capability: true, ...OAUTH_EXECUTION_AUTHORITY_SELECT },
   });
   if (
     !storedToken
     || storedToken.userId !== existing.userId
     || storedToken.capability !== tokenCapability
     || storedToken.revokedAt !== null
-    || (tokenSource === "oauth" && !isCurrentOAuthAccessToken(storedToken))
-    || (storedToken.expiresAt !== null && storedToken.expiresAt <= new Date())
+    || (tokenSource === "oauth" && !await isCurrentOAuthExecutionAuthority(storedToken))
+    || (tokenSource !== "oauth" && storedToken.expiresAt !== null && storedToken.expiresAt <= new Date())
   ) {
     return refusal(taskRunId, "The original MCP token authority is no longer valid.");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: existing.userId },
-    select: { isSuperuser: true, groups: { include: { platformRole: true } } },
-  });
-  if (!user) return refusal(taskRunId, "The original submitting user no longer exists.");
-  const userContext: UserContext = {
-    userId: existing.userId,
-    platformRole: resolveWorkforcePlatformRole(user.groups),
-    isSuperuser: user.isSuperuser,
-  };
+  const userContext = await currentUserContext(existing.userId);
+  if (!userContext) return refusal(taskRunId, "The original submitting user is no longer active.");
   const token: RemoteTaskSubmitAuth = {
     tokenId,
     userId: existing.userId,

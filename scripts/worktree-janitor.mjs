@@ -48,6 +48,8 @@ const DEFAULT_GRACE = 14;
 function parseArgs(argv) {
   let dryRun = true;
   let tierAOnly = false;
+  /** Scope the scan to ONE branch's worktree (BI-848360EF). Default: every worktree. */
+  let branch = null;
   let graceDays = DEFAULT_GRACE;
   let json = false;
   let root = process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "";
@@ -60,13 +62,15 @@ function parseArgs(argv) {
     else if (a === "--grace-days") graceDays = Number(argv[++i]);
     else if (a.startsWith("--grace-days=")) graceDays = Number(a.split("=")[1]);
     else if (a === "--root") root = argv[++i];
+    else if (a === "--branch") branch = argv[++i];
+    else if (a.startsWith("--branch=")) branch = a.slice("--branch=".length);
     else if (a === "-h" || a === "--help") {
       console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 35).join("\n"));
       process.exit(0);
     }
   }
   if (!Number.isFinite(graceDays) || graceDays < 1) graceDays = DEFAULT_GRACE;
-  return { dryRun, tierAOnly, graceDays, json, root };
+  return { dryRun, tierAOnly, graceDays, json, root, branch };
 }
 
 function runGit(args, cwd) {
@@ -321,7 +325,27 @@ function main(argv = process.argv.slice(2)) {
   const decisions = [];
   const removals = [];
 
-  for (const entry of entries) {
+  // A merge tells us exactly ONE worktree just became reapable. Scanning the
+  // whole fleet to act on one is wasteful and widens the blast radius of a
+  // mistake, so `--branch` narrows the scan without touching a single rule:
+  // every verdict below is still produced by `classifyWorktree`, which refuses
+  // a live session, an active Workroom claim, a pin, a lease and an open PR.
+  //
+  // That ordering is load-bearing here specifically. classifyWorktree puts the
+  // liveness gate ABOVE the merged/Tier-A check precisely because "the moment a
+  // live session's PR merges, its clean tree first becomes Tier-A eligible —
+  // exactly when it must NOT be reaped". A merge-triggered reaper is the caller
+  // that walks straight into that window, so it must go through the classifier
+  // rather than around it.
+  const scanned = args.branch
+    ? entries.filter((e) => e.branch === args.branch)
+    : entries;
+
+  if (args.branch && scanned.length === 0) {
+    console.error(`[worktree-janitor] no worktree on branch ${args.branch}; nothing to scan.`);
+  }
+
+  for (const entry of scanned) {
     const facts = gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims);
     const { verdict, reason, tier } = classifyWorktree(facts, { graceDays: args.graceDays });
     const row = {

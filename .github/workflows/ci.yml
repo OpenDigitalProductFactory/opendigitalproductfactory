@@ -59,7 +59,9 @@ jobs:
           set -euo pipefail
           PLAN_PATH="$RUNNER_TEMP/ci-evidence-plan.json"
           git fetch --quiet origin main 2>/dev/null || true
-          FRESH_BASE="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+          # Checkout HEAD may be GitHub's synthetic merge. Compare the same
+          # source head passed to the planner, or unrelated main changes leak in.
+          FRESH_BASE="$(git merge-base "${HEAD_SHA:-HEAD}" origin/main 2>/dev/null || true)"
           BASE_SHA="${FRESH_BASE:-${EVENT_BASE:-origin/main}}"
           if [ -n "${EVENT_BASE:-}" ] && [ -n "${FRESH_BASE:-}" ] && [ "$EVENT_BASE" != "$FRESH_BASE" ]; then
             echo "::notice::event base ($EVENT_BASE) disagrees with merge-base ($FRESH_BASE) — using the fresh one. See BI-9E5E6063."

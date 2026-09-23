@@ -1,3 +1,4 @@
+import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
 import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { persistedTerminalReaderExecutions, reserveTerminalWriterReplay } from "./mcp-task-terminal-writer-recovery";
 import { prisma, type Prisma } from "@dpf/db";
@@ -287,19 +288,25 @@ export async function submitRemoteCoworkerTask(input: {
       kind: "result",
       result: {
         content: remoteTaskContent(
-          `This token is read-only and cannot submit ${parsed.riskClass} autonomous coworker work. Issue a write token in Admin > Platform Development > MCP, then retry.`,
+          `This token is read-only and cannot submit ${parsed.riskClass} autonomous coworker work. Ask the connection owner to approve the required work permission, then retry.`,
         ),
         structuredContent: {
           error: "insufficient_token_scope",
           requiredScope: "write",
           tokenScope: "read",
           riskClass: parsed.riskClass,
-          action: "Issue a write MCP token in Admin > Platform Development > MCP.",
+          action: "Review the work permission approved for this connection.",
         },
         isError: true,
       },
     };
   }
+  const taskAuthorityKey = await resolveMcpTaskAuthorityKey(token);
+  if (!taskAuthorityKey) return { kind: "result", result: { isError: true,
+    content: remoteTaskContent("This connection is not currently authorized to start assistant work. Review its authorization in DPF."),
+    structuredContent: { error: "connection_authorization_required", permissionGranted: false },
+  } };
+  const taskAuthorityMetadata = token.source === "oauth" ? { taskAuthorityKey } : {};
   const requestDigest = remoteTaskRequestDigest(parsed);
   const exactRequiredToolNames = requiredToolNames(parsed.authorityScope);
   const terminalToolPolicy = parsed.initiativeReviewBinding
@@ -309,7 +316,7 @@ export async function submitRemoteCoworkerTask(input: {
         parsed.initiativeReviewBinding.artifactRef,
       )
     : null;
-  const taskRunId = deterministicExternalTaskRunId(token.tokenId, parsed.idempotencyKey);
+  const taskRunId = deterministicExternalTaskRunId(taskAuthorityKey, parsed.idempotencyKey);
   const durableInitialDispatch = parsed.recipeId
     ? initialRemoteTaskDispatchProjection(taskRunId, new Date())
     : null;
@@ -318,7 +325,7 @@ export async function submitRemoteCoworkerTask(input: {
       userId: token.userId,
       AND: [
         { a2aMetadata: { path: ["idempotencyKey"], equals: parsed.idempotencyKey } },
-        { a2aMetadata: { path: ["apiTokenId"], equals: token.tokenId } },
+        { a2aMetadata: { path: [token.source === "oauth" ? "taskAuthorityKey" : "apiTokenId"], equals: taskAuthorityKey } },
       ],
     },
     orderBy: [{ createdAt: "desc" }],
@@ -594,6 +601,7 @@ export async function submitRemoteCoworkerTask(input: {
         collaborationKind: parsed.collaborationKind ?? null,
         riskClass: parsed.riskClass,
         apiTokenId: token.tokenId,
+        ...taskAuthorityMetadata,
         tokenSource: token.source,
         tokenCapability: token.capability,
         requestedAgentId: parsed.agentId,
@@ -609,6 +617,7 @@ export async function submitRemoteCoworkerTask(input: {
             idempotencyKey: parsed.idempotencyKey,
             riskClass: parsed.riskClass,
             apiTokenId: token.tokenId,
+            ...taskAuthorityMetadata,
           },
           progressPayload: { dispatch: durableInitialDispatch },
         },
@@ -637,6 +646,7 @@ export async function submitRemoteCoworkerTask(input: {
         idempotencyKey: parsed.idempotencyKey,
         riskClass: parsed.riskClass,
         apiTokenId: token.tokenId,
+        ...taskAuthorityMetadata,
       },
     });
   }

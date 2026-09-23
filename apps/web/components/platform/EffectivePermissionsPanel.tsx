@@ -8,7 +8,7 @@ import {
   type EffectiveAuthorityBinding,
 } from "@/lib/authority/effective-authority";
 import { oversightLabel, oversightStyle } from "@/lib/workforce/oversight-copy";
-import { type AgentIdentitySnapshot } from "@/lib/identity/agent-identity-snapshot";
+import type { AgentIdentitySnapshot } from "@/lib/identity/agent-identity-snapshot";
 
 type AgentInfo = {
   agentId: string;

@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import {
   parsePersistedWorkroomParticipantAssignment,
@@ -14,7 +14,7 @@ type AssignmentDb = {
     }) => Promise<{ id: string } | null>;
   };
   workroomParticipant: {
-    upsert: (args: unknown) => Promise<unknown>;
+    upsert: (args: Prisma.WorkroomParticipantUpsertArgs) => Promise<unknown>;
   };
 };
 

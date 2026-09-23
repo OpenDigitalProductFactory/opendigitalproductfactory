@@ -442,6 +442,49 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
+  it("update_backlog_item_status reconciles completion evidence onto an already-done item", async () => {
+    db.backlogItemFindUnique.mockResolvedValue({
+      id: "row-1",
+      status: "done",
+      epicId: null,
+      triageOutcome: "build",
+      effortSize: "medium",
+      activeBuildId: null,
+      claimStatus: "released",
+      claimedById: "u1",
+      claimedByAgentId: "agent-1",
+      claimedAt: new Date("2026-07-26T09:00:00Z"),
+    });
+    const completionEvidence = {
+      workClass: "implementation" as const,
+      evidenceActivityIds: ["source", "tests"],
+      useActiveBuildEvidence: false,
+      ux: { disposition: "not-applicable" as const, reason: "No user interface files or routes changed." },
+      migration: { disposition: "not-applicable" as const, reason: "No database schema or persisted data changed." },
+      callerVerdict: "allow" as const,
+    };
+
+    const res = await backlogPack.handlers.update_backlog_item_status(
+      {
+        itemId: "BI-1",
+        status: "done",
+        resolution: "Reconciled governed delivery evidence.",
+        completionEvidence,
+      },
+      "u1",
+      { agentId: "agent-1" },
+    );
+
+    expect(res.success).toBe(true);
+    expect(terminalTransition.completeBacklogItemTransition).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "BI-1",
+      expectedStatus: "done",
+      resolution: "Reconciled governed delivery evidence.",
+      completionEvidence,
+    }));
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
   it("link_backlog_item_to_epic requires an itemId", async () => {
     const res = await backlogPack.handlers.link_backlog_item_to_epic(
       { epicId: "EP-1" },

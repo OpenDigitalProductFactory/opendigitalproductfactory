@@ -251,24 +251,36 @@ export function projectRoomShape(
     const permittedStage = definition.stages.find((stage) => stage.key === check.nextPermittedStageKey);
     const permission = permittedStage ? `Permitted stage: ${permittedStage.title}.` : "No permitted transition recorded.";
     const recordedAction = view.work.nextAction ? ` Recorded action: ${view.work.nextAction}` : "";
-    // Definition order is stable. A receipt kind alone cannot bind a receipt to
-    // one of these steps; leave uncorrelated receipts in the evidence lane.
-    stages = definition.stages.map((stage) => ({
-      key: stage.key, label: stage.title, parallel: false, rows: [],
-      state: stage.key !== currentStageKey ? "unknown"
-        : view.state === "cancelled" ? "cancelled"
-        : check.disposition === "pause" || check.disposition === "escalate" ? "holding"
-        : check.disposition === "stop" ? "denied" : "observed",
-      inspection: {
-        position: stage.key === currentStageKey ? "Current stage reported by the process check" : "Intended step; execution not verified",
-        reason: stage.key === currentStageKey ? check.interventionReason ?? view.work.attentionReason ?? "The process check reports this stage." : "No step-linked execution receipt is available.",
-        next: stage.key === currentStageKey
-          ? `${permission}${recordedAction}`
-          : `Intended advance condition: ${stage.advance.condition} ${permission}`,
-        owner: ownerName(stage.accountablePrincipalRef), expectedEvidence: stage.evidence, affected,
-      },
-    }));
-    if (view.receipts.length) gaps.push("Receipts are linked to this room, but their definition-step correlation is not verified.");
+    const correlated = new Set<string>();
+    stages = definition.stages.map((stage) => {
+      const rows = view.receipts.filter(receipt => {
+        const binding = receipt.processEvidence;
+        return binding?.definitionRef === `${definition.key}@${definition.version}`
+          && binding.stageKey === stage.key && binding.relationship === "required-evidence"
+          && stage.evidence.includes(binding.evidenceKind);
+      }).map(receipt => {
+        correlated.add(receipt.receiptId);
+        // Requirement evidence is not the runner's stage-completion verdict.
+        return { ...rowFromReceipt(receipt), state: "observed" as const };
+      });
+      return {
+        key: stage.key, label: stage.title, parallel: false, rows,
+        state: stage.key !== currentStageKey ? rows.length ? "observed" : "unknown"
+          : view.state === "cancelled" ? "cancelled"
+          : check.disposition === "pause" || check.disposition === "escalate" ? "holding"
+          : check.disposition === "stop" ? "denied" : "observed",
+        inspection: {
+          position: stage.key === currentStageKey ? "Current stage reported by the process check" : "Intended step; execution not verified",
+          reason: stage.key === currentStageKey ? check.interventionReason ?? view.work.attentionReason ?? "The process check reports this stage."
+            : rows.length ? "Current-source evidence matches this requirement; stage completion is not recorded." : "No step-linked execution receipt is available.",
+          next: stage.key === currentStageKey
+            ? `${permission}${recordedAction}`
+            : `Intended advance condition: ${stage.advance.condition} ${permission}`,
+          owner: ownerName(stage.accountablePrincipalRef), expectedEvidence: stage.evidence, affected,
+        },
+      };
+    });
+    if (view.receipts.some(receipt => !correlated.has(receipt.receiptId))) gaps.push("Some room receipts have no verified definition-step correlation.");
   } else {
     stages = stages.map((stage) => ({ ...stage, inspection: {
       position: stage.key === currentStageKey ? `Current lifecycle stage: ${stage.label}` : `Lifecycle stage: ${stage.label}`,

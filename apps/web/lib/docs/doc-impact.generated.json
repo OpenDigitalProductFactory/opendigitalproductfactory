@@ -766,9 +766,6 @@
     "apps/web/lib/govern/auth-redirect.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
-    "apps/web/lib/govern/auth.ts": [
-      "docs/security/tool-evaluations/2026-08-23-authentik.md"
-    ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -1836,6 +1833,9 @@
     "scripts/check-prose-lint.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
+    "scripts/check-queue-flag-reachability.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/check-retired-substrate.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
@@ -2723,6 +2723,7 @@
       "scripts/check-docs-impact.mjs",
       "scripts/check-failure-readiness.mjs",
       "scripts/check-guard-diff-honesty.mjs",
+      "scripts/check-queue-flag-reachability.mjs",
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
@@ -3215,9 +3216,6 @@
     ],
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "scripts/probes/marketing-media/local-render-receipt.json"
-    ],
-    "docs/security/tool-evaluations/2026-08-23-authentik.md": [
-      "apps/web/lib/govern/auth.ts"
     ],
     "docs/security/tool-evaluations/2026-09-15-bmad-method.md": [
       "apps/web/lib/explore/build-process-matrix.ts"

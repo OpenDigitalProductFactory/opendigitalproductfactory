@@ -1022,3 +1022,95 @@ Protected run 35673719251 measured 392 arrival words against the retained 385 ba
 Run exception: the operator's existing Sept21 authorization to bypass the three known Windows Bash PKI mode-0600 fixtures applies to this same Workroom's copy follow-up gate. The Release Asset Contract host fixture verdict is skipped, never passed; canonical Linux and protected PR/release gates remain mandatory. Git Bash must be on PATH so the separate Janitor shell tests actually run. The copy-only workforce file is intentionally absent from the control manifest because the UX classifier rejects it as over-broad; its design reasoning is recorded above.
 
 Local-CI-Override: docs-adjacent: Only the shared workforce explanatory prose, its existing text assertion, and verification notes changed after canonical PASS5415282865288589979dfcf5b4aa273d8e9ca97d (cmubylf5019jk01ru8lq2o1if). Nine affected tests and both TypeScript programs passed. Same-head50b6 retries ended without gate verdict despite first-run2865 tests and completed BuildKit build stage; they remain inconclusive. This exception uses docs/testing/pre-pr-gate.md's prose-in-code route, not a claim that the current full gate passed. Protected cloud build, route sweep, DCO and merge queue remain required. The prose reduction is eleven words; the earlier absolute23-to12 count was off by one at each end.
+## Recorded initiative context in the enterprise view
+
+Continue BI-9DC43E17 through the existing EA Workrooms loader and route.
+DI-83DB469D1ADB selected extending this operation context over a new dashboard.
+Resolve Workroom.epicId against both existing Epic identities, combine aliases,
+and label unresolved references. Read at most201 membership groups, display200
+with an explicit partial label, and resolve a selected canonical Epic separately
+so selection is not limited by the inventory page. Unknown selection returns no
+rooms rather than broadening into all operations.
+
+Show initiative title, recorded description, scope and observed open-room counts
+in a disclosure. Select by its named link; preserve that identity in the existing
+Operation filter and subsequent room, process and evidence links. Keep initiative
+membership separate from value-stream, capability, containment and authority
+relationships. The room remains a real execution carrier, not a synthetic EA task.
+The existing organization archetype is unchanged.
+
+Source checks first reproduced three missing identity/filter behaviors and one
+missing route selection; the initial33 loader/page checks passed after wiring.
+Add bounded-read, ambiguous-reference and unavailable-selection coverage before
+handoff. Source coverage does not prove deployed enterprise-to-evidence acceptance.
+
+Search initiative names and semantic IDs before the bounded membership read so
+an initiative beyond the first page remains discoverable. Preserve initiative
+search through coordination, room and process navigation. Reuse FilterBar's URL
+form with opt-in preserved keys; exclude editable facets to avoid duplicate form
+fields. Existing consumers retain their behavior. Reuse CollapsibleList for the
+initiative preview and one identity-field projection for both inventory and
+selection. These changes consolidate navigation and projection logic rather
+than adding another dashboard or client-side execution authority.
+
+The four affected test files pass 55 tests, including bounded search, identity
+aliases, unresolved selection, form context and process return navigation. The
+shared FilterBar has 14 source consumers including its test file; its new option
+is opt-in. Protected runtime verification remains required.
+
+The source-copy guard measures 119 words instead of 63 on the EA route after
+adding initiative search and explicit unknown, partial and missing-link states.
+Record only this file's measured source-copy baseline. All other prose axes
+remain zero, and the page's reading-grade check passes. The initiative inventory
+starts collapsed and previews five rows when opened. This does not increase the
+separate frozen live-route budget; the protected UX sweep must still pass.
+
+Canonical integration passed on f8a895168d1086ac0ec6e45de003004479549a9a:
+715 tests in 136 files, both TypeScript programs, migrations, guards and a
+production image. Earlier host-runner interruptions remain unexplained; no
+memory-exhaustion cause was established. The later four-word copy correction
+passed all 55 focused tests, both TypeScript programs and the protected cloud
+production build. These are revision-specific results, not current deployment
+acceptance.
+
+Protected UX measurement on the copy correction records 162 arrival words,
+matching the unchanged budget, with no metric regression. Workflow 35816892791
+measured the intentional initiative search/disclosure accessibility structure.
+Review its captured page and replace only /ea/workrooms's ariaSnapshot; retain
+every numeric budget and every unrelated route. Refresh against current main
+and rerun the same 55 focused tests. Final protected checks and live navigation
+remain required. The known Windows PKI fixture exception does not turn an unrun
+or failing check into a pass.
+
+## Evidence reader consolidation, September 23
+
+Before adding definition-step correlation, consolidate the duplicated persisted
+initiative receipt validation in entry-adapter and projection. Both readers must
+require the receipt's policy identity, immutable artifact locator, authority
+snapshot, reviewer identity and finding disposition. Keep semantic subject
+matching explicit: a database row ID is not the backlog item's semantic ID.
+Retain the existing plan/design digest freshness rules, inherited-baseline
+behavior and malformed-newest-row precedence. This refactor adds no execution
+authority and does not convert readiness recognition into a stage receipt.
+
+The regression first returned pass for a receipt missing policyVersion. After
+the shared validator, 61 tests across both projections, readiness guidance and
+MCP backlog reads pass. Existing wrong-subject and stale-plan tests remain green.
+Portal navigation PR 5487 merged through protected checks. This evidence-reader
+increment has not been deployed or accepted as the complete vertical slice.
+
+Live RV-C21-PIR-PROJECTION-GAP-20260923 reproduces the next gap: BI-70B2ED84
+has a passing independent PIR and an enforced completion decision, but its
+Workroom inspector shows zero receipts. Extend the shared evidence reader for
+anchored and standalone rooms with the latest governed initiative gate rows.
+Validate subject, receipt, authority and immutable source identity using the
+shared validator. Bind a receipt to a declared evidence requirement only when
+the repository and exact Workroom head match its source artifact. Older or
+unresolved artifacts stay visible as historical observations, never current
+step proof. Keep definition/version in the projected binding and expose partial
+reads. Required-evidence correlation is not a stage-completion receipt and must
+not advance the runner, mark a stage passed or close the room.
+
+After merging current main, 177 focused tests across 17 files pass, including
+cross-repository and unknown-definition-version refusal to bind step evidence.
+These source checks do not replace canonical build or deployed UX verification.

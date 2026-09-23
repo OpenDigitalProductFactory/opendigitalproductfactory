@@ -182,8 +182,9 @@ export async function createAuthorityBinding(input: CreateAuthorityBindingInput)
 export async function updateAuthorityBinding(bindingId: string, input: UpdateAuthorityBindingInput) {
   const existing = await prisma.authorityBinding.findUnique({
     where: { bindingId },
-    select: { resourceType: true },
+    select: { resourceType: true, oauthPurpose: true },
   });
+  if (existing?.oauthPurpose) throw new Error("oauth_binding_requires_connection_flow");
   assertGenericEditorOwnsResourceType(existing?.resourceType);
   assertGenericEditorOwnsResourceType(input.resourceType);
   const nested = await buildNestedData(input);

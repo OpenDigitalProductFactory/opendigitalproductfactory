@@ -39,6 +39,7 @@ import {
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import { assertOAuthWorkroomOwner, workroomOwnershipData } from "./oauth-workroom-ownership";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
 import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
 import {
@@ -128,7 +129,7 @@ export async function createWorkCapsule(args: {
   const existing = await args.db.workroom.findUnique({
     where: { idempotencyKey: args.input.idempotencyKey },
   });
-  if (existing) { assertScopeReadback(existing, args.input.scope); return existing; }
+  if (existing) { assertOAuthWorkroomOwner(existing, args.actor); assertScopeReadback(existing, args.input.scope); return existing; }
 
   const now = new Date();
   try {
@@ -159,12 +160,7 @@ export async function createWorkCapsule(args: {
           scopeClaims: buildWorkCapsuleScopeClaims(scope, now),
           workspaceState: args.input.workspaceState ?? {},
           idempotencyKey: args.input.idempotencyKey,
-          leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)
-            ? args.actor.principalId
-            : null,
-          leaseExpiresAt: isExternalLeaseExecutor(args.input.executorKind) ? leaseUntil(now) : null,
-          createdByPrincipalId: args.actor.principalId,
-          requestedByPrincipalId: args.input.requestedByPrincipalId ?? null,
+          ...workroomOwnershipData(args.actor, args.input.executorKind, now, args.input.requestedByPrincipalId),
           status,
         },
       });
@@ -181,7 +177,7 @@ export async function createWorkCapsule(args: {
       const winner = await args.db.workroom.findUnique({
         where: { idempotencyKey: args.input.idempotencyKey },
       });
-      if (winner) { assertScopeReadback(winner, args.input.scope); return winner; }
+      if (winner) { assertOAuthWorkroomOwner(winner, args.actor); assertScopeReadback(winner, args.input.scope); return winner; }
     }
     throw error;
   }
@@ -198,7 +194,7 @@ export async function adoptWorktreeCapsule(args: {
   const scope = normalizePersistedScope(args.input.scope);
 
   const { existing, repositoryUnbound } = await readBranchIdentityCapsule(args.db, args.input);
-
+  if (existing) assertOAuthWorkroomOwner(existing, args.actor);
   const now = new Date();
   const resumePlan = planTerminalCapsuleResume({ existing, input: args.input, actor: args.actor, now });
   if (resumePlan) {
@@ -300,11 +296,7 @@ export async function adoptWorktreeCapsule(args: {
           outcomeAnchor: scope.outcomeAnchor ?? {},
           servesPortfolioRoles: scope.servesPortfolioRoles,
           dependsOnPortfolioRoles: scope.dependsOnPortfolioRoles,
-          leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)
-            ? args.actor.principalId
-            : null,
-          leaseExpiresAt: isExternalLeaseExecutor(args.input.executorKind) ? leaseUntil(now) : null,
-          createdByPrincipalId: args.actor.principalId,
+          ...workroomOwnershipData(args.actor, args.input.executorKind, now),
           lastSyncedAt: now,
         },
       });
@@ -327,6 +319,7 @@ export async function adoptWorktreeCapsule(args: {
         orderBy: { updatedAt: "desc" },
       });
       if (winner && isReusableLiveCapsule(winner, args.input)) {
+        assertOAuthWorkroomOwner(winner, args.actor);
         assertScopeReadback(winner, args.input.scope);
         return winner;
       }

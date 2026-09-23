@@ -12,6 +12,7 @@ import {
   resolveGitRevision,
   resolveCommandInvocation,
   isHostProcessLaunchFailure,
+  EXIT_STAGE_INCONCLUSIVE,
 } from "./local-integration-ci.mjs";
 
 describe("createLocalIntegrationPlan", () => {
@@ -589,4 +590,46 @@ it("a genuine command failure still reports its own status", () => {
   assert.equal(outcome.status, 1);
   assert.equal(outcome.diagnostics.hostLaunchFailure, false);
 });
+});
+
+// BI-27D3DCCD. A STAGE that ran and says it reached no verdict is infrastructure
+// evidence, exactly like a command the host could not start. The typecheck
+// runner has always exited 86 when its compiler was terminated; nothing read it,
+// so the gate recorded a product failure about a diff it never finished reading.
+describe("a stage reporting itself inconclusive is not a verdict (BI-27D3DCCD)", () => {
+  function runOne(status) {
+    return executeLocalIntegrationPlan({ commands: [["node", "scripts/local-ci-typecheck-runner.mjs"]] }, {
+      baseEnv: {},
+      platform: "win32",
+      spawnSyncImpl: () => ({ status, signal: null, error: null }),
+      now: () => 0,
+      log: () => {},
+      error: () => {},
+    });
+  }
+
+  it("maps the stage's inconclusive code onto the gate's infrastructure code", () => {
+    // 87 is EXIT_CHILD_SIGNAL_DEATH, the code classifyGateOutcome already reads
+    // as infrastructure evidence rather than a verdict about the diff.
+    assert.equal(runOne(EXIT_STAGE_INCONCLUSIVE).status, 87);
+  });
+
+  it("leaves an ordinary failure alone, so a real type error still fails the gate", () => {
+    assert.equal(runOne(2).status, 2);
+    assert.equal(runOne(1).status, 1);
+  });
+
+  it("does NOT touch 86, which is the vitest runner's own termination code", () => {
+    // Both runners are commands in this plan. 86 is EXIT_VITEST_RUNNER_TERMINATION,
+    // which classifyGateOutcome deliberately classifies as `failed` with its own
+    // summary about inspecting the attempt diagnostics. A rule keyed on 86 here
+    // would silently move that decision.
+    assert.equal(runOne(86).status, 86);
+  });
+
+  it("still names the command that ended the run, so the log is not weaker", () => {
+    const result = runOne(EXIT_STAGE_INCONCLUSIVE);
+    assert.deepEqual(result.failedCommand, ["node", "scripts/local-ci-typecheck-runner.mjs"]);
+    assert.equal(result.completedCommandCount, 0);
+  });
 });
