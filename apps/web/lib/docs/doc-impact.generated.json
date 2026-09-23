@@ -648,6 +648,9 @@
     "apps/web/lib/change-review/semantic-change-review.ts": [
       "docs/architecture/agent-client-governance.md"
     ],
+    "apps/web/lib/compliance/format-retention-minimum.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/contracts/entity-contract-drift.ts": [
       "docs/architecture/package-boundaries.md"
     ],
@@ -2638,6 +2641,7 @@
       "packages/db/src/capability-maturity.ts"
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
+      "apps/web/lib/compliance/format-retention-minimum.ts",
       "apps/web/lib/ea/table-growth.ts",
       "apps/web/lib/evidence/bounded-evidence-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
