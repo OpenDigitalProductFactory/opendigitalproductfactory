@@ -96,6 +96,76 @@ describe("enforceBuildInitiativeReadiness", () => {
     expect(db.buildActivity.create).toHaveBeenCalled();
   });
 
+  // BI-0E2E3BC5: with the shape bound (BI-1E8EAD10), a small or medium build
+  // still owed a research receipt no agent it runs as can write. Its own
+  // reviewed design is that research, and sensitivity raises the shape exactly
+  // as it does at the claim and at closure.
+  describe("reads the build's reviewed design and item sensitivity", () => {
+    function shaped(args: { boundShape: string | null; title?: string; designReview?: unknown }) {
+      const db = database();
+      db.featureBuild.findUnique.mockResolvedValueOnce({
+        id: "build-row",
+        buildId: "FB-ENTRY",
+        kind: "feature",
+        originatingBacklogItemId: "bi-row",
+        designDoc: { acceptanceCriteria: ["the page lists adoptable animals", { text: "each card links to a profile" }] },
+        designReview: args.designReview === undefined ? { decision: "pass" } : args.designReview,
+        originator: {
+          id: "bi-row",
+          itemId: "BI-ENTRY",
+          title: args.title ?? "Adoptable animals page",
+          body: "Show the animals available for adoption.",
+          type: "product",
+          source: "user-request",
+          workType: "feature",
+          scopeKind: "platform",
+          archetypeCategories: [],
+          archetypeIds: [],
+          activities: [],
+        },
+      });
+      const workroom = {
+        findFirst: vi.fn().mockResolvedValue(
+          args.boundShape ? { scopeClaims: [{ workShape: args.boundShape, recordedAt: "2026-09-22T00:00:00.000Z" }] } : null,
+        ),
+      };
+      return Object.assign(db, { workroom });
+    }
+    const enforce = (db: ReturnType<typeof shaped>, target: "plan" | "implementation") => enforceBuildInitiativeReadiness({
+      db,
+      buildId: "FB-ENTRY",
+      target,
+      targetPhase: target === "plan" ? "plan" : "build",
+      evaluatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    const medium = "delivery-medium@1.0.0";
+
+    it("lets a medium build with a passed design review enter plan and build", async () => {
+      const plan = await enforce(shaped({ boundShape: medium }), "plan");
+      expect(plan.decision.unmet.map((entry) => entry.code)).toEqual([]);
+      expect(plan.allowed).toBe(true);
+      expect((await enforce(shaped({ boundShape: medium }), "implementation")).allowed).toBe(true);
+    });
+
+    it("still refuses research when the design review failed", async () => {
+      const result = await enforce(shaped({ boundShape: medium, designReview: { decision: "fail" } }), "plan");
+      expect(result.allowed).toBe(false);
+      expect(result.decision.unmet.map((entry) => entry.code)).toContain("RESEARCH_REQUIRED");
+    });
+
+    it("keeps large, sensitive and unshaped work on the full table", async () => {
+      for (const db of [
+        shaped({ boundShape: "delivery-large@1.0.0" }),
+        shaped({ boundShape: medium, title: "Adopter login and password reset" }),
+        shaped({ boundShape: null }),
+      ]) {
+        const result = await enforce(db, "plan");
+        expect(result.allowed).toBe(false);
+        expect(result.decision.unmet.map((entry) => entry.code)).toContain("SPEC_APPROVAL_REQUIRED");
+      }
+    });
+  });
+
   it("returns an allowed decision from the shared projector without consulting advisory JSON", async () => {
     const db = database();
     const projectReadiness = vi.fn().mockReturnValue({
