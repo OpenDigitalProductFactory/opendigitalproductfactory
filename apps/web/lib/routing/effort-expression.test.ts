@@ -73,6 +73,14 @@ describe("expressEffort — one decision, each provider's dialect", () => {
     expect(e.effortUnexpressed).toBe(false);
   });
 
+  // BI-D9F13BEA: Gemini spends thinking tokens inside maxOutputTokens, exactly as
+  // Anthropic spends budget_tokens inside max_tokens. Without the budget on top,
+  // thinking consumed the answer's ceiling: Build Studio plans came back empty
+  // (38 times on the dev install) or cut off mid-array, and builds stalled in plan.
+  it("Gemini: the thinking budget is added on top of the answer's output ceiling", () => {
+    expect(expressEffort("gemini", high, thinkingCaps).extraMaxTokens).toBe(high.budgetTokens);
+  });
+
   it("OpenRouter: reasoning.effort", () => {
     expect(expressEffort("openrouter", high, thinkingCaps).settings).toEqual({
       reasoning: { effort: "high" },

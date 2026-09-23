@@ -183,9 +183,13 @@ export function expressEffort(
   // ── Gemini — generationConfig.thinkingConfig.thinkingBudget (was missing) ──
   if (providerId.toLowerCase().includes("gemini") || providerId.toLowerCase().includes("google")) {
     if (decision.budgetTokens === null) return { ...NOTHING, effortUnexpressed: true };
+    // BI-D9F13BEA: Gemini spends thinking tokens inside maxOutputTokens, as
+    // Anthropic spends budget_tokens inside max_tokens, so the budget goes on
+    // top of the answer's ceiling. At 0, thinking consumed it: plans came back
+    // empty or truncated and Build Studio builds stalled in plan.
     return {
       settings: { thinkingConfig: { thinkingBudget: decision.budgetTokens } },
-      extraMaxTokens: 0,
+      extraMaxTokens: decision.budgetTokens,
       thinking: true,
       effortUnexpressed: false,
     };
