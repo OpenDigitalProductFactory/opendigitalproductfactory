@@ -3,17 +3,14 @@
 // Drains the two multi-agent collaboration doors out of the mcp-tools.ts
 // executeTool switch: request_coworker (hand off a scoped sub-task to a named
 // peer) and summon_coworker (bring a named peer into the current conversation).
-// Both validate the caller thread context and delegate to the shared
-// coworker-collaboration module, so behaviour is identical when a tool is
-// invoked over MCP.
-//
-// Definitions moved verbatim out of the inline PLATFORM_TOOLS array. These tools
-// carry no TOOL_TO_GRANTS entry (advise-safe coordination gated elsewhere), so
-// grants is empty and there is nothing to drift against.
+// General collaboration uses thread_write. Evidence authors can request only
+// a current server-issued independent review through the token-bound task owner.
+// Central TOOL_TO_GRANTS owns disclosure; the request guard narrows execution.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { dispatchExternalCoworkerTask } from "@/lib/mcp/external-coworker-task-adapter";
+import { authorizeCoworkerRequest } from "@/lib/mcp/independent-review-request";
 
 const initiativeReviewProperties = {
   requiredToolNames: {
@@ -147,7 +144,9 @@ async function requestCoworkerHandler(
   if (!targetAgent || !objective) {
     return { success: false, error: "invalid_params", message: "request_coworker requires targetAgent and objective." };
   }
-  if (!context?.threadId) {
+  const authority = await authorizeCoworkerRequest(params, userId, context);
+  if (authority.refusal) return authority.refusal;
+  if (authority.bounded || !context?.threadId) {
     return dispatchExternalCoworkerTask({
       collaborationKind: "handoff",
       targetAgent,
@@ -157,7 +156,7 @@ async function requestCoworkerHandler(
       requiredToolNames: params["requiredToolNames"],
       initiativeReviewBinding: params["initiativeReviewBinding"],
       userId,
-      context,
+      context: authority.bounded ? { ...context, routeContext: "/build" } : context,
     });
   }
   const tierParam = Number(params["tier"]);

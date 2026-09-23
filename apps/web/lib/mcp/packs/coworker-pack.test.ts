@@ -5,6 +5,8 @@ const collab = vi.hoisted(() => ({
   summonCoworker: vi.fn(),
 }));
 const external = vi.hoisted(() => ({ dispatch: vi.fn() }));
+const authority = vi.hoisted(() => ({ authorize: vi.fn() }));
+vi.mock("@/lib/mcp/independent-review-request", () => ({ authorizeCoworkerRequest: authority.authorize }));
 vi.mock("@/lib/tak/coworker-collaboration", () => ({
   requestCoworker: (...a: unknown[]) => collab.requestCoworker(...a),
   summonCoworker: (...a: unknown[]) => collab.summonCoworker(...a),
@@ -14,7 +16,7 @@ vi.mock("@/lib/mcp/external-coworker-task-adapter", () => ({
 }));
 
 import { coworkerPack } from "./coworker-pack";
-import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
+import { TOOL_TO_GRANTS, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
 const EXPECTED_TOOLS = ["request_coworker", "summon_coworker", "find_coworker"];
 
@@ -40,6 +42,7 @@ const objectiveMappingBinding = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authority.authorize.mockResolvedValue({ bounded: false });
   external.dispatch.mockResolvedValue({
     success: false,
     error: "external_handoff_context_required",
@@ -48,6 +51,12 @@ beforeEach(() => {
 });
 
 describe("coworker pack — registration", () => {
+  it("discloses review requests to evidence authors without granting general summons or review receipts", () => {
+    const grants = ["initiative_evidence_write"];
+    expect(isToolAllowedByGrants("request_coworker", grants)).toBe(true);
+    expect(isToolAllowedByGrants("summon_coworker", grants)).toBe(false);
+    expect(isToolAllowedByGrants("record_initiative_post_implementation_review", grants)).toBe(false);
+  });
   it("exposes exactly the collaboration + discovery tools with a handler each", () => {
     expect(coworkerPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(coworkerPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
@@ -60,8 +69,8 @@ describe("coworker pack — registration", () => {
   });
 
   it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
-    // request_coworker/summon_coworker are advise-safe coordination, ungated in
-    // TOOL_TO_GRANTS — pack.grants is empty, so there is nothing to drift against.
+    // The central grant map owns collaboration disclosure; this pack does not
+    // duplicate it. Its runtime guard narrows the additional author lane.
     expect(coworkerPack.grants).toEqual({});
     for (const [name, grants] of Object.entries(coworkerPack.grants)) {
       expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
@@ -109,6 +118,19 @@ describe("coworker pack — registration", () => {
 });
 
 describe("coworker pack — handler behavior (delegation preserved)", () => {
+  it("cannot use a portal thread to escape the bounded review lane", async () => {
+    authority.authorize.mockResolvedValue({ bounded: true });
+    await coworkerPack.handlers.request_coworker({ targetAgent: "reviewer", objective: "review" }, "u1", { threadId: "portal" });
+    expect(external.dispatch).toHaveBeenCalledOnce();
+    expect(collab.requestCoworker).not.toHaveBeenCalled();
+  });
+  it("returns the authority refusal without dispatching on either surface", async () => {
+    const refusal = { success: false, error: "independent_review_request_denied", message: "Not admitted" };
+    authority.authorize.mockResolvedValue({ bounded: true, refusal });
+    expect(await coworkerPack.handlers.request_coworker({ targetAgent: "reviewer", objective: "review" }, "u1", { threadId: "portal" })).toEqual(refusal);
+    expect(external.dispatch).not.toHaveBeenCalled();
+    expect(collab.requestCoworker).not.toHaveBeenCalled();
+  });
   it("request_coworker fails closed when neither a portal thread nor verified external context exists", async () => {
     const res = await coworkerPack.handlers.request_coworker(
       { targetAgent: "ea-architect", objective: "review schema" },
