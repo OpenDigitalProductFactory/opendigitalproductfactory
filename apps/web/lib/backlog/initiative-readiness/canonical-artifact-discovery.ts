@@ -23,7 +23,7 @@ export type CanonicalArtifactDiscoveryResult =
   | { resolved: true; artifact: DiscoveredCanonicalArtifact }
   | {
     resolved: false;
-    code: "no-canonical-design" | "ambiguous-canonical-design" | "provider-unavailable";
+    code: "no-canonical-design" | "ambiguous-canonical-design" | "no-repair-artifact" | "ambiguous-repair-artifact" | "provider-unavailable";
     nextAction: string;
   };
 
@@ -74,10 +74,11 @@ function isCanonicalDesignFile(file: CompareFile): boolean {
  * The compare RANGE matters: a design is routinely authored across several
  * commits, and `GET /commits/{sha}` would report only the last one's files.
  */
-export async function discoverCanonicalDesignArtifact(args: {
+export async function discoverCanonicalReviewArtifact(args: {
   repositoryFullName: string;
   baseSha: string;
   headSha: string;
+  purpose?: "post-implementation-review";
   /** Read from the live item by the claim handler, never a caller-supplied blob identity. */
   backlogBody?: string | null;
   db?: CanonicalArtifactDb;
@@ -136,8 +137,15 @@ export async function discoverCanonicalDesignArtifact(args: {
   }
 }
 
+/** Design gates retain their design-only contract; only PIR may bind repair source. */
+export async function discoverCanonicalDesignArtifact(
+  args: Omit<Parameters<typeof discoverCanonicalReviewArtifact>[0], "purpose">,
+): Promise<CanonicalArtifactDiscoveryResult> {
+  return discoverCanonicalReviewArtifact({ ...args, purpose: undefined });
+}
+
 async function discoverCanonicalDesignArtifactWithFetch(
-  args: { repositoryFullName: string; baseSha: string; headSha: string; backlogBody?: string | null },
+  args: { repositoryFullName: string; baseSha: string; headSha: string; backlogBody?: string | null; purpose?: "post-implementation-review" },
   repo: { owner: string; name: string },
   token: string | null,
   fetchImpl: typeof fetch,
@@ -222,10 +230,18 @@ async function discoverCanonicalDesignArtifactWithFetch(
     };
   }
 
+  if (args.purpose === "post-implementation-review" && files.length >= COMPARE_FILE_LIMIT) {
+    return { resolved: false, code: "provider-unavailable",
+      nextAction: "The provider comparison reached its file limit. The repair scope may be incomplete; narrow the immutable review range before retrying." };
+  }
+
   const candidates = files
     .filter(isCanonicalDesignFile)
     .sort((left, right) => left.filename.localeCompare(right.filename));
   if (candidates.length === 0) {
+    if (args.purpose === "post-implementation-review") {
+      return discoverRepairArtifact(files);
+    }
     return {
       resolved: false,
       code: "no-canonical-design",
@@ -244,4 +260,27 @@ async function discoverCanonicalDesignArtifactWithFetch(
 
   const canonical = candidates[0]!;
   return { resolved: true, artifact: { path: canonical.filename, providerBlobId: canonical.sha } };
+}
+
+/** A single implementation artifact may be accompanied by tests and explanatory docs. */
+function discoverRepairArtifact(files: CompareFile[]): CanonicalArtifactDiscoveryResult {
+  const present = files.filter((file) => file.status !== "removed"
+    && /^[a-f0-9]{40}$/i.test(file.sha)
+    && !file.filename.includes("\\")
+    && file.filename.split("/").every((part) => part.length > 0 && part !== "." && part !== ".."));
+  const implementation = present.filter((file) => !file.filename.startsWith("docs/")
+    && !/(^|\/)(__tests__|tests?)\//.test(file.filename)
+    && !/\.(test|spec)\.[^/]+$/.test(file.filename));
+  const candidates = present.length === 1 ? present : implementation;
+  if (candidates.length === 1) {
+    const file = candidates[0]!;
+    return { resolved: true, artifact: { path: file.filename, providerBlobId: file.sha } };
+  }
+  return {
+    resolved: false,
+    code: candidates.length > 1 ? "ambiguous-repair-artifact" : "no-repair-artifact",
+    nextAction: candidates.length > 1
+      ? `The repair has multiple implementation artifacts (${candidates.map((file) => file.filename).join(", ")}). Narrow the review to an independently reviewable repair or use its existing canonical design. No artifact was selected arbitrarily.`
+      : "The recorded range contains no unique surviving repair artifact. Verify the pushed base/head and repair scope; a post-implementation review does not require a new design document.",
+  };
 }

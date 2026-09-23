@@ -20,6 +20,14 @@ They meet at one edge: a readiness **review gate** is *routed into* a Workroom, 
 
 ## 1. The lifecycle sequence
 
+Break-fix post-implementation review uses the authored Workroom head and a
+provider-verified artifact. A workflow or code repair with one implementation
+file can be reviewed without a changed design document; accompanying tests
+and explanatory docs do not change that identity. Multiple implementation
+files without a canonical design remain an explicit scope ambiguity. Use the
+returned reviewer packet unchanged; deployment evidence and an independent
+receipt are still required. This does not relax design-approval gates.
+
 The readiness **targets** are ordered and cumulative — each includes every prior target's requirements ([`types.ts`](../../apps/web/lib/backlog/initiative-readiness/types.ts), the cumulative call chain in `evaluate.ts`):
 
 ```

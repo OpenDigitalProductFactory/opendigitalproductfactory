@@ -86,9 +86,25 @@ No existing helper reads the GitHub compare endpoint.
 A missing post-implementation review routes through the existing immutable
 reviewer packet before objective-baseline lookup. A break-fix does not owe an
 objective baseline. The packet uses the unique live Workroom's authored head
-and the provider-verified design blob from its base-to-head range. A squash
+and a provider-verified review blob from its base-to-head range. A squash
 merge does not replace the authored head in review provenance. Missing or
 ambiguous ownership and unavailable source still produce explicit refusals.
+
+For a repair without a changed design, PIR may bind the unique surviving
+implementation artifact, including a workflow. Accompanying tests and docs
+do not make that implementation identity ambiguous. A single-file test or
+documentation repair may bind that file. Multiple implementation artifacts
+remain an explicit ambiguity; never choose one alphabetically or invent a
+design to unlock a three-line repair. Design approval lanes remain design-only.
+Reuse the provider transport, immutable SHA checks, reader and independent
+writer contract. No schema, grant or receipt-policy change is needed.
+
+The regression is BI-6BF129EA: PR5547 restored the alarm and its actual GitHub
+dry run passed, but completion IRD-0C57E93D9CF0 demanded a changed design.
+Follow-up under BI-594CF003: reproduce source-only discovery failure; factor
+the existing discovery boundary by review purpose; retain design-only callers;
+test unique, ambiguous, removed and invalid source plus bound PIR routing;
+then deploy and execute the original completion journey with its real evidence.
 
 The canonical `get_backlog_item` read returns this completion recovery packet
 as `data.recovery`; attempting completion invokes the same resolver. Neither

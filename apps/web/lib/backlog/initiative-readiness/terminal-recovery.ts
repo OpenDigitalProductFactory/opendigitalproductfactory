@@ -16,7 +16,7 @@ import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inven
 
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
-import { discoverCanonicalDesignArtifact } from "./canonical-artifact-discovery";
+import { discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   selectEligibleObjectiveEvidenceActivityIds,
@@ -148,7 +148,8 @@ export type TerminalRecoveryPorts = {
     repositoryFullName: string;
     baseSha: string;
     headSha: string;
-  }): Promise<Awaited<ReturnType<typeof discoverCanonicalDesignArtifact>>>;
+    purpose?: "post-implementation-review";
+  }): Promise<Awaited<ReturnType<typeof discoverCanonicalReviewArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
 };
 
@@ -452,7 +453,7 @@ const DEFAULT_PORTS: TerminalRecoveryPorts = {
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
   loadObjectiveMappingHistory: defaultLoadObjectiveMappingHistory,
   verifyHistoricalArtifact: (args) => readRepositoryProviderBlob(args),
-  discoverArtifact: discoverCanonicalDesignArtifact,
+  discoverArtifact: discoverCanonicalReviewArtifact,
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
 };
 
@@ -628,6 +629,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
       repositoryFullName: room.repositoryFullName,
       baseSha: room.baseSha,
       headSha: room.headSha,
+      purpose: "post-implementation-review",
     });
     return ports.resolveRecovery({
       decision: {
