@@ -1,0 +1,54 @@
+name: Stuck Auto-Merge Alarm
+
+# PR #5333 sat six days with auto-merge armed, mergeStateStatus BLOCKED and red
+# checks, and nothing surfaced it: auto-merge only fires on green, and the
+# merge-queue churn watch only sees PRs that reached the queue. This scheduled
+# alarm (BI-53BE1C77) comments ONCE per stuck head SHA on any open PR that has
+# had auto-merge armed while BLOCKED / DIRTY / BEHIND (or with a failing check)
+# for longer than STUCK_PR_THRESHOLD_HOURS, naming the failing checks and
+# linking the build-gate runbook. Pure logic lives in
+# scripts/check-stuck-auto-merge.mjs (unit-tested).
+
+on:
+  schedule:
+    - cron: "17 * * * *" # hourly, off the top of the hour to avoid the churn watch
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the analysis without commenting"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: write # post the alarm comment
+
+concurrency:
+  group: stuck-auto-merge-alarm
+  cancel-in-progress: true
+
+jobs:
+  alarm:
+    name: Flag PRs stuck with auto-merge armed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Flag stuck PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STUCK_PR_THRESHOLD_HOURS: "4"
+<<<<<<< Updated upstream
+          # Env indirection, never `${{ }}` inside `run:` (actions-injection audit, CWE-094).
+=======
+>>>>>>> Stashed changes
+          DRY_RUN: ${{ inputs.dry_run == true }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            node scripts/check-stuck-auto-merge.mjs --dry-run
+          else
+            node scripts/check-stuck-auto-merge.mjs
+          fi

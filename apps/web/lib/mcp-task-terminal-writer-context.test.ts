@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
+import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_MAX_CHARS } from "./source-page-lines";
 import {
   hydrateTerminalWriterContext,
+  verifyTerminalWriterCitation,
   type PersistedTerminalReaderExecution,
 } from "./mcp-task-terminal-writer-context";
 
@@ -61,6 +63,17 @@ function page(input: {
 }
 
 describe("terminal writer context hydration", () => {
+  it.each([false, true])("verifies a paginated citation and refuses conflicting continuation identity (%s)", async (wrongBlob) => {
+    const first = page({ content: "First line\n", startLine: 50, endLine: 50, totalLines: 1000, hasMore: true, cursor: "continue-51" });
+    const second = page({ content: "Second line\n", startLine: 51, endLine: 51, totalLines: 1000, hasMore: true, cursor: "continue-52" });
+    if (wrongBlob) second.blobId = "wrong";
+    const readPage = vi.fn().mockResolvedValueOnce({ success: true, data: first }).mockResolvedValueOnce({ success: true, data: second });
+    const result = await verifyTerminalWriterCitation({ policy, executions: [reader("read", { startLine: 50 })],
+      evidence: { blobId: policy.immutableReaderArguments!.expectedBlobId, startLine: 50, endLine: 51, quote: "First line\nSecond line" }, readPage });
+    if (wrongBlob) expect(result.ok).toBe(false);
+    else expect(result).toMatchObject({ ok: true, data: true });
+    expect(readPage).toHaveBeenNthCalledWith(2, expect.objectContaining({ cursor: "continue-51" }));
+  });
   it("keeps the exact seven-row BI-F48 reader history recoverable through one bounded reread", async () => {
     const readPage = vi.fn().mockResolvedValue({
       success: true,
@@ -136,7 +149,7 @@ describe("terminal writer context hydration", () => {
         readerExecutionIds: ["cmtd3z0ye00gz01rtjr503slt", "cmtd3zymp00hh01rtpf9ukk8z"],
         hydratedPageCount: 2,
         hydratedCharCount: 12,
-        context: expect.stringContaining("first\nsecond"),
+        context: expect.stringContaining("1 | first\n2 | second"),
       },
     });
     expect(readPage).toHaveBeenNthCalledWith(1, expect.objectContaining({ startLine: 1 }));
@@ -226,7 +239,7 @@ describe("terminal writer context hydration", () => {
       data: {
         hydratedPageCount: 2,
         hydratedCharCount: 17,
-        context: expect.stringContaining("first line\nsecond"),
+        context: expect.stringContaining("1 | first line\n2 | second"),
       },
     });
     expect(readPage).toHaveBeenNthCalledWith(2, expect.objectContaining({ cursor: "byte-cursor-6" }));
@@ -256,7 +269,7 @@ describe("terminal writer context hydration", () => {
       ok: true,
       data: {
         hydratedPageCount: 2,
-        context: expect.stringContaining("first\nsecond"),
+        context: expect.stringContaining("1 | first\n2 | second"),
       },
     });
     expect(readPage).not.toHaveBeenCalled();
@@ -283,7 +296,7 @@ describe("terminal writer context hydration", () => {
       data: {
         readerExecutionIds: executions.map((execution) => execution.id),
         hydratedPageCount: 2,
-        context: expect.stringContaining("first\nsecond"),
+        context: expect.stringContaining("1 | first\n2 | second"),
       },
     });
     expect(readPage).not.toHaveBeenCalled();
@@ -682,11 +695,35 @@ describe("terminal writer context hydration", () => {
     expect(result).toMatchObject({ ok: false, code: "terminal_writer_context_cursor_repeated" });
   });
 
+  // BI-E8237EAE. The reader serves a whole medium document in one default page
+  // (#5079), but hydration still rejected any persisted page over 3,200 chars,
+  // so a reviewer that read a design in one default page lost that read on
+  // resume and had to traverse again. A page the reader itself served is
+  // authority evidence; only a page past the reader's own ceiling is oversize.
+  it("reuses a persisted page the reader served at its own default size", async () => {
+    const readPage = vi.fn();
+    const content = "y".repeat(SOURCE_READ_DEFAULT_MAX_CHARS);
+    const result = await hydrateTerminalWriterContext({
+      policy,
+      executions: [
+        reader("one-default-page", { startLine: 1 }, {
+          result: {
+            data: page({ content, startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null }),
+          },
+        }),
+      ],
+      readPage,
+    });
+
+    expect(result).toMatchObject({ ok: true, data: { hydratedPageCount: 1 } });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
   it("fails closed when one hydrated page exceeds the bounded content budget", async () => {
     const readPage = vi.fn().mockResolvedValue({
       success: true,
       message: "oversize",
-      data: page({ content: "x".repeat(3_201), startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null }),
+      data: page({ content: "x".repeat(SOURCE_READ_MAX_CHARS + 1), startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null }),
     });
 
     const result = await hydrateTerminalWriterContext({

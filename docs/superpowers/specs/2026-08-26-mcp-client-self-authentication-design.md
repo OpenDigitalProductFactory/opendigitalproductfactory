@@ -233,7 +233,7 @@ The operator's experience is: point the client at the URL, a browser tab opens, 
 
 `grant_types_supported` is `["authorization_code", "refresh_token", "client_credentials"]` — the third is the headless path (§2.1), not a separate system.
 
-`scopes_supported` advertises **`dpf.read` only**, per `:344-347` ("the minimal set of scopes necessary for basic functionality"). Everything above read arrives through step-up (§5.4). See §4.3.1 for why the vocabulary is six strings rather than the 75 internal grant names.
+`scopes_supported` advertises **`dpf.read dpf.work dpf.build`** — the development floor — per `:344-347` ("the minimal set of scopes necessary for basic functionality"). See §4.3.1 for why the vocabulary is six strings rather than the 75 internal grant names, and **§4.3.2 for why the floor is no longer read alone**. `dpf.business`, `dpf.operate` and `dpf.admin` remain above the floor and arrive through an explicit request.
 
 ### 4.3 Mapping onto the existing authorization model
 
@@ -266,7 +266,17 @@ This is the load-bearing decision and it is a projection, not a new model.
 
 Properties this has to satisfy:
 
-- **`scopes_supported` advertises `dpf.read` only.** Per `authorization.mdx:344-347` that field is "the minimal set of scopes necessary for basic functionality." Everything above read arrives through step-up (§5.4), which is what makes the default-request behaviour in point 2 above *safe* rather than dangerous — a client that requests everything advertised gets read access, and each escalation is a separate, named, human-approved decision.
+- **`scopes_supported` advertises the development floor: `dpf.read dpf.work dpf.build`.** Per `authorization.mdx:344-347` that field is "the minimal set of scopes necessary for basic functionality," and for this resource basic functionality is development work. **Superseded 2026-09-19 — this bullet previously read "`dpf.read` only"; see §4.3.2.**
+
+### 4.3.2 Why the read-only floor was superseded (2026-09-19, BI-CE5F8C0A)
+
+The read-only floor was safe **only if** escalation was reachable. Measurement says it is not, so the floor was not least privilege — it was no privilege.
+
+1. **The step-up cannot fire.** The 403 `insufficient_scope` challenge is emitted solely on `tools/call` of a tool the grant does not cover (`apps/web/app/api/mcp/v1/route.ts`). But `load_tools` filters by grant first and answers `not-granted` as a plain HTTP 200 (`apps/web/lib/mcp/load-tools.ts`), so a read client never sees the write tool, never calls it, and is never told a scope is missing. On a production install every OAuth client landed read-only and no step-up ever fired.
+2. **A per-client pin does not generalise.** Claude Code can pin `oauth.scopes` in `.mcp.json`. Grok cannot: it derives its request from the challenge (`"WWW-Authenticate challenge contains scope:"` in its binary) and exposes no scope setting in `grok mcp add` or `config.toml`. Pinning therefore fixes one of the four peer delivery surfaces (`AGENTS.md` §12) and strands the others.
+3. **Read is not a reduced product here.** This MCP server exists to claim workrooms, record evidence and move backlog items. A grant that can do none of those is not a smaller promise; it is a client that cannot perform the task it connected to perform.
+
+What did **not** change: `dpf.business`, `dpf.operate` and `dpf.admin` stay off the floor, because running the organization and administering the platform are not this resource's basic functionality. Widening the floor does not cap the ceiling — a client may still request them, and the consent screen continues to list every requested scope as its own checkbox for human approval.
 - **The coarse tier is derived, not separately requested.** The granted scope set implies `read`/`write`/`admin`; there is no independent tier parameter for a client to get wrong.
 - **The mapping is a code artifact with a completeness guard.** A single `apps/web/lib/mcp/oauth-scope-map.ts` owns it, and a test asserts every one of the 86 grants maps to exactly one public scope. **Adding a new grant without mapping it fails CI.** This is the drift guard, and without it the two vocabularies separate within a quarter — the failure this whole item exists to correct is a pointer that nobody re-checked.
 - **Grants stay refactorable.** Internal names can be split, merged or renamed freely as long as the map stays total. The public contract is six strings.
@@ -319,6 +329,8 @@ AS metadata; `authorize` + `token`; authorization-code with mandatory PKCE-S256;
 The grant that closes the second door without keeping a second system (§2.1). A headless client — CI, cron, a container, a scheduled agent task — authenticates with its own client credentials against the same AS, receives an access token carrying the same public scopes, and is resolved by the same code path. Operator-issued from Admin > Platform Development, listed and revocable beside browser-authorized clients.
 
 This is what makes the PAT deprecable rather than permanent, so it is not optional and it is not "later" — a deprecation horizon (§9) cannot start until it ships.
+
+**Delivery note (2026-09-18, BI-EDB67A2B).** The grant, the token route and the server actions shipped earlier; the operator surface did not, so no install could actually issue a headless client and the gate's own remedy text (BI-78B653D5) pointed at a page with nothing on it. The surface now exists as the "MCP OAuth clients" section of Admin > Platform Development, directly beneath the PAT manager: list, create (one-time secret with the credentials-file command and the environment-variable alternative) and revoke. The file path and env names it prints are the same ones `scripts/lib/mcp-credential.mjs` resolves.
 
 ### Slice 3 — Registration (medium)
 
@@ -450,3 +462,83 @@ Not hidden assumptions. Each changes behaviour and none should be settled by an 
 - Making DPF an MCP **client** with OAuth (outbound to third-party servers) — related, separately owned, out of scope here.
 - Building a general-purpose OAuth provider for non-MCP surfaces. The AS is scoped to the MCP resource; broadening it is `EP-24741BBF`'s directory work, not this item.
 - Re-specifying the consumer bootstrap (`BI-ED1BBC9E`). Sequenced ahead of this, designed elsewhere, amended on its own item.
+
+## 11. OAuth setup convergence — BI-A5307F9E
+
+This amendment implements the remaining setup portion of Slice 5. The operator
+requested OAuth as the default for future installs on 2026-09-20. Fresh-server
+reinstall acceptance is reserved for the operator's planned reinstall; it is not
+a prerequisite to publishing the source fix and must not be reported as passed.
+
+**OBJ-OAUTH-SETUP:** A supported interactive client receives OAuth configuration
+on a fresh install and retains it after every bootstrap or updater run.
+
+**OBJ-OAUTH-COMPAT:** An explicitly selected compatibility credential remains
+usable without revoking existing credentials or silently replacing browser consent.
+
+| Acceptance | Objectives | Required outcome |
+| --- | --- | --- |
+| AC-OAUTH-DEFAULT | OBJ-OAUTH-SETUP | Fresh Codex configuration uses the MCP URL without a bearer override, including HTTP loopback verified in this task. |
+| AC-OAUTH-RERUN | OBJ-OAUTH-SETUP | Bootstrap and updater reruns preserve OAuth and do not mint a PAT merely because authorization is pending. |
+| AC-OAUTH-CLIENTS | OBJ-OAUTH-SETUP, OBJ-OAUTH-COMPAT | Every shipped client writer uses an explicit credential policy; an unsupported client receives a truthful compatibility requirement instead of an unusable OAuth success claim. |
+| AC-OAUTH-LEGACY | OBJ-OAUTH-COMPAT | Explicit compatibility mode preserves credential references; migration removes only the managed DPF override and never revokes a credential. |
+| AC-OAUTH-STATE | OBJ-OAUTH-SETUP | Setup distinguishes configuration written, authorization pending, and a verified authenticated connection. |
+| AC-OAUTH-REINSTALL | OBJ-OAUTH-SETUP | Fresh server install, browser consent, restart, refresh and governed read/write calls are verified during the planned reinstall, with pending evidence retained until then. |
+
+### Evidence and design choice
+
+On this install, removing Codex's `bearer_token_env_var` and completing
+`codex mcp login dpf` succeeded against `http://127.0.0.1:3000/api/mcp/v1`.
+After restart, governed reads and ordinary writes succeeded. That refutes the
+shared policy's blanket assertion that every MCP client requires a PAT on HTTP.
+It does not establish the behavior of every other client. Preserve that distinction
+in the policy and its tests rather than replacing one unsupported generalization
+with another. Sections 3 and 7.5 remain the standards and comparison basis.
+
+Keep `packages/integration-shared/src/mcp-client-credential-policy.ts` as the
+policy owner. Extend its inputs to represent the supported client and explicit
+compatibility choice. Its Python consumer must have matching fixture coverage.
+Codex uses OAuth on HTTPS and loopback HTTP; non-loopback HTTP must never be
+presented as a secure OAuth configuration. Other client adapters must follow
+verified host capability, with a named compatibility state when needed.
+
+Rejected alternatives: a one-time edit to the operator's config is undone by
+bootstrap; removing headers indiscriminately can strand clients; minting a PAT
+when consent is pending silently defeats the requested OAuth default. Reuse the
+existing authorization server, scope mapping and client-owned token storage.
+This amendment adds no identity store, grant, scope, or database migration.
+
+### Ordered implementation and verification
+
+The following are internal stages of one configuration-convergence deliverable,
+owned by BI-A5307F9E. They are not separately shippable: an unchanged updater or
+bootstrap would restore the old configuration and invalidate the default.
+
+1. Add failing fresh/rerun/explicit-compatibility cases to the shared policy and
+   Codex configuration tests. Cover HTTPS, IPv4/IPv6 loopback, remote HTTP and
+   malformed URLs. Check that unrelated user settings survive convergence.
+2. Refactor the existing configuration writers and Python updater to consume the
+   policy. Reserve roughly 20% of implementation effort for removing duplicated
+   credential decisions and testing agreement across adapters.
+3. Update both bootstrap entry points and shipped descriptors so OAuth setup
+   avoids PAT minting and reports pending authorization honestly. Preserve the
+   explicit compatibility and headless client-credentials paths.
+4. Update setup guidance and the authorization runbook in the same change. Run
+   affected TypeScript and Python tests, source guards, type checking and required
+   semantic review. Exercise generation in a temporary user home; never use the
+   operator's real config as an automated-test fixture.
+5. Publish through the protected PR flow. Verify the delivered client configuration
+   and existing live OAuth read/write path. Keep AC-OAUTH-REINSTALL pending until
+   the planned server reinstall; capture backlog before any eventual teardown.
+
+Rollback restores the prior generators through a source revert. Existing tokens
+and consent records remain intact throughout. Governed author receipts and
+PAT-only reviewer handoff are separate runtime authorization defects tracked with
+BI-3B323B6A; setup must not report those workflows verified merely because login
+or a read succeeded.
+
+### Backlog coverage
+
+Implementation owner: BI-A5307F9E. Coverage is pending the independent approval
+of this immutable amendment and its scope baseline. No implementation permission
+or passing coverage receipt is claimed by this text.

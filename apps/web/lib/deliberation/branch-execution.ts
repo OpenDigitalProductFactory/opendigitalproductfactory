@@ -90,6 +90,25 @@ export function parseBranchPosition(raw: string): BranchPosition {
     };
   }
 
+  // A caller's brief may carry its own output contract — the decision
+  // concierge asks for a JSON envelope — and the model follows the brief over
+  // this module's line format. Keep the envelope INTACT as the recommendation:
+  // the synthesizer merges branch recommendations verbatim, and the caller's
+  // own parser reads that merged text. Taking the first line instead yielded
+  // "```json" as the panel's verdict.
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+  const candidate = (fenced?.[1] ?? text).trim();
+  if (candidate.startsWith("{")) {
+    let summary: string | null = null;
+    try {
+      const parsed = JSON.parse(candidate) as Record<string, unknown>;
+      if (typeof parsed.summary === "string") summary = parsed.summary;
+    } catch {
+      // Unparseable JSON still travels whole rather than being shredded.
+    }
+    return { recommendation: candidate, rationale: summary, raw: text };
+  }
+
   const [first, ...rest] = text.split("\n").map((l) => l.trim()).filter(Boolean);
   return {
     recommendation: first ?? null,

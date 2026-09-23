@@ -14,6 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
@@ -60,7 +61,8 @@ export function describeLeaseCallFailure(error) {
     + "if this box regularly runs several gates at once";
 }
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_USAGE } from "./lib/sandbox-freshness.mjs";
+import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   authoritySafetyMarginMs,
@@ -575,30 +577,8 @@ function readLivePeerSlotOwners({
   });
 }
 
-function readProcessRows({ platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
-  if (platform === "win32") {
-    const result = spawnSyncImpl("powershell.exe", [
-      "-NoProfile",
-      "-Command",
-      "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress",
-    ], { encoding: "utf8", windowsHide: true });
-    if (result.status !== 0 || !result.stdout) return [];
-    try {
-      const parsed = JSON.parse(result.stdout);
-      const rows = Array.isArray(parsed) ? parsed : [parsed];
-      return rows.map((row) => ({
-        pid: Number(row.ProcessId),
-        parentPid: Number(row.ParentProcessId),
-        commandLine: typeof row.CommandLine === "string" ? row.CommandLine : "",
-      }));
-    } catch {
-      return [];
-    }
-  }
-
-  const result = spawnSyncImpl("ps", ["-eo", "pid=,ppid=,args="], { encoding: "utf8" });
-  if (result.status !== 0 || !result.stdout) return [];
-  return result.stdout
+function parsePosixProcessRows(stdout) {
+  return stdout
     .split(/\r?\n/)
     .map((line) => line.match(/^\s*(\d+)\s+(\d+)\s*(.*)$/))
     .filter(Boolean)
@@ -607,6 +587,87 @@ function readProcessRows({ platform = process.platform, spawnSyncImpl = spawnSyn
       parentPid: Number(match[2]),
       commandLine: match[3] || "",
     }));
+}
+
+function parseWindowsProcessRows(stdout) {
+  try {
+    const parsed = JSON.parse(stdout);
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    return rows.map((row) => ({
+      pid: Number(row.ProcessId),
+      parentPid: Number(row.ParentProcessId),
+      commandLine: typeof row.CommandLine === "string" ? row.CommandLine : "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+const WINDOWS_PS_ARGS = [
+  "-NoProfile",
+  "-Command",
+  "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress",
+];
+const POSIX_PS_ARGS = ["-eo", "pid=,ppid=,args="];
+
+/**
+ * Non-blocking twin of readProcessRows, for the scan that runs WHILE the gate
+ * command is building (BI-04AECD8A).
+ *
+ * The synchronous reader is correct where it is still used — reaping after the
+ * child has closed — but it must never run on a timer during the build. `ps`
+ * costs ~30-40ms against ~900 processes on an idle host and far more under a
+ * build; the scan interval is 250ms. Once a scan outlasts its interval the
+ * next tick is already due when the previous returns, so the loop saturates
+ * and NOTHING else on it runs — including the lease heartbeat that keeps the
+ * run alive. Measured signature: zero heartbeats for 17 minutes, then every
+ * starved timer firing at once the moment the scan timer was cleared, and the
+ * renewal that finally ran SUCCEEDING. The portal was never refusing; the
+ * process simply never got to ask.
+ */
+function readProcessRowsAsync({ platform = process.platform, spawnImpl = spawn } = {}) {
+  const isWindows = platform === "win32";
+  const command = isWindows ? "powershell.exe" : "ps";
+  const args = isWindows ? WINDOWS_PS_ARGS : POSIX_PS_ARGS;
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawnImpl(command, args, { windowsHide: true });
+    } catch {
+      resolve([]);
+      return;
+    }
+    let stdout = "";
+    let settled = false;
+    const done = (rows) => {
+      if (settled) return;
+      settled = true;
+      resolve(rows);
+    };
+    child.stdout?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk) => { stdout += chunk; });
+    child.once("error", () => done([]));
+    child.once("close", (code) => {
+      if (code !== 0 || !stdout) return done([]);
+      done(isWindows ? parseWindowsProcessRows(stdout) : parsePosixProcessRows(stdout));
+    });
+  });
+}
+
+function readProcessRows({ platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
+  if (platform === "win32") {
+    const result = spawnSyncImpl("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress",
+    ], { encoding: "utf8", windowsHide: true });
+    if (result.status !== 0 || !result.stdout) return [];
+    return parseWindowsProcessRows(result.stdout);
+  }
+
+  const result = spawnSyncImpl("ps", POSIX_PS_ARGS, { encoding: "utf8" });
+  if (result.status !== 0 || !result.stdout) return [];
+  return parsePosixProcessRows(result.stdout);
 }
 
 function isProcessAlive(pid) {
@@ -635,6 +696,7 @@ function terminatePid(pid) {
 export function createProcessTreeTracker({
   rootPid,
   listProcessRows = readProcessRows,
+  listProcessRowsAsync = null,
   processAlive = isProcessAlive,
   terminate = terminatePid,
   wait = sleep,
@@ -644,11 +706,25 @@ export function createProcessTreeTracker({
   const root = Number(rootPid);
   const remembered = new Set();
 
-  const sample = () => {
-    const descendants = collectDescendantPids(root, listProcessRows());
+  const remember = (rows) => {
+    const descendants = collectDescendantPids(root, rows);
     for (const pid of descendants) remembered.add(pid);
     return descendants;
   };
+
+  const sample = () => remember(listProcessRows());
+
+  /**
+   * The same observation without blocking the event loop (BI-04AECD8A). Used
+   * for the scan that runs WHILE the build runs; `sample` stays synchronous
+   * for reaping after the child has closed, where blocking costs nothing.
+   *
+   * A caller that injects only a synchronous `listProcessRows` (the tests do)
+   * still works — it is awaited as a resolved value.
+   */
+  const sampleAsync = async () => remember(
+    listProcessRowsAsync ? await listProcessRowsAsync() : await listProcessRows(),
+  );
 
   const liveRememberedDescendants = () =>
     [...remembered].filter((pid) => pid !== root && processAlive(pid));
@@ -673,6 +749,7 @@ export function createProcessTreeTracker({
 
   return {
     sample,
+    sampleAsync,
     waitForQuiescence,
     liveRememberedDescendants,
     rememberedPids: () => [...remembered],
@@ -696,6 +773,12 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
   let child = null;
   let tracker = null;
   let trackerTimer = null;
+  // Declared HERE, not inside run(): terminate() reads it, and the two are
+  // siblings on the returned object. Scoping it to run() made terminate()
+  // throw a ReferenceError before it reached the kill, so a fenced descendant
+  // survived — caught by "hard host-pressure loss kills the real child
+  // process tree before later mutation".
+  let scanStopped = false;
   let output = "";
   writeFileSync(fullLogFile, "");
   // BI-B1065D41: the child's transcript is ~28,000 lines. It is persisted in
@@ -728,18 +811,40 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
       } else {
         child = spawn(commandSpec.value, { ...common, shell: true });
       }
-      tracker = createProcessTreeTracker({ rootPid: child.pid });
+      tracker = createProcessTreeTracker({
+        rootPid: child.pid,
+        listProcessRowsAsync: () => readProcessRowsAsync(),
+      });
       tracker.sample();
-      trackerTimer = setInterval(
-        () => tracker.sample(),
-        Math.max(50, numberOrDefault(process.env.DPF_GATE_PROCESS_SCAN_MS, defaultProcessScanMs())),
+      // BI-04AECD8A: a self-rescheduling timeout, never setInterval. The next
+      // scan is scheduled only once the previous one has RETURNED, so a scan
+      // that outlasts its interval can no longer queue behind itself and
+      // saturate the loop. Combined with the async reader, the descendant scan
+      // can no longer starve the lease heartbeat that keeps this run alive.
+      const scanDelayMs = Math.max(
+        50,
+        numberOrDefault(process.env.DPF_GATE_PROCESS_SCAN_MS, defaultProcessScanMs()),
       );
+      scanStopped = false;
+      const scheduleScan = () => {
+        trackerTimer = setTimeout(() => {
+          Promise.resolve()
+            .then(() => tracker.sampleAsync())
+            .catch(() => {})
+            .finally(() => {
+              if (!scanStopped) scheduleScan();
+            });
+        }, scanDelayMs);
+        trackerTimer.unref?.();
+      };
+      scheduleScan();
       child.stdout.on("data", (chunk) => append(chunk));
       child.stderr.on("data", (chunk) => append(chunk));
       child.once("error", reject);
       child.once("close", async (code, signal) => {
+        scanStopped = true;
         if (trackerTimer) {
-          clearInterval(trackerTimer);
+          clearTimeout(trackerTimer);
           trackerTimer = null;
         }
         const terminated = tracker
@@ -767,9 +872,24 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
       });
     }),
     terminate: async () => {
+      scanStopped = true;
       if (trackerTimer) {
-        clearInterval(trackerTimer);
+        clearTimeout(trackerTimer);
         trackerTimer = null;
+      }
+      // One SYNCHRONOUS observation before the kill, deliberately. The periodic
+      // scan is async so it cannot starve the heartbeat (BI-04AECD8A), but that
+      // leaves a window: a descendant spawned since the last resolved scan is
+      // not yet remembered, and once its parent dies it reparents to init and
+      // can no longer be reached from the root pid. Blocking here costs
+      // nothing — the run is already being torn down — and it is what keeps
+      // "remembers descendants before they reparent" true under a fence.
+      if (tracker) {
+        try {
+          tracker.sample();
+        } catch {
+          // A failed observation must not block the kill path.
+        }
       }
       if (child && child.exitCode === null) {
         if (process.platform === "win32") {
@@ -1051,8 +1171,18 @@ async function main() {
     process.exit(0); // exit-0: --dry-run routing probe; changes nothing and records nothing
   }
 
-  const bearerToken = process.env.DPF_MCP_BEARER_TOKEN;
-  if (!bearerToken) die("DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease");
+  // BI-78B653D5: the gate speaks the same authorization server as every other
+  // client — a client_credentials client first (self-refreshing, so a long gate
+  // never strands on a stale token), the legacy PAT until its retirement
+  // horizon, and an actionable refusal naming both when neither is configured.
+  let credential;
+  try {
+    credential = resolveMcpCredential({ mcpUrl: options.mcpUrl });
+  } catch (error) {
+    die(`cannot claim the local-CI lease: ${error.message}`);
+  }
+  const bearerToken = credential.bearer;
+  process.stdout.write(`[gate-worktree] MCP credential: ${credential.kind} (${credential.source})\n`);
 
   const candidateGitDir = dirname(gitPath(gitBin, worktreePath, "dpf-local-ci-gate.json"));
   const gitCommonDir = resolvePath(
@@ -1378,6 +1508,7 @@ async function main() {
         expiresAt,
         waitDeadlineAt: new Date(deadline).toISOString(),
         worktreePath,
+        gateClientRevision: GATE_CLIENT_REVISION,
         branchName: branch,
         slotManifestVersion: slotManifest.schemaVersion,
         hostPressure,
@@ -1391,6 +1522,14 @@ async function main() {
       continue;
     }
 
+    // The server retires a gate client below its revision floor (BI-69178E02).
+    // Not a verdict on the diff, and re-running this same client can only be
+    // refused again, so exit with the usage code: no resumer retries it.
+    if (claimResponse?.error === "gate_client_upgrade_required") {
+      await releaseLeaseOnce();
+      process.stderr.write(`gate-worktree: ${claimResponse.message || "this gate client is below the platform's revision floor; rebase onto main and re-run pregate"}\n`);
+      process.exit(EXIT_USAGE);
+    }
     const admission = claimResponse?.data?.admission;
     const canonicalLeaseId = claimResponse?.data?.lease?.leaseId || "";
     gateKey = claimResponse?.data?.gateKey || gateKey;

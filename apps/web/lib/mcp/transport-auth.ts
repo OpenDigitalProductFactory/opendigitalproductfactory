@@ -13,6 +13,8 @@ import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 export type ResolvedMcpTransportAuth = ResolvedMcpToken & {
   threadId?: string | null;
   routeContext?: string | null;
+  /** BI-B949993E: present only on session-JWT tokens minted for a governed TaskRun. */
+  taskRunId?: string | null;
   source: McpAuthSource;
 };
 
@@ -108,6 +110,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpAuthe
         capability: session.capability,
         threadId: session.threadId ?? null,
         routeContext: session.routeContext ?? null,
+        taskRunId: session.taskRunId ?? null,
         source: "session-jwt",
       },
       oauthGrantedScopes: [],

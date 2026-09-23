@@ -41,7 +41,9 @@ import {
 import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
 import { FLOW_JOB_CATALOG_ENTRIES } from "./catalog-flow";
 import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
+import { COMMONS_JOB_CATALOG_ENTRIES } from "./catalog-commons";
 import { HYGIENE_JOB_CATALOG_ENTRIES } from "./catalog-hygiene";
+import { ECOSYSTEM_JOB_CATALOG_ENTRIES } from "./catalog-ecosystem";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
@@ -49,6 +51,7 @@ export type { JobCategory, ScheduledJobCatalogEntry };
 
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
+  ...ECOSYSTEM_JOB_CATALOG_ENTRIES,
   ...DECISION_GOVERNANCE_JOBS,
   ...FLOW_JOB_CATALOG_ENTRIES,
   {
@@ -211,6 +214,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  ...COMMONS_JOB_CATALOG_ENTRIES,
   ...HYGIENE_JOB_CATALOG_ENTRIES,
   {
     jobId: "alert-delivery-bridge",
@@ -356,19 +360,6 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
-    jobId: "canonical-improvement-digest",
-    inngestId: "ops/canonical-improvement-digest",
-    honorsEnabledGate: true,
-    name: "Canonical improvement digest",
-    purpose:
-      "Batches [reference-doc] ImprovementProposal rows into one doc chore BI for human-approved canonical-source PRs (process-spine §6.5).",
-    cron: "17 6 * * 1",
-    cadence: "Weekly (Mon 06:17)",
-    category: "editable",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
     jobId: "coworker-regression-detect",
     inngestId: "quality/coworker-regression-detect",
     honorsEnabledGate: true,
@@ -427,6 +418,20 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
       "Off-hours WWMD-gated merge decision for assurance remediation PRs (patch-only-auto): escalates non-auto PRs to a human. Auto-merge actuation is dark (DPF_ASSURANCE_AUTOMERGE_ENABLED, default off). If it stops, remediation PRs await manual merge.",
     cron: "47 * * * *",
     cadence: "Hourly at :47 — acts only in the 02:00–06:00 UTC off-hours window",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "pr-submit-awaiting-acceptance-reconcile",
+    inngestId: "backlog/pr-submit-awaiting-acceptance-reconcile",
+    ungatedReason:
+      "Module does not call gateAtEntry yet — not wired to the kill switch (BI-7E49FA15).",
+    name: "PR-submit awaiting-acceptance reconcile",
+    purpose:
+      "Moves coding-pool backlog items whose Workroom already has a pull request number to awaiting-acceptance. Live PR submit is the GitHub webhook; this cron is the post-upgrade backstop.",
+    cron: "7,22,37,52 * * * *",
+    cadence: "Every 15 minutes, offset by 7 minutes",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,

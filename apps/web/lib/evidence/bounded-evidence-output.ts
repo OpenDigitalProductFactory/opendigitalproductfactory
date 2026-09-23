@@ -1,4 +1,22 @@
-// apps/web/lib/evidence/bounded-output.ts
+// apps/web/lib/evidence/bounded-evidence-output.ts
+//
+// THIS FILENAME IS LOAD-BEARING. Renaming it back, or moving it, can bring
+// back a build failure that has nothing to do with this module.
+//
+// It was `bounded-output.ts`. Under that name its emitted SSR chunk and the
+// one holding lib/crm/presentation.ts both landed on
+// `apps_web_lib_1nqemst._.js`, and `next build` aborted with "Two or more
+// assets with different content were emitted to the same output path". That
+// blocked every self-upgrade from cddc1085 onward (SUR-7F02CA27,
+// SUR-83CB5952 and two more) with byte-identical hashes across four target
+// SHAs. Turbopack truncates chunk names to 7 base38 characters (~36 bits) and
+// this app emits ~24.6k SSR chunks, so pairs collide: vercel/next.js#97765,
+// unfixed as of 16.3.5. The hash is over module PATHS, so only a rename moves
+// it -- content edits and comments do not.
+//
+// This bought one pair apart. It did not add collision resistance. If another
+// upgrade dies on a duplicate-asset error, it is a different pair and this
+// note is the precedent, not the cure.
 //
 // BI-39AAE9B8 (EP-A33A5C61 slice 2) — keep evidence PAYLOADS out of ledger
 // JSON columns.

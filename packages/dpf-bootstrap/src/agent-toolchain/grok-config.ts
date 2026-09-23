@@ -10,6 +10,7 @@
  * Config shape from packages/dpf-skill-pack/grok.mcp.json (TOML-compatible).
  */
 import { parse, stringify } from "smol-toml";
+import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 export type GrokConfigPlan = {
   /** Path/content pairs to write. Empty when already converged. */
@@ -24,7 +25,7 @@ const DPF_MCP_KEY = "dpf";
 function desiredMcpServerBlock(mcpEndpoint: string): Record<string, string> {
   return {
     url: mcpEndpoint,
-    bearer_token_env_var: MCP_BEARER_TOKEN_ENV_VAR,
+    ...(mcpClientBearerHeaderRequired(mcpEndpoint, "grok") ? { bearer_token_env_var: MCP_BEARER_TOKEN_ENV_VAR } : {}),
   };
 }
 
@@ -75,7 +76,7 @@ export function planGrokConfig(
   return {
     writes,
     rationale: writes.length
-      ? "wrote [mcp_servers.dpf] into Grok config.toml for DPF MCP"
+      ? "wrote [mcp_servers.dpf] into Grok config.toml for DPF MCP (legacy compatibility required; OAuth support unverified)"
       : "Grok config.toml already converged for DPF",
   };
 }

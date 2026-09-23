@@ -18,6 +18,7 @@ import { prisma } from "@dpf/db";
 import { CANONICAL_AGENT_ID_TO_COWORKER_SLUG } from "@dpf/db/agent-identity";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { roomOwnedLevelFor } from "./room-owned-cadence";
 import {
   PROACTIVITY_FACT_CATEGORY,
   PROACTIVITY_OVERRIDE_FACT_PREFIX,
@@ -663,6 +664,14 @@ export type ReconcileAllSelfTasksResult = {
   /** Live self-tasks stood down because the toggle is now quiet (Direction A). */
   deactivated: number;
   /**
+   * Coworkers whose pace still came from an agent-scoped fact because no live
+   * room carries their standing work.
+   *
+   * The residual dependency on facts no operator can write. Zero means the
+   * fallback is dead code and can be removed.
+   */
+  unroomedFallback: number;
+  /**
    * Live self-tasks running with no backing fact (Direction B).
    *
    * OBSERVED, NOT REPAIRED — see the Direction B block. Under the room-owned
@@ -680,7 +689,7 @@ export type ReconcileAllSelfTasksResult = {
  * it never perturbs the schedule of a task that is already correctly active.
  */
 export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfTasksResult> {
-  const result: ReconcileAllSelfTasksResult = { created: 0, deactivated: 0, orphansObserved: 0 };
+  const result: ReconcileAllSelfTasksResult = { created: 0, deactivated: 0, orphansObserved: 0, unroomedFallback: 0 };
 
   // Direction A — every active Proactivity fact for a REGISTERED coworker should
   // have a matching self-task (create when missing; stand down when quiet).
@@ -701,8 +710,19 @@ export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfT
     // operator with the canonical one for a dual-seeded coworker (BI-B05E5D30).
     const agentId = selfTaskRegistryKey(fact.key.slice(PROACTIVITY_AGENT_KEY_PREFIX.length));
     if (!agentId) continue;
-    const level = readSelfTaskFactLevel(fact.value);
+
+    // ROOM FIRST (DI-81E47BDA59F1). The rooms carrying this coworker's standing
+    // work own its pace; the agent-scoped fact is the fallback, not the source.
+    //
+    // The fact is still read where no live room carries the coworker — the case
+    // the ruling left open — and every such coworker is COUNTED as
+    // `unroomedFallback`. That count is the residual dependency on facts no
+    // operator can write (BI-4CE4F52F), made visible rather than hidden: when it
+    // reaches zero the fallback can be deleted outright.
+    const roomLevel = await roomOwnedLevelFor(agentId);
+    const level = roomLevel ?? readSelfTaskFactLevel(fact.value);
     if (!level) continue;
+    if (roomLevel === null) result.unroomedFallback++;
 
     const taskId = coworkerSelfTaskId(agentId, fact.userId);
     const existing = await prisma.scheduledAgentTask.findUnique({

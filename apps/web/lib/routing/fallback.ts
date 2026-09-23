@@ -26,8 +26,10 @@ import {
   LocalProviderCapacityDeferredError,
 } from "./local-provider-capacity";
 import { invalidateRoutingLoaderCache } from "./loader";
+import { isModelRefusalError, recordAuthEligibility } from "./model-auth-eligibility";
 import { recordRouteOutcome } from "./route-outcome";
-import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
+import { autoDiscoverAndProfile, requestProviderCatalogRefresh } from "@/lib/ai-provider-internals";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   ProviderReconciliationRequiredError,
   shouldDegradeModelForInterfaceDrift,
@@ -57,6 +59,13 @@ type RouteOutcomeAttribution = {
   agentMessageId?: string | null;
   /** FeatureBuild this call belongs to (BI-0A6B8B38 per-phase metering). */
   buildId?: string | null;
+  /**
+   * Coworker thread this call belongs to. The join key of the per-thread cost
+   * ledger (BI-CCF1ACBB): AdapterRunTelemetry.threadId was NULL on every row
+   * because nothing on this path carried it. Falls back to the MCP session's
+   * threadId the same way agentId does.
+   */
+  threadId?: string | null;
 };
 
 function buildFallbackProviderSettings(
@@ -267,6 +276,7 @@ export async function callWithFallbackChain(
   const traceId = outcomeAttribution?.traceId?.trim() || decision.traceId?.trim() || null;
   const agentMessageId = outcomeAttribution?.agentMessageId?.trim() || null;
   const buildId = outcomeAttribution?.buildId?.trim() || null;
+  const threadId = outcomeAttribution?.threadId?.trim() || mcpSession?.threadId?.trim() || null;
 
   // Small local fallback models (Docker Model Runner / 7-13B class) reliably
   // handle ~10-15 tools before tool-selection accuracy collapses. When the
@@ -357,7 +367,7 @@ export async function callWithFallbackChain(
         entryPlan,
         i === 0 ? previousResponseId : undefined,
         mcpSession,
-        { traceId, agentId, agentMessageId, buildId },
+        { traceId, agentId, agentMessageId, buildId, threadId },
       );
 
       // EP-INF-004: Record successful request for rate tracking
@@ -438,8 +448,29 @@ export async function callWithFallbackChain(
         attempts.push({ endpointId: entry.providerId, error: e.reason });
         continue;
       }
-      const errMsg = e instanceof Error ? e.message : String(e);
+      const errMsg = getErrorMessage(e);
       attempts.push({ endpointId: entry.providerId, error: errMsg });
+      // BI-7F2FBDA3: a provider refusing THIS model under THIS account is a
+      // fact about the catalog, not about the request. Learn it (benched for a
+      // day, audited), drop the loader cache so the next route excludes it, and
+      // ask for an on-demand re-discovery so the successor is known before 03:10.
+      if (isModelRefusalError(errMsg)) {
+        await recordAuthEligibility(prisma, {
+          providerId: entry.providerId,
+          modelId: entry.modelId,
+          authMethod: provider.authMethod,
+          supported: false,
+          source: "runtime-refusal",
+          reason: errMsg.slice(0, 200),
+        }).catch((err: unknown) =>
+          console.warn(`[callWithFallbackChain] could not record refusal for ${entry.providerId}/${entry.modelId}: ${getErrorMessage(err)}`),
+        );
+        invalidateRoutingLoaderCache();
+        void requestProviderCatalogRefresh({
+          providerId: entry.providerId,
+          reason: `provider refused ${entry.modelId}: ${errMsg.slice(0, 120)}`,
+        });
+      }
       if (e instanceof InferenceError && e.code === "required_terminal_writer_not_enforceable") {
         if (i === 0) selectedAdapterCannotEnforceRequiredTerminalWriter = true;
         console.info(`[callWithFallbackChain] ${entry.providerId} adapter cannot enforce the required terminal writer; trying the next candidate.`);

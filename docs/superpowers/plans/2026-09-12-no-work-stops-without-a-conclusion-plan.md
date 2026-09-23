@@ -38,7 +38,7 @@ Measured against the drive's own exits in `lib/work-management/drive-resolution.
 
 Six of the ten left a room waiting on no one.
 
-## Phase 1 — this branch
+## Phase 1 — every tick concludes (delivered)
 
 1. **`lib/work-management/drive-conclusion.ts`** — one pure classifier. It does not decide
    whether to stop; the work shape's declared stages and stop conditions already do that.
@@ -57,18 +57,53 @@ Six of the ten left a room waiting on no one.
    and every work shape in the registry declares a way to succeed, a way to fail, a named
    accountable per stage, unique stage keys and declared evidence.
 
-## Phase 2 — not in this branch
-
-- **Recursive roll-up (AC-CS-04).** A concluded room reconciles against the objective it
-  serves through `ProductObjectiveWork`, and an objective whose measure is unmet with no
-  work in motion and no named blockage becomes an unmet outcome at the level above,
-  terminating at the organization's stated purpose.
-- **One visible answer (AC-CS-05).** A single read answering outcome-met / in-motion /
-  blocked-and-owned for a room, an objective and the organization.
-- **Live proof (AC-CS-06).** A real unmet outcome surfacing without anyone asking.
-
 Phase 1 is the substrate Phase 2 reads. Splitting here keeps the recursion honest: there is
 no point rolling up conclusions until every tick produces one.
+
+## Phase 2 — the recursion (delivered)
+
+The word that matters in the founder's sentence is **recursively**. A room that concludes
+cleanly while the objective it serves goes unmet, with nobody working on it, is the same
+silence one level up. So the same three states are applied again at the objective, and again
+at the organization, terminating at its stated reason for existing.
+
+1. **`lib/work-management/conclusion-rollup.ts`** — pure, and the only place a judgement is
+   made. `rollUpObjective` composes the objective's existing posture
+   (`deriveObjectivePosture`) with the conclusions the drive already wrote on the rooms
+   serving it. `rollUpOrganization` takes the state furthest from "someone is carrying this"
+   across the objectives in play.
+2. **The case this phase exists for (AC-CS-04).** An objective whose measure is unmet, with
+   no work in motion and nothing blocked, previously raised nothing at all. It is now a
+   blockage owned by whoever answers for the organization, cleared by *work is linked and
+   started against this objective, or its target is revised*.
+3. **Silence outranks a blockage.** `unconcluded` is treated as worse than `blocked`,
+   because a blockage has an owner and a clearing event while an unconcluded state means
+   nobody can even say what is true. That is the whole subject of this epic.
+4. **Never call unreadable "met".** An objective with no observation, no baseline, no target
+   or a changed measure contract is `unconcluded`, never `outcome-met` — the same rule
+   Phase 1 applies when an owner cannot be resolved. It names the observation that would
+   make it readable.
+5. **Never invent an owner.** With no accountable principal the objective records
+   `unconcluded` plus the setup that is missing, rather than a blockage stored against
+   nobody. Proven by a test asserting the owner id appears nowhere in the output.
+6. **What is not in play cannot make the organization look unmet.** Draft objectives are
+   still being formed; closed and archived ones were concluded or withdrawn deliberately.
+   All three are reported with a reason and excluded from what the organization owes.
+7. **Terminating conditions.** Every objective in play met is success. No stated mission is
+   `unconcluded` — the deepest form of the defect, not an unmet outcome but no stated
+   outcome to be unmet. A stated mission with no objective in play is `unconcluded` too.
+8. **One visible answer (AC-CS-05).** `resolveOutcomeRollup` answers for the organization
+   and every objective in one call and one vocabulary, so the two cannot drift.
+   `conclusion-rollup.server.ts` is the read that composes the real substrate into it.
+9. **Conformance walks.** Every objective status crossed with every posture the type can
+   hold is classified with no silent default; every blockage raised names an owner or the
+   setup that is missing, plus an observable clearing event.
+
+### Still owed
+
+- **Live proof (AC-CS-06).** A real unmet outcome surfacing on this install without anyone
+  asking. Phase 2 is proven by tests and by the read composing real substrate, not yet by
+  observation on live data.
 
 ## Design constraints, each from an observed failure
 

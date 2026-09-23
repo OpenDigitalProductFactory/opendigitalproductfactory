@@ -32,6 +32,16 @@
       "memory": "1g",
       "cpus": "1.0",
       "rationale": "Durable execution engine; promoted to the core runtime and bounded independently from the portal."
+    },
+    "loki": {
+      "memory": "1g",
+      "cpus": "1.0",
+      "rationale": "Log store with 14-day retention; promoted to the core runtime (BI-F8024A9D) because log capture must not be optional. Bounded so a flooding container costs disk and retention, never the host."
+    },
+    "alloy": {
+      "memory": "512m",
+      "cpus": "0.5",
+      "rationale": "Log shipper tailing the Docker socket; promoted alongside loki (BI-F8024A9D). Small steady footprint — it forwards rather than stores."
     }
   },
   "optionalProfileServices": {

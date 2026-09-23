@@ -137,6 +137,14 @@ case "$*" in
     printf 'recreate service=%s DPF_STATE_DIR=%s DPF_PROMOTER_STATE_DIR=%s DPF_STATE_DIR_HOST=%s mount_source=%s\\n' \
       "$service" "\${DPF_STATE_DIR-<unset>}" "\${DPF_PROMOTER_STATE_DIR-<unset>}" "$effective_state_dir" "$effective_state_dir" >> "$DOCKER_LOG"
     ;;
+  *"ps -a --services"*)
+    # Services this fake install has ever created (any state). Empty by default.
+    [ -n "\${DPF_TEST_EXISTING_SERVICES:-}" ] && printf '%s\n' "\$DPF_TEST_EXISTING_SERVICES"
+    ;;
+  *"up -d --no-recreate"*)
+    printf 'reconcile-create services=%s\n' "\$*" >> "$DOCKER_LOG"
+    [ "\${DPF_TEST_RECONCILE_FAILS:-0}" = "1" ] && exit 1
+    ;;
   *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;
   "ps -a --format "*) [ -n "\${DPF_TEST_IMAGES_IN_USE:-}" ] && printf '%s\n' "$DPF_TEST_IMAGES_IN_USE" ;;
   *"images --filter reference=ghcr.io/"*"/dpf-portal:v* --format "*) [ -n "\${DPF_TEST_PORTAL_VERSION_TAGS_FILE:-}" ] && cat "$DPF_TEST_PORTAL_VERSION_TAGS_FILE" ;;
@@ -166,6 +174,10 @@ export function runPromote(opts: {
   dockerLog?: string;
   recoveryDecision?: "recover" | "not-needed" | "blocked";
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
+  /** Services the fake install has ever created (any state), for service-reconcile. */
+  existingServices?: string[];
+  /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
+  reconcileFails?: boolean;
   principalResolveFails?: boolean;
   principalVerifyFails?: boolean;
   /** Newest-first `repo:tag` list the shim returns for the dpf-portal version-tag query. */
@@ -226,6 +238,10 @@ export function runPromote(opts: {
     ...(opts.principalRecoveryDecision
       ? [`export DPF_TEST_PRINCIPAL_RECOVERY_DECISION=${shellQuote(opts.principalRecoveryDecision)}`]
       : []),
+    ...(opts.existingServices
+      ? [`export DPF_TEST_EXISTING_SERVICES=${shellQuote(opts.existingServices.join("\n"))}`]
+      : []),
+    ...(opts.reconcileFails ? ["export DPF_TEST_RECONCILE_FAILS=1"] : []),
     ...(opts.principalResolveFails ? ["export DPF_TEST_PRINCIPAL_RESOLVE_FAIL=yes"] : []),
     ...(opts.principalVerifyFails ? ["export DPF_TEST_PRINCIPAL_VERIFY_FAIL=yes"] : []),
     ...(opts.composeEnvFile

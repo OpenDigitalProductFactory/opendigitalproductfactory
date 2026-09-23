@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 712,
+  "pageCount": 715,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -82,6 +82,8 @@
         "32-the-experience-layer-exists-too-and-has-the-same-build-studio-only-problem",
         "4-the-gap-named",
         "5-design-principles-the-bar-any-long-running-process-must-clear",
+        "51-common-recovery-contract",
+        "interruption-acceptance-matrix",
         "6-target-architecture-the-durable-agentic-process-dap",
         "7-applying-dap",
         "71-build-studio-the-first-and-proving-instance",
@@ -413,6 +415,7 @@
         "2-the-composition-the-assurance-operating-loop",
         "3-the-capability-completeness-contract",
         "31-the-dead-column-check-generalized",
+        "3a-staffing-posture-a-hole-or-a-decision-runtime-2026-09-16",
         "4-what-changes-concretely",
         "4a-the-decision-gate-and-the-closed-loop",
         "4a1-what-exists",
@@ -1134,6 +1137,7 @@
       "publishedPortal": false,
       "anchors": [
         "build-gate-runbook",
+        "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205"
       ]
     },
@@ -1581,6 +1585,19 @@
       "anchors": [
         "failure-analysis-and-recovery-evidence",
         "deployment-and-protection"
+      ]
+    },
+    "docs/architecture/federation-outbox-runbook.md": {
+      "publicHref": "/architecture/federation-outbox-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "federation-outbox-reading-a-backlog-correctly",
+        "the-two-shapes-of-failure-and-why-they-must-not-share-a-budget",
+        "reading-the-queue-health-line",
+        "link-quarantine",
+        "when-you-get-back-on-the-peers-network"
       ]
     },
     "docs/architecture/field-service-work-item.md": {
@@ -3536,6 +3553,25 @@
         "sources"
       ]
     },
+    "docs/founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes.md": {
+      "publicHref": "/founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "value-is-the-net-and-that-is-what-makes-it-a-proof",
+        "where-work-should-move-human-then-ai-then-code",
+        "this-is-the-return-on-investment-criterion-for-the-backlog",
+        "humancognitiveload-is-a-required-measure-not-an-optional-axis",
+        "scope-and-propagation",
+        "examples",
+        "related-principles"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md": {
       "publicHref": "/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval/",
       "portalHref": null,
@@ -3552,6 +3588,19 @@
         "what-the-agent-should-do-mid-autonomous-run",
         "anti-pattern",
         "related-principles"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/autonomy-graduates-on-recorded-agreement.md": {
+      "publicHref": "/founder-kernel/wiki/principles/autonomy-graduates-on-recorded-agreement/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "what-this-page-does-not-say",
+        "how-to-apply",
+        "overlap-scan-43"
       ]
     },
     "docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md": {
@@ -3858,6 +3907,7 @@
         "decision-dimensions",
         "examples",
         "sources",
+        "amendment-2026-09-22-progressive-disclosure-hides-machinery-never-the-guarantee",
         "overlap-scan-43"
       ]
     },
@@ -3889,6 +3939,7 @@
         "decision-dimensions",
         "examples",
         "when-this-does-not-apply",
+        "amendment-2026-09-22-a-reach-limit-is-a-recorded-outcome-not-a-silent-stall",
         "see-also"
       ]
     },
@@ -4035,7 +4086,8 @@
         "how-to-apply",
         "decision-dimensions",
         "examples",
-        "sources"
+        "sources",
+        "amendment-2026-09-22-i-did-not-click-it-is-inconclusive-not-a-pass"
       ]
     },
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": {
@@ -4376,7 +4428,8 @@
         "applies-to",
         "how-to-apply",
         "decision-dimensions",
-        "overlap-scan-43"
+        "overlap-scan-43",
+        "amendment-2026-09-22-background-work-has-a-named-home-the-coworker"
       ]
     },
     "docs/founder-kernel/wiki/principles/optimize-for-the-whole.md": {
@@ -4447,6 +4500,8 @@
         "why",
         "what-this-does-not-license",
         "how-to-apply",
+        "recovery-is-a-platform-guarantee",
+        "server-ownership",
         "decision-dimensions",
         "related"
       ]
@@ -4537,7 +4592,8 @@
         "the-acknowledgement-as-state-requirement",
         "anti-pattern",
         "penalty",
-        "related-principles"
+        "related-principles",
+        "amendment-2026-09-22-a-genuine-fork-is-a-button-not-a-sentence-to-answer"
       ]
     },
     "docs/founder-kernel/wiki/principles/prose-is-not-a-control-gate.md": {
@@ -4835,6 +4891,7 @@
         "specific-tactics",
         "seed-change-pre-push-checklist",
         "penalty",
+        "amendment-2026-09-22-this-applies-to-a-shared-state-write-not-only-to-verification",
         "related-principles"
       ]
     },
@@ -4879,7 +4936,8 @@
         "the-contract",
         "anti-patterns",
         "related-principles",
-        "spec-references"
+        "spec-references",
+        "amendment-2026-09-22-surface-a-deprecation-when-you-meet-it-and-price-a-big-one"
       ]
     },
     "docs/founder-kernel/wiki/principles/supersession-is-a-mechanical-act.md": {
@@ -5532,16 +5590,16 @@
         "evidence-weight-1-ceiling-2",
         "every-agent",
         "widest-gaps-detail",
-        "agt-100-policy-enforcement-agent-declared-only-48-attainable",
-        "agt-101-strategy-alignment-agent-declared-only-48-attainable",
-        "agt-102-portfolio-backlog-agent-declared-only-48-attainable",
-        "agt-110-portfolio-rationalization-agent-declared-only-48-attainable",
-        "agt-111-investment-analysis-agent-declared-only-48-attainable",
-        "agt-112-gap-analysis-agent-declared-only-48-attainable",
-        "agt-113-scope-agreement-agent-declared-only-48-attainable",
-        "agt-120-product-backlog-prioritization-agent-declared-only-48-attainable",
-        "agt-121-architecture-definition-agent-declared-only-48-attainable",
-        "agt-122-roadmap-assembly-agent-declared-only-48-attainable",
+        "agt-100-policy-enforcement-agent-deliberately-unstaffed-48-attainable",
+        "agt-101-strategy-alignment-agent-deliberately-unstaffed-48-attainable",
+        "agt-102-portfolio-backlog-agent-deliberately-unstaffed-48-attainable",
+        "agt-110-portfolio-rationalization-agent-deliberately-unstaffed-48-attainable",
+        "agt-111-investment-analysis-agent-deliberately-unstaffed-48-attainable",
+        "agt-112-gap-analysis-agent-deliberately-unstaffed-48-attainable",
+        "agt-113-scope-agreement-agent-deliberately-unstaffed-48-attainable",
+        "agt-120-product-backlog-prioritization-agent-deliberately-unstaffed-48-attainable",
+        "agt-121-architecture-definition-agent-deliberately-unstaffed-48-attainable",
+        "agt-122-roadmap-assembly-agent-deliberately-unstaffed-48-attainable",
         "assignto-health"
       ]
     },
@@ -5942,7 +6000,9 @@
         "platform-split-linux-vs-windows-hostinfra-alerts",
         "status-decisions-2026-06-25-objective-completed",
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
-        "alert-delivery"
+        "alert-delivery",
+        "log-capture-runs-by-default-bi-f8024a9d",
+        "a-monitor-that-cannot-see-must-say-so-bi-adb574ab"
       ]
     },
     "docs/operations/oss-repo-identity-hygiene.md": {
@@ -11207,6 +11267,7 @@
         "the-confidence-model",
         "the-inheritance-chain",
         "profile-kinds",
+        "what-onboarding-seeds-for-wwwd",
         "the-profession-scope-wsid",
         "ratifying-a-policy-once",
         "calling-the-gate",
@@ -12505,6 +12566,7 @@
         "workflow",
         "authoritative-state",
         "ai-coworker-support",
+        "your-business-stances",
         "reading-the-decision-log",
         "escalated-and-deferred-decisions-what-to-do",
         "suggestions-your-coworkers-drafted",
@@ -12549,6 +12611,10 @@
         "the-ward-for-a-shelter",
         "rescue-operations",
         "when-the-ward-is-full",
+        "admitting-an-animal",
+        "daily-care-rounds",
+        "veterinary-visits",
+        "adoptions",
         "confirming-an-operational-suggestion",
         "which-installation-you-are-on",
         "correcting-the-identity",
@@ -12571,6 +12637,7 @@
         "defining-the-room",
         "pace-and-priority",
         "changing-it",
+        "what-how-hard-should-it-push-now-reaches",
         "setting-a-default-for-every-room",
         "giving-a-room-its-shape",
         "incomplete-or-unavailable-rooms",

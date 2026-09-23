@@ -707,6 +707,12 @@ export async function renewNonprodEnvironmentLease(input: {
       slotKeys: ["slot-0"],
       rollbackReason: null,
       config: null,
+      // Renewing a lease that is already running: admission was decided when it
+      // was granted, so this path restates it rather than re-deciding it
+      // (BI-C77D920A — the required fields are what surfaced this second
+      // construction site, which the boolean collapse had hidden).
+      admissionStatus: "admitted",
+      disposition: "proceed",
     }
     : await resolveNonprodPoolPolicy({
       platformConfig: db.platformConfig,

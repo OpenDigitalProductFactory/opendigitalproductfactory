@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   recordWorkCapsuleEvidence: vi.fn(),
   dispatchRoutedSemanticReview: vi.fn(),
   enqueueSemanticReview: vi.fn(),
+  retryPersistedSemanticReview: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
@@ -25,7 +26,7 @@ vi.mock("@/lib/change-review/routed-semantic-review", () => ({
   dispatchRoutedSemanticReview: mocks.dispatchRoutedSemanticReview,
 }));
 vi.mock("@/lib/work-capsules/work-capsule-store", () => ({ recordWorkCapsuleEvidence: mocks.recordWorkCapsuleEvidence }));
-vi.mock("@/lib/change-review/semantic-review-background", () => ({ enqueueSemanticReview: mocks.enqueueSemanticReview }));
+vi.mock("@/lib/change-review/semantic-review-background", () => ({ enqueueSemanticReview: mocks.enqueueSemanticReview, retryPersistedSemanticReview: mocks.retryPersistedSemanticReview }));
 
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { changeReviewPack } from "./change-review-pack";
@@ -84,16 +85,21 @@ describe("change-review MCP pack", () => {
     expect(changeReviewPack.definitions.map((definition) => definition.name)).toEqual([
       "review_semantic_change",
       "record_semantic_review_outcome",
+      "retry_semantic_review",
     ]);
     expect(Object.keys(changeReviewPack.handlers)).toEqual([
       "review_semantic_change",
       "record_semantic_review_outcome",
+      "retry_semantic_review",
     ]);
   });
 
   it("requires evidence-writing authority", () => {
     expect(changeReviewPack.grants.review_semantic_change).toEqual(["backlog_write"]);
     expect(changeReviewPack.grants.record_semantic_review_outcome).toEqual(["backlog_write"]);
+    expect(changeReviewPack.grants.retry_semantic_review).toEqual(["backlog_write"]);
+    expect(isToolAllowedByGrants("retry_semantic_review", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("retry_semantic_review", ["view_platform"])).toBe(false);
     expect(isToolAllowedByGrants("review_semantic_change", ["backlog_write"])).toBe(true);
     expect(isToolAllowedByGrants("review_semantic_change", ["view_platform"])).toBe(false);
   });
@@ -110,6 +116,28 @@ describe("change-review MCP pack", () => {
       "ciPassed",
       "merged",
     ]));
+  });
+
+  it("binds confirmed recovery to the authenticated user, never a payload identity", async () => {
+    mocks.retryPersistedSemanticReview.mockResolvedValueOnce({ newTaskRunId: "TR-1", strategy: "native-review" });
+    const out = await changeReviewPack.handlers.retry_semantic_review!({ taskRunId: "TR-1", confirmed: true, userId: "other" }, "requester");
+    expect(out.success).toBe(true);
+    expect(mocks.retryPersistedSemanticReview).toHaveBeenCalledWith("TR-1", "requester", true);
+  });
+  it("requires explicit confirmation before invoking recovery", async () => {
+    const out = await changeReviewPack.handlers.retry_semantic_review!({ taskRunId: "TR-1", confirmed: "true" }, "requester");
+    expect(out.success).toBe(false);
+    expect(mocks.retryPersistedSemanticReview).not.toHaveBeenCalled();
+  });
+  it.each(["semantic-review-recovery-authority-denied", "semantic-review-deadline-exhausted", "semantic-review-recovery-state-changed"])("preserves the underlying refusal: %s", async reason => {
+    mocks.retryPersistedSemanticReview.mockRejectedValueOnce(new Error(reason));
+    const out = await changeReviewPack.handlers.retry_semantic_review!({ taskRunId: "TR-1", confirmed: true }, "requester");
+    expect(out).toMatchObject({ success: false, message: reason });
+  });
+  it("does not dispatch unrelated tasks", async () => {
+    mocks.retryPersistedSemanticReview.mockResolvedValueOnce(null);
+    expect(await changeReviewPack.handlers.retry_semantic_review!({ taskRunId: "TR-OTHER", confirmed: true }, "requester")).toMatchObject({ success: false });
+    expect(mocks.enqueueSemanticReview).not.toHaveBeenCalled();
   });
 
   it("requires an immutable tree identity and exact artifact", () => {

@@ -595,6 +595,11 @@ async function handleToolsCall(
       apiTokenId: token.tokenId,
       threadId: token.threadId ?? undefined,
       routeContext: token.routeContext ?? undefined,
+      // BI-B949993E: a session JWT minted for a governed TaskRun carries its
+      // id; governed execution resolves the TaskRun's immutable review
+      // binding from it (resolve-coworker-tool-authority), so a native CLI
+      // writer call is admitted routinely instead of parked on an envelope.
+      ...(token.taskRunId ? { taskRunId: token.taskRunId } : {}),
       callerClient,
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,

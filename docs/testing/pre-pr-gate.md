@@ -356,6 +356,22 @@ separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
 
+**The heartbeat is protected from the gate's own work.** A renewal timer only
+helps if the process is free to run it, and for a period it was not: the
+in-run descendant scan used a synchronous `ps` on a fixed interval, so on a
+host where that scan cost more than its interval the event loop saturated and
+no timer fired at all — the lease expired unrenewed and the deadline then
+fenced a run that was progressing normally. The signature was unmistakable:
+no heartbeat events for the length of the build, then every starved timer
+firing at once the moment the scan stopped, and the renewal that finally ran
+succeeding. The scan is now asynchronous and self-rescheduling — the next
+scan is scheduled only once the previous has returned — so it cannot queue
+behind itself or block the renewal. One synchronous observation remains,
+immediately before a fence kills the tree, because a descendant reparents to
+init the moment its parent dies and could otherwise escape the reap. If a
+long run is ever fenced for lease authority again, this is the first thing to
+re-measure (BI-04AECD8A).
+
 **Equivalent gate requests are single-flight.** Before admission, the gate
 builds the exact merge-tree evidence plan and fingerprints the host toolchain.
 The server derives one immutable key from repository, integration tree, plan
@@ -639,6 +655,16 @@ pressure to pass. Waiting in line does nothing for a closed pool
 (`fence reason: lease-authority-deadline`, ...) in its gate record, so a
 self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
 
+**`gate_client_upgrade_required` means rebase, not retry.** The gate client and
+its durable-wait resumer run from the branch being gated, so a client defect
+fixed on `main` keeps running in every branch cut before the fix. Every claim
+therefore reports `gateClientRevision`, and the admission server refuses a
+claim below its floor with `gate_client_upgrade_required`. Today the floor is
+revision 1, on Windows hosts only: older clients opened a focus-stealing
+terminal window on every re-claim (BI-69178E02). The refusal is not a verdict on
+the diff. Re-running the same branch is refused again, and a stale resumer stops
+after the first refusal. Rebase onto `origin/main` and run `pregate` again.
+
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
 bounded output tail, and records real compiler exits separately from opaque
@@ -728,7 +754,7 @@ succeeds. `evidencePending` qualifies a PASS; it never establishes one. A run
 blocked by control-plane starvation also preserves its local evidence and sets
 the flag while `gatePassed` stays `false`, so `pregate:status` reports that
 record as `INCONCLUSIVE` and the fix is to re-run pregate on the SHA —
-`--finalize-evidence` has no published PASS to finalize and refuses (BI-41C3E303). Failure evidence also carries `failureSummary`, a bounded list of
+`--finalize-evidence` has no published PASS to finalize and refuses (PR #5295). Failure evidence also carries `failureSummary`, a bounded list of
 failed tests/checks and omitted counts, plus an explicit pointer to
 BI-A4EC0EA6 for code-graph impacted-test recommendations. The complete output
 from the most recent run is retained outside the working tree at the git-private
@@ -822,6 +848,7 @@ Allowlisted codes (see `LOCAL_CI_OVERRIDE_REASON_CODES` in
 | `operator-emergency` | Named human consciously waived the gate |
 | `external-contribution-no-install` | No local DPF install / cannot run pregate |
 | `install-bootstrap-recovery` | Sandbox/install is the patient under repair |
+| `gate-infrastructure-unavailable` | Push-time only; the hook itself re-attempts the lease claim and records the failure (401, refused connection, 5xx) — refused when the claim succeeds; reads as gate-**unrun** |
 
 Push-time `DPF_SKIP_PREPUSH_GATE_REASON` must use the same code format or
 `pr:health` treats the recorded skip as a **blocker**, not a pass. The normal

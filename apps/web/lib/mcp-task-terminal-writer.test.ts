@@ -1,3 +1,4 @@
+import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
@@ -50,6 +51,7 @@ vi.mock("./mcp-task-review-outcome", () => ({
 }));
 
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
+import { terminalTruncationMessage } from "./tak/terminal-response-truncation";
 
 const userContext = { platformRole: "developer", isSuperuser: false };
 const params = {
@@ -398,8 +400,8 @@ describe("terminal writer resumption", () => {
         version: "d47536a552c7d588b2f963e478ae99369f720783",
         expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
         startLine: 1,
-        maxLines: 200,
-        maxChars: 3_200,
+        maxLines: SOURCE_READ_DEFAULT_MAX_LINES,
+        maxChars: SOURCE_READ_DEFAULT_MAX_CHARS,
       },
     }));
     expect(db.findToolExecutions).toHaveBeenCalledTimes(2);
@@ -483,7 +485,10 @@ describe("terminal writer resumption", () => {
     });
   });
 
-  it("stops replaying and returns a governed escalation after the third missing-writer attempt", async () => {
+  it.each([false, true])("stops after the third missing-writer attempt (truncated=%s)", async (truncated) => {
+    const failureMessage = truncated ? terminalTruncationMessage({ writerToolName: "record_initiative_evidence",
+      readerToolNames: ["read_source_at_version"], minimumSuccessfulReaderCalls: 1, maximumReaderCalls: 3 }, [], true)
+      : "The provider did not honor the required writer tool-call contract. No receipt was created.";
     const exhaustedParams = { ...params, idempotencyKey: "missing-writer-resume-exhausted" };
     const metadata = await persistedMetadata("PAT-WRITER-EXHAUSTED", exhaustedParams);
     vi.clearAllMocks();
@@ -516,19 +521,8 @@ describe("terminal writer resumption", () => {
     });
     db.findToolExecutions.mockResolvedValue([
       {
+        ...persistedReaderExecution,
         id: "cmtd3z0ye00gz01rtjr503slt",
-        toolName: "read_source_at_version",
-        parameters: {
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          path: "docs/superpowers/specs/design.md",
-          version: "d47536a552c7d588b2f963e478ae99369f720783",
-          expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
-          startLine: 1,
-          maxChars: 3_200,
-        },
-        result: {},
-        success: true,
-        createdAt: new Date("2026-08-28T15:30:31.190Z"),
       },
       {
         id: "cmtd3zymp00hh01rtpf9ukk8z",
@@ -568,14 +562,14 @@ describe("terminal writer resumption", () => {
       };
     });
     autonomous.execute.mockResolvedValue({
-      content: "The provider did not honor the required writer tool-call contract. No receipt was created.",
+      content: failureMessage,
       // BI-C35576A9: the provider that ran is a CLI subscription; the recorded
       // contract must say receipt-verified, not the old hard-coded claim.
       providerId: "codex",
       executedTools: [],
       failure: {
         kind: "terminal-writer-missing",
-        message: "The provider did not honor the required writer tool-call contract. No receipt was created.",
+        message: failureMessage,
       },
     });
 
@@ -627,7 +621,7 @@ describe("terminal writer resumption", () => {
           terminalWriterWait: expect.objectContaining({
             attempt: 3,
             dispatchContract: "receipt-verified",
-            noncompliance: "prose-without-required-writer",
+            ...(truncated ? {} : { noncompliance: "prose-without-required-writer" }),
           }),
           terminalWriterEscalation: expect.objectContaining({
             schemaVersion: 1,
@@ -639,6 +633,11 @@ describe("terminal writer resumption", () => {
         }),
       }),
     });
+    if (truncated) {
+      const projection = db.update.mock.calls.map(([call]) => call.data.progressPayload)
+        .find(progress => progress?.summary === failureMessage);
+      expect(projection.terminalWriterWait).not.toHaveProperty("noncompliance");
+    }
   });
 
   it("replays an exhausted terminal-writer escalation without starting another attempt", async () => {

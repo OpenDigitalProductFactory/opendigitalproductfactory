@@ -57,3 +57,20 @@ export function priorDriveFromStored(stored: StoredWorkroomDriveState): PriorWor
     cycleKey: stored.lastCycleKey,
   };
 }
+
+/** One observation contract for anchored and standalone room inspectors. */
+export function projectStoredWorkroomDriveObservation(workspaceState: unknown) {
+  const stored = readStoredWorkroomDriveState(workspaceState);
+  const drive = isRecord(workspaceState) && isRecord(workspaceState.workroomDrive)
+    ? workspaceState.workroomDrive : null;
+  const pending = isRecord(drive?.pendingAttention) ? drive.pendingAttention : null;
+  const attentionReason = stored.lastAction === "attention" && stored.currentStageKey
+    && pending?.stageKey === stored.currentStageKey
+    && typeof pending.principalRef === "string" && pending.principalRef.trim()
+    ? `Stage ${stored.currentStageKey} is waiting on ${pending.principalRef.trim()}.` : null;
+  return {
+    currentStageKey: stored.currentStageKey, proposedStageKey: stored.currentStageKey,
+    receipts: stored.receipts, budgetUsage: stored.budgetUsage,
+    stopConditionHits: stored.stopConditionHits, reviewDue: stored.reviewDue, attentionReason,
+  };
+}

@@ -42,6 +42,8 @@ import {
 import { selectRecipeWithExploration } from "./champion-challenger";
 import {
   selectEndpointPreference,
+  toPreferenceCandidate,
+  withInferredPreferenceFamily,
   type EndpointPreferences,
 } from "./preference-finalization";
 import {
@@ -520,13 +522,14 @@ export async function routeEndpointV2(
     try {
       const { prisma } = await import("@dpf/db");
       const rows = await prisma.providerCapacityStatus.findMany({
-        select: { providerId: true, state: true, retryAt: true },
+        select: { providerId: true, state: true, retryAt: true, lastObservedAt: true },
       });
       const map = new Map<string, CapacitySnapshot>();
       for (const row of rows) {
         map.set(row.providerId, {
           state: row.state,
           retryAtMs: row.retryAt ? row.retryAt.getTime() : null,
+          observedAtMs: row.lastObservedAt ? row.lastObservedAt.getTime() : null,
         });
       }
       capacityByProvider = map;
@@ -668,18 +671,15 @@ export async function routeEndpointV2(
   // Persisted endpoint pins and per-coworker provider/model assignments are
   // preferences, never authority. They can select only from the set that has
   // cleared override blocks, policy, contract, cooldown, and capacity fences.
+  // BI-7F2FBDA3: lineage travels with the candidates so an unavailable
+  // preferred model can move to its family successor (preference-finalization).
   const preferenceSelection = selectEndpointPreference(
-    ranked.map((entry) => ({
-      endpointId: entry.endpoint.id,
-      providerId: entry.endpoint.providerId,
-      modelId: entry.endpoint.modelId,
-      entry,
-    })),
+    ranked.map((entry) => toPreferenceCandidate(entry.endpoint, entry)),
     {
       ...(pinnedOverride
         ? { pinnedEndpointId: pinnedOverride.endpointId }
         : {}),
-      ...(opts?.preferences ?? {}),
+      ...withInferredPreferenceFamily(endpoints, opts?.preferences ?? {}),
     },
   );
   const winner = preferenceSelection.winner.entry;
@@ -718,7 +718,7 @@ export async function routeEndpointV2(
         winner.endpoint.providerId, winner.endpoint.modelId, contract,
       );
   const baseExecutionPlan = recipe
-    ? buildPlanFromRecipe(recipe, contract)
+    ? buildPlanFromRecipe(recipe, contract, winner.endpoint)
     : opts?.skipRecipe
       ? undefined
       : buildDefaultPlan(winner.endpoint, contract);

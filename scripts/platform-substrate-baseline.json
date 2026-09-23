@@ -1,11 +1,14 @@
 {
-  "generatedAt": "2026-09-09T23:46:28.891Z",
-  "gitSha": "60285a25afc2cf27a807692ae5794dd2931096d3",
+  "generatedAt": "2026-09-15T20:02:42.579Z",
+  "gitSha": "67c849b2cec43f0b08acddcf3bf9c8337e8ed8c4",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
       "direction": "non-increasing",
-      "value": 5
+      "value": 7,
+      "owner": "platform-architecture",
+      "expiry": "2026-12-31",
+      "contraction": "EP-8B9B50D5"
     },
     "directInngestImportCount": {
       "direction": "non-increasing",
@@ -21,7 +24,7 @@
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 19700
+      "value": 19804
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
@@ -33,11 +36,11 @@
     },
     "seedCoordinatorLines": {
       "direction": "informational",
-      "value": 2872
+      "value": 2874
     },
     "serviceCount": {
       "direction": "non-increasing",
-      "value": 26
+      "value": 25
     }
   },
   "version": 1

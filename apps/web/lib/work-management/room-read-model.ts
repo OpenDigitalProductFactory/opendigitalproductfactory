@@ -67,7 +67,9 @@ export interface BuildWorkroomViewInput {
   outcomePacket?: WorkroomOutcomePacket | null;
   outcomeHealth?: WorkroomOutcomeView["health"];
   receipts?: readonly ReceiptEnvelope[];
+  reviewerRuns?: WorkroomView["reviewerRuns"];
   sourceHealth?: WorkroomView["projection"]["sourceHealth"];
+  executionAttentionReason?: string | null;
   /**
    * The subject's value-stream + lifecycle structure, pre-resolved by the loader via
    * `resolveWorkroomStructure` (kept out of this pure build, like `sourceHealth`).
@@ -90,6 +92,7 @@ export interface BuildWorkroomViewInput {
   now?: Date;
   /** Optional observed execution state supplied by a lifecycle/drive loader. */
   processOverseerObservation?: {
+    attentionReason?: string | null;
     currentStageKey?: string | null;
     proposedStageKey?: string | null;
     receipts?: readonly { stageKey: string; kind: string }[];
@@ -277,6 +280,13 @@ export function buildWorkroomView(
           checkedAt: now,
         });
 
+  const processNeedsAttention = !input.detail.summary.terminal
+    && ["pause", "escalate", "stop"].includes(processOverseer.disposition);
+  const processAttention = processNeedsAttention
+    ? processOverseer.interventionReason ?? "The process check requires attention before work continues."
+    : null;
+  const driveAttention = input.detail.summary.terminal ? null : observation?.attentionReason;
+
   return {
     roomKey: input.caseKey,
     caseRef,
@@ -309,11 +319,17 @@ export function buildWorkroomView(
     participants,
     activity: normalizeWorkroomActivities(input.activities ?? []),
     work: {
-      nextAction: standingIdle
+      nextAction: processNeedsAttention
+        ? "Resolve the process check before continuing"
+        : input.executionAttentionReason
+        ? "Inspect Observed execution for the reviewer status and required action."
+        : driveAttention
+        ? driveAttention
+        : standingIdle
         ? "Open next cycle"
         : input.detail.summary.nextAction,
-      attentionRequired: input.detail.summary.attention.required,
-      attentionReason: input.detail.summary.attention.reason,
+      attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || Boolean(driveAttention) || input.detail.summary.attention.required,
+      attentionReason: [processAttention, input.executionAttentionReason, driveAttention, input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,
       blockingActorKind: blockingActorKindForState(input.detail.summary.state),
       activeCapsuleRefs,
       activeTaskRunSummary: null,
@@ -324,6 +340,7 @@ export function buildWorkroomView(
     posture,
     processOverseer,
     receipts: [...(input.receipts ?? [])],
+    reviewerRuns: input.reviewerRuns ?? [],
     sourceRefs,
     structure: input.structure ?? null,
     projection: {

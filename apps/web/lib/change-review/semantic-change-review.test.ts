@@ -7,6 +7,7 @@ import {
   createLowRiskAutoPassReceipt,
   createSemanticReviewReceipt,
   parseSemanticReviewResponse,
+  restoreSemanticReviewCheckpoint,
   projectSemanticReviewReceipt,
   type SemanticReviewIdentity,
 } from "./semantic-change-review";
@@ -23,6 +24,78 @@ const identity = (overrides: Partial<SemanticReviewIdentity> = {}): SemanticRevi
 });
 
 describe("semantic review receipt freshness", () => {
+  it("reports content-free structure for malformed responses without accepting them", () => {
+    const raw = '{"summary":"private } { \\\" content"}{"summary":"private"}';
+    const result = parseSemanticReviewResponse(raw);
+    expect(result.decision).toBe("inconclusive");
+    expect(result.parseDiagnostics?.[0]).toMatchObject({ stage: "invalid-json", structure: {
+      characters: raw.length, completedObjects: 2, openDepth: 0, unterminatedString: false, scanTruncated: false,
+    } });
+    expect(JSON.stringify(result)).not.toContain("private");
+    expect(restoreSemanticReviewCheckpoint(result, "change-reviewer").parseDiagnostics)
+      .toEqual(result.parseDiagnostics?.map(d => ({ ...d, agentId: "change-reviewer" })));
+  });
+
+  it("bounds structural scanning and rejects untrusted checkpoint counts", () => {
+    const result = parseSemanticReviewResponse('{"summary":"' + "x".repeat(1_000_010));
+    expect(result.parseDiagnostics?.[0]).toMatchObject({ stage: "missing-json", structure: {
+      characters: 1_000_000, scanTruncated: true, openDepth: 1, unterminatedString: true,
+    } });
+    const forged = { ...result, parseDiagnostics: [{ stage: "invalid-json",
+      structure: { characters: -1, completedObjects: 0, openDepth: 0, unterminatedString: false, scanTruncated: false } }] };
+    expect(restoreSemanticReviewCheckpoint(forged, "change-reviewer").parseDiagnostics).toBeUndefined();
+  });
+
+  it("provides one valid JSON response example including the required failure challenge", () => {
+    const prompt = buildSemanticChangeReviewPrompt({ title: "Review", artifact: "diff",
+      verificationEvidence: "Test evidence", requireFailureAnalysis: true });
+    const example = prompt.split("RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):\n")[1];
+    expect(JSON.parse(example)).toMatchObject({ decision: "pass", issues: [],
+      failureAnalysisReview: { adequate: true, rationale: expect.any(String) } });
+    expect(prompt).not.toContain("Also return");
+    expect(prompt).toContain('"cannot-verify"');
+  });
+
+  it.each([
+    ["private prose", "missing-json"],
+    ['{"summary":"private",}', "invalid-json"],
+    ['{"decision":"private-value","issues":[],"summary":"private"}', "schema-mismatch"],
+  ])("retains content-free parser diagnostics for %s", (raw, stage) => {
+    const result = parseSemanticReviewResponse(raw);
+    expect(result).toMatchObject({ decision: "inconclusive", parseError: true,
+      parseDiagnostics: [{ stage }] });
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
+
+  it("identifies invalid contract fields without retaining response values", () => {
+    const result = parseSemanticReviewResponse(JSON.stringify({ decision: "pass",
+      issues: [{ severity: "private-value", description: "private source" }], summary: "private" }));
+    expect(result).toMatchObject({ parseDiagnostics: [{ stage: "schema-mismatch",
+      violations: [{ field: "issues.severity" }] }] });
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
+
+  it("bounds diagnostics and carries them through the canonical receipt projection", () => {
+    const result = parseSemanticReviewResponse(JSON.stringify({ decision: "pass",
+      issues: Array.from({ length: 100 }, () => ({ severity: "private", description: "private" })),
+      summary: "private", "private-property": "private-value" }));
+    expect(result.parseDiagnostics?.[0]?.violations).toHaveLength(8);
+    const receipt = createSemanticReviewReceipt({ identity: identity(), risk: "high",
+      disposition: "reviewed", rationale: "Independent review", result });
+    const projected = projectSemanticReviewReceipt(receipt);
+    expect(projected.externalEvidence.details.result.parseDiagnostics).toEqual(result.parseDiagnostics);
+    expect(JSON.stringify(projected)).not.toContain("private");
+  });
+
+  it("rejects untrusted checkpoint diagnostic text and handles missing results", () => {
+    const restored = restoreSemanticReviewCheckpoint({ decision: "inconclusive", issues: [], summary: "Unavailable",
+      parseError: true, parseDiagnostics: [{ stage: "schema-mismatch", agentId: "private",
+        violations: [{ field: "private", code: "private" }] }] }, "change-reviewer");
+    expect(restored.decision).toBe("inconclusive");
+    expect(JSON.stringify(restored)).not.toContain("private");
+    expect(restoreSemanticReviewCheckpoint(undefined, "change-reviewer").decision).toBe("inconclusive");
+  });
+
   const reviewedReceipt = () => createSemanticReviewReceipt({
     identity: identity(),
     disposition: "reviewed",

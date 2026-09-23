@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   loadBacklogWorkroomOwnership: vi.fn(),
   mapDemandRows: vi.fn(),
   projectReadiness: vi.fn(),
+  resolveTerminalRecovery: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
@@ -36,6 +37,9 @@ vi.mock("@/lib/work-capsules/backlog-workroom-ownership", () => ({
 }));
 
 vi.mock("@/lib/demand/demand-data", () => ({ mapDemandRows: mocks.mapDemandRows }));
+vi.mock("@/lib/backlog/initiative-readiness/terminal-recovery", () => ({
+  resolveTerminalInitiativeRecovery: mocks.resolveTerminalRecovery,
+}));
 vi.mock("@/lib/backlog/initiative-readiness/entry-adapter", () => ({
   projectBacklogItemReadinessSummary: mocks.projectReadiness,
 }));
@@ -126,6 +130,22 @@ describe("backlog deferral read projection", () => {
     const result = await getBacklogItem({ itemId: "BI-WORKROOM" });
 
     expect(result).toMatchObject({ success: true, data: { workrooms: [active], activeWorkrooms: [active] } });
+  });
+
+  it("exposes the same PIR recovery resolver on a read without attempting completion", async () => {
+    mocks.findUnique.mockResolvedValue({
+      ...baseItem, id: "row-bi", status: "in-progress", body: null,
+      createdAt: new Date("2026-09-21T00:00:00Z"), completedAt: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null,
+      productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+    });
+    const completion = { verdict: "input-required", blockers: [], unmet: [{ code: "POST_IMPLEMENTATION_REVIEW_REQUIRED" }] };
+    const recovery = { reviewerRoutes: [{ gate: "post-implementation-review" }], escalations: [], unroutable: [] };
+    mocks.projectReadiness.mockReturnValue({ decisions: { completion } });
+    mocks.resolveTerminalRecovery.mockResolvedValue(recovery);
+    const result = await getBacklogItem({ itemId: baseItem.itemId });
+    expect(mocks.resolveTerminalRecovery).toHaveBeenCalledWith({ decision: completion, currentAgentId: null, refusedWorkroomId: null });
+    expect(result).toMatchObject({ success: true, data: { recovery } });
   });
 
   it("passes the persisted terminal readiness decision through the canonical item read", async () => {

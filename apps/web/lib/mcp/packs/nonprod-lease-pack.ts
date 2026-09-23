@@ -201,6 +201,12 @@ const definitions: ToolDefinition[] = [
           description: "Optional ISO deadline for a server-owned durable wait. Defaults to expiresAt. Queued clients should stop polling and resume from the returned TaskRun.",
         },
         worktreePath: { type: "string" },
+        gateClientRevision: {
+          type: "number",
+          description:
+            "Revision of the local-CI gate client making this claim. A client below the server's floor is refused " +
+            "with gate_client_upgrade_required: rebase the branch onto main and re-run; do not retry the same client.",
+        },
         branchName: { type: "string" },
         buildId: { type: "string" },
         taskRunId: { type: "string" },
@@ -418,6 +424,31 @@ async function claimNonprodEnvironmentLeaseHandler(
       error: "invalid_host_pressure",
       message: "hostPressure must be an object",
     };
+  }
+
+  // Refuse a local-CI gate client below the server's revision floor before any
+  // lease row is touched. The client runs from the branch, so this is the only
+  // place a client defect fixed on main can be retired from un-rebased
+  // branches on every install.
+  if (environmentKey === "local-integration-ci") {
+    const { evaluateGateClientRevision } = await import("@/lib/nonprod/gate-client-revision");
+    const refusal = evaluateGateClientRevision({
+      clientRevision: params["gateClientRevision"],
+      worktreePath: stringValue("worktreePath") || undefined,
+      purpose,
+    });
+    if (refusal) {
+      return {
+        success: false,
+        error: "gate_client_upgrade_required",
+        message:
+          `This branch's local-CI gate client is revision ${refusal.clientRevision}; this platform requires `
+          + `revision ${refusal.minimumRevision} or later on ${refusal.platform} hosts because ${refusal.reason}. `
+          + "Rebase the branch onto main and re-run pregate. This is not a verdict on the diff, and retrying "
+          + "with the same client will be refused again.",
+        data: { admission: { status: "refused", reason: "gate-client-upgrade-required" }, ...refusal },
+      };
+    }
   }
 
   const resourceClass = stringValue("resourceClass");

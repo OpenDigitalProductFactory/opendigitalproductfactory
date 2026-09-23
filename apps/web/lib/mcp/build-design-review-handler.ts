@@ -7,12 +7,14 @@
 // over MCP; the local error boundary mirrors executeTool's shared try/catch
 // (see build-review-handlers.ts).
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import * as crypto from "crypto";
 
 import { prisma } from "@dpf/db";
 import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 
 import type { ToolResult } from "@/lib/mcp-tools";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPackHandler } from "./tool-pack";
 import {
   logBuildActivity,
@@ -28,7 +30,61 @@ import { toFailureResult } from "./build-review-handlers";
 
 type HandlerContext = Parameters<ToolPackHandler>[2];
 
-export async function reviewDesignDoc(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {
+/**
+ * BI-C5D978E9 follow-up: attest the ideate research at REVIEW time, not only at
+ * save time.
+ *
+ * The receipt was recorded in exactly one place — `saveBuildEvidence` with
+ * field "designDoc". Any build whose design document was saved by another path,
+ * or before that writer shipped, could therefore never obtain the receipt: the
+ * reviewer passed, `RESEARCH_REQUIRED` blocked ideate->plan, the stranded-build
+ * resumer re-ran the same review, and the build aged out at seven days.
+ *
+ * Live repro FB-7B4C714B — governed subject BI-CA7C0C48, a 4394-character
+ * existingFunctionalityAudit and a 1677-character reusePlan, `reviewDesignDoc`
+ * pass, and zero initiative_gate_receipt rows. It is one of 45 abandoned builds.
+ *
+ * Review is the honest place to attest: the reviewer has just read the document
+ * and passed it. The write itself stays truthful — `recordIdeateResearchReceipt`
+ * no-ops when the design records no research or the build has no governed
+ * subject — so this only ever records what the design actually evidences, and
+ * re-running a review is idempotent. Failure never breaks the review.
+ */
+async function attestIdeateResearch(
+  buildId: string,
+  designDoc: unknown,
+  userId: string,
+  agentId: string | null,
+): Promise<void> {
+  let outcome: { recorded: boolean; reason: string };
+  try {
+    const { recordIdeateResearchReceipt } = await import("@/lib/build/record-ideate-research-receipt");
+    outcome = await recordIdeateResearchReceipt({
+      buildId,
+      designDoc,
+      revisionId: `review:${buildId}`,
+      authorUserId: userId,
+      authorAgentId: agentId,
+    });
+  } catch (err) {
+    outcome = { recorded: false, reason: `attestation threw: ${getErrorMessage(err)}` };
+  }
+  // A missing receipt leaves the build exactly where it already was — but it
+  // must never leave it there silently (BI-CA7C0C48: the swallowed refusal is
+  // what made ten builds look stuck for no reason). The outcome is a build
+  // activity row either way.
+  await prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "ideate_research_attestation",
+      summary: outcome.recorded
+        ? "Research receipt recorded for the governed backlog subject (author-accountable lane)."
+        : `Research receipt NOT recorded: ${outcome.reason.slice(0, 400)}`,
+    },
+  }).catch(() => undefined);
+}
+
+async function reviewDesignDocInner(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {
   try {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
@@ -65,6 +121,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           await triggerDesignReviewAutoRepair(buildId, userId, context);
           return { success: true, message: `Fix review FAILED. ${review.issues[0]?.description ?? review.summary}`, data: { review, blocked: true, action: "revise_and_resubmit" } };
         }
+        await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null);
         let fixPhaseGateBlocker: string | null = null;
         try {
           const fixPlan = (build.plan as Record<string, unknown> | null);
@@ -139,9 +196,21 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // `Build: <title>. <description>`. This is the same context, on the path
       // the pipeline actually uses.
       const ownerContext = ownerAskContext(build.title, build.description);
+      // Founder ruling 2026-08-12 (mapBuildDeliverableToRoutingSensitivity):
+      // ordinary platform builds route as development work; only elevated/high
+      // deliverables demand internal/confidential clearance. The literal
+      // "internal" these reviewers used to send excluded every public-cleared
+      // cloud dev engine, so reviews landed on the local model and came back
+      // without JSON.
+      const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } =
+        await import("@/lib/explore/build-process-matrix");
+      const reviewSensitivity = mapBuildDeliverableToRoutingSensitivity(
+        deriveDeliverableSensitivity({ text: `${build.title}\n${build.description ?? ""}`, workType: build.kind }),
+      );
       const prompt = buildDesignReviewPrompt(designDocTyped, ownerContext, priorContext);
       const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, ownerContext);
       const { routeAndCall } = await import("@/lib/routed-inference");
+      const { buildPhaseRouteOptions } = await import("@/lib/build/build-phase-route-options");
       const messages = [{ role: "user" as const, content: prompt }];
       // Run the two checklist reviewers PLUS the advisory architecture reviewer
       // (chief-architect / Enterprise Architect lens) in parallel. The
@@ -159,18 +228,18 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
         buildId,
       };
       const [r1settled, r2settled, archSettled] = await Promise.allSettled([
-        routeAndCall(messages, "You are a design reviewer.", "internal", attribution),
+        routeAndCall(messages, "You are a design reviewer.", reviewSensitivity, buildPhaseRouteOptions(attribution)),
         routeAndCall(
           messages,
           "You are an independent design reviewer. Focus especially on security, data integrity, edge cases, and accessibility gaps the primary reviewer may have missed.",
-          "internal",
-          { ...attribution, budgetClass: "minimize_cost" },
+          reviewSensitivity,
+          buildPhaseRouteOptions({ ...attribution, budgetClass: "minimize_cost" }),
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
           `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.`,
-          "internal",
-          { ...attribution, budgetClass: "minimize_cost" },
+          reviewSensitivity,
+          buildPhaseRouteOptions({ ...attribution, budgetClass: "minimize_cost" }),
         ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
@@ -219,7 +288,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           doc: typeof build.designDoc === "string" ? build.designDoc : JSON.stringify(designDocTyped),
           db: prisma,
           transport: (messages, systemPrompt) =>
-            routeAndCall(messages, systemPrompt, "internal", { budgetClass: "minimize_cost" }),
+            routeAndCall(messages, systemPrompt, reviewSensitivity, buildPhaseRouteOptions({ budgetClass: "minimize_cost" })),
         });
         if (!daAdvisory.skipped && daAdvisory.findings.length > 0) {
           review = Object.assign({}, review, { dataArchitectureAdvisory: daAdvisory }) as typeof review;
@@ -588,6 +657,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
             }
           }
 
+          await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null);
           const idpPlan = (updatedBuild.plan as Record<string, unknown> | null);
           const gate = await checkBuildPhaseGate({
             buildId,
@@ -650,4 +720,11 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
   } catch (err) {
     return toFailureResult("reviewDesignDoc", err);
   }
+}
+
+/** Build-phase entry: the reviewers run under the autonomous inference origin (BI-2F9DE752). */
+export function reviewDesignDoc(
+  ...args: Parameters<typeof reviewDesignDocInner>
+): ReturnType<typeof reviewDesignDocInner> {
+  return runAsBuildPhase(() => reviewDesignDocInner(...args));
 }

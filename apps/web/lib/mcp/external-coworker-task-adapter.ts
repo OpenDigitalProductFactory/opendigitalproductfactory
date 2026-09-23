@@ -21,15 +21,16 @@ export type ExternalCoworkerTaskInput = {
 };
 
 const RECONNECT_ACTION =
-  "Reconnect through the DPF MCP endpoint with a write-capable personal access token, then retry with requestKey.";
+  "Reconnect through the DPF MCP endpoint with an authorized OAuth access token or write-capable personal access token, then retry with requestKey.";
 
-function verifiedPatContext(context: ToolExecutionContext | undefined): {
+function verifiedExternalContext(context: ToolExecutionContext | undefined): {
   tokenId: string;
+  source: "pat" | "oauth";
   capability: "read" | "write";
   userContext: UserContext;
 } | null {
   if (
-    context?.authSource !== "pat"
+    (context?.authSource !== "pat" && context?.authSource !== "oauth")
     || typeof context.apiTokenId !== "string"
     || context.apiTokenId.trim().length === 0
     || !context.userContext
@@ -38,6 +39,7 @@ function verifiedPatContext(context: ToolExecutionContext | undefined): {
   }
   return {
     tokenId: context.apiTokenId,
+    source: context.authSource,
     capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read",
     userContext: context.userContext,
   };
@@ -82,17 +84,17 @@ function initiativeReviewPacket(input: ExternalCoworkerTaskInput): InitiativeRev
 }
 
 /**
- * Bridges threadless, PAT-authenticated collaboration calls onto the existing
+ * Bridges threadless, token-authenticated collaboration calls onto the existing
  * governed autonomous-task owner. The caller never supplies a portal thread or
  * a reviewer principal: the token and target coworker remain server-owned.
  */
 export async function dispatchExternalCoworkerTask(input: ExternalCoworkerTaskInput): Promise<ToolResult> {
-  const verified = verifiedPatContext(input.context);
+  const verified = verifiedExternalContext(input.context);
   if (!verified) {
     return {
       success: false,
       error: "external_handoff_context_required",
-      message: `External coworker handoff requires verified PAT context. ${RECONNECT_ACTION}`,
+      message: `External coworker handoff requires verified OAuth or PAT context. ${RECONNECT_ACTION}`,
       data: { action: RECONNECT_ACTION },
     };
   }
@@ -150,7 +152,7 @@ export async function dispatchExternalCoworkerTask(input: ExternalCoworkerTaskIn
         tokenId: verified.tokenId,
         userId: input.userId,
         capability: verified.capability,
-        source: "pat",
+        source: verified.source,
       },
       userContext: verified.userContext,
       params: {

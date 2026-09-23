@@ -15,7 +15,7 @@ Every rule here is a one-line statement; the kernel principle behind it carries 
 - **Never ask the user to run commands.** The user is non-technical; the agent runs the system and reports results. **Commandment tier.** → [kernel principle](docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md)
 - **Never assume — verify.** Resolve ambiguity by inspecting the environment, not by pattern-matching context. **Commandment tier.** → [kernel principle](docs/founder-kernel/wiki/principles/no-assumptions.md)
 - **Never fabricate.** Ground every claim in code, specs, or DB state. → [kernel principle](docs/founder-kernel/wiki/principles/never-fabricate.md)
-- **Platform function never depends on a client.** Every guarantee runs server-side, on every install, with no AI client present; a hook may accelerate one, never own it. **Commandment tier.** → [kernel principle](docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md)
+- **Platform function never depends on a client.** Servers guarantee agentic recovery across executor or credential changes; hooks only accelerate. **Commandment tier.** → [kernel principle](docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md)
 - **Single source of truth.** Each rule, fact or decision in exactly one place. Pointers, not copies. → [kernel principle](docs/founder-kernel/wiki/principles/single-source-of-truth.md)
 - **Ground new work in existing platform work.** Inspect the specs, schema, epics, principles, routes, primitives and backlog first; extend or refactor what exists. Net-new substrate only when prior work is proven unfit and the supersession explicit. → [kernel](docs/founder-kernel/wiki/principles/consult-specs-first.md) · [epics](docs/professions/portfolio-management/wiki/check-epic-overlap-before-creating.md) · [schema](docs/professions/data-architect/wiki/schema-audit-before-features.md) · [substrate](docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md)
 - **An enforcement refusal stops work unless a checked-in override records operator authorization for that run.** Use only it; record reason/scope; report **skipped/unrun, never passed**. Never override PR protection, DCO, grant intersection, destructive or production-integrity controls, or route around refusal via DB/filesystem/shell. Otherwise stop. ⟦situational: hook support varies by host; enforce these rules yourself when unverified—review at EP-ANTIGRAVITY-001⟧ → [PR](docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md) · [DCO](docs/founder-kernel/wiki/principles/dco-sign-off-required.md) · [lease](docs/founder-kernel/wiki/principles/runtime-gates-via-shared-lease.md)
@@ -63,7 +63,7 @@ Procedure, recovery steps and rationale: [branch & worktree runbook](docs/archit
 Work is not complete until all four pass:
 
 1. **Unit tests** — `pnpm --filter <pkg> exec vitest run` for affected files.
-2. **Production build** — `pnpm --filter web build` with zero errors. TypeScript errors surface only here, not in `vitest` or IDE checks.
+2. **Production build** — `pnpm --filter web build` with zero errors. Typecheck via `pnpm --filter <pkg> typecheck`, never bare `tsc`.
 3. **UX verification** — for any UI/agent/coworker/workflow/forms change, exercise the affected path against the running app.
 4. **Migration applies cleanly** — if a migration was added.
 

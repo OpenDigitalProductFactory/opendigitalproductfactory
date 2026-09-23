@@ -4,6 +4,7 @@ import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surfac
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
+import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -187,8 +188,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_execution_evidence: ["build_evidence"],
   // Non-build evidence stays on backlog_write because it coordinates the whole backlog surface.
   record_external_development_evidence: ["backlog_write"],
-  review_semantic_change: ["backlog_write"],
-  record_semantic_review_outcome: ["backlog_write"],
+  ...CHANGE_REVIEW_TOOL_GRANTS,
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
   ...INITIATIVE_READINESS_TOOL_GRANTS,
@@ -288,6 +288,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // the evidence behind a decision must not need a higher grant than making the
   // decision did, or the check is less reachable than the thing it checks.
   reverify_decision_evidence: ["registry_read"],
+  // BI-F302B80E: appends what the caller did with a kernel recommendation.
+  // Same grant as propose_improvement — it records, it never re-decides.
+  record_decision_outcome: ["decision_record_create"],
 
   // Two more doors sealed the same way as evaluate_profession_decision, found
   // by the registry-wide sweep the BI-88B77204 fix added. Both packs already
@@ -749,6 +752,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Hive Mind / Platform updates
   assess_contribution:    ["backlog_read"],
   contribute_to_hive:     ["backlog_write"],
+  // BI-1281A164: the same egress grant as contribute_to_hive. It sends a
+  // captured FINDING rather than a build diff, so an external session with no
+  // build can complete step 4 of routing a learning to the commons.
+  contribute_finding_to_hive: ["backlog_write"],
   set_change_disposition: ["backlog_write"],
   apply_platform_update:  ["admin_write"],
   // BI-C26F7EE1: read-only operator preview of the upstream change set —

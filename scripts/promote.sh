@@ -1069,6 +1069,54 @@ if [[ $_dry_run -eq 0 ]]; then
   fi
 fi
 
+# --- Step 7d: service-reconcile ---
+# BI-D011EBE2: every OTHER `up` in this script is `up -d --no-deps --force-recreate
+# <named service>` — portal, sandbox, a postgres override. That recreates services
+# the install ALREADY has and can never create one it does not. install-dpf.sh runs a
+# full `docker compose up -d`, so a fresh install gets every service the shipped
+# compose file declares while an upgraded install keeps the service set it was born
+# with. The two never converge: any service added in any release reaches zero existing
+# installs, while the upgrade reports success. (The mirror case — a service REMOVED
+# from compose is never torn down — is BI-922EBB99, handled for the legacy stores by
+# step 7c above.)
+#
+# Reconcile against `requiredServices` from the capability projection, NOT a blind
+# `compose up -d`: that projection is the platform's own declaration of what this
+# install should run, already filtered by host platform and enabled capabilities, and
+# it is the same source step 7b uses to decide whether the sandbox applies here.
+#
+# Only services with NO container at all are created. `docker compose ps -a --services`
+# lists every service that has a container in any state, so a service an operator
+# deliberately stopped stays stopped — this step adds what was never delivered, it does
+# not fight the operator. `--no-recreate` means nothing already running is disturbed,
+# including dependencies pulled in by the services being created.
+#
+# Fail-LOUD but NOT fail-ABORT, exactly like sandbox-refresh (7b) and
+# decommission-legacy-stores (7c): the portal swap already succeeded and has been
+# verified, so a docker hiccup here must never mislabel a good upgrade. A service left
+# uncreated is a recoverable degraded state — the next upgrade retries it.
+emit_step service-reconcile
+if [[ $_dry_run -eq 0 ]]; then
+  _reconcile_required="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requiredServices.join("\n")))')"
+  _reconcile_existing="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+    "${_f_args[@]}" ps -a --services 2>/dev/null || true)"
+  _reconcile_missing=()
+  while IFS= read -r _reconcile_svc; do
+    [[ -z "$_reconcile_svc" ]] && continue
+    printf '%s\n' "$_reconcile_existing" | grep -qxF "$_reconcile_svc" || _reconcile_missing+=("$_reconcile_svc")
+  done <<< "$_reconcile_required"
+  if [[ ${#_reconcile_missing[@]} -gt 0 ]]; then
+    printf 'step=service-reconcile-creating target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")"
+    if ! docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" up -d --no-recreate "${_reconcile_missing[@]}"; then
+      printf 'step=service-reconcile-failed target=%s\n' "$_built_sha"
+      printf 'warning: could not create newly-required service(s) %s after a successful portal promotion — the portal upgrade stands, but this install is missing capability services the release ships. Retries on the next upgrade, or run `docker compose up -d` on the install (BI-D011EBE2)\n' "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")" >&2
+    fi
+  else
+    printf 'step=service-reconcile-current target=%s\n' "$_built_sha"
+  fi
+fi
+
 # --- Step 8: cleanup ---
 # A successful swap leaves the PREVIOUS portal image untagged (dangling) plus BuildKit
 # cache layers from step 3's rebuild. Nothing else sweeps them, so across upgrades they
@@ -1087,9 +1135,34 @@ fi
 #     Capping reclaims runaway disk without making every future upgrade rebuild cold.
 # Volumes are NEVER touched here — operator DB/state lives in volumes.
 emit_step cleanup
+# BI-DC04048A: every sweep below is BOUNDED and NAMED. The acceptance harness
+# watched a promotion complete every verify and then die inside this step with
+# nine silent minutes after `step=cleanup` — no way to tell which sweep hung,
+# and no bound to stop it taking the run with it. A sweep is a disk-hygiene
+# courtesy; it may never hold a finished upgrade hostage. Each one gets its own
+# step line (so the trail names the hang) and a busybox/coreutils `timeout`
+# (so the hang ends). A sweep that times out is reported and skipped; the
+# upgrade stands either way, exactly as `|| true` already promised.
+_sweep_timeout="${PROMOTE_CLEANUP_SWEEP_TIMEOUT_SECONDS:-300}"
+[[ "$_sweep_timeout" =~ ^[0-9]+$ ]] || _sweep_timeout=300
+_bounded_sweep() {
+  # usage: _bounded_sweep <name> <command...>
+  local _name="$1"; shift
+  emit_step "cleanup-${_name}"
+  local _rc=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 10 "$_sweep_timeout" "$@" >/dev/null 2>&1 || _rc=$?
+  else
+    "$@" >/dev/null 2>&1 || _rc=$?
+  fi
+  if [[ $_rc -eq 124 || $_rc -eq 137 || $_rc -eq 143 ]]; then
+    printf 'warning: cleanup sweep %s did not finish within %ss and was stopped — skipped; the upgrade stands (BI-DC04048A)\n' "$_name" "$_sweep_timeout" >&2
+  fi
+  return 0
+}
 if [[ $_dry_run -eq 0 ]]; then
-  docker image prune -f >/dev/null 2>&1 || true
-  docker builder prune -f --keep-storage "${PROMOTE_BUILD_CACHE_KEEP:-10GB}" >/dev/null 2>&1 || true
+  _bounded_sweep image-prune docker image prune -f
+  _bounded_sweep builder-prune docker builder prune -f --keep-storage "${PROMOTE_BUILD_CACHE_KEEP:-10GB}"
   # BI-9B7FC928: `image prune` above only removes DANGLING images. The TAGGED
   # throwaway images left by Build Studio's content-verify / main-compare /
   # local-integration flows (dpf-*-build-test:*, dpf-*-build-compare:*,
@@ -1101,7 +1174,8 @@ if [[ $_dry_run -eq 0 ]]; then
   # fails the upgrade. Volumes are still never touched.
   for _ref in 'dpf-*-build-test' 'dpf-*-build-compare' 'dpf-*:verify'; do
     _imgs="$(docker images --filter "reference=${_ref}" -q 2>/dev/null | sort -u)"
-    [[ -n "${_imgs}" ]] && docker rmi -f ${_imgs} >/dev/null 2>&1 || true
+    # shellcheck disable=SC2086 # image ids are whitespace-separated by construction
+    [[ -n "${_imgs}" ]] && _bounded_sweep "ephemeral-images" docker rmi -f ${_imgs}
   done
   # BI-1172E86A: the two sweeps above still leave every SUPERSEDED
   # version tag alive. Each upgrade tags a fresh dpf-portal / dpf-postgres /
@@ -1134,14 +1208,15 @@ if [[ $_dry_run -eq 0 ]]; then
       if (( _kept < _keep )); then _kept=$((_kept + 1)); continue; fi
       _chunk+=("$_tagged")
       if (( ${#_chunk[@]} >= 50 )); then
-        docker rmi "${_chunk[@]}" >/dev/null 2>&1 || true
+        _bounded_sweep "superseded-tags-${_repo}" docker rmi "${_chunk[@]}"
         _chunk=()
       fi
     done < <(docker images --filter "reference=${_ref}:v*" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)
     if (( ${#_chunk[@]} > 0 )); then
-      docker rmi "${_chunk[@]}" >/dev/null 2>&1 || true
+      _bounded_sweep "superseded-tags-${_repo}" docker rmi "${_chunk[@]}"
     fi
   done
+  emit_step cleanup-done
 fi
 
 # Terminal success marker — emitted only after every verify AND the cleanup sweep, so

@@ -30,6 +30,7 @@ import type { ToolCallEntry } from "@/lib/routing/adapter-types";
 import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
+import { terminalTruncationMessage } from "./terminal-response-truncation";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
@@ -37,6 +38,7 @@ import {
   resolveTurnMinimumCapabilities,
 } from "@/lib/routing/agent-capability-types";
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
+import { lookupPinnedModelFamily } from "@/lib/routing/model-successor";
 import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 import type { UserContext } from "@/lib/permissions";
 import {
@@ -53,7 +55,8 @@ import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store"
 import { estimateContextTokens, classifyContextPressure, compactAgenticMessages } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
-import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
+import { applyEscalationLadderGuard } from "./escalation-ladder";
+import { buildDowngradedFabricationMessage, buildLocalToolCallFailureMessage } from "./provider-failure-messages";
 import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import {
@@ -229,6 +232,8 @@ type AgentRouteConfig = {
   budgetClass?: "minimize_cost" | "balanced" | "quality_first";
   preferredProviderId?: string;
   preferredModelId?: string;
+  /** BI-7F2FBDA3: lineage of the pinned model, looked up even when it has retired. */
+  preferredModelFamily?: string | null;
   allowedProviders?: string[];
   deniedProviders?: string[];
   residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
@@ -483,29 +488,6 @@ function buildFabricationFailureMessage(params: {
  * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
  * See spec docs/specs/routing-resilience-and-failure-observability-spec.md §4.5.
  */
-function buildDowngradedFabricationMessage(): string {
-  return (
-    "My usual AI provider was unavailable, so I worked through a backup that "
-    + "couldn't fully complete this — nothing was left half-saved on your side. "
-    + "Please try again (the primary connection may have recovered), or break "
-    + "the request into a smaller step."
-  );
-}
-
-function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): string {
-  // Respects IDENTITY_BLOCK rule #5 — no infrastructure names, model ids, or
-  // routing architecture; engineers get those from RoutedInferenceResult.
-  // Copy must stay honest (G2, 2026-05-23): an earlier version promised a
-  // re-route the loop never performs.
-  // Rung 4 (BI-33F1EA72): connecting a provider is work only the human can do,
-  // so this hands off rather than apologizing — steps, then the resumption.
-  return buildHumanHandoff({
-    blocker: "I'm on the local AI here, and it couldn't carry this one through.",
-    steps: ["Open Platform > AI > Providers.", "Connect a stronger provider — Claude, Gemini, or OpenAI."],
-    verify: "confirm the stronger provider is live",
-  });
-}
-
 type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult; modelEvidenceTruncated?: boolean };
 
 function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
@@ -1175,6 +1157,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   );
   effectiveConfig.minimumDimensions = turnRoute.minimumDimensions;
 
+  // BI-7F2FBDA3: a pinned model is a preference with lineage; routing moves to
+  // the family successor rather than to whatever ranked first.
+  effectiveConfig.preferredModelFamily ??= await lookupPinnedModelFamily(prisma, effectiveConfig.preferredProviderId, effectiveConfig.preferredModelId);
+
   // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
   // per turn and, when it is near the budget, bias the routing budget class
   // toward cost so the router picks a cheaper (still capability-floor-respecting)
@@ -1216,7 +1202,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // EP-AGENT-CAP-002: Capability floor — passed through to pipeline Stage 1
     minimumCapabilities,
     agentMinimumContextTokens,
-    agentId, routeContext,
+    agentId, routeContext, threadId, // threadId: the cost ledger's join key (BI-CCF1ACBB)
     ...(agentMessageId ? { agentMessageId } : {}),
     ...(params.workroomPriority ? { workroomPriority: params.workroomPriority } : {}),
     // mcpSession is forwarded through callWithFallbackChain → callProvider →
@@ -1225,7 +1211,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
     // adapters ignore the field. The agentic loop is the only place with
     // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext },
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two
@@ -1694,7 +1680,6 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();
 
-      // Diagnostic: log raw response so we can trace stalls
       console.log(
         `[agentic-loop] thread=${JSON.stringify(threadId)} iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
@@ -1706,6 +1691,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         if (exit.kind === "complete") {
           logTurnSummary(result.providerId, result.modelId);
           return completeResult(result.content, result);
+        }
+        if (result.truncated) {
+          const exhausted = truncationContinues >= MAX_TRUNCATION_CONTINUES;
+          const message = terminalTruncationMessage(params.terminalToolPolicy, executedTools, exhausted);
+          if (exhausted) return terminalFailure(message, result);
+          truncationContinues++;
+          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: message }];
+          continue;
         }
         if (exit.kind === "nudge") {
           terminalToolNudges++;
@@ -1719,15 +1712,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         }
       }
 
-      // BI-1D144CC1: truncation stop. The provider cut generation off at the
-      // output-token ceiling (stop_reason=max_tokens / finish_reason=length /
-      // MAX_TOKENS / Responses incomplete). A reply that ends without a tool call
-      // because it RAN OUT OF TOKENS is not a natural end_turn — returning its
-      // partial text as the final answer is the defect this guards. Ask the model
-      // to finish (bounded) BEFORE the "why did you stop" contract/fabrication/
-      // nudge guards run: we already know why it stopped, so those diagnostics
-      // would misfire. This realizes the stop_reason==="end_turn" contract the
-      // loop's own header comment claims but never enforced.
+      // BI-1D144CC1: an output-token cutoff is not a natural end_turn.
       if (result.truncated && truncationContinues < MAX_TRUNCATION_CONTINUES) {
         truncationContinues++;
         // Never regress below today's behaviour: keep the longest partial as the

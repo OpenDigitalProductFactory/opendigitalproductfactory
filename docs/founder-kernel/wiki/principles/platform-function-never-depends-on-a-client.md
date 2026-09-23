@@ -95,6 +95,33 @@ shape of what happens in between.
 
 ## How to apply
 
+### Recovery is a platform guarantee
+
+Every agentic process must be recoverable. Its work, progress and accountability
+outlive a client, executor, credential or employee. The platform owns recovery;
+an agent remembering to return to a conversation is not the mechanism.
+
+Use the existing durable process identity and journal. A replacement executor
+continues the recorded work under current authority, preserving completed
+effects and evidence. A refreshed credential proves authority; it does not
+create a new business operation. Replacing an executor alone changes
+participation, not work identity or accountability. A separately authorized
+transfer of accountable ownership is supported and recorded explicitly.
+
+Recovery means a supported path to continuation, compensation, or an explicit
+safe terminal disposition. It does not promise automatic success, undo an
+irreversible effect, restore revoked authority, or justify unlimited retries.
+If the outcome of a prior effect is unknown, reconcile it before repeating it.
+Reuse valid authorization and evidence; ask a human only for a decision or
+authority the process actually lacks.
+
+The shared acceptance contract and interruption matrix live in the
+[Durable Agentic Process architecture](../../../architecture/2026-06-09-long-running-agentic-process-architecture.md#51-common-recovery-contract).
+Existing adapters must demonstrate that contract before being called
+recoverable. A new policy document is not runtime proof.
+
+### Server ownership
+
 - Put guaranteed behaviour in the server: a scheduled job, a queue function, a
   runtime service. Not a hook, not a skill, not a CLI cron.
 - Treat a client hook as an **accelerator with no authority**. Removing every

@@ -21,6 +21,11 @@
           },
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/raw-tool-guard.mjs\"",
+            "statusMessage": "Redirect raw tsc, root-level vitest and npx to the checked-in routines"
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/portal-image-guard.mjs\"",
             "statusMessage": "Keep portal image changes on the verified release path"
           },

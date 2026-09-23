@@ -13,6 +13,7 @@ export {
   defaultVisibleHtml,
   extractSubtrees,
   isDisclosureRegion,
+  isLiveRegion,
   isStructurallyHidden,
   leadBandHtml,
   removeSubtrees,

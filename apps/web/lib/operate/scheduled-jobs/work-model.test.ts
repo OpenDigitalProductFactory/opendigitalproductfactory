@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  FAILING_LAST_STATUSES,
   buildWorkView,
   cadenceIntervalMs,
   deriveHealth,
@@ -418,5 +419,71 @@ describe("isQuarantined", () => {
   it("recognises index-repair debris", () => {
     expect(isQuarantined("__dpf_quarantined__cmq5xd304001i01oc9jht6wxu__eval-x")).toBe(true);
     expect(isQuarantined("code-graph-reconcile")).toBe(false);
+  });
+});
+
+describe("deriveHealth sees every spelling of failure (BI-F3B80A1E)", () => {
+  const NOW = new Date("2026-09-15T19:00:00.000Z");
+  const HOUR = 3_600_000;
+  const DAY = 24 * HOUR;
+  // Relative to NOW, so the fixtures cannot expire as wall-clock advances: the
+  // shape under test is "ran recently, due again soon", not any literal date.
+  const base = {
+    kind: "recurring" as const,
+    enabled: true,
+    schedule: "daily",
+    lastRunAt: new Date(NOW.getTime() - 16 * HOUR),
+    nextRunAt: new Date(NOW.getTime() + 8 * HOUR),
+    reportsRunData: true,
+  };
+
+  // lastStatus is a free-form String, so the vocabulary drifted across runners.
+  // Matching only "error" meant the health surface was blind to "failed" and
+  // "partial" — and the one job on this install reporting "failed" was the
+  // backup trial-restore, which had been failing nightly since 2026-06-09 while
+  // reading as healthy.
+
+  it("treats 'failed' as an error — the backup trial-restore case", () => {
+    expect(deriveHealth({ ...base, lastStatus: "failed" }, NOW).health).toBe("error");
+  });
+
+  it("treats 'partial' as an error — a run that could not finish is not ok", () => {
+    expect(deriveHealth({ ...base, lastStatus: "partial" }, NOW).health).toBe("error");
+  });
+
+  it("still treats 'error' as an error", () => {
+    expect(deriveHealth({ ...base, lastStatus: "error" }, NOW).health).toBe("error");
+  });
+
+  it("does not call an unconfigured job healthy, but does not call it broken either", () => {
+    // It did not fail; it never ran. Both "ok" and "error" would be a lie.
+    expect(deriveHealth({ ...base, lastStatus: "not-configured" }, NOW).health).toBe("untracked");
+  });
+
+  it("leaves genuinely healthy statuses alone", () => {
+    expect(deriveHealth({ ...base, lastStatus: "ok" }, NOW).health).toBe("ok");
+    expect(deriveHealth({ ...base, lastStatus: null }, NOW).health).toBe("ok");
+  });
+
+  it("does not mistake a coworker task awaiting acceptance for a failure", () => {
+    expect(deriveHealth({ ...base, lastStatus: "proposed" }, NOW).health).toBe("ok");
+  });
+
+  it("reports a failing job as error even when it is also overdue", () => {
+    // postgres-trial-restore-daily is both: it ran today and failed, and its
+    // nextRunAt has been frozen in the past since June. The failure is the
+    // actionable fact; a stale projection is a symptom of it.
+    const health = deriveHealth(
+      // 98 days in the past — the frozen projection the live row carried.
+      { ...base, lastStatus: "failed", nextRunAt: new Date(NOW.getTime() - 98 * DAY) },
+      NOW,
+    ).health;
+    expect(health).toBe("error");
+  });
+
+  it("every failing spelling in FAILING_LAST_STATUSES actually yields error", () => {
+    for (const status of FAILING_LAST_STATUSES) {
+      expect(deriveHealth({ ...base, lastStatus: status }, NOW).health).toBe("error");
+    }
   });
 });

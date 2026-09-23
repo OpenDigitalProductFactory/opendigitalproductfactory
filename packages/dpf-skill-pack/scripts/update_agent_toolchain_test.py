@@ -19,6 +19,40 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_agent_toolchain as updater
 
 
+class CodexCacheVersionTest(unittest.TestCase):
+    def test_changed_contents_refresh_same_source_version_and_reruns_are_stable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / ".codex-plugin" / "plugin.json"
+            manifest.parent.mkdir()
+            updater.write_json(manifest, {"name": "dpf-platform", "version": "0.2.5+codex.old"})
+            script = root / "updater.py"
+            script.write_text("legacy config")
+            first = updater.codex_content_version(root)
+            updater.write_json(manifest, {"name": "dpf-platform", "version": first})
+            self.assertEqual(updater.codex_content_version(root), first)
+            script.write_text("oauth config")
+            self.assertNotEqual(updater.codex_content_version(root), first)
+            self.assertTrue(first.startswith("0.2.5+codex."))
+
+    def test_ignored_python_files_do_not_change_version_but_rename_does(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / ".codex-plugin" / "plugin.json"
+            manifest.parent.mkdir()
+            updater.write_json(manifest, {"name": "dpf-platform", "version": "0.2.5"})
+            script = root / "a.py"
+            script.write_text("same")
+            first = updater.codex_content_version(root)
+            cache = root / "__pycache__"
+            cache.mkdir()
+            (cache / "a.pyc").write_bytes(b"cache")
+            (root / ".DS_Store").write_bytes(b"metadata")
+            self.assertEqual(updater.codex_content_version(root), first)
+            script.rename(root / "b.py")
+            self.assertNotEqual(updater.codex_content_version(root), first)
+
+
 class McpCatalogTierTest(unittest.TestCase):
     def test_adds_full_tier_without_dropping_existing_query(self) -> None:
         self.assertEqual(
@@ -62,10 +96,31 @@ class WriteTextIfChangedTest(unittest.TestCase):
                     "--skip-grok-cli-install",
                 ])
             self.assertEqual(code, 0)
+            managed_manifest = json.loads((Path(tmp) / "plugins/dpf-platform/.codex-plugin/plugin.json").read_text())
+            self.assertEqual(managed_manifest["version"], updater.codex_content_version(skill_pack))
             marketplace = json.loads(
                 (Path(tmp) / ".agents" / "plugins" / "marketplace.json").read_text(),
             )
             self.assertEqual(marketplace["plugins"][0]["name"], "dpf-platform")
+
+    def test_dry_run_leaves_source_manifest_and_home_untouched(self):
+        skill_pack = Path(__file__).resolve().parents[1]
+        manifest = skill_pack / ".codex-plugin/plugin.json"
+        before = manifest.read_bytes()
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}):
+            self.assertEqual(updater.main(["--skill-pack-path", str(skill_pack), "--codex-only", "--dry-run"]), 0)
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+        self.assertEqual(manifest.read_bytes(), before)
+
+    def test_main_fails_when_codex_cache_verification_fails(self):
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch.object(
+            updater, "install_codex_plugin", return_value="failed: Codex plugin cache does not match the delivered skill pack"
+        ):
+            self.assertEqual(updater.main([
+                "--skill-pack-path", str(skill_pack), "--codex-only",
+                "--skip-grok-cli-install", "--skip-antigravity-cli-install",
+            ]), 1)
 
 
 class InstallGrokHooksTest(unittest.TestCase):
@@ -386,10 +441,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
 
             codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text())
             self.assertTrue(codex_config["plugins"]["dpf-platform@personal"]["enabled"])
-            self.assertEqual(
-                codex_config["mcp_servers"]["dpf"]["bearer_token_env_var"],
-                "DPF_MCP_BEARER_TOKEN",
-            )
+            self.assertNotIn("bearer_token_env_var", codex_config["mcp_servers"]["dpf"])
             codex_hooks = json.loads((home / ".codex" / "hooks.json").read_text())
             write_groups = [
                 group for group in codex_hooks["hooks"]["PreToolUse"]
@@ -490,7 +542,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
         self.assertEqual(codex["action"], "disable-plugin")
 
     def test_installs_and_verifies_through_codex_registry(self) -> None:
-        add_result = unittest.mock.Mock(returncode=0, stdout='{"installed":true}', stderr="")
+        add_result = unittest.mock.Mock(returncode=0, stdout='{"installedPath":"/cache/dpf-platform"}', stderr="")
         list_result = unittest.mock.Mock(
             returncode=0,
             stdout=json.dumps(
@@ -508,7 +560,9 @@ class UpdateAgentToolchainTest(unittest.TestCase):
         )
         with patch.object(
             updater, "resolve_codex_binary", return_value="/fake/codex"
-        ), patch("subprocess.run", side_effect=[add_result, list_result]) as run:
+        ), patch("subprocess.run", side_effect=[add_result, list_result]) as run, patch.object(
+            Path, "is_dir", return_value=True
+        ), patch.object(updater, "codex_content_version", return_value="0.2.5+codex.match"):
             status = updater.install_codex_plugin(Path("/operator-home"), dry_run=False)
 
         self.assertEqual(status, "installed, enabled, and verified")
@@ -536,6 +590,16 @@ class UpdateAgentToolchainTest(unittest.TestCase):
         ), patch("subprocess.run", side_effect=[add_result, list_result]):
             status = updater.install_codex_plugin(Path("/operator-home"), dry_run=False)
         self.assertIn("failed", status)
+
+    def test_refuses_stale_cache_even_when_codex_reports_install_success(self):
+        result = unittest.mock.Mock(returncode=0, stdout='{"installedPath":"/cache/dpf-platform"}')
+        with patch.object(updater, "resolve_codex_binary", return_value="/fake/codex"), patch(
+            "subprocess.run", return_value=result
+        ), patch.object(Path, "is_dir", return_value=True), patch.object(
+            updater, "codex_content_version", side_effect=["0.2.5+codex.old", "0.2.5+codex.new"]
+        ):
+            status = updater.install_codex_plugin(Path("/operator-home"), dry_run=False)
+        self.assertIn("cache does not match", status)
 
     def test_migrates_bare_codex_plugin_table_to_registry_qualified_key(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
@@ -668,10 +732,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
 
             codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text())
             self.assertTrue(codex_config["plugins"]["dpf-platform@personal"]["enabled"])
-            self.assertEqual(
-                codex_config["mcp_servers"]["dpf"]["bearer_token_env_var"],
-                "DPF_MCP_BEARER_TOKEN",
-            )
+            self.assertNotIn("bearer_token_env_var", codex_config["mcp_servers"]["dpf"])
 
 
 class GrokInstallTest(unittest.TestCase):
@@ -1163,6 +1224,88 @@ class ProbeGrokExposedSkillsTest(unittest.TestCase):
             self.assertEqual(code, 0)
             mock_probe.assert_not_called()
 
+
+class ClaudeMcpConfigSchemeAwarenessTest(unittest.TestCase):
+    """The bearer header and OAuth are mutually exclusive; the scheme decides.
+
+    BI-FA2C46D7, mirroring mcpClientBearerHeaderRequired() in
+    packages/integration-shared/src/mcp-client-credential-policy.ts (BI-46B636B0).
+
+    Both directions are pinned deliberately. Dropping the header on http strands
+    the install with no credential at all - that is what PR #5416 did. Keeping it
+    on https disables the OAuth fallback and silently prevents the self-renewing
+    path from engaging. Neither failure announces itself at write time, so the
+    test is the thing that catches them.
+    """
+
+    def _write(self, url: str) -> dict:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            updater.ensure_claude_repo_mcp_config(pack, url, dry_run=False)
+            return json.loads((pack / "claude.mcp.json").read_text())
+
+    def test_http_endpoint_keeps_the_bearer_header(self) -> None:
+        server = self._write("http://127.0.0.1:3000/api/mcp/v1")["mcpServers"]["dpf"]
+        self.assertIn("headers", server, "http has no OAuth path; the header is the only credential")
+        self.assertEqual(
+            server["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN:-}"
+        )
+        self.assertNotIn("oauth", server, "OAuth never runs over http; a pin there is noise")
+
+    def test_https_endpoint_drops_the_bearer_header(self) -> None:
+        server = self._write("https://localhost:3000/api/mcp/v1")["mcpServers"]["dpf"]
+        self.assertNotIn("headers", server, "a pinned header disables the client's OAuth fallback")
+        # BI-3D2FD68C: without the pin the consent grants only the advertised
+        # read scope, so the OAuth path would be read-only for good.
+        self.assertEqual(server["oauth"], {"scopes": "dpf.read dpf.work dpf.build"})
+        self.assertEqual(server["oauth"]["scopes"], updater.MCP_CLIENT_OAUTH_SCOPE_PIN)
+
+    def test_unparseable_endpoint_fails_safe_by_keeping_the_header(self) -> None:
+        self.assertTrue(updater.mcp_client_bearer_header_required("not a url"))
+
+    def test_predicate_matches_the_typescript_rule(self) -> None:
+        for endpoint, required in [
+            ("https://localhost:3000/api/mcp/v1", False),
+            ("http://127.0.0.1:3000/api/mcp/v1", True),
+            ("http://localhost:3000/api/mcp/v1", True),
+        ]:
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(updater.mcp_client_bearer_header_required(endpoint), required)
+
+    def test_checked_in_descriptor_matches_the_generator(self) -> None:
+        """An edit to the JSON alone is reverted by the next bootstrap run."""
+        repo_descriptor = Path(__file__).resolve().parents[1] / "claude.mcp.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            updater.ensure_claude_repo_mcp_config(
+                pack, "http://127.0.0.1:3000/api/mcp/v1", dry_run=False
+            )
+            generated = (pack / "claude.mcp.json").read_text()
+        self.assertEqual(generated, repo_descriptor.read_text())
+
+
+
+
+class OAuthDefaultTest(unittest.TestCase):
+    def test_policy_agrees_with_shared_fixtures(self):
+        cases = json.loads(Path(__file__).with_name("mcp-credential-policy-cases.json").read_text())
+        for case in cases:
+            with self.subTest(case=case):
+                self.assertEqual(updater.mcp_client_bearer_header_required(case["endpoint"], case["client"], case["mode"]), case["required"])
+
+    def test_codex_updater_preserves_oauth_and_user_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            path.write_text('[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\nbearer_token_env_var="DPF_MCP_BEARER_TOKEN"\nstartup_timeout_sec=45\n[mcp_servers.other]\nurl="https://other.example/mcp"\n')
+            updater.ensure_codex_config(home, "http://127.0.0.1:3000/api/mcp/v1", False)
+            first = path.read_text()
+            self.assertNotIn("bearer_token_env_var", first)
+            self.assertIn("startup_timeout_sec=45", first)
+            self.assertIn("https://other.example/mcp", first)
+            updater.ensure_codex_config(home, "http://127.0.0.1:3000/api/mcp/v1", False)
+            self.assertEqual(first, path.read_text())
 
 if __name__ == "__main__":
     unittest.main()

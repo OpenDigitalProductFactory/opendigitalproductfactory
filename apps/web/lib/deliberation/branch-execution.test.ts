@@ -88,3 +88,41 @@ describe("buildBranchTurn", () => {
     expect(turn.systemPrompt).toContain("debater");
   });
 });
+
+describe("parseBranchPosition — caller-supplied JSON contracts", () => {
+  const envelope = [
+    "```json",
+    '{"recommendedAction":"adopt_option","draft":{"optionId":"defer"},',
+    '"summary":"The owner is asked to keep this as engineering hygiene."}',
+    "```",
+  ].join("\n");
+
+  it("keeps a fenced JSON envelope whole instead of taking the fence line", () => {
+    // Regression: the first-line fallback returned "```json" as the panel's
+    // verdict, which the caller's parser could not read.
+    const p = parseBranchPosition(envelope);
+    expect(p.recommendation).not.toBe("```json");
+    expect(p.recommendation).toContain("recommendedAction");
+    expect(() => JSON.parse(p.recommendation!)).not.toThrow();
+  });
+
+  it("surfaces the envelope's summary as the rationale", () => {
+    expect(parseBranchPosition(envelope).rationale).toContain("engineering hygiene");
+  });
+
+  it("handles an unfenced JSON object", () => {
+    const p = parseBranchPosition('{"recommendedAction":"no_change"}');
+    expect(p.recommendation).toContain("no_change");
+  });
+
+  it("keeps unparseable JSON whole rather than shredding it", () => {
+    const p = parseBranchPosition('```json\n{"recommendedAction": "adopt_o\n```');
+    expect(p.recommendation).toContain("recommendedAction");
+    expect(p.rationale).toBeNull();
+  });
+
+  it("still prefers the line contract when the model uses it", () => {
+    const p = parseBranchPosition("RECOMMENDATION: fund now\nRATIONALE: because.");
+    expect(p.recommendation).toBe("fund now");
+  });
+});

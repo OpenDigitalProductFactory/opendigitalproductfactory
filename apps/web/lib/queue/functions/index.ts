@@ -6,6 +6,9 @@ import { rateRecovery } from "./rate-recovery";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
+import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
+import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
+import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
 import { backlogTriageDrain } from "./backlog-triage-drain";
@@ -15,6 +18,7 @@ import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { materialFreshnessDecay } from "./material-freshness-decay";
+import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
 import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
@@ -98,6 +102,7 @@ import {
   identityInferenceFallbackRequested,
 } from "./identity-inference-fallback";
 import { canonicalImprovementDigest } from "./canonical-improvement-digest";
+import { localOnlyKnowledgeSweep } from "./local-only-knowledge-sweep";
 import {
   coworkerCertificationNightly,
   coworkerCertificationRunNow,
@@ -133,6 +138,7 @@ import {
 } from "./data-control-operation";
 import { indexIntegritySweep } from "./index-integrity-sweep";
 import { localModelInstall } from "./local-model-install";
+import { providerCatalogRefresh } from "./provider-catalog-refresh";
 import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
 import {
   mcpTaskRunDispatchReconciliation,
@@ -155,6 +161,9 @@ export const scheduledFunctions = [
   infraPrune,
   codeGraphReconcileScheduled,
   issueReportTriage,
+  ecosystemInboundTriage,
+  ecosystemSubmissionSweep,
+  ecosystemWatchdog,
   backlogTriageDrain,
   coworkerRegressionDetect,
   agentTaskDispatch,
@@ -176,6 +185,7 @@ export const scheduledFunctions = [
   workPatternProfileReview,
   researchScheduleScan,
   materialFreshnessDecay,
+  prSubmitAwaitingAcceptanceReconcile,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
@@ -209,6 +219,7 @@ export const scheduledFunctions = [
   obligationAssuranceWatchScheduled, // TAK §8.11: deadline-horizon sweep over recorded obligations, control reviews, and licence expiries, daily 05:40
   workroomDriveScheduled, // BI-FCD639D9: standing Workroom drive — wake, lease, dispatch, attention, stop, every 15m
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
+  localOnlyKnowledgeSweep, // BI-1281A164: weekly report of findings captured here and never routed to a commons lane
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
   demandReconciliationScheduled, // BI-44AA45BF: trusted-link demand projection, retry, and reconciliation every five minutes
@@ -226,6 +237,7 @@ export const eventFunctions = [
   pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
   localModelInstall,
+  providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
   mcpCatalogSync,
   codeGraphReconcileEvent,

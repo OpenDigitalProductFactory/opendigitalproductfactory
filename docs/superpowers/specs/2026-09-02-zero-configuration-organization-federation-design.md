@@ -212,3 +212,28 @@ platform does itself.
    drain and swaps.
 6. (Slice 2) Two installs holding the same organization root pair and reach
    `trusted` on both sides without a person.
+
+## 8. Objectives and acceptance
+
+The decision in §1, the invariants in §4 and the criteria in §7 already state
+all of this in prose. This section restates them as an identified manifest so
+the delivered slices carry a machine-readable scope baseline; it adds no new
+scope.
+
+1. **OBJ-NO-CONFIGURABLE-SEAM:** Membership is the only switch. No flag,
+   approval click, stale-able token or "upgrade the other box" page stands
+   between two installations of one organization.
+2. **OBJ-DURABLE-IDENTITY:** An installation's identity and peer ledger survive
+   teardown and reinstall, so a peer's trust never rots.
+3. **OBJ-ONE-LINK-PER-PEER:** Exactly one non-revoked same-organization link
+   exists per peer, with older ones revoked and pointing at their successor.
+4. **OBJ-UNATTENDED-UPGRADE:** A scheduled self-upgrade on an install with only
+   soft activity drains and swaps rather than skipping.
+
+| Criterion | Objectives | Statement |
+| --- | --- | --- |
+| AC-STATE-DIR-REINSTALL | OBJ-DURABLE-IDENTITY | Tearing down and reinstalling a member that keeps `DPF_STATE_DIR` leaves the peer's link working with no action on either side. |
+| AC-LEDGER-ABSORBED | OBJ-DURABLE-IDENTITY | A fresh database on a member absorbs the ledger at boot, shows the same trusted links, and the peer's next work-sync pull succeeds. |
+| AC-LINK-COLLAPSE | OBJ-ONE-LINK-PER-PEER | Three trusted links to one peer collapse to one at the next tick, the two older ones revoked `superseded-by:` the newest. |
+| AC-NO-EXCHANGE-FLAG | OBJ-NO-CONFIGURABLE-SEAM | No route, action or job reads `DPF_FEDERATION_EXCHANGE_ENABLED`. |
+| AC-SOFT-ACTIVITY-DRAINS | OBJ-UNATTENDED-UPGRADE | A scheduled self-upgrade on an install with only soft activity proceeds to drain and swaps. |

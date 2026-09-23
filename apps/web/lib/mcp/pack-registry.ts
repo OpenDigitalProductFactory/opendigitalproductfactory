@@ -97,6 +97,7 @@ import { buildVisibilityPack } from "./packs/build-visibility-pack";
 import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 import { changeReviewPack } from "./packs/change-review-pack";
 import { principleDecidePack } from "./packs/principle-decide-pack";
+import { decisionOutcomePack } from "./packs/decision-outcome-pack";
 import { decisionReverifyPack } from "./packs/decision-reverify-pack";
 import { productOutcomesPack } from "./packs/product-outcomes-pack";
 import { initiativeReadinessPack } from "./packs/initiative-readiness-pack";
@@ -199,6 +200,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   buildEvidenceExtraPack,
   changeReviewPack,
   principleDecidePack,
+  decisionOutcomePack,
   decisionReverifyPack,
   productOutcomesPack,
   initiativeReadinessPack,

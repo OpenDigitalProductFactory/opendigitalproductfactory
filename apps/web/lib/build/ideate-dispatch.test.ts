@@ -1,8 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   buildResearchPrompt,
+  buildIdeateRunnerScript,
   deriveSearchTerms,
   runLocalIdeateWithRetry,
+  IDEATE_SOURCE_DIR,
+  IDEATE_WORKING_DIR,
   LOCAL_IDEATE_MAX_ATTEMPTS,
 } from "./ideate-dispatch";
 
@@ -164,5 +167,55 @@ describe("buildResearchPrompt", () => {
     expect(prompt).toContain('"targetRoles"');
     expect(prompt).toContain("INTERNAL platform/meta-feature");
     expect(prompt).toMatch(/never 'customer'/i);
+  });
+});
+
+describe("buildIdeateRunnerScript — where research runs, and what it can read", () => {
+  it("does NOT run claude from the repository root", () => {
+    // Running FROM /workspace makes claude treat the repo as its project: it
+    // walks up from cwd and loads CLAUDE.md (which imports the whole AGENTS.md
+    // rulebook), settings and hooks. That turned a single-shot "return a design
+    // document" call into a continuing agentic session whose reply was session
+    // meta-commentary — which is what "Could not parse design document from
+    // research output" actually was.
+    const script = buildIdeateRunnerScript("claude", { model: "sonnet" });
+    expect(script).not.toMatch(/^cd \/workspace$/m);
+    expect(script).toContain(`cd ${IDEATE_WORKING_DIR}`);
+  });
+
+  it("still gives claude the repository, as an allowed directory rather than a project root", () => {
+    // The neutral cwd must not cost it source access — the prompt asks it to
+    // read real code. --add-dir grants the tools that directory without making
+    // it the project.
+    const script = buildIdeateRunnerScript("claude", { model: "sonnet" });
+    expect(script).toContain(`--add-dir ${IDEATE_SOURCE_DIR}`);
+  });
+
+  it("creates the neutral directory before entering it", () => {
+    const script = buildIdeateRunnerScript("claude", {});
+    expect(script.indexOf(`mkdir -p ${IDEATE_WORKING_DIR}`)).toBeLessThan(
+      script.indexOf(`cd ${IDEATE_WORKING_DIR}`),
+    );
+  });
+
+  it("preserves the auth-mode flag from ensureClaudeAuth", () => {
+    // Regression guard for the extraction: dropping bareFlag would silently
+    // change how the CLI authenticates.
+    expect(buildIdeateRunnerScript("claude", { claudeBareFlag: "--bare " })).toContain("claude --bare -p -");
+    expect(buildIdeateRunnerScript("claude", {})).toContain("claude -p -");
+  });
+
+  it("omits the model flag when no model is pinned", () => {
+    expect(buildIdeateRunnerScript("claude", { model: null })).not.toContain("--model");
+    expect(buildIdeateRunnerScript("claude", { model: "sonnet" })).toContain("--model sonnet");
+  });
+
+  it("leaves grok and codex on the repository root, which is NOT yet proven safe", () => {
+    // Deliberate: both plausibly have the same exposure (codex reads AGENTS.md
+    // natively), but neither was measured, and changing a dispatch path blind is
+    // how you trade one silent failure for another. This test records the
+    // current state honestly rather than asserting it is correct.
+    expect(buildIdeateRunnerScript("grok", {})).toContain(`cd ${IDEATE_SOURCE_DIR}`);
+    expect(buildIdeateRunnerScript("codex", {})).toContain(`cd ${IDEATE_SOURCE_DIR}`);
   });
 });

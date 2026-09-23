@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "decidedOption": "extend-existing-rescue-care-route-with-rounds-follow-ups-and-routine-setup",
+  "decisionInteractionId": "DI-F289DBB51DCB",
+  "scope": {
+    "files": [
+      "apps/web/components/animal-welfare/DailyCareOperations.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-F289DBB51DCB",
+    "consideredOptions": [
+      "extend-existing-rescue-care-route-with-rounds-follow-ups-and-routine-setup",
+      "create-separate-care-scheduler-route-with-calendar",
+      "keep-care-read-only-and-record-rounds-through-coworker-chat"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. /workspace/rescue/care stays the single daily-care home. Today's rounds, welfare follow-ups and routine setup are added to that page as three surfaces in priority order; no new route, calendar, navigation layer or task engine is introduced.",
+    "persona": "A volunteer on the morning rota opens one list and records what happened to each animal; a shelter manager sees the follow-ups that need a person and sets up routines when an animal's care changes.",
+    "reuse": "The existing RescueCockpit shell, Surface, StatusBadge and shared form primitives are extended. Rounds are materialised by the existing recurrence expander; completion and exceptions use the append-only WorkEngagementActivity timeline; escalations are ordinary urgent WorkEngagements the cockpit already counts.",
+    "sourceTruth": "WorkEngagement (subject animal-profile) owns each round and each follow-up; RecurrenceSchedule owns the routine; WorkEngagementActivity owns what happened. Overdue and missed medication are computed from dueAt and status, never stored.",
+    "states": "No animals disables routine setup and says so. No rounds explains that a routine creates tomorrow's list. Overdue and Medication overdue are badges with text, never color alone. An exception outcome requires an observation before it can be saved. Shared FormStatus exposes pending, success, validation, permission and already-recorded outcomes; every control is at least 44px high.",
+    "aiBoundary": "No control sends a coworker prompt. Escalations are raised for a person and resolved only by a person with a note; no coworker makes a treatment decision.",
+    "verification": "Focused daily-care command, board and component tests plus web typecheck passed. Browser verification on the governed contributor preview is recorded in the PR body; if the preview could not be leased the PR says so and the UX check is reported as unrun, not passed."
+  }
+}

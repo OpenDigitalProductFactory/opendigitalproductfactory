@@ -119,21 +119,18 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
     stopConditions: [
       {
         kind: "success",
-        condition: "The period is closed by the owner with a reconciliation and an Outcome Packet.",
-      },
+        condition: "The period is closed by the owner with a reconciliation and an Outcome Packet.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "A required statement cannot be read. The cycle stops and reports the gap rather than "
           + "reconciling against inferred rows — the config's 'never fabricate a transaction' rule "
-          + "is a stop condition, not advice.",
-      },
+          + "is a stop condition, not advice.", disposition: "inconclusive" },
       {
         kind: "budget",
         condition:
           "More than 500 unmatched exceptions in one period — the cycle stops and escalates rather "
-          + "than handing the owner a review nobody can finish.",
-      },
+          + "than handing the owner a review nobody can finish.", disposition: "awaiting-person" },
     ],
     grants: ["tool:banking_read", "tool:banking_write", "tool:document_read", "tool:enrichment_write", "tool:crm_read"],
     measures: [
@@ -210,14 +207,13 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The published policy matches applied practice, or every remaining divergence is one a human declined to change." },
+      { kind: "success", condition: "The published policy matches applied practice, or every remaining divergence is one a human declined to change.", disposition: "proceed" },
       {
         kind: "failure",
         condition:
           "The applicable jurisdiction cannot be established. The cycle stops rather than drafting "
-          + "leave rules against the wrong statute.",
-      },
-      { kind: "budget", condition: "More than 25 divergences in one cycle — stop and escalate; that is a policy rewrite, not a currency check." },
+          + "leave rules against the wrong statute.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 25 divergences in one cycle — stop and escalate; that is a policy rewrite, not a currency check.", disposition: "awaiting-person" },
     ],
     grants: ["tool:policy_read", "tool:policy_write", "tool:consumer_read", "tool:registry_read"],
     measures: [
@@ -232,5 +228,185 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
         + "than a quarter stale is a policy the org cannot rely on.",
     },
     collaborationShape: "approval-sign-off",
+  },
+
+  // ── SOC Incident Commander (AGT-SOC-IR-LEAD) ──────────────────────────────
+  //
+  // Distinct from security-alert-triage-ladder, which is TRIAGE: a detection is
+  // enriched, given a verdict, and escalated. This is COMMAND, which begins
+  // where triage ends — once something is an incident rather than an alert.
+  //
+  // Grants: siem_read, siem_investigate, incident_respond, registry_read. The
+  // response grant does NOT make response unilateral. The triage ladder already
+  // fixes the constraint this must honour: "The commander drafts; the customer
+  // authorizes. The MSP never gains standing execute rights on the customer's
+  // estate." So containment is proposed here and authorized by the customer on
+  // their own Attention Surface, exactly as it is one ladder over.
+  "security-incident-command": {
+    key: "security-incident-command",
+    version: "1.0.0",
+    title: "Security incident command",
+    description:
+      "Runs a declared incident from declaration to stand-down: scope is established, containment "
+      + "and remediation are PROPOSED to the customer, and the incident is closed with a record of "
+      + "what was authorized and what was not. The commander never executes on the customer's estate.",
+    triggers: ["escalation", "claim"],
+    stages: [
+      {
+        key: "declare",
+        title: "Declare the incident and its severity",
+        accountablePrincipalRef: "agent:soc-incident-commander",
+        advance: {
+          kind: "status-change",
+          condition:
+            "The incident is declared with a severity, a stated scope, and the detections that "
+            + "support it. An incident nobody can trace to evidence is a suspicion, not an incident.",
+        },
+        evidence: ["security-case-timeline"],
+      },
+      {
+        key: "scope",
+        title: "Establish blast radius and hold it current",
+        accountablePrincipalRef: "agent:soc-incident-commander",
+        advance: {
+          kind: "status-change",
+          condition:
+            "Affected assets, identities and data are named, or the limit of what can be determined "
+            + "is named. A scope that stops being updated is reported as stale rather than trusted.",
+        },
+        evidence: ["security-case-timeline"],
+      },
+      {
+        key: "authorize-containment",
+        title: "Authorize containment and remediation",
+        // The estate belongs to the customer. incident_respond lets the
+        // commander PREPARE the action; the customer decides whether it runs.
+        accountablePrincipalRef: "role:security-owner",
+        advance: {
+          kind: "governed-decision",
+          condition:
+            "The customer approves, amends or rejects each proposed containment and remediation "
+            + "action on their own Attention Surface. Execution happens on their runner.",
+          decisionScope: "security-response-authorization",
+        },
+        evidence: ["decision-record"],
+      },
+      {
+        key: "stand-down",
+        title: "Close the incident",
+        accountablePrincipalRef: "role:security-owner",
+        advance: {
+          kind: "governed-decision",
+          condition:
+            "The customer closes the incident against a record of what was authorized, what was "
+            + "declined, and what remains open. An incident closed by the responder is not closed.",
+          decisionScope: "security-incident-closure",
+        },
+        evidence: ["decision-record", "outcome-packet"],
+      },
+    ],
+    stopConditions: [
+      { kind: "success", condition: "The incident is closed by the customer with an authorization record and named residual risk.", disposition: "proceed" },
+      {
+        kind: "failure",
+        condition:
+          "Telemetry or asset context cannot be read. Command stops and reports rather than "
+          + "declaring a scope from an empty read — an unfounded blast radius is worse than none.", disposition: "inconclusive" },
+      {
+        kind: "budget",
+        condition:
+          "More than 40 proposed response actions in one incident — stop and escalate; that is a "
+          + "programme of work, not an incident response the customer can review.", disposition: "awaiting-person" },
+    ],
+    grants: ["tool:siem_read", "tool:siem_investigate", "tool:incident_respond", "tool:registry_read"],
+    measures: [
+      { key: "time-to-containment-authorized", description: "Hours from declaration to the first authorized containment action." },
+      { key: "actions-declined", description: "Proposed actions the customer declined — a proxy for whether proposals are well-judged." },
+    ],
+    budgets: [{ kind: "findings-per-run", limit: 40, unit: "actions" }],
+    reviewPoint: {
+      everyDays: 30,
+      description:
+        "Monthly, whether or not an incident ran. A command shape exercised rarely is the one most "
+        + "likely to have drifted from the estate it assumes.",
+    },
+    collaborationShape: "escalation",
+  },
+
+  // ── Farm & Ranch Steward (AGT-WS-FARM-RANCH) ──────────────────────────────
+  //
+  // Grants: registry_read, backlog_read, backlog_write, consumer_read,
+  // web_search, file_read. It can FILE work and read widely; it holds no
+  // operational write on the business. So the shape is observe → file → the
+  // operator decides what actually gets done on the ground.
+  "seasonal-operations-watch": {
+    key: "seasonal-operations-watch",
+    version: "1.0.0",
+    title: "Seasonal operations watch",
+    description:
+      "Watches the operating calendar and external conditions a land-based business runs against, "
+      + "and files what needs attention. It decides nothing about the ground: the operator does.",
+    triggers: ["cadence", "deadline-horizon"],
+    stages: [
+      {
+        key: "observe",
+        title: "Read the season and the conditions",
+        accountablePrincipalRef: "agent:farm-ranch-steward",
+        advance: {
+          kind: "status-change",
+          condition:
+            "Upcoming seasonal obligations and the external conditions bearing on them are read and "
+            + "cited. An unsourced condition is dropped, not softened.",
+        },
+        evidence: ["assurance-run"],
+      },
+      {
+        key: "file",
+        title: "File what needs attention",
+        accountablePrincipalRef: "agent:farm-ranch-steward",
+        advance: {
+          kind: "status-change",
+          condition:
+            "Each item that needs a human is filed with what was observed and why it matters now. "
+            + "Filing is the ceiling of this stage — nothing is scheduled or committed.",
+        },
+        evidence: ["backlog-items"],
+      },
+      {
+        key: "decide",
+        title: "Decide what happens on the ground",
+        accountablePrincipalRef: "role:operations-owner",
+        advance: {
+          kind: "governed-decision",
+          condition:
+            "The operator decides what is done, deferred, or accepted. Work on land, livestock or "
+            + "crop is theirs to commit; the steward never commits it.",
+          decisionScope: "seasonal-operations-response",
+        },
+        evidence: ["decision-record"],
+      },
+    ],
+    stopConditions: [
+      { kind: "success", condition: "Every filed item has an operator decision against it.", disposition: "proceed" },
+      {
+        kind: "failure",
+        condition:
+          "The operating calendar cannot be read. The watch stops and says so rather than inferring "
+          + "a season from the date — the wrong hemisphere is a plausible-looking answer.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 30 filed items in one cycle — stop and escalate rather than burying the operator.", disposition: "awaiting-person" },
+    ],
+    grants: ["tool:registry_read", "tool:backlog_read", "tool:backlog_write", "tool:consumer_read", "tool:web_search", "tool:file_read"],
+    measures: [
+      { key: "items-acted-on", description: "Filed items the operator acted on rather than dismissed." },
+      { key: "lead-time", description: "Days of notice given before a seasonal obligation fell due." },
+    ],
+    budgets: [{ kind: "findings-per-run", limit: 30, unit: "items" }],
+    reviewPoint: {
+      everyDays: 90,
+      description:
+        "Quarterly — which for this role is also roughly seasonal, so each review sees a different "
+        + "part of the calendar it is meant to cover.",
+    },
+    collaborationShape: "specialist-alignment",
   },
 };

@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { isCurrentOAuthAccessToken } from "@/lib/auth/oauth-tokens";
 import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
 import type { UserContext } from "@/lib/permissions";
 import {
@@ -119,8 +120,9 @@ export async function resumeRemoteCoworkerTaskById(
     !tokenId
     // Event recovery cannot revalidate a five-minute session JWT because the
     // bearer is intentionally not persisted. A fresh authenticated caller can
-    // still perform an exact replay; the event seam remains PAT-only.
-    || tokenSource !== "pat"
+    // still perform an exact replay. Persisted OAuth access tokens, like PATs,
+    // can be revalidated from their original row and client below.
+    || (tokenSource !== "pat" && tokenSource !== "oauth")
     || (tokenCapability !== "read" && tokenCapability !== "write")
     || !requestedAgentId
     || !existing.routeContext
@@ -162,13 +164,15 @@ export async function resumeRemoteCoworkerTaskById(
 
   const storedToken = await prisma.mcpApiToken.findUnique({
     where: { id: tokenId },
-    select: { userId: true, capability: true, revokedAt: true, expiresAt: true },
+    select: { userId: true, capability: true, revokedAt: true, expiresAt: true, kind: true,
+      oauthClient: { select: { revokedAt: true } } },
   });
   if (
     !storedToken
     || storedToken.userId !== existing.userId
     || storedToken.capability !== tokenCapability
     || storedToken.revokedAt !== null
+    || (tokenSource === "oauth" && !isCurrentOAuthAccessToken(storedToken))
     || (storedToken.expiresAt !== null && storedToken.expiresAt <= new Date())
   ) {
     return refusal(taskRunId, "The original MCP token authority is no longer valid.");

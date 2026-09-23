@@ -1,6 +1,8 @@
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
+import { loadPirEvidenceContext } from "./pir-evidence-context";
 import { prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
+import type { RequestContract } from "@/lib/routing/request-contract";
 import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import {
@@ -96,15 +98,35 @@ export async function executeRemoteTaskAttempt(input: {
   });
   const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
   const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
-  const routingConfig = await prisma.agentModelConfig?.findUnique({
-    where: { agentId: modelRoutingAgentId },
-    select: {
-      minimumTier: true,
-      budgetClass: true,
-      pinnedProviderId: true,
-      pinnedModelId: true,
-    },
-  }).catch(() => null) ?? null;
+  const requestedAgentId = parsed.agentId;
+  const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
+  let routingConfig: {
+    minimumTier: string;
+    budgetClass: string;
+    pinnedProviderId: string | null;
+    pinnedModelId: string | null;
+    residencyPolicy: string | null;
+  } | null = null;
+  // An explicit alias is itself an operator-selectable coworker identity, so
+  // its assignment wins. A canonical request keeps the established resolved
+  // slug first because the coworker management surface stores assignments by
+  // slug. Grants and audit remain canonical in both cases.
+  const configAgentIds = requestedAgentId === requestedCanonicalAgentId
+    ? [modelRoutingAgentId, requestedAgentId]
+    : [requestedAgentId, modelRoutingAgentId];
+  for (const configAgentId of new Set(configAgentIds)) {
+    routingConfig = await prisma.agentModelConfig?.findUnique({
+      where: { agentId: configAgentId },
+      select: {
+        minimumTier: true,
+        budgetClass: true,
+        pinnedProviderId: true,
+        pinnedModelId: true,
+        residencyPolicy: true,
+      },
+    }).catch(() => null) ?? null;
+    if (routingConfig) break;
+  }
   const modelRequirements = routingConfig
     ? {
         defaultMinimumTier: routingConfig.minimumTier,
@@ -115,8 +137,16 @@ export async function executeRemoteTaskAttempt(input: {
         ...(routingConfig.pinnedModelId
           ? { preferredModelId: routingConfig.pinnedModelId }
           : {}),
-        ...(routingConfig.pinnedProviderId === "local"
-          ? { residencyPolicy: "local_only" as const }
+        // BI-8CFA1CA8: residency is read as the stated policy it is. This used
+        // to be inferred from `pinnedProviderId === "local"`, which let a
+        // routing preference silently set — or silently clear — a data
+        // guarantee. The migration wrote the policy explicitly for every
+        // config that was local-pinned, so behaviour is unchanged.
+        ...(routingConfig.residencyPolicy
+          ? {
+              residencyPolicy:
+                routingConfig.residencyPolicy as RequestContract["residencyPolicy"],
+            }
           : {}),
       }
     : null;
@@ -163,7 +193,7 @@ export async function executeRemoteTaskAttempt(input: {
       ? { resumedFromTerminalWriterWait: true }
       : { resumedFromCapacity: true };
   const conversation = remoteTaskConversation({
-    systemPrompt: agent.systemPrompt,
+    systemPrompt: `${agent.systemPrompt}\n${await loadPirEvidenceContext(prisma, parsed.initiativeReviewBinding)}`,
     prompt: parsed.prompt,
     resumeKind: input.resumeKind,
     terminalWriterContext: input.terminalWriterContext,

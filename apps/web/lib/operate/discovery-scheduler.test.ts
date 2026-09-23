@@ -23,7 +23,7 @@ vi.mock("@/lib/hive/contribute-fingerprint", () => ({
 }));
 
 // Must import after mock setup
-import { runPrometheusTargetCheck, runFullDiscoverySweep, registerScheduledJobs, recordJobRun } from "./discovery-scheduler";
+import { runPrometheusTargetCheck, runFullDiscoverySweep, registerScheduledJobs, recordJobRun, MANAGED_JOB_IDS } from "./discovery-scheduler";
 import { registerModelDiscoveryJob } from "../inference/model-discovery-scheduler";
 import { registerCodeGraphScheduledJob } from "../build/code-graph-refresh";
 
@@ -34,7 +34,10 @@ describe("registerScheduledJobs", () => {
     upsert.mockClear();
 
     await registerScheduledJobs();
-    expect(upsert).toHaveBeenCalledTimes(4);
+    // Derived, not a literal: every managed job must be upserted, and adding one
+    // should not require editing a number here to stay honest.
+    expect(upsert).toHaveBeenCalledTimes(MANAGED_JOB_IDS.length);
+    expect(upsert.mock.calls.map((c) => c[0].where.jobId).sort()).toEqual([...MANAGED_JOB_IDS].sort());
     expect(registerModelDiscoveryJob).toHaveBeenCalledTimes(1);
     expect(registerCodeGraphScheduledJob).toHaveBeenCalledTimes(1);
   });
