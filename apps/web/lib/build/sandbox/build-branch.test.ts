@@ -294,6 +294,21 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     expect(recreateBranch).toContain("git worktree add --force");
   });
 
+  // A directory git no longer recognises (the .git/worktrees registry was lost)
+  // must be cleared before `worktree add`, or the recreate fails twice over:
+  // "is not a working tree" then "already exists". Only the recreate path may
+  // clear it, and only when git disowns it.
+  it("clears an orphaned build directory git does not recognise before recreating the worktree", () => {
+    const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
+    const recreateBranch = cmd.slice(cmd.indexOf("; else "));
+    const clear = "git -C /workspace/.builds/FB-ABCD1234 rev-parse --git-dir >/dev/null 2>&1 || rm -rf /workspace/.builds/FB-ABCD1234";
+    expect(recreateBranch).toContain(`if [ -d /workspace/.builds/FB-ABCD1234 ]; then ${clear}; fi`);
+    expect(recreateBranch.indexOf("worktree remove --force")).toBeLessThan(recreateBranch.indexOf("rm -rf"));
+    expect(recreateBranch.indexOf("rm -rf")).toBeLessThan(recreateBranch.indexOf("git worktree add --force"));
+    const reuseBranch = cmd.slice(cmd.indexOf("; then "), cmd.indexOf("; else "));
+    expect(reuseBranch).not.toContain("rm -rf");
+  });
+
   // BI-82CB5A7D — smoke check so a hooksPath-override regression is caught
   // proactively (`git worktree add` failing again) instead of only surfacing
   // as every subsequent plan→build transition failing at startBuildBranch.

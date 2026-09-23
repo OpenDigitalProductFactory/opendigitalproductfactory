@@ -196,8 +196,17 @@ export function buildSandboxWorktreeAddCommand(
   const symlinks = WORKTREE_SHARED_NODE_MODULES.map(
     (rel) => `ln -sfn ${workspace}/${rel} ${path}/${rel}`,
   ).join(" && ");
+  // An orphaned directory — present on disk but unknown to git because the
+  // registry under .git/worktrees is gone — defeats both halves of the
+  // recreate: `worktree remove` refuses it ("is not a working tree") and
+  // `worktree add` refuses the path ("already exists"). Its contents are the
+  // branch's committed checkout (git cannot commit into a tree it does not
+  // recognise), so clearing it loses nothing the branch does not hold.
+  const clearOrphanedDir =
+    `git -C ${path} rev-parse --git-dir >/dev/null 2>&1 || rm -rf ${path}`;
   const recreate = [
     `git worktree remove --force ${path} 2>/dev/null || true`,
+    `if [ -d ${path} ]; then ${clearOrphanedDir}; fi`,
     `git worktree prune`,
     `git worktree add --force ${path} ${branchRef}`,
     symlinks,
