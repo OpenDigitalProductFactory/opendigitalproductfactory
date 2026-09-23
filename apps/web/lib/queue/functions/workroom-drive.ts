@@ -21,6 +21,7 @@ import {
   jsiSchemePresent,
   resolveCoordinatorEligibility,
 } from "@/lib/work-management/coordinator-eligibility";
+import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import { buildStageBrief, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
 
 import {
@@ -144,7 +145,8 @@ export type WorkroomDriveResult = {
   plans: Array<{ roomId: string; action: string; reason: string; taskId: string | null }>;
 };
 
-const TERMINAL = new Set(["abandoned", "archived", "complete"]);
+// One terminal rule for the drive and the nesting it walks (BI-CFB3FDB7).
+const TERMINAL = TERMINAL_WORKROOM_STATUSES;
 
 /** Max rooms one drive tick will consider. Bounds CANDIDATES, not all rooms. */
 export const STANDING_ROOM_SCAN_LIMIT = 200;

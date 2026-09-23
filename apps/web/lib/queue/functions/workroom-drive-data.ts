@@ -12,7 +12,7 @@ import {
   COORDINATION_SCOPE_TYPE,
 } from "@/lib/work-management/coordinator-eligibility";
 import type { RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
-import { planContainmentRelations } from "@/lib/work-management/standing-room-nesting";
+import { planContainmentRelations, terminalStandingRoomIds } from "@/lib/work-management/standing-room-nesting";
 
 /**
  * Write the declared standing-room tree, returning how many relations were newly
@@ -28,12 +28,30 @@ export async function reconcileStandingRoomNesting(): Promise<number> {
     const { prisma } = await import("@dpf/db");
     const rooms = await prisma.workroom.findMany({
       where: { archivedAt: null, idempotencyKey: { startsWith: "standing-room:" } },
-      select: { id: true, capsuleId: true, idempotencyKey: true },
+      select: { id: true, capsuleId: true, idempotencyKey: true, status: true },
     });
     const byCapsuleId = new Map(rooms.map((room) => [room.capsuleId, room.id]));
-    const plans = planContainmentRelations(
-      rooms.map((room) => ({ capsuleId: room.capsuleId, idempotencyKey: room.idempotencyKey })),
-    );
+    const rows = rooms.map((room) => ({
+      capsuleId: room.capsuleId,
+      idempotencyKey: room.idempotencyKey,
+      status: room.status,
+    }));
+    // Withdraw containment for rooms that have since gone terminal: the rows
+    // were materialized while those rooms were live, and a walk over the tree
+    // must not find a retired duplicate beside its replacement (BI-CFB3FDB7).
+    const retired = terminalStandingRoomIds(rows).flatMap((capsuleId) => {
+      const id = byCapsuleId.get(capsuleId);
+      return id ? [id] : [];
+    });
+    if (retired.length > 0) {
+      await prisma.workroomRelation.deleteMany({
+        where: {
+          relation: "contains",
+          OR: [{ toWorkroomId: { in: retired } }, { fromWorkroomId: { in: retired } }],
+        },
+      });
+    }
+    const plans = planContainmentRelations(rows);
     if (plans.length === 0) return 0;
     const created = await prisma.workroomRelation.createMany({
       data: plans.flatMap((plan) => {
