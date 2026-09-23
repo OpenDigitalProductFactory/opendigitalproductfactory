@@ -323,6 +323,35 @@ describe("completeBacklogItemTransition", () => {
     ]));
   });
 
+  it("reconciles evidence for an already-done item without rewriting its completion timestamp or status history", async () => {
+    const completedAt = new Date("2026-08-22T07:30:00.000Z");
+    const fake = fakeDb(1, "feature", { status: "done", completedAt });
+    const result = await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "done",
+      resolution: "Reconciled governed delivery evidence.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({ kind: "evaluated", item: { id: "row-1", itemId: "BI-1", status: "done", workType: "feature" }, verdict: { allowed: true, noOp: false, normalizedManifest: { workClass: "implementation", evidenceActivityIds: ["E-1"], useActiveBuildEvidence: false }, blockers: [], nextAction: null } }),
+        reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["E-1"], requiredStatementIds: ["OBJ-1"] }),
+        resolveMergeDelivery: async () => "not-merged" as const,
+        projectReadiness: () => projected("allowed"),
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    const update = (fake.updateMany.mock.calls as unknown as Array<[
+      { data: Record<string, unknown> },
+    ]>)[0]?.[0];
+    expect(update.data).not.toHaveProperty("completedAt");
+    expect(fake.creates).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ data: expect.objectContaining({ kind: "status_change" }) }),
+    ]));
+  });
+
   it("BI-B04A0203: a merge through CI + the merge queue satisfies delivery even with a missing manifest", async () => {
     const fake = fakeDb();
     const seen: Array<{ deliveryEvidence: string; requirementReasons?: Record<string, string[]> }> = [];
