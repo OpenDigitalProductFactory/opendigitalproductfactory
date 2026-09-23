@@ -5,7 +5,7 @@
 // file needed the same helpers — duplicating them would have let the two drift.
 import type { EndpointManifest } from "../types";
 import type { RequestContract } from "../request-contract";
-import { EMPTY_CAPABILITIES, EMPTY_PRICING, DEFAULT_DIMENSION_SCORES } from "../model-card-types";
+import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "../model-card-types";
 
 export function makeEndpoint(overrides: Partial<EndpointManifest> = {}): EndpointManifest {
   return {
