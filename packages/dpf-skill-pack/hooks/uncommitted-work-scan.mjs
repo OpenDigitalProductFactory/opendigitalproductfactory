@@ -182,3 +182,36 @@ export function buildUnattributedWarning(losable, opts = {}) {
     `Bypass only when intentional: DPF_SKIP_UNCOMMITTED_WORK_GUARD=1.`
   );
 }
+
+// ── Session baseline and once-per-set (2026-09-23) ───────────────────────────
+//
+// `stop_hook_active` only marks the re-entry pass inside one turn. Every new
+// turn ends with a fresh Stop, so a file that was dirty before the session
+// began — and that the session never touched — was reported again at the end
+// of every turn (50+ times in one session). The guard now remembers what was
+// dirty at SessionStart and what it has already said.
+
+/**
+ * Drop entries that were already dirty at session start and have not changed
+ * since. A path is "unchanged" when its fingerprint matches the baseline.
+ *
+ * @param {Array<{ path: string, xy: string, fingerprint?: string }>} hits
+ * @param {Record<string, string> | null | undefined} baseline path → fingerprint
+ */
+export function subtractBaseline(hits, baseline) {
+  if (!baseline) return hits;
+  return hits.filter((hit) => baseline[hit.path] !== hit.fingerprint);
+}
+
+/**
+ * Stable identity of a warning's content: the same paths in the same state
+ * give the same signature, whatever order git listed them in.
+ *
+ * @param {Array<{ path: string, xy: string, fingerprint?: string }>} hits
+ */
+export function workSignature(hits) {
+  return hits
+    .map((hit) => `${hit.path}\u0000${hit.fingerprint ?? hit.xy}`)
+    .sort()
+    .join("\n");
+}

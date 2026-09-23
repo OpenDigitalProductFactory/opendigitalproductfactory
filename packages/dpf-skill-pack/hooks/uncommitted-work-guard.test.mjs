@@ -168,9 +168,9 @@ function dirtyRepo() {
   return dir;
 }
 
-function runGuard(dir, payload) {
+function runGuard(dir, payload, ...extra) {
   const script = fileURLToPath(new URL("./uncommitted-work-guard.mjs", import.meta.url));
-  return spawnSync(process.execPath, [script, "--repo-root", dir], {
+  return spawnSync(process.execPath, [script, "--repo-root", dir, ...extra], {
     encoding: "utf8",
     input: JSON.stringify(payload),
     env: { ...process.env, CLAUDE_PROJECT_DIR: "", DPF_SKIP_UNCOMMITTED_WORK_GUARD: "" },
@@ -189,5 +189,102 @@ describe("Stop hook re-entry (stop_hook_active)", () => {
     const r = runGuard(dirtyRepo(), { hook_event_name: "Stop", stop_hook_active: true });
     assert.equal(r.status, 0);
     assert.equal(r.stdout, "");
+  });
+});
+
+// ── Session baseline and once-per-set ────────────────────────────────────────
+//
+// 2026-09-23, after #5568: `.mcp.json` was dirty in the shared clone before a
+// session started. The session never touched it — it worked and pushed from
+// its own worktree — yet the guard warned at the end of every turn, 50+ times.
+// `stop_hook_active` resets each turn, so it could not stop that. The guard
+// now snapshots dirty paths at SessionStart and says each distinct set once.
+
+import { appendFileSync } from "node:fs";
+import { subtractBaseline, workSignature } from "./uncommitted-work-scan.mjs";
+
+const stop = (session_id) => ({ hook_event_name: "Stop", stop_hook_active: false, session_id });
+
+describe("session baseline: pre-existing dirt the session never touched", () => {
+  it("never prompts, on any turn, for a file dirty before the session started", () => {
+    const dir = dirtyRepo();
+    assert.equal(runGuard(dir, { hook_event_name: "SessionStart", session_id: "s1" }, "--snapshot").status, 0);
+    for (let turn = 0; turn < 3; turn++) {
+      const r = runGuard(dir, stop("s1"));
+      assert.equal(r.status, 0);
+      assert.equal(r.stdout, "", `turn ${turn} must stay silent`);
+    }
+  });
+
+  it("does report a file the session dirtied after the snapshot", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, { session_id: "s2" }, "--snapshot");
+    writeFileSync(join(dir, "new.txt"), "mine\n");
+    const r = runGuard(dir, stop("s2"));
+    assert.match(r.stdout, /new\.txt/);
+    assert.doesNotMatch(r.stdout, /a\.txt/);
+  });
+
+  it("does report a pre-existing dirty file once the session edits it further", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, { session_id: "s3" }, "--snapshot");
+    appendFileSync(join(dir, "a.txt"), "more from this session\n");
+    assert.match(runGuard(dir, stop("s3")).stdout, /a\.txt/);
+  });
+
+  it("keeps baselines per session: a new session in the same clone is not silenced by another's", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, { session_id: "early" }, "--snapshot");
+    writeFileSync(join(dir, "later.txt"), "x\n");
+    runGuard(dir, { session_id: "late" }, "--snapshot");
+    assert.equal(runGuard(dir, stop("late")).stdout, "");
+    assert.match(runGuard(dir, stop("early")).stdout, /later\.txt/);
+  });
+});
+
+describe("once per distinct set, per session", () => {
+  it("warns on the first turn, not on later turns with the same set", () => {
+    const dir = dirtyRepo(); // no snapshot: session predates the SessionStart wiring
+    assert.match(runGuard(dir, stop("t1")).stdout, /a\.txt/);
+    assert.equal(runGuard(dir, stop("t1")).stdout, "");
+    assert.equal(runGuard(dir, stop("t1")).stdout, "");
+  });
+
+  it("warns again when the set changes", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, stop("t2"));
+    writeFileSync(join(dir, "b.txt"), "b\n");
+    const r = runGuard(dir, stop("t2"));
+    assert.match(r.stdout, /b\.txt/);
+  });
+
+  it("without a session id, behaves as before and warns", () => {
+    const dir = dirtyRepo();
+    assert.match(runGuard(dir, { hook_event_name: "Stop" }).stdout, /a\.txt/);
+    assert.match(runGuard(dir, { hook_event_name: "Stop" }).stdout, /a\.txt/);
+  });
+
+  it("keeps its state out of the working tree", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, { session_id: "t3" }, "--snapshot");
+    runGuard(dir, stop("t3"));
+    const status = spawnSync("git", ["-C", dir, "status", "--porcelain"], { encoding: "utf8" }).stdout;
+    assert.equal(status.trim(), "M a.txt");
+  });
+});
+
+describe("subtractBaseline / workSignature", () => {
+  const hits = [
+    { path: "a", xy: " M", fingerprint: "f1" },
+    { path: "b", xy: "??", fingerprint: "f2" },
+  ];
+  it("drops only paths whose fingerprint is unchanged", () => {
+    assert.deepEqual(subtractBaseline(hits, { a: "f1", b: "old" }).map((h) => h.path), ["b"]);
+  });
+  it("passes everything through with no baseline", () => {
+    assert.equal(subtractBaseline(hits, null).length, 2);
+  });
+  it("is order-independent", () => {
+    assert.equal(workSignature(hits), workSignature([...hits].reverse()));
   });
 });

@@ -100,6 +100,15 @@
     ],
     "SessionStart": [
       {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/uncommitted-work-guard.mjs\" --snapshot",
+            "async": false
+          }
+        ]
+      },
+      {
         "matcher": "*",
         "hooks": [
           {

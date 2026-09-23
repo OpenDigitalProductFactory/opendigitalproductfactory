@@ -118,6 +118,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\" --snapshot",
+            "statusMessage": "Note work that was already uncommitted when the session started"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/process-spine-health-check.mjs\" --hook",
             "statusMessage": "Check required DPF skills are installed and exposed"
           }

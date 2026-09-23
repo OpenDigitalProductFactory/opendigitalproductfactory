@@ -37,12 +37,13 @@ A purpose in this file is not proof that an approval row displays it.
 
 ## SessionStart
 
-- Hook 1: [process-spine-health-check.mjs](process-spine-health-check.mjs) — Check required DPF skills are installed and exposed
-- Hook 2: [governance-freshness-check.mjs](governance-freshness-check.mjs) — Check this checkout has current process guards
-- Hook 3: [worktree-session-hygiene.mjs](worktree-session-hygiene.mjs) — Check worktree location and unused checkout inventory
-- Hook 4: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Refresh this session heartbeat to protect active work
-- Hook 5: [root-clone-freshness.mjs](root-clone-freshness.mjs) — Safely fast-forward the clean shared source checkout
-- Hook 6: [worktree-readiness-banner.mjs](worktree-readiness-banner.mjs) — Report which checks this worktree is ready to run
+- Hook 1: [uncommitted-work-guard.mjs](uncommitted-work-guard.mjs) — Note work that was already uncommitted when the session started
+- Hook 2: [process-spine-health-check.mjs](process-spine-health-check.mjs) — Check required DPF skills are installed and exposed
+- Hook 3: [governance-freshness-check.mjs](governance-freshness-check.mjs) — Check this checkout has current process guards
+- Hook 4: [worktree-session-hygiene.mjs](worktree-session-hygiene.mjs) — Check worktree location and unused checkout inventory
+- Hook 5: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Refresh this session heartbeat to protect active work
+- Hook 6: [root-clone-freshness.mjs](root-clone-freshness.mjs) — Safely fast-forward the clean shared source checkout
+- Hook 7: [worktree-readiness-banner.mjs](worktree-readiness-banner.mjs) — Report which checks this worktree is ready to run
 
 ## SessionEnd
 
