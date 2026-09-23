@@ -43,6 +43,17 @@ export function getPoolConfig() {
   };
 }
 
+/** Container ids the running compose stack actually defines for this pool size. */
+export function configuredSandboxContainerIds(): string[] {
+  return getPoolConfig().slots.map((slot) => slot.containerId);
+}
+
+/**
+ * Build phases that still need a sandbox they can reach. Terminal builds keep
+ * whatever they recorded; nothing will exec into it again.
+ */
+const SANDBOX_BOUND_ACTIVE_PHASES = ["build", "review", "ship"] as const;
+
 // ─── Pool Initialization ────────────────────────────────────────────────────
 
 /**
@@ -56,6 +67,14 @@ export function getPoolConfig() {
  * in-memory state is gone. Stale in_use slots block every new build until
  * manually cleared. Resetting on startup is safe: if a build genuinely needs
  * a slot it will re-acquire one on the next tool call.
+ *
+ * Rows beyond the configured pool size are removed and builds still pointed
+ * at a container the stack does not define are re-pointed at the first
+ * configured slot. A slot row that outlives its container (an old seed named
+ * `dpf-sandbox-2` while compose only runs `dpf-sandbox-1`) is otherwise handed
+ * out as "available", and every build that draws it runs its build, review
+ * and gauntlet against a container that does not exist (BI pending —
+ * SandboxSlot phantom container).
  */
 export async function initializePool(): Promise<void> {
   const config = getPoolConfig();
@@ -76,6 +95,36 @@ export async function initializePool(): Promise<void> {
         userId: null,
       },
     });
+  }
+  await retireUnconfiguredSlots(config);
+}
+
+/**
+ * Drop slot rows the stack no longer defines and heal builds bound to them.
+ * RuntimeTarget.slotId is `onDelete: SetNull`, so removing a row detaches its
+ * targets instead of failing.
+ */
+async function retireUnconfiguredSlots(config: ReturnType<typeof getPoolConfig>): Promise<void> {
+  const configuredIds = config.slots.map((slot) => slot.containerId);
+  const removed = await prisma.sandboxSlot.deleteMany({
+    where: { OR: [{ slotIndex: { gte: config.size } }, { containerId: { notIn: configuredIds } }] },
+  });
+  if (removed.count > 0) {
+    console.warn(`[sandbox-pool] removed ${removed.count} slot row(s) outside the configured pool of ${config.size}`);
+  }
+  const fallback = config.slots[0];
+  if (!fallback) return;
+  const healed = await prisma.featureBuild.updateMany({
+    where: {
+      phase: { in: [...SANDBOX_BOUND_ACTIVE_PHASES] },
+      sandboxId: { notIn: configuredIds },
+    },
+    data: { sandboxId: fallback.containerId, sandboxPort: fallback.port },
+  });
+  if (healed.count > 0) {
+    console.warn(
+      `[sandbox-pool] re-pointed ${healed.count} active build(s) from an unconfigured sandbox to ${fallback.containerId}`,
+    );
   }
 }
 
@@ -140,8 +189,10 @@ export async function acquireSandboxLease(
     throw new QuiescingError(level);
   }
 
+  // Only a slot whose container the stack defines is a slot at all; a stale
+  // row for a container that never started must not be handed out.
   const available = await prisma.sandboxSlot.findFirst({
-    where: { status: "available" },
+    where: { status: "available", containerId: { in: configuredSandboxContainerIds() } },
     orderBy: { slotIndex: "asc" },
   });
 
