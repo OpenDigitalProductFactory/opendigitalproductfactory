@@ -106,6 +106,21 @@ export const buildReviewVerification = inngest.createFunction(
     // refusal that arrives before the checks are trustworthy would meet a
     // non-developer with a wall they did not earn. This step's job for now is to
     // make the result exist and be honest about what it covers.
+    // The gauntlet and the diff projection exec into the build's own worktree.
+    // That tree is derived from the build branch, and the sandbox's worktree
+    // registry does not survive every container swap — so make it exist before
+    // anything reads it, instead of reporting "could not be started" forever.
+    await step.run("ensure-worktree", async () => {
+      const { ensureBuildWorktree } = await import("@/lib/build/sandbox/build-branch");
+      try {
+        return await ensureBuildWorktree(buildId);
+      } catch (err) {
+        const message = (err as Error)?.message?.slice(0, 300) ?? "unknown error";
+        console.warn(`[review-verification] ${buildId} worktree could not be materialized: ${message}`);
+        return { materialized: false, error: message };
+      }
+    });
+
     await step.run("guard-gauntlet", async () => {
       const { runGuardGauntlet, guardPlanDigest } = await import("@/lib/build/sandbox/guard-gauntlet");
       const { buildGauntletEvidence, summarizeGauntlet, toolchainFingerprintFrom, resolveGauntletRepository } =
