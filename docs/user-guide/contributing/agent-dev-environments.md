@@ -274,11 +274,19 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 **Point the client at the MCP URL and approve it once in your browser.** The client gets a `401` that tells it where to look, discovers this installation's authorization server, and runs the standard OAuth flow. A portal page opens naming the client, this installation, and what it is asking to do; you approve, and the client refreshes its own access from then on. **No environment variable, no copy-paste, no client restart.**
 
-Choose the assistant role you authorize on the approval page. This assigns a
-server-approved role; it does not verify a client's self-chosen name. All work
-remains within your current permissions, the permissions you approved, and the
-assistant's allowed tools. Build Studio access and access to each workroom are
-checked separately. Signing in does not admit the assistant to every room.
+The approval page names the assistant role this connection will act as and
+has one **Connect** button; you do not pick the role. The server chooses it
+from the roles you are allowed to authorize, after checking that they carry
+the same permissions, and reuses the role you approved last time for the same
+client. A client's self-chosen name only labels the connection; it cannot
+select a different role or widen what it can do. **Change** lets you pick
+another approved role, and **Adjust permissions** shows one checkbox per
+permission if you want to grant less. You are asked to choose only when the
+roles you could authorize differ in what they can do; the one with the least
+authority is preselected. All work remains within your current permissions,
+the permissions you approved, and the assistant's allowed tools. Build Studio
+access and access to each workroom are checked separately. Signing in does not
+admit the assistant to every room.
 
 The same connection supports multiple tasks and normal token refresh without
 another sign-in. Each task keeps its own target and evidence. If an older

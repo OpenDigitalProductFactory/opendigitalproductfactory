@@ -28,7 +28,14 @@ import {
   resolveResourceOrigin,
 } from "@/lib/auth/oauth-metadata";
 import { createAuthorizationCode } from "@/lib/auth/oauth-tokens";
-import { eligibleOAuthCoworkers, createOAuthConsentBinding, OAUTH_SETUP_REQUIRED } from "@/lib/auth/oauth-identity-binding";
+import {
+  eligibleOAuthCoworkers,
+  resolveDefaultOAuthCoworker,
+  createOAuthConsentBinding,
+  OAUTH_SETUP_REQUIRED,
+  type EligibleCoworker,
+} from "@/lib/auth/oauth-identity-binding";
+import type { AuthorizeRequest } from "@/lib/auth/oauth-authorize-request";
 import { touchClient } from "@/lib/auth/oauth-clients";
 import { parseScopeParam } from "@/lib/auth/oauth-scope-map";
 import {
@@ -76,34 +83,55 @@ export async function GET(request: Request) {
     );
   }
 
+  return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+    url.searchParams, origin, { after: url.searchParams.get("assistant_after") ?? undefined });
+}
+
+const CONSENT_FORM_FIELDS = new Set(["granted_scope", "decision", "acting_coworker", "default_coworker", "assistant_after"]);
+
+/**
+ * Build and render the consent screen for a validated request. Shared by the
+ * GET and by the POST's drift re-render, so both show exactly what the
+ * server would bind: the eligible set, then the server-resolved default.
+ * The client name is display data throughout — the resolver looks at it
+ * last, and only inside a class it has already proven authority-equal.
+ */
+async function renderConsentFor(
+  human: { userId: string; email: string | null },
+  request: AuthorizeRequest,
+  params: URLSearchParams,
+  origin: string,
+  options: { after?: string; driftNotice?: boolean } = {},
+): Promise<Response> {
   const org = await prisma.organization.findFirst({ select: { name: true } });
-  const { client, scopes, redirectUri, resource } = parsed.request;
-  const coworkers = await eligibleOAuthCoworkers(session.user.id, client.rowId, resource, prisma,
-    { after: url.searchParams.get("assistant_after") ?? undefined });
+  const { client, scopes, redirectUri, resource } = request;
+  const coworkers = await eligibleOAuthCoworkers(human.userId, client.rowId, resource, prisma, { after: options.after });
   if (!coworkers.length) {
     return htmlResponse(renderConsentRefusal("Assistant setup needs approval",
       "Ask your administrator to approve an assistant role for this connection, then reconnect."), 403);
   }
+  const page = coworkers.slice(0, 50);
+  const resolution = await resolveDefaultOAuthCoworker({ userId: human.userId, resource, eligible: page,
+    client: { rowId: client.rowId, clientName: client.clientName, redirectUris: client.redirectUris } }, prisma);
 
   return htmlResponse(
     renderConsentPage({
       clientName: client.clientName,
       selfAsserted: client.selfAsserted,
       installationName: org?.name ?? "this installation",
-      actingUser: session.user.email ?? session.user.id,
+      actingUser: human.email ?? human.userId,
       scopes,
-      coworkers: coworkers.slice(0, 50),
+      assistant: { kind: resolution.kind, selected: resolution.selected, candidates: resolution.candidates },
+      driftNotice: options.driftNotice,
       nextAssistantsUrl: coworkers.length > 50 ? (() => {
-        const next = new URL(url);
-        next.searchParams.set("assistant_after", coworkers[49].agentId);
-        return `${next.pathname}${next.search}`;
+        const next = new URLSearchParams(params);
+        next.set("assistant_after", coworkers[49].agentId);
+        return `${OAUTH_AUTHORIZE_PATH}?${next.toString()}`;
       })() : undefined,
       resource: resource || canonicalResourceUri(origin),
       redirectUri,
       // Echoed verbatim so the POST re-derives the same request from scratch.
-      hiddenParams: [...url.searchParams.entries()].filter(
-        ([k]) => k !== "granted_scope" && k !== "decision" && k !== "acting_coworker" && k !== "assistant_after",
-      ),
+      hiddenParams: [...params.entries()].filter(([k]) => !CONSENT_FORM_FIELDS.has(k)),
     }),
   );
 }
@@ -175,11 +203,25 @@ export async function POST(request: Request) {
     );
   }
 
-  const agentId = typeof form.get("acting_coworker") === "string"
-    ? String(form.get("acting_coworker")) : "";
-  const eligible = await eligibleOAuthCoworkers(session.user.id, client.rowId, resource, prisma, { agentId });
-  if (!eligible.some((agent) => agent.agentId === agentId)) {
+  // Which assistant. The human either left the server's default in place or
+  // chose another eligible one from the disclosure. An unchanged default is
+  // re-derived here and must come out the same; if eligibility or authority
+  // signatures moved between the GET and this POST, the screen is shown again
+  // with the new answer rather than binding an identity the human never saw.
+  const agentId = typeof form.get("acting_coworker") === "string" ? String(form.get("acting_coworker")) : "";
+  const shownDefault = typeof form.get("default_coworker") === "string" ? String(form.get("default_coworker")) : "";
+  const eligible = await eligibleOAuthCoworkers(session.user.id, client.rowId, resource, prisma);
+  if (!agentId || !eligible.some((agent) => agent.agentId === agentId)) {
     return directError("access_denied", OAUTH_SETUP_REQUIRED, 403);
+  }
+  if (shownDefault && agentId === shownDefault) {
+    const page: EligibleCoworker[] = eligible.slice(0, 50);
+    const resolution = await resolveDefaultOAuthCoworker({ userId: session.user.id, resource, eligible: page,
+      client: { rowId: client.rowId, clientName: client.clientName, redirectUris: client.redirectUris } }, prisma);
+    if (resolution.selected.agentId !== agentId) {
+      return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+        params, origin, { driftNotice: true });
+    }
   }
   const code = await prisma.$transaction(async (db) => {
     const binding = await createOAuthConsentBinding({ userId: session.user.id,
