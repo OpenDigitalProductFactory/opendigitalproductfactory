@@ -38,6 +38,7 @@ import {
   type ResolvedMcpToken,
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
+import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
 import { oauthSetupRequiredResult } from "@/lib/auth/oauth-setup-required";
 import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
@@ -589,6 +590,7 @@ async function handleToolsCall(
       callerClient,
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,
+      ...connectionDelegationFor(token),
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });

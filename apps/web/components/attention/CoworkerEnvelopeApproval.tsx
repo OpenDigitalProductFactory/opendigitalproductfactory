@@ -75,22 +75,46 @@ export function CoworkerEnvelopeApproval({
           {decision.authorization}.
         </p>
         <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+          <Fact label="Action" value={decision.action} wide />
+          <Fact label="Where it lands" value={decision.target} wide />
           {decision.subjectId ? <Fact label="Subject" value={decision.subjectId} /> : null}
           {decision.gate ? <Fact label="Gate" value={decision.gate} /> : null}
           {decision.decision ? <Fact label="Decision" value={decision.decision} /> : null}
-          <Fact
-            label="Findings"
-            value={
-              decision.findings.length === 0
-                ? "None"
-                : decision.findings.map((finding) => finding.issue).join(" ")
-            }
-            wide
-          />
+          {decision.kind === "known" ? (
+            <Fact
+              label="Findings"
+              value={
+                decision.findings.length === 0
+                  ? "None"
+                  : decision.findings.map((finding) => finding.issue).join(" ")
+              }
+              wide
+            />
+          ) : null}
           {decision.reason ? <Fact label="Reason" value={decision.reason} wide /> : null}
+          <Fact label="Consequence" value={decision.consequence} wide />
+          <Fact label="Why you are asked" value={decision.whyAPerson} wide />
+          <Fact label="What authorizing covers" value={decision.scope} wide />
+          <Fact label="Status" value={statusLabel(approval)} />
           <Fact label="Recommender" value={decision.recommenderLabel} />
           <Fact label="Accountable authorizer" value={decision.authorizerLabel} />
         </dl>
+        {decision.kind === "known" ? null : decision.kind === "exact" ? (
+          <div className="mt-3">
+            <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">
+              Proposed content
+            </p>
+            <dl className="mt-1 grid gap-y-1.5">
+              {decision.proposed.map((field, index) => (
+                <Fact key={`${field.label}-${index}`} label={field.label} value={field.value} wide />
+              ))}
+            </dl>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs font-semibold text-[var(--dpf-text)]" role="note">
+            {decision.recordedIfAuthorized}
+          </p>
+        )}
         <p className="mt-3 text-xs leading-relaxed text-[var(--dpf-muted)]">
           {decision.authorizeDoes} {decision.declineDoes}
         </p>
@@ -130,9 +154,24 @@ export function CoworkerEnvelopeApproval({
 }
 
 function outcomeMessage(outcome: Outcome): string {
-  if (outcome === "authorized") return "Record authorized.";
-  if (outcome === "declined") return "Record declined.";
+  // Authorizing permits the change; it does not perform it. Say so, so the
+  // card never reads as "done" while nothing has been written yet.
+  if (outcome === "authorized") {
+    return "Authorized. Nothing is written until your coworker sends this exact request again.";
+  }
+  if (outcome === "declined") return "Declined. Nothing was changed.";
   return "This request was already settled.";
+}
+
+function statusLabel(approval: AttentionEnvelopeApproval): string {
+  if (approval.status === "proposed") {
+    return approval.actionable ? "Waiting for your decision" : "Closed: the window expired";
+  }
+  if (approval.status === "approved") return "Authorized, not yet run";
+  if (approval.status === "executed") return "Authorized and run";
+  if (approval.status === "declined") return "Declined";
+  if (approval.status === "expired") return "Closed: the window expired";
+  return approval.status;
 }
 
 function Fact({ label, value, wide }: { label: string; value: string; wide?: boolean }) {

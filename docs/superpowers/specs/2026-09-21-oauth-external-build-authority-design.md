@@ -291,3 +291,20 @@ human. No production or administrative grant is added.
 Acceptance includes siblings sharing one WorkItem, foreign users sharing an
 assistant, removed participants, observer versus contributor, unanchored-room
 clearance, atomic audited invitation, and existing-token use without new consent.
+
+### Consent steers routine writes (BI-12E5DD91)
+
+WWMD DI-178749D7F5BD extends C3. External assistants seed at HITL tier 1, and
+the MCP route supplied no steering, so every non-damaging write reached the
+escalation gate's `unsteered-side-effect` branch. A human who had consented to
+the assistant then clicked through generic cards, while the same human on a PAT
+was never asked. The access-token resolver already revalidates the consent
+binding on every call. The route now passes that binding as
+`connection-delegation` steering, which the existing gate treats like any other
+recorded delegation. Damaging, restricted and proposal-shaped actions still
+reach a person, because gate branch 4 precedes steering. PAT, session and
+client-credentials tokens, unbound connections and a different acting coworker
+steer nothing. Independent review lanes are unchanged. Each decision log row
+records the escalation branch and the consent binding. Approval cards show the
+exact proposal, found by the envelope id on the pending execution, and state
+that authorizing is not review.

@@ -293,3 +293,63 @@ describe("OwnerDecisionCards routing", () => {
     expect(screen.getByText("bddca7c5a0b109f9460f84b2b0d886f5d794cbb6")).toBeTruthy();
   });
 });
+
+describe("CoworkerEnvelopeApproval — exact effect (BI-12E5DD91)", () => {
+  const evidence = () =>
+    approval({
+      coworkerAgentId: "AGT-EXT-CODEX",
+      manifestActionId: "record_workroom_evidence",
+      taskRunId: null,
+      reviewBinding: undefined,
+      decision: summarizeCoworkerEnvelopeDecision({
+        toolName: "record_workroom_evidence",
+        proposedParameters: { capsuleId: "WC-04ED087E", kind: "note", summary: "Acceptance A." },
+        recommenderAgentId: "AGT-EXT-CODEX",
+        authorizerUserId: "cmt6ejt2109n56mnw5kt1f8y0",
+        rationale: "Rule. It changes a record, and no recorded delegation, room decision, schedule or independent review covers it.",
+      }),
+    });
+
+  it("shows action, destination, proposed content, consequence, reason, scope and status", () => {
+    render(<CoworkerEnvelopeApproval approval={evidence()} />);
+    expect(screen.getByText("Add an evidence entry to a Workroom timeline")).toBeTruthy();
+    expect(screen.getAllByText("Workroom WC-04ED087E").length).toBeGreaterThan(0);
+    expect(screen.getByText("Proposed content")).toBeTruthy();
+    expect(screen.getByText("Acceptance A.")).toBeTruthy();
+    expect(screen.getByText(/None declared/)).toBeTruthy();
+    expect(screen.getByText(/no recorded delegation/)).toBeTruthy();
+    expect(screen.getByText(/does not review the content/)).toBeTruthy();
+    expect(screen.getByText("Waiting for your decision")).toBeTruthy();
+    expect(screen.queryByText("Findings")).toBeNull();
+  });
+
+  it("says authorizing has not yet written anything", async () => {
+    render(<CoworkerEnvelopeApproval approval={evidence()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Nothing is written until/));
+  });
+
+  it("marks an unloadable proposal as unresolved instead of offering a generic record", () => {
+    render(
+      <CoworkerEnvelopeApproval
+        approval={approval({
+          reviewBinding: undefined,
+          decision: summarizeCoworkerEnvelopeDecision({
+            toolName: "record_runtime_verification",
+            proposedParameters: undefined,
+            recommenderAgentId: "AGT-EXT-CODEX",
+            authorizerUserId: "cmt6ejt2109n56mnw5kt1f8y0",
+          }),
+        })}
+      />,
+    );
+    expect(screen.getByRole("note").textContent).toMatch(/could not be loaded/);
+    expect(screen.getByText(/decline unless you already know/)).toBeTruthy();
+  });
+
+  it("shows an expired window as closed with its persisted status", () => {
+    render(<CoworkerEnvelopeApproval approval={{ ...evidence(), actionable: false }} />);
+    expect(screen.getByText("Closed: the window expired")).toBeTruthy();
+    expect(screen.queryByText("Authorize")).toBeNull();
+  });
+});

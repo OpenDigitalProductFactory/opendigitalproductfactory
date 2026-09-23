@@ -41,11 +41,15 @@ An action is damaging when it declares a consequence (outward, irreversible, aut
 
 A damaging action is decided by a person; a coworker's steering does not decide damage.
 
-Automated steering is a recorded, server-resolved fact about the action itself: independent-reviewer, room-authority, wwmd, scheduled-mandate.
+Automated steering is a recorded, server-resolved fact about the action itself: independent-reviewer, room-authority, wwmd, scheduled-mandate, connection-delegation.
 
 A governed scheduled task steers only the tools its registry entry declares; it gets no licence for anything it did not declare.
 
+An external assistant steers only through its human's current OAuth consent, revalidated on the call and bounded by the consented scopes; a personal access token or an unbound connection steers nothing.
+
 A cadence is a recorded decision. Installing one declares what a coworker may write, how often, and with which tool, before any run exists — so a declared write on an unattended cadence is not put to a person who, by definition, is not there. A scheduled run carries no Workroom, so without this it could never reach any steering branch at all: the marketing coworker reached its brief-writing tool on 2026-09-21, was parked on a fifteen-minute approval envelope twice, and produced nothing, as it had every week since 2026-08-31.
+
+A consent is a recorded delegation. When a person connects an assistant over OAuth, they approve that exact assistant for listed scopes, and the platform rechecks that consent on every call. Asking the same person to approve each routine write inside it is a rubber stamp, not a control: on 2026-09-23 an assistant's Workroom evidence, runtime verification and a backlog item the person had just requested all parked on generic cards, while the same person on a personal token was never asked. Damage still reaches a person, and independent review stays a separate principal's decision (BI-12E5DD91).
 
 A non-damaging action with steering is decided automatically and mints no approval envelope.
 

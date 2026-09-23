@@ -264,6 +264,11 @@ export function resolveSteering(input: {
   agentId?: string | null;
   /** The tool being called, matched against the cadence's declared writes. */
   toolName?: string;
+  /**
+   * BI-12E5DD91: the OAuth consent the MCP route revalidated on this request.
+   * Steers only when it names the coworker actually acting.
+   */
+  connectionDelegation?: { authorityBindingId: string; agentId: string } | null;
 }): EscalationSteering {
   if (input.initiativeReviewBinding) return "independent-reviewer";
   const room = input.roomAuthority;
@@ -275,6 +280,14 @@ export function resolveSteering(input: {
   if (input.taskRunId?.startsWith(SCHEDULED_RUN_PREFIX) && input.agentId && input.toolName) {
     const mandated = coworkerSelfTaskMandatedTools(input.agentId);
     if (mandated?.includes(input.toolName)) return "scheduled-mandate";
+  }
+  const connection = input.connectionDelegation;
+  if (
+    connection?.authorityBindingId.trim()
+    && input.agentId
+    && connection.agentId === input.agentId
+  ) {
+    return "connection-delegation";
   }
   return "none";
 }
@@ -441,6 +454,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         toolName: execution.toolName,
         initiativeReviewBinding,
         roomAuthority: execution.context?.roomAuthority ?? null,
+        connectionDelegation: execution.context?.connectionDelegation ?? null,
       }),
       subject: initiativeAuthority.subject,
       room: roomAuthority

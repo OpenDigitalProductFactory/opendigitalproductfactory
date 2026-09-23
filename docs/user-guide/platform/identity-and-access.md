@@ -129,6 +129,22 @@ returned as a plain-language explanation; an action that needs judgment pauses
 the originating task and creates one approval envelope. Approving that envelope
 does not approve a different task or changed action.
 
+Your OAuth sign-in is itself a recorded decision. When you approve an
+assistant's role, routine changes inside those permissions run without a
+further card: an evidence entry, a verification result, or a backlog item you
+asked for. You are still asked when a change reaches outside the platform,
+cannot be undone, changes who may do what, touches restricted data, or is
+defined as a proposal. A personal access token or an unbound connection does
+not count as this decision.
+
+Each approval card shows the action, where it lands, the exact proposed
+content, its consequence, why you are being asked, and what authorizing covers.
+Authorizing permits that one request. It does not review the content or confirm
+that any test it cites is correct. If the card cannot load the proposal, it
+says the effect is unresolved; decline unless you already know what it writes.
+After you authorize an assistant's request, nothing is written until the
+assistant sends the same request again.
+
 ## Recovery And Evidence
 
 - If access is unexpectedly missing, trace principal → aliases → membership →

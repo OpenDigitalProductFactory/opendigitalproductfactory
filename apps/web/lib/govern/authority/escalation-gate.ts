@@ -80,12 +80,26 @@ export const DAMAGING_SENSITIVITIES: readonly PrincipalSensitivity[] = ["restric
  *    Measured on the reference install: the marketing coworker reached its
  *    brief-writing tool on 2026-09-21, was parked on a fifteen-minute envelope
  *    twice, and produced nothing, as it had every week since 2026-08-31.
+ *  • connection-delegation — the call arrives on an OAuth access token whose
+ *    consent binding the resolver revalidated on THIS request: the human is
+ *    active, the binding is current, and it names the acting assistant. That
+ *    consent is the human's recorded delegation to this assistant for the
+ *    scopes it lists, and the token layer has already refused anything outside
+ *    them. PAT, unbound and client-credentials tokens never carry it.
+ *
+ *    Measured 2026-09-23 (BI-12E5DD91, WWMD DI-178749D7F5BD): once OAuth
+ *    resolved the external assistant's identity, every non-damaging write it
+ *    made — Workroom evidence, runtime verification, a backlog item the human
+ *    had just asked for — reached `unsteered-side-effect` and parked on a card
+ *    the human clicked through, while the same human on a PAT client was never
+ *    asked at all. Damage still reaches a person: branch 4 precedes this one.
  */
 export const ESCALATION_STEERING = [
   "independent-reviewer",
   "room-authority",
   "wwmd",
   "scheduled-mandate",
+  "connection-delegation",
   "none",
 ] as const;
 export type EscalationSteering = (typeof ESCALATION_STEERING)[number];
@@ -97,6 +111,7 @@ export const ESCALATION_REASON_CODES = [
   "steered-by-room-authority",
   "steered-by-wwmd",
   "steered-by-scheduled-mandate",
+  "steered-by-connection-delegation",
   "damaging-consequence",
   "damaging-sensitivity",
   "damaging-work-case",
@@ -156,6 +171,7 @@ const STEERED_REASON: Record<
   "room-authority": "steered-by-room-authority",
   wwmd: "steered-by-wwmd",
   "scheduled-mandate": "steered-by-scheduled-mandate",
+  "connection-delegation": "steered-by-connection-delegation",
 };
 
 /**
@@ -201,6 +217,25 @@ export function resolveEscalation(input: EscalationInput): EscalationDecision {
 }
 
 /**
+ * Why a person is being asked, in the approver's words (BI-12E5DD91). Stored
+ * on the envelope so the card states the governing reason instead of a
+ * generic sentence. Only the human-verdict branches have one.
+ */
+const HUMAN_REASON_SENTENCES: Partial<Record<EscalationReasonCode, string>> = {
+  "declared-proposal": "This action is defined as a proposal, so a person decides it.",
+  "damaging-consequence":
+    "It declares a consequence a person must decide: it reaches outside, cannot be undone, or changes someone's authority.",
+  "damaging-sensitivity": "It touches restricted data, so a person decides it.",
+  "damaging-work-case": "Its Work Case marks this step as consequential.",
+  "unsteered-side-effect":
+    "It changes a record, and no recorded delegation, room decision, schedule or independent review covers it.",
+};
+
+export function escalationReasonSentence(reasonCode: EscalationReasonCode): string | null {
+  return HUMAN_REASON_SENTENCES[reasonCode] ?? null;
+}
+
+/**
  * The rule in words, derived from the same constants the gate runs on.
  * `check-escalation-gate.ts` fails the build unless the kernel principle page
  * states these verbatim, so what an agent reads and what the platform enforces
@@ -215,6 +250,7 @@ export function describeEscalationRule(): string[] {
     "A damaging action is decided by a person; a coworker's steering does not decide damage.",
     `Automated steering is a recorded, server-resolved fact about the action itself: ${ESCALATION_STEERING.filter((s) => s !== "none").join(", ")}.`,
     "A governed scheduled task steers only the tools its registry entry declares; it gets no licence for anything it did not declare.",
+    "An external assistant steers only through its human's current OAuth consent, revalidated on the call and bounded by the consented scopes; a personal access token or an unbound connection steers nothing.",
     "A non-damaging action with steering is decided automatically and mints no approval envelope.",
     "A non-damaging action with no steering reaches a human only when it has a side effect; an immediate read never escalates.",
     "A tool declared as a proposal is always put to a person, because that is its declared shape.",

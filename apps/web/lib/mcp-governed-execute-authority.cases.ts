@@ -239,6 +239,83 @@ export function registerCoworkerAuthorityCases(
     });
   });
 
+  it("runs a routine write under the human's OAuth consent with no envelope and records why (BI-12E5DD91)", async () => {
+    const steered = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+      },
+      steering: "connection-delegation",
+    });
+    harness.applyOverrides({ resolveCoworkerAuthorityInput: async () => steered });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "requested by the human" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: {
+        agentId: "AGT-100",
+        authSource: "oauth",
+        connectionDelegation: { authorityBindingId: "binding-row-1", agentId: "AGT-100" },
+      },
+      source: "external-jsonrpc",
+    });
+
+    expect(result.success).toBe(true);
+    expect(harness.executeMock()).toHaveBeenCalledOnce();
+    expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      decision: "allow",
+      authorityBindingId: "binding-row-1",
+      rationale: expect.objectContaining({
+        escalationReason: "steered-by-connection-delegation",
+        escalationSteering: "connection-delegation",
+        damaging: false,
+      }),
+    });
+  });
+
+  it("still puts an authority-changing write to a person under the same consent (BI-12E5DD91)", async () => {
+    const damaging = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+        consequence: "authority",
+      },
+      steering: "connection-delegation",
+    });
+    harness.applyOverrides({ resolveCoworkerAuthorityInput: async () => damaging });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "grant change" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: {
+        agentId: "AGT-100",
+        connectionDelegation: { authorityBindingId: "binding-row-1", agentId: "AGT-100" },
+      },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({ success: false, error: "approval_required" });
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledWith(expect.objectContaining({
+      explanation: expect.stringContaining("changes someone's authority"),
+    }));
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      decision: "require-approval",
+      rationale: expect.objectContaining({ escalationReason: "damaging-consequence" }),
+    });
+  });
+
   it("puts the unresolved WWMD residue on the human decision card", async () => {
     const pending = harness.authorityInput({
       action: {
@@ -272,7 +349,8 @@ export function registerCoworkerAuthorityCases(
       message: expect.stringContaining("Human decision required: commandment conflict."),
     });
     expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledWith(expect.objectContaining({
-      explanation: "Human decision required: commandment conflict.",
+      // BI-12E5DD91: the stored reason also names the escalation branch.
+      explanation: expect.stringMatching(/^Human decision required: commandment conflict\. \S/),
     }));
     expect(harness.executeMock()).not.toHaveBeenCalled();
   });
