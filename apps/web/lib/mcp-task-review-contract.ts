@@ -1,3 +1,4 @@
+import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "./source-page-lines";
 import type { ToolDefinition } from "@/lib/mcp-tools";
 
 export type InitiativeReviewBinding = {
@@ -264,8 +265,8 @@ export function narrowInitiativeReviewTools<T extends {
           version: { type: "string", enum: [binding.artifactRef.commitSha] },
           startLine: { type: "number", minimum: 1 },
           cursor: { type: "string" },
-          maxLines: { type: "number", minimum: 1, maximum: 200 },
-          maxChars: { type: "number", minimum: 1, maximum: 3200 },
+          maxLines: { type: "number", minimum: 1, maximum: SOURCE_READ_MAX_LINES },
+          maxChars: { type: "number", minimum: 1, maximum: SOURCE_READ_MAX_CHARS },
           expectedBlobId: { type: "string", enum: [binding.artifactRef.providerBlobId] },
         },
         required: ["repositoryFullName", "path", "version", "expectedBlobId"],

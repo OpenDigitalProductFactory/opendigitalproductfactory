@@ -1,5 +1,10 @@
 import { INITIATIVE_CORRECTABLE_ERRORS, INITIATIVE_DISPOSITION_GUIDANCE, INITIATIVE_WRITER_CORRECTION_LIMIT } from "../backlog/initiative-readiness/disposition-contract";
-import { sourcePageEndLine, sourcePageNextLine } from "../source-page-lines";
+import {
+  SOURCE_READ_MAX_CHARS,
+  SOURCE_READ_MAX_LINES,
+  sourcePageEndLine,
+  sourcePageNextLine,
+} from "../source-page-lines";
 
 export type TerminalToolPolicy = {
   writerToolName: string;
@@ -167,8 +172,8 @@ export function normalizeTerminalToolArguments(
 
   const boundedControls = [
     ["startLine", 1, Number.MAX_SAFE_INTEGER],
-    ["maxLines", 1, 200],
-    ["maxChars", 1, 3_200],
+    ["maxLines", 1, SOURCE_READ_MAX_LINES],
+    ["maxChars", 1, SOURCE_READ_MAX_CHARS],
   ] as const;
   for (const [name, minimum, maximum] of boundedControls) {
     const value = providerArguments[name];

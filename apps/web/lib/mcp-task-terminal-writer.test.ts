@@ -1,3 +1,4 @@
+import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
@@ -399,8 +400,8 @@ describe("terminal writer resumption", () => {
         version: "d47536a552c7d588b2f963e478ae99369f720783",
         expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
         startLine: 1,
-        maxLines: 200,
-        maxChars: 3_200,
+        maxLines: SOURCE_READ_DEFAULT_MAX_LINES,
+        maxChars: SOURCE_READ_DEFAULT_MAX_CHARS,
       },
     }));
     expect(db.findToolExecutions).toHaveBeenCalledTimes(2);
