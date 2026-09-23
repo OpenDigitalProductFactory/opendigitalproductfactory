@@ -41,8 +41,14 @@ function candidateAbsolutePaths(relativePath: string): string[] {
   const normalized = normalizeRelativePath(relativePath);
   const appRelative = normalized.startsWith("apps/web/") ? normalized.slice("apps/web/".length) : null;
   const cwd = getCwd();
+  // BI-8FFC45DA: PROJECT_ROOT is the Build Studio workspace the build modifies
+  // (/sandbox-workspace on an install). The runtime image under /app ships no
+  // docs/ and little of scripts/ or package sources, so without it a real file
+  // read as "missing" and the plan was refused until the build was abandoned.
+  const projectRoot = process.env.PROJECT_ROOT?.trim() || null;
 
   return Array.from(new Set([
+    projectRoot ? path.resolve(projectRoot, normalized) : null,
     path.resolve(cwd, normalized),
     appRelative ? path.resolve(cwd, appRelative) : null,
     path.resolve(cwd, "..", normalized),
