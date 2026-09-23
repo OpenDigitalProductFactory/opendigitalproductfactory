@@ -101,6 +101,13 @@ export function parseSandboxPort(output: string): number | null {
 export function prefixSafeWorkspaceCommand(command: string): string {
   return [
     `git config --global --add safe.directory "${SANDBOX_WORKSPACE}" >/dev/null 2>&1 || true`,
+    // Git's ownership check is per worktree path, so the /workspace allowance
+    // does not reach the isolated build worktrees under /workspace/.builds —
+    // every plain exec that reads a build tree (the guard gauntlet's tree sha,
+    // the diff projection) saw "dubious ownership" and reported nothing. The
+    // sandbox is a single-tenant root container; the wildcard is the honest
+    // allowance, and the guard keeps repeated prefixes from growing the config.
+    `git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' || git config --global --add safe.directory '*' >/dev/null 2>&1 || true`,
     command,
   ].join(" && ");
 }

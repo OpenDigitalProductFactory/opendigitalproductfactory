@@ -705,6 +705,28 @@ async function provisionBuildWorktree(args: {
 }
 
 /**
+ * Materialize a build's isolated worktree when a later phase needs it (review
+ * verification, the guard gauntlet). The worktree is a derived artifact of the
+ * build branch: when the sandbox's `.git/worktrees` registry is gone (a container
+ * swap, a registry prune, a re-baselined workspace) every `.builds/<id>` tree
+ * reports "not a git repository" while the branch still holds the committed
+ * work. Reuses the tree when it is already on the build's branch; otherwise
+ * recreates it from the branch (the same reuse-or-recreate rule as
+ * startBuildBranch). No-op with isolation off.
+ */
+export async function ensureBuildWorktree(buildId: string): Promise<{ materialized: boolean; workdir: string }> {
+  const workdir = resolveBuildWorkdir(buildId);
+  if (!isBuildWorktreeIsolationEnabled()) return { materialized: false, workdir };
+  const identity = await getClientIdentity();
+  await provisionBuildWorktree({
+    buildId,
+    branchName: `build/${buildId}`,
+    clientBranch: identity.clientBranch,
+  });
+  return { materialized: true, workdir };
+}
+
+/**
  * Tear down a build's worktree (isolation-ON cleanup on promote/abandon/terminal).
  * Best-effort — the symlinked node_modules are not real files so removal never
  * touches the shared install, and a missing worktree is not an error.

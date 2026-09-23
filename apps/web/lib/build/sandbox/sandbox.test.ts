@@ -110,6 +110,14 @@ describe("prefixSafeWorkspaceCommand", () => {
     expect(command).toContain('git config --global --add safe.directory "/workspace"');
     expect(command).toContain("cd /workspace && git status -sb");
   });
+
+  it("also allows every isolated build worktree, guarded so repeats do not grow the config", () => {
+    const command = prefixSafeWorkspaceCommand("git -C /workspace/.builds/FB-1 rev-parse HEAD^{tree}");
+
+    expect(command).toContain("git config --global --add safe.directory '*'");
+    expect(command).toContain("git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' ||");
+    expect(command.indexOf("safe.directory '*'")).toBeLessThan(command.indexOf("git -C /workspace/.builds/FB-1"));
+  });
 });
 
 describe("buildDockerExecSandboxCommand", () => {
