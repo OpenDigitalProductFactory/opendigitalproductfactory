@@ -83,6 +83,47 @@ A drawn layout is what the HOA plan's hierarchy-and-list first slice does not ye
 - **Georeferenced (optional).** When lots need real-world position (a vendor navigating to a detention pond), import county parcel GeoJSON or a shapefile into a geographic scene, or pin the image's four corners so MapLibre draws it as an image source.
 - **Pinned work:** inspection findings, violations and maintenance work orders attach to a placement's `entityRef` (lot, common asset), so a subcontractor's view is "this lot, this spot, this photo". A placement references the work; it does not own it.
 
+#### 3.3.1 The map is where, not the workflow
+
+Added 2026-09-23 from operator direction. Most HOA work is a list, a schedule or a case, and the map earns its place only when someone must be told *where* or *within what boundary*. So for every HOA flow below, the primary surface is the list or case, and the map appears as:
+
+- a **location attachment** on the case (a pin, or a boundary drawn on the community layout);
+- a **shareable snapshot** of that location sent with the work to a vendor or inspector;
+- a **duplicate check** on public reports ("3 open reports within 30 m").
+
+It never appears as a standing dashboard that must be watched.
+
+#### 3.3.2 Violation inspections
+
+The people involved are inspectors, who may be staff, board volunteers or a contracted inspection firm (the `field-inspection` archetype, `BI-E25B803C`), plus the board and the homeowner.
+
+- **Flow.** Inspection round → finding (lot, rule cited, photo, note) → notice to homeowner → cure deadline → re-inspection → resolved, or escalated (fine or hearing). This is a Work Case in the HOA plan's `violation` / `inspection` categories, **not a new model**. The rule citation points at the association's governing documents.
+- **On the phone.** The inspector walks a round of lots in order, and each finding is captured in place. Photo and location capture depends on `EP-528CF32A` (camera, signature and location fields in mobile dynamic forms). The mobile photo seam is a stub today (`apps/mobile/src/features/job-evidence/imageSource.ts`). Rounds must work offline and sync later, because communities have dead spots.
+- **Re-inspection** is a scheduled follow-up on the same case at the cure deadline, not a fresh finding.
+- **Map role:** the round's lots in walking order, plus the lot a finding belongs to. Inspectors are the map's main field user.
+- **Care:** a violation is a dispute between neighbours. Findings, photos and the reporter's identity are visible to the board and the manager, never to other residents. A public report that becomes a violation does not expose its reporter to the homeowner.
+
+#### 3.3.3 Maintenance reports from residents and the public
+
+- **Intake.** Reuse the civic 311 pattern: the municipality archetype already runs a service-request queue over `StorefrontInquiry` behind the `service-request-311` capability (`apps/web/app/(shell)/service-requests/page.tsx`), with **no new model**. The HOA `Maintenance Request` item template is the same shape, but today it captures only free text: no location and no photo.
+- **Additions:**
+  - an optional **pin on the community layout** ("where is the problem"), or the phone's location, reduced to the nearest common asset or lot rather than stored as a raw coordinate;
+  - an optional photo;
+  - a public reference number for status follow-up.
+- **Phone app.** The mobile app already has an anonymous, geo-aware `visitor` surface and a multi-business `spaces` connection. A resident joins their community as a space, and a passer-by can report without an account, following the walk-up pattern (`BI-9FEB61B8`). Anonymous reports need rate limiting and abuse controls.
+- **Duplicates.** Before a report is filed, open reports near the same spot are offered for "+1", which turns five reports of one broken light into one case with five reporters.
+- **Triage:** a report becomes a maintenance case, or (if it describes a homeowner's lot) a candidate violation for the inspector. It never becomes a violation automatically.
+
+#### 3.3.4 Recurring maintenance of common areas and trees
+
+- **What gets maintained:** trees, lawn and landscape zones, pools, ponds, playgrounds, lighting, gates, fences, irrigation. Each is a **maintained feature** on the community layout:
+  - a **point** for a tree, light or gate;
+  - a **boundary** for a lawn zone, pool enclosure or pond.
+- **Recurrence reuses `RecurrenceSchedule`** (RFC 5545 RRULE, the platform's one recurrence primitive; see `ai-coworker.prisma:135` and its canonical-primitive note). Examples: trim yearly in the dormant season; mow weekly in season; pool chemistry twice weekly and inspection annually. Each occurrence materializes a work item for the assigned vendor. No parallel scheduler.
+- **Why boundaries matter:** a lawn contract covers a drawn area, so the vendor knows exactly what is and is not in scope, and a dispute about "you missed the strip by the entrance" has an answer. The boundary travels with the work order as a snapshot, and the vendor needs no DPF login to see it.
+- **Substrate gap:** there is no maintained-asset record. `FixedAsset` is a finance record, and `Resource` is bookable capacity (the pool is already a bookable amenity through `Resource`). Before proposing anything new, check whether a common-area feature can be a `Resource` / `CustomerSiteNode` with maintenance attributes, versus a new typed record. This is `dpf-verify-substrate-first` work and is not decided here.
+- **Tree specifics:** species, size, last trimmed, next due, and an arborist note are attributes, not map layers. The map shows only where the tree is.
+
 ## 4. Real-time and third-party overlays
 
 **Rule:** every external feed is fetched **server-side**, cached, normalized to GeoJSON, and pushed to the browser over the existing event bus. The browser never calls a third party. This keeps the parent spec's no-outbound-request guarantee, centralizes rate limits and attribution, and lets an install run with every feed off.
@@ -136,6 +177,9 @@ Each phase is independently shippable, and P0 is the dependency every other phas
 | **P2** | `customer-map` primitive (List/Map on the customer list) + batch geocode-and-cache through ADR-9 with the "none" default | Satisfies the customer-surface spec and MSP §16.1 |
 | **P3** | Coverage: service-area zones, pure-TS point-in-polygon, "sites outside coverage" | Isochrones optional via a routing connector |
 | **P4** | HOA community layout on the cartesian renderer with site-plan underlay; work and inspections pinned to lots and common assets | Lands inside `BI-FE286C27` rather than as a parallel item |
+| **P4a** | Resident/public maintenance reports: 311-pattern intake with pin, photo, reference number and near-duplicate "+1"; phone intake via `spaces` / `visitor` | Web first; phone photo depends on `EP-528CF32A` |
+| **P4b** | Violation inspection rounds: phone round of lots, in-place finding capture, notice → cure → re-inspection on one case, offline sync | Depends on `EP-528CF32A`; benchmark HOA violation tools first |
+| **P4c** | Recurring common-area and tree maintenance: maintained features with point or boundary, `RecurrenceSchedule`-driven work, boundary snapshot sent to vendors | Substrate decision (§3.3.4) comes first |
 | **P5** | Server-side overlay connectors, NWS alerts first | On the integration substrate |
 | **P6** | Consented country-only deployment declaration over federation | Only after the §9 decision |
 
@@ -153,7 +197,9 @@ Each phase is independently shippable, and P0 is the dependency every other phas
 2. **Market footprint placement:** a `footprint` variant beside the TENANTS board (recommended), or its own route under marketing/portfolio?
 3. **HOA default:** site-plan image first (recommended) or georeferenced parcels first?
 4. **First overlay connector:** NWS alerts (recommended; free, US) or another feed?
-5. **Epic:** the parent spec's `EP-SPATIAL-OPERATIONAL-VIEWS` does not exist in the live backlog. Create it and attach `BI-3A56AE0C`, `BI-FE286C27`, `BI-A951CC46`, `BI-3391BE2C`, `BI-F91D0685` and the new P1–P6 items to it, or attach them to an existing epic?
+5. **Vendor access to work orders:** a signed, expiring link showing the work, its location snapshot and boundary (recommended; no vendor account), or vendor portal accounts?
+6. **Anonymous public reports:** allowed from anyone (rate-limited), or only from residents who have joined the community in the app?
+7. **Epic:** the parent spec's `EP-SPATIAL-OPERATIONAL-VIEWS` does not exist in the live backlog. Create it and attach `BI-3A56AE0C`, `BI-FE286C27`, `BI-A951CC46`, `BI-3391BE2C`, `BI-F91D0685` and the new P1–P6 items to it, or attach them to an existing epic?
 
 ## 10. Findings to route separately
 
