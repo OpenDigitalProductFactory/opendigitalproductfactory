@@ -194,8 +194,7 @@ export async function reviewBuildStudioAssembledChange(args: {
         resultClass: outcome.receipt.result.decision === "fail" ? "fail" : "pass",
       }, store);
     }
-    const { publishFailureReadinessStatus } = await import("./failure-readiness-status");
-    await publishFailureReadinessStatus(capsule.capsuleId);
+    await publishFailureReadinessWhenBound(capsule.capsuleId);
     return { kind: "reviewed", outcome };
   }
 
@@ -237,7 +236,25 @@ export async function reviewBuildStudioAssembledChange(args: {
     }, store);
   }
 
-  const { publishFailureReadinessStatus } = await import("./failure-readiness-status");
-  await publishFailureReadinessStatus(capsule.capsuleId);
+  await publishFailureReadinessWhenBound(capsule.capsuleId);
   return { kind: "reviewed", outcome };
+}
+
+/**
+ * The GitHub commit status is published only once the room is bound to a
+ * pushed commit. Before the ship lane pushes the build branch there is no
+ * commit on GitHub to carry a status, and throwing here failed the whole
+ * review-verification run for every Build Studio build — after the review
+ * itself had already been recorded. The receipt is the review's evidence; the
+ * status is its GitHub projection, and the ship/PR lane publishes it when the
+ * commit exists there.
+ */
+async function publishFailureReadinessWhenBound(capsuleId: string): Promise<void> {
+  const { isWorkroomStatusPublishable, publishFailureReadinessStatus } = await import("./failure-readiness-status");
+  const bound = await isWorkroomStatusPublishable(capsuleId);
+  if (!bound.publishable) {
+    console.info(`[semantic-review] ${capsuleId}: failure-readiness status not published yet — ${bound.reason}; the ship lane publishes it once the commit is on GitHub.`);
+    return;
+  }
+  await publishFailureReadinessStatus(capsuleId);
 }

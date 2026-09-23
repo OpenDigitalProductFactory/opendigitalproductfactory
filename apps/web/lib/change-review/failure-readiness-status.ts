@@ -4,10 +4,32 @@ import { checkWorkroomFailureReadiness } from "./failure-readiness-publication";
 
 export const FAILURE_READINESS_STATUS_CONTEXT = "dpf/failure-readiness";
 
+const IMMUTABLE_SHA = /^[a-f0-9]{40}$/;
+
+/**
+ * A commit status can only be published for a Workroom whose final commit is
+ * known and lives in a repository. A Build Studio room reaches its semantic
+ * review before its branch has been pushed anywhere — no headSha, so no GitHub
+ * commit to attach a status to. That is a lifecycle position, not a failure:
+ * the ship/PR lane binds the room and publishes then.
+ */
+export async function isWorkroomStatusPublishable(
+  capsuleId: string,
+): Promise<{ publishable: true } | { publishable: false; reason: string }> {
+  const room = await prisma.workroom.findUnique({ where: { capsuleId }, select: { headSha: true, repositoryFullName: true } });
+  if (!room?.headSha || !IMMUTABLE_SHA.test(room.headSha)) {
+    return { publishable: false, reason: "the Workroom has no immutable source commit yet" };
+  }
+  if (!room.repositoryFullName) {
+    return { publishable: false, reason: "the Workroom is not bound to a repository yet" };
+  }
+  return { publishable: true };
+}
+
 /** Publish only the server-resolved verdict for the Workroom's final commit. */
 export async function publishFailureReadinessStatus(capsuleId: string): Promise<void> {
   const room = await prisma.workroom.findUnique({ where: { capsuleId }, select: { headSha: true, repositoryFullName: true } });
-  if (!room?.headSha || !/^[a-f0-9]{40}$/.test(room.headSha)) throw new Error("Failure readiness requires an immutable source commit.");
+  if (!room?.headSha || !IMMUTABLE_SHA.test(room.headSha)) throw new Error("Failure readiness requires an immutable source commit.");
   const repository = await resolveRepoIdentity(prisma);
   if (room.repositoryFullName !== `${repository.owner}/${repository.name}`) throw new Error("Failure readiness repository mismatch.");
   const token = await resolveGithubToken(prisma);
