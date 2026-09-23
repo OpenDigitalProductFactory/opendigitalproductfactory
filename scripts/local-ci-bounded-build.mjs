@@ -750,9 +750,31 @@ async function main() {
     stageReceipt.complete(receiptStatus, payload);
     if (finalStatus === "blocked_control_plane_starvation") {
       process.stderr.write(`[local-ci-bounded-build] ${finalStatus} ${failures.join(",")}\n`);
-      const advisory = controlPlaneEngineAdvisory(failures);
-      if (advisory) process.stderr.write(`[local-ci-bounded-build] ${advisory}\n`);
-      exitCode = EXIT_CONTROL_PLANE_STARVATION;
+      // BI-5A1FBCA6: say WHICH failure. Three different things record this one
+      // status, and they have three different remedies. Only the watchdog's
+      // verdict is about the shared control plane, so only it gets the engine
+      // advisory; the builder exhausting its OWN cap gets the numbers instead.
+      if (watchdog.status === "blocked_control_plane_starvation") {
+        const advisory = controlPlaneEngineAdvisory(failures);
+        if (advisory) process.stderr.write(`[local-ci-bounded-build] ${advisory}\n`);
+        exitCode = EXIT_CONTROL_PLANE_STARVATION;
+      } else {
+        // The control plane being healthy the whole time is the single most
+        // useful fact when the builder was the one that ran out. All of this was
+        // already known here and none of it was printed.
+        const healthy = watchdog.samples.length;
+        process.stderr.write(
+          "[local-ci-bounded-build] the BUILDER exhausted its own memory cap; "
+            + `the shared control plane stayed healthy for all ${healthy} probe(s). `
+            + `cap=${policy.memoryBytes} bytes parallelism=${policy.maxParallelism}`
+            + `${buildOutcome.observedWorkers ? ` observedWorkers=${buildOutcome.observedWorkers}` : ""}`
+            + `${buildOutcome.killedStep ? ` killedStep=${buildOutcome.killedStep}` : ""}\n`,
+        );
+        process.stderr.write(
+          "[local-ci-bounded-build] this is build capacity, NOT Docker, PostgreSQL or the portal.\n",
+        );
+        exitCode = buildOutcome.exitCode;
+      }
     } else {
       // Retention runs ONLY on a green build, so the slot always keeps a working
       // image: the one just produced supersedes the slot's older images. Gating on
