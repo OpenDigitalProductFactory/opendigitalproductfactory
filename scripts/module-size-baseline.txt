@@ -39,7 +39,6 @@ apps/web/lib/ai-operations-map/load-map-data.test.ts	915
 apps/web/lib/explore/build-process-matrix.ts	842
 apps/web/lib/explore/feature-build-types.ts	1102
 apps/web/lib/finance/ai-provider-finance.ts	1309
-apps/web/lib/inference/ai-provider-internals.ts	1167
 apps/web/lib/inference/ai-provider-internals.ts	1151
 apps/web/lib/marketing.ts	1196
 apps/web/lib/mcp/packs/backlog-pack.dispatch.test.ts	874
@@ -55,7 +54,7 @@ apps/web/lib/self-upgrade/quiescence.test.ts	951
 apps/web/lib/self-upgrade/quiescence.ts	1621
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	940
-apps/web/lib/tak/agent-grants.ts	989
+apps/web/lib/tak/agent-grants.ts	992
 apps/web/lib/tak/agent-routing.ts	1195
 apps/web/lib/tak/agentic-loop.test.ts	2472
 apps/web/lib/tak/agentic-loop.ts	2625
