@@ -26,6 +26,7 @@
 // The WWMD decision itself is NOT the blocker (the stuck builds carried a cached
 // `recommend`, confidence 0.9); the transition SIDE-EFFECT was.
 
+import { excerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
 import { prisma, type Prisma } from "@dpf/db";
 import {
   canTransitionPhase,
@@ -475,7 +476,9 @@ export async function performPlanToBuildTransition(params: {
     return await failTransition({
       buildId,
       parentEpicId: build.parentEpicId ?? null,
-      reason: `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`,
+      // BI-518B5F69: git states its fault at the END of stderr (after the
+      // prelude echo); a head-only clip hid "dubious ownership" for a day.
+      reason: `startBuildBranch failed: ${excerptHeadAndTail((branchErr as Error).message ?? "", 700)}`,
       prevTracker: tracker,
     });
   }
