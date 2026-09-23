@@ -236,11 +236,23 @@ export const buildReviewVerification = inngest.createFunction(
       return { status: "semantic-review-unavailable", reason: semanticReview.reason };
     }
     if (semanticReview.kind === "reviewed" && !semanticReview.outcome.mayPublish) {
-      return {
-        status: "semantic-review-blocked",
-        decision: semanticReview.outcome.receipt.result.decision,
-        nextAction: semanticReview.outcome.nextAction,
-      };
+      // The receipt is durable evidence, but the build's own trail said
+      // nothing — an owner saw a build parked in review with no reason while
+      // the reconciler re-queued the same verdict every half hour.
+      const { decision, summary, issues } = semanticReview.outcome.receipt.result;
+      const nextAction = semanticReview.outcome.nextAction;
+      await step.run("record-semantic-review-blocked", async () => {
+        const { prisma } = await import("@dpf/db");
+        const issueList = issues.slice(0, 3).map((issue) => `${issue.severity}: ${issue.description}`).join("; ");
+        await prisma.buildActivity.create({
+          data: {
+            buildId,
+            tool: "review-verification",
+            summary: `Semantic change review ${decision} — next: ${nextAction}. ${summary}${issueList ? ` (${issueList})` : ""}`.slice(0, 1000),
+          },
+        }).catch(() => {});
+      });
+      return { status: "semantic-review-blocked", decision, nextAction };
     }
 
     await step.run("start-verification", async () => {
