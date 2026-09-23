@@ -45,12 +45,13 @@ function compareFiles(payload: unknown): CompareFile[] | null {
   if (!Array.isArray(files)) return null;
   const rows: CompareFile[] = [];
   for (const entry of files.slice(0, COMPARE_FILE_LIMIT)) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
     const row = entry as Record<string, unknown>;
     const filename = typeof row.filename === "string" ? row.filename : "";
     const sha = typeof row.sha === "string" ? row.sha : "";
     const status = typeof row.status === "string" ? row.status : "";
-    if (filename && sha) rows.push({ filename, sha, status });
+    if (!filename || !sha || !status) return null;
+    rows.push({ filename, sha, status });
   }
   return rows;
 }
@@ -264,15 +265,15 @@ async function discoverCanonicalDesignArtifactWithFetch(
 
 /** A single implementation artifact may be accompanied by tests and explanatory docs. */
 function discoverRepairArtifact(files: CompareFile[]): CanonicalArtifactDiscoveryResult {
-  const present = files.filter((file) => file.status !== "removed"
-    && /^[a-f0-9]{40}$/i.test(file.sha)
+  const valid = files.filter((file) => /^[a-f0-9]{40}$/i.test(file.sha)
     && !file.filename.includes("\\")
     && file.filename.split("/").every((part) => part.length > 0 && part !== "." && part !== ".."));
-  const implementation = present.filter((file) => !file.filename.startsWith("docs/")
+  const implementation = valid.filter((file) => !file.filename.startsWith("docs/")
     && !/(^|\/)(__tests__|tests?)\//.test(file.filename)
     && !/\.(test|spec)\.[^/]+$/.test(file.filename));
-  const candidates = present.length === 1 ? present : implementation;
-  if (candidates.length === 1) {
+  // Deletions remain part of the repair scope even though no head blob survives.
+  const candidates = valid.length !== files.length ? [] : valid.length === 1 ? valid : implementation;
+  if (candidates.length === 1 && candidates[0]!.status !== "removed") {
     const file = candidates[0]!;
     return { resolved: true, artifact: { path: file.filename, providerBlobId: file.sha } };
   }

@@ -59,6 +59,23 @@ describe("canonical design artifact discovery", () => {
       .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
   });
 
+  it("does not hide a second implementation artifact because it was deleted", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
+      { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" },
+      { filename: "apps/web/lib/b.ts", sha: OTHER_BLOB_SHA, status: "removed" },
+    ]));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+  });
+
+  it("does not infer uniqueness after silently dropping malformed provider entries", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
+      { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" }, null,
+    ]));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toMatchObject({ resolved: false, code: "provider-unavailable" });
+  });
+
   it("does not infer unique repair scope from a provider-capped comparison", async () => {
     const files = Array.from({ length: 300 }, (_, index) => ({ filename: index === 0 ? "apps/web/lib/a.ts" : `docs/${index}.md`, sha: BLOB_SHA, status: "modified" }));
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse(files));
