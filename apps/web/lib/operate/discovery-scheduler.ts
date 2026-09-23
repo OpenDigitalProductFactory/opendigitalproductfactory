@@ -9,12 +9,14 @@ const PROMETHEUS_POLL_INTERVAL_MS = 60 * 60_000;
 const FULL_SWEEP_INTERVAL_MS = 60 * 60_000;
 const ISSUE_TRIAGE_INTERVAL_MS = 15 * 60_000;
 const BACKLOG_TRIAGE_DRAIN_INTERVAL_MS = 60 * 60_000;
+const LOCAL_ONLY_SWEEP_INTERVAL_MS = 7 * 24 * 60 * 60_000;
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL ?? "http://prometheus:9090";
 
 const JOB_PROMETHEUS_POLL       = "discovery-prometheus-poll";
 const JOB_FULL_SWEEP            = "discovery-full-sweep";
 const JOB_ISSUE_TRIAGE          = "issue-report-triage";
 const JOB_BACKLOG_TRIAGE_DRAIN  = "backlog-triage-drain";
+const JOB_LOCAL_ONLY_SWEEP      = "local-only-knowledge-sweep";
 
 /**
  * Single source of truth for the ScheduledJob rows this module owns.
@@ -35,7 +37,16 @@ const MANAGED_JOBS: ManagedJob[] = [
   { jobId: JOB_FULL_SWEEP,           name: "Discovery: full infrastructure sweep",   schedule: "hourly",     intervalMs: FULL_SWEEP_INTERVAL_MS },
   { jobId: JOB_ISSUE_TRIAGE,         name: "Quality: issue report triage",           schedule: "every-15m",  intervalMs: ISSUE_TRIAGE_INTERVAL_MS },
   { jobId: JOB_BACKLOG_TRIAGE_DRAIN, name: "Operate: backlog triage drain",          schedule: "hourly",     intervalMs: BACKLOG_TRIAGE_DRAIN_INTERVAL_MS },
+  { jobId: JOB_LOCAL_ONLY_SWEEP,     name: "Commons: local-only knowledge sweep",    schedule: "weekly",     intervalMs: LOCAL_ONLY_SWEEP_INTERVAL_MS },
 ];
+
+/**
+ * The ids this module registers, exported so a test asserts COVERAGE rather
+ * than a hardcoded count. A literal count is the same drift this registry
+ * exists to prevent: adding a job here and forgetting the test taught the test
+ * to fail for the right reason in the wrong words.
+ */
+export const MANAGED_JOB_IDS: readonly string[] = MANAGED_JOBS.map((job) => job.jobId);
 
 const MANAGED_JOBS_BY_ID: Record<string, ManagedJob> = Object.fromEntries(
   MANAGED_JOBS.map((job) => [job.jobId, job]),

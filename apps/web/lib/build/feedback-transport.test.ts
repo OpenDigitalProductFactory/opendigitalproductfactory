@@ -192,3 +192,37 @@ describe("DirectBridgeTransport", () => {
     expect(result).toEqual({ status: "failed", error: "GitHub API error: bad credentials" });
   });
 });
+
+describe("federation transport selection (BI-B423912F)", () => {
+  const federationClient = async () => ({ status: "filed" as const, issueNumber: null, url: "demand://x" });
+
+  it("prefers demand when a trusted link exists, so the submission can be voted on", () => {
+    // An issue filed as a GitHub issue is pseudonymous and unvotable; the
+    // federated demand channel is the one the ballot reads.
+    const transport = selectTransport(
+      { upstreamRelayUrl: "https://relay.test", hasToken: true, hasTrustedFederationLink: true },
+      { federationClient },
+    );
+    expect(transport.kind).toBe("federation");
+  });
+
+  it("falls back to the relay when there is no federation link", () => {
+    expect(selectTransport(
+      { upstreamRelayUrl: "https://relay.test", hasToken: false, hasTrustedFederationLink: false },
+      { federationClient },
+    ).kind).toBe("relay");
+  });
+
+  it("does not claim the federation path when no client was injected", () => {
+    // A declared link with no way to project would otherwise swallow the report.
+    expect(selectTransport(
+      { upstreamRelayUrl: "https://relay.test", hasToken: false, hasTrustedFederationLink: true },
+      {},
+    ).kind).toBe("relay");
+  });
+
+  it("leaves existing installs untouched when the flag is absent", () => {
+    expect(selectTransport({ upstreamRelayUrl: null, hasToken: true }).kind).toBe("direct");
+    expect(selectTransport({ upstreamRelayUrl: null, hasToken: false }).kind).toBe("noop");
+  });
+});

@@ -359,6 +359,18 @@ export const EXIT_USAGE = 2;
 export const EXIT_SANDBOX_DRIFT = 3;
 export const EXIT_SANDBOX_NOT_READY = 4;
 export const EXIT_CONTROL_PLANE_STARVATION = 5;
+/**
+ * The production build exhausted the BUILDER's own memory cap (BI-5A1FBCA6).
+ *
+ * Distinct from EXIT_CONTROL_PLANE_STARVATION, which means the shared portal,
+ * MCP, Docker or PostgreSQL degraded while the build ran. Both are
+ * infrastructure evidence rather than a verdict on the diff, and both currently
+ * record the same STATUS so an already-deployed portal keeps accepting the
+ * evidence write — but they have different remedies, so they must not share a
+ * summary. Splitting the status itself is deferred until the portal's accepted
+ * set ships the new value; see the item.
+ */
+export const EXIT_BUILDER_RESOURCE_EXHAUSTED = 6;
 export const EXIT_VITEST_RUNNER_TERMINATION = 86;
 /**
  * The local-CI child was killed by a SIGNAL rather than exiting (BI-F22B4EEE).
@@ -404,6 +416,14 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
       gatePassed: false,
       productEvidence: false,
       summary: "local-CI gate blocked: freshness preflight reported sandbox drift. This is a sandbox defect, NOT product build evidence.",
+    };
+  }
+  if (gateExitCode === EXIT_BUILDER_RESOURCE_EXHAUSTED) {
+    return {
+      status: "blocked_control_plane_starvation",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate blocked: the production build ran out of memory inside the BUILDER's own cap — the shared control plane was healthy throughout. This is infrastructure evidence, NOT a product build failure. Do not go looking at Docker, PostgreSQL or the portal: the remedy is build capacity (the recorded policy names the cap, and the build log names the worker count and the step that was killed).",
     };
   }
   if (gateExitCode === EXIT_CONTROL_PLANE_STARVATION) {

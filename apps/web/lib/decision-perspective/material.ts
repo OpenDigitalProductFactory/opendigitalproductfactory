@@ -454,12 +454,21 @@ export async function resolveProfileMaterialForProfession(input: {
     ? professionProfileId(professionKey)
     : (input.fallbackProfileId ?? MARK_DPF_PLATFORM_PROFILE.profileId);
 
-  const resolved = await resolveProfileMaterial({
+  const base = await resolveProfileMaterial({
     db: input.db,
     profileId: entryProfileId,
     domainClass: input.domainClass,
     maxDepth: input.maxDepth,
   });
+
+  // BI-0EB9F1D2. Craft material carries every decision class its family
+  // answers, so a confirmed page and the platform-derived distillation it
+  // supersedes can now meet in one class. The gate averages effective
+  // weights, so leaving both in place would let a B/0.6 distillation veto
+  // the human A/0.9 confirmation. Superseding is applied HERE, on the craft
+  // path only, so the WWMD and build-studio scoring stays byte-identical.
+  const { supersedeDerivedMaterial } = await import("@dpf/db/profession-material-promotion");
+  const resolved = { ...base, materials: supersedeDerivedMaterial(base.materials) };
 
   // The profession profile "decided" only when the coworker maps to a family
   // AND the material that resolved came from that profile itself (not a
