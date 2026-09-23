@@ -1836,6 +1836,9 @@
     "scripts/check-prose-lint.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
+    "scripts/check-queue-flag-reachability.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/check-retired-substrate.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
@@ -2723,6 +2726,7 @@
       "scripts/check-docs-impact.mjs",
       "scripts/check-failure-readiness.mjs",
       "scripts/check-guard-diff-honesty.mjs",
+      "scripts/check-queue-flag-reachability.mjs",
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
