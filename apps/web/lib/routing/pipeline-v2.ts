@@ -52,6 +52,7 @@ import {
   buildDefaultPlan,
   resolveDefaultExecutionAdapter,
 } from "./execution-plan";
+import { buildRoutingConfidence } from "./route-confidence";
 import {
   applyHarnessConfidenceOverride,
   bindHarnessRecipeForActivity,
@@ -755,15 +756,13 @@ export async function routeEndpointV2(
   );
 
   const fallbackChain = fallbackEntries.map((e) => e.endpoint.id);
-  // Always include winner in fallback chain too
-  const fullFallbackChain = [winner.endpoint.id, ...fallbackChain];
+  const fullFallbackChain = [winner.endpoint.id, ...fallbackChain]; // winner leads the chain
 
   const preferenceReason = preferenceSelection.resolution
     ? ` Preferences: ${preferenceSelection.resolution.applied.length} applied, ` +
       `${preferenceSelection.resolution.unavailable.length} unavailable.`
     : "";
-  // BI-16A1B4A3: a relaxed floor must never be silent — the owner is getting a
-  // below-floor model and is entitled to know that is what happened.
+  // BI-16A1B4A3: a relaxed floor is never silent — the owner is entitled to know.
   const degradedReason = hardResult.qualityFloorRelaxed
     ? " No endpoint met the quality floor for this work, so it ran on the best available rather than not running."
     : "";
@@ -778,6 +777,7 @@ export async function routeEndpointV2(
     selectedEndpoint: winner.endpoint.id,
     selectedModelId: winner.endpoint.modelId,
     reason,
+    routingConfidence: buildRoutingConfidence(hardResult.qualityFloorRelaxed, ranked.length, preferenceSelection.resolution?.fallbackUsed),
     fitnessScore: winner.rankScore,
     fallbackChain: fullFallbackChain,
     candidates: [...eligibleTraces, ...allCandidates],

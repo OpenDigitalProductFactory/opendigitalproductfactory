@@ -198,6 +198,14 @@ export interface RouteDecision {
   policyRulesApplied: string[];
   /** Structured preference outcome; avoids coupling behavior to reason text. */
   preferenceResolution?: RoutePreferenceResolution;
+  /**
+   * BI-A08285BC: how much confidence routing had in this answer — the floor it
+   * had to relax, how many candidates actually competed, whether a fallback was
+   * used. Structural for the same reason preferenceResolution is: behaviour must
+   * not depend on parsing `reason`. Deliberation activation reads it to decide
+   * whether the output needs a second look.
+   */
+  routingConfidence?: import("@/lib/deliberation/routing-confidence").RoutingConfidenceSignal;
   taskType: string;
   sensitivity: SensitivityLevel;
   timestamp: Date;

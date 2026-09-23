@@ -27,6 +27,13 @@ import {
 } from "./types";
 import { getPattern } from "./registry";
 import type { ResolvedDeliberationPattern } from "./registry";
+import { gradeIndependence, type ReviewerPool } from "./reviewer-independence";
+import {
+  boundedConfidenceRisk,
+  describeRoutingConfidence,
+  routingConfidenceRisk,
+  type RoutingConfidenceSignal,
+} from "./routing-confidence";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -37,6 +44,25 @@ export type DeliberationStage = "ideate" | "plan" | "build" | "review" | "ship";
 export interface ResolveDeliberationInput {
   stage?: DeliberationStage;
   riskLevel: DeliberationActivatedRiskLevel;
+  /**
+   * BI-1A5204A0: how much confidence routing had in the endpoint it chose.
+   * Folded onto the risk axis, so it can only ever ADD scrutiny — never reduce
+   * what stage or declared risk already require.
+   */
+  routingConfidence?: RoutingConfidenceSignal | null;
+  /**
+   * BI-2A67FAE2: the caller's Cost/Quality/Time posture. `economy` opts out of
+   * confidence-driven escalation — an explicit choice to accept a weaker answer
+   * rather than pay for a second look. Declared risk and stage defaults still
+   * apply, so it is a discount on inferred escalation, never a policy dodge.
+   */
+  costPosture?: DeliberationStrategyProfile | null;
+  /**
+   * BI-0FC71985: what the install can actually field for a reviewer. Absent
+   * resolves to the WEAKEST independence rather than the strongest — claiming
+   * independence we cannot evidence is the failure this guards.
+   */
+  reviewerPool?: ReviewerPool | null;
   explicitPatternSlug?: string | null;
   artifactType: DeliberationArtifactType;
   routeContext?: string | null;
@@ -44,6 +70,13 @@ export interface ResolveDeliberationInput {
 
 export interface ResolvedDeliberationRun {
   patternSlug: string;
+  /** Set when routing confidence raised the effective risk above the declared one. */
+  routingConfidenceEscalated?: boolean;
+  /**
+   * BI-0FC71985: what this review is actually worth. Present whenever a pattern
+   * runs, so a same-model review can never read like heterogeneous review.
+   */
+  independence?: import("./reviewer-independence").IndependenceGrade;
   triggerSource: DeliberationTriggerSource;
   strategyProfile: DeliberationStrategyProfile;
   diversityMode: DeliberationDiversityMode;
@@ -56,8 +89,13 @@ export interface ResolvedDeliberationRun {
 /* -------------------------------------------------------------------------- */
 
 const STRENGTH: Record<string, number> = {
-  review: 1,
-  debate: 2,
+  // BI-A8EAC294: multi-pass ranks BELOW review deliberately. A second sample from
+  // the same model measures run-to-run variance; it is a weaker instrument than an
+  // independent critic and must never displace one. Where a reviewer is available
+  // and warranted, the strengthen-but-not-weaken rule picks the reviewer.
+  "multi-pass": 1,
+  review: 2,
+  debate: 3,
 };
 
 function strengthOf(slug: string): number {
@@ -171,7 +209,17 @@ function reasonFor(input: {
 export async function resolve(
   input: ResolveDeliberationInput,
 ): Promise<ResolvedDeliberationRun | null> {
-  const { stage, riskLevel, explicitPatternSlug, artifactType: _artifactType } = input;
+  const { stage, explicitPatternSlug, artifactType: _artifactType } = input;
+
+  // BI-1A5204A0: a routing outcome the router itself had little confidence in
+  // raises the effective risk. Taking the HIGHER of the two is what makes this
+  // strengthen-only: a confident route can never lower a declared risk level.
+  const confidenceRisk = routingConfidenceRisk(input.routingConfidence);
+  const riskLevel = boundedConfidenceRisk(input.riskLevel, confidenceRisk, input.costPosture);
+  const routingConfidenceEscalated = riskLevel !== input.riskLevel;
+  const confidenceReason = routingConfidenceEscalated
+    ? describeRoutingConfidence(input.routingConfidence)
+    : null;
 
   // Silence unused-var warning without losing the shape of the call-site.
   void _artifactType;
@@ -248,12 +296,15 @@ export async function resolve(
   const pattern = await getPattern(chosen);
   if (!pattern) return null;
 
-  const { strategyProfile, diversityMode } = resolveStrategy(pattern);
+  const { strategyProfile, diversityMode: requestedDiversity } = resolveStrategy(pattern);
+  // Never claim more independence than the pool can field.
+  const independence = gradeIndependence(requestedDiversity, input.reviewerPool);
+  const diversityMode = independence.mode;
 
   const activatedRiskLevel: DeliberationActivatedRiskLevel | null =
     triggerSource === "stage" && riskLevel === "low" ? null : riskLevel;
 
-  const reason = reasonFor({
+  const baseReason = reasonFor({
     slug: chosen,
     triggerSource,
     riskLevel,
@@ -262,6 +313,12 @@ export async function resolve(
     overruledExplicit,
   });
 
+  // An escalation that cannot explain itself reads as unexplained extra cost, so
+  // the routing reason is appended rather than replacing the policy reason.
+  const reason = confidenceReason
+    ? `${baseReason} Raised because ${confidenceReason}.`
+    : baseReason;
+
   return {
     patternSlug: chosen,
     triggerSource,
@@ -269,5 +326,7 @@ export async function resolve(
     diversityMode,
     activatedRiskLevel,
     reason,
+    independence,
+    ...(routingConfidenceEscalated ? { routingConfidenceEscalated: true } : {}),
   };
 }
