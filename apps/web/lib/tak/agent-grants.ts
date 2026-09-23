@@ -752,6 +752,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Hive Mind / Platform updates
   assess_contribution:    ["backlog_read"],
   contribute_to_hive:     ["backlog_write"],
+  // BI-1281A164: the same egress grant as contribute_to_hive. It sends a
+  // captured FINDING rather than a build diff, so an external session with no
+  // build can complete step 4 of routing a learning to the commons.
+  contribute_finding_to_hive: ["backlog_write"],
   set_change_disposition: ["backlog_write"],
   apply_platform_update:  ["admin_write"],
   // BI-C26F7EE1: read-only operator preview of the upstream change set —

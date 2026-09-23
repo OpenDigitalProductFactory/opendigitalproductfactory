@@ -12,6 +12,10 @@ export const SCHEDULED_AGENT_TASK_KINDS = [
   // advances the standing Bookkeeping Work Room's cycle for the current period;
   // handled off the LLM path (like the data-model mirror), not a free-form watch.
   "bookkeeping-cycle",
+  // BI-19CEC4B4 — the weekly decision-engine self-review. Deterministic like
+  // bookkeeping-cycle: it reads the DecisionInteraction ledger and runs pure
+  // measures, so no model judgement enters the run.
+  "decision-engine-review",
 ] as const;
 
 export type ScheduledAgentTaskKind =
@@ -25,6 +29,9 @@ export const ASSURANCE_WATCH_TASK_KIND =
 
 export const BOOKKEEPING_CYCLE_TASK_KIND =
   SCHEDULED_AGENT_TASK_KINDS[4];
+
+export const DECISION_ENGINE_REVIEW_TASK_KIND =
+  SCHEDULED_AGENT_TASK_KINDS[5];
 
 export function isScheduledAgentTaskKind(
   value: unknown,

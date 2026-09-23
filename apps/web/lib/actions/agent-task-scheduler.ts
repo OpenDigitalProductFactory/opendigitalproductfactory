@@ -47,7 +47,7 @@ import { proposeProductIntelligenceWatch } from "@/lib/product-management/produc
 import {
   PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND,
 } from "@/lib/product-management/product-management-playbook";
-import { BUSINESS_ANALYSIS_WATCH_TASK_KIND, BOOKKEEPING_CYCLE_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
+import { BUSINESS_ANALYSIS_WATCH_TASK_KIND, BOOKKEEPING_CYCLE_TASK_KIND, DECISION_ENGINE_REVIEW_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import { executeBusinessAnalysisWatchRun } from "@/lib/performance/business-analysis-watch-run";
 import { executeBookkeepingCycleTask } from "@/lib/finance/bookkeeping/bookkeeping-cycle-task";
 import {
@@ -245,6 +245,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   // S-TRIG (BI-DC738330): the weekly books cadence — deterministic, off the LLM path.
   if (task.taskKind === BOOKKEEPING_CYCLE_TASK_KIND) {
     await executeBookkeepingCycleTask(task);
+    return;
+  }
+
+  // BI-19CEC4B4: the weekly decision-engine self-review — also deterministic.
+  if (task.taskKind === DECISION_ENGINE_REVIEW_TASK_KIND) {
+    const { executeDecisionEngineReviewTask } = await import("@/lib/decision/self-review/decision-engine-review-task");
+    await executeDecisionEngineReviewTask(task);
     return;
   }
 

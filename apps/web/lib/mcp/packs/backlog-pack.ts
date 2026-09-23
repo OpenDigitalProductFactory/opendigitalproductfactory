@@ -335,7 +335,9 @@ async function updateBacklogItemStatus(
   // race on the same row; the loser's WHERE fails (count=0) → claim_conflict.
   // Stale claims reclaim inline; force=true takes over. Release on leave.
   const forceClaim = params["force"] === true;
-  if (item.status === target && target !== "deferred") {
+  const isCompletionEvidenceReconciliation =
+    target === "done" && params["completionEvidence"] !== undefined;
+  if (item.status === target && target !== "deferred" && !isCompletionEvidenceReconciliation) {
     return {
       success: true,
       entityId: itemIdRaw,
