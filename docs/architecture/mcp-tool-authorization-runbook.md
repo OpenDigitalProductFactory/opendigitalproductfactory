@@ -1,14 +1,21 @@
 # MCP tool authorization runbook
 
 **OAuth identity and continuing authority.** The approval binds the human,
-client, resource and approved assistant role. A client's self-declared name
-cannot choose a coworker identity. Reconnects, refreshes and new tasks reuse
-that consent without another login; each privileged action checks the human's
-current permissions, token scope, assistant grants and room admission. OAuth
-work claims retain the human owner separately from assistant attribution.
-Older connections missing approved identity need one consent repair through
-the client's reconnect flow. Never infer identity from a name, assign an old
-room to its caller, or substitute a legacy token to repair OAuth.
+client, resource and approved assistant role. The server resolves that role
+before the consent screen renders (BI-05E0EA33): it takes the eligible set,
+proves the candidates carry the same grants, clearance and tier, and only
+then lets the client's self-declared name pick a label inside that class;
+a prior consent by the same human for the same name and redirect family wins
+over the name. A self-declared name can never choose a coworker outside the
+eligible set or widen a scope. The default flow is one Connect action;
+`Change` and `Adjust permissions` are disclosures, and a picker is opened
+only when eligible coworkers differ in authority. Reconnects, refreshes and
+new tasks reuse that consent without another login; each privileged action
+checks the human's current permissions, token scope, assistant grants and
+room admission. OAuth work claims retain the human owner separately from
+assistant attribution. Older connections missing approved identity need one
+consent repair through the client's reconnect flow. Never assign an old room
+to its caller or substitute a legacy token to repair OAuth.
 
 **Status:** procedure reference. The *rules* — the authorization principle, scope escalation, and grant enforcement — live in [`AGENTS.md`](../../AGENTS.md) §8/§8a and stay always-on. This file holds transport detail, token issuance and rotation, worktree MCP sync, and the grant-intersection mechanics. Relocated from §8 by BI-0020D511 Phase 1; no rule was dropped.
 
@@ -55,7 +62,7 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 1. `bash scripts/bootstrap-organization-pki.sh --mode authority --hostname localhost --san 127.0.0.1` (re-runnable; reuses the CA). The portal certificate is issued for a year (`DPF_PKI_PORTAL_CERT_DURATION`, default `8760h`) — earlier bootstraps issued a 24h leaf that expired the next day and silently broke LDAPS and any https front (BI-5727522F); a leaf shorter than the configured lifetime is re-issued on the next run. The script starts the Caddy front (`docker-compose.tls.yml`, `:443 → portal:3000`); the installer's compose chain and the autostart unit keep it running because `DPF_ORGANIZATION_TRUST_ENABLED=1` is recorded in `.env`.
 2. `DPF_MCP_URL=https://127.0.0.1/api/mcp/v1?tier=full bash scripts/dpf-bootstrap-agent-toolchain.sh`. For an https endpoint the bootstrap resolves the organization root (`DPF_PKI_TRUST_BUNDLE`, then the install's `.env`, then `~/.dpf/pki/root_ca.crt`) and persists `DPF_MCP_URL` and `NODE_EXTRA_CA_CERTS` beside the token in `~/.dpf/agent-toolchain.env` and, on macOS, the launchd user environment — Node clients (Claude Code, Codex, the gate scripts) trust the install's own CA through that variable, so nothing is added to the system keychain. The client config it writes carries **no** `headers.Authorization` (the scheme rule above), which is what lets discovery run. For Claude Code it also carries `oauth.scopes` = `dpf.read dpf.work dpf.build` (BI-3D2FD68C). The portal advertises only `dpf.read` in its protected-resource metadata, on purpose, and a client that requests just the advertisement is read-only for good: progressive disclosure never shows it a write tool, so the `insufficient_scope` step-up has nothing to fire on. The pin is what makes the consent screen list the write scopes; `dpf.business`, `dpf.operate` and `dpf.admin` stay a deliberate operator choice. The pinned set lives once, as `MCP_CLIENT_OAUTH_SCOPE_PIN` in `packages/integration-shared/src/mcp-client-credential-policy.ts`, and the skill pack's Python generator mirrors it. Claude Code reads the pin only when it starts, so restart the desktop client after the bootstrap changes it.
-3. Restart the desktop client. On first connection it discovers the authorization server, registers itself (RFC 7591), and opens a browser consent page on the signed-in portal; approve once — the page lists one checkbox per pinned scope, so a Claude Code consent shows read, work and build. From then on the access token refreshes silently. `Admin > Platform Development` lists the client beside any remaining PATs. To consent again later (for example after the pin changes), type `/mcp` in the Claude Code composer, pick `dpf`, and choose Authenticate. The desktop app's Settings > Connectors page lists claude.ai connectors only, and the dpf-platform plugin page shows its own copy of the connector as "Not added" because the project's `.mcp.json` entry of the same name takes precedence; neither is the place to sign in. If the consent page stays on screen after Approve, the sign-in still completed: the redirect targets the `claude://` scheme, so the tab never navigates away.
+3. Restart the desktop client. On first connection it discovers the authorization server, registers itself (RFC 7591), and opens a browser consent page on the signed-in portal; approve once — the page names the assistant the connection will act as and lists the pinned scopes in plain words (read, work and build for Claude Code); `Adjust permissions` reveals one checkbox per scope if you want to grant less. From then on the access token refreshes silently. `Admin > Platform Development` lists the client beside any remaining PATs. To consent again later (for example after the pin changes), type `/mcp` in the Claude Code composer, pick `dpf`, and choose Authenticate. The desktop app's Settings > Connectors page lists claude.ai connectors only, and the dpf-platform plugin page shows its own copy of the connector as "Not added" because the project's `.mcp.json` entry of the same name takes precedence; neither is the place to sign in. If the consent page stays on screen after Approve, the sign-in still completed: the redirect targets the `claude://` scheme, so the tab never navigates away.
 
 The SessionStart health hook reads the OAuth challenge on https (a `401` naming `resource_metadata` is the healthy answer) and no longer asks for a token there. Headless callers that cannot open a browser use a `client_credentials` client (design Slice 2b) or, until then, a PAT. Liveness: `OAuthRefreshToken` rows become non-zero on the install and a session authenticates with `source=oauth` (BI-CE5F8C0A).
 

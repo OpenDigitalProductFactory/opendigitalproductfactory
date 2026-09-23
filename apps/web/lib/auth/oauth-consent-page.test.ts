@@ -3,7 +3,17 @@ import { describe, it, expect } from "vitest";
 import { renderConsentPage, renderConsentRefusal, htmlResponse } from "./oauth-consent-page";
 import type { PublicScope } from "./oauth-scope-map";
 
+const assistant = {
+  kind: "resolved" as const,
+  selected: { agentId: "AGT-EXT-CLAUDE", displayName: "Claude Code (external CLI)" },
+  candidates: [
+    { agentId: "AGT-EXT-CLAUDE", displayName: "Claude Code (external CLI)" },
+    { agentId: "AGT-EXT-CODEX", displayName: "Codex (external CLI)" },
+  ],
+};
+
 const base = {
+  assistant,
   clientName: "Claude Code",
   selfAsserted: false,
   installationName: "Second Chance Animal Rescue",
@@ -16,15 +26,49 @@ const base = {
 
 describe("consent rendering", () => {
   it("lets a person cancel without selecting an assistant", () => {
-    expect(renderConsentPage({ ...base, coworkers: [{ agentId: "AGT-EXT-CODEX", displayName: "Codex" }] }))
-      .toContain('name="decision" value="deny" formnovalidate');
+    expect(renderConsentPage(base)).toContain('name="decision" value="deny" formnovalidate');
   });
-  it("does not echo a client-supplied coworker as a hidden identity", () => {
-    const html = renderConsentPage({ ...base, hiddenParams: [["acting_coworker", "impersonated"]],
-      coworkers: [{ agentId: "AGT-EXT-CODEX", displayName: '<img src=x onerror="evil">' }] });
+  it("does not echo a client-supplied coworker or default as a hidden identity", () => {
+    const html = renderConsentPage({ ...base, hiddenParams: [["acting_coworker", "impersonated"], ["default_coworker", "forged"]],
+      assistant: { ...assistant, candidates: [{ agentId: "AGT-EXT-CODEX", displayName: '<img src=x onerror="evil">' }] } });
     expect(html).not.toContain("impersonated");
+    expect(html).not.toContain('value="forged"');
     expect(html).not.toContain("<img src=x");
     expect(html).toContain("does not verify the app's name or grant access to a workroom");
+  });
+
+  // BI-05E0EA33: one Connect action, no role decision in the default flow.
+  it("states the resolved assistant as a consequence and offers Change as a closed disclosure", () => {
+    const html = renderConsentPage(base);
+    expect(html).toContain("It will work as <strong>Claude Code (external CLI)</strong>");
+    expect(html).toMatch(/<details[^>]*>\s*<summary>Change<\/summary>/);
+    expect(html).not.toMatch(/<details[^>]*open[^>]*>\s*<summary>Change/);
+    expect(html).toContain('name="default_coworker" value="AGT-EXT-CLAUDE"');
+    expect(html).toMatch(/<option value="AGT-EXT-CLAUDE" selected>/);
+    expect(html).not.toContain("Choose the assistant you authorize");
+  });
+  it("renders one primary Connect button named for the client and no Approve button", () => {
+    const html = renderConsentPage(base);
+    expect(html).toContain('value="approve">Connect Claude Code</button>');
+    expect(html).not.toContain(">Approve<");
+  });
+  it("binds a single eligible assistant as a hidden field with no disclosure", () => {
+    const html = renderConsentPage({ ...base, assistant: { kind: "single", selected: assistant.selected, candidates: [assistant.selected] } });
+    expect(html).toContain('type="hidden" name="acting_coworker" value="AGT-EXT-CLAUDE"');
+    expect(html).not.toContain("<summary>Change</summary>");
+  });
+  it("opens a specific choice, least authority first, only when candidates differ in authority", () => {
+    const html = renderConsentPage({ ...base, assistant: { kind: "choice", selected: assistant.candidates[0],
+      candidates: [{ ...assistant.candidates[0], detail: "13 permissions" }, { ...assistant.candidates[1], detail: "14 permissions" }] } });
+    expect(html).toMatch(/<details[^>]*open[^>]*>\s*<summary>Change<\/summary>/);
+    expect(html).toContain("differ in what they can do");
+    expect(html).toContain("13 permissions");
+    expect(html).toContain("14 permissions");
+  });
+  it("lists permissions plainly by default and keeps the checkboxes behind Adjust permissions", () => {
+    const html = renderConsentPage(base);
+    expect(html).toContain("<summary>Adjust permissions</summary>");
+    expect(html.indexOf("<li>")).toBeLessThan(html.indexOf('type="checkbox"'));
   });
   it("names the client, the installation and the acting human", () => {
     const html = renderConsentPage(base);
