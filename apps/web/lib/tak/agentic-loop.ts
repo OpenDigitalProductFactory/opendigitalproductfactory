@@ -114,7 +114,7 @@ export const HARD_COMPLETION_CLAIM_PATTERN =
   /\bI(?:'ve| have| just)?\s*(?:have\s+)?(?:saved|created|published|posted|sent|scheduled|recorded|queued|logged|added|drafted and saved|placed)\b|\b(?:saved|published|posted|sent|scheduled|queued|added|recorded)\s+(?:it|that|your|the)\b|\b(?:is|are|has been|have been)\s+(?:now\s+)?(?:live|saved|published|sent|scheduled|posted|queued|recorded)\b|in\s+(?:your\s+)?approval\s+queue|\b(?:prospect\s+)?account\s+created\b|\bACCT-[A-Z0-9]{4,}\b/i;
 
 // The dead-end classifier and its copy live in ./inference-dead-ends (BI-A89E4827).
-import { describeToolRouteFailure, describeToolRouteFailureOutcome, type InferenceDeadEndOutcome } from "./inference-dead-ends";
+import { describeBankedReaderDeferral, describeToolRouteFailure, describeToolRouteFailureOutcome, type InferenceDeadEndOutcome } from "./inference-dead-ends";
 import { usesGovernedReviewTools } from "./governed-review-tools";
 export { describeToolRouteFailure };
 
@@ -1591,41 +1591,20 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       logTurnSummary("unknown", "unknown");
       if (params.terminalToolPolicy) {
         // BI-8B8731EE. A THROW from routeAndCall means the model never ran, so
-        // this is not the reviewer declining its writer contract.
-        //
-        // `failure` above already classifies why. Preserve an adapter capability
-        // refusal on every required-writer call; preserve RESOURCE waits only
-        // before any tool work, because the platform already knows what
-        // to do with it: `preInferenceResourceWait` projects a `provider-capacity`
-        // wait that resumes on the same TaskRun. Rewriting it to
-        // `terminal-writer-missing` made that handling unreachable for every
-        // governed reviewer route and reported a reservation that clears itself
-        // in ~195s as a failure of the writer contract.
-        //
-        // Measured cost of the substitution: five dispatches spent auditing
-        // grants, autonomy tiers and tool surfaces that were correct throughout.
-        // Capacity/busy is preserved only before tool work, mirroring
-        // `preInferenceResourceWait`. Once a reader runs, its work is banked and
-        // the resumable writer wait is better than a resource wait. An adapter
-        // refusal is still pre-inference for the current writer call, though,
-        // so preserve it regardless of completed reader work.
+        // this is not the reviewer declining its writer contract. `failure`
+        // already classifies why. An adapter capability refusal is preserved on
+        // every required-writer call. A RESOURCE wait is preserved as-is only
+        // before any tool work, mirroring `preInferenceResourceWait`, which
+        // projects a `provider-capacity` wait on the same TaskRun (rewriting it
+        // to `terminal-writer-missing` once cost five dispatches auditing grants
+        // that were correct). Once a reader runs its work is banked and the
+        // resumable writer wait is kept, but BI-50B0C471: it still names the
+        // deferral, so the caller waits instead of spending writer attempts.
         if (failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
           return completeResult(failure.message, null, { failure });
         }
-        // BI-50B0C471. After reader work the run keeps its banked writer wait
-        // (above), but it must not claim the writer failed: the model was never
-        // reached. Name the deferral so the caller waits for capacity instead of
-        // re-dispatching into the same reservation, and so the retry does not
-        // spend one of the writer's bounded attempts.
-        if (failure.kind === "capacity" || failure.kind === "busy") {
-          const reads = executedTools.length;
-          const deferredMessage = `Inference ${failure.kind === "capacity" ? "capacity was deferred" : "was busy"} after ${reads} bound read${reads === 1 ? "" : "s"} (${msg}). `
-            + `The reads are banked on this TaskRun and ${params.terminalToolPolicy.writerToolName} has not run. `
-            + "Re-issue the same request after the reservation clears; it resumes here without spending a writer attempt. No receipt was created.";
-          return completeResult(deferredMessage, null, {
-            failure: { kind: "terminal-writer-missing", message: deferredMessage, deferredBy: failure.kind },
-          });
-        }
+        const deferred = describeBankedReaderDeferral(failure.kind, executedTools.length, params.terminalToolPolicy.writerToolName, msg);
+        if (deferred) return completeResult(deferred.message, null, { failure: deferred });
         const message = routeOptions.toolChoice === "required"
           ? `The required governed writer ${params.terminalToolPolicy.writerToolName} could not be dispatched. The same TaskRun remains resumable. No receipt was created.`
           : `The governed review route failed before ${params.terminalToolPolicy.writerToolName} could be recorded. The same TaskRun remains resumable. No receipt was created.`;
