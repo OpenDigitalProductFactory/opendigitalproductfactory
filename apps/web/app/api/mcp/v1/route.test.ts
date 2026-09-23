@@ -133,6 +133,7 @@ beforeEach(() => {
   getQuiescenceConfigMock.mockResolvedValue({ level: "normal", runId: null, enteredAt: null });
   userMock.mockResolvedValue({
     isSuperuser: true,
+    isActive: true,
     groups: [{ platformRole: { roleId: "HR-000" } }],
   } as never);
   taskRunFindFirstMock.mockResolvedValue(null);

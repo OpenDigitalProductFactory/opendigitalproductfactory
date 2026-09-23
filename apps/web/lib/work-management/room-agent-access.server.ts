@@ -7,9 +7,11 @@
  */
 import { prisma } from "@dpf/db";
 
-import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
+import { ensureAgentPrincipalIdentity, syncUserPrincipal } from "@/lib/identity/principal-linking";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 import { authorizeAgentRoomAccess } from "./room-agent-access";
 import type { WorkroomAccessDecision, WorkroomAccessLevel } from "./room-participation";
+import { authorizeWorkroomAccess } from "./room-participation";
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 export interface AgentRoomAccessResult {
@@ -26,9 +28,12 @@ const DEFAULT_AGENT_CLEARANCE = ["public", "internal"] as const;
  */
 export async function resolveAgentRoomAccess(input: {
   agentId: string;
+  userId: string;
   requested: Exclude<WorkroomAccessLevel, "none">;
-  workItem: { id: string; evidence: unknown; assignedToAgentId: string | null };
+  workItem: { id: string; evidence: unknown; assignedToAgentId: string | null; assignedToUserId: string | null };
 }): Promise<AgentRoomAccessResult> {
+  const human = await currentUserContext(input.userId);
+  if (!human) return { decision: { level: "none", reason: "not-admitted" }, agentPrincipalId: null };
   const principal = await ensureAgentPrincipalIdentity(input.agentId);
   // The room ref space is the canonical Principal.principalId (PRN) — the pure
   // decision, the participant projection, and the policy refs all agree on it.
@@ -78,6 +83,25 @@ export async function resolveAgentRoomAccess(input: {
     ...(assignedPrincipal?.principalId ? [assignedPrincipal.principalId] : []),
   ];
   const admittedPrincipalRefs = [...(policy.admittedPrincipalRefs ?? []), ...actionPrincipalRefs];
+
+  // A shared coworker is not a human's room membership. Both must be admitted.
+  // Unlike the legacy portal content fallback, an unassigned room is not open.
+  const humanPrincipal = await syncUserPrincipal(input.userId);
+  const humanRefs = [
+    ...capsuleHolderRefs,
+    ...(policy.actionPrincipalRefs ?? []),
+    ...(input.requested !== "action" ? policy.admittedPrincipalRefs ?? [] : []),
+    ...(input.workItem.assignedToUserId === input.userId ? [humanPrincipal.principalId] : []),
+  ];
+  const humanAccess = authorizeWorkroomAccess({
+    requested: input.requested, principalRef: humanPrincipal.principalId,
+    assignedPrincipalRefs: humanRefs,
+    discoverablePrincipalRefs: policy.discoverablePrincipalRefs ?? [],
+    sensitivityCeiling: policy.sensitivityCeiling ?? "internal",
+    sensitivityClearance: humanPrincipal.sensitivityClearance,
+    isSuperuser: human.isSuperuser, principalKind: "human",
+  });
+  if (humanAccess.level !== input.requested) return { decision: humanAccess, agentPrincipalId };
 
   const decision = authorizeAgentRoomAccess({
     requested: input.requested,

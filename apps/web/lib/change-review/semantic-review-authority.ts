@@ -1,6 +1,6 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { can } from "@/lib/permissions";
-import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 import { getAgentToolGrantsAsync, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { resolveServerOwnedAsyncOperationAuthority } from "@/lib/inference/async-operation-authority";
 import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
@@ -11,16 +11,14 @@ export async function verifySemanticReviewAuthority(packet: SemanticReviewReques
   db: Pick<Prisma.TransactionClient, "user" | "mcpApiToken" | "taskRun" | "workroom" | "agent" | "authorityBinding"> = prisma,
 ): Promise<boolean> {
   const { actor } = packet;
-  const user = await db.user.findUnique({ where: { id: actor.userId },
-    select: { isActive: true, isSuperuser: true, groups: { include: { platformRole: true } } } });
-  if (!user?.isActive || !can({ userId: actor.userId, isSuperuser: user.isSuperuser,
-    platformRole: resolveWorkforcePlatformRole(user.groups) }, "view_platform")) return false;
+  const user = await currentUserContext(actor.userId, db);
+  if (!user || !can(user, "view_platform")) return false;
 
   if (actor.authSource === "pat" || actor.authSource === "oauth") {
     if (!actor.apiTokenId) return false;
     const token = await db.mcpApiToken.findFirst({
       where: { id: actor.apiTokenId, userId: actor.userId, agentId: actor.agentId, revokedAt: null,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        ...(actor.authSource === "oauth" ? {} : { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }) },
       select: { scope: true, capability: true, scopes: true, ...OAUTH_EXECUTION_AUTHORITY_SELECT },
     });
     const scope = token?.scope ?? token?.capability;

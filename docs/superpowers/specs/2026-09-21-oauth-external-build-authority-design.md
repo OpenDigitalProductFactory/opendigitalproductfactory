@@ -69,10 +69,11 @@ its admitted OAuth context and revalidation; verify its deployment independently
 The client name is untrusted display data. The server resolves eligible
 coworkers from approved delegation policy for this human and client/resource.
 An active coworker or work_room_write grant alone is not eligibility. A
-submitted agent identifier is revalidated on POST. Vendor-specific identity
-requires an operator-approved binding to this registration; self-declared
-"Codex" is insufficient. A generic approved external role may be offered
-without claiming verified vendor provenance.
+submitted agent identifier is revalidated on POST. The source-approved external
+development roles may be consented to by a human with current Build Studio
+access. Other coworkers require an administrator or an exact human/client/
+resource delegation. The displayed role is an assignment, not verified vendor
+identity: self-declared "Codex" or "Claude" supplies no authority.
 
 Reuse AuthorityBinding.appliedAgentId and human/client subjects. Each consent
 revision is a new binding record; do not mutate the identity/scope of issued
@@ -113,6 +114,12 @@ requests can narrow only. Revoked or missing bindings return invalid_grant for
 refresh with a reconnect explanation. Legacy unbound refresh cannot repair
 itself or gain identity. Preserve ordinary allowed read behavior where it does
 not require coworker identity; never pass unbound credentials to room actions.
+
+One OAuth approval covers transport reconnections and concurrent tasks. Normal
+refresh is silent. Task idempotency uses the server-issued credential family,
+not an access-token row. Queued execution may survive access-token expiry only
+when a current successor preserves the same human, client, consent, resource,
+coworker and scope envelope. Expired bearer authentication remains refused.
 
 ## Operation authority and attribution (C3)
 
@@ -227,5 +234,8 @@ or scope mapping. They do not establish a passing implementation or live proof.
 
 ## Review state
 
-Draft for immutable design review. No implementation, migration or acceptance
-gate has passed. Formal baseline and coverage receipts remain prerequisites.
+Implementation admitted under IRD-A8107E37E8CF and coverage receipt
+cmubxupm50wg301ru404n27ll. The initial committed identity lifecycle passed the
+canonical gate at afd62e4f095f1afb31a8a2bd492c468b05b746b1, evidence
+cmuc1na3g165e01mkk2eyj7jq. Subsequent human-authority and task-continuity changes
+need final review and gate evidence. Nothing is deployed or live-accepted yet.

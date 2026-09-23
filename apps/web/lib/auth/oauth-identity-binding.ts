@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { can } from "@/lib/govern/permissions";
-import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 import type { PublicScope } from "./oauth-public-scopes";
 
 type Db = Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding">;
@@ -9,13 +9,7 @@ export const OAUTH_SETUP_REQUIRED =
   "Reconnect to approve an assistant role before starting work.";
 
 export async function currentOAuthHuman(userId: string, db: Db = prisma) {
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { isActive: true, isSuperuser: true, groups: { include: { platformRole: true } } },
-  });
-  if (!user?.isActive) return null;
-  return { userId, isSuperuser: user.isSuperuser,
-    platformRole: resolveWorkforcePlatformRole(user.groups) };
+  return currentUserContext(userId, db);
 }
 
 /** Human approval is authority. The client-provided app name is never queried. */
@@ -25,17 +19,21 @@ export async function eligibleOAuthCoworkers(
 ) {
   const human = await currentOAuthHuman(userId, db);
   if (!human) return [];
-  // Administrators can explicitly delegate; everyone else needs an existing
-  // approved delegation for this exact human/client/resource combination.
+  // Human consent can delegate the source-approved development profile within
+  // their build permission. Other coworker identities require an administrator
+  // or an existing delegation for this human/client/resource combination.
   const administrator = can(human, "manage_agents");
+  const delegation: Prisma.AgentWhereInput = { authorityBindings: { some: {
+    oauthPurpose: "delegation", oauthUserId: userId, oauthClientId: clientId,
+    resourceRef: resource, status: "active",
+  } } };
+  const approvedExternalRole: Prisma.AgentWhereInput[] = can(human, "view_platform")
+    ? [{ agentId: { in: ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX", "AGT-EXT-GROK"] } }] : [];
   return db.agent.findMany({
     where: { status: "active", archived: false,
       ...(selection.agentId ? { agentId: selection.agentId } : selection.after ? { agentId: { gt: selection.after } } : {}),
       toolGrants: { some: { grantKey: "work_room_write" } },
-      ...(!administrator ? { authorityBindings: { some: {
-        oauthPurpose: "delegation", oauthUserId: userId, oauthClientId: clientId,
-        resourceRef: resource, status: "active",
-      } } } : {}),
+      ...(!administrator ? { OR: [delegation, ...approvedExternalRole] } : {}),
     },
     select: { id: true, agentId: true, displayName: true },
     orderBy: { agentId: "asc" },

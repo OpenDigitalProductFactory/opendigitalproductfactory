@@ -41,6 +41,7 @@ const ROOM_WORK_ITEM_SELECT = {
   title: true,
   evidence: true,
   assignedToAgentId: true,
+  assignedToUserId: true,
 } as const;
 
 async function resolveRoomWorkItem(caseKey: string) {
@@ -64,7 +65,7 @@ async function agentLabel(agentId: string): Promise<string> {
 
 async function postRoomMessageHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
   context?: PackContext,
 ): Promise<ToolResult> {
   const agentId = context?.agentId;
@@ -84,8 +85,9 @@ async function postRoomMessageHandler(
 
   const access = await resolveAgentRoomAccess({
     agentId,
+    userId,
     requested: "action",
-    workItem: { id: item.id, evidence: item.evidence, assignedToAgentId: item.assignedToAgentId },
+    workItem: item,
   });
   if (access.decision.level !== "action" || !access.agentPrincipalId) {
     return {
@@ -124,7 +126,7 @@ async function postRoomMessageHandler(
 
 async function readRoomMessagesHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
   context?: PackContext,
 ): Promise<ToolResult> {
   const agentId = context?.agentId;
@@ -143,8 +145,9 @@ async function readRoomMessagesHandler(
 
   const access = await resolveAgentRoomAccess({
     agentId,
+    userId,
     requested: "content",
-    workItem: { id: item.id, evidence: item.evidence, assignedToAgentId: item.assignedToAgentId },
+    workItem: item,
   });
   if (access.decision.level !== "content") {
     return {
@@ -189,7 +192,7 @@ async function readRoomMessagesHandler(
 
 async function inviteRoomParticipantHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
   context?: PackContext,
 ): Promise<ToolResult> {
   const agentId = context?.agentId;
@@ -211,8 +214,9 @@ async function inviteRoomParticipantHandler(
   // Only a room member with action rights (the Coordinator, or an active participant) may invite.
   const caller = await resolveAgentRoomAccess({
     agentId,
+    userId,
     requested: "action",
-    workItem: { id: item.id, evidence: item.evidence, assignedToAgentId: item.assignedToAgentId },
+    workItem: item,
   });
   if (caller.decision.level !== "action") {
     return {

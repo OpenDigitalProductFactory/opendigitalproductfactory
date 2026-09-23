@@ -91,17 +91,32 @@ export function isCurrentOAuthAccessToken(row: {
 /** Fields required to revalidate a persisted OAuth actor before queued work. */
 export const OAUTH_EXECUTION_AUTHORITY_SELECT = {
   kind: true, revokedAt: true, expiresAt: true, userId: true, agentId: true,
-  authorityBindingId: true, oauthClientId: true, resource: true, publicScopes: true,
+  authorityBindingId: true, oauthClientId: true, resource: true, publicScopes: true, oauthFamilyKey: true,
   oauthClient: { select: { revokedAt: true, registrationKind: true } },
 } satisfies Prisma.McpApiTokenSelect;
 
-type OAuthAuthorityRow = Prisma.McpApiTokenGetPayload<{ select: typeof OAUTH_EXECUTION_AUTHORITY_SELECT }>;
+type OAuthAuthorityRow = Omit<Prisma.McpApiTokenGetPayload<{ select: typeof OAUTH_EXECUTION_AUTHORITY_SELECT }>, "oauthFamilyKey">
+  & { oauthFamilyKey?: string | null };
 
 /** Admission does not preserve revoked consent while a request waits in a queue. */
 export async function isCurrentOAuthExecutionAuthority(row: OAuthAuthorityRow,
-  db: Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding"> = prisma,
+  db: Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding" | "mcpApiToken"> = prisma,
 ): Promise<boolean> {
-  if (!isCurrentOAuthAccessToken(row) || !await currentOAuthHuman(row.userId, db)) return false;
+  if (row.kind !== "oauth_access" || row.revokedAt || !row.oauthClient || row.oauthClient.revokedAt
+    || !await currentOAuthHuman(row.userId, db)) return false;
+  if (!isCurrentOAuthAccessToken(row)) {
+    // This is queued-work continuity, never bearer authentication. A rotated
+    // credential can sustain only the same human/client/consent/scope envelope.
+    if (!row.oauthClientId || (!row.oauthFamilyKey && row.oauthClient.registrationKind !== "credentials")) return false;
+    const successor = await db.mcpApiToken.findFirst({ where: {
+      kind: "oauth_access", userId: row.userId, oauthClientId: row.oauthClientId,
+      authorityBindingId: row.authorityBindingId, agentId: row.agentId, resource: row.resource,
+      ...(row.oauthFamilyKey ? { oauthFamilyKey: row.oauthFamilyKey } : {}),
+      revokedAt: null, expiresAt: { gt: new Date() }, publicScopes: { hasEvery: row.publicScopes },
+      oauthClient: { revokedAt: null },
+    }, select: OAUTH_EXECUTION_AUTHORITY_SELECT });
+    if (!successor || !isCurrentOAuthAccessToken(successor)) return false;
+  }
   if (!row.authorityBindingId) return row.oauthClient?.registrationKind === "credentials";
   if (!row.oauthClientId || !row.resource) return false;
   const consent = await resolveOAuthConsent({ bindingId: row.authorityBindingId,

@@ -37,7 +37,7 @@ vi.mock("@dpf/db", () => ({
     agentThread: { upsert: (...args: unknown[]) => db.upsertThread(...args) },
     agentModelConfig: { findUnique: (...args: unknown[]) => db.findModelConfig(...args) },
     taskMessage: { findFirst: (...args: unknown[]) => db.findTaskMessage(...args) },
-    mcpApiToken: { findUnique: (...args: unknown[]) => db.findMcpToken(...args) },
+    mcpApiToken: { findFirst: async () => null, findUnique: (...args: unknown[]) => db.findMcpToken(...args) },
     user: { findUnique: (...args: unknown[]) => db.findUser(...args) },
   },
 }));
@@ -322,6 +322,9 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
       executedTools: [],
       failure: { kind: "busy", message: "Provider busy." },
     });
+    db.findMcpToken.mockResolvedValue({ userId: "user-1", kind: "oauth_access", revokedAt: null,
+      expiresAt: null, authorityBindingId: null, oauthClientId: "client", resource: "https://dpf.example/api/mcp/v1",
+      publicScopes: ["dpf.work"], oauthClient: { registrationKind: "credentials", revokedAt: null } });
     await submitRemoteCoworkerTask({ token: { tokenId: "PAT-EVENT", userId: "user-1", capability: "write", source }, userContext, params });
     const createInput = autonomous.create.mock.calls[0]?.[0] as {
       taskRunId: string;
@@ -411,7 +414,7 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         revokedAt: true,
         expiresAt: true,
         kind: true,
-        agentId: true, authorityBindingId: true, oauthClientId: true, resource: true, publicScopes: true,
+        agentId: true, authorityBindingId: true, oauthClientId: true, resource: true, publicScopes: true, oauthFamilyKey: true,
         oauthClient: { select: { revokedAt: true, registrationKind: true } },
       },
     });

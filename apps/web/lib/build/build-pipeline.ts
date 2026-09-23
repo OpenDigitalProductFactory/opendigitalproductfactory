@@ -278,18 +278,28 @@ export async function runBuildPipeline(params: {
  * Inngest function runs each step as its own journaled step.run via
  * build-execute-helpers.runPipelineStepDurable.
  */
+async function requireCurrentBuildHuman(buildId: string) {
+  const { prisma } = await import("@dpf/db");
+  const { currentOperationAuthority } = await import("@/lib/govern/operation-authority");
+  const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { createdById: true } });
+  const user = build?.createdById ? await currentOperationAuthority(build.createdById, "start_build") : null;
+  if (!user || !build?.createdById) throw new Error("The initiating user no longer has permission to run this build.");
+  return { ...user, userId: build.createdById };
+}
+
 export async function executeStep(
   step: BuildExecStep,
   buildId: string,
   state: BuildExecutionState,
   emit: (event: import("@/lib/agent-event-bus").AgentEvent) => void,
 ): Promise<BuildExecutionState> {
+  const user = STEP_ORDER.includes(step) && step !== "complete" ? await requireCurrentBuildHuman(buildId) : null;
   switch (step) {
-    case "pending":              return stepCreateSandbox(buildId, state, emit);
+    case "pending":              return stepCreateSandbox(buildId, state, emit, user!.userId);
     case "sandbox_created":      return stepInitWorkspace(buildId, state);
     case "workspace_initialized":return stepInitDb(buildId, state);
     case "db_ready":             return stepInstallDeps(buildId, state);
-    case "deps_installed":       return stepGenerateCode(buildId, state);
+    case "deps_installed":       return stepGenerateCode(buildId, state, user!);
     case "code_generated":       return stepRunTests(buildId, state);
     case "tests_run":            return stepComplete(buildId, state);
     default:                     return state;
@@ -302,6 +312,7 @@ async function stepCreateSandbox(
   buildId: string,
   state: BuildExecutionState,
   emit: (event: import("@/lib/agent-event-bus").AgentEvent) => void,
+  userId: string,
 ): Promise<BuildExecutionState> {
   const { isSandboxAvailable, startBuildBranch } = await import("./sandbox/build-branch");
   const { waitForSandboxSlot } = await import("./sandbox/sandbox-pool");
@@ -314,7 +325,7 @@ async function stepCreateSandbox(
   // Acquire a slot from the pool — waits up to 30 min if all slots are busy.
   // Emits "slot_queued" progress events so Build Studio shows a waiting state
   // rather than appearing stuck at "Pending".
-  const slot = await waitForSandboxSlot(buildId, "system", {
+  const slot = await waitForSandboxSlot(buildId, userId, {
     pollIntervalMs: 30_000,
     timeoutMs: 1_800_000,
     onWaiting: (attempt) => {
@@ -408,6 +419,7 @@ async function stepInstallDeps(
 async function stepGenerateCode(
   buildId: string,
   state: BuildExecutionState,
+  userContext: Awaited<ReturnType<typeof requireCurrentBuildHuman>>,
 ): Promise<BuildExecutionState> {
   const { prisma } = await import("@dpf/db");
   const { runAgenticLoop } = await import("@/lib/agentic-loop");
@@ -477,8 +489,7 @@ async function stepGenerateCode(
   //
   // Tools with no buildPhases tag (null/undefined) are platform-wide utilities
   // that are safe to include regardless of phase.
-  const adminContext = { userId: "system", platformRole: "HR-000", isSuperuser: true } as Parameters<typeof getAvailableTools>[0];
-  const allTools = await getAvailableTools(adminContext, { mode: "act", unifiedMode: true });
+  const allTools = await getAvailableTools(userContext, { mode: "act", unifiedMode: true });
   const tools = allTools.filter(
     (t) => !t.buildPhases || t.buildPhases.includes("build"),
   );
@@ -618,7 +629,7 @@ async function stepGenerateCode(
     sensitivity: "development", // code clearance; payload screening still applies
     tools,
     toolsForProvider,
-    userId: "system",
+    userId: userContext.userId,
     routeContext: `/build/${buildId}`,
     agentId: "build-architect",
     threadId,

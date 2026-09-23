@@ -8,8 +8,8 @@ Status: implementation in progress; no deployed fix or live acceptance yet.
 Parent: BI-B986A18B. Workroom: WC-F174CC4F.
 Design: ../specs/2026-09-21-oauth-external-build-authority-design.md.
 
-For agentic workers: execute this plan one independently reviewable backlog
-item at a time — one BI, one branch, one PR. Use dpf-tdd for red-green
+Deliver consent and its human/task authority protections as one reviewable
+repair under BI-B986A18B, with linked coverage below. Use dpf-tdd for red-green
 implementation, dpf-local-merge-ci-before-push plus the completion gate before
 any success claim, and dpf-pr-with-dco for handoff.
 
@@ -88,9 +88,24 @@ Focused tests include public/database identity custody, cross-human/client/
 audience/scope denial, disabled users, missing consent, narrowed refresh,
 replay-family isolation and actionable MCP setup refusals. These use mocked
 persistence; actual transaction concurrency, migration and browser acceptance
-still require the leased candidate runtime. Operation-policy, task isolation
-and connection-management deliverables remain open. Nothing in this note
+still require the leased candidate runtime. Current-human policy, exact build
+targeting, OAuth task continuity and human/coworker room intersection now have
+source implementations and focused regression tests. Connection-management
+and final live acceptance remain open. Nothing in this note
 claims that an installation upgrade contains this unmerged implementation.
+
+The shared current-human resolver replaces separate first-role/session-claim
+checks in MCP, portal release actions, queued execution and the agent loop.
+This is the focused refactor portion of the repair. The source-approved external
+development profile permits coordination and development; deployment and
+administration remain excluded. Registry and workforce seed sources agree,
+and existing grant revocation tombstones remain respected.
+
+The room regression first reproduced cross-human content and action admission
+through a shared coworker. The resolver now requires both human and coworker
+admission; 27 related room tests pass. A live release task also reproduced
+duplicate creation with the same user/idempotency key after its token changed,
+consistent with the token-family task continuity regression fixed here.
 
 ### Host preflight prerequisite
 

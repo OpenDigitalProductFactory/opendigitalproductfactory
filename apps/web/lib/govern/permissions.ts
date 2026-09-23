@@ -121,6 +121,8 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
 export type UserContext = {
   userId?: string;
   platformRole: string | null;
+  /** Current memberships, when resolved server-side. The scalar keeps existing session callers compatible. */
+  platformRoles?: readonly string[];
   isSuperuser: boolean;
 };
 
@@ -132,14 +134,13 @@ function isPlatformRoleId(role: string): role is PlatformRoleId {
 
 export function can(user: UserContext, capability: CapabilityKey): boolean {
   if (user.isSuperuser) return true;
-  if (!user.platformRole) return false;
-  if (!isPlatformRoleId(user.platformRole)) return false;
   // PERMISSIONS is a complete Record<CapabilityKey, Permission> — every key is
   // present by construction. The non-null assertion is safe and required because
   // noUncheckedIndexedAccess widens the index return type to `Permission | undefined`
   // even for exhaustive Record types.
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  return PERMISSIONS[capability]!.roles.includes(user.platformRole);
+  return (user.platformRoles ?? (user.platformRole ? [user.platformRole] : []))
+    .some((role) => isPlatformRoleId(role) && PERMISSIONS[capability]!.roles.includes(role));
 }
 
 export function canAccessEmployeeRecord(
@@ -253,12 +254,7 @@ function isAllowed(user: UserContext, capabilityKey: CapabilityKey | null): bool
 
 /** Get all capabilities granted to a user's role. */
 export function getGrantedCapabilities(user: UserContext): CapabilityKey[] {
-  if (user.isSuperuser) return Object.keys(PERMISSIONS) as CapabilityKey[];
-  const role = user.platformRole;
-  if (!role || !isPlatformRoleId(role)) return [];
-  return (Object.entries(PERMISSIONS) as [CapabilityKey, Permission][])
-    .filter(([, perm]) => perm.roles.includes(role))
-    .map(([cap]) => cap);
+  return (Object.keys(PERMISSIONS) as CapabilityKey[]).filter((capability) => can(user, capability));
 }
 
 /** Get capabilities NOT granted to a user's role. */

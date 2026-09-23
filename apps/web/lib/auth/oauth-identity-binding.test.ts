@@ -5,10 +5,11 @@ const identityDb = vi.hoisted(() => ({
   user: { findUnique: vi.fn() },
   agent: { findMany: vi.fn() },
   authorityBinding: { findUnique: vi.fn() },
+  mcpApiToken: { findFirst: vi.fn() },
 }));
 vi.mock("@dpf/db", () => ({ prisma: { oAuthAuthorizationCode: db, ...identityDb } }));
 
-import { resolveOAuthConsent } from "./oauth-identity-binding";
+import { eligibleOAuthCoworkers, resolveOAuthConsent } from "./oauth-identity-binding";
 import { createAuthorizationCode, isCurrentOAuthExecutionAuthority } from "./oauth-tokens";
 
 describe("OAuth consent identity custody", () => {
@@ -89,6 +90,35 @@ describe("current OAuth execution authority", () => {
   });
   it("permits still-approved queued work", async () => {
     expect(await isCurrentOAuthExecutionAuthority(token)).toBe(true);
+  });
+  it("lets a permitted builder approve only the server's external development roles without administrator setup", async () => {
+    identityDb.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false,
+      groups: [{ platformRole: { roleId: "HR-300" } }] });
+    await eligibleOAuthCoworkers("human", "client", token.resource);
+    expect(identityDb.agent.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      OR: expect.arrayContaining([{ agentId: { in: ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX", "AGT-EXT-GROK"] } }]),
+    }) }));
+  });
+  it("does not offer the development role to a human without build permission", async () => {
+    identityDb.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false,
+      groups: [{ platformRole: { roleId: "HR-600" } }] });
+    await eligibleOAuthCoworkers("human", "client", token.resource);
+    const query = identityDb.agent.findMany.mock.calls[0][0];
+    expect(JSON.stringify(query.where)).not.toContain("AGT-EXT-CODEX");
+    expect(JSON.stringify(query.where)).toContain("delegation");
+  });
+  it("continues queued work after refresh using a current successor in the same consent family", async () => {
+    identityDb.mcpApiToken.findFirst.mockResolvedValue({ ...token, oauthFamilyKey: "family" });
+    expect(await isCurrentOAuthExecutionAuthority({ ...token, oauthFamilyKey: "family", expiresAt: new Date(0) })).toBe(true);
+    expect(identityDb.mcpApiToken.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      oauthFamilyKey: "family", userId: token.userId, authorityBindingId: "binding",
+      oauthClientId: "client", agentId: token.agentId, resource: token.resource,
+      publicScopes: { hasEvery: token.publicScopes }, revokedAt: null,
+    }) }));
+  });
+  it("refuses expired queued authority when no equally scoped successor exists", async () => {
+    identityDb.mcpApiToken.findFirst.mockResolvedValue(null);
+    expect(await isCurrentOAuthExecutionAuthority({ ...token, oauthFamilyKey: "family", expiresAt: new Date(0) })).toBe(false);
   });
   it.each(["revoked-consent", "disabled-human", "missing-binding", "wrong-agent", "removed-delegation"])("rejects %s before queued execution", async state => {
     const current = { ...token };

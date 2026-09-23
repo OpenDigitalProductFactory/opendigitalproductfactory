@@ -111,6 +111,7 @@ function row(overrides: Record<string, unknown> = {}) {
     messages: [{ parts: [{ type: "message", text: params.prompt }] }],
     user: {
       id: "user-1",
+      isActive: true,
       isSuperuser: false,
       groups: [{ platformRole: { roleId: "developer" } }],
     },
@@ -202,7 +203,7 @@ describe("persisted remote TaskRun worker", () => {
       data: {
         run: { id: "task-row-1", taskRunId: "TR-MCP-ASYNC" },
         token: { tokenId: "token-1", userId: "user-1", capability: "write", source: "pat" },
-        userContext: { userId: "user-1", platformRole: "developer", isSuperuser: false },
+        userContext: { userId: "user-1", platformRole: "developer", platformRoles: ["developer"], isSuperuser: false },
         parsed: params,
       },
     });
