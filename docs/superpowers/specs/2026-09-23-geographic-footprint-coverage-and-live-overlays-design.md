@@ -6,7 +6,7 @@ status: draft
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft — research complete; four operator decisions recorded 2026-09-23, three open (§9) |
+| **Status** | Draft — research complete; decisions recorded 2026-09-23 with WWMD evidence, two open (§9) |
 | **Created** | 2026-09-23 |
 | **Author** | Claude Opus 5.5 for Mark Bodman |
 | **Amends** | [2026-07-21 Spatial Operational Views](./2026-07-21-spatial-operational-views-design.md) — does not supersede it |
@@ -120,7 +120,7 @@ The people involved are inspectors, who may be staff, board volunteers or a cont
   - a **point** for a tree, light or gate;
   - a **boundary** for a lawn zone, pool enclosure or pond.
 - **Recurrence reuses `RecurrenceSchedule`** (RFC 5545 RRULE, the platform's one recurrence primitive; see `ai-coworker.prisma:135` and its canonical-primitive note). Examples: trim yearly in the dormant season; mow weekly in season; pool chemistry twice weekly and inspection annually. Each occurrence materializes a work item for the assigned vendor. No parallel scheduler.
-- **Why boundaries matter:** a lawn contract covers a drawn area, so the vendor knows exactly what is and is not in scope, and a dispute about "you missed the strip by the entrance" has an answer. The boundary travels with the work order as a snapshot, and the vendor needs no DPF login to see it.
+- **Why boundaries matter:** a lawn contract covers a drawn area, so the vendor knows exactly what is and is not in scope, and a dispute about "you missed the strip by the entrance" has an answer. The boundary travels with the work order as a snapshot. How the vendor opens it (expiring link or portal account) is open in §9.
 - **Substrate gap:** there is no maintained-asset record. `FixedAsset` is a finance record, and `Resource` is bookable capacity (the pool is already a bookable amenity through `Resource`). Before proposing anything new, check whether a common-area feature can be a `Resource` / `CustomerSiteNode` with maintenance attributes, versus a new typed record. This is `dpf-verify-substrate-first` work and is not decided here.
 - **Tree specifics:** species, size, last trimmed, next due, and an arborist note are attributes, not map layers. The map shows only where the tree is.
 
@@ -181,7 +181,7 @@ Each phase is independently shippable, and P0 is the dependency every other phas
 | **P4b** | Violation inspection rounds: phone round of lots, in-place finding capture, notice → cure → re-inspection on one case, offline sync | Depends on `EP-528CF32A`; benchmark HOA violation tools first |
 | **P4c** | Recurring common-area and tree maintenance: maintained features with point or boundary, `RecurrenceSchedule`-driven work, boundary snapshot sent to vendors | Substrate decision (§3.3.4) comes first |
 | **P5** | Server-side overlay connectors, NWS alerts first | On the integration substrate |
-| **P6** | Consented country-only deployment declaration over federation | Only after the §9 decision |
+| **P6** | Consented country-only deployment declaration over federation | Decided 2026-09-23 (§9); follows P1 |
 
 ## 8. Non-goals
 
@@ -193,20 +193,41 @@ Each phase is independently shippable, and P0 is the dependency every other phas
 
 ## 9. Decisions
 
-**Resolved by the operator, 2026-09-23:**
+Platform-direction choices were scored with WWMD `principle_decide` on 2026-09-23 (`platform-development`, stakes `routine`). The operator answers the calls WWMD leaves uncertain or that belong to the org's own business (WWWD).
 
-- **Deployment-footprint source (§3.1.1):** both, CRM-derived first; the opt-in, country-only federation declaration follows as P6.
-- **HOA default (§3.3):** an uploaded site-plan image on the cartesian renderer; georeferenced parcels stay optional.
-- **Vendor access (§3.3.4):** a signed, expiring link showing the work, photo, location snapshot and boundary. No vendor account.
-- **Public reports (§3.3.3):** anyone may report, rate-limited with abuse controls; the reporter's identity is never shown to other residents.
+| Decision | Outcome | Basis |
+|---|---|---|
+| Market footprint placement (§3.1) | `footprint` variant beside the TENANTS board | WWMD, high confidence, margin 2.67 |
+| First overlay connector (§4) | NWS alerts | WWMD, high confidence, margin 0.99 |
+| Backlog home | Create `EP-SPATIAL-OPERATIONAL-VIEWS` (done 2026-09-23) | WWMD, high confidence, margin 7.33 |
+| HOA layout default (§3.3) | Uploaded site-plan image | Operator; WWMD agrees (margin 1.79) |
+| Deployment-footprint source (§3.1.1) | CRM first, then opt-in country-only federation | Operator; WWMD uncertain (margin 0.02), a human call |
+| Who may file public reports (§3.3.3) | **An org-level (WWWD) setting**; platform default **open** | Operator chose "anyone, rate-limited"; WWMD leaned residents-only on a thin margin (0.20) |
+| Vendor access (§3.3.4) | **Open** | Operator chose signed expiring link; WWMD leaned portal accounts on a thin margin (0.33) |
 
-**Still open (leaning noted; not blocking P0):**
+WWMD's margins on the last two are narrow, and the principles it cites for them are only loosely related. Both remain with the operator.
 
-1. **Market footprint placement:** a `footprint` variant beside the TENANTS board (leaning), or its own route under marketing/portfolio?
-2. **First overlay connector:** NWS alerts (leaning; free, US) or another feed?
-3. **Epic:** the parent spec's `EP-SPATIAL-OPERATIONAL-VIEWS` does not exist in the live backlog. Create it and attach `BI-3A56AE0C`, `BI-FE286C27`, `BI-A951CC46`, `BI-3391BE2C`, `BI-F91D0685` and the new P1–P6 items to it, or attach them to an existing epic?
+## 10. Backlog
 
-## 10. Findings to route separately
+Epic `EP-SPATIAL-OPERATIONAL-VIEWS`, created 2026-09-23:
 
-- **Nominatim usage policy.** The public server allows at most 1 request/second, requires caching, forbids client-side autocomplete and requires an identifying User-Agent ([policy](https://operations.osmfoundation.org/policies/nominatim/)). `site-address-validation.ts:153` calls it live; compliance has not been checked.
+| Phase | Item |
+|---|---|
+| P0 geographic renderer | `BI-814F86E1` |
+| P1 market footprint | `BI-4EC1D572` |
+| P2 customer-map + geocoding | `BI-560128FB` |
+| P3 coverage | `BI-6CC10E4C` |
+| P4 HOA layout | inside `BI-FE286C27` |
+| P4a public reports | `BI-246AC135` |
+| P4b violation inspections | `BI-1B3DED34` |
+| P4c recurring maintenance | `BI-3DA6E1A0` |
+| P5 NWS alerts connector | `BI-DC264802` |
+| P6 country-only federation | `BI-06EA3167` |
+| Nominatim policy compliance | `BI-3099EACD` |
+
+Existing spatial items (`BI-3A56AE0C`, `BI-FE286C27`, `BI-A951CC46`, `BI-3391BE2C`, `BI-F91D0685`) still need linking to this epic. The MCP `update_backlog_item` tool exposes no `epicId` field, so that link cannot be made through the governed surface today.
+
+## 11. Findings to route separately
+
+- **Nominatim usage policy** (filed as `BI-3099EACD`). The public server allows at most 1 request/second, requires caching, forbids client-side autocomplete and requires an identifying User-Agent ([policy](https://operations.osmfoundation.org/policies/nominatim/)). `site-address-validation.ts:153` calls it live; compliance has not been checked.
 - **Stale plan anchors.** The territory plan's tool-evaluation IDs and the downstream items named in its "Backlog coverage" section do not resolve in this install; `BI-3A56AE0C` already records the rebinding.
