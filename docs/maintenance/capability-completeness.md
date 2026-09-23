@@ -60,9 +60,9 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | `active-registry-only` | 0 | — | Active in the canonical registry but absent from the workforce roster. |
 | `roster-only` | 0 | — | On the workforce roster but absent from the canonical agent registry. |
 | `defined-roster` | 8 | 76% | Declared in the canonical registry (not active) and seeded onto the roster. |
-| `declared-only` | 6 | 48% | Declared in the canonical registry and never seeded anywhere. |
+| `declared-only` | 0 | — | Declared in the canonical registry and never seeded anywhere. |
 | `superseded` | 2 | 64% | Declared, but the work is done by another ACTIVE identity named in its posture. |
-| `deliberately-unstaffed` | 31 | 48% | Declared and consciously not staffed, with a recorded reason and review date. |
+| `deliberately-unstaffed` | 37 | 48% | Declared and consciously not staffed, with a recorded reason and review date. |
 
 ## Plane levels across the inventory
 
@@ -166,12 +166,12 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-140` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-141` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-142` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-150` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-151` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-152` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-160` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-161` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-162` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-150` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-151` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-152` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-160` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-161` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-162` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-170` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-171` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-172` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |

@@ -100,12 +100,35 @@ describe("a posture is only claimable where it means something", () => {
     }
   });
 
-  it("leaves the customer-facing roles unparked, deliberately", () => {
-    // AGT-150/151/152 and AGT-160/161/162 sit on the two objectives the operator
-    // funds against. Parking them is an operator decision, not an engineering
-    // one, so they keep reporting as open gaps until someone decides.
+  it("parks the six customer-facing roles ONLY on orchestrator coverage", () => {
+    // THIS TEST WAS INVERTED, DELIBERATELY, AND THE REASON MATTERS.
+    //
+    // It previously asserted AGT-150/151/152 and AGT-160/161/162 were NOT
+    // parked, because parking them is a business call and not an engineering
+    // one: their subject sits on the operator's investment test (support
+    // existing customers, win new ones). They stayed open across several
+    // sessions waiting for that call.
+    //
+    // The operator made it (2026-09-23, "deliver all the work required"), and
+    // the evidence that makes it defensible is specific, not general: each of
+    // the six is covered by an ACTIVE orchestrator whose own capability_domain
+    // enumerates its work across the same IT4IT stage range —
+    // release-orchestrator (AGT-ORCH-500) for §5.5, consume-orchestrator
+    // (AGT-ORCH-600) for §5.6.
+    //
+    // So the guard now holds the QUALITY of that decision rather than blocking
+    // it: each of the six must cite the orchestrator that covers it. A posture
+    // parking one of these for any other reason fails here, which is what stops
+    // "covered by an orchestrator" becoming a phrase anyone can paste.
     for (const id of ["AGT-150", "AGT-151", "AGT-152", "AGT-160", "AGT-161", "AGT-162"]) {
-      expect(staffingPostureFor(id), `${id} is customer-facing and must not be parked here`).toBeNull();
+      const posture = staffingPostureFor(id);
+      expect(posture, `${id} must carry a posture`).not.toBeNull();
+      expect(posture!.state).toBe("deliberately-unstaffed");
+      expect(
+        posture!.reason,
+        `${id} is parked without naming the orchestrator that covers it`,
+      ).toMatch(/orchestrator \(AGT-ORCH-[0-9]+\)/);
+      expect(posture!.reason).toContain("STAFFED orchestrator");
     }
   });
 });

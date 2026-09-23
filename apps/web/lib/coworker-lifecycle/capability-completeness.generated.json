@@ -157,9 +157,9 @@
         "medianAttainablePct": 76
       },
       "declared-only": {
-        "count": 6,
+        "count": 0,
         "meaning": "Declared in the canonical registry and never seeded anywhere.",
-        "medianAttainablePct": 48
+        "medianAttainablePct": null
       },
       "superseded": {
         "count": 2,
@@ -167,16 +167,16 @@
         "medianAttainablePct": 64
       },
       "deliberately-unstaffed": {
-        "count": 31,
+        "count": 37,
         "meaning": "Declared and consciously not staffed, with a recorded reason and review date.",
         "medianAttainablePct": 48
       }
     },
     "gaps": {
       "listed": 231,
-      "open": 67,
-      "postured": 164,
-      "posturedAgents": 33
+      "open": 37,
+      "postured": 194,
+      "posturedAgents": 39
     },
     "atFullAttainable": 30,
     "medianAttainablePct": 76,
@@ -2582,7 +2582,7 @@
     {
       "key": "AGT-150",
       "displayName": "service-offer-definition-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "service-offer-definition-agent"
       ],
@@ -2718,7 +2718,7 @@
     {
       "key": "AGT-151",
       "displayName": "catalog-publication-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "catalog-publication-agent"
       ],
@@ -2854,7 +2854,7 @@
     {
       "key": "AGT-152",
       "displayName": "subscription-management-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "subscription-management-agent"
       ],
@@ -2991,7 +2991,7 @@
     {
       "key": "AGT-160",
       "displayName": "consumer-onboarding-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "consumer-onboarding-agent"
       ],
@@ -3127,7 +3127,7 @@
     {
       "key": "AGT-161",
       "displayName": "order-fulfillment-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "order-fulfillment-agent"
       ],
@@ -3263,7 +3263,7 @@
     {
       "key": "AGT-162",
       "displayName": "service-support-agent",
-      "identityClass": "declared-only",
+      "identityClass": "deliberately-unstaffed",
       "handles": [
         "service-support-agent"
       ],
