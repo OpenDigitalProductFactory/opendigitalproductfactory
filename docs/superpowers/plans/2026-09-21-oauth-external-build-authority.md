@@ -39,6 +39,49 @@ Canonical and legacy external identities share this intentional public default.
 This follow-up does not claim full OAuth acceptance or change the approval
 policy. Legacy human-only rooms still need a supported explicit admission action.
 
+### Complete existing-room recovery on the same governed branch
+
+Decision DI-0F2E1820E309; coverage BI-B986A18B (room recovery) and BI-1E56D891
+(external author profile). Extend PR #5558 before queueing its final head.
+
+1. Reproduce cross-sibling admission and unanchored-room clearance gaps. Add an
+   exact-room resolver using existing Principal, participant lifecycle/roles,
+   boundary and case policy. Keep case-wide messaging semantics separate.
+2. Add an owner-authenticated, transactional assistant invitation and audit.
+   Select only active assistants already approved in that human's OAuth setup.
+   Treat existing observer/contributor assignments explicitly; never replace
+   coordinator or reviewer assignments through this recovery control.
+3. Add the on-demand control in Participants, carrying the already selected
+   workroomRowId from the case detail. Explain room-only scope and show refusals.
+4. Add the author evidence grant to canonical and legacy external profiles;
+   test that independent review/admin/deployment grants remain absent.
+5. Run targeted negative and UI tests, exact-head canonical gate and independent
+   review. Update PR scope and evidence, pass protected checks and merge queue.
+6. Deploy canonically; verify real OAuth evidence, room recovery, denied users
+   and siblings, refresh and concurrent tasks. Keep the parent unaccepted until
+   the complete matrix passes. No DB authorization edits or token substitution.
+
+The extension now includes exact legacy identities in the administrator's
+data-access selector, without changing the deduplicated identity cards or
+requiring a replacement connection. The room editor loads current participation,
+preserves contributor access on reopen, and blocks selection changes during Save.
+Missing case admission fields differ from explicit empty restrictions; a
+sensitivity-only policy does not invent a membership denial. Removed membership
+still overrides historical ownership.
+
+CI follow-through: the identity page's deliberate new control requires the
+supported measured route-baseline refresh. Splice only that route, retaining
+its word and accessibility budgets. CodeQL's credential-name heuristic treated
+the fixed refusal result of oauthCapsuleTargetRefusal as a password and followed
+it into the existing transient HMAC redaction vault. Rename that result helper
+to workroomTargetAccessRefusal to describe its actual output; do not change
+cryptography, credential handling, or suppress the security rule.
+
+Grant convergence uses the existing boot seed on canonical and legacy profiles;
+both seed paths honor AgentToolGrantRevocation tombstones. The author-only grant
+does not add independent review, administrator or deployment authority. Data
+clearance and room admission still require explicit supported setup.
+
 1. Identity lifecycle (BI-B986A18B): extend core-identity.prisma and forward
    migration; auth/oauth-tokens.ts, oauth-consent-page.ts, authorize/token
    routes and MCP identity-required responses. Consent binding, recovery and

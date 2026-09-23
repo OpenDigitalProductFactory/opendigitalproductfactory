@@ -12,6 +12,22 @@ export type CoworkerDataAccessInput = {
 };
 
 export class CoworkerDataAccessError extends Error {}
+export type CoworkerDataAccessChoice = { agentId: string; name: string; levels: string[]; editable: boolean };
+
+/** Editing targets real identities, including legacy connections hidden by card deduplication. */
+export async function listCoworkerDataAccessChoices(userId: string): Promise<CoworkerDataAccessChoice[]> {
+  if (!await coworkerDataAccessEditor(userId)) return [];
+  const agents = await prisma.agent.findMany({ where: { status: "active", archived: false },
+    select: { agentId: true, name: true }, orderBy: { name: "asc" } });
+  const aliases = await prisma.principalAlias.findMany({ where: { aliasType: "agent", issuer: "",
+    aliasValue: { in: agents.map((agent) => agent.agentId) }, principal: { kind: "agent", status: "active" } },
+    select: { aliasValue: true, principal: { select: { sensitivityClearance: true } } } });
+  const levelsByAgent = new Map(aliases.map((alias) => [alias.aliasValue, alias.principal.sensitivityClearance]));
+  return agents.flatMap((agent) => {
+    const levels = levelsByAgent.get(agent.agentId);
+    return levels ? [{ ...agent, levels, editable: true }] : [];
+  });
+}
 
 /** Shared by the page and mutation; login claims never decide current access. */
 export async function coworkerDataAccessEditor(userId: string, db: Prisma.TransactionClient = prisma) {

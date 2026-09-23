@@ -5,6 +5,7 @@ import {
 
 import { IdentityProjectionSummaryGrid } from "./IdentityProjectionSummaryGrid";
 import { CoworkerDataAccessSettings } from "./CoworkerDataAccessSettings";
+import type { CoworkerDataAccessChoice } from "@/lib/identity/coworker-data-access";
 
 function formatValidationLabel(state: AgentIdentitySnapshot["validationState"]) {
   switch (state) {
@@ -36,10 +37,12 @@ export function AgentIdentityPanel({
   agents,
   summary,
   editableDataAccess = [],
+  dataAccessChoices,
 }: {
   agents: AgentIdentitySnapshot[];
   summary: AgentIdentitySnapshotSummary;
   editableDataAccess?: string[];
+  dataAccessChoices?: CoworkerDataAccessChoice[];
 }) {
   return (
     <section className="space-y-6">
@@ -53,7 +56,7 @@ export function AgentIdentityPanel({
         </p>
       </div>
 
-      <CoworkerDataAccessSettings allowed={editableDataAccess} coworkers={agents.map((agent) => ({
+      <CoworkerDataAccessSettings allowed={editableDataAccess} coworkers={dataAccessChoices ?? agents.map((agent) => ({
         agentId: agent.agentId, name: agent.name, levels: agent.dataAccess ?? ["public"],
         editable: agent.status === "active" && !!agent.linkedPrincipalId,
       }))} />

@@ -7,6 +7,14 @@ vi.mock("@/lib/actions/coworker-data-access", () => ({ updateCoworkerDataAccess:
 import { CoworkerDataAccess } from "./CoworkerDataAccess";
 import { CoworkerDataAccessSettings } from "./CoworkerDataAccessSettings";
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
+it("can remove an existing level above the administrator's current access", () => {
+  render(<CoworkerDataAccess agentId="codex" current={["public", "internal"]} allowed={["public"]} />);
+  const internal = screen.getByLabelText(/internal/) as HTMLInputElement;
+  expect(internal.disabled).toBe(false);
+  fireEvent.click(internal);
+  expect(internal.checked).toBe(false);
+  expect(internal.disabled).toBe(true);
+});
 it("shows the current restriction without an edit form to nonadministrators", () => {
   const html = renderToStaticMarkup(<CoworkerDataAccess agentId="AGT-EXT-CODEX" current={["public"]} allowed={[]} />);
   expect(html).toContain("Data access: public");

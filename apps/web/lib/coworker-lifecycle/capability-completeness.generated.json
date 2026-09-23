@@ -8323,7 +8323,8 @@
             "file_read",
             "code_graph_read",
             "build_lifecycle",
-            "sandbox_execute"
+            "sandbox_execute",
+            "initiative_evidence_write"
           ],
           "services": 0,
           "unbackedSkillIds": [],
@@ -8435,7 +8436,8 @@
             "file_read",
             "code_graph_read",
             "build_lifecycle",
-            "sandbox_execute"
+            "sandbox_execute",
+            "initiative_evidence_write"
           ],
           "services": 0,
           "unbackedSkillIds": [],
@@ -8547,7 +8549,8 @@
             "file_read",
             "code_graph_read",
             "build_lifecycle",
-            "sandbox_execute"
+            "sandbox_execute",
+            "initiative_evidence_write"
           ],
           "services": 0,
           "unbackedSkillIds": [],

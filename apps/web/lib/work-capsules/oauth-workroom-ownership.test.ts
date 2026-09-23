@@ -2,8 +2,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ room: vi.fn(), workItem: vi.fn(), actor: vi.fn(), access: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room }, workItem: { findUnique: mocks.workItem } } }));
 vi.mock("./handler-actor", () => ({ workCapsuleActor: mocks.actor }));
-vi.mock("@/lib/work-management/room-agent-access.server", () => ({ resolveAgentRoomAccess: mocks.access }));
-import { authorizeOAuthCapsuleTarget, oauthCapsuleTargetRefusal } from "./oauth-workroom-ownership";
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: mocks.access }));
+import { authorizeOAuthCapsuleTarget, workroomTargetAccessRefusal } from "./oauth-workroom-ownership";
 const input = { params: { capsuleId: "WC-ONE" }, userId: "alice", agentId: "claude", authSource: "oauth", action: true };
 beforeEach(() => {
   vi.resetAllMocks();
@@ -12,8 +12,13 @@ beforeEach(() => {
   mocks.access.mockResolvedValue({ decision: { level: "none" } });
 });
 it("authorizes each separately created room without a new login", async () => {
+  mocks.access.mockResolvedValue({ decision: { level: "action" } });
   expect(await authorizeOAuthCapsuleTarget(input)).toBe(true);
   expect(await authorizeOAuthCapsuleTarget({ ...input, params: { capsuleId: "WC-TWO" } })).toBe(true);
+});
+it("checks data access for an owned room without a work item", async () => {
+  mocks.access.mockResolvedValue({ decision: { level: "discover", reason: "insufficient-clearance" } });
+  expect(await workroomTargetAccessRefusal(input)).toEqual(expect.objectContaining({ error: "workroom_data_access_required" }));
 });
 it("denies borrowing another human's ownership through a shared assistant", async () => {
   mocks.room.mockResolvedValue({ leaseHolderPrincipalId: "human-bob", requestedByPrincipalId: "human-bob", createdByPrincipalId: "assistant" });
@@ -40,7 +45,7 @@ it("explains insufficient data access without prescribing another login or an in
   mocks.room.mockResolvedValue({ requestedByPrincipalId: "human-alice", createdByPrincipalId: "assistant", workItemId: "room-item" });
   mocks.workItem.mockResolvedValue({ id: "room-item" });
   mocks.access.mockResolvedValue({ decision: { level: "discover", reason: "insufficient-clearance" } });
-  expect(await oauthCapsuleTargetRefusal(input)).toEqual(expect.objectContaining({
+  expect(await workroomTargetAccessRefusal(input)).toEqual(expect.objectContaining({
     error: "workroom_data_access_required", data: { recoveryUrl: "/platform/identity/agents" },
   }));
 });

@@ -263,3 +263,31 @@ pick up grants and revocations on their next operation without new consent.
 Return a data-access recovery link for an insufficient-clearance refusal;
 retain the invitation explanation for an admission refusal. Do not automatically
 admit the coworker to existing rooms or override explicit public-only limits.
+
+### Existing-room recovery and author evidence
+
+DI-0F2E1820E309 extends the same repair in WC-BDBAFFC7. Add an on-demand
+assistant invitation in the selected room's Participants section. The signed-in
+owner chooses an assistant from their active, server-approved OAuth bindings.
+An active human, exact room ownership, current clearance and active assistant
+identity are checked server-side. Persist only that WorkroomParticipant row and
+an audit in one transaction; never write every room under its WorkItem.
+
+OAuth calls targeting a capsule resolve both principals against that exact
+room. Active participant roles distinguish content from action. An explicit
+inactive assignment denies access despite historical creator/holder references.
+Sibling-room holder references never supply admission. Existing case-wide
+policy remains an additional restriction, not an implicit invitation to every
+child room. Unanchored rooms use their declared boundary or the internal default
+and receive the same clearance checks; ownership is not a clearance bypass.
+
+The invitation grants no user capability, tool grant, OAuth scope or review
+authority. Saved access applies to the existing connection's next operation.
+External development author profiles gain only initiative_evidence_write under
+BI-1E56D891, preserving explicit grant revocations and independent reviewer
+grants. The existing author lane still checks manage_backlog for the current
+human. No production or administrative grant is added.
+
+Acceptance includes siblings sharing one WorkItem, foreign users sharing an
+assistant, removed participants, observer versus contributor, unanchored-room
+clearance, atomic audited invitation, and existing-token use without new consent.

@@ -20,7 +20,8 @@ export function CoworkerDataAccessSettings({ coworkers, allowed }: {
       {open ? (
         <Surface as="section" id={id} aria-label="Coworker data access" className="mt-3">
           <SelectField name={`${id}-coworker`} label="Coworker" value={selected} onValueChange={setSelected}
-            options={coworkers.map((item) => ({ value: item.agentId, label: item.name }))} />
+            options={coworkers.map((item) => ({ value: item.agentId,
+              label: coworkers.filter((other) => other.name === item.name).length > 1 ? `${item.name} (${item.agentId})` : item.name }))} />
           {coworker ? <CoworkerDataAccess key={coworker.agentId} agentId={coworker.agentId} current={coworker.levels}
             allowed={coworker.editable ? allowed : []} /> : <p>No coworkers are available.</p>}
         </Surface>

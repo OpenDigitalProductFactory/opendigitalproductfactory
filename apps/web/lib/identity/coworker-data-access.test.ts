@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ current: vi.fn(), alias: vi.fn(), agent: vi.fn(), update: vi.fn(), audit: vi.fn() }));
+const mocks = vi.hoisted(() => ({ current: vi.fn(), alias: vi.fn(), aliases: vi.fn(), agents: vi.fn(), agent: vi.fn(), update: vi.fn(), audit: vi.fn() }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mocks.current }));
-vi.mock("@dpf/db", () => ({ prisma: { $transaction: (fn: (tx: unknown) => unknown) => fn({
+vi.mock("@dpf/db", () => ({ prisma: { principalAlias: { findFirst: mocks.alias, findMany: mocks.aliases }, agent: { findMany: mocks.agents }, $transaction: (fn: (tx: unknown) => unknown) => fn({
   principalAlias: { findFirst: mocks.alias }, agent: { findUnique: mocks.agent },
   principal: { updateMany: mocks.update }, authorizationDecisionLog: { create: mocks.audit },
 }) } }));
-import { setCoworkerDataAccess } from "./coworker-data-access";
+import { setCoworkerDataAccess, listCoworkerDataAccessChoices } from "./coworker-data-access";
 
 const input = { agentId: "AGT-EXT-CODEX", expected: ["public"], levels: ["public", "internal"], reason: "Approved internal development work" };
 beforeEach(() => {
@@ -21,6 +21,19 @@ beforeEach(() => {
     : { id: "agent", kind: "agent", status: "active", sensitivityClearance: ["public"] } }));
 });
 describe("audited coworker data access", () => {
+  it("keeps distinct legacy assistant identities editable without replacing their connection", async () => {
+    mocks.agents.mockResolvedValue([{ agentId: "AGT-EXT-CODEX", name: "Codex" }, { agentId: "external-codex", name: "Codex" }]);
+    mocks.aliases.mockResolvedValue([
+      { aliasValue: "AGT-EXT-CODEX", principal: { sensitivityClearance: ["internal"] } },
+      { aliasValue: "external-codex", principal: { sensitivityClearance: ["public"] } },
+    ]);
+    expect(await listCoworkerDataAccessChoices("alice")).toEqual([
+      { agentId: "AGT-EXT-CODEX", name: "Codex", levels: ["internal"], editable: true },
+      { agentId: "external-codex", name: "Codex", levels: ["public"], editable: true },
+    ]);
+    mocks.current.mockResolvedValue(null);
+    expect(await listCoworkerDataAccessChoices("alice")).toEqual([]);
+  });
   it("updates the exact linked assistant with an atomic before/after audit", async () => {
     await expect(setCoworkerDataAccess("alice", input)).resolves.toEqual({ levels: ["public", "internal"] });
     expect(mocks.update).toHaveBeenCalledWith({ where: { id: "agent", kind: "agent", status: "active", sensitivityClearance: { equals: ["public"] } }, data: { sensitivityClearance: ["public", "internal"] } });

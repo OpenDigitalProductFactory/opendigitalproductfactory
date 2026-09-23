@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const access = vi.hoisted(() => ({ auth: vi.fn(), editor: vi.fn() }));
+const access = vi.hoisted(() => ({ auth: vi.fn(), editor: vi.fn(), choices: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: access.auth }));
-vi.mock("@/lib/identity/coworker-data-access", () => ({ coworkerDataAccessEditor: access.editor }));
+vi.mock("@/lib/identity/coworker-data-access", () => ({ coworkerDataAccessEditor: access.editor, listCoworkerDataAccessChoices: access.choices }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -34,6 +34,7 @@ describe("PlatformIdentityAgentsPage", () => {
   ])("shows identities and gates data access for $userId", async ({ userId, levels }) => {
     access.auth.mockResolvedValue(userId ? { user: { id: userId } } : null);
     access.editor.mockResolvedValue(levels);
+    access.choices.mockResolvedValue([{ agentId: "external-codex", name: "Codex", levels: ["public"], editable: true }]);
     vi.mocked(prisma.agent.findMany).mockResolvedValue([
       {
         id: "agent-db-1",
@@ -96,6 +97,8 @@ describe("PlatformIdentityAgentsPage", () => {
     expect(html).toContain("needs linking");
     expect(html).toContain("gaid:priv:dpf.internal:agt-100");
     expect(page.props.editableDataAccess).toEqual(levels ?? []);
+    if (levels) expect(page.props.dataAccessChoices[0].agentId).toBe("external-codex");
+    else expect(access.choices).not.toHaveBeenCalled();
     if (userId) expect(access.editor).toHaveBeenCalledWith(userId);
     else expect(access.editor).not.toHaveBeenCalled();
   });

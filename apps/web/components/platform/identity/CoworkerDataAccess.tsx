@@ -24,9 +24,11 @@ export function CoworkerDataAccess({ agentId, current, allowed }: {
           <form className="mt-3 space-y-3" onSubmit={(event) => {
             event.preventDefault();
             startTransition(async () => {
-              const result = await updateCoworkerDataAccess({ agentId, expected: saved, levels: selected, reason });
-              if (result.ok) { setSaved(result.data.levels); setSelected(result.data.levels); setReason(""); setMessage("Saved. Existing connections use this access without signing in again."); }
-              else setMessage(result.error);
+              try {
+                const result = await updateCoworkerDataAccess({ agentId, expected: saved, levels: selected, reason });
+                if (result.ok) { setSaved(result.data.levels); setSelected(result.data.levels); setReason(""); setMessage("Saved. Existing connections use this access without signing in again."); }
+                else setMessage(result.error);
+              } catch { setMessage("Access was not saved. Try again."); }
             });
           }}>
             <p className="text-[var(--dpf-muted)]">Applies to this coworker across connections. Each user still needs permission and workroom access.</p>
@@ -34,7 +36,7 @@ export function CoworkerDataAccess({ agentId, current, allowed }: {
               <legend>Allowed information</legend>
               {PRINCIPAL_SENSITIVITIES.map((level) => (
                 <label key={level} className="flex items-center gap-2">
-                  <input type="checkbox" checked={selected.includes(level)} disabled={!allowed.includes(level)} onChange={(event) => {
+                  <input type="checkbox" checked={selected.includes(level)} disabled={!allowed.includes(level) && !selected.includes(level)} onChange={(event) => {
                     setSelected(event.target.checked ? [...selected, level] : selected.filter((value) => value !== level));
                   }} />
                   <span className="capitalize">{level}</span>

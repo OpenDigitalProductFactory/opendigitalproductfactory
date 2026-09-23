@@ -333,8 +333,8 @@ async function callExecuteTool(
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
   if (ctx?.authSource === "oauth") {
-    const { oauthCapsuleTargetRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const refusal = await oauthCapsuleTargetRefusal({ params, userId, ...ctx, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
+    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
+    const refusal = await workroomTargetAccessRefusal({ params, userId, ...ctx, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
     if (refusal) return refusal;
   }
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);

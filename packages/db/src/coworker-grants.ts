@@ -20,7 +20,7 @@ const EXTERNAL_DEVELOPMENT_GRANTS = [
   "work_room_read", "work_room_write", "registry_read",
   "work_capsule_read", "work_capsule_write", "work_capsule_adopt",
   "backlog_read", "backlog_write", "file_read", "code_graph_read",
-  "build_lifecycle", "sandbox_execute",
+  "build_lifecycle", "sandbox_execute", "initiative_evidence_write",
 ];
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {

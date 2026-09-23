@@ -96,6 +96,16 @@ This setting does not grant tools, waive action approvals, or invite anyone
 into a workroom. A room owner must separately admit the people and assistants
 who will work there. Signing in again cannot fix a missing invitation.
 
+Open the selected workroom's **Participants → Assistant access** to admit an
+assistant from your approved connections. Choose **Read only** or **Contribute**
+and save. This changes that room alone; sibling rooms and other users stay
+separate. Existing connections use the saved access without another sign-in.
+If the room has a broader case restriction, its owner must resolve that too.
+
+The data-access selector includes older assistant identities still used by
+connections. Similar names show their identity IDs so an administrator can
+update the exact assistant without replacing the connection.
+
 1. Start with the principal you need to explain or change. Resolve duplicate or
    ambiguous aliases before changing access around them.
 2. Inspect role, group, and team membership. A group change can affect several
