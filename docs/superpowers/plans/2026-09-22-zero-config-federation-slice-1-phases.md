@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Zero-Config Federation Slice 1 — Phased Implementation Plan
 
 **Design:** [`docs/superpowers/specs/2026-09-02-zero-configuration-organization-federation-design.md`](../specs/2026-09-02-zero-configuration-organization-federation-design.md)
