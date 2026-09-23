@@ -47,6 +47,10 @@ vi.mock("@/lib/mcp-tools", () => ({
   executeTool: (...args: unknown[]) => executeToolMock(...args),
 }));
 const performPlanToBuildTransitionMock = vi.fn();
+const enforceReadinessMock = vi.fn();
+vi.mock("@/lib/build/build-entry-gate", () => ({
+  enforceBuildInitiativeReadiness: (...args: unknown[]) => enforceReadinessMock(...args),
+}));
 vi.mock("@/lib/build/plan-to-build-transition", () => ({
   performPlanToBuildTransition: (...args: unknown[]) => performPlanToBuildTransitionMock(...args),
 }));
@@ -67,6 +71,7 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     findUniqueMock.mockReset();
     queueBuildReviewVerificationMock.mockReset().mockResolvedValue(undefined);
     dispatchIdeateMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
+    enforceReadinessMock.mockReset().mockResolvedValue({ allowed: true, message: "plan readiness allowed." });
     dispatchDesignFixMock.mockReset().mockResolvedValue({ kind: "repaired", rounds: 1 });
     dispatchPlanMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
     executeToolMock.mockReset().mockResolvedValue({ success: true, message: "Plan review: pass." });
@@ -441,6 +446,39 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(buildActivityFindManyMock).not.toHaveBeenCalled();
     expect(dispatchDesignFixMock).toHaveBeenCalled();
     expect(out.kind).toBe("resumed");
+  });
+
+  // BI-9B2E7154: a design that already PASSED, blocked only by phase readiness,
+  // was re-reviewed on every resume (every ~30 min). The reviewers were fed the
+  // prior round's issues each time and drifted to "fail" on a document nobody
+  // was asked to change; the fix loop then escalated and the build was
+  // abandoned (FB-650326BC). Re-reviewing cannot clear a readiness refusal.
+  it("parks a passed design that phase readiness still refuses instead of re-reviewing it", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "pass", sizeAssessment: { decision: "ok" } },
+      plan: null,
+    });
+    enforceReadinessMock.mockResolvedValue({ allowed: false, message: "This cannot move into plan yet because the research behind this design has not been recorded." });
+    const out = await resumePreBuildPhase({ buildId: "FB-READY", phase: "ideate", userId: "uR" });
+    expect(enforceReadinessMock).toHaveBeenCalledWith(expect.objectContaining({ buildId: "FB-READY", target: "plan", expectedPhase: "ideate" }));
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(dispatchDesignFixMock).not.toHaveBeenCalled();
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toContain("research behind this design");
+  });
+
+  it("re-runs the review of a passed design once readiness allows plan, so it advances", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "pass", sizeAssessment: { decision: "ok" } },
+      plan: null,
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-OPEN", phase: "ideate", userId: "uO" });
+    expect(executeToolMock).toHaveBeenCalledWith("reviewDesignDoc", { buildId: "FB-OPEN" }, "uO", { featureBuildId: "FB-OPEN" });
+    expect(out).toMatchObject({ kind: "resumed", via: "executeTool:reviewDesignDoc" });
   });
 
   it("parks when design PASSed but persisted happyPath intake is still incomplete (BI-E212CAE2)", async () => {
