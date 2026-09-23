@@ -99,7 +99,8 @@
         "95-cost-bands-order-of-magnitude-mid-2026-full-cites-10",
         "96-recommendation",
         "97-epistemic-status-of-the-9-numbers-independent-verification-2026-06-09",
-        "10-references-primary-sources-dated"
+        "10-references-primary-sources-dated",
+        "merge-triggered-subscribers-bi-a6e4d205-bi-848360ef"
       ]
     },
     "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": {
@@ -1125,7 +1126,8 @@
         "root-clone-freshness-the-shared-root-must-stay-on-current-main",
         "reaping-safety-a-live-sessions-worktree-is-never-reaped",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
-        "housekeeping"
+        "housekeeping",
+        "when-a-worktree-is-removed"
       ]
     },
     "docs/architecture/build-gate-runbook.md": {
@@ -5550,6 +5552,7 @@
         "what-gets-registered",
         "reading-the-output",
         "checking-it-ran",
+        "scoping-to-one-branch-and-the-merge-trigger-bi-848360ef",
         "related"
       ]
     },
