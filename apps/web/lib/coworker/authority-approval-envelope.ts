@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import { prisma } from "@dpf/db";
 
 import {
@@ -24,6 +26,11 @@ type AuthorityApprovalDb = {
     updateMany(args: unknown): Promise<unknown>;
   };
   taskRun: { updateMany(args: unknown): Promise<unknown> };
+  /**
+   * The envelope's threadId is a NOT NULL foreign key to AgentThread, so an
+   * approval raised outside a chat needs a real thread to live in (BI-4D6C21A7).
+   */
+  agentThread: { upsert(args: unknown): Promise<{ id: string }> };
 };
 
 type MarkTaskWorking = (taskRunId: string) => Promise<boolean | void>;
@@ -63,6 +70,49 @@ async function pauseBoundTask(
     },
     data: { status: "input-required" },
   });
+}
+
+/**
+ * The AgentThread an approval card lives in.
+ *
+ * `CoworkerActionEnvelope.threadId` is NOT NULL with a foreign key to
+ * AgentThread. This used to fall back to a synthesized string —
+ * `task:<taskRunId>` or `authority:<agentId>` — which is not an AgentThread id,
+ * so the insert violated the FK, `ensureAuthorityApprovalEnvelope` threw, and
+ * the caller reported `authority_evidence_unavailable`: "approval evidence
+ * could not be recorded... the check itself was unavailable, and the call can be
+ * retried unchanged." It was retried unchanged, forever, and could never
+ * succeed — 229 recorded failures of the Build Studio research attestation
+ * alone, which is what kept RESEARCH_REQUIRED unsatisfiable and every
+ * decomposition child stuck short of `build`.
+ *
+ * An approval genuinely needs somewhere to render for the human who must answer
+ * it, so the honest fix is to create that somewhere rather than to invent an id
+ * for a row that does not exist.
+ *
+ * The id is derived deterministically from the same key the old string used, so
+ * repeated approvals in one authority context reuse one thread instead of
+ * spawning one per attempt, and concurrent writers collide on the primary key
+ * rather than racing.
+ */
+async function ensureApprovalThread(
+  binding: CoworkerApprovalBinding,
+  db: AuthorityApprovalDb,
+): Promise<string> {
+  const key = binding.taskRunId
+    ? `task:${binding.taskRunId}`
+    : `authority:${binding.actingAgentId}`;
+  const id = `thr-authority-${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
+  const thread = await db.agentThread.upsert({
+    where: { id },
+    update: {},
+    create: {
+      id,
+      userId: binding.actingHumanUserId,
+      contextKey: `authority:${binding.toolName}`,
+    },
+  });
+  return thread.id;
 }
 
 export async function ensureAuthorityApprovalEnvelope(
@@ -107,11 +157,7 @@ export async function ensureAuthorityApprovalEnvelope(
       data: {
         coworkerAgentId: input.binding.actingAgentId,
         delegatingUserId: input.binding.actingHumanUserId,
-        threadId:
-          input.threadId
-          ?? (input.binding.taskRunId
-            ? `task:${input.binding.taskRunId}`
-            : `authority:${input.binding.actingAgentId}`),
+        threadId: input.threadId ?? (await ensureApprovalThread(input.binding, db)),
         manifestActionId: input.binding.toolName,
         // Never persist raw tool arguments in the universal authority
         // envelope. The exact-call fingerprint and bounded binding are enough
