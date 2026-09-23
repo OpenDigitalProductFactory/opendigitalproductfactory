@@ -27,6 +27,12 @@ import {
 } from "./types";
 import { getPattern } from "./registry";
 import type { ResolvedDeliberationPattern } from "./registry";
+import {
+  describeRoutingConfidence,
+  higherRisk,
+  routingConfidenceRisk,
+  type RoutingConfidenceSignal,
+} from "./routing-confidence";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -37,6 +43,12 @@ export type DeliberationStage = "ideate" | "plan" | "build" | "review" | "ship";
 export interface ResolveDeliberationInput {
   stage?: DeliberationStage;
   riskLevel: DeliberationActivatedRiskLevel;
+  /**
+   * BI-1A5204A0: how much confidence routing had in the endpoint it chose.
+   * Folded onto the risk axis, so it can only ever ADD scrutiny — never reduce
+   * what stage or declared risk already require.
+   */
+  routingConfidence?: RoutingConfidenceSignal | null;
   explicitPatternSlug?: string | null;
   artifactType: DeliberationArtifactType;
   routeContext?: string | null;
@@ -44,6 +56,8 @@ export interface ResolveDeliberationInput {
 
 export interface ResolvedDeliberationRun {
   patternSlug: string;
+  /** Set when routing confidence raised the effective risk above the declared one. */
+  routingConfidenceEscalated?: boolean;
   triggerSource: DeliberationTriggerSource;
   strategyProfile: DeliberationStrategyProfile;
   diversityMode: DeliberationDiversityMode;
@@ -171,7 +185,17 @@ function reasonFor(input: {
 export async function resolve(
   input: ResolveDeliberationInput,
 ): Promise<ResolvedDeliberationRun | null> {
-  const { stage, riskLevel, explicitPatternSlug, artifactType: _artifactType } = input;
+  const { stage, explicitPatternSlug, artifactType: _artifactType } = input;
+
+  // BI-1A5204A0: a routing outcome the router itself had little confidence in
+  // raises the effective risk. Taking the HIGHER of the two is what makes this
+  // strengthen-only: a confident route can never lower a declared risk level.
+  const confidenceRisk = routingConfidenceRisk(input.routingConfidence);
+  const riskLevel = higherRisk(input.riskLevel, confidenceRisk);
+  const routingConfidenceEscalated = riskLevel !== input.riskLevel;
+  const confidenceReason = routingConfidenceEscalated
+    ? describeRoutingConfidence(input.routingConfidence)
+    : null;
 
   // Silence unused-var warning without losing the shape of the call-site.
   void _artifactType;
@@ -253,7 +277,7 @@ export async function resolve(
   const activatedRiskLevel: DeliberationActivatedRiskLevel | null =
     triggerSource === "stage" && riskLevel === "low" ? null : riskLevel;
 
-  const reason = reasonFor({
+  const baseReason = reasonFor({
     slug: chosen,
     triggerSource,
     riskLevel,
@@ -262,6 +286,12 @@ export async function resolve(
     overruledExplicit,
   });
 
+  // An escalation that cannot explain itself reads as unexplained extra cost, so
+  // the routing reason is appended rather than replacing the policy reason.
+  const reason = confidenceReason
+    ? `${baseReason} Raised because ${confidenceReason}.`
+    : baseReason;
+
   return {
     patternSlug: chosen,
     triggerSource,
@@ -269,5 +299,6 @@ export async function resolve(
     diversityMode,
     activatedRiskLevel,
     reason,
+    ...(routingConfidenceEscalated ? { routingConfidenceEscalated: true } : {}),
   };
 }

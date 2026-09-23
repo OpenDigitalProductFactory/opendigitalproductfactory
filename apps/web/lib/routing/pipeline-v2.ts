@@ -774,10 +774,22 @@ export async function routeEndpointV2(
     `${allCandidates.length} endpoint(s) excluded; ` +
     `${ranked.length} candidate(s) ranked.${preferenceReason}${degradedReason}`;
 
+  // BI-A08285BC: carry the confidence structurally, not only inside the reason
+  // string. `qualityFloorRelaxed` was set, threaded all the way up here, and then
+  // concatenated into prose that nothing read — so the platform knew it was about
+  // to produce lower-confidence work and could not act on it. Consumers read this
+  // (deliberation activation is the first) instead of parsing a sentence.
+  const routingConfidence = {
+    qualityFloorRelaxed: hardResult.qualityFloorRelaxed,
+    candidateCount: ranked.length,
+    ...(preferenceSelection.resolution?.fallbackUsed ? { fallbackUsed: true } : {}),
+  };
+
   return {
     selectedEndpoint: winner.endpoint.id,
     selectedModelId: winner.endpoint.modelId,
     reason,
+    routingConfidence,
     fitnessScore: winner.rankScore,
     fallbackChain: fullFallbackChain,
     candidates: [...eligibleTraces, ...allCandidates],

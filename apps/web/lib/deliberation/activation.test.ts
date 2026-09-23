@@ -289,3 +289,75 @@ describe("deliberation activation.resolve", () => {
     });
   });
 });
+
+// BI-1A5204A0 — routing confidence as an activation axis.
+//
+// The regression this guards is the observed 2026-09-18 incident: a route that
+// resolved with one candidate and a relaxed floor ran below the bar and nothing
+// happened, because qualityFloorRelaxed was concatenated into a sentence that
+// nothing read.
+describe("resolve — routing confidence", () => {
+  it("activates a review when the floor was relaxed on otherwise low-risk work", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true, candidateCount: 1 },
+    });
+    expect(run?.patternSlug).toBe("review");
+    expect(run?.routingConfidenceEscalated).toBe(true);
+    expect(run?.reason).toContain("quality bar");
+  });
+
+  it("escalates to debate when the winner is well short of the floor", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true, floorShortfall: 40 },
+    });
+    expect(run?.patternSlug).toBe("debate");
+    expect(run?.reason).toContain("well short");
+  });
+
+  it("activates on a single ranked candidate — no choice was made, only an outcome", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { candidateCount: 1 },
+    });
+    expect(run?.patternSlug).toBe("review");
+    expect(run?.reason).toContain("only one model");
+  });
+
+  it("changes nothing when routing was confident — the byte-identical guard", async () => {
+    const withSignal = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { candidateCount: 9, qualityFloorRelaxed: false },
+    });
+    const without = await resolve({ riskLevel: "low", artifactType: "code-change" });
+    expect(withSignal).toEqual(without);
+  });
+
+  it("never weakens what declared risk already requires", async () => {
+    const run = await resolve({
+      riskLevel: "critical",
+      artifactType: "code-change",
+      routingConfidence: { candidateCount: 12 },
+    });
+    expect(run?.patternSlug).toBe("debate");
+    expect(run?.activatedRiskLevel).toBe("critical");
+    expect(run?.routingConfidenceEscalated).toBeUndefined();
+  });
+
+  it("does not claim an escalation it did not cause", async () => {
+    // Risk already demands debate; confidence would only have asked for review.
+    const run = await resolve({
+      riskLevel: "high",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true },
+    });
+    expect(run?.patternSlug).toBe("debate");
+    expect(run?.routingConfidenceEscalated).toBeUndefined();
+    expect(run?.reason).not.toContain("Raised because");
+  });
+});
