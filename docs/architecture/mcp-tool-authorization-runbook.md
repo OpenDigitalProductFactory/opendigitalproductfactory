@@ -4,6 +4,15 @@
 
 External coding agents use the real MCP JSON-RPC 2.0 transport at `/api/mcp/v1` (`apps/web/app/api/mcp/v1/route.ts`). The older `/api/mcp/tools` and `/api/mcp/call` endpoints remain for in-portal coworker chat and are not the external MCP client contract.
 
+The agent-toolchain updater gives its managed Codex plugin copy a content-derived
+cache version. New delivered files therefore replace a stale client cache even
+when the source package version is unchanged; identical updates keep the same
+version. Installation succeeds only after the cached files match the managed
+copy. A dry run leaves both source and client configuration untouched. Restart
+the client to load the refreshed plugin; an existing connection is not proof of
+the new OAuth configuration. This prevents a stale updater from restoring the
+managed bearer override after OAuth setup.
+
 Authorized product surfaces use the six generic `surface_*` MCP tools rather than page-specific side doors. `surface_open` compiles a principal-bound session; every later read or action revalidates the human role, coworker grants, work context, token scope, approval policy, revision, and TTL. Persistent actions re-enter `governedExecuteTool`, so the surface contract never bypasses the authorization path described here.
 
 **How a client authenticates: one authorization server, two grant types.** A client points at `/api/mcp/v1`, gets a `401` whose `WWW-Authenticate` carries `resource_metadata=`, discovers the authorization server from `/.well-known/oauth-protected-resource/api/mcp/v1`, and runs the OAuth 2.1 authorization-code flow with PKCE-S256. A browser opens, the operator approves a named client and a named scope set once, and the client refreshes silently from then on. **No environment variable, no copy-paste, no client restart.** Headless callers with no browser — CI, cron, containers — use the `client_credentials` grant against the same authorization server, with an operator-issued client from Admin > Platform Development. Design: [`docs/superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md`](../superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md).

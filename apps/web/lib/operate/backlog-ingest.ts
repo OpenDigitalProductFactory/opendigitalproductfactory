@@ -29,6 +29,12 @@ import {
   type DemandStage,
 } from "@/lib/explore/backlog";
 import {
+  FILING_DUPLICATE_LIMIT,
+  FILING_DUPLICATE_THRESHOLD,
+  findDuplicateCandidates,
+  type FilingDuplicateCandidate,
+} from "@/lib/demand/dedup";
+import {
   findImplementationCandidates,
   type ImplementationCandidate,
 } from "@/lib/operate/implementation-scan";
@@ -101,17 +107,45 @@ export interface BacklogIngestResult {
    * about the filing, not part of the filing contract.
    */
   implementationCandidates?: ImplementationCandidate[];
+
+  /**
+   * Items already on the backlog that look like this one (BI-3722E9A1).
+   *
+   * Optional for the same reason as `implementationCandidates`: it is
+   * metadata about the filing, not part of the filing contract, and the
+   * many injected ingest fakes legitimately return only identity fields.
+   */
+  duplicateCandidates?: FilingDuplicateCandidate[];
+
+  /**
+   * Set when meaning-based matching could not run (embeddings deferred or
+   * failed). The advisory says so rather than letting an empty list read as
+   * "nothing similar exists" (BI-3722E9A1).
+   */
+  duplicateSemanticUnavailable?: string | null;
 }
 
 /**
  * Minimal structural view of the stores the front door touches. Lets tests
  * inject a fake without standing up a Prisma client.
  */
+/**
+ * Statuses worth warning about (BI-3722E9A1). Open work first, but a
+ * recently-done item matters too: filing the same thing again usually means
+ * a regression, and the closed item carries the evidence that found it.
+ */
+const DUPLICATE_POOL_STATUSES = ["triaging", "open", "in-progress", "done"] as const;
+
+/** Bounds the scan's cost on a backlog that is thousands of rows deep. */
+const DUPLICATE_POOL_LIMIT = 500;
+
 export interface IngestBacklogStore {
   backlogItem: {
     findFirst(args: unknown): Promise<{ id: string; itemId: string } | null>;
     update(args: unknown): Promise<unknown>;
     create(args: unknown): Promise<{ id: string; itemId: string }>;
+    /** Candidate pool for the duplicate advisory (BI-3722E9A1). */
+    findMany?(args: unknown): Promise<Array<{ itemId: string; title: string; body: string | null; status: string }>>;
   };
   backlogItemActivity: {
     create(args: unknown): Promise<unknown>;
@@ -131,6 +165,16 @@ export interface BacklogIngestDeps {
    * returns nothing rather than failing to file.
    */
   listRepoFiles?: () => Promise<string[]>;
+  /**
+   * Meaning-based duplicate search (BI-3722E9A1). Injectable so tests need
+   * no Qdrant and no embedding model, and so an install without them files
+   * normally with a lexical-only advisory.
+   */
+  searchSimilarItems?: (query: string) => Promise<{
+    status: string;
+    reason?: string;
+    results: Array<{ entityId: string; title: string; score: number }>;
+  }>;
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -254,6 +298,20 @@ function cleanStringArray(values: string[] | undefined): string[] {
 }
 
 // ─── Default knowledge indexing (fire-and-forget) ─────────────────────────────
+
+async function defaultSearchSimilarItems(query: string) {
+  const { searchPlatformKnowledge } = await import("@/lib/semantic-memory");
+  const found = await searchPlatformKnowledge({ query, entityType: "backlog", limit: 8 });
+  return {
+    status: found.status,
+    reason: "reason" in found ? found.reason : undefined,
+    results: found.results.map((r) => ({
+      entityId: r.entityId,
+      title: r.title,
+      score: r.score,
+    })),
+  };
+}
 
 function defaultIndexKnowledge(args: { entityId: string; title: string; content: string }): void {
   import("@/lib/semantic-memory")
@@ -454,5 +512,88 @@ export async function ingestBacklogItem(
     implementationCandidates = [];
   }
 
-  return { itemId: item.itemId, id: item.id, created: true, implementationCandidates };
+  // BI-3722E9A1. `findDuplicateCandidates` existed as an opt-in tool that
+  // nothing called, and this tool's own description asked the filer to
+  // remember to sweep first. That is the shape this install has twice paid
+  // to remove: the queued-claim resumer (13 of 41 sessions remembered) and
+  // the WWMD ratification no surface offered. Measured cost on 2026-09-12:
+  // one subsystem took six items in a day from two sessions, including a
+  // full duplicate diagnosis of a defect already measured in an open PR.
+  //
+  // Advisory, never blocking. A similarity score cannot tell the same
+  // defect from an adjacent one, so it must not decide whether work exists.
+  // Errors swallow to empty: a filing must never fail because the pool
+  // could not be read.
+  let duplicateCandidates: FilingDuplicateCandidate[] = [];
+  let duplicateSemanticUnavailable: string | null = null;
+  try {
+    const pool = store.backlogItem.findMany
+      ? await store.backlogItem.findMany({
+        where: { status: { in: DUPLICATE_POOL_STATUSES } },
+        select: { itemId: true, title: true, body: true, status: true },
+        orderBy: { createdAt: "desc" },
+        take: DUPLICATE_POOL_LIMIT,
+      })
+      : [];
+    const statusById = new Map(pool.map((p) => [p.itemId, p.status]));
+    const lexical = findDuplicateCandidates(
+      { itemId: item.itemId, title: input.title, body: input.body ?? null },
+      pool,
+      FILING_DUPLICATE_THRESHOLD,
+    ).map((c) => ({
+      ...c,
+      status: statusById.get(c.itemId) ?? "unknown",
+      matchedBy: "lexical" as const,
+    }));
+
+    // The lexical score compares words. The pair that motivated this
+    // feature does not share enough of them: one item is written about
+    // memory fencing a running gate, the other about load average not
+    // being CPU, and they are the same subsystem. Meaning-based search is
+    // what closes that gap, over the index THIS front door already writes.
+    const semantic = deps.searchSimilarItems ?? defaultSearchSimilarItems;
+    const found = await semantic(`${input.title}\n\n${input.body ?? ""}`);
+    if (found.status !== "ok") {
+      duplicateSemanticUnavailable = found.reason ?? found.status;
+    }
+    const semanticHits = found.results
+      .filter((r) => r.entityId && r.entityId !== item.itemId)
+      .map((r) => ({
+        itemId: r.entityId,
+        title: r.title,
+        similarity: Math.round(r.score * 1000) / 1000,
+        status: statusById.get(r.entityId) ?? "unknown",
+        matchedBy: "semantic" as const,
+      }));
+
+    const byId = new Map<string, FilingDuplicateCandidate>();
+    for (const c of [...lexical, ...semanticHits]) {
+      const seen = byId.get(c.itemId);
+      if (!seen) {
+        byId.set(c.itemId, c);
+        continue;
+      }
+      // Found by both signals: keep the stronger score and say so, because
+      // agreement between two independent signals is worth the filer's eye.
+      byId.set(c.itemId, {
+        ...seen,
+        similarity: Math.max(seen.similarity, c.similarity),
+        matchedBy: "both",
+      });
+    }
+    duplicateCandidates = [...byId.values()]
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, FILING_DUPLICATE_LIMIT);
+  } catch {
+    duplicateCandidates = [];
+  }
+
+  return {
+    itemId: item.itemId,
+    id: item.id,
+    created: true,
+    implementationCandidates,
+    duplicateCandidates,
+    duplicateSemanticUnavailable,
+  };
 }

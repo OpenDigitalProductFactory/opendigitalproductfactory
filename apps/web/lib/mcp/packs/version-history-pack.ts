@@ -14,6 +14,12 @@
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { createHash } from "node:crypto";
+import {
+  SOURCE_READ_DEFAULT_MAX_CHARS,
+  SOURCE_READ_DEFAULT_MAX_LINES,
+  SOURCE_READ_MAX_CHARS,
+  SOURCE_READ_MAX_LINES,
+} from "@/lib/source-page-lines";
 
 // BI-8B8731EE: a governed reviewer gets a bounded number of immutable reads
 // (terminal-tool-policy maximumReaderCalls = 6) before it must write its
@@ -22,10 +28,10 @@ import { createHash } from "node:crypto";
 // without a verdict. A default page now carries a whole medium document, and
 // the cap allows a long one in two or three reads. Pages stay bounded: this
 // is still a paged reader, not a whole-file dump.
-const DEFAULT_READ_MAX_LINES = 200;
-const MAX_READ_LINES = 400;
-const DEFAULT_READ_MAX_CHARS = 12_000;
-const MAX_READ_CHARS = 16_000;
+const DEFAULT_READ_MAX_LINES = SOURCE_READ_DEFAULT_MAX_LINES;
+const MAX_READ_LINES = SOURCE_READ_MAX_LINES;
+const DEFAULT_READ_MAX_CHARS = SOURCE_READ_DEFAULT_MAX_CHARS;
+const MAX_READ_CHARS = SOURCE_READ_MAX_CHARS;
 const DEFAULT_SEARCH_RESULTS = 20;
 const MAX_SEARCH_RESULTS = 50;
 const MAX_SEARCH_OFFSET = 2_000;

@@ -573,7 +573,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 18
+    "textMass": 20
   },
   "apps/web/app/(shell)/compliance/obligations/page.tsx": {
     "vocabulary": 0,
