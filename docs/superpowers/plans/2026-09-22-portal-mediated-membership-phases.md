@@ -58,6 +58,19 @@ Both acts are portal-mediated after phase 2, so nothing reaches the edge-node re
 
 ---
 
+## Backlog coverage
+
+- Decision: decomposed
+- Parent: `BI-4DD1E739`
+- Receipt: `cmudkozq81j0q01s1rlecmvp6`
+- Dependencies: phase-1-material-and-relay -> none; phase-2-authority-issues-join-file -> phase-1-material-and-relay; phase-3-retire-edge-node-path -> phase-2-authority-issues-join-file
+
+| Deliverable | Mapping |
+| --- | --- |
+| Membership material, sign relay, import action, import tool | phase-1-material-and-relay -> `BI-4DD1E739` |
+| Join-file issuance, trusted-peer picker, membership-proof pairing | phase-2-authority-issues-join-file -> `BI-AC7BCC58` |
+| Edge-node path retired from the Connections page | phase-3-retire-edge-node-path -> `BI-66A2DFB3` |
+
 ## Coverage
 
 | Phase | Deliverable | Backlog item | Objectives served | Acceptance verified |
