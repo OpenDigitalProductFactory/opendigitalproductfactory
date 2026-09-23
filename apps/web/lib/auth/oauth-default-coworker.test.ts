@@ -80,6 +80,30 @@ describe("server-resolved default assistant (BI-05E0EA33)", () => {
     expect((await resolveDefaultOAuthCoworker({ userId: "human", client, resource, eligible })).kind).toBe("choice");
   });
 
+  it("honours this human's prior consent before the authority-signature check (administrator's mixed set)", async () => {
+    // AC-OC-7 live finding: an administrator's eligible set spans every
+    // room-write coworker, so signatures differ. A recorded prior consent is
+    // the human's own decision and must still land on the same assistant.
+    const mailroom = { id: "row-AGT-WS-MAILROOM", agentId: "AGT-WS-MAILROOM", displayName: "Mailroom coordinator" };
+    db.agent.findMany.mockResolvedValue([agent("AGT-EXT-CLAUDE"), agent("AGT-EXT-CODEX"), agent("AGT-EXT-GROK"),
+      agent("AGT-WS-MAILROOM", { grants: ["work_room_read", "work_room_write", "mailroom_read"] })]);
+    db.principalAlias.findMany.mockResolvedValue([...eligible, mailroom].map((a) => ({ aliasValue: a.agentId, principal: { sensitivityClearance: ["public"] } })));
+    db.authorityBinding.findMany.mockResolvedValue([{ appliedAgentId: "row-AGT-EXT-CODEX",
+      oauthClient: { clientName: "Codex", redirectUris: ["http://127.0.0.1:61733/callback/ag9HJJhIbJpx"] } }]);
+    const out = await resolveDefaultOAuthCoworker({ userId: "human", client, resource, eligible: [...eligible, mailroom] });
+    expect(out).toMatchObject({ kind: "resolved", reason: "prior_consent", selected: { agentId: "AGT-EXT-CODEX" } });
+    expect(out.candidates.every((c) => typeof c.detail === "string")).toBe(true);
+  });
+
+  it("still presents a choice for a mixed set when this human has no prior consent", async () => {
+    const mailroom = { id: "row-AGT-WS-MAILROOM", agentId: "AGT-WS-MAILROOM", displayName: "Mailroom coordinator" };
+    db.agent.findMany.mockResolvedValue([agent("AGT-EXT-CLAUDE"), agent("AGT-EXT-CODEX"), agent("AGT-EXT-GROK"),
+      agent("AGT-WS-MAILROOM", { grants: ["work_room_read", "work_room_write", "mailroom_read"] })]);
+    db.principalAlias.findMany.mockResolvedValue([...eligible, mailroom].map((a) => ({ aliasValue: a.agentId, principal: { sensitivityClearance: ["public"] } })));
+    const out = await resolveDefaultOAuthCoworker({ userId: "human", client, resource, eligible: [...eligible, mailroom] });
+    expect(out).toMatchObject({ kind: "choice", selected: { agentId: "AGT-WS-MAILROOM" } });
+  });
+
   it("never lets a name match reach outside the eligible set", async () => {
     const out = await resolveDefaultOAuthCoworker({ userId: "human", client: { ...client, clientName: "Codex" }, resource, eligible: [eligible[0], eligible[2]] });
     expect(out.kind).toBe("resolved");

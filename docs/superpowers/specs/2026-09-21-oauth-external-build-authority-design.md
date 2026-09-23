@@ -419,8 +419,13 @@ existing helpers in `apps/web/lib/tak/agent-grants.ts`), its `Principal`
 coworkers with equal signatures are interchangeable for everything the
 token can do; the consent then chooses a name, not a power.
 
-**Within an equal-signature class the label is chosen in this order**, and
-each rule is a lookup over existing rows:
+**Rule 1 runs before the signature check; rules 2 and 3 run only inside an
+equal-signature class.** A prior consent is a decision this human already
+recorded for this resource, name and redirect family, so reusing it is the
+human's own choice, not the name's; an administrator's eligible set spans
+every room-write coworker and never has one signature, so a rule that waited
+for equality could never fire for them (live finding, 2026-09-23). Each rule
+is a lookup over existing rows:
 
 1. The coworker on this human's most recent active `consent` binding for
    this resource whose client has the same self-asserted name and the same
