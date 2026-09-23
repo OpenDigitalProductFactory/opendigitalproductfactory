@@ -14,6 +14,7 @@ import {
   type CoworkerAuthorityDecision,
   type CoworkerAuthorityInput,
 } from "./coworker-authority-decision";
+import { escalationReasonSentence } from "./escalation-gate";
 
 export type CoworkerAuthorityInputResolver = (args: {
   execution: GovernedExecuteArgs;
@@ -209,7 +210,19 @@ async function writeAuthorizationDecision(
         input.task?.taskRunId ?? execution.context?.taskRunId ?? null,
       subjectKind: input.subject?.kind ?? null,
       authorityOrganizationScope: input.organizationId ?? null,
+      // BI-12E5DD91: which escalation branch decided, so "why did this need a
+      // person?" is answerable from the record instead of re-derived.
+      ...("escalation" in decision && decision.escalation
+        ? {
+            escalationReason: decision.escalation.reasonCode,
+            escalationSteering: decision.escalation.steering,
+            damaging: decision.escalation.damaging,
+          }
+        : {}),
     },
+    // The OAuth consent this call ran under, when it ran under one.
+    authorityBindingId:
+      execution.context?.connectionDelegation?.authorityBindingId ?? null,
     endpointUsed: execution.source,
     mode: input.action.executionMode,
     routeContext: input.action.routeContext,
@@ -234,6 +247,16 @@ async function writeAuthorizationDecision(
     );
     return null;
   }
+}
+
+/** The envelope's stored reason: the rule, then the branch that decided it. */
+export function approvalExplanation(
+  decision: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>,
+): string {
+  const why = decision.escalation
+    ? escalationReasonSentence(decision.escalation.reasonCode)
+    : null;
+  return why ? `${decision.explanation} ${why}` : decision.explanation;
 }
 
 async function ensureApproval(
@@ -366,7 +389,7 @@ export async function enforceCoworkerToolAuthority(
         binding: decision.approvalBinding,
         authorityDecisionId: decisionId,
         threadId: execution.context?.threadId ?? null,
-        explanation: decision.explanation,
+        explanation: approvalExplanation(decision),
       });
       return {
         outcome: "reject",

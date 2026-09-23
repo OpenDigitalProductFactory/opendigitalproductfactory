@@ -165,6 +165,13 @@ export type GovernedExecuteContext = {
   surfaceInvocation?: AuthorizedSurfaceInvocation;
   /** Server-resolved organization identity for WWWD alignment. */
   organizationId?: string;
+  /**
+   * BI-12E5DD91: the OAuth consent binding the access-token resolver
+   * revalidated on THIS request (current human, current binding, bound
+   * assistant). Set only by the MCP route for `oauth` tokens; the escalation
+   * gate treats it as the human's recorded delegation to `agentId`.
+   */
+  connectionDelegation?: { authorityBindingId: string; agentId: string };
 };
 
 export type GovernedExecuteArgs = {

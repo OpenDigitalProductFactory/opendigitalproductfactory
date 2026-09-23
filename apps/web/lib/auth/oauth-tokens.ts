@@ -175,6 +175,8 @@ export async function resolveOAuthAccessToken(
       scopes: row.scopes,
       scope: row.scope as McpTokenScope,
       capability: row.scope === "read" ? "read" : "write",
+      // Only reachable after resolveOAuthConsent above accepted the binding.
+      authorityBindingId: row.authorityBindingId ?? null,
     },
     publicScopes,
     clientId: row.oauthClient?.oAuthClientId ?? null,

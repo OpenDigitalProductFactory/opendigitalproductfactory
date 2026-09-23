@@ -61,6 +61,8 @@ export type CoworkerEnvelopeRow = {
   createdAt: Date;
   argsJson?: unknown;
   proposedParameters?: unknown;
+  /** The tool's declared consequence, resolved from the tool registry. */
+  consequence?: string | null;
   taskRun: { a2aMetadata: unknown } | null;
 };
 
@@ -113,6 +115,8 @@ export function coworkerEnvelopeToAttentionItem(
     reviewBinding,
     recommenderAgentId: row.coworkerAgentId,
     authorizerUserId: row.delegatingUserId,
+    consequence: row.consequence ?? null,
+    rationale: row.rationale,
   });
   const approval: AttentionEnvelopeApproval = {
     envelopeId: row.id,
@@ -209,6 +213,9 @@ export async function loadCoworkerEnvelopeItems(
     db,
     rows as unknown as CoworkerEnvelopeRow[],
   );
+  const consequenceByTool = await loadDeclaredConsequences(
+    (rows as unknown as CoworkerEnvelopeRow[]).map((row) => row.manifestActionId),
+  );
   // Fire-and-forget backlog observation (BI-78D3CF1E). The query above
   // deliberately EXCLUDES expired envelopes, because an expired one is not
   // actionable — which is exactly why nothing could see them lapsing. This
@@ -249,6 +256,7 @@ export async function loadCoworkerEnvelopeItems(
         ...(proposedByEnvelopeId.has(row.id)
           ? { proposedParameters: proposedByEnvelopeId.get(row.id) }
           : {}),
+        consequence: consequenceByTool.get(row.manifestActionId) ?? null,
       },
       nowMs,
     ),
@@ -258,34 +266,58 @@ export async function loadCoworkerEnvelopeItems(
 type ProposedExecutionRow = {
   taskRunId: string | null;
   toolName: string;
+  userId?: string;
   parameters: unknown;
   result: unknown;
 };
 
+/**
+ * The pending call the envelope was minted for, found by the envelope id the
+ * governed executor wrote into its result. Every surface writes that id, so
+ * this finds external MCP envelopes (which carry no TaskRun) as well as task
+ * envelopes (BI-12E5DD91). Only the delegating user's own execution of the
+ * same tool is accepted.
+ */
 async function loadProposedParameters(
   db: Db,
   rows: CoworkerEnvelopeRow[],
 ): Promise<Map<string, unknown>> {
-  const taskRunIds = rows
-    .map((row) => row.taskRunId)
-    .filter((id): id is string => typeof id === "string" && id.length > 0);
-  if (taskRunIds.length === 0) return new Map();
+  if (rows.length === 0) return new Map();
   const executions = await db.toolExecution.findMany({
     where: {
-      taskRunId: { in: taskRunIds },
       success: false,
+      toolName: { in: [...new Set(rows.map((row) => row.manifestActionId))] },
+      OR: rows.map((row) => ({ result: { path: ["data", "envelopeId"], equals: row.id } })),
     },
     orderBy: { createdAt: "desc" },
-    select: { taskRunId: true, toolName: true, parameters: true, result: true },
+    select: { taskRunId: true, toolName: true, userId: true, parameters: true, result: true },
   }) as ProposedExecutionRow[];
   const proposed = new Map<string, unknown>();
   for (const row of rows) {
     const match = executions.find((execution) =>
-      execution.taskRunId === row.taskRunId
-      && execution.toolName === row.manifestActionId
-      && envelopeIdFromExecutionResult(execution.result) === row.id,
+      execution.toolName === row.manifestActionId
+      && envelopeIdFromExecutionResult(execution.result) === row.id
+      && (execution.userId === undefined || execution.userId === row.delegatingUserId)
+      && (!row.taskRunId || execution.taskRunId === row.taskRunId),
     );
     if (match) proposed.set(row.id, match.parameters);
   }
   return proposed;
+}
+
+/** Declared consequences, read from the tool registry. Display only: an
+ *  unavailable registry leaves the card saying none is declared. */
+async function loadDeclaredConsequences(toolNames: string[]): Promise<Map<string, string>> {
+  const wanted = new Set(toolNames);
+  const out = new Map<string, string>();
+  if (wanted.size === 0) return out;
+  try {
+    const { PLATFORM_TOOLS } = await import("@/lib/mcp-tools");
+    for (const tool of PLATFORM_TOOLS) {
+      if (wanted.has(tool.name) && tool.consequence) out.set(tool.name, tool.consequence);
+    }
+  } catch {
+    // Display-only enrichment; the card falls back to "none declared".
+  }
+  return out;
 }

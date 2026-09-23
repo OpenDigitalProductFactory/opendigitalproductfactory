@@ -70,6 +70,8 @@ export type ResolvedMcpToken = {
   scopes: string[];
   scope: McpTokenScope;
   capability: McpTokenCapability;
+  /** OAuth only: the consent binding revalidated for this request (BI-12E5DD91). */
+  authorityBindingId?: string | null;
 };
 
 export type AddMcpTokenScopesResult =

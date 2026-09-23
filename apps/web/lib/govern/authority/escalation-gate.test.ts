@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   describeEscalationRule,
+  escalationReasonSentence,
   isDamagingAction,
   resolveEscalation,
   type EscalationInput,
@@ -224,5 +225,64 @@ describe("scheduled-mandate steering (BI-6B3DA9DD)", () => {
     });
     expect(decision.verdict).toBe("human");
     expect(decision.reasonCode).toBe("declared-proposal");
+  });
+});
+
+describe("connection-delegation steering (BI-12E5DD91)", () => {
+  const write = { sideEffect: true, executionMode: "immediate" as const, consequence: null };
+
+  it("decides a routine write under the human's current OAuth consent automatically", () => {
+    // 2026-09-23: Workroom evidence, runtime verification and a requested
+    // backlog item from an OAuth-bound assistant all parked on generic cards.
+    const decision = resolveEscalation({
+      operatorRequiresApproval: true,
+      action: write,
+      dataPolicy: { sensitivity: "internal" },
+      steering: "connection-delegation",
+    });
+    expect(decision.verdict).toBe("automated");
+    expect(decision.reasonCode).toBe("steered-by-connection-delegation");
+  });
+
+  it.each(["outward", "irreversible", "authority"] as const)(
+    "still puts a %s consequence to a person — consent does not decide damage",
+    (consequence) => {
+      const decision = resolveEscalation({
+        operatorRequiresApproval: true,
+        action: { ...write, consequence },
+        dataPolicy: { sensitivity: "internal" },
+        steering: "connection-delegation",
+      });
+      expect(decision.verdict).toBe("human");
+      expect(decision.reasonCode).toBe("damaging-consequence");
+    },
+  );
+
+  it("still puts restricted data and declared proposals to a person", () => {
+    expect(resolveEscalation({
+      operatorRequiresApproval: true,
+      action: write,
+      dataPolicy: { sensitivity: "restricted" },
+      steering: "connection-delegation",
+    }).verdict).toBe("human");
+    expect(resolveEscalation({
+      operatorRequiresApproval: true,
+      action: { ...write, executionMode: "proposal" },
+      dataPolicy: { sensitivity: "internal" },
+      steering: "connection-delegation",
+    }).reasonCode).toBe("declared-proposal");
+  });
+
+  it("names the governing reason for every branch that asks a person", () => {
+    for (const reason of [
+      "declared-proposal",
+      "damaging-consequence",
+      "damaging-sensitivity",
+      "damaging-work-case",
+      "unsteered-side-effect",
+    ] as const) {
+      expect(escalationReasonSentence(reason)).toMatch(/\w/);
+    }
+    expect(escalationReasonSentence("steered-by-connection-delegation")).toBeNull();
   });
 });
