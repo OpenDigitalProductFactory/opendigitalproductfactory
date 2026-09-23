@@ -73,3 +73,5 @@ Business model roles default to **Employee review**. Platform governance roles v
 ## Customer Accounts
 
 Customers who sign in through the storefront have a separate session type. They see the customer portal (not the internal shell) and can only access their own orders, bookings, and account information.
+
+Customer password and Google/Apple sign-in are authorized through the same canonical identity authority as workforce sessions. A disabled contact, suspended or closed account, inactive identity, or conflicting identity link is refused with the same generic sign-in failure; internal identity details are not exposed. Social sign-in is linked by the provider's stable account identifier, never by email alone.

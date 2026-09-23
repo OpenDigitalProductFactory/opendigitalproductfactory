@@ -4,6 +4,7 @@ import {
   resolvePrincipalSensitivityClearance,
   type PrincipalSensitivity,
 } from "@dpf/db/principal-sensitivity";
+import { isCustomerAccountSessionCapable } from "./customer-auth-policy";
 
 type PrincipalDb = Pick<
   typeof prisma,
@@ -31,6 +32,13 @@ type PrincipalRecord = {
   displayName: string;
   sensitivityClearance: PrincipalSensitivity[];
 };
+
+export class PrincipalAliasConflictError extends Error {
+  constructor(public readonly principalIds: readonly string[]) {
+    super(`Aliases resolve to multiple Principals: ${principalIds.join(", ")}`);
+    this.name = "PrincipalAliasConflictError";
+  }
+}
 
 export type SyncedPrincipal = PrincipalRecord & {
   aliases: AliasRecord[];
@@ -66,6 +74,7 @@ async function findPrincipalByAliases(
   db: PrincipalDb,
   aliases: AliasRecord[],
 ): Promise<PrincipalRecord | null> {
+  const matches = new Map<string, PrincipalRecord>();
   for (const alias of aliases) {
     const match = await db.principalAlias.findFirst({
       where: {
@@ -79,11 +88,15 @@ async function findPrincipalByAliases(
     });
 
     if (match?.principal) {
-      return match.principal;
+      matches.set(match.principal.id, match.principal);
     }
   }
-
-  return null;
+  if (matches.size > 1) {
+    throw new PrincipalAliasConflictError(
+      [...matches.values()].map((principal) => principal.principalId),
+    );
+  }
+  return matches.values().next().value ?? null;
 }
 
 async function persistPrincipalAliases(
@@ -105,10 +118,31 @@ async function persistPrincipalAliases(
     });
   }
 
+  const matchedAliases = await db.principalAlias.findMany({
+    where: {
+      OR: aliases.map((alias) => ({
+        aliasType: alias.aliasType,
+        aliasValue: alias.aliasValue,
+        issuer: alias.issuer,
+      })),
+    },
+  });
+
+  const conflictingPrincipalIds = [...new Set(
+    matchedAliases
+      .map((alias) => alias.principalId)
+      .filter((principalId) => principalId !== principal.id),
+  )];
+  if (conflictingPrincipalIds.length > 0) {
+    throw new PrincipalAliasConflictError([
+      principal.principalId,
+      ...conflictingPrincipalIds,
+    ]);
+  }
+
   const persisted = await db.principalAlias.findMany({
     where: { principalId: principal.id },
   });
-
   return persisted.map((alias) => ({
     aliasType: alias.aliasType,
     aliasValue: alias.aliasValue,
@@ -324,6 +358,13 @@ export async function syncCustomerPrincipal(
       id: true,
       email: true,
       isActive: true,
+      mergedIntoId: true,
+      account: {
+        select: {
+          status: true,
+          partnerEnrollment: { select: { status: true, endedAt: true } },
+        },
+      },
     },
   });
 
@@ -333,22 +374,35 @@ export async function syncCustomerPrincipal(
 
   const lowercaseEmail = contact.email.toLowerCase();
 
+  const kind = principalKindForContact(contact.account);
+  const active = contact.isActive
+    && contact.mergedIntoId == null
+    && isCustomerAccountSessionCapable(contact.account.status);
+  const aliases: AliasRecord[] = [
+    {
+      aliasType: "customer_contact",
+      aliasValue: contact.id,
+      issuer: INTERNAL_ISSUER,
+    },
+  ];
+  if (kind === "partner") {
+    aliases.push({
+      aliasType: "partner_contact",
+      aliasValue: contact.id,
+      issuer: INTERNAL_ISSUER,
+    });
+  }
+  aliases.push({
+    aliasType: "email",
+    aliasValue: lowercaseEmail,
+    issuer: INTERNAL_ISSUER,
+  });
+
   return upsertPrincipalForAliases(db, {
-    kind: "customer",
-    status: contact.isActive ? "active" : "inactive",
+    kind,
+    status: active ? "active" : "inactive",
     displayName: contact.email,
-    aliases: [
-      {
-        aliasType: "customer_contact",
-        aliasValue: contact.id,
-        issuer: INTERNAL_ISSUER,
-      },
-      {
-        aliasType: "email",
-        aliasValue: lowercaseEmail,
-        issuer: INTERNAL_ISSUER,
-      },
-    ],
+    aliases,
   });
 }
 

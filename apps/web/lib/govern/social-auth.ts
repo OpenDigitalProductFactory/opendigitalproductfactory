@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { SignJWT, jwtVerify } from "jose";
+import { isCustomerAccountSessionCapable } from "@/lib/identity/customer-auth-policy";
 
 function getTempTokenSecret(): Uint8Array {
   const authSecret = process.env.AUTH_SECRET;
@@ -20,7 +21,6 @@ export type SocialProfile = {
 export type SocialAuthFlow =
   | { flow: "sign-in"; contact: ContactWithAccount }
   | { flow: "link"; contact: ContactWithAccount }
-  | { flow: "auto-link"; contact: ContactWithAccount }
   | { flow: "onboard" }
   | { flow: "blocked" };
 
@@ -52,7 +52,7 @@ export async function determineSocialAuthFlow(
   });
 
   if (identity) {
-    if (!identity.contact.isActive || identity.contact.account.status === "inactive") {
+    if (!identity.contact.isActive || !isCustomerAccountSessionCapable(identity.contact.account.status)) {
       return { flow: "blocked" };
     }
     return { flow: "sign-in", contact: identity.contact };
@@ -66,12 +66,13 @@ export async function determineSocialAuthFlow(
       },
     });
     if (contact) {
-      if (!contact.isActive || contact.account.status === "inactive") {
+      if (!contact.isActive || !isCustomerAccountSessionCapable(contact.account.status)) {
         return { flow: "blocked" };
       }
-      if (!contact.passwordHash) {
-        return { flow: "auto-link", contact };
-      }
+      // Email only identifies which guarded linking ceremony to offer. It
+      // never selects an identity for session issuance. The ceremony must
+      // independently prove the existing credential; contacts without one
+      // therefore fail closed in linkSocialIdentity.
       return { flow: "link", contact };
     }
   }

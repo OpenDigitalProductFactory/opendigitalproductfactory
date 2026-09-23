@@ -28,6 +28,7 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import {
+  PrincipalAliasConflictError,
   resolvePrincipalRecordIdForSessionIdentity,
   syncAgentPrincipal,
   syncCustomerPrincipal,
@@ -188,6 +189,8 @@ describe("syncCustomerPrincipal", () => {
       id: "contact-db-1",
       email: "Buyer@Example.com",
       isActive: true,
+      mergedIntoId: null,
+      account: { status: "active", partnerEnrollment: null },
     } as never);
     vi.mocked(prisma.principalAlias.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.principal.create).mockResolvedValue({
@@ -245,6 +248,8 @@ describe("syncCustomerPrincipal", () => {
       id: "contact-db-2",
       email: "former@example.com",
       isActive: false,
+      mergedIntoId: null,
+      account: { status: "active", partnerEnrollment: null },
     } as never);
     vi.mocked(prisma.principalAlias.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.principal.create).mockResolvedValue({
@@ -272,6 +277,68 @@ describe("syncCustomerPrincipal", () => {
     await expect(syncCustomerPrincipal("missing-contact")).rejects.toThrow(
       /CustomerContact missing-contact not found/,
     );
+  });
+
+  it("derives partner kind and both canonical contact aliases from live enrollment", async () => {
+    vi.mocked(prisma.customerContact.findUnique).mockResolvedValue({
+      id: "contact-partner",
+      email: "Partner@Example.com",
+      isActive: true,
+      mergedIntoId: null,
+      account: {
+        status: "active",
+        partnerEnrollment: { status: "active", endedAt: null },
+      },
+    } as never);
+    vi.mocked(prisma.principalAlias.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.principal.create).mockResolvedValue({
+      id: "principal-partner",
+      principalId: "PRN-partner",
+      kind: "partner",
+      status: "active",
+      displayName: "Partner@Example.com",
+      sensitivityClearance: ["public"],
+    } as never);
+    vi.mocked(prisma.principalAlias.createMany).mockResolvedValue({ count: 3 });
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([
+      { principalId: "principal-partner", aliasType: "customer_contact", aliasValue: "contact-partner", issuer: "" },
+      { principalId: "principal-partner", aliasType: "partner_contact", aliasValue: "contact-partner", issuer: "" },
+      { principalId: "principal-partner", aliasType: "email", aliasValue: "partner@example.com", issuer: "" },
+    ] as never);
+
+    const result = await syncCustomerPrincipal("contact-partner");
+
+    expect(result.kind).toBe("partner");
+    expect(result.aliases.map((alias) => alias.aliasType).sort()).toEqual([
+      "customer_contact",
+      "email",
+      "partner_contact",
+    ]);
+  });
+
+  it("refuses aliases already split across two Principals", async () => {
+    vi.mocked(prisma.customerContact.findUnique).mockResolvedValue({
+      id: "contact-conflict",
+      email: "conflict@example.com",
+      isActive: true,
+      mergedIntoId: null,
+      account: { status: "active", partnerEnrollment: null },
+    } as never);
+    vi.mocked(prisma.principalAlias.findFirst)
+      .mockResolvedValueOnce({ principal: {
+        id: "principal-a", principalId: "PRN-a", kind: "customer", status: "active",
+        displayName: "A", sensitivityClearance: ["public"],
+      } } as never)
+      .mockResolvedValueOnce({ principal: {
+        id: "principal-b", principalId: "PRN-b", kind: "customer", status: "active",
+        displayName: "B", sensitivityClearance: ["public"],
+      } } as never);
+
+    await expect(syncCustomerPrincipal("contact-conflict")).rejects.toBeInstanceOf(
+      PrincipalAliasConflictError,
+    );
+    expect(prisma.principal.update).not.toHaveBeenCalled();
+    expect(prisma.principal.create).not.toHaveBeenCalled();
   });
 });
 

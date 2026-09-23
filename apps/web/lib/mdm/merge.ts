@@ -18,6 +18,7 @@
  * coworker path and logged as a system activity on the admin path.
  */
 import { prisma } from "@dpf/db";
+import { syncCustomerPrincipal } from "@/lib/identity/principal-linking";
 import { CUSTOMER_TOMBSTONE_STATUSES } from "@dpf/db/customer-lifecycle";
 import { loadMatchConfig } from "./match-config";
 import { recordAttributeChanges } from "./history";
@@ -411,6 +412,10 @@ export async function mergeRecords(
       where: { id: loserId },
       data: adapter.tombstoneData(survivorId),
     });
+    if (domain === "customer-contact") {
+      await syncCustomerPrincipal(loserId, tx as never);
+      await syncCustomerPrincipal(survivorId, tx as never);
+    }
 
     return {
       domain,

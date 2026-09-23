@@ -22,32 +22,29 @@ export async function customerSignup(input: {
   const passwordHash = await hashPassword(input.password);
   const accountId = `CUST-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
-  const account = await prisma.customerAccount.create({
-    data: {
-      accountId,
-      name: input.companyName.trim(),
-      status: "active",
-      contacts: {
-        create: {
-          email: input.email.trim().toLowerCase(),
-          passwordHash,
+  await prisma.$transaction(async (tx) => {
+    const account = await tx.customerAccount.create({
+      data: {
+        accountId,
+        name: input.companyName.trim(),
+        status: "active",
+        contacts: {
+          create: {
+            email: input.email.trim().toLowerCase(),
+            passwordHash,
+          },
         },
       },
-    },
-    include: { contacts: true },
-  });
-
-  // Project the new contact into the canonical Principal substrate so
-  // downstream identity resolution and audit trails carry a stable
-  // principalId. Best-effort — a failure here must not block signup.
-  const newContact = account.contacts[0];
-  if (newContact) {
-    try {
-      await syncCustomerPrincipal(newContact.id);
-    } catch (error) {
-      console.error("[customer-auth] syncCustomerPrincipal failed for", newContact.id, error);
+      include: { contacts: true },
+    });
+    const newContact = account.contacts[0];
+    if (!newContact) {
+      throw new Error("Customer signup did not create its credential holder.");
     }
-  }
+    // Principal and aliases are part of the credential creation invariant — a
+    // failed convergence rolls the account/contact write back.
+    await syncCustomerPrincipal(newContact.id, tx as never);
+  });
 
   return { success: true };
 }

@@ -6,6 +6,8 @@ import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 import * as crypto from "crypto";
 import { verifyPassword, hashPassword } from "@/lib/password";
 import { verifyTempToken, type SocialProfile } from "@/lib/social-auth";
+import { authorizeIdentityForSession } from "@/lib/identity/authentication";
+import { syncCustomerPrincipal } from "@/lib/identity/principal-linking";
 
 type LinkResult = {
   success: boolean;
@@ -37,25 +39,46 @@ export async function linkSocialIdentity(
   const { valid, needsRehash } = await verifyPassword(password, contact.passwordHash);
   if (!valid) return { success: false, error: "Incorrect password. Please try again." };
 
-  if (needsRehash) {
-    const newHash = await hashPassword(password);
-    await prisma.customerContact.update({ where: { id: contact.id }, data: { passwordHash: newHash } });
-  }
+  const nextHash = needsRehash ? await hashPassword(password) : null;
+  const linked = await prisma.$transaction(async (tx) => {
+    // Re-read under the same transaction that writes the provider identity, so
+    // account/contact deactivation cannot race the credential proof.
+    const current = await tx.customerContact.findUnique({
+      where: { id: contact.id },
+      include: { account: { select: { id: true, accountId: true, name: true, status: true } } },
+    });
+    if (!current || current.passwordHash !== contact.passwordHash) return null;
+    const authority = await authorizeIdentityForSession(
+      { population: "customer", credentialId: current.id },
+      tx as never,
+    );
+    if (!authority.authorized) return null;
 
-  await prisma.socialIdentity.create({
-    data: {
-      provider: profile.provider,
-      providerAccountId: profile.providerAccountId,
-      email: profile.email,
-      contactId: contact.id,
-    },
+    if (nextHash || (!current.name && profile.name)) {
+      await tx.customerContact.update({
+        where: { id: current.id },
+        data: {
+          ...(nextHash ? { passwordHash: nextHash } : {}),
+          ...(!current.name && profile.name ? { name: profile.name } : {}),
+        },
+      });
+    }
+    await tx.socialIdentity.create({
+      data: {
+        provider: profile.provider,
+        providerAccountId: profile.providerAccountId,
+        email: profile.email,
+        contactId: current.id,
+      },
+    });
+    return {
+      contactId: current.id,
+      accountId: current.account.accountId,
+      accountName: current.account.name,
+    };
   });
-
-  if (!contact.name && profile.name) {
-    await prisma.customerContact.update({ where: { id: contact.id }, data: { name: profile.name } });
-  }
-
-  return { success: true, contactId: contact.id, accountId: contact.account.accountId, accountName: contact.account.name };
+  if (!linked) return { success: false, error: "Account not found or inactive." };
+  return { success: true, ...linked };
 }
 
 type OnboardInput =
@@ -87,6 +110,7 @@ export async function completeProfileWithSocial(
       const contact = await tx.customerContact.create({
         data: { email: profile.email.toLowerCase(), name: profile.name, ...customerContactNormalizedColumns({ name: profile.name }), accountId: account.id },
       });
+      await syncCustomerPrincipal(contact.id, tx as never);
       await tx.socialIdentity.create({
         data: { provider: profile.provider, providerAccountId: profile.providerAccountId, email: profile.email, contactId: contact.id },
       });
@@ -114,6 +138,7 @@ export async function completeProfileWithSocial(
     const contact = await tx.customerContact.create({
       data: { email: profile.email.toLowerCase(), name: profile.name, ...customerContactNormalizedColumns({ name: profile.name }), accountId: validation.account!.id },
     });
+    await syncCustomerPrincipal(contact.id, tx as never);
     await tx.socialIdentity.create({
       data: { provider: profile.provider, providerAccountId: profile.providerAccountId, email: profile.email, contactId: contact.id },
     });
