@@ -420,7 +420,11 @@ export async function executeRemoteTaskAttempt(input: {
         ? result.failure.message
         : writerResult && receiptExpected && !persistedOutcome ? result.content
         : describeTerminalWriterFailure(terminalToolPolicy, terminalWriterExecutions);
-      const escalation = !writerRejection && terminalWriterRetryIsExhausted(terminalWriterAttempt)
+      // BI-50B0C471: a deferral after banked reads is a wait, not a writer no-show.
+      const capacityDeferred = result.failure?.kind === "terminal-writer-missing"
+        ? result.failure.deferredBy
+        : undefined;
+      const escalation = !writerRejection && !capacityDeferred && terminalWriterRetryIsExhausted(terminalWriterAttempt)
         ? createTerminalWriterEscalation({
             writerToolName: terminalToolPolicy.writerToolName,
             attempt: terminalWriterAttempt,
@@ -447,6 +451,7 @@ export async function executeRemoteTaskAttempt(input: {
                 ? { noncompliance: "prose-without-required-writer" }
                 : {}),
               ...(writerRejection ? { writerRejection } : {}),
+              ...(capacityDeferred ? { capacityDeferred } : {}),
             },
             ...(escalation ? { terminalWriterEscalation: escalation } : {}),
           },
@@ -465,6 +470,8 @@ export async function executeRemoteTaskAttempt(input: {
             ? terminalWriterEscalationWaitReason(escalation)
             : writerRejection
             ? TERMINAL_WRITER_REJECTED_WAIT_REASON
+            : capacityDeferred
+            ? "provider-capacity"
             : "missing-terminal-writer",
           content: remoteTaskContent(
             escalation ? terminalWriterEscalationMessage(escalation) : terminalWriterFailureMessage,

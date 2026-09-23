@@ -395,6 +395,9 @@ export type InferenceDeadEndKind =
 export type InferenceDeadEndOutcome = {
   kind: InferenceDeadEndKind;
   message: string;
+  /** BI-50B0C471: set on `terminal-writer-missing` when a capacity/busy
+   * deferral, not the writer contract, stopped a reviewer after banked reads. */
+  deferredBy?: "capacity" | "busy";
 };
 
 function isAllEndpointNetworkOutage(message: string): boolean {
@@ -454,4 +457,24 @@ export function describeToolRouteFailure(
   error?: unknown,
 ): string {
   return describeToolRouteFailureOutcome(errorMessage, toolCount, error).message;
+}
+
+/**
+ * BI-50B0C471: a capacity/busy deferral that met a governed reviewer AFTER its
+ * bound reads. The banked writer wait is kept (the run is no longer a clean
+ * pre-inference wait), but the outcome names the deferral instead of reporting
+ * that the writer could not be dispatched, so the caller waits for capacity and
+ * the resume does not spend one of the writer's bounded attempts.
+ */
+export function describeBankedReaderDeferral(
+  kind: InferenceDeadEndKind,
+  reads: number,
+  writerToolName: string,
+  cause: string,
+): InferenceDeadEndOutcome | null {
+  if (kind !== "capacity" && kind !== "busy") return null;
+  const message = `Inference ${kind === "capacity" ? "capacity was deferred" : "was busy"} after ${reads} bound read${reads === 1 ? "" : "s"} (${cause}). `
+    + `The reads are banked on this TaskRun and ${writerToolName} has not run. `
+    + "Re-issue the same request after the reservation clears; it resumes here without spending a writer attempt. No receipt was created.";
+  return { kind: "terminal-writer-missing", message, deferredBy: kind };
 }
