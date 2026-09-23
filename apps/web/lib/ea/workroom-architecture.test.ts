@@ -1,6 +1,59 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { loadRoomInventory, loadWorkroomArchitecture, loadWorkroomCoordination, resolvePortfolioPlacement } from "./workroom-architecture";
+import { loadRoomInventory, loadWorkroomArchitecture, loadWorkroomCoordination, loadWorkroomInitiatives, resolvePortfolioPlacement } from "./workroom-architecture";
+
+describe("initiative operation identities", () => {
+  it("searches initiative names before membership paging and resolves both aliases", async () => {
+    const db = { epic: { findMany: vi.fn().mockResolvedValue([{ id: "late-row", epicId: "EP-LATE", title: "Rescue intake", description: null, scopeKind: "business" }]) },
+      workroom: { groupBy: vi.fn().mockResolvedValue([{ epicId: "late-row", _count: { _all: 2 } }]) } };
+    const result = await loadWorkroomInitiatives(db, new Date(), " Rescue ");
+    expect(db.epic.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: [
+      { title: { contains: "Rescue", mode: "insensitive" } }, { epicId: { contains: "Rescue", mode: "insensitive" } },
+    ] }, take: 201 }));
+    expect(db.workroom.groupBy).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ epicId: { in: ["EP-LATE", "late-row"] } }) }));
+    expect(result.initiatives[0]).toMatchObject({ id: "EP-LATE", openRooms: 2 });
+  });
+  it("joins semantic and row references without counting an initiative twice", async () => {
+    const db = { workroom: { groupBy: vi.fn().mockResolvedValue([
+      { epicId: "epic-row", _count: { _all: 2 } }, { epicId: "EP-ONE", _count: { _all: 3 } },
+      { epicId: "missing", _count: { _all: 1 } },
+    ]) }, epic: { findMany: vi.fn().mockResolvedValue([
+      { id: "epic-row", epicId: "EP-ONE", title: "Reliable delivery", description: "Work continues without a connected client", scopeKind: "platform" },
+    ]) } };
+    const result = await loadWorkroomInitiatives(db, new Date("2026-09-22T00:00:00Z"));
+    expect(result.initiatives).toEqual([expect.objectContaining({ id: "EP-ONE", title: "Reliable delivery", openRooms: 5,
+      storedRefs: ["EP-ONE", "epic-row"], operation: "initiative:EP-ONE" })]);
+    expect(result.unresolvedRooms).toBe(1);
+    expect(result.truncated).toBe(false);
+    expect(db.workroom.groupBy).toHaveBeenCalledWith(expect.objectContaining({ take: 201,
+      where: expect.objectContaining({ archivedAt: null, epicId: { not: null } }) }));
+  });
+
+  it("reports failed identity reads as unknown, not an empty healthy portfolio", async () => {
+    const db = { workroom: { groupBy: vi.fn().mockRejectedValue(new Error("unavailable")) }, epic: { findMany: vi.fn() } };
+    expect(await loadWorkroomInitiatives(db)).toMatchObject({ initiatives: [], partial: true, unresolvedRooms: null });
+  });
+
+  it("reports the membership page bound and never guesses ambiguous identity", async () => {
+    const db = { workroom: { groupBy: vi.fn().mockResolvedValue(Array.from({ length: 201 }, (_, i) => ({ epicId: `ref-${i}`, _count: { _all: 1 } }))) },
+      epic: { findMany: vi.fn().mockResolvedValue([
+        { id: "ref-0", epicId: "EP-FIRST", title: "First", description: null, scopeKind: null },
+        { id: "other", epicId: "ref-0", title: "Ambiguous", description: null, scopeKind: null },
+      ]) } };
+    expect(await loadWorkroomInitiatives(db)).toMatchObject({ initiatives: [], truncated: true, unresolvedRooms: 200 });
+    expect(db.epic.findMany.mock.calls[0][0].where.OR[0].id.in).toHaveLength(200);
+  });
+
+  it("filters initiative aliases before paging and preserves the canonical operation link", async () => {
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue([
+      { id: "r1", capsuleId: "WC-ONE", title: "Recovery", status: "ready", workItem: null },
+    ]) } };
+    const result = await loadWorkroomCoordination(db, new Date(), { initiative: { id: "EP-ONE", storedRefs: ["EP-ONE", "epic-row"] }, query: "Recovery", initiativeQuery: "Reliable" });
+    expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ epicId: { in: ["EP-ONE", "epic-row"] } }), take: 201 }));
+    expect(new URL(result.rooms[0].href, "http://localhost").searchParams.get("operation")).toBe("initiative:EP-ONE");
+    expect(new URL(result.rooms[0].href, "http://localhost").searchParams.get("initiativeQuery")).toBe("Reliable");
+  });
+});
 
 describe("loadWorkroomArchitecture", () => {
   it("reports failed ownership and relation reads as unknown context", async () => {

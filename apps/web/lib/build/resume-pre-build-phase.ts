@@ -573,6 +573,25 @@ export async function resumePreBuildPhase(params: {
       };
     }
 
+    // Self-heal (BI-C60EB507): readiness gates a build by the delivery shape
+    // bound to its Workroom; a build with no room (decomposition children) or
+    // a room with no workShape claim falls to the unshaped gate table and is
+    // refused at plan→build with PLAN_REQUIRED — a committed plan document the
+    // automated lane never produces. Attach/bind before any phase work.
+    // Idempotent: no-op once a shape is bound or when there is no governed
+    // subject. Fixed forward at child-creation time in approve-decomposition.ts.
+    if (build.originatingBacklogItemId) {
+      try {
+        const { healBuildWorkroomShape } = await import("@/lib/build/heal-build-workroom-shape");
+        const shapeHeal = await healBuildWorkroomShape({ buildId, userId });
+        if (shapeHeal.healed) {
+          return { kind: "resumed", phase, via: "healBuildWorkroomShape", detail: shapeHeal.detail };
+        }
+      } catch (err) {
+        console.warn("[resume-pre-build-phase] workroom shape heal failed:", { buildId }, err);
+      }
+    }
+
     if (phase === "plan") {
       // Self-heal (BI-FF8ABFCB): a decomposition child is created directly in
       // `plan` with no plan.happyPathState.intake, so it hard-blocks at the

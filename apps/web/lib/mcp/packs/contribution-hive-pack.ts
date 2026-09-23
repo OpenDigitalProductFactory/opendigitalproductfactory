@@ -16,6 +16,10 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
+  contributeFindingToHiveDefinition,
+  contributeFindingToHiveHandler,
+} from "@/lib/hive/finding-contribution-tool";
+import {
   logBuildActivity,
   extractBuildIdHint,
   resolveActiveBuildId,
@@ -36,6 +40,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: false,
     buildPhases: ["ship"],
   },
+  contributeFindingToHiveDefinition,
   {
     name: "contribute_to_hive",
     description: "Package a shipped feature as a FeaturePack for community contribution. Only call after the user has seen the assessment and explicitly approved. Includes DCO (Developer Certificate of Origin) attestation.",
@@ -835,6 +840,7 @@ async function submitFeedbackHandler(
 const handlers: Record<string, ToolPackHandler> = {
   assess_contribution: (params, userId) => assessContributionHandler(params, userId),
   contribute_to_hive: (params, userId) => contributeToHiveHandler(params, userId),
+  contribute_finding_to_hive: (params) => contributeFindingToHiveHandler(params),
   propose_improvement: (params, userId, context) => proposeImprovementHandler(params, userId, context),
   propose_skill_improvement: (params, userId, context) => proposeSkillImprovementHandler(params, userId, context),
   submit_feedback: (params, userId) => submitFeedbackHandler(params, userId),
@@ -847,6 +853,7 @@ export const contributionHivePack: ToolPack = {
   grants: {
     assess_contribution: ["backlog_read"],
     contribute_to_hive: ["backlog_write"],
+    contribute_finding_to_hive: ["backlog_write"],
     submit_feedback: ["backlog_write"],
     propose_improvement: ["decision_record_create"],
     propose_skill_improvement: ["decision_record_create"],

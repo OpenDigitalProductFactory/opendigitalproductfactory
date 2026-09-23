@@ -9,6 +9,7 @@ artifact, without Docker, pnpm, Prisma, or the portal runtime.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -105,6 +106,25 @@ def copy_skill_pack(source: Path, destination: Path, dry_run: bool) -> bool:
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
     shutil.copytree(source, destination, ignore=ignore)
     return True
+
+
+def codex_content_version(skill_pack: Path) -> str:
+    """Invalidate Codex's versioned cache when delivered bytes change."""
+    manifest_path = skill_pack / ".codex-plugin" / "plugin.json"
+    manifest = read_json(manifest_path, {})
+    base_version = str(manifest.get("version", "0.0.0")).split("+", 1)[0]
+    digest = hashlib.sha256()
+    for path in sorted(skill_pack.rglob("*")):
+        relative = path.relative_to(skill_pack)
+        if not path.is_file() or "__pycache__" in relative.parts or path.suffix == ".pyc" or path.name == ".DS_Store":
+            continue
+        content = path.read_bytes()
+        if path == manifest_path:
+            # The cache suffix itself must not change the next run's digest.
+            content = json.dumps({**manifest, "version": base_version}, sort_keys=True).encode("utf-8")
+        digest.update(relative.as_posix().encode("utf-8") + b"\0")
+        digest.update(hashlib.sha256(content).digest())
+    return f"{base_version}+codex.{digest.hexdigest()[:24]}"
 
 
 def codex_marketplace_path(home: Path) -> Path:
@@ -954,6 +974,13 @@ def install_codex_plugin(home: Path, dry_run: bool) -> str:
         return f"failed: Codex CLI could not start ({exc.__class__.__name__})"
     if installed.returncode != 0:
         return f"failed: codex plugin add exited {installed.returncode}"
+    try:
+        installed_path = Path(json.loads(installed.stdout or "{}")["installedPath"])
+    except (ValueError, KeyError, TypeError):
+        return "failed: Codex did not return an installed plugin path"
+    managed = codex_managed_plugin_path(home)
+    if not installed_path.is_dir() or codex_content_version(installed_path) != codex_content_version(managed):
+        return "failed: Codex plugin cache does not match the delivered skill pack"
     listed = subprocess.run(
         [codex, "plugin", "list", "--marketplace", "personal", "--json"],
         cwd=str(home),
@@ -1740,6 +1767,9 @@ def main(argv: list[str]) -> int:
 
     copy_skill_pack(skill_pack, codex_managed, args.dry_run)
     copy_skill_pack(skill_pack, shared_managed, args.dry_run)
+    codex_version = codex_content_version(skill_pack)
+    if not args.dry_run:
+        write_json(codex_managed / ".codex-plugin" / "plugin.json", {**manifest, "version": codex_version})
     print(f"  Codex source : {codex_managed}")
     print(f"  shared source: {shared_managed}")
     process_spine_root = skill_pack if args.dry_run else codex_managed
@@ -1756,13 +1786,15 @@ def main(argv: list[str]) -> int:
         print(line)
 
     codex_present = resolve_codex_binary() is not None
+    codex_install_failed = False
 
     if not args.claude_only:
-        ensure_codex_marketplace(home, version, args.dry_run)
+        ensure_codex_marketplace(home, codex_version, args.dry_run)
         ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
         codex_status = "skipped by flag"
         if not args.skip_codex_cli_install:
             codex_status = install_codex_plugin(home, args.dry_run)
+            codex_install_failed = codex_status.startswith("failed:")
             # Codex currently writes a legacy `[plugins."<name>"]` alias while
             # installing a qualified registry id. Converge again after the CLI
             # mutation so the next process does not warn that `dpf-platform`
@@ -1820,7 +1852,7 @@ def main(argv: list[str]) -> int:
     for line in guard_liveness_advisory():
         print(line)
 
-    exit_code = 0
+    exit_code = 1 if codex_install_failed else 0
     roster_printed = False
     trust_pending = codex_hook_trust_pending(home, codex_present=codex_present)
     if trust_pending:
@@ -1836,7 +1868,10 @@ def main(argv: list[str]) -> int:
         for line in hook_roster(skill_pack):
             print(line)
 
-    print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
+    if codex_install_failed:
+        print("Incomplete: Codex plugin refresh failed; resolve the error above and rerun the updater.")
+    else:
+        print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
     return exit_code
 
 

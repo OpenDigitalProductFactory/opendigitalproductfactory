@@ -569,12 +569,12 @@ export async function completeBacklogItemTransition(args: {
         data: {
           ...args.additionalData,
           status: "done",
-          completedAt: new Date(evaluatedAt),
+          ...(args.expectedStatus === "done" ? {} : { completedAt: new Date(evaluatedAt) }),
           resolution: args.resolution,
           claimStatus: "released",
         },
       });
-      if (updated.count === 1) {
+      if (updated.count === 1 && args.expectedStatus !== "done") {
         await tx.backlogItemActivity.create({ data: {
           backlogItemId: lockedItem.id,
           kind: "status_change",
