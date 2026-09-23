@@ -189,17 +189,50 @@ export const buildReviewVerification = inngest.createFunction(
     // intact, then one surface-neutral review evaluates the assembled committed
     // change before UX verification or promotion. Shadow mode is the rollback
     // default until outcome telemetry calibrates deterministic enforcement.
+    // The semantic review judges the assembled change: the exact diff and the
+    // committed head/base trees. The orchestrated build path advances to
+    // review without recording either (only the legacy pipeline's completion
+    // step did), so record them here from the build's own worktree — it is
+    // idempotent, and it also heals builds already stranded in review.
+    const assembled = await step.run("capture-assembled-change", async () => {
+      const { captureAssembledChange } = await import("@/lib/build/capture-assembled-change");
+      try {
+        const capture = await captureAssembledChange({
+          buildId,
+          containerId: build.sandboxId!,
+          persistSourceCurrency: true,
+        });
+        return { captured: true as const, diffPatch: capture.diffPatch, commits: capture.commitHashes.length };
+      } catch (err) {
+        const message = (err as Error)?.message?.slice(0, 300) ?? "unknown error";
+        console.warn(`[review-verification] ${buildId} assembled change could not be captured: ${message}`);
+        return { captured: false as const, error: message };
+      }
+    });
+
     const semanticReview = await step.run("semantic-change-review", async () => {
       const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
       const { reviewBuildStudioAssembledChange } = await import(
         "@/lib/change-review/build-studio-semantic-review"
       );
       return reviewBuildStudioAssembledChange({
-        build,
+        build: assembled.captured ? { ...build, diffPatch: assembled.diffPatch } : build,
         sandboxState: await getSandboxStateForBuild(buildId),
       });
     });
     if (semanticReview.kind === "unavailable" && !semanticReview.mayContinue) {
+      // A silent return here left the build in review with nothing in its
+      // trail while the resume re-queued the same run every ten minutes.
+      await step.run("record-semantic-review-unavailable", async () => {
+        const { prisma } = await import("@dpf/db");
+        await prisma.buildActivity.create({
+          data: {
+            buildId,
+            tool: "review-verification",
+            summary: `Review verification stopped before UX checks: semantic change review unavailable — ${semanticReview.reason}`,
+          },
+        }).catch(() => {});
+      });
       return { status: "semantic-review-unavailable", reason: semanticReview.reason };
     }
     if (semanticReview.kind === "reviewed" && !semanticReview.outcome.mayPublish) {

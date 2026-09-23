@@ -747,97 +747,11 @@ async function stepComplete(
     );
   }
 
-  const { prisma } = await import("@dpf/db");
-  const { extractDiff, execInSandbox, listSandboxCommitsAheadOfBase } = await import(
-    "./sandbox/sandbox"
-  );
-  const { getClientIdentity, resolveBuildWorkdir, buildSandboxCommitInFlightWorkCommand } =
-    await import("./sandbox/build-branch");
-
-  const identity = await getClientIdentity();
-  const baseRef = identity.clientBranch;
-  // Extract the diff from the build's working dir: its own worktree when
-  // isolation is on, else /workspace (default — byte-identical). BI-98B723C0 2c.
-  const buildWorkdir = resolveBuildWorkdir(buildId);
-
-  // BI-53C14D19: the per-task coding agents WRITE files into the working tree
-  // but do not COMMIT them, so listSandboxCommitsAheadOfBase() below would
-  // capture 0 commits and the build would strand at deploy/ship with "no
-  // releasable source changes" (working tree dirty) — the generated code sat
-  // uncommitted and was lost on the next branch scrub. Commit any in-flight
-  // task output onto the build branch here, before capture. Best-effort and
-  // build/-branch-scoped (the helper no-ops off a build/ branch and excludes
-  // generated artifacts), so a no-op or failure never blocks completion.
-  await execInSandbox(
-    state.containerId,
-    buildSandboxCommitInFlightWorkCommand(buildWorkdir),
-  ).catch((err: unknown) => {
-    console.warn(
-      "[build-pipeline] pre-capture in-flight commit failed (best-effort):",
-      (err as Error)?.message,
-    );
+  const { captureAssembledChange } = await import("./capture-assembled-change");
+  const { sourceCurrency } = await captureAssembledChange({
+    buildId,
+    containerId: state.containerId,
   });
-
-  const [fullDiff, commitHashes] = await Promise.all([
-    extractDiff(state.containerId, { baseRef, workspace: buildWorkdir }),
-    listSandboxCommitsAheadOfBase(state.containerId, baseRef, buildWorkdir),
-  ]);
-
-  // Branch-start currency is stale once task output is committed.
-  const { refreshCommittedSourceCurrency } = await import("./sandbox/refresh-source-currency");
-  const sourceCurrency = await refreshCommittedSourceCurrency({
-    workspace: buildWorkdir,
-    targetRef: baseRef,
-    exec: (command) => execInSandbox(state.containerId!, command),
-  });
-  // BI-D93CF6C0 — generate the plain-language change narrative (Band 2 of the
-  // overseer layer) from the goal + plan + diff. Best-effort: a null result just
-  // falls back to the raw diffSummary dive-in, so this never blocks completion.
-  let changeNarrative:
-    | import("@/lib/feature-build-types").BuildChangeNarrative
-    | null = null;
-  try {
-    const buildRow = await prisma.featureBuild.findUnique({
-      where: { buildId },
-      select: { title: true, designDoc: true, buildPlan: true },
-    });
-    if (buildRow) {
-      const designDoc = buildRow.designDoc as
-        | { problemStatement?: string; proposedApproach?: string }
-        | null;
-      const { generateChangeNarrative } = await import("./change-narrative");
-      changeNarrative = await generateChangeNarrative({
-        title: buildRow.title,
-        goal: designDoc?.problemStatement ?? designDoc?.proposedApproach ?? null,
-        planText: buildRow.buildPlan ? JSON.stringify(buildRow.buildPlan) : null,
-        diff: fullDiff,
-      });
-    }
-  } catch (err) {
-    console.warn(
-      "[build-pipeline] change-narrative generation skipped:",
-      (err as Error)?.message,
-    );
-  }
-
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: {
-      diffPatch: fullDiff,
-      diffSummary: fullDiff.slice(0, 500),
-      gitCommitHashes: commitHashes,
-      ...(changeNarrative
-        ? {
-            changeNarrative:
-              changeNarrative as unknown as import("@dpf/db").Prisma.InputJsonValue,
-          }
-        : {}),
-    },
-  });
-
-  console.log(
-    `[build-pipeline] stepComplete: captured ${fullDiff.length} bytes diff + ${commitHashes.length} commits for ${JSON.stringify(buildId)}`,
-  );
 
   return { ...state, sourceCurrency };
 }
