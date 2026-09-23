@@ -22,6 +22,7 @@ const featureBuildFindUniqueMock = vi.fn();
 const featureBuildUpdateMock = vi.fn();
 const featureBuildUpdateManyMock = vi.fn();
 const buildActivityCreateMock = vi.fn();
+const buildActivityFindManyMock = vi.fn();
 const getScopedVerificationForBuildMock = vi.fn();
 const queueBuildReviewVerificationMock = vi.fn();
 const productVersionFindManyMock = vi.fn();
@@ -67,6 +68,7 @@ vi.mock("@dpf/db", () => ({
     },
     buildActivity: {
       create: (...args: unknown[]) => buildActivityCreateMock(...args),
+      findMany: (...args: unknown[]) => buildActivityFindManyMock(...args),
     },
     productVersion: {
       findMany: (...args: unknown[]) => productVersionFindManyMock(...args),
@@ -108,6 +110,8 @@ beforeEach(() => {
   featureBuildUpdateMock.mockResolvedValue({});
   featureBuildUpdateManyMock.mockResolvedValue({ count: 1 });
   buildActivityCreateMock.mockResolvedValue({});
+  buildActivityFindManyMock.mockReset();
+  buildActivityFindManyMock.mockResolvedValue([]);
   queueBuildReviewVerificationMock.mockResolvedValue(undefined);
   productVersionFindManyMock.mockResolvedValue([]);
   changePromotionUpdateManyMock.mockResolvedValue({ count: 0 });
@@ -521,6 +525,21 @@ describe("recoverContradictoryBuildExecStatesOnBoot (FIX 1)", () => {
     expect(updateArg.data.buildExecState).toEqual({ __dbnull: true });
   });
 
+  // BI-5BF650CB: the reconciler runs on an interval, and the auto-dispatched
+  // orchestrator writes BuildActivity but no exec step. FB-8255C0E5 was coding
+  // (171 sandbox commands) when its checkpoint was cleared as "missing-step".
+  it("leaves a build that is actively working alone even when its checkpoint looks contradictory", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-LIVE", buildExecState: { sourceCurrency: { a: 1 } }, verificationOut: null },
+    ]);
+    buildActivityFindManyMock.mockResolvedValueOnce([{ buildId: "BLD-LIVE" }]);
+
+    const result = await recoverContradictoryBuildExecStatesOnBoot({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ recovered: 0, cleared: 0, failedCoerced: 0 });
+    expect(featureBuildUpdateMock).not.toHaveBeenCalled();
+  });
+
   it("clears a complete-no-verify checkpoint for a clean restart", async () => {
     featureBuildFindManyMock.mockResolvedValueOnce([
       { buildId: "BLD-NOVERIFY", buildExecState: { step: "complete" }, verificationOut: null },
@@ -620,6 +639,23 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(dispatch).toHaveBeenCalledWith("BLD-NULLSTATE");
     expect(abandonStale).not.toHaveBeenCalled();
     expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  // BI-5BF650CB: FeatureBuild.updatedAt is not a liveness signal for the
+  // orchestrator, which records progress as BuildActivity. Re-dispatching a build
+  // that is mid-run started a second pipeline that wiped /workspace node_modules
+  // under the first (FB-8255C0E5, 22:38).
+  it("does not re-dispatch a build-phase row that has recent activity", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-CODING", phase: "build", buildExecState: null, verificationOut: null, createdById: "u", createdAt: new Date(), parentEpicId: null },
+    ]);
+    buildActivityFindManyMock.mockResolvedValueOnce([{ buildId: "BLD-CODING" }]);
+    const dispatch = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ resumed: 0, flagged: 0, advanced: 0, abandoned: 0 });
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it("ages out a build-phase strand with null exec-state once past the cap (BI-B036209D)", async () => {
