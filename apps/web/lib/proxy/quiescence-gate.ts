@@ -106,8 +106,28 @@ let stateCache: CacheEntry | null = null;
  * the most recent draining/swapping state we observed so that if the state
  * route is unreachable during a mutation, we can preserve that posture
  * rather than fail open.
+ *
+ * BI-4479DDA0: the memory is forgotten on the next successful `normal` read
+ * and expires after LAST_KNOWN_NON_NORMAL_MAX_AGE_MS. Without both, one
+ * `swapping` observation followed by failing lookups refused every browser
+ * mutation for a completed run until the process restarted. The bound is
+ * twice the coordinator's 5-minute drain budget.
  */
-let lastKnownNonNormal: ProxyQuiescenceState | null = null;
+export const LAST_KNOWN_NON_NORMAL_MAX_AGE_MS = 10 * 60 * 1_000;
+let lastKnownNonNormal: { state: ProxyQuiescenceState; observedAt: number } | null = null;
+
+/**
+ * Where the gate reads quiescence state: this server's own loopback port.
+ * Never the request's public origin — behind the TLS proxy that is
+ * `https://localhost`, which nothing inside the portal container serves
+ * (ECONNREFUSED), so every lookup failed (BI-4479DDA0). Same convention as
+ * lib/business-journeys/probes.ts.
+ */
+export function resolveQuiescenceStateOrigin(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return `http://127.0.0.1:${env.PORT ?? "3000"}`;
+}
 
 /**
  * Fetch the current state from the internal route, with cache + timeout.
@@ -149,7 +169,7 @@ export async function fetchQuiescenceState(
       bundleHash: body.bundleHash ?? "unknown",
     };
     stateCache = { state, cachedAt: now };
-    if (state.level !== "normal") lastKnownNonNormal = state;
+    lastKnownNonNormal = state.level === "normal" ? null : { state, observedAt: now };
     return state;
   } catch {
     // Fetch failed / timed out. Don't cache the failure — let next call
@@ -185,8 +205,10 @@ export function _resetProxyQuiescenceCache(): void {
  * by the gate to apply preserve-last-known fail-closed for mutations when
  * the state route is unreachable.
  */
-export function getLastKnownNonNormal(): ProxyQuiescenceState | null {
-  return lastKnownNonNormal;
+export function getLastKnownNonNormal(now: number = Date.now()): ProxyQuiescenceState | null {
+  if (!lastKnownNonNormal) return null;
+  if (now - lastKnownNonNormal.observedAt > LAST_KNOWN_NON_NORMAL_MAX_AGE_MS) return null;
+  return lastKnownNonNormal.state;
 }
 
 function getAllowListedPassState(): ProxyQuiescenceState {

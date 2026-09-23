@@ -9,6 +9,7 @@ import { classifyRoute, RouteClass } from "@/lib/storefront-middleware";
 import {
   attachVersionHeaders,
   checkQuiescenceForRequest,
+  resolveQuiescenceStateOrigin,
 } from "@/lib/proxy/quiescence-gate";
 import { NextResponse } from "next/server";
 import type { NextAuthRequest } from "next-auth";
@@ -37,8 +38,9 @@ export default auth(async function proxy(req: NextAuthRequest) {
   //   - Always: inject X-Platform-Version + X-Bundle-Hash headers on the
   //     response (spec §7.2 defensive layer for stale-bundle detection).
   // Fail-open for reads, preserve-last-known for mutations (§6.4 / §12 Q6).
-  const origin = req.nextUrl.origin;
-  const quiescence = await checkQuiescenceForRequest(req, origin);
+  // State is read from this server's loopback, not req.nextUrl.origin: the
+  // public origin is not served inside the container (BI-4479DDA0).
+  const quiescence = await checkQuiescenceForRequest(req, resolveQuiescenceStateOrigin());
   if (quiescence.kind === "block") {
     return quiescence.response;
   }

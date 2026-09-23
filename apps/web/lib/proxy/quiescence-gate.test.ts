@@ -17,6 +17,8 @@ import {
   getLastKnownNonNormal,
   isAllowListed,
   isMutationRequest,
+  LAST_KNOWN_NON_NORMAL_MAX_AGE_MS,
+  resolveQuiescenceStateOrigin,
   type ProxyQuiescenceState,
 } from "./quiescence-gate";
 
@@ -286,7 +288,7 @@ describe("fetchQuiescenceState — cache + timeout", () => {
         status: 200,
       })) as typeof fetch;
     await fetchQuiescenceState("https://x", { fetchImpl, now: 1000 });
-    expect(getLastKnownNonNormal()?.level).toBe("draining");
+    expect(getLastKnownNonNormal(1000)?.level).toBe("draining");
   });
 });
 
@@ -346,7 +348,7 @@ describe("checkQuiescenceForRequest — fail policy integration", () => {
       new Response(JSON.stringify({ level: "draining", runId: "Q1", version: "x", bundleHash: "y" }), {
         status: 200,
       })) as typeof fetch;
-    await fetchQuiescenceState("https://x", { fetchImpl: fetchOk, now: 1000 });
+    await fetchQuiescenceState("https://x", { fetchImpl: fetchOk, now: Date.now() });
     expect(getLastKnownNonNormal()?.level).toBe("draining");
 
     vi.stubGlobal("fetch", async () => {
@@ -365,8 +367,53 @@ describe("checkQuiescenceForRequest — fail policy integration", () => {
     }
   });
 
+  // BI-4479DDA0: live 2026-09-23 — after a swap, the process had seen
+  // "swapping" once, every later lookup failed (the public origin is not
+  // reachable from inside the container), and every browser POST stayed 503
+  // for the completed run until the process restarted.
+  it("forgets a non-normal state once a successful read returns normal", async () => {
+    const respond = (level: string) =>
+      (async () =>
+        new Response(JSON.stringify({ level, runId: "Q1", version: "x", bundleHash: "y" }), {
+          status: 200,
+        })) as typeof fetch;
+    await fetchQuiescenceState("https://x", { fetchImpl: respond("swapping"), now: 1_000 });
+    await fetchQuiescenceState("https://x", { fetchImpl: respond("normal"), now: 5_000 });
+    expect(getLastKnownNonNormal()).toBeNull();
+
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("ECONNREFUSED");
+    });
+    const req = makeRequest("https://localhost/admin/platform-development", { method: "POST" });
+    const decision = await checkQuiescenceForRequest(req, "https://x");
+    expect(decision.kind).toBe("pass");
+  });
+
+  it("does not let a remembered non-normal state outlive its bound", async () => {
+    const swapping = (async () =>
+      new Response(JSON.stringify({ level: "swapping", runId: "Q1", version: "x", bundleHash: "y" }), {
+        status: 200,
+      })) as typeof fetch;
+    await fetchQuiescenceState("https://x", { fetchImpl: swapping, now: 1_000 });
+    expect(getLastKnownNonNormal(1_000 + LAST_KNOWN_NON_NORMAL_MAX_AGE_MS - 1)?.level).toBe("swapping");
+    expect(getLastKnownNonNormal(1_000 + LAST_KNOWN_NON_NORMAL_MAX_AGE_MS + 1)).toBeNull();
+  });
+
   // Note: full checkQuiescenceForRequest integration test would mock the
   // module-level `fetch`; skipped here in favor of testing the building
   // blocks individually. The function composes them straightforwardly.
   void checkQuiescenceForRequest; // keep import alive for type-check.
+});
+
+describe("resolveQuiescenceStateOrigin", () => {
+  // The browser's origin (https://localhost behind the TLS proxy) is not
+  // served inside the portal container — ECONNREFUSED there (BI-4479DDA0).
+  it("targets the server's own loopback port, not the public request origin", () => {
+    expect(resolveQuiescenceStateOrigin({ PORT: "3000" })).toBe("http://127.0.0.1:3000");
+    expect(resolveQuiescenceStateOrigin({ PORT: "3001" })).toBe("http://127.0.0.1:3001");
+  });
+
+  it("defaults to port 3000 when PORT is unset", () => {
+    expect(resolveQuiescenceStateOrigin({})).toBe("http://127.0.0.1:3000");
+  });
 });
