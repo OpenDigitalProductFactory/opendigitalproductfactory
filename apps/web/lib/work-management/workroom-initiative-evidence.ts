@@ -3,6 +3,7 @@ import { readLatestInitiativeGateRows, type InitiativeGateQueryDb } from "@/lib/
 import { validInitiativeGateReceipt } from "@/lib/backlog/initiative-readiness/receipt-validation";
 import { resolveWorkShapeClaim } from "./workroom-shape-claim";
 import type { ReceiptEnvelope } from "./receipt-envelope";
+import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
 
 export type InitiativeEvidenceRoom = {
   id?: string; capsuleId: string; backlogItemId?: string | null;
@@ -14,7 +15,7 @@ export type InitiativeEvidenceClient = Partial<InitiativeGateQueryDb> & {
 
 // These are evidence requirements in the versioned delivery definitions, not
 // permissions to advance a stage. Other gates remain in the evidence lane.
-const REQUIREMENT_KIND: Readonly<Record<string, string>> = {
+const REQUIREMENT_KIND: Readonly<Record<string, WorkShapeEvidenceKind>> = {
   research: "research-receipt", "spec-approval": "spec-approval-receipt",
   "architecture-review": "architecture-review-receipt", "plan-review": "plan-review-receipt",
   "post-implementation-review": "pir-receipt",

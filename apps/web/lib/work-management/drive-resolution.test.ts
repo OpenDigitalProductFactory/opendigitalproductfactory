@@ -39,14 +39,14 @@ const definition: WorkShapeDefinitionContract = {
       title: "Scan",
       accountablePrincipalRef: "agent:watcher",
       advance: { kind: "status-change", condition: "scanned" },
-      evidence: ["findings"],
+      evidence: ["assurance-finding"],
     },
     {
       key: "review",
       title: "Review",
       accountablePrincipalRef: "person:owner",
       advance: { kind: "governed-decision", condition: "accepted", decisionScope: "wwmd" },
-      evidence: ["decision"],
+      evidence: ["decision-record"],
     },
   ],
   stopConditions: [

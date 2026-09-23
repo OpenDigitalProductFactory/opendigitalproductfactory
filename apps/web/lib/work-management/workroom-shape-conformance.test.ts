@@ -39,8 +39,8 @@ const definition: WorkShapeDefinitionContract = {
   description: "A shape used in tests.",
   triggers: ["cadence"],
   stages: [
-    { key: "scan", title: "Scan", accountablePrincipalRef: "agent:watcher", advance: { kind: "status-change", condition: "scanned" }, evidence: ["findings"] },
-    { key: "review", title: "Review", accountablePrincipalRef: "person:owner", advance: { kind: "governed-decision", condition: "accepted", decisionScope: "wwmd" }, evidence: ["decision"] },
+    { key: "scan", title: "Scan", accountablePrincipalRef: "agent:watcher", advance: { kind: "status-change", condition: "scanned" }, evidence: ["assurance-finding"] },
+    { key: "review", title: "Review", accountablePrincipalRef: "person:owner", advance: { kind: "governed-decision", condition: "accepted", decisionScope: "wwmd" }, evidence: ["decision-record"] },
   ],
   stopConditions: [
     { kind: "success", condition: "findings dispositioned", disposition: "proceed" },

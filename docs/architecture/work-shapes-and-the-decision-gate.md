@@ -731,6 +731,18 @@ stage. Concurrent completing receipts in the same cycle are preserved.
 schema/handler parity guard protects it — the same seam already shipped broken
 once when `workShape` was advertised and silently dropped.
 
+**The declared kind must be a kind the tool accepts.** Stages declare what
+they leave behind in their own vocabulary (`assurance-run`, `decision-record`,
+`pr-gate`, …). Until BI-9BF42226 the tool accepted only six generic media kinds
+(`test`, `build`, `screenshot`, `verification`, `lint`, `note`), none of which
+any stage declared — so every recorded outcome was refused as a completing
+receipt and no room ever left its first stage. Per kernel decision
+DI-BE0348CE9229 the accepted vocabulary is the six media kinds plus the closed
+set in `work-shape-evidence-kinds.ts`, and `WorkShapeStage.evidence` is typed
+against that set: a shape cannot declare evidence it has no way to record. A
+generic `note` still does not advance a stage that declared `assurance-run`;
+the requirement is unchanged, only made satisfiable.
+
 ## Failing closed is not the same as locking
 
 `#5166` stopped a real defect: a stage that produced no completing receipt was

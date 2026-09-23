@@ -293,7 +293,13 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
-        kind: { type: "string", enum: ENUMS.evidenceKinds, description: "Evidence kind." },
+        kind: {
+          type: "string",
+          enum: ENUMS.evidenceKinds,
+          description:
+            "Evidence kind. For a Workroom stage, use a kind the stage brief names — the stage "
+            + "advances only on evidence of a kind it declared; a generic kind like note does not advance it.",
+        },
         stageKey: {
           type: "string",
           description:
