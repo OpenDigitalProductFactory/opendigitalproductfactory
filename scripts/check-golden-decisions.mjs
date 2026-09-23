@@ -59,6 +59,15 @@ export const SCENARIOS = [
       "expensive-rebuild": { long_term_maintainability: 0.9, schema_grounding: 0.85, reusability: 0.7, blast_radius: 0.95, speed_to_value: 0.05, evidence_density: 0.4, governance_compliance: 0.5, cost_efficiency: 0.2, human_cognitive_load: 0.1 },
     },
   },
+  {
+    id: "adopt-vs-absorb-capability",
+    expectedWinner: "absorb-into-spine",
+    marginFloor: 0.3,
+    options: {
+      "adopt-upstream-stack": { speed_to_value: 0.9, evidence_density: 0.85, long_term_maintainability: 0.6, schema_grounding: 0.45, reusability: 0.6, operational_independence: 0.4, vendor_lock_in: 0.6, blast_radius: 0.2, operator_effort: 0.3, cost_efficiency: 0.6, governance_compliance: 0.7 },
+      "absorb-into-spine": { speed_to_value: 0.25, evidence_density: 0.55, long_term_maintainability: 0.8, schema_grounding: 0.75, reusability: 0.7, operational_independence: 0.9, vendor_lock_in: 0.1, blast_radius: 0.5, operator_effort: 0.6, cost_efficiency: 0.6, governance_compliance: 0.6 },
+    },
+  },
 ];
 
 // ─── Minimal principle-frontmatter parse (mirrors parsePrinciplePage) ────────
