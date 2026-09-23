@@ -41,6 +41,18 @@ Every federation capability sat behind `DPF_FEDERATION_EXCHANGE_ENABLED`, defaul
 
 ---
 
+## Backlog coverage
+
+- Decision: decomposed
+- Parent: `BI-DF5F045F`
+- Receipt: `cmude72u90xq801mraf035zva`
+- Dependencies: phase-1-durable-identity-and-ledger -> none; phase-2-retire-exchange-flag -> phase-1-durable-identity-and-ledger
+
+| Deliverable | Mapping |
+| --- | --- |
+| Durable identity, peer ledger, link supersession, upgrade drain | phase-1-durable-identity-and-ledger -> `BI-DF5F045F` |
+| Exchange flag retired from every gate | phase-2-retire-exchange-flag -> `BI-006A04FE` |
+
 ## Coverage
 
 | Phase | Deliverable | Backlog item | Objectives served | Acceptance verified |
