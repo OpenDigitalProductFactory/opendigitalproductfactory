@@ -20,6 +20,22 @@
 import { prisma } from "@dpf/db";
 import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
 
+/**
+ * The dispatching user's auth context. BI-937E106A: this once selected
+ * `platformRole` directly on User, which has no such field — the role lives on
+ * the user's group. Prisma threw on every call, the error was swallowed, and
+ * every auto-dispatched build ran as a roleless non-superuser, so the tool
+ * filter handed the specialists no tools at all. Exported so a test can check
+ * it against the committed schema.
+ */
+export const BUILD_DISPATCH_USER_SELECT = {
+  isSuperuser: true,
+  groups: {
+    take: 1,
+    select: { platformRole: { select: { roleId: true } } },
+  },
+} as const;
+
 function logBuildActivity(buildId: string, tool: string, summary: string): Promise<void> {
   return prisma.buildActivity.create({ data: { buildId, tool, summary } }).then(() => void 0).catch(() => void 0);
 }
@@ -106,17 +122,25 @@ export async function dispatchBuildForApprovedPlan(params: {
     }
 
     // 2. Lookup the user's auth context (needed by orchestrator for specialist dispatch).
-    const userRow = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        platformRole: true,
-        isSuperuser: true,
-        groups: {
-          take: 1,
-          select: { platformRole: { select: { roleId: true } } },
-        },
-      },
-    }).catch(() => null);
+    // A failed lookup must stop the dispatch. Running the orchestrator without
+    // an auth context strips every tool and records the model's prose as
+    // finished work (BI-937E106A).
+    let userRow;
+    try {
+      userRow = await prisma.user.findUnique({
+        where: { id: userId },
+        select: BUILD_DISPATCH_USER_SELECT,
+      });
+    } catch (err) {
+      const msg = `Could not read the dispatching user's access: ${err instanceof Error ? err.message.slice(0, 300) : String(err)}`;
+      await log(msg);
+      return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
+    }
+    if (!userRow) {
+      const msg = `Dispatching user ${userId} not found; not starting code generation without an access context.`;
+      await log(msg);
+      return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
+    }
 
     const platformRole = userRow?.groups?.[0]?.platformRole?.roleId ?? null;
     const isSuperuser = userRow?.isSuperuser ?? false;
