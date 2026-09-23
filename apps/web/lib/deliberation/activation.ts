@@ -27,6 +27,7 @@ import {
 } from "./types";
 import { getPattern } from "./registry";
 import type { ResolvedDeliberationPattern } from "./registry";
+import { gradeIndependence, type ReviewerPool } from "./reviewer-independence";
 import {
   boundedConfidenceRisk,
   describeRoutingConfidence,
@@ -56,6 +57,12 @@ export interface ResolveDeliberationInput {
    * apply, so it is a discount on inferred escalation, never a policy dodge.
    */
   costPosture?: DeliberationStrategyProfile | null;
+  /**
+   * BI-0FC71985: what the install can actually field for a reviewer. Absent
+   * resolves to the WEAKEST independence rather than the strongest — claiming
+   * independence we cannot evidence is the failure this guards.
+   */
+  reviewerPool?: ReviewerPool | null;
   explicitPatternSlug?: string | null;
   artifactType: DeliberationArtifactType;
   routeContext?: string | null;
@@ -65,6 +72,11 @@ export interface ResolvedDeliberationRun {
   patternSlug: string;
   /** Set when routing confidence raised the effective risk above the declared one. */
   routingConfidenceEscalated?: boolean;
+  /**
+   * BI-0FC71985: what this review is actually worth. Present whenever a pattern
+   * runs, so a same-model review can never read like heterogeneous review.
+   */
+  independence?: import("./reviewer-independence").IndependenceGrade;
   triggerSource: DeliberationTriggerSource;
   strategyProfile: DeliberationStrategyProfile;
   diversityMode: DeliberationDiversityMode;
@@ -279,7 +291,10 @@ export async function resolve(
   const pattern = await getPattern(chosen);
   if (!pattern) return null;
 
-  const { strategyProfile, diversityMode } = resolveStrategy(pattern);
+  const { strategyProfile, diversityMode: requestedDiversity } = resolveStrategy(pattern);
+  // Never claim more independence than the pool can field.
+  const independence = gradeIndependence(requestedDiversity, input.reviewerPool);
+  const diversityMode = independence.mode;
 
   const activatedRiskLevel: DeliberationActivatedRiskLevel | null =
     triggerSource === "stage" && riskLevel === "low" ? null : riskLevel;
@@ -306,6 +321,7 @@ export async function resolve(
     diversityMode,
     activatedRiskLevel,
     reason,
+    independence,
     ...(routingConfidenceEscalated ? { routingConfidenceEscalated: true } : {}),
   };
 }

@@ -399,3 +399,35 @@ describe("resolve — escalation cost bound", () => {
     expect(run?.patternSlug).toBe("review");
   });
 });
+
+// BI-0FC71985 — the resolved run states what its review is worth.
+describe("resolve — reviewer independence", () => {
+  it("grades every activated run, so independence is never assumed", async () => {
+    const run = await resolve({
+      stage: "review",
+      riskLevel: "low",
+      artifactType: "code-change",
+      reviewerPool: { providerCount: 3, modelCount: 8 },
+    });
+    expect(run?.independence?.mode).toBeTruthy();
+    expect(run?.independence?.note).toBeTruthy();
+  });
+
+  it("reports the weakest grade on a single-model install rather than claiming more", async () => {
+    const run = await resolve({
+      stage: "review",
+      riskLevel: "low",
+      artifactType: "code-change",
+      reviewerPool: { providerCount: 1, modelCount: 1 },
+    });
+    expect(run?.independence?.mode).toBe("single-model-multi-persona");
+    expect(run?.diversityMode).toBe("single-model-multi-persona");
+    expect(run?.independence?.note).toContain("not systematic bias");
+  });
+
+  it("marks the grade unverified when no pool was reported", async () => {
+    const run = await resolve({ stage: "review", riskLevel: "low", artifactType: "code-change" });
+    expect(run?.independence?.verified).toBe(false);
+    expect(run?.independence?.note).toContain("Not verified");
+  });
+});
