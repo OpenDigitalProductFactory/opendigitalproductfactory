@@ -308,6 +308,8 @@ It names, in the platform's own vocabulary rather than OAuth's:
 
 Approvals are recorded as `AuthorizationDecisionLog` rows and listed in Admin > Platform Development > MCP beside PATs, each individually revocable.
 
+**Amended 2026-09-23 (BI-05E0EA33).** The assistant role is resolved server-side and the default flow has one Connect action; see the one-click connection section of [the OAuth external build authority design](2026-09-21-oauth-external-build-authority-design.md).
+
 ---
 
 ## 5. Slices
