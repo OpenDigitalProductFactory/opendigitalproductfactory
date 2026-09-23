@@ -66,6 +66,13 @@ Use the AI Workforce area for everyday coworker discovery and work assignment.
 
 ## Following a Concern Across Views
 
+On **Workrooms**, open **Initiatives** to find a named initiative and see its
+recorded purpose, scope and open rooms. Search by name or ID, then select its
+link to narrow Coordination. Partial or unavailable reads are labeled. Initiative
+membership does not establish a value-stream link, capability link or reporting
+relationship. The selected initiative and search stay with you through a room
+and its process, including the **Operation** return link.
+
 On **Workrooms**, expand **Coordination** to open an actual room. Use **Find a room**
 to search by title or room ID and filter by operation or status. **Next rooms**
 continues the bounded list; changing filters starts a new first page. A room with

@@ -39,7 +39,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
   const params = useSearchParams().toString();
   const operation = new URLSearchParams(params).get("operation");
   const coordinationContext = new URLSearchParams();
-  for (const key of ["operation", "coordinationQuery", "coordinationStatus", "coordinationAfter"]) {
+  for (const key of ["operation", "coordinationQuery", "coordinationStatus", "coordinationAfter", "initiativeQuery"]) {
     const value = new URLSearchParams(params).get(key);
     if (value) coordinationContext.set(key, value);
   }
