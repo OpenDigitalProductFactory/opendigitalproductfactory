@@ -18,7 +18,18 @@ import { STANDING_ROOM_PARENT_BY_KEY } from "@dpf/storefront-templates";
 export type StandingRoomRow = {
   capsuleId: string;
   idempotencyKey: string | null;
+  /** Lifecycle status. A terminal room is not part of the live tree. */
+  status?: string | null;
 };
+
+/** Statuses after which a room is no longer part of the live estate. The drive
+ *  refuses these rooms; nesting agrees with it, so a hierarchy walk and a drive
+ *  tick see the same set (BI-CFB3FDB7). */
+export const TERMINAL_WORKROOM_STATUSES: ReadonlySet<string> = new Set(["abandoned", "archived", "complete"]);
+
+function isTerminal(room: StandingRoomRow): boolean {
+  return typeof room.status === "string" && TERMINAL_WORKROOM_STATUSES.has(room.status);
+}
 
 export type ContainmentRelationPlan = {
   /** The CONTAINER. `contains` reads from the parent; reversing it would invert
@@ -62,9 +73,11 @@ export function planContainmentRelations(
   parentByKey: Readonly<Record<string, string | null>> = STANDING_ROOM_PARENT_BY_KEY,
 ): ContainmentRelationPlan[] {
   // A key may map to more than one room while a superseded duplicate lives on;
-  // both are real rooms and both belong under the parent.
+  // both are real rooms and both belong under the parent — until one is
+  // retired. A terminal room is neither a child nor a parent.
   const roomsByKey = new Map<string, string[]>();
   for (const room of rooms) {
+    if (isTerminal(room)) continue;
     const key = standingRoomKeyOf(room.idempotencyKey);
     if (!key) continue;
     const bucket = roomsByKey.get(key);
@@ -90,4 +103,16 @@ export function planContainmentRelations(
     (a, b) =>
       a.fromCapsuleId.localeCompare(b.fromCapsuleId) || a.toCapsuleId.localeCompare(b.toCapsuleId),
   );
+}
+
+/**
+ * Standing rooms in a terminal status, sorted. Their `contains` rows were
+ * materialized while they were live; the reconciler withdraws them so the tree
+ * holds only rooms the drive still runs.
+ */
+export function terminalStandingRoomIds(rooms: readonly StandingRoomRow[]): string[] {
+  return rooms
+    .filter((room) => standingRoomKeyOf(room.idempotencyKey) !== null && isTerminal(room))
+    .map((room) => room.capsuleId)
+    .sort((a, b) => a.localeCompare(b));
 }

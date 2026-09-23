@@ -16,7 +16,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { planContainmentRelations, standingRoomKeyOf } from "./standing-room-nesting";
+import {
+  planContainmentRelations,
+  standingRoomKeyOf,
+  terminalStandingRoomIds,
+} from "./standing-room-nesting";
 
 const parents = {
   "issue-triage": "contribution-flow",
@@ -124,6 +128,42 @@ describe("planContainmentRelations", () => {
       dupParents,
     );
     expect(plan.map((r) => r.toCapsuleId)).toEqual(["WC-V1", "WC-V2"]);
+  });
+
+  it("does not nest a terminal room — an abandoned duplicate is not a child", () => {
+    // BI-CFB3FDB7, as it stood on this operator install 2026-09-23: WC-F46E17BE (:v1) was
+    // abandoned, yet WC-236EA1BB still `contains` it beside the live :v2, so every
+    // hierarchy walk saw two advisory-watch children for one concern. The drive
+    // already refuses terminal rooms; nesting must agree with it.
+    const dupParents = { "dependency-advisory-watch": "source-custody", "source-custody": null };
+    const plan = planContainmentRelations(
+      [
+        room("WC-P", "source-custody"),
+        { ...room("WC-V2", "dependency-advisory-watch", "v2"), status: "draft" },
+        { ...room("WC-V1", "dependency-advisory-watch", "v1"), status: "abandoned" },
+      ],
+      dupParents,
+    );
+    expect(plan.map((r) => r.toCapsuleId)).toEqual(["WC-V2"]);
+  });
+
+  it("does not hang children under a terminal parent", () => {
+    const plan = planContainmentRelations(
+      [{ ...room("WC-PARENT", "contribution-flow"), status: "archived" }, room("WC-CHILD", "issue-triage")],
+      parents,
+    );
+    expect(plan).toEqual([]);
+  });
+
+  it("names the terminal standing rooms whose containment must be withdrawn", () => {
+    expect(
+      terminalStandingRoomIds([
+        { ...room("WC-V1", "dependency-advisory-watch", "v1"), status: "abandoned" },
+        { ...room("WC-DONE", "issue-triage"), status: "complete" },
+        { ...room("WC-LIVE", "pull-request-flow"), status: "working" },
+        { capsuleId: "WC-OTHER", idempotencyKey: "not-a-standing-room", status: "abandoned" },
+      ]),
+    ).toEqual(["WC-DONE", "WC-V1"]);
   });
 
   it("is a pure plan — it returns rows and writes nothing", () => {
