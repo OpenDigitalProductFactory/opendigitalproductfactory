@@ -404,3 +404,43 @@ describe("getClientIdentity upstream default", () => {
     );
   });
 });
+
+describe("a leftover worktree directory does not wedge the build (BI-7A4E90C2)", () => {
+  it("clears the DIRECTORY before `git worktree add`, not just the registry entry", () => {
+    // `git worktree remove --force` only acts on a REGISTERED worktree, and
+    // `git worktree prune` only drops entries whose directory is already gone.
+    // Neither deletes a directory that exists on disk but is unregistered, so
+    // the next add failed with:
+    //     fatal: '/workspace/.builds/FB-100A8799' already exists
+    // `--force` overrides the branch-already-checked-out check, not an existing
+    // path — so the build wedged permanently, retrying into the same leftover.
+    // Live on 2026-09-23: FB-100A8799 and FB-9233F66D, 199 and 192 activity
+    // rows each, no commit.
+    const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
+    const rm = cmd.indexOf("rm -rf /workspace/.builds/FB-ABCD1234");
+    const add = cmd.indexOf("git worktree add --force /workspace/.builds/FB-ABCD1234");
+    expect(rm).toBeGreaterThan(-1);
+    expect(add).toBeGreaterThan(-1);
+    expect(rm).toBeLessThan(add);
+  });
+
+  it("clears the smoke-check path too, so the probe cannot wedge on its own leftover", () => {
+    const cmd = buildSandboxWorktreeSmokeCheckCommand();
+    const rm = cmd.indexOf("rm -rf /workspace/.builds/.smoke-check");
+    const add = cmd.indexOf("git worktree add --force /workspace/.builds/.smoke-check HEAD");
+    expect(rm).toBeGreaterThan(-1);
+    expect(rm).toBeLessThan(add);
+  });
+
+  it("refuses to build a filesystem command from an unsafe build id", () => {
+    // buildWorktreePath interpolates the id straight into a path that is now
+    // passed to `rm -rf`. A traversing or metacharacter-bearing id would aim
+    // that delete elsewhere, so it throws rather than being sanitized into
+    // something plausible.
+    expect(() => buildWorktreePath("../../etc")).toThrow(/Unsafe build worktree id/);
+    expect(() => buildWorktreePath("FB-X; rm -rf /")).toThrow(/Unsafe build worktree id/);
+    expect(() => buildWorktreePath("")).toThrow(/Unsafe build worktree id/);
+    expect(() => buildWorktreePath("FB-OK123")).not.toThrow();
+    expect(() => buildWorktreePath(".smoke-check")).not.toThrow();
+  });
+});

@@ -134,7 +134,7 @@ export const BUILD_WORKTREE_ROOT_SEGMENT = ".builds";
 
 /** Absolute path of a build's isolated git worktree inside the sandbox. */
 export function buildWorktreePath(buildId: string, workspace: string = WORKSPACE): string {
-  return `${workspace}/${BUILD_WORKTREE_ROOT_SEGMENT}/${buildId}`;
+  return `${workspace}/${BUILD_WORKTREE_ROOT_SEGMENT}/${assertSafeWorktreeSegment(buildId)}`;
 }
 
 /**
@@ -185,6 +185,60 @@ const WORKTREE_SHARED_NODE_MODULES = [
  * `--force` on `worktree add` lets the same branch be (re)attached after a prior
  * crash left the registry pointing at a now-gone path.
  */
+/**
+ * A build-worktree path segment that is safe to interpolate into a shell
+ * command — including `rm -rf` (BI-7A4E90C2).
+ *
+ * `buildWorktreePath` interpolates the id straight into a path, and the
+ * teardown below now deletes that path from disk. An id containing `/`, `..`,
+ * whitespace or shell metacharacters would therefore aim the delete somewhere
+ * other than this build's worktree. Real ids are `FB-<hex>` and the smoke check
+ * uses `.smoke-check`, so the allowed shape is deliberately narrow; anything
+ * else throws rather than being sanitized into something plausible.
+ */
+function assertSafeWorktreeSegment(buildId: string): string {
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(buildId) && buildId !== SANDBOX_WORKTREE_SMOKE_CHECK_ID) {
+    throw new Error(`Unsafe build worktree id ${JSON.stringify(buildId)} — refusing to build a filesystem command from it.`);
+  }
+  if (buildId.includes("..")) {
+    throw new Error(`Unsafe build worktree id ${JSON.stringify(buildId)} — path traversal.`);
+  }
+  return buildId;
+}
+
+/**
+ * Clear a worktree path completely: drop the registry entry AND the directory.
+ *
+ * `git worktree remove --force` only acts on a REGISTERED worktree, and
+ * `git worktree prune` only drops registry entries whose directory is already
+ * gone — neither deletes a directory that is on disk but unregistered. A crash,
+ * or a prune that ran first, therefore leaves the path present with no registry
+ * entry, and the next `git worktree add --force` fails:
+ *
+ *     fatal: '/workspace/.builds/FB-100A8799' already exists
+ *
+ * `--force` overrides the branch-already-checked-out check, not an existing
+ * path. So the build wedges permanently: every retry hits the same leftover.
+ * Observed live on 2026-09-23 — FB-100A8799 and FB-9233F66D both failed this
+ * way with 199 and 192 activity rows and no commit.
+ *
+ * The `rm -rf` is what the surrounding code already intends: the caller reaches
+ * this only when the tree is NOT the build's live tree (the reuse branch above
+ * handles that case), and `git worktree remove --force` deletes the working
+ * tree wholesale anyway.
+ *
+ * Used ONLY on the add path. Teardown stays git-only: node_modules inside a
+ * worktree are symlinks into the shared install, and that invariant is worth
+ * keeping even though `rm -rf` unlinks symlinks rather than following them.
+ */
+function clearWorktreePath(path: string): string[] {
+  return [
+    `git worktree remove --force ${path} 2>/dev/null || true`,
+    `git worktree prune`,
+    `rm -rf ${path}`,
+  ];
+}
+
 export function buildSandboxWorktreeAddCommand(
   buildId: string,
   branchRef: string,
@@ -197,8 +251,7 @@ export function buildSandboxWorktreeAddCommand(
     (rel) => `ln -sfn ${workspace}/${rel} ${path}/${rel}`,
   ).join(" && ");
   const recreate = [
-    `git worktree remove --force ${path} 2>/dev/null || true`,
-    `git worktree prune`,
+    ...clearWorktreePath(path),
     `git worktree add --force ${path} ${branchRef}`,
     symlinks,
   ].join(" && ");
@@ -232,6 +285,11 @@ export function buildSandboxWorktreeRemoveCommand(
   workspace: string = WORKSPACE,
 ): string {
   const path = buildWorktreePath(buildId, workspace);
+  // Deliberately git-only: no `rm -rf` here. node_modules inside the worktree
+  // are symlinks into the shared install, and teardown keeps removal as git's
+  // job so a teardown bug can never reach them. The reclaim of a leftover
+  // DIRECTORY belongs to the add path (clearWorktreePath), which is where a
+  // leftover actually causes a failure.
   return [
     `cd ${workspace}`,
     `git worktree remove --force ${path} 2>/dev/null || true`,
@@ -265,8 +323,7 @@ export function buildSandboxWorktreeSmokeCheckCommand(workspace: string = WORKSP
   const path = buildWorktreePath(SANDBOX_WORKTREE_SMOKE_CHECK_ID, workspace);
   return [
     `cd ${workspace}`,
-    `git worktree remove --force ${path} 2>/dev/null || true`,
-    `git worktree prune`,
+    ...clearWorktreePath(path),
     `git worktree add --force ${path} HEAD`,
     `git worktree remove --force ${path}`,
     `git worktree prune`,
