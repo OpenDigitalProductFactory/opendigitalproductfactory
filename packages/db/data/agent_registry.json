@@ -1478,6 +1478,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Specialist decomposition beneath a STAFFED orchestrator. release-orchestrator (AGT-ORCH-500) is active and its declared capability_domain enumerates this role's work (offer definition) across the same IT4IT stage range, so the work is covered \u2014 this entry is finer granularity, not an uncovered gap. Like the other parked lattice roles it escalates to a human supervisor (HR-*) and cites IT4IT clauses rather than naming a hire. Held open longer than those because its SUBJECT is customer-facing, which sits on the operator's investment test; the review date is when that gets re-decided against whether the orchestrator is still carrying it adequately.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1526,6 +1531,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Specialist decomposition beneath a STAFFED orchestrator. release-orchestrator (AGT-ORCH-500) is active and its declared capability_domain enumerates this role's work (catalog publication) across the same IT4IT stage range, so the work is covered \u2014 this entry is finer granularity, not an uncovered gap. Like the other parked lattice roles it escalates to a human supervisor (HR-*) and cites IT4IT clauses rather than naming a hire. Held open longer than those because its SUBJECT is customer-facing, which sits on the operator's investment test; the review date is when that gets re-decided against whether the orchestrator is still carrying it adequately.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1574,6 +1584,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Specialist decomposition beneath a STAFFED orchestrator. release-orchestrator (AGT-ORCH-500) is active and its declared capability_domain enumerates this role's work (subscription lifecycle) across the same IT4IT stage range, so the work is covered \u2014 this entry is finer granularity, not an uncovered gap. Like the other parked lattice roles it escalates to a human supervisor (HR-*) and cites IT4IT clauses rather than naming a hire. Held open longer than those because its SUBJECT is customer-facing, which sits on the operator's investment test; the review date is when that gets re-decided against whether the orchestrator is still carrying it adequately.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1620,6 +1635,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Specialist decomposition beneath a STAFFED orchestrator. consume-orchestrator (AGT-ORCH-600) is active and its declared capability_domain enumerates this role's work (consumer onboarding) across the same IT4IT stage range, so the work is covered \u2014 this entry is finer granularity, not an uncovered gap. Like the other parked lattice roles it escalates to a human supervisor (HR-*) and cites IT4IT clauses rather than naming a hire. Held open longer than those because its SUBJECT is customer-facing, which sits on the operator's investment test; the review date is when that gets re-decided against whether the orchestrator is still carrying it adequately.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1666,6 +1686,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Specialist decomposition beneath a STAFFED orchestrator. consume-orchestrator (AGT-ORCH-600) is active and its declared capability_domain enumerates this role's work (order fulfillment) across the same IT4IT stage range, so the work is covered \u2014 this entry is finer granularity, not an uncovered gap. Like the other parked lattice roles it escalates to a human supervisor (HR-*) and cites IT4IT clauses rather than naming a hire. Held open longer than those because its SUBJECT is customer-facing, which sits on the operator's investment test; the review date is when that gets re-decided against whether the orchestrator is still carrying it adequately.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
@@ -1714,6 +1739,11 @@
           "backend": null
         },
         "concurrency_limit": 4
+      },
+      "staffing_posture": {
+        "state": "deliberately-unstaffed",
+        "reason": "Specialist decomposition beneath a STAFFED orchestrator. consume-orchestrator (AGT-ORCH-600) is active and its declared capability_domain enumerates this role's work (service support and CLIP routing) across the same IT4IT stage range, so the work is covered \u2014 this entry is finer granularity, not an uncovered gap. Like the other parked lattice roles it escalates to a human supervisor (HR-*) and cites IT4IT clauses rather than naming a hire. Held open longer than those because its SUBJECT is customer-facing, which sits on the operator's investment test; the review date is when that gets re-decided against whether the orchestrator is still carrying it adequately.",
+        "reviewBy": "2027-03-16"
       }
     },
     {
