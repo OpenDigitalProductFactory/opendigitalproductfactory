@@ -244,6 +244,47 @@ describe("runThreadCheckpointSweep", () => {
     expect(result).toMatchObject({ advanceAttempts: 1, advanceFailures: 1, foldsPerformed: 0 });
   });
 
+  // BI-CA79DB7B: the two wedged production threads (1,150 and 855 messages)
+  // carry an updatedAt from June while receiving messages daily, so a sweep
+  // keyed on the thread's own timestamp never admits them. Message activity is
+  // the second admission path; the where clauses are the contract.
+  it("BI-CA79DB7B: admits a thread with a stale updatedAt when it received a message inside the window", async () => {
+    const now = new Date("2026-09-22T04:20:00.000Z");
+    const since = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const db = sweepDb([]);
+    vi.mocked(db.agentThread.findMany)
+      .mockResolvedValueOnce([{ id: "recent", contextKey: "coworker", updatedAt: new Date("2026-09-21T00:00:00.000Z") }])
+      .mockResolvedValueOnce([{ id: "wedged", contextKey: "scheduled:discovery-taxonomy-gap-triage-daily", updatedAt: new Date("2026-06-18T22:40:00.000Z") }]);
+    const advance = vi.fn().mockResolvedValue({ advanced: false, reason: "not-enough" });
+
+    const result = await runThreadCheckpointSweep(db, { advance, now });
+
+    expect(vi.mocked(db.agentThread.findMany)).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: { updatedAt: { gte: since }, cancelledAt: null },
+    }));
+    expect(vi.mocked(db.agentThread.findMany)).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { updatedAt: { lt: since }, cancelledAt: null, messages: { some: { createdAt: { gte: since } } } },
+      orderBy: { updatedAt: "asc" },
+      take: 25,
+    }));
+    expect(advance).toHaveBeenCalledTimes(2);
+    expect(advance).toHaveBeenNthCalledWith(1, "recent", 8);
+    expect(advance).toHaveBeenNthCalledWith(2, "wedged", 8);
+    expect(result.threadsChecked).toBe(2);
+  });
+
+  it("BI-CA79DB7B: a thread returned by both admission paths is swept once", async () => {
+    const db = sweepDb([]);
+    const row = { id: "both", contextKey: "coworker", updatedAt: new Date("2026-09-21T00:00:00.000Z") };
+    vi.mocked(db.agentThread.findMany).mockResolvedValueOnce([row]).mockResolvedValueOnce([row]);
+    const advance = vi.fn().mockResolvedValue({ advanced: false, reason: "not-enough" });
+
+    const result = await runThreadCheckpointSweep(db, { advance });
+
+    expect(advance).toHaveBeenCalledTimes(1);
+    expect(result.threadsChecked).toBe(1);
+  });
+
   it("counts skipped oversized messages so the sweep reports them", async () => {
     const skip = { messageId: "m0", role: "user", chars: 30_000, estimatedTokens: 7_500, budgetTokens: 6_000 };
     const advance = vi
