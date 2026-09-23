@@ -9,7 +9,23 @@ import { readWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 export type BoundWorkShapeDb = {
   workroom: { findFirst(args: unknown): Promise<{ scopeClaims?: unknown } | null> };
+  /** BI-BAB5E837: lets a semantic item id (BI-…) resolve to the row id the room stores. */
+  backlogItem?: { findFirst(args: unknown): Promise<{ id: string } | null> };
 };
+
+/**
+ * Workroom.backlogItemId holds the BacklogItem ROW id, while every caller of
+ * this reader passes the semantic id (BI-…). The lookup never matched, so a
+ * bound shape was invisible to readiness everywhere except the claim that
+ * persisted it, and every item was gated as unshaped (live install
+ * 2026-09-23: a room carrying delivery-small@1.0.0, a decision with
+ * shapeDecision absent). Accept either id: a semantic id resolves to its row.
+ */
+async function resolveBacklogRowId(db: BoundWorkShapeDb, backlogItemId: string): Promise<string> {
+  if (!/^BI-/i.test(backlogItemId) || !db.backlogItem?.findFirst) return backlogItemId;
+  const row = await db.backlogItem.findFirst({ where: { itemId: backlogItemId }, select: { id: true } });
+  return row?.id ?? backlogItemId;
+}
 
 /**
  * A shape decided at claim time must outlive the room that decided it
@@ -27,8 +43,9 @@ export type BoundWorkShapeDb = {
  * `abandoned` room is still never consulted, because abandoning the work is a
  * statement that its shape claim no longer stands.
  */
-export async function readBoundWorkShapeRef(db: BoundWorkShapeDb, backlogItemId: string): Promise<string | null> {
+export async function readBoundWorkShapeRef(db: BoundWorkShapeDb, backlogItemRef: string): Promise<string | null> {
   if (!db.workroom?.findFirst) return null;
+  const backlogItemId = await resolveBacklogRowId(db, backlogItemRef);
 
   const live = await db.workroom.findFirst({
     where: { backlogItemId, archivedAt: null, status: { notIn: ["abandoned", "archived", "superseded"] } },
