@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Portal-Mediated Organization Membership — Phased Implementation Plan
 
 **Design:** [`docs/superpowers/specs/2026-09-03-portal-mediated-organization-membership-design.md`](../specs/2026-09-03-portal-mediated-organization-membership-design.md)
