@@ -379,7 +379,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Multi-agent collaboration (EP-A2A) — targeted handoff / summon spawn a
   // child work thread, so they require the same thread_write grant as spawn.
-  request_coworker:          ["thread_write"],
+  request_coworker:          ["thread_write", "initiative_evidence_write"],
   summon_coworker:           ["thread_write"],
 
   // Registry / Products

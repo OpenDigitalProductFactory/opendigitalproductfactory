@@ -146,6 +146,48 @@ install grant changes require the governed approval flow, not direct DB edits.
 
 ## Task and workroom boundary (C4, F4)
 
+### Bound independent-review requests (C3 follow-up, BI-1E56D891)
+
+WWMD DI-4C12C9013D64 selects reuse of `initiative_evidence_write` for
+requesting an independent review through `request_coworker`. This capability
+does not authorize general delegation, `summon_coworker`, or any reviewer
+receipt. The existing `thread_write` lane retains its current contract.
+
+The new lane requires an active consent-bound OAuth connection, the current
+human capability, and action admission for both human and assistant to the
+exact packet Workroom. It accepts only the complete server-generated readiness
+packet: item, immutable repository/commit/blob, exact room/head, eligible
+independent reviewer, writer, reader scope, objective and idempotency key.
+Regenerate readiness on the server and compare the packet before dispatch;
+reject arbitrary objectives, stale heads, sibling rooms, self-review and packet
+changes. Never enter the portal-thread delegation branch through this lane.
+The existing task substrate owns bounded execution, refresh-stable idempotency,
+reviewer grants, author separation and the reviewer's receipt.
+
+Implementation order: first add failing disclosure and request-boundary tests;
+then compose the existing grant map, readiness projection, OAuth authority and
+exact-room resolver into one request guard; then exercise the existing external
+task adapter. About 20% of effort consolidates packet validation and reuse of
+authority helpers rather than adding a new grant or task store. No migration,
+live grant edit, new dependency or new UI control is required. Rollback removes
+the author request lane without affecting existing reviewer receipts or tasks.
+
+Acceptance: current author discovers the request tool; an exact eligible
+independent-review packet dispatches; retry across refresh returns the same
+task; missing/forged packet, changed objective/writer/reviewer/head, self-review,
+revoked human/binding/grant and non-admitted room are refused before dispatch.
+Portal thread identifiers cannot bypass the narrow guard. General delegation
+still requires `thread_write`. An actual independent reviewer must read the
+bound artifact and write its own receipt before end-to-end acceptance.
+
+The first bounded lane consumes canonical completion recovery, including
+post-implementation review. It does not authorize arbitrary design-phase
+delegation. Once a review passes and its readiness request disappears, the
+same consent family may retrieve that task's recorded writer outcome: current
+human, coworker, consent and room access still apply, the persisted task digest
+must match, and an actual writer receipt must exist. An old packet alone can
+never restart a finished or obsolete review.
+
 Use the existing work packet/session/lease flow (BI-D4C110BC). Bind task context
 to the authenticated connection, human and exact work item. A client thread
 label is correlation only; task isolation requires server-issued narrowed task
