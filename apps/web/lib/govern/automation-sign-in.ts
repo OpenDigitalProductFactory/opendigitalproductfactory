@@ -209,6 +209,7 @@ export async function mintAutomationSignIn(
 export interface AutomationSessionClaims {
   sub: string;
   id: string;
+  principalId?: string;
   email: string;
   type: "admin";
   platformRole: string | null;
@@ -263,7 +264,9 @@ export async function consumeAutomationSignIn(
     return { accepted: false, reason: "persona-not-signable" };
   }
   const spine = await authorizeSession(user.id);
-  if (!spine.authorized) return { accepted: false, reason: `principal-refused:${spine.reason ?? "unknown"}` };
+  if (!spine.authorized) {
+    return { accepted: false, reason: `principal-refused:${spine.reason ?? "unknown"}` };
+  }
 
   console.info("[automation-sign-in] consumed", { persona: user.email, requestedBy: payload["requestedBy"] ?? null, next: payload["next"] ?? "/" });
   return {
@@ -272,6 +275,7 @@ export async function consumeAutomationSignIn(
     claims: {
       sub: user.id,
       id: user.id,
+      ...("principalId" in spine ? { principalId: spine.principalId } : {}),
       email: user.email,
       type: "admin",
       platformRole: resolveWorkforcePlatformRole(user.groups),

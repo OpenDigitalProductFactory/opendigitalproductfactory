@@ -8,7 +8,10 @@ import { verifyPassword, hashPassword } from "./password";
 // BI-CEACBD0D: authentication now consults the Principal spine. Before this,
 // auth.ts never read Principal — identity was decided without the spine that
 // decides authority.
-import { authorizePrincipalForSession } from "@/lib/identity/authentication";
+import {
+  authorizeIdentityForSession,
+  authorizePrincipalForSession,
+} from "@/lib/identity/authentication";
 import { determineSocialAuthFlow, createTempToken } from "./social-auth";
 import { normalizeAuthRedirect } from "./auth-redirect";
 import { resolveWorkforcePlatformRole } from "./auth-utils";
@@ -66,6 +69,7 @@ export type UserType = "admin" | "customer";
 export type DpfSession = {
   user: {
     id: string;
+    principalId?: string | null;
     email: string;
     type: UserType;
     // Admin fields
@@ -168,6 +172,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           }
           return {
             id: user.id,
+            principalId: spine.principalId,
             email: user.email,
             type: "admin" as const,
             platformRole: resolveWorkforcePlatformRole(user.groups),
@@ -205,8 +210,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const newHash = await hashPassword(credentials.password as string);
           await prisma.customerContact.update({ where: { id: contact.id }, data: { passwordHash: newHash } });
         }
+        const spine = await authorizeIdentityForSession({
+          population: "customer",
+          credentialId: contact.id,
+        });
+        if (!spine.authorized) {
+          console.warn(`[auth] customer login refused by the principal spine: ${spine.reason}`);
+          return null;
+        }
         return {
           id: contact.id,
+          principalId: spine.principalId,
           email: contact.email,
           type: "customer" as const,
           platformRole: null,
@@ -257,33 +271,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (flow.flow === "blocked") return false;
 
       if (flow.flow === "sign-in") {
-        user.id = flow.contact.id;
-        user.type = "customer";
-        user.platformRole = null;
-        user.isSuperuser = false;
-        user.accountId = flow.contact.account.accountId;
-        user.accountName = flow.contact.account.name;
-        user.contactId = flow.contact.id;
-        return true;
-      }
-
-      if (flow.flow === "auto-link") {
-        const { prisma } = await import("@dpf/db");
-        await prisma.socialIdentity.create({
-          data: {
-            provider: account.provider,
-            providerAccountId: account.providerAccountId ?? "",
-            email: user.email ?? undefined,
-            contactId: flow.contact.id,
-          },
+        const spine = await authorizeIdentityForSession({
+          population: "customer",
+          credentialId: flow.contact.id,
         });
-        if (user.name && !flow.contact.name) {
-          await prisma.customerContact.update({
-            where: { id: flow.contact.id },
-            data: { name: user.name },
-          });
+        if (!spine.authorized) {
+          console.warn(`[auth] social login refused by the principal spine: ${spine.reason}`);
+          return false;
         }
         user.id = flow.contact.id;
+        user.principalId = spine.principalId;
         user.type = "customer";
         user.platformRole = null;
         user.isSuperuser = false;
@@ -310,6 +307,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.principalId = user.principalId;
         token.type = user.type ?? "admin";
         token.platformRole = user.platformRole ?? null;
         token.isSuperuser = user.isSuperuser ?? false;
@@ -323,6 +321,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     session({ session, token }) {
       if (session.user) {
         session.user.id = typeof token.id === "string" ? token.id : token.sub ?? "";
+        session.user.principalId = typeof token.principalId === "string" ? token.principalId : "";
         session.user.type = (token.type as UserType) ?? "admin";
         session.user.platformRole = token.platformRole ?? null;
         session.user.isSuperuser = token.isSuperuser ?? false;
