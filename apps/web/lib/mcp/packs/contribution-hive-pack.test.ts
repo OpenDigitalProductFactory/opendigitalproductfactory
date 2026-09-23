@@ -33,6 +33,10 @@ import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 const EXPECTED_TOOLS = [
   "assess_contribution",
   "contribute_to_hive",
+  // BI-1281A164: the findings path. contribute_to_hive needs an active build
+  // and its diff, so a knowledge finding raised outside Build Studio had no way
+  // to leave the install at all.
+  "contribute_finding_to_hive",
   "submit_feedback",
   "propose_improvement",
   "propose_skill_improvement",
@@ -43,7 +47,7 @@ beforeEach(() => {
 });
 
 describe("contribution-hive pack — registration", () => {
-  it("exposes exactly the five contribution & hive tools with a handler each", () => {
+  it("exposes exactly the six contribution & hive tools with a handler each", () => {
     expect(contributionHivePack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(contributionHivePack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });

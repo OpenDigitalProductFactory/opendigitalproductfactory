@@ -34,6 +34,27 @@ function database(activities: unknown[] = []) {
   };
 }
 
+function shapedDatabase(activities: unknown[] = []) {
+  const db = database(activities);
+  return {
+    ...db,
+    backlogItemActivity: {
+      ...db.backlogItemActivity,
+      findMany: vi.fn().mockResolvedValue([{
+        id: "cov-1",
+        backlogItemId: "parent-row",
+        payload: { schemaVersion: 2, decision: "decomposed", deliverables: [{ backlogItemId: "BI-ENTRY" }] },
+      }]),
+    },
+    backlogItem: { findFirst: vi.fn().mockResolvedValue({ itemId: "BI-PARENT" }) },
+    workroom: {
+      findFirst: vi.fn().mockResolvedValue({
+        scopeClaims: [{ workShape: "delivery-small@1.0.0", recordedAt: "2026-09-23T00:00:00.000Z" }],
+      }),
+    },
+  };
+}
+
 describe("enforceBuildInitiativeReadiness", () => {
   it("does not treat legacy designReview or planReview JSON as governed evidence", async () => {
     const db = database();
@@ -108,5 +129,28 @@ describe("enforceBuildInitiativeReadiness", () => {
       activities: [],
       target: "plan",
     }));
+  });
+
+  it("keys the gates on the bound delivery shape and inherits the decomposition parent's scope (BI-1E8EAD10)", async () => {
+    const db = shapedDatabase();
+    const projectReadiness = vi.fn().mockReturnValue({
+      governed: true,
+      decision: {
+        decisionId: "IRD-SHAPED", policyVersion: "initiative-readiness.v3",
+        subject: { kind: "backlog-item", id: "BI-ENTRY" },
+        transitionObject: { kind: "feature-build", id: "FB-ENTRY", expectedVersion: "plan", targetState: "build" },
+        profile: "feature", target: "implementation", verdict: "allowed",
+        satisfied: [], unmet: [], blockers: [], evaluatedAt: "2026-09-23T00:00:00.000Z",
+      },
+    });
+
+    await enforceBuildInitiativeReadiness({
+      db, buildId: "FB-ENTRY", target: "implementation", targetPhase: "build", expectedPhase: "plan",
+      evaluatedAt: "2026-09-23T00:00:00.000Z", dependencies: { projectReadiness },
+    });
+
+    const call = projectReadiness.mock.calls[0]![0] as { item: { workShape?: string | null }; inheritedScope?: unknown };
+    expect(call.item.workShape).toBe("delivery-small@1.0.0");
+    expect(call.inheritedScope).toBeTruthy();
   });
 });
