@@ -4,6 +4,22 @@ import { readFileSync } from "node:fs";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 import { EXIT_CHILD_SIGNAL_DEATH } from "./sandbox-freshness.mjs";
 
+/**
+ * The exit code a local-CI STAGE uses to say it ran but reached no verdict
+ * (BI-27D3DCCD). Distinct from EXIT_CHILD_SIGNAL_DEATH, which says the host
+ * could not start or keep a process at all: this one is a stage reporting on
+ * itself. Both mean the same thing to the gate — infrastructure evidence, not a
+ * judgement about the diff — so this is mapped onto that code here.
+ *
+ * Declared by scripts/local-ci-typecheck-runner.mjs as TSC_TERMINATED_EXIT_CODE.
+ *
+ * NOT 86: that is EXIT_VITEST_RUNNER_TERMINATION, which classifyGateOutcome
+ * deliberately classifies as `failed` with its own summary. The vitest runner
+ * and the typecheck runner are both commands in this plan, so a rule keyed on
+ * 86 would move a decision somebody else made on purpose.
+ */
+export const EXIT_STAGE_INCONCLUSIVE = 88;
+
 export function integrationBranchName(candidateBranch, slotKey = "") {
   const prefix = slotKey ? `local-integration/${slotKey}` : "local-integration";
   return `${prefix}/${
@@ -171,7 +187,15 @@ export function executeLocalIntegrationPlan(plan, {
         // EXIT_CHILD_SIGNAL_DEATH is the code classifyGateOutcome already reads
         // as infrastructure evidence rather than a product build failure, so the
         // run is recorded inconclusive and the prior verdict stands.
-        status: diagnostics.hostLaunchFailure
+        //
+        // BI-27D3DCCD: the same is true of a stage that RAN and says it reached
+        // no verdict. local-ci-typecheck-runner.mjs has always exited
+        // EXIT_STAGE_INCONCLUSIVE when its compiler was terminated, but nothing
+        // here read it, so the stage's honest "I was killed" was recorded as a
+        // product failure about the author's diff. Observed 2026-09-12: two gate
+        // attempts failed on a branch containing no TypeScript, with both
+        // typecheck programs printing success and zero diagnostics emitted.
+        status: diagnostics.hostLaunchFailure || result.status === EXIT_STAGE_INCONCLUSIVE
           ? EXIT_CHILD_SIGNAL_DEATH
           : (result.status ?? 1),
         completedCommandCount,

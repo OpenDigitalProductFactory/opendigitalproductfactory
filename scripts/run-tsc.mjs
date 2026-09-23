@@ -28,4 +28,31 @@ if (result.error) {
   console.error(`[run-tsc] failed to launch tsc: ${result.error.message}`);
   process.exit(1);
 }
-process.exit(result.status ?? 1);
+
+// BI-27D3DCCD: a compiler the OS killed did not reach a verdict about anyone's
+// code, and must not be reported as one.
+//
+// `spawnSync` sets `status: null` and names the signal when the child is
+// terminated. Collapsing that to `exit 1` produced the worst possible output:
+// both typecheck programs printed success, the stage exited 1 with zero
+// diagnostics in 36 seconds, and the gate failed a branch containing no
+// TypeScript at all. The only clue was an exit code that reads as "your types
+// are broken".
+//
+// 88 is this stage's own code for "I ran and reached no verdict". It is NOT 86:
+// that is already EXIT_VITEST_RUNNER_TERMINATION, and reusing it would make a
+// killed compiler indistinguishable from a terminated test runner — trading one
+// ambiguity for another.
+// Not exported: this file runs tsc on import, so nothing may import it. The
+// runner carries the same number with a comment pointing back here.
+const TSC_TERMINATED_EXIT_CODE = 88;
+
+if (result.signal || result.status === null) {
+  console.error(
+    `[run-tsc] tsc was terminated by ${result.signal ?? "an unknown signal"} before it could report. `
+      + "This is NOT a verdict on the code: nothing was compiled to completion. "
+      + "The usual cause is the host or container reclaiming memory from the compiler.",
+  );
+  process.exit(TSC_TERMINATED_EXIT_CODE);
+}
+process.exit(result.status);
