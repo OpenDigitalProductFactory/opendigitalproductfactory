@@ -2,117 +2,104 @@
 status: draft
 ---
 
-# Office document conversion: a one-shot converter, not an office suite
+# Office document engine: absorb the LibreOffice engine, not an office suite
 
-**BI:** `BI-815D40C6` (umbrella) · slices `BI-65D65EC0`, `BI-15D69168`, `BI-52E565DA`, `BI-81524041`, `BI-9D43CBEF`
-**Epic:** `EP-8DC217EB` (Vertical Integration Inward)
-**Decision:** `DI-3638BEF46CE9` (`principle_decide`, platform-development, confidence high)
-**Base:** `main` at `0d80ac222a1`
-**Related:** [dependency diet plan](../plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md) M2 (`BI-DBDB8C6D`), M3 (`BI-068BBA33`), M5 (`BI-0AB1FD47`); the speech-sidecar removal precedent (PR #5290, `BI-F7E9A541`)
+**BI:** `BI-815D40C6` (umbrella) · S0 `BI-65D65EC0` · S1 `BI-15D69168` · S2 `BI-52E565DA` · S3 `BI-81524041` · S4 `BI-9D43CBEF` · S5 `BI-4865EB4D` · S6 `BI-3A0E5413` · S7 `BI-543819B1` · S8 `BI-4C17BF51` · S9 `BI-D1B40D43`
+**Epic:** `EP-8DC217EB` · **Decision:** `DI-3638BEF46CE9` · **Doctrine:** `absorb-dont-adopt` (commandment, `BI-1637FC89`)
 **Plan:** [2026-09-22-office-document-conversion-plan.md](../plans/2026-09-22-office-document-conversion-plan.md)
 
 ## Problem and scope
 
-The founder asked (2026-09-22) to evaluate Apache OpenOffice and absorb what
-makes sense into DPF. An office suite has three parts: editors (word
-processor, spreadsheet, presentations), file-format filters, and a headless
-converter. DPF already owns a spreadsheet surface (Workbooks, with its own
-formula engine and `.xlsx` writer) and stores documents as markdown. It has
-no need for desktop editors. What it lacks is the filter and converter layer.
+The founder asked (2026-09-22) to absorb what Apache OpenOffice offers. The concern behind it: DPF's internal document tools (Workbooks, documents, presentations, EA drawings) lack office-suite fidelity and breadth. The direction is absorption, with fewer dependencies.
 
 Verified on `main` at `0d80ac222a1`:
+- `file-parsers.ts` sends legacy `.doc` to mammoth, which reads `.docx` only. `.rtf` is ingested as raw markup. Nothing reads `.ppt`, `.pptx`, `.odt`, `.ods` or `.odp`.
+- `DocumentRendition` has no writer, so office blobs are never full-text or vector indexed.
+- Workbooks export through a hand-written `.xlsx` writer that carries data only, with no formats or charts.
+- Documents are read-only markdown with no export.
+- No coworker can produce a presentation.
+- The EA canvas has no drawing exchange.
+- Parsing rents three packages (mammoth, read-excel-file, pdf-parse); pdf-parse brings about 56 MB of transitive weight.
 
-1. `apps/web/lib/shared/file-parsers.ts` sends `.doc` and
-   `application/msword` to mammoth, which reads only OOXML. A real Word
-   97-2003 file is an OLE compound file, so the parse fails. `.rtf` is on the
-   plain-text list, so RTF control words are stored and embedded as content.
-2. Nothing reads `.ppt`, `.pptx`, `.odt`, `.ods` or `.odp`.
-3. `DocumentRendition` (`packages/db/prisma/schema/knowledge-docs.prisma`)
-   has no writer anywhere in `apps/web`.
-4. `document-store.ts` sets `fullTextIndexedAt` and stores a vector only when
-   a version carries `contentText`. An office file saved as a `DocumentBlob`
-   through `doc_save` is invisible to `doc_search` and to semantic search.
-
-In scope: a converter image, a sandboxed runtime that launches it, converter-
-backed ingestion, and document renditions with indexing. Out of scope:
-in-browser office editing, presentation authoring, any change to Workbooks'
-own model, the react-pdf invoice (M5 owns it), and the `analyze_brand_document`
-stub.
+In scope: one engine that both reads and produces office files. Out of scope: in-browser office editing, replacing Workbooks' data model, and the EA model itself.
 
 ## Objectives
 
-- **OBJ-ODC-HONEST:** No office format is silently mis-parsed. A file DPF
-  cannot read yields a typed, plain-language unsupported result.
-- **OBJ-ODC-INGEST:** Legacy Word/Excel/PowerPoint, RTF, PPTX and ODF files
-  are read by every ingestion path (uploads, onboarding capture, Workbooks
-  sheet import) through the parsers DPF already has.
-- **OBJ-ODC-RENDITION:** An office file in the document store has a PDF and a
-  plain-text rendition, and its text is found by full-text and semantic search.
-- **OBJ-ODC-FOOTPRINT:** The capability adds no always-on container, nothing
-  to any compose file, and nothing to the portal image.
-- **OBJ-ODC-CONTAIN:** Untrusted documents are converted with no network, no
-  macro execution, a read-only filesystem, and bounded memory, time and
-  concurrency.
+- **OBJ-ODC-HONEST:** No office format is silently mis-parsed. An unreadable file yields a typed, plain-language result.
+- **OBJ-ODC-INGEST:** Every ingestion path reads legacy Office, RTF, PPTX and ODF files.
+- **OBJ-ODC-RENDITION:** Office files in the document store have PDF and text renditions and are searchable.
+- **OBJ-ODC-PRODUCE:** Documents, Workbooks, presentations and EA views are produced as full-fidelity office files from one shared facility.
+- **OBJ-ODC-FOOTPRINT:** No always-on container, nothing added to the portal image, and the net dependency count falls.
+- **OBJ-ODC-CONTAIN:** Untrusted documents convert with no network, no macros, a read-only filesystem and bounded resources.
 
-## Design (ordered deliverables)
+## Design
 
-Implementation detail, file paths and test lists live in the plan.
+Applying the absorption ladder (`absorb-dont-adopt`): about 10 million lines of C++ cannot be absorbed as source. The next rung is infrastructure DPF owns: a DPF-built, pinned tool image that runs one-shot, never always-on. Callers reach it only through platform contracts, and it retires the packages it duplicates.
 
-- **S0 · Honest format detection (`BI-65D65EC0`, ships first).** `parseFileContent` sniffs content before trusting the extension (OLE magic `D0 CF 11 E0`, `{\rtf`, ZIP header). Legacy binary, RTF and not-yet-convertible formats return a typed unsupported result with a plain-language reason; a `.docx` misnamed `.doc` still parses. Every later slice degrades to this.
-- **S1 · `dpf-doctools` image (`BI-15D69168`).** A DPF-built, Debian-slim image with the distribution's LibreOffice writer/calc/impress (no Java, Base or GUI) and metric-compatible fonts. A non-root `dpf-convert --to <pdf|docx|xlsx|txt>` entrypoint reads stdin and writes stdout, with fixed exit codes. The baked profile disables macros and linked-content loading. `publish-image.yml` publishes it beside `dpf-promoter` with a recorded digest and a size budget. It is **not** in any compose file or profile: PR #5290 removed the only optional third-party image because `verify-compose-image-manifests` checks every profile and froze `promote-latest`.
-- **S2 · Converter runtime (`BI-52E565DA`).** `apps/web/lib/documents/conversion/` follows the promoter precedent: the portal already mounts the docker socket and launches `dpf-promoter` one-shot (`buildPromoterCommand`, `runProcessWithBudget`). `convertDocument()` runs `docker run --rm -i --network none --read-only` with tmpfs, memory, pid and capability limits, streams stdin/stdout (no bind mounts, so install shapes never differ), and caps input size, wall-clock time and concurrency. It returns a typed result and never throws on expected failure (`converter-unavailable`, `input-too-large`, `timeout`, `conversion-failed`). An install with no docker socket reports "unavailable by design", not an outage. The image reference comes from the same channel as `promoterImage`.
-- **S3 · Converter-backed ingestion (`BI-81524041`).** Conversion normalises to formats existing parsers read, so no parser library is added: `.doc/.rtf/.odt` → `.docx` → `parseDocx`; `.xls/.ods` → `.xlsx` → `parseXlsx`; `.ppt/.pptx/.odp` → text. It routes behind M5's `parseDocument()` if that has landed, else `parseFileContent`. Uploads, onboarding capture and Workbooks sheet import widen their accepted types together.
-- **S4 · Document renditions (`BI-9D43CBEF`).** `renditionKind` becomes the Prisma enum `DocumentRenditionKind { pdf, plain_text }` (AGENTS.md §8). A durable background function converts office versions to PDF (a `DocumentBlob`) and text, writes both renditions idempotently on the existing unique key, and indexes the text through the existing full-text and `storeDocumentVector` paths. Failures become `DocumentLifecycleEvent`s with the typed reason. `doc_load` returns renditions; the document page offers "View PDF" and "Download original". A bounded backfill covers existing office blobs.
+- **S0 · Honest detection.** Sniff content (OLE, `{\rtf`, ZIP) before trusting the extension. Legacy binary formats and RTF get a typed unsupported result, and every later slice degrades to it.
+- **S1 · `dpf-doctools` image.** Debian-slim with the distribution's LibreOffice writer, calc, impress and draw, metric-compatible fonts, `python3-uno` and `pdftotext`. It runs as a non-root user.
+  - `dpf-convert` reads stdin and writes stdout, with fixed exit codes. `dpf-render` serves S6.
+  - The baked profile disables macros and linked content.
+  - `publish-image.yml` publishes it beside `dpf-promoter`, with a recorded digest and a size budget.
+  - It is not in Compose: PR #5290 showed that an optional image there freezes `promote-latest`.
+- **S2 · Runtime.** `convertDocument()` follows the promoter precedent: the portal already mounts the docker socket and runs `runProcessWithBudget`.
+  - It runs `docker run --rm -i --network none --read-only` with tmpfs, memory, pid and capability limits, over stdin and stdout only.
+  - It caps input size, run time and concurrency.
+  - It returns a typed result and never throws on an expected failure.
+  - An install without a docker socket reports "unavailable by design".
+- **S3 · Ingestion.** Convert to what an existing parser reads: `.doc`, `.rtf` and `.odt` to `.docx`; `.xls` and `.ods` to `.xlsx`; slides to text. This applies to uploads, onboarding capture and Workbooks import.
+- **S4 · Renditions.** `renditionKind` becomes a Prisma enum. A durable job writes PDF and text renditions and indexes the text. Failures are recorded as `DocumentLifecycleEvent`s. The document page shows the PDF.
+- **S5 · Export.** Documents export to `.docx`, `.odt` and `.pdf`. Workbooks export to `.xlsx` and `.ods` with formats and charts, generated as flat ODS through the engine. This retires the hand-written `grid-xlsx.ts`.
+- **S6 · Generation.** `renderDocument(templateRef, content, formats)`:
+  - A Python-UNO script, using the image's `python3-uno` bridge so nothing is added to the portal, fills a template from a validated JSON content spec (deck, report, letter, sheet, drawing).
+  - It exports the office file plus PNG previews.
+  - Brand masters derive from `Organization`, the canonical identity.
+  - The output is a Document with renditions.
+  - The model writes a spec, never raw file XML.
+- **S7 · Presentations.** The marketing coworker gets a `create_presentation` tool and a skill. An outline becomes a branded `.pptx`, a PDF and slide previews. A revision creates a new version, not a new document.
+- **S8 · EA exchange.** An EA view exports to `.odg`, `.svg` and `.pdf`. Customer Visio or `.odg` files import as candidate elements for review, never auto-committed. The canvas stays model-first.
+- **S9 · Retire parsers.** Once S3 is proven on every install shape, `.docx`, `.xlsx` and `.pdf` also route through the engine, and mammoth, read-excel-file and pdf-parse are removed and added to the deny list. If any deployment target cannot run the engine, that is recorded as a finding and the parsers stay.
+
+People edit office files in their own office suite: download, edit, then upload a new version, which S4 indexes. A rented in-browser editor is rejected under the doctrine.
 
 ## Research and benchmarking
 
-| Candidate | What it is | Verdict |
-|---|---|---|
-| **Apache OpenOffice** | 4.1.16 (2025-11-10); the site says it is "developed 100% by volunteers". Apache-2.0. | **Rejected.** Few releases, and weaker OOXML fidelity than its fork. It is ~10 M lines of C++ desktop suite, so there is nothing to merge into a TypeScript platform, and its only usable surface (headless conversion) is better served by LibreOffice. |
-| **LibreOffice headless** | The actively developed fork. `soffice --headless --convert-to`. MPL-2.0. | **Adopted** as the engine inside `dpf-doctools`. It runs as a separate process with no linking, so the licence imposes nothing on DPF source. |
-| **Gotenberg** | A Docker HTTP API that bundles LibreOffice and Chromium for conversion to PDF. | **Rejected.** It is an always-on service, which conflicts with the dependency diet's removal of always-on containers. The browser half duplicates the `browser-use` sidecar that M5 already plans to print PDFs through. It would also be a third-party pinned image in Compose (the PR #5290 failure mode). |
-| **unoserver** | A persistent LibreOffice listener plus a client. MIT. It replaces the deprecated unoconv. Its project states 2-4× throughput from keeping one warm process. | **Deferred.** It is worth adopting inside `dpf-doctools` only if measured conversion volume makes cold starts a problem. The one-shot contract does not change if it is adopted. |
-| **Collabora Online / ONLYOFFICE Docs** | In-browser collaborative office editing servers. | **Rejected.** They are large, always-on, stateful services, and nothing in the backlog asks for office editing. DPF's documents are markdown, and its spreadsheet is Workbooks. |
-| **Hosted conversion API** | Rented conversion as a service. | **Rejected** as a default. Organisation documents would leave the install, and it scored lowest on operational independence and data privacy. An operator could add it later behind the same `convertDocument` contract. |
+| Candidate | Verdict |
+|---|---|
+| **Apache OpenOffice** 4.1.16 (2025-11), "developed 100% by volunteers", Apache-2.0 | **Rejected.** Weaker OOXML fidelity and few releases. Its only usable surface, the headless engine, is better served by its fork. |
+| **LibreOffice** headless + UNO, MPL-2.0 | **Adopted** as the engine. It runs as a separate process, so its licence imposes nothing on DPF source. |
+| **Gotenberg** (LibreOffice + Chromium HTTP API) | **Rejected.** Always-on, and its browser duplicates the `browser-use` sidecar. |
+| **unoserver** (warm listener, MIT, 2–4× throughput claimed) | **Deferred** until measured volume justifies a warm process. The contract is unchanged either way. |
+| **Collabora Online / ONLYOFFICE** (in-browser editing) | **Rejected.** Collabora's free CODE edition is "not recommended for production", so this means a paid subscription or an always-on AGPL service. That is adopting, not absorbing. |
+| **Hosted conversion API** | **Rejected.** Documents would leave the install; it ranks lowest on independence. |
 
-The kernel decision (`DI-3638BEF46CE9`) scored the one-shot LibreOffice image at
-9.50, the always-on Gotenberg service at 5.28, the hosted API at 4.51 and
-absorbing Apache OpenOffice at 3.59, with a margin of 4.22 and no sensitivity
-flips.
-
-**Architecture grounding.** This design adds no new substrate beyond one
-enum. The rendition slot (`DocumentRendition`), the blob store
-(`DocumentBlob`), the lifecycle ledger (`DocumentLifecycleEvent`), the vector
-path (`storeDocumentVector`), the one-shot container pattern (promoter), the
-process budget (`runProcessWithBudget`) and the parsers already exist. The
-`dpf-doctools` name is the tool image the dependency diet's M2 already
-proposed. M2 used the upstream mermaid image instead, so the name is free.
+`DI-3638BEF46CE9` scored the one-shot engine at 9.50, Gotenberg at 5.28, a hosted API at 4.51 and absorbing OpenOffice at 3.59. The golden scenario `adopt-vs-absorb-capability` (`BI-1637FC89`) now locks this direction.
 
 ## Security
 
-Documents are untrusted input to a large C++ parser, and LibreOffice has had advisories for macro execution and linked-content loading. Containment rests on the container, not on the parser: no network, read-only root, no host mounts (stdin/stdout only), all capabilities dropped, `no-new-privileges`, non-root, memory/pid limits, a wall-clock kill, and macros disabled in the baked profile. The image rebuilds each release, so distribution security fixes ship with the platform and the release SBOM/OSV scanning covers it.
+LibreOffice has had advisories about macros and linked content, so containment rests on the container, not the parser: no network, a read-only root, no host mounts, all capabilities dropped, `no-new-privileges`, a non-root user, memory and pid limits, a timeout kill, and macros off. The image is rebuilt every release and covered by the release SBOM and OSV scanning.
 
 ## Acceptance
 
 | Acceptance ID | Objective IDs | Required outcome |
 |---|---|---|
-| AC-ODC-001 | OBJ-ODC-HONEST | A real `.doc` (OLE) and a real `.rtf` never reach mammoth or the text path; each returns the typed unsupported result, and a `.docx` renamed `.doc` still parses. |
-| AC-ODC-002 | OBJ-ODC-CONTAIN | The built image converts `.doc/.xls/.ppt/.rtf/.odt/.pptx` fixtures to PDF and text under `--network none --read-only`, and a fixture's auto-run macro does not execute. |
-| AC-ODC-003 | OBJ-ODC-FOOTPRINT | No compose file, compose profile or portal Dockerfile stage references `dpf-doctools` or LibreOffice; the image is published by `publish-image.yml` with a recorded digest and size. |
-| AC-ODC-004 | OBJ-ODC-CONTAIN | The argv builder emits every hardening flag and a digest-pinned image; a hung conversion is removed by name within the timeout and its concurrency slot is released. |
-| AC-ODC-005 | OBJ-ODC-INGEST | On the running portal, a `.doc` uploaded during onboarding capture and a `.xls` imported into Workbooks both produce content; with the converter unavailable, both show the plain-language unsupported message. |
-| AC-ODC-006 | OBJ-ODC-RENDITION | A `.docx` and a `.pptx` saved through `doc_save` get `pdf` and `plain_text` renditions; `doc_search` finds a phrase from the body and semantic search returns the document. |
-| AC-ODC-007 | OBJ-ODC-RENDITION, OBJ-ODC-HONEST | With the converter unavailable, saving an office file records a `converter-unavailable` lifecycle event and the document still loads. |
-| AC-ODC-008 | OBJ-ODC-RENDITION | The `renditionKind` enum migration applies cleanly to a database with and without rendition rows. |
+| AC-ODC-001 | OBJ-ODC-HONEST | A real `.doc` or `.rtf` never reaches mammoth or the text path; a `.docx` renamed `.doc` still parses. |
+| AC-ODC-002 | OBJ-ODC-CONTAIN | The image converts `.doc/.xls/.ppt/.rtf/.odt/.pptx` fixtures offline and read-only; a macro fixture does not execute. |
+| AC-ODC-003 | OBJ-ODC-FOOTPRINT | No compose file or portal build stage references the engine; the image is published with a recorded digest and size. |
+| AC-ODC-004 | OBJ-ODC-CONTAIN | The runtime emits every hardening flag and a digest-pinned image; a hung job is killed and its slot freed. |
+| AC-ODC-005 | OBJ-ODC-INGEST | On the running portal, a `.doc` in onboarding and an `.xls` in Workbooks produce content; with no converter, a plain-language message appears instead. |
+| AC-ODC-006 | OBJ-ODC-RENDITION | A `.docx` and a `.pptx` saved with `doc_save` get renditions; `doc_search` and semantic search find their body text. |
+| AC-ODC-007 | OBJ-ODC-RENDITION, OBJ-ODC-HONEST | With no converter, saving records `converter-unavailable` and the document still loads. |
+| AC-ODC-008 | OBJ-ODC-PRODUCE | A document exports to `.docx`; a Workbook with formats and a chart exports to `.xlsx/.ods` and re-imports to the same values. |
+| AC-ODC-009 | OBJ-ODC-PRODUCE | The marketing coworker produces a branded `.pptx`, a PDF and previews on the running portal. |
+| AC-ODC-010 | OBJ-ODC-PRODUCE | An EA view exports to `.odg/.svg/.pdf`; a Visio fixture yields reviewable candidate elements. |
+| AC-ODC-011 | OBJ-ODC-FOOTPRINT | After S9, mammoth, read-excel-file and pdf-parse are absent from the lockfile and on the deny list, and the SBOM baseline ratchets down. |
 
-## Verification
+## Verification and documentation
 
-Each slice runs the build gate for its own change (AGENTS.md §4): unit tests,
-the production build, UX verification for S3 and S4, and a migration check
-for S4. The docker-dependent tests are gated on docker availability. When
-docker is absent they are reported as skipped, never passed. The image
-smoke test runs in the publishing workflow.
+Each slice runs its own build gate (AGENTS.md §4):
+- UX verification for S3, S4, S5, S7 and S8.
+- A migration check for S4.
+- Tests that need docker report "skipped", never "passed", when docker is absent.
 
-## Documentation impact
-
-S1 release/install docs; S2 a `platform-support-watchlist.md` row; S3 supported upload formats in the user guide; S4 the documents workspace guide.
+Each slice updates its own docs: install, platform-support watchlist, user guide, and the documents and EA guides.

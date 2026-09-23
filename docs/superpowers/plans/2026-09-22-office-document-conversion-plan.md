@@ -2,7 +2,7 @@
 status: draft
 ---
 
-# Office document conversion: implementation plan
+# Office document engine: implementation plan
 
 _Umbrella `BI-815D40C6` · Epic `EP-8DC217EB` · Design [2026-09-22-office-document-conversion-design.md](../specs/2026-09-22-office-document-conversion-design.md) · Decision `DI-3638BEF46CE9`._
 
@@ -13,12 +13,14 @@ _Umbrella `BI-815D40C6` · Epic `EP-8DC217EB` · Design [2026-09-22-office-docum
 ## Order and dependencies
 
 ```
-S0 BI-65D65EC0 (small)  ───────────────┐
-S1 BI-15D69168 (medium) ── S2 BI-52E565DA (medium) ──┬── S3 BI-81524041 (medium)  ← also needs S0
-                                                     └── S4 BI-9D43CBEF (medium)
+S0 BI-65D65EC0 ───────────────────────────────┐
+S1 BI-15D69168 ── S2 BI-52E565DA ──┬── S3 BI-81524041 ── S9 BI-D1B40D43
+                                   ├── S4 BI-9D43CBEF ── S5 BI-4865EB4D
+                                   └── S6 BI-3A0E5413 ──┬── S7 BI-543819B1
+                                                        └── S8 BI-4C17BF51 (import half needs only S2)
 ```
 
-S0 and S1 can run in parallel. S3 and S4 are independent of each other.
+S0 and S1 run in parallel. After S2, three lines are independent of each other: ingest (S3, then S9), store (S4, then S5) and produce (S6, then S7 and S8).
 
 ## Deliverables
 
@@ -28,7 +30,12 @@ S0 and S1 can run in parallel. S3 and S4 are independent of each other.
 | S1 | BI-15D69168 | yes | — | OBJ-ODC-CONTAIN, OBJ-ODC-FOOTPRINT | `dpf-convert` CLI + exit codes; release manifest image entry | release publish | AC-ODC-002, AC-ODC-003 |
 | S2 | BI-52E565DA | yes (no caller yet; availability probe live) | S1 | OBJ-ODC-CONTAIN, OBJ-ODC-FOOTPRINT | `convertDocument` / `ConversionResult`; `getConverterAvailability` | portal → docker socket → one-shot container | AC-ODC-003, AC-ODC-004 |
 | S3 | BI-81524041 | yes | S0, S2 | OBJ-ODC-INGEST | format routing table | upload · onboarding capture · sheet import | AC-ODC-005 |
-| S4 | BI-9D43CBEF | yes | S2 | OBJ-ODC-RENDITION, OBJ-ODC-HONEST | `DocumentRenditionKind` enum; `doc_load` renditions | doc_save → rendition job → index → document page | AC-ODC-006, AC-ODC-007, AC-ODC-008 |
+| S4 | BI-9D43CBEF | yes | S2 | OBJ-ODC-RENDITION, OBJ-ODC-HONEST | `DocumentRenditionKind` enum; `doc_load` renditions | doc_save → rendition job → index → document page | AC-ODC-006, AC-ODC-007 |
+| S5 | BI-4865EB4D | yes | S2, S4 | OBJ-ODC-PRODUCE | export action; flat-ODS Workbook writer | document page export · Workbooks export | AC-ODC-008 |
+| S6 | BI-3A0E5413 | yes | S1, S2 | OBJ-ODC-PRODUCE, OBJ-ODC-FOOTPRINT | `renderDocument` + content-spec schemas; `dpf-render` | spec → template → office file + previews → Document | AC-ODC-009, AC-ODC-010 |
+| S7 | BI-543819B1 | yes | S6 | OBJ-ODC-PRODUCE | `create_presentation` tool + marketing skill | coworker outline → deck | AC-ODC-009 |
+| S8 | BI-4C17BF51 | yes | S2, S6 | OBJ-ODC-PRODUCE | EA view drawing spec; Visio import candidates | EA view export · discovery import review | AC-ODC-010 |
+| S9 | BI-D1B40D43 | yes | S3 | OBJ-ODC-FOOTPRINT | engine-backed `.docx/.xlsx/.pdf` parsing; sbom deny list | all ingestion paths | AC-ODC-011 |
 
 ## S0 · Honest format detection — `BI-65D65EC0`
 
@@ -56,7 +63,7 @@ Branch `feat/dpf-doctools-image`. Shape `delivery-medium@1.0.0`.
 
 1. `Dockerfile.doctools`:
    - Base: `debian:<current stable>-slim`, pinned by digest.
-   - `apt-get install --no-install-recommends libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress fonts-dejavu-core fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea`.
+   - `apt-get install --no-install-recommends libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-draw python3-uno poppler-utils fonts-dejavu-core fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea`.
    - Remove the apt lists.
    - Create a non-root `doctools` user.
 2. `tools/doctools/dpf-convert` (POSIX sh, LF):
@@ -64,7 +71,7 @@ Branch `feat/dpf-doctools-image`. Shape `delivery-medium@1.0.0`.
    - Run `soffice --headless --norestore --nolockcheck -env:UserInstallation=file:///tmp/lo --convert-to <filter> --outdir /tmp/out`.
    - Write the result to stdout.
    - Use the exit codes defined in the design.
-   - The filter map lives in one table in the script: `pdf`, `docx:"MS Word 2007 XML"`, `xlsx:"Calc MS Excel 2007 XML"`, `txt:"Text (encoded):UTF8"`. Presentations go to text by converting to PDF and extracting the text inside the image with `pdftotext` from `poppler-utils`. `poppler-utils` is added to the image, not to the portal.
+   - The filter map lives in one table in the script: `pdf`, `docx:"MS Word 2007 XML"`, `xlsx:"Calc MS Excel 2007 XML"`, `txt:"Text (encoded):UTF8"`. Presentations go to text by converting to PDF and extracting the text inside the image with `pdftotext` from `poppler-utils`. `poppler-utils` and `python3-uno` live in the image, not in the portal.
 3. `tools/doctools/registrymodifications.xcu`: set macro security to very high, disable macros and linked-content update, and copy it into the baked profile template.
 4. `tools/doctools/fixtures/` and `tools/doctools/smoke.sh`:
    - Convert every fixture with `--network none --read-only --tmpfs /tmp`.
@@ -136,11 +143,77 @@ Branch `feat/document-renditions`. Shape `delivery-medium@1.0.0`.
    - A `doc_save` → `doc_search` round trip on the running portal.
 9. Docs: the documents workspace guide.
 
+## S5 · Export — `BI-4865EB4D`
+
+Branch `feat/office-export`. Shape `delivery-medium@1.0.0`.
+
+1. **Test first (documents).** Export a markdown fixture with headings, a table, a list and an image to `.docx`. Re-import it through S3; the headings and table cells must survive.
+2. **Documents.** Render markdown to HTML with the existing renderer, then call `convertDocument` with `to` set to `docx`, `odt` or `pdf`.
+   - Store the output as renditions. This widens `DocumentRenditionKind` with `docx` and `odt`, which needs a migration.
+   - Add an export control on `app/(shell)/workspace/documents/[documentId]`.
+   - `doc_load` gains `exportFormat`.
+3. **Test first (Workbooks).** Export a fixture Workbook (formulas, number formats, a conditional format, one chart view) to `.xlsx` and `.ods`. Re-import it through S3; the values must match.
+4. **`lib/workbooks/export-fods.ts`.** Write the Workbook model as flat ODS XML (cells, styles, formulas, a chart object), then run it through the engine to get `.xlsx` or `.ods`. Point the Workbooks export button at it.
+5. **Remove the old writer.** Once step 3 passes, delete `components/workbooks/grid-xlsx.ts` and migrate its tests.
+6. **Gate:** vitest, build, the migration, and UX verification of both controls. Docs: the documents and Workbooks guides.
+
+## S6 · Template-driven generation — `BI-3A0E5413`
+
+Branch `feat/document-generation-engine`. Shape `delivery-medium@1.0.0`.
+
+1. **`tools/doctools/dpf-render.py`.** Runs on the image's `python3-uno` bridge.
+   - Reads `{ template, content, formats }` as JSON on stdin and opens the template.
+   - Fills named placeholders, master-page layouts, tables and chart data.
+   - Exports each requested format plus PNG previews, and writes a tar stream to stdout.
+   - `publish-image.yml` smoke-tests it with a fixture deck, report and drawing.
+2. **Test first: `lib/documents/generation/spec.test.ts`.** Validate the deck, report, letter, sheet and drawing specs with the platform's existing validator helpers. An invalid spec is rejected with field paths before any container runs.
+3. **`lib/documents/generation/render.ts`.** `renderDocument()` runs on the S2 runtime (same hardening, longer timeout) and unpacks the outputs into a Document with renditions (S4), storing previews as blobs.
+4. **Brand masters: `lib/documents/generation/brand-master.ts`.** Builds `.otp`, `.ott` and `.otg` masters from the `Organization` brand fields (colours, fonts, logo). They are versioned as DocumentBlobs and regenerated when the brand changes.
+5. **Determinism test.** Rendering the same spec twice gives a byte-identical PDF text layer and the same slide count.
+6. **Gate:** vitest, build, and a docker-gated end-to-end render. Docs: an architecture note on the generation facility.
+
+## S7 · Marketing presentations — `BI-543819B1`
+
+Branch `feat/marketing-presentations`. Shape `delivery-medium@1.0.0`.
+
+1. **Test first: the `create_presentation` handler.** It maps an outline to a deck spec. Revising an existing presentation creates a new `DocumentVersion`, not a new document.
+2. **Tool and grant.** Add the tool to the document pack and grant it to the marketing coworker in `packages/db/data/agent_registry.json`, which is the single source of grants.
+3. **Skill: `packages/dpf-skill-pack/skills/create-presentation/SKILL.md`.** The coworker drafts the outline from the organization's marketing playbook and brand, and regenerates on feedback. It never hand-edits file XML.
+4. **Slide previews** on the document page, from the S6 previews.
+5. **Gate:** vitest, build, and UX verification: on the running portal, ask the marketing coworker for a 6-slide deck and open the `.pptx` in Impress. Docs: the marketing coworker guide.
+
+## S8 · EA diagram exchange — `BI-4C17BF51`
+
+Branch `feat/ea-diagram-exchange`. Shape `delivery-medium@1.0.0`.
+
+1. **Test first: EA view to drawing spec.**
+   - Node positions, sizes and labels carry over.
+   - ArchiMate layer colours come from `--dpf-*` token values, resolved server-side.
+   - Edges become connectors.
+2. **Export.** An action on the EA view and a tool for the EA coworker. Through S6 it produces `.odg`, `.svg`, `.pdf` and `.png`.
+3. **Import.** A `.vsd`, `.vsdx` or `.odg` file uploaded in discovery goes through the engine, which produces an SVG and extracts the shape and connector text. Those become candidate elements and relationships in the existing EA review flow. They are never committed automatically.
+4. **Gate:** vitest, build, and UX verification of export and of the import review. Docs: the EA guide.
+
+## S9 · Retire the in-process parsers — `BI-D1B40D43`
+
+Branch `refactor/retire-in-process-document-parsers`. Shape `delivery-medium@1.0.0`.
+
+1. **Check the precondition before starting.** `getConverterAvailability()` must be true on both the source and the release compose install shapes. Every other target in `docs/install/platform-support-watchlist.md` must have its degraded behaviour recorded. If either condition fails, stop and record the finding on the backlog item.
+2. **Test first.** The existing parser fixtures pass through the engine path, with the same caps:
+   - `.docx`: headings preserved;
+   - `.xlsx`: columns and sample rows;
+   - `.pdf`: text.
+3. **Route through the engine.** Send `.docx`, `.xlsx` and `.pdf` through the engine behind the same facade, and delete the bodies of `parseDocx`, `parseXlsx` and `parsePdf`.
+4. **Remove the packages.** Drop `mammoth`, `read-excel-file` and `pdf-parse` from `apps/web` and `packages/db`. Add them to the deny list in `sbom/dependency-allowlist.json`, and ratchet `sbom/baseline.json` down.
+5. **Gate:**
+   - vitest and build;
+   - `pnpm why` returns nothing for the three packages;
+   - the PR records the change in image size.
+
 ## Out of scope (recorded so it is not re-proposed)
 
-- Office editing in the browser (Collabora Online / ONLYOFFICE).
-- Presentation authoring.
-- Absorbing Apache OpenOffice.
-- The react-pdf invoice (M5).
-- `analyze_brand_document` (a stub; its own item).
-- Warm-process conversion (unoserver). Revisit only if measured volume makes cold starts a problem.
+- **In-browser office editing** (Collabora Online / ONLYOFFICE). Rejected under `absorb-dont-adopt`. People edit in their own office suite and upload a new version.
+- **Absorbing Apache OpenOffice.**
+- **The react-pdf invoice.** M5 covers it.
+- **`analyze_brand_document`.** It is a stub with its own backlog item.
+- **Warm-process conversion (unoserver).** Out of scope until measured volume makes cold starts a problem.
