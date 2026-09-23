@@ -56,10 +56,11 @@ function asFbId(raw: string): string | null {
 export function extractBuildIdHint(params: Record<string, unknown>): string | null {
   for (const key of ["buildId", "featureBuildId", "build_id"]) {
     const v = params[key];
-    if (typeof v === "string") {
-      const id = asFbId(v);
-      if (id) return id;
+    if (v === undefined || v === null) continue;
+    if (typeof v !== "string" || !/^FB-[A-Za-z0-9]+$/.test(v.trim())) {
+      throw new Error("Choose a valid build before continuing this task.");
     }
+    return v.trim();
   }
   for (const key of ["routeContext", "route", "path", "url", "message", "summary"]) {
     const v = params[key];
@@ -77,8 +78,9 @@ export const SANDBOX_HOT_PHASES = ["build", "review", "ship"] as const;
 /**
  * Resolve the active FeatureBuild for the current user.
  *
- * When `buildIdHint` is supplied AND it resolves to an existing build the
- * caller is allowed to act on, that hint wins — even if the user has a more
+ * When `buildIdHint` is supplied it must resolve to an existing owned build.
+ * An invalid or foreign explicit target is refused without fallback. An owned
+ * hint wins — even if the user has a more
  * recently updated build. This is how explicit `buildId` arguments from MCP
  * tool calls reach the per-tool handlers without being silently overridden
  * (the bug behind FB-1D69766D returning FB-72EB9C06's review).
@@ -89,14 +91,15 @@ export async function resolveActiveBuildId(
   userId: string,
   buildIdHint?: string | null,
 ): Promise<string | null> {
-  if (buildIdHint && buildIdHint.startsWith("FB-")) {
+  if (buildIdHint !== undefined && buildIdHint !== null) {
+    if (!/^FB-[A-Za-z0-9]+$/.test(buildIdHint)) return null;
     const hinted = await prisma.featureBuild.findUnique({
       where: { buildId: buildIdHint },
       select: { buildId: true, createdById: true },
     });
     // Access model today is owner-only — see getFeatureBuildForContext for the
     // matching check. If a future grant model lands, expand this predicate.
-    if (hinted && hinted.createdById === userId) return hinted.buildId;
+    return hinted?.createdById === userId ? hinted.buildId : null;
   }
   const where = { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } };
   const build = await prisma.featureBuild.findFirst({

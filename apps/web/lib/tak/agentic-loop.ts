@@ -1,3 +1,4 @@
+import { currentUserContext } from "@/lib/govern/current-user-context";
 // apps/web/lib/agentic-loop.ts
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
@@ -757,21 +758,8 @@ export type AgenticResult = {
 };
 
 async function resolveUserContext(userId: string): Promise<UserContext> {
-  const row = await prisma.user
-    .findUnique({
-      where: { id: userId },
-      select: {
-        isSuperuser: true,
-        groups: { include: { platformRole: true }, take: 1 },
-      },
-    })
-    .catch(() => null);
-
-  return {
-    userId,
-    platformRole: row?.groups?.[0]?.platformRole?.roleId ?? null,
-    isSuperuser: row?.isSuperuser ?? false,
-  };
+  return await currentUserContext(userId).catch(() => null)
+    ?? { userId, platformRole: null, isSuperuser: false };
 }
 
 /** Generate a phase-aware nudge based on which tools have been used so far. */
@@ -1119,7 +1107,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   let hasResolvedSkillInvocation = false;
   const interactionMode: "chat" | "autonomous" = params.interactionMode ?? "autonomous";
   const proposeSideEffects = params.proposeSideEffects ?? false;
-  const userContext = await resolveUserContext(userId);
+
 
   // Admin DB configuration takes precedence over registry defaults.
   const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
@@ -2440,7 +2428,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           toolName: tc.name,
           rawParams: tc.arguments,
           userId,
-          userContext,
+          userContext: await resolveUserContext(userId),
           context: {
             routeContext,
             agentId,

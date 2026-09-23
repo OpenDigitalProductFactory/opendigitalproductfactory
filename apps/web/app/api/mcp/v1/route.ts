@@ -39,6 +39,7 @@ import {
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
+import { oauthSetupRequiredResult } from "@/lib/auth/oauth-setup-required";
 import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
 import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-up";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
@@ -51,7 +52,7 @@ import {
   resolveListingAuthorityForToken,
   filterListableTools,
 } from "@/lib/mcp/listing-authority-resolver";
-import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 import {
   resolveEffectiveTierForAuthSource,
@@ -154,25 +155,8 @@ function normalizeTokenScope(token: Pick<ResolvedMcpToken, "scope" | "capability
 }
 
 async function loadUserContext(userId: string): Promise<UserContext> {
-  const row = await prisma.user
-    .findUnique({
-      where: { id: userId },
-      select: {
-        isSuperuser: true,
-        // ALL groups, not `take: 1`: a human in more than one group has their
-        // platform role under-determined by the first row (which may even carry
-        // a null platformRole). Resolve it exactly as the web session does
-        // (resolveWorkforcePlatformRole — first group with a non-null role) so
-        // the agent's role matches what the human sees logged in.
-        groups: { include: { platformRole: true } },
-      },
-    })
-    .catch(() => null);
-  return {
-    userId,
-    platformRole: row ? resolveWorkforcePlatformRole(row.groups) : null,
-    isSuperuser: row?.isSuperuser ?? false,
-  };
+  return await currentUserContext(userId).catch(() => null)
+    ?? { userId, platformRole: null, isSuperuser: false };
 }
 
 // Tool is included in tools/list iff:
@@ -579,6 +563,8 @@ async function handleToolsCall(
     });
   }
 
+  const setupRefusal = oauthSetupRequiredResult(token, toolName, requiredScope, required);
+  if (setupRefusal) return jsonRpcOk(id, setupRefusal);
   const quiescenceRefusal = await quiescenceRefusalResult(toolName, toolDef);
   if (quiescenceRefusal) {
     return jsonRpcOk(id, quiescenceRefusal);

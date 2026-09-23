@@ -2,7 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { createHash, randomBytes } from "crypto";
 
 const tokenDb = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn().mockResolvedValue({}) }));
-vi.mock("@dpf/db", () => ({ prisma: { mcpApiToken: tokenDb } }));
+const userDb = vi.hoisted(() => ({ findUnique: vi.fn().mockResolvedValue({
+  isActive: true, isSuperuser: false, groups: [],
+}) }));
+vi.mock("@dpf/db", () => ({ prisma: { mcpApiToken: tokenDb, user: userDb } }));
 
 import { isCurrentOAuthAccessToken, resolveOAuthAccessToken, secretMatches, verifyPkceS256 } from "./oauth-tokens";
 import { isRedirectUriAllowed, isRegisterableRedirectUri } from "./oauth-clients";
@@ -39,6 +42,14 @@ describe("shared OAuth token lifetime", () => {
 });
 
 describe("OAuth bearer client boundary", () => {
+  it("refuses an access token after the human is disabled", async () => {
+    userDb.findUnique.mockResolvedValueOnce({ isActive: false, isSuperuser: true, groups: [] });
+    tokenDb.findUnique.mockResolvedValueOnce({ id: "token", userId: "user", agentId: null,
+      kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      resource: "http://127.0.0.1:3000/api/mcp/v1", publicScopes: ["dpf.work"],
+      oauthClient: { id: "client", oAuthClientId: "client", revokedAt: null } });
+    await expect(resolveOAuthAccessToken("dpfoat_test_fixture", "http://127.0.0.1:3000")).resolves.toBeNull();
+  });
   it.each([false, true])("resolves only a present client (deleted=%s)", async (deleted) => {
     tokenDb.findUnique.mockResolvedValue({ id: "token", userId: "user", agentId: null,
       kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),

@@ -1081,3 +1081,36 @@ every numeric budget and every unrelated route. Refresh against current main
 and rerun the same 55 focused tests. Final protected checks and live navigation
 remain required. The known Windows PKI fixture exception does not turn an unrun
 or failing check into a pass.
+
+## Evidence reader consolidation, September 23
+
+Before adding definition-step correlation, consolidate the duplicated persisted
+initiative receipt validation in entry-adapter and projection. Both readers must
+require the receipt's policy identity, immutable artifact locator, authority
+snapshot, reviewer identity and finding disposition. Keep semantic subject
+matching explicit: a database row ID is not the backlog item's semantic ID.
+Retain the existing plan/design digest freshness rules, inherited-baseline
+behavior and malformed-newest-row precedence. This refactor adds no execution
+authority and does not convert readiness recognition into a stage receipt.
+
+The regression first returned pass for a receipt missing policyVersion. After
+the shared validator, 61 tests across both projections, readiness guidance and
+MCP backlog reads pass. Existing wrong-subject and stale-plan tests remain green.
+Portal navigation PR 5487 merged through protected checks. This evidence-reader
+increment has not been deployed or accepted as the complete vertical slice.
+
+Live RV-C21-PIR-PROJECTION-GAP-20260923 reproduces the next gap: BI-70B2ED84
+has a passing independent PIR and an enforced completion decision, but its
+Workroom inspector shows zero receipts. Extend the shared evidence reader for
+anchored and standalone rooms with the latest governed initiative gate rows.
+Validate subject, receipt, authority and immutable source identity using the
+shared validator. Bind a receipt to a declared evidence requirement only when
+the repository and exact Workroom head match its source artifact. Older or
+unresolved artifacts stay visible as historical observations, never current
+step proof. Keep definition/version in the projected binding and expose partial
+reads. Required-evidence correlation is not a stage-completion receipt and must
+not advance the runner, mark a stage passed or close the room.
+
+After merging current main, 177 focused tests across 17 files pass, including
+cross-repository and unknown-definition-version refusal to bind step evidence.
+These source checks do not replace canonical build or deployed UX verification.

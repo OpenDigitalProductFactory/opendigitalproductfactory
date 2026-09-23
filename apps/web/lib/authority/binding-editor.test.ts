@@ -44,6 +44,12 @@ describe("validateBindingGrant", () => {
 });
 
 describe("binding editor", () => {
+  it("refuses edits to issued OAuth consent through the generic binding editor", async () => {
+    vi.mocked(prisma.authorityBinding.findUnique).mockResolvedValue({ resourceType: "mcp", oauthPurpose: "consent" } as never);
+    await expect(updateAuthorityBinding("consent", { appliedAgentId: "different-agent" }))
+      .rejects.toThrow("oauth_binding_requires_connection_flow");
+    expect(prisma.authorityBinding.update).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(prisma.authorityBinding.findUnique).mockResolvedValue({

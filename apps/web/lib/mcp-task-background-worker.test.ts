@@ -5,6 +5,8 @@ const db = vi.hoisted(() => ({
   findTask: vi.fn(),
   findProjection: vi.fn(),
   findToken: vi.fn(),
+  findHuman: vi.fn(),
+  findConsent: vi.fn(),
   claim: vi.fn(),
   update: vi.fn(),
   findWriter: vi.fn(),
@@ -18,6 +20,8 @@ const events = vi.hoisted(() => ({ emit: vi.fn() }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    user: { findUnique: (...args: unknown[]) => db.findHuman(...args) },
+    authorityBinding: { findUnique: (...args: unknown[]) => db.findConsent(...args) },
     taskRun: {
       findUnique: (...args: unknown[]) => db.findTask(...args),
       findFirst: (...args: unknown[]) => db.findProjection(...args),
@@ -107,6 +111,7 @@ function row(overrides: Record<string, unknown> = {}) {
     messages: [{ parts: [{ type: "message", text: params.prompt }] }],
     user: {
       id: "user-1",
+      isActive: true,
       isSuperuser: false,
       groups: [{ platformRole: { roleId: "developer" } }],
     },
@@ -116,6 +121,8 @@ function row(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.findHuman.mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] });
+  db.findConsent.mockResolvedValue(null);
   db.findTask.mockResolvedValue(row());
   db.findProjection.mockResolvedValue({
     status: "working",
@@ -149,12 +156,15 @@ beforeEach(() => {
 });
 
 describe("persisted remote TaskRun worker", () => {
-  it.each(["active", "revoked-client", "missing-client", "wrong-kind"])("revalidates OAuth %s before dispatch", async state => {
+  it.each(["active", "revoked-client", "missing-client", "wrong-kind", "revoked-consent", "missing-binding", "disabled-human"])("revalidates OAuth %s before dispatch", async state => {
     const original = row();
+    if (state === "disabled-human") db.findHuman.mockResolvedValue({ isActive: false });
     db.findTask.mockResolvedValue({ ...original, a2aMetadata: { ...original.a2aMetadata, tokenSource: "oauth" } });
-    db.findToken.mockResolvedValue({ id: "token-1", capability: "write", kind: state === "wrong-kind" ? "oauth_refresh" : "oauth_access",
+    db.findToken.mockResolvedValue({ id: "token-1", capability: "write", userId: "user-1",
+      authorityBindingId: state === "revoked-consent" ? "binding" : null, oauthClientId: "client",
+      resource: "https://dpf.example/api/mcp/v1", publicScopes: ["dpf.work"], kind: state === "wrong-kind" ? "oauth_refresh" : "oauth_access",
       revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
-      oauthClient: state === "missing-client" ? null : { revokedAt: state === "revoked-client" ? new Date() : null } });
+      oauthClient: state === "missing-client" ? null : { registrationKind: state === "missing-binding" ? "dcr" : "credentials", revokedAt: state === "revoked-client" ? new Date() : null } });
     const result = await executePersistedRemoteTask({ taskRunId: "TR-MCP-ASYNC" });
     if (state === "active") expect(execution.run).toHaveBeenCalledOnce();
     else {
@@ -193,7 +203,7 @@ describe("persisted remote TaskRun worker", () => {
       data: {
         run: { id: "task-row-1", taskRunId: "TR-MCP-ASYNC" },
         token: { tokenId: "token-1", userId: "user-1", capability: "write", source: "pat" },
-        userContext: { userId: "user-1", platformRole: "developer", isSuperuser: false },
+        userContext: { userId: "user-1", platformRole: "developer", platformRoles: ["developer"], isSuperuser: false },
         parsed: params,
       },
     });

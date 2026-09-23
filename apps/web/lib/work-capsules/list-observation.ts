@@ -19,6 +19,13 @@ export async function listWorkroomObservation(db: Db, params: Record<string, unk
     filters: { ...where, staleOnly: params.staleOnly === true },
   };
   try {
+    if (context.authSource === "oauth") {
+      const { workCapsuleActor } = await import("./handler-actor");
+      const actor = await workCapsuleActor(userId, context);
+      where.AND = [actor.principalId, actor.agentPrincipalId].map(principalId => ({
+        OR: ["leaseHolderPrincipalId", "createdByPrincipalId", "requestedByPrincipalId"].map(key => ({ [key]: principalId })),
+      }));
+    }
     if (typeof params.cursor === "string") return store.resume(params.cursor, identity);
     if (captures >= 2) throw new Error("snapshot_capacity_exceeded");
     captures++;

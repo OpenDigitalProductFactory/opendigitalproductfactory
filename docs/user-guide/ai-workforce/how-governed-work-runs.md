@@ -36,6 +36,14 @@ one sentence.
 
 ## 1. The Workroom holds the work
 
+An external assistant acts within the permissions of the person who connected
+it. Approve the connection once; routine reconnects, refreshes and separate
+tasks do not need another sign-in. A shared assistant does not share people's
+workroom access. Your work remains yours, and joining another room still needs
+an invitation. If your access changes, the next action uses your current
+permissions. See [external agent setup](../contributing/agent-dev-environments.md)
+for setup and recovery.
+
 A Workroom is a focused place where authorized people and AI coworkers coordinate toward a
 named outcome. It is not an open chat channel: it carries a purpose, an outcome, a scope, an
 accountable owner, an authority level, a sensitivity ceiling, measures, timing, and a rule

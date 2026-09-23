@@ -28,6 +28,7 @@ import {
   resolveResourceOrigin,
 } from "@/lib/auth/oauth-metadata";
 import { createAuthorizationCode } from "@/lib/auth/oauth-tokens";
+import { eligibleOAuthCoworkers, createOAuthConsentBinding, OAUTH_SETUP_REQUIRED } from "@/lib/auth/oauth-identity-binding";
 import { touchClient } from "@/lib/auth/oauth-clients";
 import { parseScopeParam } from "@/lib/auth/oauth-scope-map";
 import {
@@ -77,6 +78,12 @@ export async function GET(request: Request) {
 
   const org = await prisma.organization.findFirst({ select: { name: true } });
   const { client, scopes, redirectUri, resource } = parsed.request;
+  const coworkers = await eligibleOAuthCoworkers(session.user.id, client.rowId, resource, prisma,
+    { after: url.searchParams.get("assistant_after") ?? undefined });
+  if (!coworkers.length) {
+    return htmlResponse(renderConsentRefusal("Assistant setup needs approval",
+      "Ask your administrator to approve an assistant role for this connection, then reconnect."), 403);
+  }
 
   return htmlResponse(
     renderConsentPage({
@@ -85,11 +92,17 @@ export async function GET(request: Request) {
       installationName: org?.name ?? "this installation",
       actingUser: session.user.email ?? session.user.id,
       scopes,
+      coworkers: coworkers.slice(0, 50),
+      nextAssistantsUrl: coworkers.length > 50 ? (() => {
+        const next = new URL(url);
+        next.searchParams.set("assistant_after", coworkers[49].agentId);
+        return `${next.pathname}${next.search}`;
+      })() : undefined,
       resource: resource || canonicalResourceUri(origin),
       redirectUri,
       // Echoed verbatim so the POST re-derives the same request from scratch.
       hiddenParams: [...url.searchParams.entries()].filter(
-        ([k]) => k !== "granted_scope" && k !== "decision",
+        ([k]) => k !== "granted_scope" && k !== "decision" && k !== "acting_coworker" && k !== "assistant_after",
       ),
     }),
   );
@@ -162,40 +175,31 @@ export async function POST(request: Request) {
     );
   }
 
-  const code = await createAuthorizationCode({
-    oauthClientRowId: client.rowId,
-    userId: session.user.id,
-    redirectUri,
-    codeChallenge,
-    resource,
-    publicScopes: approved,
+  const agentId = typeof form.get("acting_coworker") === "string"
+    ? String(form.get("acting_coworker")) : "";
+  const eligible = await eligibleOAuthCoworkers(session.user.id, client.rowId, resource, prisma, { agentId });
+  if (!eligible.some((agent) => agent.agentId === agentId)) {
+    return directError("access_denied", OAUTH_SETUP_REQUIRED, 403);
+  }
+  const code = await prisma.$transaction(async (db) => {
+    const binding = await createOAuthConsentBinding({ userId: session.user.id,
+      clientId: client.rowId, resource, agentId, scopes: approved }, db);
+    const issuedCode = await createAuthorizationCode({
+      oauthClientRowId: client.rowId, userId: session.user.id, redirectUri,
+      codeChallenge, resource, publicScopes: approved, authorityBindingId: binding.id,
+    }, db);
+    await db.authorizationDecisionLog.create({ data: {
+      authorityBindingId: binding.id,
+      decisionId: `oauth-consent-${crypto.randomUUID()}`,
+      actorType: "human", actorRef: session.user.id, humanContextRef: session.user.id,
+      agentContextRef: agentId, actionKey: "oauth_authorize", objectRef: resource,
+      decision: "allow", rationale: { bindingId: binding.bindingId,
+        clientId: client.clientId, registrationKind: client.registrationKind,
+        requestedScopes: parsed.request.scopes, approvedScopes: approved },
+      endpointUsed: "/api/oauth/authorize", routeContext: "oauth-consent",
+    } });
+    return issuedCode;
   });
-
-  // The consent decision is an authorization event and belongs in the audit
-  // stream beside every other one, not only in the token row it produced.
-  await prisma.authorizationDecisionLog
-    .create({
-      data: {
-        decisionId: `oauth-consent-${crypto.randomUUID()}`,
-        actorType: "human",
-        actorRef: session.user.id,
-        humanContextRef: session.user.id,
-        actionKey: "oauth_authorize",
-        objectRef: resource,
-        decision: "allow",
-        rationale: {
-          clientId: client.clientId,
-          clientName: client.clientName,
-          registrationKind: client.registrationKind,
-          selfAsserted: client.selfAsserted,
-          requestedScopes: parsed.request.scopes,
-          approvedScopes: approved,
-        },
-        endpointUsed: "/api/oauth/authorize",
-        routeContext: "oauth-consent",
-      },
-    })
-    .catch(() => undefined);
 
   touchClient(client.rowId);
   return NextResponse.redirect(buildCodeRedirect(redirectUri, code, state), 302);

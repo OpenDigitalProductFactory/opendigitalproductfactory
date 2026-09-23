@@ -14,8 +14,9 @@
 //
 // Design: docs/superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md §4.3
 
-import { createHash, randomBytes, timingSafeEqual } from "crypto";
-import { prisma } from "@dpf/db";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
+import { prisma, type Prisma } from "@dpf/db";
+import { currentOAuthHuman, resolveOAuthConsent, OAUTH_SETUP_REQUIRED } from "./oauth-identity-binding";
 import { encryptSecret } from "@/lib/govern/credential-crypto";
 import type { McpTokenScope, ResolvedMcpToken } from "@/lib/auth/mcp-api-token";
 import { canonicalResourceUri, resourceMatches } from "@/lib/auth/oauth-metadata";
@@ -72,6 +73,7 @@ export type ResolvedOAuthToken = {
   resolved: ResolvedMcpToken;
   publicScopes: PublicScope[];
   clientId: string | null;
+  identitySetupRequired: boolean;
 };
 
 /** Shared by bearer resolution and server-owned work using an admitted actor. */
@@ -84,6 +86,42 @@ export function isCurrentOAuthAccessToken(row: {
   return row.kind === "oauth_access" && !row.revokedAt
     && (!row.expiresAt || row.expiresAt.getTime() > now)
     && Boolean(row.oauthClient) && !row.oauthClient?.revokedAt;
+}
+
+/** Fields required to revalidate a persisted OAuth actor before queued work. */
+export const OAUTH_EXECUTION_AUTHORITY_SELECT = {
+  kind: true, revokedAt: true, expiresAt: true, userId: true, agentId: true,
+  authorityBindingId: true, oauthClientId: true, resource: true, publicScopes: true, oauthFamilyKey: true,
+  oauthClient: { select: { revokedAt: true, registrationKind: true } },
+} satisfies Prisma.McpApiTokenSelect;
+
+type OAuthAuthorityRow = Omit<Prisma.McpApiTokenGetPayload<{ select: typeof OAUTH_EXECUTION_AUTHORITY_SELECT }>, "oauthFamilyKey">
+  & { oauthFamilyKey?: string | null };
+
+/** Admission does not preserve revoked consent while a request waits in a queue. */
+export async function isCurrentOAuthExecutionAuthority(row: OAuthAuthorityRow,
+  db: Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding" | "mcpApiToken"> = prisma,
+): Promise<boolean> {
+  if (row.kind !== "oauth_access" || row.revokedAt || !row.oauthClient || row.oauthClient.revokedAt
+    || !await currentOAuthHuman(row.userId, db)) return false;
+  if (!isCurrentOAuthAccessToken(row)) {
+    // This is queued-work continuity, never bearer authentication. A rotated
+    // credential can sustain only the same human/client/consent/scope envelope.
+    if (!row.oauthClientId || (!row.oauthFamilyKey && row.oauthClient.registrationKind !== "credentials")) return false;
+    const successor = await db.mcpApiToken.findFirst({ where: {
+      kind: "oauth_access", userId: row.userId, oauthClientId: row.oauthClientId,
+      authorityBindingId: row.authorityBindingId, agentId: row.agentId, resource: row.resource,
+      ...(row.oauthFamilyKey ? { oauthFamilyKey: row.oauthFamilyKey } : {}),
+      revokedAt: null, expiresAt: { gt: new Date() }, publicScopes: { hasEvery: row.publicScopes },
+      oauthClient: { revokedAt: null },
+    }, select: OAUTH_EXECUTION_AUTHORITY_SELECT });
+    if (!successor || !isCurrentOAuthAccessToken(successor)) return false;
+  }
+  if (!row.authorityBindingId) return row.oauthClient?.registrationKind === "credentials";
+  if (!row.oauthClientId || !row.resource) return false;
+  const consent = await resolveOAuthConsent({ bindingId: row.authorityBindingId,
+    userId: row.userId, clientId: row.oauthClientId, resource: row.resource, scopes: row.publicScopes }, db);
+  return Boolean(consent && consent.agentId === row.agentId);
 }
 
 /**
@@ -109,11 +147,17 @@ export async function resolveOAuthAccessToken(
 
   const row = await prisma.mcpApiToken.findUnique({
     where: { tokenHash: sha256(plaintext) },
-    include: { oauthClient: { select: { id: true, oAuthClientId: true, revokedAt: true } } },
+    include: { oauthClient: { select: { id: true, oAuthClientId: true, revokedAt: true, registrationKind: true } } },
   });
   if (!row) return null;
   if (!isCurrentOAuthAccessToken(row)) return null;
   if (!row.resource || !resourceMatches(row.resource, origin)) return null;
+  if (!await currentOAuthHuman(row.userId)) return null;
+  if (row.authorityBindingId) {
+    const consent = await resolveOAuthConsent({ bindingId: row.authorityBindingId,
+      userId: row.userId, clientId: row.oauthClientId!, resource: row.resource, scopes: row.publicScopes });
+    if (!consent || consent.agentId !== row.agentId) return null;
+  }
 
   const publicScopes = row.publicScopes.filter(isPublicScope);
 
@@ -134,10 +178,13 @@ export async function resolveOAuthAccessToken(
     },
     publicScopes,
     clientId: row.oauthClient?.oAuthClientId ?? null,
+    identitySetupRequired: row.oauthClient?.registrationKind !== "credentials" && !row.authorityBindingId,
   };
 }
 
 export type IssueAccessTokenInput = {
+  authorityBindingId?: string | null;
+  oauthFamilyKey?: string | null;
   userId: string;
   agentId?: string | null;
   oauthClientRowId: string;
@@ -160,15 +207,17 @@ export type IssuedAccessToken = {
  * internal grant list here, once — everything downstream reads `scopes` and
  * has no idea a public vocabulary exists.
  */
-export async function issueAccessToken(input: IssueAccessTokenInput): Promise<IssuedAccessToken> {
+export async function issueAccessToken(input: IssueAccessTokenInput, db: Prisma.TransactionClient = prisma): Promise<IssuedAccessToken> {
   const ttl = input.ttlSeconds ?? accessTokenTtlSeconds();
   const { plaintext, hash } = mint(ACCESS_TOKEN_PREFIX);
   const grants = grantsForPublicScopes(input.publicScopes);
   const scope = coarseScopeForPublicScopes(input.publicScopes);
   const expiresAt = new Date(Date.now() + ttl * 1000);
 
-  await prisma.mcpApiToken.create({
+  await db.mcpApiToken.create({
     data: {
+      authorityBindingId: input.authorityBindingId ?? null,
+      oauthFamilyKey: input.oauthFamilyKey ?? null,
       userId: input.userId,
       agentId: input.agentId ?? null,
       kind: "oauth_access",
@@ -194,6 +243,8 @@ export async function issueAccessToken(input: IssueAccessTokenInput): Promise<Is
 }
 
 export type IssueRefreshTokenInput = {
+  authorityBindingId?: string | null;
+  oauthFamilyKey?: string | null;
   userId: string;
   agentId?: string | null;
   /** OAuthClient ROW id — a real foreign key. */
@@ -202,10 +253,12 @@ export type IssueRefreshTokenInput = {
   origin: string;
 };
 
-export async function issueRefreshToken(input: IssueRefreshTokenInput): Promise<string> {
+export async function issueRefreshToken(input: IssueRefreshTokenInput, db: Prisma.TransactionClient = prisma): Promise<string> {
   const { plaintext, hash } = mint(REFRESH_TOKEN_PREFIX);
-  await prisma.oAuthRefreshToken.create({
+  await db.oAuthRefreshToken.create({
     data: {
+      authorityBindingId: input.authorityBindingId ?? null,
+      oauthFamilyKey: input.oauthFamilyKey ?? null,
       tokenHash: hash,
       oauthClientId: input.oauthClientRowId,
       userId: input.userId,
@@ -218,77 +271,24 @@ export async function issueRefreshToken(input: IssueRefreshTokenInput): Promise<
   return plaintext;
 }
 
-export type RefreshConsumeResult =
-  | {
-      accepted: true;
-      userId: string;
-      agentId: string | null;
-      oauthClientRowId: string;
-      scopes: PublicScope[];
-    }
-  | { accepted: false; error: "invalid_grant"; detail: string };
-
-/**
- * Consume a refresh token, rotating it.
- *
- * ROTATION IS THE SECURITY PROPERTY, not a convenience: presenting a token
- * that has already been exchanged means either a replay or a stolen copy, and
- * cannot be distinguished from the server side. OAuth 2.1 refresh-token
- * rotation guidance says to revoke the whole family in that case, which is
- * what `revokeRefreshFamily` does — the legitimate client re-authorizes, the
- * thief gets nothing.
- */
-export async function consumeRefreshToken(
-  plaintext: string,
-  origin: string,
-): Promise<RefreshConsumeResult> {
-  if (!plaintext.startsWith(REFRESH_TOKEN_PREFIX)) {
-    return { accepted: false, error: "invalid_grant", detail: "not a refresh token" };
-  }
-  const row = await prisma.oAuthRefreshToken.findUnique({ where: { tokenHash: sha256(plaintext) } });
-  if (!row) return { accepted: false, error: "invalid_grant", detail: "unknown refresh token" };
-  if (row.revokedAt) return { accepted: false, error: "invalid_grant", detail: "refresh token revoked" };
-
-  if (row.consumedAt || row.rotatedToId) {
-    await revokeRefreshFamily(row.id, "refresh_token_replayed");
-    return { accepted: false, error: "invalid_grant", detail: "refresh token already used" };
-  }
-  if (row.expiresAt.getTime() <= Date.now()) {
-    return { accepted: false, error: "invalid_grant", detail: "refresh token expired" };
-  }
-  if (!resourceMatches(row.resource, origin)) {
-    return { accepted: false, error: "invalid_grant", detail: "refresh token audience mismatch" };
-  }
-
-  return {
-    accepted: true,
-    userId: row.userId,
-    agentId: row.agentId,
-    oauthClientRowId: row.oauthClientId,
-    scopes: row.scopes.filter(isPublicScope),
-  };
+async function revokeOAuthFamily(db: Prisma.TransactionClient, oauthFamilyKey: string, reason: string) {
+  const where = { oauthFamilyKey, revokedAt: null };
+  const data = { revokedAt: new Date(), revokedReason: reason };
+  await db.oAuthRefreshToken.updateMany({ where, data });
+  await db.mcpApiToken.updateMany({ where, data });
 }
 
-/** Mark a refresh token consumed and link it to its successor, so a later
- *  presentation of the old one is recognisable as a replay. */
-export async function markRefreshRotated(
-  oldPlaintext: string,
-  newPlaintext: string,
-): Promise<void> {
-  const successor = await prisma.oAuthRefreshToken.findUnique({
-    where: { tokenHash: sha256(newPlaintext) },
-    select: { id: true },
-  });
-  await prisma.oAuthRefreshToken.updateMany({
-    where: { tokenHash: sha256(oldPlaintext) },
-    data: { consumedAt: new Date(), rotatedToId: successor?.id ?? null },
-  });
-}
-
-/** Revoke a rotation chain from any member: walk to its successors and revoke
- *  each, then revoke every live access token issued to the same client for the
- *  same user. Bounded so a corrupted `rotatedToId` cycle cannot spin. */
+/** New credential families revoke refresh and access tokens together. Old
+ * unbound rows retain successor-chain revocation; they cannot refresh again. */
 export async function revokeRefreshFamily(startId: string, reason: string): Promise<void> {
+  const member = await prisma.oAuthRefreshToken.findUnique({ where: { id: startId } });
+  if (!member) return;
+  if (member.oauthFamilyKey) {
+    await prisma.$transaction(async (db) => {
+      await revokeOAuthFamily(db, member.oauthFamilyKey!, reason);
+    });
+    return;
+  }
   const seen = new Set<string>();
   let cursor: string | null = startId;
   const now = new Date();
@@ -307,6 +307,7 @@ export async function revokeRefreshFamily(startId: string, reason: string): Prom
 }
 
 export type CreateAuthorizationCodeInput = {
+  authorityBindingId?: string | null;
   /** OAuthClient ROW id — a real foreign key, not the public client_id string. */
   oauthClientRowId: string;
   userId: string;
@@ -318,10 +319,12 @@ export type CreateAuthorizationCodeInput = {
 
 export async function createAuthorizationCode(
   input: CreateAuthorizationCodeInput,
+  db: Prisma.TransactionClient = prisma,
 ): Promise<string> {
   const { plaintext, hash } = mint(AUTH_CODE_PREFIX);
-  await prisma.oAuthAuthorizationCode.create({
+  await db.oAuthAuthorizationCode.create({
     data: {
+      authorityBindingId: input.authorityBindingId ?? null,
       codeHash: hash,
       oauthClientId: input.oauthClientRowId,
       userId: input.userId,
@@ -339,6 +342,9 @@ export async function createAuthorizationCode(
 export type ConsumeAuthorizationCodeResult =
   | {
       accepted: true;
+      authorityBindingId: string;
+      agentId: string;
+      agentRecordId: string;
       userId: string;
       oauthClientRowId: string;
       scopes: PublicScope[];
@@ -356,21 +362,14 @@ export type ConsumeAuthorizationCodeResult =
 export async function consumeAuthorizationCode(
   plaintext: string,
   params: { oauthClientRowId: string; redirectUri: string; codeVerifier: string; resource: string | null },
+  db: Prisma.TransactionClient = prisma,
 ): Promise<ConsumeAuthorizationCodeResult> {
   if (!plaintext.startsWith(AUTH_CODE_PREFIX)) {
     return { accepted: false, error: "invalid_grant", detail: "malformed code" };
   }
   const hash = sha256(plaintext);
-  const row = await prisma.oAuthAuthorizationCode.findUnique({ where: { codeHash: hash } });
+  const row = await db.oAuthAuthorizationCode.findUnique({ where: { codeHash: hash } });
   if (!row) return { accepted: false, error: "invalid_grant", detail: "unknown code" };
-
-  const claimed = await prisma.oAuthAuthorizationCode.updateMany({
-    where: { codeHash: hash, consumedAt: null },
-    data: { consumedAt: new Date() },
-  });
-  if (claimed.count === 0) {
-    return { accepted: false, error: "invalid_grant", detail: "code already used" };
-  }
 
   if (row.expiresAt.getTime() <= Date.now()) {
     return { accepted: false, error: "invalid_grant", detail: "code expired" };
@@ -391,8 +390,24 @@ export async function consumeAuthorizationCode(
     return { accepted: false, error: "invalid_grant", detail: "resource mismatch" };
   }
 
+  if (!row.authorityBindingId) return { accepted: false, error: "invalid_grant", detail: OAUTH_SETUP_REQUIRED };
+  const consent = await resolveOAuthConsent({ bindingId: row.authorityBindingId,
+    userId: row.userId, clientId: row.oauthClientId, resource: row.resource, scopes: row.scopes }, db);
+  if (!consent) return { accepted: false, error: "invalid_grant", detail: OAUTH_SETUP_REQUIRED };
+
+  const claimed = await db.oAuthAuthorizationCode.updateMany({
+    where: { codeHash: hash, consumedAt: null },
+    data: { consumedAt: new Date() },
+  });
+  if (claimed.count === 0) {
+    return { accepted: false, error: "invalid_grant", detail: "code already used" };
+  }
+
   return {
     accepted: true,
+    authorityBindingId: row.authorityBindingId,
+    agentId: consent.agentId,
+    agentRecordId: consent.agentRecordId,
     userId: row.userId,
     oauthClientRowId: row.oauthClientId,
     scopes: row.scopes.filter(isPublicScope),
@@ -408,6 +423,71 @@ export async function pruneExpiredAuthorizationCodes(): Promise<number> {
     where: { expiresAt: { lt: new Date(Date.now() - 60 * 60 * 1000) } },
   });
   return count;
+}
+
+type ExchangeResult = { accepted: true; issued: IssuedAccessToken; refresh: string }
+  | { accepted: false; error: "invalid_grant" | "invalid_scope"; detail: string };
+
+async function issuePair(input: IssueAccessTokenInput & { agentRecordId: string }, db: Prisma.TransactionClient) {
+  const issued = await issueAccessToken(input, db);
+  const refresh = await issueRefreshToken({ ...input, agentId: input.agentRecordId }, db);
+  return { accepted: true as const, issued, refresh };
+}
+
+export async function exchangeOAuthCode(input: {
+  code: string; clientId: string; clientLabel: string; origin: string;
+  redirectUri: string; codeVerifier: string; resource: string | null;
+}): Promise<ExchangeResult> {
+  return prisma.$transaction(async (db) => {
+    const consumed = await consumeAuthorizationCode(input.code, {
+      oauthClientRowId: input.clientId, redirectUri: input.redirectUri,
+      codeVerifier: input.codeVerifier, resource: input.resource,
+    }, db);
+    if (!consumed.accepted) return consumed;
+    return issuePair({ userId: consumed.userId, agentId: consumed.agentId, agentRecordId: consumed.agentRecordId,
+      authorityBindingId: consumed.authorityBindingId, oauthFamilyKey: randomUUID(),
+      oauthClientRowId: input.clientId, clientLabel: input.clientLabel,
+      origin: input.origin, publicScopes: consumed.scopes }, db);
+  });
+}
+
+export async function rotateOAuthRefreshToken(input: {
+  token: string; clientId: string; clientLabel: string; origin: string;
+  requestedScopes?: PublicScope[];
+}): Promise<ExchangeResult> {
+  return prisma.$transaction(async (db) => {
+    const denied = (detail: string) => ({ accepted: false as const, error: "invalid_grant" as const, detail });
+    const row = await db.oAuthRefreshToken.findUnique({ where: { tokenHash: sha256(input.token) } });
+    if (!row || row.oauthClientId !== input.clientId || !resourceMatches(row.resource, input.origin))
+      return denied("Refresh token does not match this connection.");
+    if (row.oauthFamilyKey && (row.consumedAt || row.rotatedToId)) {
+      await revokeOAuthFamily(db, row.oauthFamilyKey, "refresh_token_replayed");
+      return denied("This connection was reused. Reconnect to continue.");
+    }
+    if (row.revokedAt || row.expiresAt.getTime() <= Date.now()) return denied("Reconnect to continue.");
+    if (!row.authorityBindingId || !row.oauthFamilyKey) return denied(OAUTH_SETUP_REQUIRED);
+    const consent = await resolveOAuthConsent({ bindingId: row.authorityBindingId,
+      userId: row.userId, clientId: input.clientId, resource: row.resource, scopes: row.scopes }, db);
+    if (!consent || consent.agentRecordId !== row.agentId) return denied(OAUTH_SETUP_REQUIRED);
+    const requested = input.requestedScopes;
+    if (requested && (!requested.length || requested.some((scope) => !row.scopes.includes(scope))))
+      return { accepted: false as const, error: "invalid_scope" as const, detail: "Request only previously approved permissions." };
+    const claimed = await db.oAuthRefreshToken.updateMany({ where: {
+      id: row.id, consumedAt: null, rotatedToId: null, revokedAt: null,
+    }, data: { consumedAt: new Date() } });
+    if (claimed.count !== 1) {
+      await revokeOAuthFamily(db, row.oauthFamilyKey, "refresh_token_replayed");
+      return denied("This connection was reused. Reconnect to continue.");
+    }
+    const pair = await issuePair({ userId: row.userId, agentId: consent.agentId, agentRecordId: consent.agentRecordId,
+      authorityBindingId: row.authorityBindingId, oauthFamilyKey: row.oauthFamilyKey,
+      oauthClientRowId: input.clientId, clientLabel: input.clientLabel,
+      origin: input.origin, publicScopes: requested ?? row.scopes.filter(isPublicScope) }, db);
+    const successor = await db.oAuthRefreshToken.findUnique({ where: { tokenHash: sha256(pair.refresh) }, select: { id: true } });
+    if (!successor) throw new Error("Refresh successor was not persisted.");
+    await db.oAuthRefreshToken.update({ where: { id: row.id }, data: { rotatedToId: successor.id } });
+    return pair;
+  });
 }
 
 /** Store an operator-issued client secret. Hash for lookup, encrypted copy so

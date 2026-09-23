@@ -1,4 +1,6 @@
 import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
+import { type BoundWorkShapeDb, readBoundWorkShapeRef } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
@@ -13,8 +15,11 @@ import {
 
 type BuildEntryGateDb = {
   featureBuild: { findUnique(args: unknown): Promise<any> };
-  backlogItemActivity: { create(args: unknown): Promise<any> };
+  backlogItemActivity: { create(args: unknown): Promise<any>; findMany?(args: unknown): Promise<any[]> };
   buildActivity: { create(args: unknown): Promise<any> };
+  /** BI-1E8EAD10: the bound delivery shape lives on the Workroom. */
+  workroom?: { findFirst(args: unknown): Promise<{ scopeClaims?: unknown } | null> };
+  backlogItem?: { findFirst(args: unknown): Promise<{ itemId: string } | null> };
 };
 
 type ProjectReadiness = typeof projectBacklogItemReadiness;
@@ -88,6 +93,7 @@ export async function enforceBuildInitiativeReadiness(args: {
       originator: {
         select: {
           id: true, itemId: true, type: true, source: true, workType: true, scopeKind: true,
+          body: true,
           archetypeCategories: true, archetypeIds: true,
           activities: {
             where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
@@ -110,9 +116,26 @@ export async function enforceBuildInitiativeReadiness(args: {
     return { allowed: false, error: "classification_required", message: "Build has no canonical originating backlog subject.", decision };
   }
 
+  // BI-1E8EAD10: the claim path, the terminal transition and the review-outcome
+  // path all key the gates on the Workroom's bound delivery shape and let a
+  // decomposition child inherit its parent's baseline, research and coverage.
+  // This gate did neither, so every Build Studio phase was judged as an
+  // unshaped, standalone feature and owed a plan document the automated lane
+  // never produces. Read both the way those paths do; a missing room or
+  // parent simply leaves the value null, exactly as before.
+  const [workShape, inheritedScope] = await Promise.all([
+    db.workroom
+      ? readBoundWorkShapeRef(db as BoundWorkShapeDb, build.originator.itemId).catch(() => null)
+      : Promise.resolve(null),
+    db.backlogItemActivity.findMany && db.backlogItem
+      ? loadInheritedInitiativeScope(db as InheritanceDb, { childItemId: build.originator.itemId, childRowId: build.originator.id })
+        .catch(() => null)
+      : Promise.resolve(null),
+  ]);
   const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
-    item: { ...build.originator, activeBuildKind: build.kind },
+    item: { ...build.originator, activeBuildKind: build.kind, workShape },
     activities: build.originator.activities as InitiativeReadinessActivity[],
+    inheritedScope,
     target: args.target,
     transitionObject: {
       kind: "feature-build",
