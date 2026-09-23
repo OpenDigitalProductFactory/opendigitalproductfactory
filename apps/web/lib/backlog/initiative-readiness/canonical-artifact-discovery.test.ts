@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { discoverCanonicalDesignArtifact } from "./canonical-artifact-discovery";
+import { discoverCanonicalDesignArtifact, discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
 
 const BASE_SHA = "1111111111111111111111111111111111111111";
 const HEAD_SHA = "2222222222222222222222222222222222222222";
@@ -30,6 +30,69 @@ function args(fetchImpl: typeof fetch) {
 }
 
 describe("canonical design artifact discovery", () => {
+  it.each([
+    [".github/workflows/stuck-auto-merge-alarm.yml"],
+    [".github/workflows/ci.yml", "scripts/ci-evidence-plan.test.mjs", "docs/architecture/build-gate-runbook.md"],
+    ["apps/web/lib/repair.test.ts"],
+  ])("binds a source-only PIR to its unique repair artifact (%j)", async (...paths) => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse(paths.map((filename) => ({ filename, sha: BLOB_SHA, status: "modified" }))));
+    const result = await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" });
+    expect(result).toEqual({ resolved: true, artifact: { path: paths[0], providerBlobId: BLOB_SHA } });
+  });
+
+  it("does not turn a source-only repair into a design approval artifact", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([{ filename: ".github/workflows/ci.yml", sha: BLOB_SHA, status: "modified" }]));
+    expect(await discoverCanonicalDesignArtifact(args(fetchImpl as unknown as typeof fetch)))
+      .toMatchObject({ resolved: false, code: "no-canonical-design" });
+  });
+
+  it("retains a unique changed design as the PIR artifact for a multi-file repair", async () => {
+    const path = "docs/superpowers/specs/repair.md";
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([path, "apps/web/lib/a.ts", "apps/web/lib/b.ts"].map((filename) => ({ filename, sha: BLOB_SHA, status: "modified" }))));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toEqual({ resolved: true, artifact: { path, providerBlobId: BLOB_SHA } });
+  });
+
+  it("refuses ambiguous implementation files rather than arbitrarily choosing one for PIR", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse(["apps/web/lib/a.ts", "apps/web/lib/b.ts"].map((filename) => ({ filename, sha: BLOB_SHA, status: "modified" }))));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+  });
+
+  it("does not hide a second implementation artifact because it was deleted", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
+      { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" },
+      { filename: "apps/web/lib/b.ts", sha: OTHER_BLOB_SHA, status: "removed" },
+    ]));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+  });
+
+  it("does not infer uniqueness after silently dropping malformed provider entries", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
+      { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" }, null,
+    ]));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toMatchObject({ resolved: false, code: "provider-unavailable" });
+  });
+
+  it("does not infer unique repair scope from a provider-capped comparison", async () => {
+    const files = Array.from({ length: 300 }, (_, index) => ({ filename: index === 0 ? "apps/web/lib/a.ts" : `docs/${index}.md`, sha: BLOB_SHA, status: "modified" }));
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse(files));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toMatchObject({ resolved: false, code: "provider-unavailable" });
+  });
+
+  it.each([
+    { filename: ".github/workflows/ci.yml", sha: BLOB_SHA, status: "removed" },
+    { filename: "../outside.ts", sha: BLOB_SHA, status: "modified" },
+    { filename: "apps/web/lib/a.ts", sha: "invalid", status: "modified" },
+  ])("refuses absent or invalid repair bytes (%j)", async (file) => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([file]));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toMatchObject({ resolved: false, code: "no-repair-artifact" });
+  });
+
   it("reuses the explicitly referenced unchanged design at the immutable head", async () => {
     const path = "docs/superpowers/specs/2026-09-03-coordinated-workrooms-design.md";
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true,
