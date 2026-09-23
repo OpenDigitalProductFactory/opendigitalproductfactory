@@ -29,9 +29,13 @@ export interface EcosystemVote {
   weight: number;
 }
 
+/** A vote outcome is a DOMAIN result, not a server-action result: it carries a
+ *  typed refusal reason a caller branches on, which the canonical
+ *  `ActionResult`'s single `error` string cannot express. Discriminated on
+ *  `accepted` rather than `ok` so it does not masquerade as one. */
 export type VoteRefusal =
-  | { ok: false; reason: "invalid-weight"; message: string }
-  | { ok: false; reason: "budget-exhausted"; message: string; creditsRemaining: number };
+  | { accepted: false; reason: "invalid-weight"; message: string }
+  | { accepted: false; reason: "budget-exhausted"; message: string; creditsRemaining: number };
 
 export interface VoteLedger {
   installationId: string;
@@ -63,10 +67,10 @@ export function creditsRemaining(ledger: VoteLedger): number {
 export function castVote(
   ledger: VoteLedger,
   vote: EcosystemVote,
-): { ok: true; ledger: VoteLedger; creditsRemaining: number } | VoteRefusal {
+): { accepted: true; ledger: VoteLedger; creditsRemaining: number } | VoteRefusal {
   if (!Number.isInteger(vote.weight) || vote.weight < 1 || vote.weight > MAX_VOTE_WEIGHT) {
     return {
-      ok: false,
+      accepted: false,
       reason: "invalid-weight",
       message: `weight must be a whole number from 1 to ${MAX_VOTE_WEIGHT}`,
     };
@@ -79,7 +83,7 @@ export function castVote(
   if (spent > ledger.creditsBudget) {
     const remaining = ledger.creditsBudget - creditsSpent(others);
     return {
-      ok: false,
+      accepted: false,
       reason: "budget-exhausted",
       message:
         `weight ${vote.weight} costs ${creditCost(vote.weight)} credits and only ${remaining} remain this cycle`,
@@ -88,7 +92,7 @@ export function castVote(
   }
 
   const next: VoteLedger = { ...ledger, votes: [...others, vote] };
-  return { ok: true, ledger: next, creditsRemaining: ledger.creditsBudget - spent };
+  return { accepted: true, ledger: next, creditsRemaining: ledger.creditsBudget - spent };
 }
 
 /** Withdraw a vote, returning its credits to the cycle. */

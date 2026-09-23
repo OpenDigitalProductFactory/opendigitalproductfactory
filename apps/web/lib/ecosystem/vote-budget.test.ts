@@ -33,9 +33,9 @@ describe("creditCost", () => {
 
 describe("castVote", () => {
   it("refuses a weight outside the allowed range instead of clamping it", () => {
-    expect(castVote(ledger(), { ref: "a", weight: 0 })).toMatchObject({ ok: false, reason: "invalid-weight" });
-    expect(castVote(ledger(), { ref: "a", weight: 5 })).toMatchObject({ ok: false, reason: "invalid-weight" });
-    expect(castVote(ledger(), { ref: "a", weight: 1.5 })).toMatchObject({ ok: false, reason: "invalid-weight" });
+    expect(castVote(ledger(), { ref: "a", weight: 0 })).toMatchObject({ accepted: false, reason: "invalid-weight" });
+    expect(castVote(ledger(), { ref: "a", weight: 5 })).toMatchObject({ accepted: false, reason: "invalid-weight" });
+    expect(castVote(ledger(), { ref: "a", weight: 1.5 })).toMatchObject({ accepted: false, reason: "invalid-weight" });
   });
 
   it("REFUSES an unaffordable vote rather than silently dropping it", () => {
@@ -43,21 +43,21 @@ describe("castVote", () => {
     // was told no.
     const spent = ledger([{ ref: "a", weight: 3 }]); // 9 of 16
     const result = castVote(spent, { ref: "b", weight: 3 }); // would be 18
-    expect(result).toMatchObject({ ok: false, reason: "budget-exhausted", creditsRemaining: 7 });
-    expect(result.ok === false && result.message).toContain("7 remain");
+    expect(result).toMatchObject({ accepted: false, reason: "budget-exhausted", creditsRemaining: 7 });
+    expect(result.accepted === false && result.message).toContain("7 remain");
   });
 
   it("re-weighting replaces the prior vote rather than stacking on it", () => {
     const first = castVote(ledger(), { ref: "a", weight: 4 });
-    expect(first.ok).toBe(true);
-    const second = first.ok ? castVote(first.ledger, { ref: "a", weight: 1 }) : null;
-    expect(second).toMatchObject({ ok: true, creditsRemaining: 15 });
-    expect(second && second.ok && second.ledger.votes).toEqual([{ ref: "a", weight: 1 }]);
+    expect(first.accepted).toBe(true);
+    const second = first.accepted ? castVote(first.ledger, { ref: "a", weight: 1 }) : null;
+    expect(second).toMatchObject({ accepted: true, creditsRemaining: 15 });
+    expect(second && second.accepted && second.ledger.votes).toEqual([{ ref: "a", weight: 1 }]);
   });
 
   it("spends exactly the budget without refusing the last affordable vote", () => {
     const result = castVote(ledger(), { ref: "a", weight: 4 });
-    expect(result).toMatchObject({ ok: true, creditsRemaining: 0 });
+    expect(result).toMatchObject({ accepted: true, creditsRemaining: 0 });
   });
 
   it("returns credits when a vote is withdrawn", () => {
