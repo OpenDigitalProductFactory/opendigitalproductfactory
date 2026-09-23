@@ -7,6 +7,7 @@ import {
   customerContactNormalizedColumns,
 } from "@/lib/mdm/dedup-gate";
 import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
+import { syncCustomerPrincipal } from "@/lib/identity/principal-linking";
 
 export async function POST(req: NextRequest) {
   const body = await req.json() as { name?: string; email?: string; password?: string; orgSlug?: string };
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    await tx.customerContact.create({
+    const contact = await tx.customerContact.create({
       data: {
         email,
         name: name ?? null,
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
         isActive: true,
       },
     });
+    await syncCustomerPrincipal(contact.id, tx as never);
     return account.id;
   });
 

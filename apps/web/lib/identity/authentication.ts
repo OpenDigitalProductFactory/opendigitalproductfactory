@@ -20,7 +20,12 @@
 
 import { prisma } from "@dpf/db";
 
-import { syncUserPrincipal } from "./principal-linking";
+import {
+  PrincipalAliasConflictError,
+  syncCustomerPrincipal,
+  syncUserPrincipal,
+} from "./principal-linking";
+import { isCustomerAccountSessionCapable } from "./customer-auth-policy";
 
 // NOTE: this is deliberately NOT `ActionResult` from @/lib/shared/action-result.
 // That primitive models a server action's `{ok, data} | {ok, error}` contract and
@@ -31,14 +36,20 @@ import { syncUserPrincipal } from "./principal-linking";
 export const AUTHENTICATION_AUTHORITY = ["install", "upstream"] as const;
 export type AuthenticationAuthority = (typeof AUTHENTICATION_AUTHORITY)[number];
 
+export const AUTHENTICATION_REFUSAL_CODES = [
+  "no-credential-match",
+  "credential-inactive",
+  "account-inactive",
+  "principal-not-resolved",
+  "principal-inactive",
+  "authority-conflict",
+] as const;
+export type AuthenticationRefusalCode = (typeof AUTHENTICATION_REFUSAL_CODES)[number];
+
 export type PrincipalAuthenticationRefusal = {
   authorized: false;
   /** Stable machine code. Never surfaced verbatim to an end user. */
-  reason:
-    | "no-credential-match"
-    | "principal-not-resolved"
-    | "principal-inactive"
-    | "authority-conflict";
+  reason: AuthenticationRefusalCode;
   detail: string;
 };
 
@@ -46,7 +57,10 @@ export type PrincipalAuthenticationSuccess = {
   authorized: true;
   principalId: string;
   principalRecordId: string;
-  userId: string;
+  credentialId: string;
+  population: "workforce" | "customer";
+  /** Backwards-compatible workforce subject; customer callers use credentialId. */
+  userId?: string;
   authority: AuthenticationAuthority;
 };
 
@@ -54,7 +68,123 @@ export type PrincipalAuthenticationResult =
   | PrincipalAuthenticationSuccess
   | PrincipalAuthenticationRefusal;
 
-type AuthenticationDb = Pick<typeof prisma, "user" | "principal" | "principalAlias">;
+type AuthenticationDb = Pick<
+  typeof prisma,
+  "user" | "customerContact" | "principal" | "principalAlias"
+>;
+
+type PrincipalAuthorityRow = { id: string; principalId: string; status: string };
+
+function principalVerdict(input: {
+  principal: PrincipalAuthorityRow;
+  credentialId: string;
+  population: "workforce" | "customer";
+}): PrincipalAuthenticationResult {
+  if (input.principal.status !== "active") {
+    return {
+      authorized: false,
+      reason: "principal-inactive",
+      detail: `principal ${input.principal.principalId} is ${input.principal.status}`,
+    };
+  }
+  return {
+    authorized: true,
+    principalId: input.principal.principalId,
+    principalRecordId: input.principal.id,
+    credentialId: input.credentialId,
+    population: input.population,
+    ...(input.population === "workforce" ? { userId: input.credentialId } : {}),
+    authority: "install",
+  };
+}
+
+/**
+ * Population-aware authority seam called only after the caller verifies the
+ * credential or provider assertion. It owns Principal materialization and all
+ * state checks shared by workforce, customer password, and social sign-in.
+ */
+export async function authorizeIdentityForSession(
+  input: { population: "workforce" | "customer"; credentialId: string },
+  db: AuthenticationDb = prisma,
+): Promise<PrincipalAuthenticationResult> {
+  if (input.population === "workforce") {
+    return authorizePrincipalForSession(input.credentialId, db);
+  }
+
+  const contact = await db.customerContact.findUnique({
+    where: { id: input.credentialId },
+    select: {
+      id: true,
+      isActive: true,
+      mergedIntoId: true,
+      account: {
+        select: {
+          status: true,
+          partnerEnrollment: { select: { status: true, endedAt: true } },
+        },
+      },
+    },
+  });
+  if (!contact) {
+    return {
+      authorized: false,
+      reason: "no-credential-match",
+      detail: `customer contact ${input.credentialId} was not found`,
+    };
+  }
+  if (!contact.isActive || contact.mergedIntoId) {
+    return {
+      authorized: false,
+      reason: "credential-inactive",
+      detail: `customer contact ${contact.id} is inactive or superseded`,
+    };
+  }
+  if (!isCustomerAccountSessionCapable(contact.account.status)) {
+    return {
+      authorized: false,
+      reason: "account-inactive",
+      detail: `customer account is ${contact.account.status}`,
+    };
+  }
+
+  const aliases = await db.principalAlias.findMany({
+    where: {
+      aliasType: { in: ["customer_contact", "partner_contact"] },
+      aliasValue: contact.id,
+      issuer: "",
+    },
+    select: { principal: { select: { id: true, principalId: true, status: true } } },
+  });
+  const principals = new Map<string, PrincipalAuthorityRow>();
+  for (const alias of aliases) principals.set(alias.principal.id, alias.principal);
+  if (principals.size > 1) {
+    return {
+      authorized: false,
+      reason: "authority-conflict",
+      detail: `customer contact ${contact.id} resolves to multiple Principals`,
+    };
+  }
+
+  let principal = principals.values().next().value as PrincipalAuthorityRow | undefined;
+  if (!principal) {
+    try {
+      principal = await syncCustomerPrincipal(contact.id, db as never);
+    } catch (error) {
+      return {
+        authorized: false,
+        reason: error instanceof PrincipalAliasConflictError
+          ? "authority-conflict"
+          : "principal-not-resolved",
+        detail: `customer contact ${contact.id} could not be resolved as one Principal`,
+      };
+    }
+  }
+  return principalVerdict({
+    principal,
+    credentialId: contact.id,
+    population: "customer",
+  });
+}
 
 /**
  * Authorize an already-credential-verified user through the spine.
@@ -114,6 +244,8 @@ export async function authorizePrincipalForSession(
     authorized: true,
     principalId: principal.principalId,
     principalRecordId: principal.id,
+    credentialId: userId,
+    population: "workforce",
     userId,
     authority: "install",
   };
@@ -129,21 +261,45 @@ export async function authorizePrincipalForSession(
 export async function deactivatePrincipalAndCredentials(
   principalId: string,
   client: typeof prisma = prisma,
-): Promise<{ principalId: string; userIdsDisabled: string[] }> {
+): Promise<{
+  principalId: string;
+  userIdsDisabled: string[];
+  customerContactIdsDisabled: string[];
+}> {
   return client.$transaction(async (tx) => {
     const principal = await tx.principal.update({
       where: { principalId },
       data: { status: "inactive" },
       select: {
         principalId: true,
-        aliases: { where: { aliasType: "user" }, select: { aliasValue: true } },
+        aliases: {
+          where: { aliasType: { in: ["user", "customer_contact", "partner_contact"] } },
+          select: { aliasType: true, aliasValue: true },
+        },
       },
     });
-    const userIds = principal.aliases.map((alias) => alias.aliasValue);
+    const userIds = principal.aliases
+      .filter((alias) => alias.aliasType === "user")
+      .map((alias) => alias.aliasValue);
+    const customerContactIds = [...new Set(
+      principal.aliases
+        .filter((alias) => alias.aliasType === "customer_contact" || alias.aliasType === "partner_contact")
+        .map((alias) => alias.aliasValue),
+    )];
     if (userIds.length > 0) {
       await tx.user.updateMany({ where: { id: { in: userIds } }, data: { isActive: false } });
     }
-    return { principalId: principal.principalId, userIdsDisabled: userIds };
+    if (customerContactIds.length > 0) {
+      await tx.customerContact.updateMany({
+        where: { id: { in: customerContactIds } },
+        data: { isActive: false },
+      });
+    }
+    return {
+      principalId: principal.principalId,
+      userIdsDisabled: userIds,
+      customerContactIdsDisabled: customerContactIds,
+    };
   });
 }
 

@@ -1,5 +1,5 @@
 ---
-status: review-ready
+status: active
 ---
 
 # Customer and social Principal-gated sign-in implementation plan

@@ -1,5 +1,5 @@
 ---
-status: review-ready
+status: active
 ---
 
 # Principal-gated customer and social sign-in design
