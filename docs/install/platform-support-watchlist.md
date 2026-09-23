@@ -64,13 +64,6 @@ roadmap before touching any host exporter.
 
 ## 2. Shell scripts (BSD vs GNU coreutils)
 
-PKI join-package fixtures that require POSIX mode 0600 run on Linux/macOS.
-On Windows, Node chmod cannot establish that mode on NTFS, so the three
-mode-dependent fixtures explicitly report skipped and still require the Linux
-policy-guard run. Static PKI contracts and argument-validation tests run with
-Git Bash. This does not change the installer's mode enforcement.
-
-
 macOS ships BSD userland; Linux ships GNU. The installer targets **bash 3.2**
 and **python3 3.9** (stock macOS) — no associative arrays, `mapfile`, or
 `${var^^}` in bash; no Python-3.10+-only stdlib kwargs or syntax in scripts the

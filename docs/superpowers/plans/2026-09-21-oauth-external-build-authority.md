@@ -107,12 +107,16 @@ admission; 27 related room tests pass. A live release task also reproduced
 duplicate creation with the same user/idempotency key after its token changed,
 consistent with the token-family task continuity regression fixed here.
 
+OAuth workroom creation and adoption now persist the human owner separately
+from the acting assistant. Existing branch and idempotency matches cannot be
+used to acquire another human's room through a shared assistant. Governed
+dispatch checks the target room before evidence writes or lease renewals and
+retains room policy and clearance checks. An older room with no recorded human
+owner requires explicit room admission; its caller is never guessed as owner.
+These checks are silent authorization checks, not repeated OAuth approvals.
+
 ### Host preflight prerequisite
 
-Three PKI contract fixtures require POSIX mode 0600, which Node chmod cannot
-establish on Windows NTFS. Keep their script checks and assertions unchanged;
-mark only those fixtures POSIX-only with an explicit Windows skip reason.
-The Linux policy-guard pipeline continues to execute them. Other static PKI
-checks and command-validation tests still run on Windows with Git Bash.
-This is a test-host correction, not a permission-check exception. Record
-Windows skips separately from Linux test evidence before claiming acceptance.
+The refreshed main branch supplies the POSIX-mode capability probe for PKI
+fixtures. This repair reuses that checked-in host correction. Windows skips
+remain distinct from Linux policy-guard evidence.

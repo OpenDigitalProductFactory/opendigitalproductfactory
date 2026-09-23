@@ -23,6 +23,9 @@ export type CapsuleAdoptionInput = {
 };
 
 type BranchCapsuleRecord = {
+  leaseHolderPrincipalId?: string | null;
+  createdByPrincipalId?: string | null;
+  requestedByPrincipalId?: string | null;
   id: string;
   capsuleId: string;
   status?: string | null;
