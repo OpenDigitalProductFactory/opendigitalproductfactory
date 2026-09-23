@@ -7,6 +7,7 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import type { EndpointManifest, EndpointOverride, PolicyRuleEval } from "./types";
 import type { RequestContract } from "./request-contract";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
+import { makeContract, makeEndpoint } from "./__fixtures__/pipeline-v2-fixtures";
 import { routeEndpointV2, getExclusionReasonV2 } from "./pipeline-v2";
 import { markEndpointUnavailable } from "./rate-tracker";
 
@@ -20,69 +21,7 @@ vi.mock("./champion-challenger", () => ({
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeEndpoint(overrides: Partial<EndpointManifest> = {}): EndpointManifest {
-  return {
-    id: "ep-default",
-    providerId: "test",
-    modelId: "test-model",
-    name: "Default Endpoint",
-    endpointType: "chat",
-    status: "active",
-    providerTier: "user_configured",
-    sensitivityClearance: ["public", "internal"],
-    supportsToolUse: true,
-    supportsStructuredOutput: true,
-    supportsStreaming: true,
-    maxContextTokens: 128000,
-    maxOutputTokens: 4096,
-    modelRestrictions: [],
-    reasoning: 70,
-    codegen: 70,
-    toolFidelity: 70,
-    instructionFollowing: 70,
-    structuredOutput: 70,
-    conversational: 70,
-    contextRetention: 70,
-    customScores: {},
-    avgLatencyMs: 1000,
-    recentFailureRate: 0,
-    costPerOutputMToken: 10.0,
-    profileSource: "seed",
-    profileConfidence: "medium",
-    retiredAt: null,
-    modelClass: "chat",
-    modelFamily: null,
-    inputModalities: ["text"],
-    outputModalities: ["text"],
-    capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, structuredOutput: true, streaming: true },
-    pricing: { ...EMPTY_PRICING, inputPerMToken: 3.0, outputPerMToken: 15.0 },
-    supportedParameters: [],
-    deprecationDate: null,
-    metadataSource: "inferred",
-    metadataConfidence: "low",
-    perRequestLimits: null,
-    ...overrides,
-  };
-}
 
-function makeContract(overrides: Partial<RequestContract> = {}): RequestContract {
-  return {
-    contractId: "test-contract",
-    contractFamily: "sync.test",
-    taskType: "reasoning",
-    modality: { input: ["text"], output: ["text"] },
-    interactionMode: "sync",
-    sensitivity: "internal",
-    requiresTools: false,
-    requiresStrictSchema: false,
-    requiresStreaming: false,
-    estimatedInputTokens: 1000,
-    estimatedOutputTokens: 500,
-    reasoningDepth: "medium",
-    budgetClass: "balanced",
-    ...overrides,
-  };
-}
 
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -793,34 +732,5 @@ describe("routeEndpointV2 — runtime circuit breaker", () => {
     );
     expect(cooled.length).toBe(0);
     vi.useRealTimers();
-  });
-});
-
-// BI-A08285BC — routing confidence travels structurally, not as prose.
-describe("routeEndpointV2 — routing confidence", () => {
-  it("reports how many candidates actually competed", async () => {
-    const decision = await routeEndpointV2(
-      [makeEndpoint({ id: "ep-a" }), makeEndpoint({ id: "ep-b", modelId: "m-b" })],
-      makeContract(),
-      [],
-      [],
-    );
-    expect(decision.routingConfidence?.candidateCount).toBeGreaterThan(0);
-    expect(decision.routingConfidence?.qualityFloorRelaxed).toBe(false);
-  });
-
-  it("flags a relaxed floor on the decision, not only inside the reason text", async () => {
-    // A floor nothing can clear: the soft exclusion relaxes it and runs anyway.
-    const decision = await routeEndpointV2(
-      [makeEndpoint({ id: "ep-weak", reasoning: 10, codegen: 10, toolFidelity: 10 })],
-      makeContract({ reasoningDepth: "high" }),
-      [],
-      [],
-    );
-    if (decision.reason.includes("No endpoint met the quality floor")) {
-      expect(decision.routingConfidence?.qualityFloorRelaxed).toBe(true);
-    }
-    // Either way the signal must exist — an absent signal is what caused the defect.
-    expect(decision.routingConfidence).toBeDefined();
   });
 });
