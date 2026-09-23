@@ -4,7 +4,7 @@ vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room } } }))
 vi.mock("@/lib/contributor-change-lanes/github-rest-reader", () => ({ resolveGithubToken: mocks.token, resolveRepoIdentity: mocks.repo,
   createGithubReadTransport: () => ({ fetch: mocks.fetch, close: mocks.close }) }));
 vi.mock("./failure-readiness-publication", () => ({ checkWorkroomFailureReadiness: mocks.verdict }));
-import { publishFailureReadinessStatus } from "./failure-readiness-status";
+import { isWorkroomStatusPublishable, publishFailureReadinessStatus } from "./failure-readiness-status";
 const sha = "a".repeat(40);
 beforeEach(() => {
   vi.clearAllMocks();
@@ -41,5 +41,16 @@ describe("GitHub failure readiness publication", () => {
     await publishFailureReadinessStatus("room");
     expect(mocks.fetch.mock.calls[0][0]).toBe(mocks.fetch.mock.calls[1][0]);
     expect(mocks.close).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("isWorkroomStatusPublishable", () => {
+  it("is publishable only with an immutable commit and a repository", async () => {
+    expect(await isWorkroomStatusPublishable("room")).toEqual({ publishable: true });
+    mocks.room.mockResolvedValue({ headSha: null, repositoryFullName: "owner/repo" });
+    expect(await isWorkroomStatusPublishable("room")).toMatchObject({ publishable: false, reason: expect.stringContaining("no immutable source commit") });
+    mocks.room.mockResolvedValue({ headSha: sha, repositoryFullName: null });
+    expect(await isWorkroomStatusPublishable("room")).toMatchObject({ publishable: false, reason: expect.stringContaining("not bound to a repository") });
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 });

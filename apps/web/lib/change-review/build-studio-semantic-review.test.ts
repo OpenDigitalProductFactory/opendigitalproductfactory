@@ -37,7 +37,9 @@ const dispatchRoutedSemanticReview = vi.hoisted(() => vi.fn());
 vi.mock("./routed-semantic-review", () => ({ dispatchRoutedSemanticReview }));
 const resolvedEvidence = vi.hoisted(() => vi.fn());
 vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: resolvedEvidence }));
-vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus: vi.fn() }));
+const publishFailureReadinessStatus = vi.hoisted(() => vi.fn());
+const isWorkroomStatusPublishable = vi.hoisted(() => vi.fn());
+vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus, isWorkroomStatusPublishable }));
 
 import { reviewBuildStudioAssembledChange } from "./build-studio-semantic-review";
 
@@ -73,9 +75,36 @@ beforeEach(() => {
   recordWorkCapsuleEvidence.mockResolvedValue({ id: "activity-1" });
   dispatchRoutedSemanticReview.mockResolvedValue({ decision: "pass", issues: [], summary: "Pass.", failureAnalysisReview: { adequate: true, rationale: "Challenged the missing and stale evidence cases against the executed tests." } });
   resolvedEvidence.mockResolvedValue(fixture.resolvedFailureEvidence);
+  isWorkroomStatusPublishable.mockResolvedValue({ publishable: true });
 });
 
 describe("Build Studio assembled semantic review", () => {
+  // A Build Studio room reaches its review before its branch is pushed, so it
+  // has no GitHub commit to carry a status. The review must still complete and
+  // be recorded; the status is published by the ship lane once the commit exists.
+  it("completes the review without publishing a commit status when the room has no pushed commit", async () => {
+    isWorkroomStatusPublishable.mockResolvedValue({ publishable: false, reason: "the Workroom has no immutable source commit yet" });
+
+    const result = await reviewBuildStudioAssembledChange({
+      build: { id: "build-row", buildId: "FB-1", title: "Change", createdById: "user-1", diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts", verificationOut: null },
+      sandboxState: { sourceCurrency: { headTreeSha: "b".repeat(40), targetTreeSha: "c".repeat(40), dirty: false }, sourceDiffstat: [{ path: "apps/web/lib/a.ts" }], headSha: "d".repeat(40) } as never,
+    });
+
+    expect(result.kind).toBe("reviewed");
+    expect(recordExternalEvidence).toHaveBeenCalled();
+    expect(publishFailureReadinessStatus).not.toHaveBeenCalled();
+  });
+
+  it("publishes the commit status when the room is bound to a pushed commit", async () => {
+    const result = await reviewBuildStudioAssembledChange({
+      build: { id: "build-row", buildId: "FB-1", title: "Change", createdById: "user-1", diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts", verificationOut: null },
+      sandboxState: { sourceCurrency: { headTreeSha: "b".repeat(40), targetTreeSha: "c".repeat(40), dirty: false }, sourceDiffstat: [{ path: "apps/web/lib/a.ts" }], headSha: "d".repeat(40) } as never,
+    });
+
+    expect(result.kind).toBe("reviewed");
+    expect(publishFailureReadinessStatus).toHaveBeenCalledWith("WC-BUILD");
+  });
+
   it("reviews and records the same receipt before verification", async () => {
     const result = await reviewBuildStudioAssembledChange({
       build: {
