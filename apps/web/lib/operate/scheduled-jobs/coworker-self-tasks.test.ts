@@ -189,7 +189,10 @@ describe("coworkerSelfTaskRequiredTool (anti-fabrication floor)", () => {
 
   it("still returns null for a coworker with no procedural guarantee", () => {
     // The resolution must not invent a fallback for a coworker that has none.
-    expect(coworkerSelfTaskRequiredTool("coo")).toBeNull();
+    // "coo" held a self-task from PR 5507-era work onward, so it is no longer an
+    // example of a coworker without one. service-support-agent is declared in the
+    // registry and has no self-task entry.
+    expect(coworkerSelfTaskRequiredTool("service-support-agent")).toBeNull();
     expect(coworkerSelfTaskRequiredTool("AGT-WS-EA")).toBeNull();
   });
 
@@ -354,7 +357,7 @@ describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
   it("ignores facts for coworkers with no registered self-task", async () => {
     const { prisma } = await import("@dpf/db");
     (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
-      factRow("u1", "coo", "assertive"),
+      factRow("u1", "service-support-agent", "assertive"),
     ]);
     const r = await reconcileAllCoworkerSelfTasks();
     expect(r.created).toBe(0);

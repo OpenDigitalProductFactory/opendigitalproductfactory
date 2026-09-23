@@ -35,7 +35,7 @@ the platform is not".
   - canonical agent registry: 87 · workforce roster: 48 · profession roles: 99
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
 - At 100% of attainable: **30**
-- Median attainable: **68%** · median absolute: **63%**
+- Median attainable: **76%** · median absolute: **70%**
 - Skills: **139** total, **0** stranded, **32** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`, `software-engineer`
 - Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
@@ -59,7 +59,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | `active-roster` | 40 | 100% | Active in the canonical registry and seeded onto the workforce roster. |
 | `active-registry-only` | 0 | — | Active in the canonical registry but absent from the workforce roster. |
 | `roster-only` | 0 | — | On the workforce roster but absent from the canonical agent registry. |
-| `defined-roster` | 8 | 68% | Declared in the canonical registry (not active) and seeded onto the roster. |
+| `defined-roster` | 8 | 76% | Declared in the canonical registry (not active) and seeded onto the roster. |
 | `declared-only` | 6 | 48% | Declared in the canonical registry and never seeded anywhere. |
 | `superseded` | 2 | 64% | Declared, but the work is done by another ACTIVE identity named in its posture. |
 | `deliberately-unstaffed` | 31 | 48% | Declared and consciously not staffed, with a recorded reason and review date. |
@@ -72,7 +72,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Shape | 1 | 2 | 39 | 0 | 48 | 0 | 48/87 |
-| Cadence | 1 | 3 | 52 | 0 | 3 | 32 | 32/87 |
+| Cadence | 1 | 3 | 46 | 0 | 9 | 32 | 32/87 |
 | Tools + Skills | 2 | 3 | 0 | 45 | 5 | 37 | 37/87 |
 | Evidence | 1 | 2 | 39 | 1 | 47 | 0 | 47/87 |
 
@@ -189,21 +189,21 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-S2P-PFB` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-S2P-POL` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-904` | superseded | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
-| `AGT-906` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
-| `AGT-907` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
-| `AGT-WS-INTEGRATION` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
 | `AGT-WS-SECURITY` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
-| `AGT-WS-TIME-OFF` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
 | `AGT-WS-REVIEW` | active-roster | 72% | 67% | 3 | 3 | 3 | 2 | 0 | 1 | 2 |
+| `AGT-906` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
+| `AGT-907` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
+| `AGT-WS-INTEGRATION` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
+| `AGT-WS-TIME-OFF` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
 | `AGT-WS-BUILD` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 0 | 2 | 2 |
 | `AGT-WS-CUSTOMER` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 0 | 2 | 2 |
 | `AGT-WS-FINANCE` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 2 | 1 | 2 |
-| `AGT-ORCH-000` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
-| `AGT-WS-FARM-RANCH` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-MARKET-RESEARCH` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-ONBOARD` | active-roster | 84% | 78% | 3 | 3 | 3 | 2 | 0 | 3 | 1 |
 | `AGT-WS-MARKETING` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 2 | 2 | 2 |
 | `AGT-WS-PORTFOLIO` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
+| `AGT-ORCH-000` | defined-roster | 92% | 85% | 2 | 3 | 3 | 2 | 2 | 3 | 2 |
+| `AGT-WS-FARM-RANCH` | defined-roster | 92% | 85% | 2 | 3 | 3 | 2 | 2 | 3 | 2 |
 | `AGT-WS-LEGAL` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
 | `AGT-WS-SCOUT` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
 | `AGT-WS-PLATFORM` | active-roster | 96% | 89% | 3 | 3 | 3 | 2 | 2 | 3 | 2 |
@@ -244,7 +244,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 58 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
@@ -252,7 +252,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 53 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
@@ -260,7 +260,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 90 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
@@ -268,7 +268,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 54 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
@@ -276,7 +276,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 54 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
@@ -284,7 +284,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 56 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
@@ -292,7 +292,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 53 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
@@ -300,7 +300,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 90 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
@@ -308,7 +308,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 62 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
@@ -316,7 +316,7 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
 - **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 57 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
