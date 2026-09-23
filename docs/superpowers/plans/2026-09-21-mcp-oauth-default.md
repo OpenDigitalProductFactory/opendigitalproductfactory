@@ -38,6 +38,16 @@ Extend existing readiness types/copy and adapter projections to distinguish conf
 
 ## Stage 4: verification and delivery
 
+Cache convergence follow-up: the installed Codex cache retained the July updater
+under the unchanged package version after the OAuth source change shipped. Before
+installing the managed copy, derive its Codex cache suffix from the delivered
+plugin contents. Keep identical contents stable, change the suffix when any
+delivered file changes, and leave the source manifest and unrelated plugins alone.
+Add regressions for changed content with an unchanged source version, repeated
+updates, dry runs, and ignored Python cache files. Verify the installed updater
+matches the managed source before claiming plugin refresh succeeded. This closes
+the existing rerun contract; it introduces no authentication or permission change.
+
 Run affected bootstrap Vitest suites, shared-policy tests, setup-snippet tests, and `update_agent_toolchain_test.py`. Exercise generation and reruns in temporary homes, including preexisting bearer config and unrelated user settings. Check PowerShell parsing, POSIX syntax, TypeScript, source guards and derived artifacts. Update install guidance and the MCP authorization runbook with the exact compatibility flags and authorization steps implemented.
 
 Run the required exact-tree prepublication gate and independent semantic review; use the canonical shared lease for runtime-bound verification. Open a merge-ready DCO PR, inspect `pnpm pr:health`, and merge only through the protected queue. Advance the installed runtime only through its governed self-upgrade path if needed for shipped assets.
