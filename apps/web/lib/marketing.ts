@@ -22,7 +22,7 @@ import {
   DEFAULT_MARKETING_REVIEW_CADENCE,
 } from "@/lib/marketing/vocabulary";
 import {
-  buildConstraints,
+  buildConstraints, resolveSeedBackfill,
   buildDifferentiators,
   buildEntryOffers,
   buildIdealCustomerProfiles,
@@ -948,7 +948,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
 
   const strategy = await upsertMarketingStrategyTolerant(prisma.marketingStrategy, {
     where: { organizationId: organization.id },
-    update: {},
+    update: await resolveSeedBackfill(prisma.marketingStrategy, organization.id, { targetSegments, idealCustomerProfiles, entryOffers, serviceTerritories }) as Prisma.MarketingStrategyUpdateInput,
     create: {
       organizationId: organization.id,
       storefrontId: organization.storefrontConfig?.id,

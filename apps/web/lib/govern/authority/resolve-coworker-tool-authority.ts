@@ -1,5 +1,10 @@
 import "server-only";
 
+import { coworkerSelfTaskMandatedTools } from "@/lib/operate/scheduled-jobs/coworker-self-task-mandate";
+
+/** Public task-run ids for the scheduled trigger carry this prefix (autonomous-work-run.ts). */
+const SCHEDULED_RUN_PREFIX = "TR-SCHED-";
+
 import { prisma } from "@dpf/db";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 
@@ -245,11 +250,31 @@ export function deriveCoworkerApprovalPolicy(input: {
 export function resolveSteering(input: {
   initiativeReviewBinding: InitiativeReviewBinding | null;
   roomAuthority: { actionBoundary?: string | null; memberOfRoom?: boolean } | null;
+  /**
+   * The governed scheduled task this turn runs under, if any, and the writes
+   * its registry entry declares. Server-resolved from the self-task registry —
+   * a model cannot assert it and a client cannot send it.
+   */
+  /**
+   * The run this turn belongs to and the coworker acting. A scheduled run's
+   * public id is minted server-side with a SCHED prefix, so it is a fact about
+   * the run rather than anything a model or client can assert.
+   */
+  taskRunId?: string | null;
+  agentId?: string | null;
+  /** The tool being called, matched against the cadence's declared writes. */
+  toolName?: string;
 }): EscalationSteering {
   if (input.initiativeReviewBinding) return "independent-reviewer";
   const room = input.roomAuthority;
   if (room && room.memberOfRoom !== false && room.actionBoundary === "preauthorized") {
     return "room-authority";
+  }
+  // Scoped to the declared tools alone: installing a cadence authorizes the
+  // writes it named, and nothing else the run may decide to attempt.
+  if (input.taskRunId?.startsWith(SCHEDULED_RUN_PREFIX) && input.agentId && input.toolName) {
+    const mandated = coworkerSelfTaskMandatedTools(input.agentId);
+    if (mandated?.includes(input.toolName)) return "scheduled-mandate";
   }
   return "none";
 }
@@ -411,6 +436,9 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       },
       // BI-6B3DA9DD: what can decide this without a person. Recorded facts only.
       steering: resolveSteering({
+        taskRunId: execution.context?.taskRunId ?? null,
+        agentId: execution.context?.agentId ?? null,
+        toolName: execution.toolName,
         initiativeReviewBinding,
         roomAuthority: execution.context?.roomAuthority ?? null,
       }),

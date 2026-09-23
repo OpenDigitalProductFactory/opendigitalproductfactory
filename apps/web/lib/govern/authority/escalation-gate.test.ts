@@ -181,3 +181,48 @@ describe("describeEscalationRule", () => {
     expect(text).toContain("trust tier");
   });
 });
+
+describe("scheduled-mandate steering (BI-6B3DA9DD)", () => {
+  const write = {
+    sideEffect: true,
+    executionMode: "immediate" as const,
+    consequence: null,
+  };
+
+  it("a declared write on a cadence is decided automatically, minting no envelope", () => {
+    // The marketing coworker reached its brief tool on 2026-09-21, was parked
+    // on a fifteen-minute envelope twice, and produced nothing — as it had
+    // every week since 2026-08-31. A scheduled run carries no Workroom, so it
+    // could never reach the room-authority branch.
+    const decision = resolveEscalation({
+      operatorRequiresApproval: true,
+      action: write,
+      dataPolicy: { sensitivity: "internal" },
+      steering: "scheduled-mandate",
+    });
+    expect(decision.verdict).toBe("automated");
+    expect(decision.reasonCode).toBe("steered-by-scheduled-mandate");
+  });
+
+  it("does not steer a damaging action — a cadence cannot authorize damage", () => {
+    const decision = resolveEscalation({
+      operatorRequiresApproval: true,
+      action: { ...write, consequence: "outward" },
+      dataPolicy: { sensitivity: "internal" },
+      steering: "scheduled-mandate",
+    });
+    expect(decision.verdict).toBe("human");
+    expect(decision.damaging).toBe(true);
+  });
+
+  it("does not steer a declared proposal — that shape is always put to a person", () => {
+    const decision = resolveEscalation({
+      operatorRequiresApproval: true,
+      action: { ...write, executionMode: "proposal" },
+      dataPolicy: { sensitivity: "internal" },
+      steering: "scheduled-mandate",
+    });
+    expect(decision.verdict).toBe("human");
+    expect(decision.reasonCode).toBe("declared-proposal");
+  });
+});
