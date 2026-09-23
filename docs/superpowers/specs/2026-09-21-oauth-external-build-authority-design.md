@@ -87,7 +87,9 @@ Existing null rows stay null: no name-based backfill and no global client edit.
 GET shows the signed-in person, app (with self-asserted label where applicable),
 approved assistant role and understandable allowed actions. If one role is
 eligible, explain it without an unnecessary picker; otherwise show only
-eligible options. POST rechecks login, active user, current delegation policy,
+eligible options. **Superseded 2026-09-23 by the one-click connection
+amendment below (BI-05E0EA33): the server resolves the assistant and
+shows a choice only when eligible coworkers differ in authority.** POST rechecks login, active user, current delegation policy,
 client, redirect, PKCE, resource and narrowed scopes before issuing a code.
 Persist binding, code and successful consent audit atomically.
 
@@ -308,3 +310,267 @@ steer nothing. Independent review lanes are unchanged. Each decision log row
 records the escalation branch and the consent binding. Approval cards show the
 exact proposal, found by the envelope id on the pending execution, and state
 that authorizing is not review.
+
+## One-click connection (BI-05E0EA33, amendment 2026-09-23)
+
+Backlog: BI-05E0EA33 (triaging; no implementation authorized by this text).
+Baseline read: origin/main 5d3757539 and the live install on 2026-09-23.
+Kernel grounding: [automation is measured by the human steps it removes](../../founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes.md),
+with [human in the loop at phase boundaries](../../founder-kernel/wiki/principles/human-in-the-loop-at-phase-boundaries.md) and
+[show the consequence before the confirm](../../founder-kernel/wiki/principles/show-the-consequence-before-the-confirm.md) setting the floor
+below which no step may be removed.
+
+This amendment supersedes one sentence of F1 above: *"If one role is
+eligible, explain it without an unnecessary picker; otherwise show only
+eligible options."* The picker was the fallback, and on every real install
+it is the only branch that runs (see "Why the picker always shows" below).
+Everything else in C1, C2, F1 to F3 and V1 to V9 stands unchanged; this
+section removes a decision from the consent screen and adds none.
+
+### Operator request
+
+On 2026-09-23 the founder connected Codex. The consent page already said
+"Codex wants to work in this operator install" and then required choosing "Codex
+(external CLI)" from a three-entry dropdown. Founder: "the need to select
+what's already on the screen is cognitive load and cost that's unnecessary
+... Something to be one-click." The request is to remove the decision, not
+to relabel it.
+
+### Measured as-is (the baseline the principle requires)
+
+The principle scores a delta, and a delta needs a counted current state.
+Counted on the live install from `OAuthClient`, `AuthorityBinding`,
+`AuthorizationDecisionLog` and the consent renderer on 2026-09-23.
+
+| Path | Human operations today | Decisions | Observed |
+|---|---|---|---|
+| Fresh connect, signed in | open dropdown, pick assistant, click Approve = **3** | **1** (three options) | 13:37 consent bound Codex to `AGT-EXT-CLAUDE`; redone at 14:17 as `AGT-EXT-CODEX`. The wrong pick cost a full second cycle: register, consent, exchange. |
+| Reconnect (new `codex mcp login`) | same **3** | **1** | Every login registers a **new** DCR client row (4 Codex rows, 10 Claude Code rows on this install). A consent binding is keyed on the client row, so no prior binding ever matches and the whole screen, picker included, comes back. |
+| Refresh inside the 30-day window | **0** | 0 | Silent rotation, binding revalidated. Already correct. |
+
+Two ledgers: this change touches only the customer-facing ledger. It adds
+no step to platform delivery.
+
+### Why the picker always shows
+
+Three findings from `apps/web/lib/auth/oauth-identity-binding.ts` and the
+live tables, not from the screen:
+
+1. **The eligible set is always three.** `eligibleOAuthCoworkers` offers
+   every source-approved external development role (`AGT-EXT-CLAUDE`,
+   `AGT-EXT-CODEX`, `AGT-EXT-GROK`) to any human with `view_platform`. The
+   single-eligible collapse in the renderer exists but cannot fire for a
+   builder, which is every human who connects a coding client.
+2. **The three roles are authority-identical.** Live: the same thirteen
+   tool grants each, zero revocations, clearance `{public}`, tier 2, HITL
+   tier 1, sensitivity `internal`. Choosing between them changes attribution
+   (which coworker name appears in a room) and nothing a token can do. The
+   dropdown asks the human to make a decision that decides nothing about
+   authority, which is exactly the click the principle says to remove.
+3. **The human is transcribing an untrusted name.** The heading shows the
+   self-asserted `client_name`; the dropdown asks the human to re-enter it
+   as a role. That transcription is where the mis-selection happened. The
+   server can do the same comparison deterministically, and unlike the
+   human it can also prove the candidates are authority-equivalent first.
+
+The delegation branch of the resolver (an active `delegation` binding for
+this human, client row and resource) is structurally dead for DCR clients
+for the same reason reconnects re-consent: the client row is new each time.
+
+### Candidate approaches
+
+| | A. Server-resolved default, one Connect action, optional Change | B. Portal-initiated "Connect Codex" intent bound to the OAuth request | C. Keep the picker, pre-select it |
+|---|---|---|---|
+| Operations on fresh connect | 1 click, 0 decisions | 1 portal click + the client's own login, then 1 consent click; 2 to 3 | 1 click, but a visible dropdown still asks to be read |
+| How the role is chosen | Server policy over the eligible set, authority-signature check, prior consent, then label match | Human picks in the portal first; the OAuth request must then be matched to that intent | Untrusted name pre-selects; human confirms |
+| Binding the choice to the request | Same request, same screen; nothing to correlate | The client controls the authorize request and carries no intent id; `resource` canonicalisation strips any query hint, so correlation falls back to session plus recency heuristics | Same as A |
+| Substrate added | One resolver function, one hidden default fingerprint, screen copy. No table, enum, grant or migration | Intent table, TTL policy, portal page with its purpose contract, correlation rule | None |
+| Handles genuine ambiguity | Yes: a specific choice is shown only when candidates differ in authority | Yes, by moving the choice earlier | No: still a generic picker |
+| `human_cognitive_load` (cost axis, higher is worse) | Low: one legible screen, one button | Medium: two surfaces, and the human must understand the intent expires | Medium: the dropdown is still on screen |
+| `operator_effort` | Low | Medium | Low |
+| `blast_radius` | Low: consent renderer and resolver only; POST contract unchanged | Medium: new pending-flow state the token path must honour | Low |
+| `legibility_of_consequence` | High: the recorded identity is named on the button and the line above it | High | Medium: identity hidden in a control |
+
+**Recommendation: A.** B moves the step rather than removing it, adds
+state, and its only advantage (a human-declared role when policy cannot
+decide) is covered by A's specific-choice fallback. C keeps the control the
+founder asked to remove.
+
+⟦situational: this scoring is recorded by hand because the `dpf` MCP
+connector was unauthorized in the authoring session, so `principle_decide`
+could not be called. `human_cognitive_load` is scored above as the principle
+requires. Record the kernel decision (a `DI-`) before implementation
+admission and replace this marker with its id.⟧
+
+### Design (approach A)
+
+**Resolution runs on the server, once, from facts the server owns.** A new
+`resolveDefaultOAuthCoworker(human, client, resource, eligible)` beside
+`eligibleOAuthCoworkers` in `apps/web/lib/auth/oauth-identity-binding.ts`
+returns one of three typed outcomes; the closed set is a TypeScript union
+now and becomes a Prisma enum only if it is ever persisted.
+
+1. `single`: exactly one eligible coworker. Unchanged behaviour.
+2. `resolved`: several eligible coworkers that all share one **authority
+   signature**, plus the coworker the policy chose and why.
+3. `choice`: eligible coworkers whose signatures differ, with the
+   least-authority candidate first and a one-line reason per candidate.
+
+**Authority signature** is derived, never stored: the coworker's effective
+tool grants (`AgentToolGrant` minus `AgentToolGrantRevocation`, through the
+existing helpers in `apps/web/lib/tak/agent-grants.ts`), its `Principal`
+`sensitivityClearance`, its `hitlTierDefault` and `sensitivity`. Two
+coworkers with equal signatures are interchangeable for everything the
+token can do; the consent then chooses a name, not a power.
+
+**Within an equal-signature class the label is chosen in this order**, and
+each rule is a lookup over existing rows:
+
+1. The coworker on this human's most recent active `consent` binding for
+   this resource whose client has the same self-asserted name and the same
+   redirect family (scheme, host and path with the loopback port ignored,
+   the same comparison `isRedirectUriAllowed` already makes). This is what
+   makes a reconnect land on the same assistant without a question.
+2. A coworker whose registry aliases (`agent_registry.json`, for example
+   `codex` for `AGT-EXT-CODEX`) match the client's self-asserted name,
+   case-insensitively, as a whole word.
+3. The alphabetically first eligible coworker, so the outcome is total and
+   deterministic.
+
+A self-asserted name therefore picks a **label within a class the server
+has already proven authority-equivalent**. It can never select a coworker
+outside that class, never widen a scope, and never bypass eligibility,
+because the eligible set and the signature check run before the name is
+looked at. This is the same information the human was being asked to
+transcribe, applied after a check the human could not perform. Forged
+names are covered below.
+
+**The screen** keeps its shape and loses its controls.
+
+- Heading unchanged: "`<client_name>` wants to work in `<installation>`",
+  with the self-asserted warning for DCR clients exactly as today.
+- One consequence line, in the platform's words, before the button:
+  "It will work as **Codex (external CLI)** under your account. Change".
+  `Change` is a disclosure that reveals the existing eligible list; the
+  default flow never shows the list. For a `choice` outcome the disclosure
+  is open, the candidates are named with their difference in one line each,
+  and the least-authority candidate is pre-selected.
+- Permissions are a plain list in the default flow, drawn from the same
+  `PUBLIC_SCOPE_COPY`. "Adjust permissions" is a disclosure that reveals
+  today's pre-ticked checkboxes. The POST contract does not change: the
+  human can only remove authority, never add it.
+- One primary button, "Connect `<client_name>`" (escaped, truncated), and
+  Cancel. "Connecting to" and "Returns to" stay, because the consequence
+  must be visible before the confirm.
+- The revocation footer stays.
+
+**The POST trusts nothing the GET showed.** It already re-parses the
+request and re-runs eligibility. It additionally re-runs
+`resolveDefaultOAuthCoworker` and compares the result to a hidden
+`default_coworker` field the GET rendered. If the human made no change and
+the server's answer is the same, that coworker is bound. If the answer
+differs (eligibility or signatures changed between GET and POST), the POST
+re-renders the screen with the new answer instead of binding anything. If
+the human chose from the disclosure, the chosen id must be in the eligible
+set, as today. A client-supplied `acting_coworker` is still never echoed as
+a hidden identity.
+
+**Reconnect.** Rule 1 above removes the role question on every reconnect
+while the assistant, its signature and the scopes are unchanged. The
+consent click itself stays on every new DCR registration. That click costs
+one and exists to be seen: a public loopback client with a fresh
+`client_id` cannot prove it is the same program, so an auto-approval would
+let any local process that can reach `/register` and open the operator's
+browser obtain a token silently under a previous envelope. The principle's
+own example draws this line: an approval whose outcome the platform can
+already determine is removed; a step that exists to be seen stays. Whether
+an operator-pinned, pre-registered client may skip the click within the
+refresh window is an open decision below.
+
+**Refresh** is unchanged and already silent.
+
+**What this does not touch.** Eligibility, scope intersection, coworker
+grants, clearance, room admission, revocation, family rotation, the
+`AuthorizationDecisionLog` row, the resolver's use of `appliedAgentId`, the
+three external registry identities and every acceptance in V1 to V9.
+
+**What was considered and rejected.** Merging the three external roles
+into one identity with the vendor as a label would remove the class
+altogether. It is a substrate change with reach into room participants and
+the surface-claim skills, so it is not admissible as a UX fix; if the
+vendor split proves to be labelling only, that is its own item. Persisting
+a per-human "default assistant" preference is unnecessary once rule 1
+exists and would be a second source of truth for the same fact.
+
+### Security invariants
+
+- A forged `client_name` can at most change which of several
+  authority-identical labels is recorded, and the screen still marks it
+  self-asserted. It cannot reach a coworker outside the eligible set,
+  cannot escape the signature check, and cannot widen scopes.
+- The signature check is a strict equality over derived sets; an admin
+  delegation that adds one grant to one candidate turns the outcome into
+  `choice`, never into a silent default.
+- The POST re-derives the default and refuses on drift, so a screen
+  rendered before a policy change cannot bind the identity it showed.
+- Nothing is auto-approved for a DCR client. Revocation, room admission and
+  `OAUTH_SETUP_REQUIRED` recovery are unchanged.
+
+### Acceptance criteria
+
+**OBJ-OC-1:** a signed-in human connects a supported client with one
+consent click and no role decision.
+
+**OBJ-OC-2:** the server, not the client name, decides authority; the name
+may only label.
+
+**OBJ-OC-3:** the removal is measured on live paths.
+
+| Acceptance | Objective | Required outcome |
+|---|---|---|
+| AC-OC-1 | OBJ-OC-1 | Fresh Codex connection by a human with build permission: one click on Connect, zero selections, zero command or file-edit instructions from DPF. The binding records `AGT-EXT-CODEX`. |
+| AC-OC-2 | OBJ-OC-1 | Reconnect after a new DCR registration with unchanged scopes lands on the same assistant with no role question; refresh stays silent. |
+| AC-OC-3 | OBJ-OC-1 | Default flow shows app, installation, acting human, assistant, permissions, resource and return address; no dropdown, no checkbox, no internal CLI taxonomy beyond the assistant's display name. |
+| AC-OC-4 | OBJ-OC-2 | With an admin delegation that gives one eligible coworker a different signature, the screen presents a specific choice with the least-authority candidate first; with equal signatures it presents none. |
+| AC-OC-5 | OBJ-OC-2 | A client registered as "Codex" by a human without build permission is refused as today; a client named "Claude Code" that is actually Codex is recorded under the Claude label with no change in what it can do; a hostile name is escaped and marked self-asserted. |
+| AC-OC-6 | OBJ-OC-2 | POST re-derivation: if eligibility changes between GET and POST, no code is issued and the screen re-renders. Tampered `default_coworker` or `acting_coworker` outside the eligible set is refused. |
+| AC-OC-7 | OBJ-OC-3 | Clicks, decisions and elapsed time recorded on a live first connect and a live reconnect for Codex and Claude Code, before and after, in the item's evidence. Target: 3 to 1 operations, 1 to 0 decisions on both paths. |
+
+### Open operator decisions
+
+1. **Pinned-client skip.** Should an operator pre-registered client with an
+   active consent for the same human, scopes and assistant skip the click
+   on reconnect within the refresh window? Recommended **no** by default,
+   because a loopback public client cannot prove identity even when pinned;
+   offered as an explicit per-client setting if wanted.
+2. **Display names.** The three external roles are labelled "`<vendor>`
+   (external CLI)". The default flow shows that once. If the parenthetical
+   is unwanted on the consent screen, the fix is the registry seed, which
+   also changes the label in rooms and reports; this amendment does not
+   change it.
+3. **Unused registrations.** Ten DCR rows on this install never reached
+   consent (two registrations per Codex login). Expiring never-consented
+   registrations was named in the 2026-08-26 design §7.3 and belongs to
+   BI-D6D79AC4, not here.
+
+### Ordered implementation and backlog coverage
+
+No implementation is authorized by this text; BI-05E0EA33 is in triage and
+this is the design extension it asked for. When admitted:
+
+1. Failing tests first in `oauth-identity-binding.test.ts` and
+   `oauth-consent-page.test.ts`: signature equality across the three
+   external roles, rule 1 reconnect match, alias match, deterministic
+   fallback, `choice` on a divergent delegation, POST drift refusal, no
+   echoed client identity.
+2. `resolveDefaultOAuthCoworker` and the signature derivation, reusing the
+   grant helpers; no schema change.
+3. Consent renderer: consequence line, disclosures, single button, hidden
+   `default_coworker`; POST re-derivation in the authorize route.
+4. Live measurement for AC-OC-7 on the canonical runtime, both clients,
+   recorded as evidence on the item.
+5. Docs: the MCP tool authorization runbook's setup paragraph and the
+   2026-08-26 design §4.6 pointer.
+
+Coverage: atomic under BI-05E0EA33. The parent decision id is pending the
+kernel recording named above.
