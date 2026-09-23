@@ -528,3 +528,14 @@ The implication is the opposite of "lock in the subscription": **the flat-rate a
 ---
 
 *This is an assessment. Every recommendation in §7–§8 enters the backlog and is promoted through Build Studio; nothing here is authorization to write feature code directly.*
+
+## Merge-triggered subscribers (BI-A6E4D205, BI-848360EF)
+
+`build/pr-merged.received` is emitted by the signed GitHub webhook receiver when a `pull_request` closes as merged. It carries repository, number, head branch, head sha, merge commit and merge time.
+
+Two subscribers consume it, both registered in `eventFunctions` — they have no cron and must never appear in `scheduledFunctions`, which is the registry the admin Scheduled Jobs surface renders and whose parity guard requires a `SCHEDULED_JOB_CATALOG` row:
+
+- **`build/pr-merged-binding`** binds the Workroom to the pull request that delivered it, via `resolvePullRequestBindings`. It never repoints a room already bound to a different number, and a re-delivered webhook is a no-op by construction.
+- **`build/pr-merged-reap`** runs the worktree janitor scoped to the merged branch. It implements no reaping rules of its own; see the branch-and-worktree runbook for why that delegation matters.
+
+Both are idempotent, because GitHub re-delivers webhooks. Neither asserts success when it cannot reach its subject.

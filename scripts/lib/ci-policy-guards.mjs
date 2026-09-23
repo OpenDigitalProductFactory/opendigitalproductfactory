@@ -343,6 +343,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // The FLAG half of the same class (BI-8914E888). The guard above catches a
+      // script the image never receives; this catches a switch the install can
+      // never set. Both are "the capability was built and the last wire was never
+      // run", and both are invisible at runtime: the function takes its disabled
+      // branch and reads exactly like a feature nobody turned on. Measured
+      // 2026-09-23: 4 of 12 queue-function flags were unreachable, including the
+      // one deciding whether the worktree janitor may act at all.
+      node("scripts/check-queue-flag-reachability.mjs"),
+      node("--test", "scripts/check-queue-flag-reachability.test.mjs"),
       // AGENTS.md §11 Principal convergence covered Users but not agents, so a
       // seeded install left 71 of 76 AGT-* agents with no identity. Every
       // `independent: true` readiness lane then attributed its receipt to the
