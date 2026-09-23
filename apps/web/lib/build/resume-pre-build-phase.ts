@@ -538,6 +538,27 @@ export async function resumePreBuildPhase(params: {
             };
           }
         }
+        // BI-9B2E7154: a passed design blocked only by phase readiness is not
+        // stranded, and re-reviewing it cannot clear the refusal. Each re-run
+        // fed the reviewers the prior round's issues until the verdict drifted to
+        // fail on an unchanged document, and the fix loop escalated and abandoned
+        // the build (FB-650326BC: passed at 01:36, re-reviewed every ~30 min,
+        // abandoned at 17:06). Ask the gate first; re-review only once it would
+        // let the build through, since the review is what advances it.
+        const { enforceBuildInitiativeReadiness } = await import("@/lib/build/build-entry-gate");
+        const readiness = await enforceBuildInitiativeReadiness({
+          buildId,
+          target: "plan",
+          targetPhase: "plan",
+          expectedPhase: "ideate",
+        });
+        if (!readiness.allowed) {
+          return {
+            kind: "skipped",
+            phase,
+            reason: `design passed review; parked on phase readiness (NOT re-running reviewDesignDoc): ${readiness.message}`,
+          };
+        }
       }
       const { executeTool } = await import("@/lib/mcp-tools");
       const result = await executeTool("reviewDesignDoc", { buildId }, userId, { featureBuildId: buildId });
