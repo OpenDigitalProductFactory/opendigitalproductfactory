@@ -6,7 +6,7 @@ status: draft
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft — research complete, awaiting operator decisions (§9) |
+| **Status** | Draft — research complete; four operator decisions recorded 2026-09-23, three open (§9) |
 | **Created** | 2026-09-23 |
 | **Author** | Claude Opus 5.5 for Mark Bodman |
 | **Amends** | [2026-07-21 Spatial Operational Views](./2026-07-21-spatial-operational-views-design.md) — does not supersede it |
@@ -191,15 +191,20 @@ Each phase is independently shippable, and P0 is the dependency every other phas
 - Browser-side calls to any third-party tile, geocode or data service.
 - Automatic install telemetry.
 
-## 9. Decisions for the operator
+## 9. Decisions
 
-1. **Deployment-footprint source (§3.1.1):** CRM-derived only, or also the opt-in country-only federation declaration? *Recommended: both, CRM first.*
-2. **Market footprint placement:** a `footprint` variant beside the TENANTS board (recommended), or its own route under marketing/portfolio?
-3. **HOA default:** site-plan image first (recommended) or georeferenced parcels first?
-4. **First overlay connector:** NWS alerts (recommended; free, US) or another feed?
-5. **Vendor access to work orders:** a signed, expiring link showing the work, its location snapshot and boundary (recommended; no vendor account), or vendor portal accounts?
-6. **Anonymous public reports:** allowed from anyone (rate-limited), or only from residents who have joined the community in the app?
-7. **Epic:** the parent spec's `EP-SPATIAL-OPERATIONAL-VIEWS` does not exist in the live backlog. Create it and attach `BI-3A56AE0C`, `BI-FE286C27`, `BI-A951CC46`, `BI-3391BE2C`, `BI-F91D0685` and the new P1–P6 items to it, or attach them to an existing epic?
+**Resolved by the operator, 2026-09-23:**
+
+- **Deployment-footprint source (§3.1.1):** both, CRM-derived first; the opt-in, country-only federation declaration follows as P6.
+- **HOA default (§3.3):** an uploaded site-plan image on the cartesian renderer; georeferenced parcels stay optional.
+- **Vendor access (§3.3.4):** a signed, expiring link showing the work, photo, location snapshot and boundary. No vendor account.
+- **Public reports (§3.3.3):** anyone may report, rate-limited with abuse controls; the reporter's identity is never shown to other residents.
+
+**Still open (leaning noted; not blocking P0):**
+
+1. **Market footprint placement:** a `footprint` variant beside the TENANTS board (leaning), or its own route under marketing/portfolio?
+2. **First overlay connector:** NWS alerts (leaning; free, US) or another feed?
+3. **Epic:** the parent spec's `EP-SPATIAL-OPERATIONAL-VIEWS` does not exist in the live backlog. Create it and attach `BI-3A56AE0C`, `BI-FE286C27`, `BI-A951CC46`, `BI-3391BE2C`, `BI-F91D0685` and the new P1–P6 items to it, or attach them to an existing epic?
 
 ## 10. Findings to route separately
 
