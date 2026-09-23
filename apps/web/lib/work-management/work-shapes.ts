@@ -30,6 +30,7 @@ import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-ope
 import { DELIVERY_SHAPES } from "./delivery-shapes";
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
+import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
 
 /** §8.11.1 trigger vocabulary, verbatim and closed. */
 export const WORK_SHAPE_TRIGGER_CLASSES = [
@@ -59,8 +60,10 @@ export type WorkShapeStage = {
   /** Who answers for this stage. `agent:<id>` | `role:<role>` | `person:<ref>`. */
   accountablePrincipalRef: string;
   advance: WorkShapeAdvance;
-  /** Evidence kinds the stage is expected to leave behind (§8.11). */
-  evidence: readonly string[];
+  /** Evidence kinds the stage is expected to leave behind (§8.11). Typed
+   *  against the vocabulary record_workroom_evidence accepts, so a stage cannot
+   *  declare evidence it has no way to record. */
+  evidence: readonly WorkShapeEvidenceKind[];
   /**
    * Phase G (proactivity & capacity allocation §6.1): the reasoning this stage
    * needs, declared by the shape rather than guessed from prompt length. A

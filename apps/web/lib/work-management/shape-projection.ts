@@ -257,7 +257,7 @@ export function projectRoomShape(
         const binding = receipt.processEvidence;
         return binding?.definitionRef === `${definition.key}@${definition.version}`
           && binding.stageKey === stage.key && binding.relationship === "required-evidence"
-          && stage.evidence.includes(binding.evidenceKind);
+          && (stage.evidence as readonly string[]).includes(binding.evidenceKind);
       }).map(receipt => {
         correlated.add(receipt.receiptId);
         // Requirement evidence is not the runner's stage-completion verdict.

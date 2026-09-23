@@ -1,4 +1,5 @@
 import { slugify } from "@/lib/shared/slugify";
+import { WORK_SHAPE_EVIDENCE_KINDS } from "@/lib/work-management/work-shape-evidence-kinds";
 
 export const WORK_CAPSULE_STATUSES = [
   "draft",
@@ -248,6 +249,10 @@ export const WORK_CAPSULE_BRANCH_TAXONOMIES = [
 
 export type WorkCapsuleBranchTaxonomy = (typeof WORK_CAPSULE_BRANCH_TAXONOMIES)[number];
 
+// The six generic media kinds, plus every kind a work-shape stage declares.
+// A stage advances only on recorded evidence of a kind it declared, so the
+// shapes' vocabulary must be accepted here or no stage can ever advance
+// (DI-BE0348CE9229; guarded by stage-evidence-kind-parity.test.ts).
 export const WORK_CAPSULE_EVIDENCE_KINDS = [
   "test",
   "build",
@@ -255,6 +260,7 @@ export const WORK_CAPSULE_EVIDENCE_KINDS = [
   "verification",
   "lint",
   "note",
+  ...WORK_SHAPE_EVIDENCE_KINDS,
 ] as const;
 
 export type WorkCapsuleEvidenceKind = (typeof WORK_CAPSULE_EVIDENCE_KINDS)[number];

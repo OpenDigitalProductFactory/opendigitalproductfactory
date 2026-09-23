@@ -15,6 +15,7 @@
 // author never holds the receipt writer: acceptance and post-implementation
 // review are `role:` stages that the runner refuses to execute itself.
 
+import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
 import type { WorkShapeDefinition, WorkShapeStage } from "./work-shapes";
 
 export const DELIVERY_BREAK_FIX_SHAPE_KEY = "delivery-break-fix";
@@ -42,7 +43,7 @@ export function isDeliveryShapeKey(value: unknown): value is DeliveryShapeKey {
   return typeof value === "string" && (DELIVERY_SHAPE_KEYS as readonly string[]).includes(value);
 }
 
-const merge = (evidence: readonly string[] = ["merged-sha"]): WorkShapeStage => ({
+const merge = (evidence: readonly WorkShapeEvidenceKind[] = ["merged-sha"]): WorkShapeStage => ({
   key: "merge",
   title: "Merge through branch protection",
   accountablePrincipalRef: "role:author",
@@ -54,7 +55,7 @@ const merge = (evidence: readonly string[] = ["merged-sha"]): WorkShapeStage => 
   evidence,
 });
 
-const acceptance = (condition: string, evidence: readonly string[]): WorkShapeStage => ({
+const acceptance = (condition: string, evidence: readonly WorkShapeEvidenceKind[]): WorkShapeStage => ({
   key: "accept",
   title: "Accept on the live install",
   accountablePrincipalRef: "role:acceptance-reviewer",
