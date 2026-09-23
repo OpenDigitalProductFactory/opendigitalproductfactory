@@ -43,9 +43,10 @@ HEADLESS="${DPF_HEADLESS:-0}"
 RECONCILE_STALE=0
 SHOW_SUBSTRATE=0
 # Auto-mint: when no DPF_MCP_BEARER_TOKEN is present, issue one against the local
-# portal and persist it durably (POSIX). On by default for the contributor
-# bootstrap; pass --no-auto-mint for CI / non-contributor paths.
-AUTO_MINT="${DPF_AUTO_MINT:-1}"
+# portal and persist it durably (POSIX). Explicit compatibility only;
+# pending OAuth authorization must never trigger PAT minting.
+AUTO_MINT="${DPF_AUTO_MINT:-0}"
+AUTH_MODE="${DPF_MCP_AUTH_MODE:-oauth}"
 # Scope of the auto-minted token. `write` gives an external coding agent all the
 # side-effecting MCP tools (backlog, evidence, Build Studio handoff) without the
 # token-issuance powers of `admin`. Override with --mint-scope admin|read.
@@ -62,7 +63,8 @@ while [ $# -gt 0 ]; do
     --reconcile-stale-entries)  RECONCILE_STALE=1 ;;
     --install-antigravity)      INSTALL_ANTIGRAVITY=1 ;;
     --show-substrate)           SHOW_SUBSTRATE=1 ;;
-    --auto-mint)                AUTO_MINT=1 ;;
+    --auto-mint)                AUTO_MINT=1; AUTH_MODE=legacy ;;
+    --auth-mode)                AUTH_MODE="${2:?--auth-mode requires oauth or legacy}"; shift ;;
     --no-auto-mint)             AUTO_MINT=0 ;;
     --mint-scope)
       if [ -z "${2:-}" ]; then printf '  [FAIL] --mint-scope requires a value\n' >&2; exit 64; fi
@@ -80,7 +82,8 @@ Flags:
                               Antigravity's 'agy' CLI if it is not present,
                               then wire the DPF MCP config.
   --show-substrate            Show substrate detail under the banner.
-  --auto-mint                 Issue + persist an MCP token if none is present (default).
+  --auth-mode <oauth|legacy>  Credential mode (default: oauth).
+  --auto-mint                 Explicit legacy setup: issue and persist a PAT if needed.
   --no-auto-mint              Never issue a token; only wire what a present token allows.
   --mint-scope <read|write|admin>  Scope for the auto-minted token (default: write).
 
@@ -103,6 +106,10 @@ EOF
   esac
   shift
 done
+case "$AUTH_MODE" in oauth|legacy) ;; *) printf 'Invalid auth mode: use oauth or legacy\n' >&2; exit 64 ;; esac
+[ "$AUTH_MODE" = "oauth" ] && AUTO_MINT=0
+export DPF_MCP_AUTH_MODE="$AUTH_MODE"
+
 
 REPO_ROOT="${REPO_ROOT:-$PWD}"
 REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
@@ -541,6 +548,7 @@ bridge_args=(
   --contributor-memory    "$CONTRIBUTOR_MEMORY_DIR"
   --project-slug          "$PROJECT_SLUG"
   --mcp-endpoint          "$MCP_ENDPOINT"
+  --auth-mode             "$AUTH_MODE"
   --expected-dpf-platform-version "$EXPECTED_VERSION"
 )
 [ $CLAUDE_PRESENT  -eq 1 ] && bridge_args+=(--claude-cli-present)
@@ -620,6 +628,7 @@ shell_var("CODEX_CONVERGENCE", "\n".join(_conv_lines))
 shell_var("GROK_WRITES_COUNT", len((grok.get("config") or {}).get("writes", [])) if grok else 0)
 shell_var("MCP_CLIENT_WRITES_COUNT", len(mcp_client.get("writes", [])))
 shell_var("MEMORY_WRITES_COUNT", len(memory.get("writes", [])))
+shell_var("COMPATIBILITY_CLIENTS", ", ".join(plan.get("compatibilityClients", [])))
 shell_var("PREVIEW_STATE", plan.get("preview", {}).get("readinessState", "missing_cli"))
 shell_var("UPSTREAM_DRIFT_ADVISORY", (plan.get("upstreamDrift") or {}).get("advisory") or "")
 PY
@@ -865,6 +874,8 @@ SMOKE_RESULT="$(printf '%s' "$SMOKE_TEST" | python3 -c 'import json,sys; print(j
 
 if [ "$CLAUDE_WIRED" -eq 0 ] && [ "$CODEX_WIRED" -eq 0 ] && [ "$GROK_WIRED" -eq 0 ]; then
   FINAL_STATE="missing_cli"
+elif [ "$AUTH_MODE" = "oauth" ]; then
+  FINAL_STATE="authorization_pending"
 elif [ "$MCP_OK" != "True" ]; then
   case "$MCP_REASON" in
     no_token|scope_insufficient) FINAL_STATE="missing_token" ;;
@@ -893,6 +904,7 @@ AGENT_TOOLCHAIN_JSON="$(cat <<JSON
   "grokWired": $([ $GROK_WIRED -eq 1 ] && echo true || echo false),
   "antigravityWired": $([ $AGY_WIRED -eq 1 ] && echo true || echo false),
   "memorySeededAt": $MEMORY_SEEDED_AT_JSON,
+  "mcpAuthorization": {"mode": "$AUTH_MODE", "verified": false},
   "mcpReadiness": $MCP_READINESS,
   "smokeTest": $SMOKE_TEST,
   "readinessState": "$FINAL_STATE"
@@ -907,7 +919,10 @@ fi
 
 # --- Readiness banner --------------------------------------------------------
 
+if [ -n "${COMPATIBILITY_CLIENTS:-}" ]; then warn "Compatibility credentials required for: $COMPATIBILITY_CLIENTS. Select legacy setup explicitly; OAuth consent will not mint a PAT."; fi
+
 case "$FINAL_STATE" in
+  authorization_pending) BANNER_MSG="MCP configuration is written. Sign in through your client and verify the connection; bootstrap has not verified OAuth."; BANNER_ACTION="Sign in to DPF MCP" ;;
   ready)         BANNER_MSG="Claude Code and Codex are ready for DPF work.";                                     BANNER_ACTION="Open readiness" ;;
   partial)       BANNER_MSG="One contributor client is ready; the other needs setup.";                           BANNER_ACTION="Repair toolchain" ;;
   missing_cli)   BANNER_MSG="Install the selected agent client to enable contributor sessions.";                 BANNER_ACTION="Open setup guide" ;;

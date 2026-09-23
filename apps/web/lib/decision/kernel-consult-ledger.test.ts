@@ -151,6 +151,10 @@ describe("recordKernelConsultInteraction", () => {
       question: "Which storage approach should we take?",
       optionIds: ["option-a", "option-b"],
       optionDescriptions: { "option-a": "Reuse table", "option-b": "New table" },
+      scoredOptions: [
+        { id: "option-a", description: "Reuse table", features: { blast_radius: -0.2 } },
+        { id: "option-b", description: "New table", features: { blast_radius: -0.7 } },
+      ],
       appliedPrincipleCount: 21,
       callingSurface: "claude-code",
       policyProjection: {
@@ -191,6 +195,18 @@ describe("recordKernelConsultInteraction", () => {
     // unqueryable — and agreement cannot be measured against a value nothing
     // can select. Assert the column, not just the payload copy.
     expect(row.recommendedOptionId).toBe("option-a");
+    // BI-F302B80E part 2: record the MENU beside the pick. A row carrying a
+    // recommendation but no scored options can be counted and never learned
+    // from — weight-inference-adapter requires scoredOptions, the pick and the
+    // later outcome together, and this path wrote null for the first of them.
+    expect(row.scoredOptions).toEqual([
+      { id: "option-a", description: "Reuse table", features: { blast_radius: -0.2 } },
+      { id: "option-b", description: "New table", features: { blast_radius: -0.7 } },
+    ]);
+    // The outcome columns stay empty until the caller reports back. Absence is
+    // "nobody said", never "they agreed".
+    expect(row.chosenOptionId ?? null).toBeNull();
+    expect(row.humanOutcome ?? null).toBeNull();
     const payload = row.outcomePayload as Record<string, unknown>;
     expect(payload.tool).toBe("principle_decide");
     expect(payload.recommendedOptionId).toBe("option-a");

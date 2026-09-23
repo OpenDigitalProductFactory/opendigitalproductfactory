@@ -548,6 +548,72 @@ describe("v3: the bound delivery shape keys the gates", () => {
     expect(noCriteria.decision.unmet.map((entry) => entry.code)).toEqual(["OBJECTIVE_BASELINE_REQUIRED"]);
   });
 
+  // BI-7876699F AC2: RESEARCH_REQUIRED must be satisfiable through a writer the
+  // author can actually reach. The only writer for the "research" receipt is
+  // record_initiative_evidence, whose grant (initiative_evidence_write) is held by
+  // specific agents (AGT-WS-BUILD), never by the design-author the policy names as
+  // accountable. Delivery and acceptance already derive from CITED
+  // record_execution_evidence, and the small/medium baseline is minted from the
+  // item body — research was the last fact that demanded a grant nobody reachable
+  // holds, so a shipped small item could not be closed by anyone.
+  //
+  // DELIVERY_EVIDENCE_REQUIRED already demands the reproduction itself
+  // (source_verified: the defect on a named ref) and the failing-to-passing proof
+  // (test_pass). When those are cited, research IS evidenced — by exactly the
+  // artifacts the shape's own comment says a small fix produces anyway.
+  it("satisfies research from cited delivery evidence on a small item with no research receipt", () => {
+    const completed = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "low" },
+      activities: [],
+      target: "completion",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-22T00:00:00.000Z",
+      completion: {
+        deliveryEvidence: "pass" as const,
+        acceptanceEvidence: "pass" as const,
+        objectiveReconciliation: "pass" as const,
+      },
+    });
+    expect(completed.decision.unmet.map((entry) => entry.code)).toEqual([]);
+    expect(completed.decision.verdict).toBe("allowed");
+  });
+
+  // The derivation must NOT weaken the earlier gates: at plan/implementation there
+  // is no completion evidence yet, so research still has to be recorded.
+  it("still demands research at plan when no delivery evidence exists yet", () => {
+    const planned = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "low" },
+      activities: [],
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    expect(planned.decision.unmet.map((entry) => entry.code)).toContain("RESEARCH_REQUIRED");
+  });
+
+  // Delivery NOT passing must not confer research either.
+  it("does not confer research when delivery evidence is missing at completion", () => {
+    const completed = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "low" },
+      activities: [],
+      target: "completion",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-09-22T00:00:00.000Z",
+      completion: {
+        deliveryEvidence: "missing" as const,
+        acceptanceEvidence: "missing" as const,
+        objectiveReconciliation: "pass" as const,
+      },
+    });
+    expect(completed.decision.unmet.map((entry) => entry.code)).toContain("RESEARCH_REQUIRED");
+  });
+
   it("raises a small item at high sensitivity to the large gates and leaves an unshaped item on v2", () => {
     const raised = projectBacklogItemReadiness({
       item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "high" },

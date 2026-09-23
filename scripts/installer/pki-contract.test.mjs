@@ -1,12 +1,48 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
+
+/**
+ * Can this host represent POSIX permission bits? (BI-C69C13AC)
+ *
+ * bootstrap-organization-pki.sh requires the join package to be mode 0600 and
+ * refuses otherwise — a real control over enrolment material, and not one to
+ * weaken so a test passes. Windows has no permission bits: chmod(0o600) reads
+ * back as 666, so the script correctly refuses every fixture and the
+ * assertions BEYOND that gate never get to run.
+ *
+ * Those cases are therefore skipped here rather than failed. AGENTS.md §4: a
+ * check that could not run is not a verdict, and recording it as one is worse
+ * than not running it. Everything that does not depend on file mode still
+ * runs on every host.
+ */
+async function posixModesRepresentable() {
+  const probeDir = await mkdtemp(join(tmpdir(), "dpf-mode-probe-"));
+  const probe = join(probeDir, "probe");
+  try {
+    await writeFile(probe, "probe");
+    await chmod(probe, 0o600);
+    const { mode } = await stat(probe);
+    return (mode & 0o777) === 0o600;
+  } catch {
+    return false;
+  } finally {
+    await rm(probeDir, { recursive: true, force: true });
+  }
+}
+
+const MODE_GATED = {
+  skip: (await posixModesRepresentable())
+    ? false
+    : "host cannot represent POSIX file modes, so the 0600 join-package gate refuses every fixture before the behaviour under test (BI-C69C13AC)",
+};
+
 
 test("organization PKI compose pins the approved image and protects CA custody", async () => {
   const compose = await read("docker-compose.pki.yml");
@@ -142,7 +178,7 @@ test("join packages are short-lived, intended-peer-bound, and never require a CA
   }
 });
 
-test("Bash join rejects an expired package before Docker is invoked", async () => {
+test("Bash join rejects an expired package before Docker is invoked", MODE_GATED, async () => {
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-expired-"));
   const packagePath = join(directory, "expired.dpfjoin");
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
@@ -170,7 +206,7 @@ test("Bash join rejects an expired package before Docker is invoked", async () =
   }
 });
 
-test("Bash join rejects a package intended for a different installation", async () => {
+test("Bash join rejects a package intended for a different installation", MODE_GATED, async () => {
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-peer-"));
   const packagePath = join(directory, "wrong-peer.dpfjoin");
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
@@ -197,7 +233,7 @@ test("Bash join rejects a package intended for a different installation", async 
   }
 });
 
-test("Bash join rejects a public CA origin before Docker is invoked", async () => {
+test("Bash join rejects a public CA origin before Docker is invoked", MODE_GATED, async () => {
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-public-ca-"));
   const packagePath = join(directory, "public-ca.dpfjoin");
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));

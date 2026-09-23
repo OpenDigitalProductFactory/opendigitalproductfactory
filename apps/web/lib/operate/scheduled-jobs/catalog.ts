@@ -41,7 +41,9 @@ import {
 import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
 import { FLOW_JOB_CATALOG_ENTRIES } from "./catalog-flow";
 import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
+import { COMMONS_JOB_CATALOG_ENTRIES } from "./catalog-commons";
 import { HYGIENE_JOB_CATALOG_ENTRIES } from "./catalog-hygiene";
+import { ECOSYSTEM_JOB_CATALOG_ENTRIES } from "./catalog-ecosystem";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
@@ -49,6 +51,7 @@ export type { JobCategory, ScheduledJobCatalogEntry };
 
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
+  ...ECOSYSTEM_JOB_CATALOG_ENTRIES,
   ...DECISION_GOVERNANCE_JOBS,
   ...FLOW_JOB_CATALOG_ENTRIES,
   {
@@ -211,6 +214,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  ...COMMONS_JOB_CATALOG_ENTRIES,
   ...HYGIENE_JOB_CATALOG_ENTRIES,
   {
     jobId: "alert-delivery-bridge",
@@ -344,21 +348,6 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
-    jobId: "ecosystem-inbound-issue-triage",
-    inngestId: "ecosystem/inbound-issue-triage",
-    honorsEnabledGate: true,
-    name: "Ecosystem: inbound issue triage",
-    purpose:
-      "Reads what the ecosystem submitted — upstream issues filed by the relay and peer "
-      + "federated demand — and files it into the backlog with the submitter preserved. "
-      + "No-ops unless the installation's purpose is evolve-dpf.",
-    cron: "17 6 * * 1",
-    cadence: "Weekly (Mondays, 06:17)",
-    category: "editable",
-    tracksRunData: true,
-    runNowEvent: null,
-  },
-  {
     jobId: "backlog-triage-drain",
     inngestId: "ops/backlog-triage-drain",
     honorsEnabledGate: true,
@@ -366,19 +355,6 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     purpose: "Drains the backlog triage queue. Cadence is tunable.",
     cron: "23 * * * *",
     cadence: "Hourly at :23",
-    category: "editable",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
-    jobId: "canonical-improvement-digest",
-    inngestId: "ops/canonical-improvement-digest",
-    honorsEnabledGate: true,
-    name: "Canonical improvement digest",
-    purpose:
-      "Batches [reference-doc] ImprovementProposal rows into one doc chore BI for human-approved canonical-source PRs (process-spine §6.5).",
-    cron: "17 6 * * 1",
-    cadence: "Weekly (Mon 06:17)",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,

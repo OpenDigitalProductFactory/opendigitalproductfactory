@@ -356,6 +356,22 @@ separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
 
+**The heartbeat is protected from the gate's own work.** A renewal timer only
+helps if the process is free to run it, and for a period it was not: the
+in-run descendant scan used a synchronous `ps` on a fixed interval, so on a
+host where that scan cost more than its interval the event loop saturated and
+no timer fired at all — the lease expired unrenewed and the deadline then
+fenced a run that was progressing normally. The signature was unmistakable:
+no heartbeat events for the length of the build, then every starved timer
+firing at once the moment the scan stopped, and the renewal that finally ran
+succeeding. The scan is now asynchronous and self-rescheduling — the next
+scan is scheduled only once the previous has returned — so it cannot queue
+behind itself or block the renewal. One synchronous observation remains,
+immediately before a fence kills the tree, because a descendant reparents to
+init the moment its parent dies and could otherwise escape the reap. If a
+long run is ever fenced for lease authority again, this is the first thing to
+re-measure (BI-04AECD8A).
+
 **Equivalent gate requests are single-flight.** Before admission, the gate
 builds the exact merge-tree evidence plan and fingerprints the host toolchain.
 The server derives one immutable key from repository, integration tree, plan
@@ -638,6 +654,16 @@ pressure to pass. Waiting in line does nothing for a closed pool
 (BI-D908DA0A). A fenced run likewise records *which* fence fired
 (`fence reason: lease-authority-deadline`, ...) in its gate record, so a
 self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
+
+**`gate_client_upgrade_required` means rebase, not retry.** The gate client and
+its durable-wait resumer run from the branch being gated, so a client defect
+fixed on `main` keeps running in every branch cut before the fix. Every claim
+therefore reports `gateClientRevision`, and the admission server refuses a
+claim below its floor with `gate_client_upgrade_required`. Today the floor is
+revision 1, on Windows hosts only: older clients opened a focus-stealing
+terminal window on every re-claim (BI-69178E02). The refusal is not a verdict on
+the diff. Re-running the same branch is refused again, and a stale resumer stops
+after the first refusal. Rebase onto `origin/main` and run `pregate` again.
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a

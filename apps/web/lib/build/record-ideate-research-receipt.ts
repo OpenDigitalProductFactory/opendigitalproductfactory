@@ -93,6 +93,10 @@ export async function recordIdeateResearchReceipt(args: {
       decision: "pass",
       artifactRef: { kind: "feature-build-revision", revisionId: revision.id },
       reason: describeResearchAttestation(args.designDoc),
+      // Gate-receipt schema: a passing receipt carries empty findings and
+      // resolves nothing; omitting the fields is refused as malformed-receipt.
+      findings: [],
+      resolvedFindingRefs: [],
     },
     userId: args.authorUserId,
     userContext: { userId: args.authorUserId, platformRole: null, isSuperuser: author.isSuperuser },

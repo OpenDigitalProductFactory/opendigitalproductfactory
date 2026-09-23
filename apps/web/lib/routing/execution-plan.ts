@@ -11,6 +11,9 @@ import { terminalWriterDispatchContract, type TerminalWriterDispatchContract } f
 import type { RequestContract } from "./request-contract";
 import type { EndpointManifest } from "./types";
 import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
+import { resolveSamplingProfile, type ResolvedSampling } from "./sampling-profile";
+import { effectiveSampling } from "./vendor-sampling-catalog";
+import { expressEffort, resolveEffort, type ReasoningDepth } from "./effort-expression";
 import type { HarnessRecipe } from "./harness-recipe";
 import { usesResponsesApi, usesCliAdapter, usesCodexCli } from "./provider-utils";
 import {
@@ -58,6 +61,82 @@ export function terminalWriterDispatchContractForProvider(
   return terminalWriterDispatchContract(resolveDefaultExecutionAdapter(id));
 }
 
+// ── Situational parameters (BI-1F5DAABC / BI-40DA6D05 / BI-DBAFEC10) ────────
+
+/**
+ * What the endpoint tells us about the model, for parameter resolution. A subset
+ * of EndpointManifest so the plan builders can be called with a light object in
+ * tests and with the real manifest in the pipeline.
+ */
+export type ParameterizationContext = Pick<
+  EndpointManifest,
+  "providerId" | "modelId" | "modelFamily" | "modelClass" | "maxOutputTokens" | "capabilities"
+> & { sampling?: import("./model-card-types").ModelCardSampling | null };
+
+/**
+ * Resolve effort and sampling for one call, and fold them into the plan.
+ *
+ * This runs on BOTH plan-building paths. Before this, the only parameter logic
+ * lived in the champion-recipe maintenance job, so any dispatch that did not
+ * match a recipe row went out with `providerSettings: {}` — provider defaults.
+ */
+function applySituationalParameters(
+  plan: RoutedExecutionPlan,
+  contract: RequestContract,
+  ctx: ParameterizationContext | undefined,
+  recipeSettings: Record<string, unknown> | null,
+): RoutedExecutionPlan {
+  if (!ctx) return plan;
+
+  const effort = resolveEffort({
+    reasoningDepth: contract.reasoningDepth as ReasoningDepth,
+    estimatedInputTokens: contract.estimatedInputTokens,
+    maxOutputTokens: ctx.maxOutputTokens,
+    capabilities: ctx.capabilities,
+  });
+
+  const expression = expressEffort(ctx.providerId, effort, ctx.capabilities, {
+    modelClass: ctx.modelClass,
+    isLocalNative: isLocalNativeProvider(ctx.providerId),
+  });
+
+  const sampling: ResolvedSampling = resolveSamplingProfile({
+    sampling: effectiveSampling(ctx),
+    contractFamily: contract.contractFamily,
+    thinking: expression.thinking,
+    strictSchema: contract.requiresStrictSchema,
+    recipeSettings,
+  });
+
+  const next: RoutedExecutionPlan = {
+    ...plan,
+    providerSettings: { ...plan.providerSettings, ...expression.settings },
+    maxTokens: plan.maxTokens + expression.extraMaxTokens,
+    sampling: {
+      values: sampling.values,
+      provenance: sampling.provenance,
+      mode: sampling.mode,
+      ...(sampling.dropped.length > 0 ? { dropped: sampling.dropped } : {}),
+    },
+    ...(expression.effortUnexpressed ? { effortUnexpressed: true } : {}),
+  };
+
+  // `temperature` stays the canonical top-level field the adapters already read;
+  // the sampling record carries the rest plus provenance for the explanation.
+  if (sampling.values.temperature !== undefined) {
+    next.temperature = sampling.values.temperature;
+  } else if (sampling.dropped.includes("temperature")) {
+    delete next.temperature;
+  }
+
+  return next;
+}
+
+function isLocalNativeProvider(providerId: string): boolean {
+  const id = providerId.toLowerCase();
+  return id === "local" || id === "ollama";
+}
+
 // ── buildPlanFromRecipe ──────────────────────────────────────────────────────
 
 /**
@@ -73,6 +152,7 @@ export function terminalWriterDispatchContractForProvider(
 export function buildPlanFromRecipe(
   recipe: RecipeRow,
   contract: RequestContract,
+  ctx?: ParameterizationContext,
 ): RoutedExecutionPlan {
   const settings =
     recipe.providerSettings !== null &&
@@ -134,7 +214,10 @@ export function buildPlanFromRecipe(
     );
   }
 
-  return plan;
+  // The recipe's own temperature is the champion/challenger learning layer; the
+  // resolver treats it as such and may still be narrowed by an operator override
+  // or dropped when the model rejects it.
+  return applySituationalParameters(plan, contract, ctx, settings as Record<string, unknown>);
 }
 
 // ── buildDefaultPlan ─────────────────────────────────────────────────────────
@@ -154,6 +237,8 @@ export function buildDefaultPlan(
   endpoint: EndpointManifest,
   contract: RequestContract,
 ): RoutedExecutionPlan {
+  // "Default" now means "vendor and contract parameters, without recipe
+  // learning" — not "no parameters". That distinction is the whole of BI-1F5DAABC.
   const toolPolicy: RoutedExecutionPlan["toolPolicy"] = {};
   if (contract.requiresTools) {
     toolPolicy.toolChoice = "auto";
@@ -187,7 +272,7 @@ export function buildDefaultPlan(
   if (endpoint.providerId === "openrouter" && contract.openRouterObligations) {
     plan.openRouterPolicy = compileOpenRouterExecutionPolicy(contract.openRouterObligations);
   }
-  return plan;
+  return applySituationalParameters(plan, contract, endpoint, null);
 }
 
 // ── attachHarnessRecipeToPlan ───────────────────────────────────────────────

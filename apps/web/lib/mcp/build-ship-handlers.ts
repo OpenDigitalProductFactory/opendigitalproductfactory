@@ -543,7 +543,19 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     acceptanceMet: acMet,
     acceptanceTotal: acTotal,
   });
-  const prePublishBlockers = [...verificationReadiness.blockers];
+  // BI-0700B79C: the guard gauntlet's result only has force if publishing
+  // depends on it. On the external path `git push` is refused without a gate
+  // record; this is the in-platform equivalent, and it requires the record to be
+  // for the EXACT tree — a pass on an earlier version of this build is not a
+  // pass on what is about to be published.
+  const preflightRequirement = await requireInPlatformPreflightRecord({
+    buildId,
+    sandboxId: build.sandboxId,
+    repoOwner,
+    repoName,
+    overrideCode: params.preflight_override_reason,
+  });
+  const prePublishBlockers = [...verificationReadiness.blockers, ...preflightRequirement.blockers];
   if (prePublishBlockers.length > 0) {
     logBuildActivity(
       buildId,
@@ -685,4 +697,64 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       readiness: canonicalReadiness,
     },
   };
+}
+
+/**
+ * Resolve the tree about to be published and require a passing preflight record
+ * for it (BI-0700B79C). The I/O lives here so the decision itself stays pure and
+ * testable in preflight-record-requirement.ts.
+ */
+async function requireInPlatformPreflightRecord(input: {
+  buildId: string;
+  sandboxId: string | null;
+  repoOwner: string;
+  repoName: string;
+  overrideCode?: unknown;
+}): Promise<{ blockers: string[]; evidenceRecordId?: string }> {
+  const { evaluatePreflightRequirement, isPreflightOverrideCode } = await import(
+    "@/lib/build/preflight-record-requirement"
+  );
+
+  // An allowlisted override short-circuits before any I/O, so a recorded,
+  // deliberate bypass never depends on the sandbox being reachable.
+  if (isPreflightOverrideCode(input.overrideCode)) {
+    logBuildActivity(input.buildId, "preflight-requirement", `overridden: ${String(input.overrideCode)}`);
+    return { blockers: [] };
+  }
+
+  if (!input.sandboxId) {
+    return {
+      blockers: ["The sandbox is unavailable, so the change being published cannot be identified or verified."],
+    };
+  }
+
+  const { runGuardGauntletIdentity } = await import("@/lib/build/sandbox/guard-gauntlet-identity");
+  const identity = await runGuardGauntletIdentity({
+    containerId: input.sandboxId,
+    buildId: input.buildId,
+    repository: `${input.repoOwner}/${input.repoName}`,
+  });
+
+  const records = await prisma.externalEvidenceRecord.findMany({
+    where: { operationType: "local_integration_ci", buildId: input.buildId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { id: true, details: true },
+  });
+
+  const result = evaluatePreflightRequirement({
+    repository: identity.repository,
+    treeSha: identity.treeSha,
+    guardPlanDigest: identity.guardPlanDigest,
+    toolchainFingerprint: identity.toolchainFingerprint,
+    records,
+  });
+  logBuildActivity(
+    input.buildId,
+    "preflight-requirement",
+    result.blockers.length === 0
+      ? `satisfied by ${result.evidenceRecordId ?? "record"} for tree ${result.treeSha?.slice(0, 12) ?? "unknown"}`
+      : `blocked: ${result.blockers.join(" | ").slice(0, 400)}`,
+  );
+  return result;
 }

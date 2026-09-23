@@ -42,6 +42,10 @@ export type IdeateResult = {
    * back instead of treating it as an inference failure.
    */
   infrastructure?: boolean;
+  /** BI-5098ECEC: the host was busy (local-CI reservation / admission timeout).
+   *  Retrying now cannot help; the reconciler re-drives the build later, and
+   *  no design-repair round is consumed. */
+  capacityDeferred?: boolean;
 };
 
 /**
@@ -577,6 +581,19 @@ export async function dispatchIdeateResearch(params: {
           : "Routed ideate output could not be parsed into a design document.",
       };
     } catch (err) {
+      const { describeCapacityDeferral } = await import("./capacity-deferral");
+      const deferral = describeCapacityDeferral(err);
+      if (deferral) {
+        return {
+          designDoc: null,
+          rawOutput: "",
+          success: false,
+          durationMs: Date.now() - startMs,
+          infrastructure: true,
+          capacityDeferred: true,
+          error: deferral.message,
+        };
+      }
       return {
         designDoc: null,
         rawOutput: "",

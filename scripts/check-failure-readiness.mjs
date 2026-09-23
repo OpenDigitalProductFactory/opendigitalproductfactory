@@ -37,7 +37,20 @@ export function validateFailureStatus(statuses, publisher, now = Date.now()) {
   const current = statuses.filter(status => status.context === "dpf/failure-readiness")
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
   if (!current) return { valid: false, reason: "Final-change failure readiness evidence is missing." };
-  if (current.creator?.login !== publisher) return { valid: false, reason: "Status was not issued by the configured platform publisher." };
+  // A status row carrying NO creator is not evidence of the wrong publisher —
+  // it is evidence read from the wrong endpoint. GitHub's COMBINED status
+  // endpoint (`/commits/{sha}/status`) omits `creator` entirely; only the LIST
+  // endpoint (`/commits/{sha}/statuses`) returns it. Reading the combined one
+  // made `creator?.login` undefined for every row, so a genuine passing status
+  // published by the platform was rejected as "not issued by the configured
+  // publisher" — unpassable by construction, and indistinguishable from a real
+  // impostor. Say which of the two it is (§4: report only the verdict you
+  // reached).
+  if (!current.creator || typeof current.creator.login !== "string") {
+    return { valid: false, unidentified: true,
+      reason: "Failure readiness evidence carries no publisher identity; read the per-commit status LIST endpoint (/statuses), which returns creator, not the combined /status endpoint, which omits it." };
+  }
+  if (current.creator.login !== publisher) return { valid: false, reason: "Status was not issued by the configured platform publisher." };
   if (current.state !== "success") return { valid: false, reason: "Failure readiness has not passed; use internal review recovery." };
   const age = now - Date.parse(current.created_at);
   if (!Number.isFinite(age) || age < 0 || age > 60 * 60 * 1000) return { valid: false, reason: "Failure readiness status is stale; republish from current evidence." };
@@ -71,8 +84,11 @@ export async function checkFailureReadiness({ event, repository, token, publishe
     }
   }
   for (const sha of reviewHeads(event, entries)) {
-    const result = await request(`repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${sha}/status?per_page=100`);
-    const verdict = validateFailureStatus(result.statuses ?? [], publisher);
+    // `/statuses` (LIST), never `/status` (COMBINED): only the list form carries
+    // `creator`, and without it no status can ever be attributed to the trusted
+    // publisher. It returns a bare array, newest first.
+    const result = await request(`repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${sha}/statuses?per_page=100`);
+    const verdict = validateFailureStatus(Array.isArray(result) ? result : [], publisher);
     if (!verdict.valid) throw new Error(verdict.reason);
   }
 }

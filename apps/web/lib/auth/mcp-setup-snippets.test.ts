@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { MCP_CLIENT_OAUTH_SCOPE_PIN } from "@dpf/integration-shared/mcp-client-credential-policy";
+
 import { buildCredentialsClientSnippets, buildSetupSnippets } from "./mcp-setup-snippets";
+import { PUBLIC_SCOPES } from "./oauth-public-scopes";
 
 const BASE = "http://localhost:3000";
 const LOCAL_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1";
@@ -98,12 +101,31 @@ describe("buildSetupSnippets", () => {
   });
 
   it("constructs the url from a non-localhost baseUrl", () => {
-    const { claudeCode, runtimeRefreshPowerShell } = buildSetupSnippets(TOKEN, "https://dpf.example.com");
+    const { claudeCode, runtimeRefreshPowerShell } = buildSetupSnippets(TOKEN, "https://dpf.example.com", "oauth");
     expect(claudeCode).toContain("https://dpf.example.com/api/mcp/v1");
     // BI-46B636B0: over https the client authorizes itself; a pinned header
     // would switch that off, so the snippet carries none.
     expect(claudeCode).not.toContain("Authorization");
+    // BI-3D2FD68C: the OAuth path pins the development scopes so the consent
+    // grants more than the advertised read scope.
+    expect(JSON.parse(claudeCode).mcpServers.dpf.oauth).toEqual({ scopes: "dpf.read dpf.work dpf.build" });
     expect(runtimeRefreshPowerShell).toContain("https://dpf.example.com/api/mcp/token/refresh");
+  });
+
+  it("pins no oauth scopes on the http default, where the header is the credential", () => {
+    const { claudeCode } = buildSetupSnippets(TOKEN, BASE);
+    expect("oauth" in JSON.parse(claudeCode).mcpServers.dpf).toBe(false);
+  });
+
+  // BI-3D2FD68C: the pinned set must stay inside the portal's public scope
+  // vocabulary, or the authorization server answers invalid_scope and the
+  // client is locked out instead of merely read-only.
+  it("every pinned OAuth scope is a member of the public scope vocabulary", () => {
+    const pinned = MCP_CLIENT_OAUTH_SCOPE_PIN.split(" ");
+    expect(pinned.length).toBeGreaterThan(0);
+    for (const scope of pinned) {
+      expect(PUBLIC_SCOPES).toContain(scope);
+    }
   });
 
   it("preserves a non-localhost HTTP baseUrl for LAN installs", () => {
@@ -144,4 +166,10 @@ describe("buildCredentialsClientSnippets (BI-EDB67A2B)", () => {
     expect(s.envPosix).toBe("export DPF_MCP_CLIENT_ID='dpfoc_abc' DPF_MCP_CLIENT_SECRET='s3cr'\\''et'");
     expect(s.envPowerShell).toContain("'s3cr''et'");
   });
+});
+
+it("offers OAuth Codex config while keeping explicitly issued PAT snippets usable", () => {
+  expect(buildSetupSnippets(TOKEN, BASE, "oauth").codex).not.toContain("bearer_token_env_var");
+  expect(buildSetupSnippets(TOKEN, "https://dpf.example.com", "legacy").codex).toContain("bearer_token_env_var");
+  expect(JSON.parse(buildSetupSnippets(TOKEN, "https://dpf.example.com", "legacy").claudeCode).mcpServers.dpf.headers.Authorization).toContain("DPF_MCP_BEARER_TOKEN");
 });

@@ -138,7 +138,7 @@ export async function resolveBuildEngineSelection(
     }),
     prisma.providerCapacityStatus.findMany({
       where: { providerId: { in: providerIds } },
-      select: { providerId: true, state: true, retryAt: true },
+      select: { providerId: true, state: true, retryAt: true, lastObservedAt: true },
     }),
     prisma.cliPoolStatus.findMany({
       select: { adapterType: true, resetAt: true },
@@ -187,6 +187,7 @@ export async function resolveBuildEngineSelection(
       credentialExpiresAt: credential?.tokenExpiresAt?.getTime() ?? null,
       providerCapacityState: capacity?.state ?? null,
       providerRetryAt: capacity?.retryAt?.getTime() ?? null,
+      providerCapacityObservedAt: capacity?.lastObservedAt?.getTime() ?? null,
       cliRetryAt: cliAdapter ? cliRetryByAdapter.get(cliAdapter) ?? null : null,
       providerHealth,
     }];

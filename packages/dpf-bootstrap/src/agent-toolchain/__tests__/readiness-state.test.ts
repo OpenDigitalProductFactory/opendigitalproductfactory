@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
 
+it("does not treat a successful PAT probe as OAuth verification", () => {
+  expect(computeReadinessState({ codexWired: true, claudeCodeWired: true, mcpAuthorization: { mode: "oauth", verified: false }, mcpReadiness: { ok: true, toolCount: 12, observedAt: "2026-09-21" } })).toBe("authorization_pending");
+});
+
 import {
   computeReadinessState,
   readinessCopy,

@@ -7,6 +7,7 @@ import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
 import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
+import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
 import { backlogTriageDrain } from "./backlog-triage-drain";
@@ -100,6 +101,7 @@ import {
   identityInferenceFallbackRequested,
 } from "./identity-inference-fallback";
 import { canonicalImprovementDigest } from "./canonical-improvement-digest";
+import { localOnlyKnowledgeSweep } from "./local-only-knowledge-sweep";
 import {
   coworkerCertificationNightly,
   coworkerCertificationRunNow,
@@ -159,6 +161,7 @@ export const scheduledFunctions = [
   codeGraphReconcileScheduled,
   issueReportTriage,
   ecosystemInboundTriage,
+  ecosystemWatchdog,
   backlogTriageDrain,
   coworkerRegressionDetect,
   agentTaskDispatch,
@@ -214,6 +217,7 @@ export const scheduledFunctions = [
   obligationAssuranceWatchScheduled, // TAK §8.11: deadline-horizon sweep over recorded obligations, control reviews, and licence expiries, daily 05:40
   workroomDriveScheduled, // BI-FCD639D9: standing Workroom drive — wake, lease, dispatch, attention, stop, every 15m
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
+  localOnlyKnowledgeSweep, // BI-1281A164: weekly report of findings captured here and never routed to a commons lane
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
   demandReconciliationScheduled, // BI-44AA45BF: trusted-link demand projection, retry, and reconciliation every five minutes

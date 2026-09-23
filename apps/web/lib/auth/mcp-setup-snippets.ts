@@ -4,7 +4,11 @@
 // apps/web/scripts/issue-mcp-token.ts (CLI).
 
 import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
-import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
+import {
+  mcpClientBearerHeaderRequired,
+  mcpClientOAuthScopePin,
+  type McpAuthMode,
+} from "@dpf/integration-shared/mcp-client-credential-policy";
 
 export type McpSnippetFormat = "claude-code" | "codex" | "grok" | "antigravity" | "vscode" | "raw";
 
@@ -51,14 +55,15 @@ function normalizeLocalClientBaseUrl(baseUrl: string): string {
   return trimmed;
 }
 
-export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetupSnippets {
+// This entry point follows explicit PAT issuance. Interactive generators default to OAuth.
+export function buildSetupSnippets(plaintext: string, baseUrl: string, authMode: McpAuthMode = "legacy"): McpSetupSnippets {
   const clientBaseUrl = normalizeLocalClientBaseUrl(baseUrl);
   const url = `${clientBaseUrl}/api/mcp/v1`;
   const lazyHostUrl = withDpfMcpCatalogTier(url, "full");
   const refreshUrl = `${clientBaseUrl}/api/mcp/token/refresh`;
   // BI-46B636B0: the header fallback is the only credential path over plain
   // http (the client refuses OAuth there); over https it would disable OAuth.
-  const headerRequired = mcpClientBearerHeaderRequired(url);
+  const headerRequired = mcpClientBearerHeaderRequired(url, "claude", authMode);
   const httpEntry = {
     type: "http",
     url,
@@ -68,14 +73,21 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
   const vscodeHttpEntry = {
     type: "http",
     url,
-    ...(headerRequired ? { headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}),
+    ...(mcpClientBearerHeaderRequired(url, "vscode", authMode) ? { headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}),
   };
-  // Claude Code: .mcp.json uses the mcpServers key.
-  const claudeCode = JSON.stringify({ mcpServers: { dpf: lazyHostHttpEntry } }, null, 2);
+  // Claude Code: .mcp.json uses the mcpServers key. BI-3D2FD68C: Claude Code
+  // alone understands `oauth.scopes`; without the pin an https consent grants
+  // only the advertised read scope and every write tool stays out of reach.
+  const scopePin = mcpClientOAuthScopePin(url, "claude", authMode);
+  const claudeCodeEntry = {
+    ...lazyHostHttpEntry,
+    ...(scopePin ? { oauth: { scopes: scopePin } } : {}),
+  };
+  const claudeCode = JSON.stringify({ mcpServers: { dpf: claudeCodeEntry } }, null, 2);
   const codex = [
     "[mcp_servers.dpf]",
     `url = "${lazyHostUrl}"`,
-    `bearer_token_env_var = "${MCP_BEARER_TOKEN_ENV_VAR}"`,
+    ...(mcpClientBearerHeaderRequired(url, "codex", authMode) ? [`bearer_token_env_var = "${MCP_BEARER_TOKEN_ENV_VAR}"`] : []),
   ].join("\n");
   // Grok: identical TOML shape to Codex (Grok CLI/desktop reads a config.toml).
   // Cross-platform locations (Grok CLI behavior may evolve — these are the common patterns in 2026):
@@ -88,7 +100,7 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
     "# Windows:     %USERPROFILE%\\.grok\\config.toml  (or %APPDATA%\\grok\\config.toml)",
     "[mcp_servers.dpf]",
     `url = "${url}"`,
-    `bearer_token_env_var = "${MCP_BEARER_TOKEN_ENV_VAR}"`,
+    ...(mcpClientBearerHeaderRequired(url, "grok", authMode) ? [`bearer_token_env_var = "${MCP_BEARER_TOKEN_ENV_VAR}"`] : []),
   ].join("\n");
   // Antigravity (Google): VS Code / Windsurf-derived agentic IDE. Its MCP config
   // is a JSON block keyed by `mcpServers` (same shape as Claude Code's .mcp.json),
@@ -98,7 +110,7 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
   //   macOS/Linux: ~/.antigravity/mcp_config.json  (or the in-IDE MCP settings)
   //   Windows:     %USERPROFILE%\.antigravity\mcp_config.json
   // The JSON content itself is identical across platforms.
-  const antigravity = JSON.stringify({ mcpServers: { dpf: httpEntry } }, null, 2);
+  const antigravity = JSON.stringify({ mcpServers: { dpf: { type: "http", url, ...(mcpClientBearerHeaderRequired(url, "antigravity", authMode) ? { headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}) } } }, null, 2);
   // VS Code: .vscode/mcp.json uses servers (not mcpServers)
   const vscode = JSON.stringify({ servers: { dpf: vscodeHttpEntry } }, null, 2);
   const syncCommand = ".\\scripts\\seed-worktree-mcp.ps1";

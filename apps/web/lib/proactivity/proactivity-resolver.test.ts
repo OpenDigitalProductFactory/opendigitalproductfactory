@@ -343,3 +343,46 @@ describe("marketing-campaign proactivity (BI-C26FE785)", () => {
     expect(plan.actionBoundary).toBe("advise");
   });
 });
+
+describe("ecosystem-participation proactivity (BI-784D20FD)", () => {
+  it("is a declarable family, so the resolver can govern the cadence at all", () => {
+    // Without a family the coworker cannot be described to the resolver, so no
+    // posture could govern it and it would never act unprompted — the same
+    // reason marketing-campaign exists.
+    expect(PROACTIVITY_ACTIVITY_FAMILIES).toContain("ecosystem-participation");
+  });
+
+  it("never lets an assertive posture cast a vote unreviewed", () => {
+    const plan = resolveProactivityPlanForLevel({ activityFamily: "ecosystem-participation" }, "assertive");
+    expect(plan.actionBoundary).not.toBe("preauthorized");
+  });
+
+  it("routes an unanswered nudge to the owner, not a queue", () => {
+    const plan = resolveProactivityPlanForLevel({ activityFamily: "ecosystem-participation" }, "balanced");
+    expect(plan.escalationTarget).toBe("owner");
+  });
+
+  it("never spends the urgent channel on a ballot", () => {
+    for (const level of PROACTIVITY_LEVELS) {
+      const plan = resolveProactivityPlanForLevel({ activityFamily: "ecosystem-participation" }, level);
+      expect(plan.channelPolicy).not.toBe("urgent-channel");
+    }
+  });
+
+  it("stays balanced for the routine weekly digest and only escalates for a closing ballot", () => {
+    expect(resolveProactivityPlan({ activityFamily: "ecosystem-participation" }).resolvedLevel).toBe("balanced");
+    expect(resolveProactivityPlan({
+      activityFamily: "ecosystem-participation", deadlineWindowDays: 1,
+    }).resolvedLevel).toBe("assertive");
+    expect(resolveProactivityPlan({
+      activityFamily: "ecosystem-participation", deadlineWindowDays: 9,
+    }).resolvedLevel).toBe("balanced");
+  });
+
+  it("explains itself in each posture", () => {
+    for (const level of PROACTIVITY_LEVELS) {
+      const plan = resolveProactivityPlanForLevel({ activityFamily: "ecosystem-participation" }, level);
+      expect(plan.explanation.length).toBeGreaterThan(20);
+    }
+  });
+});

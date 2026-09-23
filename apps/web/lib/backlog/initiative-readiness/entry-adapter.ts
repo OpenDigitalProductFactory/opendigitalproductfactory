@@ -493,6 +493,35 @@ export function projectBacklogItemReadiness(args: {
   // The caller owns the predicate; here it is a pure state coercion.
   const recognizeMerge = args.recognizeMergeThroughGates === true;
   const pass = (s: ReadinessEvidenceState): ReadinessEvidenceState => (recognizeMerge ? "pass" : s);
+  // BI-7876699F: research is satisfiable from the reproduction the author already
+  // cited, on the shapes whose gate table says so.
+  //
+  // The "research" receipt has exactly one writer, record_initiative_evidence, and
+  // its grant (initiative_evidence_write) is held by specific agents — never by the
+  // design-author the policy names accountable for this lane. So a shipped
+  // small/medium item could not be closed by anyone: delivery and acceptance passed,
+  // research could not, and the recovery packet's only offer was an objective
+  // baseline the small shape does not require.
+  //
+  // DELIVERY_EVIDENCE_REQUIRED already demands the reproduction itself
+  // (source_verified — the defect on a named ref) and the failing-to-passing proof
+  // (test_pass). Once those are CITED in completionEvidence they are gate receipts,
+  // so research is evidenced by the artifacts shape-requirements.ts already calls
+  // "nothing it would not produce anyway". Same derivation-from-authored-material
+  // principle as the small/medium baseline minted from the item body just above,
+  // and as BI-05F8860A's acceptance lane.
+  //
+  // Deliberately narrow: only when no receipt was recorded, only on small/medium,
+  // and only where completion evidence exists — so the plan and implementation
+  // gates still demand research before any delivery has happened, and a failing or
+  // absent delivery lane confers nothing.
+  const recordedResearch = state(evidence, "research");
+  const researchState: ReadinessEvidenceState =
+    recordedResearch === "missing"
+      && (shape === "small" || shape === "medium")
+      && args.completion?.deliveryEvidence === "pass"
+      ? "pass"
+      : recordedResearch;
   const facts: InitiativeReadinessFacts = {
     subject: { kind: "backlog-item", id: args.item.itemId },
     transitionObject: args.transitionObject,
@@ -503,7 +532,7 @@ export function projectBacklogItemReadiness(args: {
     classification: profile ? "pass" : "missing",
     canonicalDesign: pass(baselineState),
     canonicalDesignAmbiguous: recognizeMerge ? false : baseline.ambiguous,
-    research: pass(state(evidence, "research")),
+    research: pass(researchState),
     specApproval: pass(state(evidence, "spec-approval")),
     specialistReviews: {
       architecture: pass(state(evidence, "architecture-review")),
