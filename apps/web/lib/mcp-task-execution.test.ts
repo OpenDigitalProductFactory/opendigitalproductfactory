@@ -661,6 +661,42 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     expect(JSON.stringify(outcome)).not.toContain("In my assessment the design is sound.");
   });
 
+  // BI-50B0C471. The loop marks a deferral that met the reviewer after its reads
+  // (`deferredBy`). The banked writer wait is kept — it is not a clean
+  // pre-inference wait — but the caller is told to wait for capacity, and the
+  // deferral neither escalates nor spends one of the writer's attempts.
+  it.each([1, 3])("reports a capacity deferral after banked reads as a provider-capacity wait (writer attempt %i)", async (terminalWriterAttempt) => {
+    const message = "Inference capacity was deferred after 1 bound read (local-ci-active-capacity-reservation). The reads are banked on this TaskRun.";
+    autonomous.execute.mockResolvedValue({
+      content: message,
+      executedTools: [{ name: "read_source_at_version", result: { success: true } }],
+      failure: { kind: "terminal-writer-missing", message, deferredBy: "capacity" },
+    });
+
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-CAPACITY-AFTER-READ", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-CAPACITY", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed,
+      idempotentReplay: false,
+      capacityAttempt: 1,
+      terminalWriterAttempt,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: { status: "input-required", resumable: true, waitReason: "provider-capacity" },
+    });
+    expect(JSON.stringify(outcome)).not.toContain("could not be dispatched");
+    const payload = db.updateTaskRun.mock.calls.at(-1)?.[0]?.data?.progressPayload;
+    expect(payload).toEqual(expect.objectContaining({
+      terminalWriterWait: expect.objectContaining({ kind: "missing-terminal-writer", capacityDeferred: "capacity" }),
+    }));
+    expect(payload).not.toHaveProperty("terminalWriterEscalation");
+    expect(payload).not.toHaveProperty("resourceWait");
+  });
+
   it("does not divert a capacity failure that arrived AFTER real tool work", async () => {
     // preInferenceResourceWait is deliberately pre-inference: once the reviewer
     // has executed tools, a late capacity error is not a clean "nothing

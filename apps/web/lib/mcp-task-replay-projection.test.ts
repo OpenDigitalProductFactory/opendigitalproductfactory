@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
+import { nextTerminalWriterAttempt } from "./mcp-task-terminal-writer-recovery";
 
 const terminalWriterWait = {
   schemaVersion: 1,
@@ -91,6 +92,18 @@ describe("projectRemoteTaskReplay required terminal writer dispatch", () => {
 // BI-C35576A9: a wait recorded after a CLI dispatch carries the contract it was
 // actually held to. The parser must accept it and still reject an invented one.
 describe("projectRemoteTaskReplay dispatch contracts", () => {
+  // BI-50B0C471: a wait caused by a capacity deferral after banked reads
+  // replays as a capacity wait, so the caller waits instead of re-dispatching.
+  it("replays a capacity-deferred writer wait as provider-capacity", () => {
+    expect(project({ terminalWriterWait: { ...terminalWriterWait, capacityDeferred: "capacity" } })).toMatchObject({
+      kind: "result",
+      result: { resumable: true, waitReason: "provider-capacity" },
+    });
+    expect(project({ terminalWriterWait: { ...terminalWriterWait, capacityDeferred: "unknown" } })).not.toMatchObject({
+      result: { waitReason: "provider-capacity" },
+    });
+  });
+
   it("accepts a receipt-verified wait", () => {
     expect(project({ terminalWriterWait: { ...terminalWriterWait, dispatchContract: "receipt-verified" } })).toMatchObject({
       kind: "result",
@@ -101,5 +114,15 @@ describe("projectRemoteTaskReplay dispatch contracts", () => {
   it("does not accept an unknown dispatch contract", () => {
     const projected = project({ terminalWriterWait: { ...terminalWriterWait, dispatchContract: "trust-me" } });
     expect(JSON.stringify(projected)).not.toContain('"waitReason":"missing-terminal-writer"');
+  });
+});
+
+// BI-50B0C471: only a real writer no-show spends one of the bounded attempts.
+describe("nextTerminalWriterAttempt", () => {
+  it("advances after a writer no-show and holds after a capacity deferral", () => {
+    expect(nextTerminalWriterAttempt(null)).toBe(2);
+    expect(nextTerminalWriterAttempt({ ...terminalWriterWait, attempt: 2 })).toBe(3);
+    expect(nextTerminalWriterAttempt({ ...terminalWriterWait, attempt: 2, capacityDeferred: "capacity" })).toBe(2);
+    expect(nextTerminalWriterAttempt({ ...terminalWriterWait, attempt: 1, capacityDeferred: "busy" })).toBe(1);
   });
 });

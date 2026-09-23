@@ -9,6 +9,16 @@ import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-esca
 import { parseTerminalWriterWait, type TerminalWriterWait } from "./mcp-task-replay-projection";
 function optionalString(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 
+/**
+ * The attempt a resumed terminal-writer wait runs as. BI-50B0C471: a wait the
+ * writer never caused (a capacity deferral after banked reads) resumes at the
+ * same attempt; only a real writer no-show spends one of the bounded attempts.
+ */
+export function nextTerminalWriterAttempt(existingWait: TerminalWriterWait | null): number {
+  if (!existingWait) return 2;
+  return existingWait.attempt + (existingWait.capacityDeferred ? 0 : 1);
+}
+
 export async function persistedTerminalReaderExecutions(
   taskRunId: string,
 ): Promise<PersistedTerminalReaderExecution[]> {
@@ -111,7 +121,7 @@ export async function reserveTerminalWriterReplay(input: {
     kind: "missing-terminal-writer",
     writerToolName: input.terminalToolPolicy.writerToolName,
     resumeMode: "same-taskrun",
-    attempt: existingWait ? existingWait.attempt + 1 : 2,
+    attempt: nextTerminalWriterAttempt(existingWait),
     observedAt: now,
     // BI-C35576A9: a re-dispatch has not run yet, so it cannot claim a contract;
     // carry forward what the last real dispatch recorded, if anything.

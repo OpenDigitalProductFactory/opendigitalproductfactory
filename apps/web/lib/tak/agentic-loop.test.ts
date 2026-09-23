@@ -601,6 +601,40 @@ describe("runAgenticLoop", () => {
     expect(result.executedTools).toHaveLength(banksReader ? 1 : 0);
   });
 
+  // BI-50B0C471. A deferral AFTER the bound reader ran keeps the banked writer
+  // wait (the run is no longer a clean pre-inference wait), but it must say what
+  // actually stopped it. Observed 2026-09-23: three plan-review dispatches read
+  // the plan, met `local-ci-active-capacity-reservation`, and each was told the
+  // writer "could not be dispatched" — so the caller re-dispatched straight back
+  // into the reservation and each retry spent a writer attempt.
+  it.each([
+    ["Local provider dispatch deferred: local-ci-active-capacity-reservation", "capacity"],
+    ["Provider is overloaded, status: 529", "busy"],
+  ])("names a %s deferral after banked reads instead of blaming the writer", async (message, deferredBy) => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const deferral = new Error(message);
+    deferral.name = deferredBy === "capacity" ? "LocalProviderCapacityDeferredError" : "Error";
+    mockRoute
+      .mockResolvedValueOnce(mockResult({ content: "Read.", toolCalls: [{ id: "r1", name: "search_project_files", arguments: { query: "bound source" } }] }))
+      .mockRejectedValueOnce(deferral);
+    vi.mocked(executeTool).mockResolvedValueOnce({ success: true, message: "Bound source" });
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      terminalToolPolicy: {
+        writerToolName: "record_initiative_evidence",
+        readerToolNames: ["search_project_files"],
+        minimumSuccessfulReaderCalls: 1,
+        maximumReaderCalls: 3,
+      },
+    });
+
+    expect(result.failure).toMatchObject({ kind: "terminal-writer-missing", deferredBy });
+    expect(result.content).not.toContain("could not be dispatched");
+    expect(result.content).toContain("banked");
+    expect(result.executedTools).toHaveLength(1);
+  });
+
   it("still blames the writer when the route fails for a reason it cannot classify", async () => {
     // The unclassified path is unchanged: without a known cause there is nothing
     // truer to say than that the receipt was not recorded.

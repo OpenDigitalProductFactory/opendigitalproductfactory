@@ -395,6 +395,9 @@ export type InferenceDeadEndKind =
 export type InferenceDeadEndOutcome = {
   kind: InferenceDeadEndKind;
   message: string;
+  /** BI-50B0C471: set on `terminal-writer-missing` when a capacity/busy
+   * deferral, not the writer contract, stopped a reviewer after banked reads. */
+  deferredBy?: "capacity" | "busy";
 };
 
 function isAllEndpointNetworkOutage(message: string): boolean {

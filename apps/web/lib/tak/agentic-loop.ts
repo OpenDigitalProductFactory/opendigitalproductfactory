@@ -1612,6 +1612,20 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         if (failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
           return completeResult(failure.message, null, { failure });
         }
+        // BI-50B0C471. After reader work the run keeps its banked writer wait
+        // (above), but it must not claim the writer failed: the model was never
+        // reached. Name the deferral so the caller waits for capacity instead of
+        // re-dispatching into the same reservation, and so the retry does not
+        // spend one of the writer's bounded attempts.
+        if (failure.kind === "capacity" || failure.kind === "busy") {
+          const reads = executedTools.length;
+          const deferredMessage = `Inference ${failure.kind === "capacity" ? "capacity was deferred" : "was busy"} after ${reads} bound read${reads === 1 ? "" : "s"} (${msg}). `
+            + `The reads are banked on this TaskRun and ${params.terminalToolPolicy.writerToolName} has not run. `
+            + "Re-issue the same request after the reservation clears; it resumes here without spending a writer attempt. No receipt was created.";
+          return completeResult(deferredMessage, null, {
+            failure: { kind: "terminal-writer-missing", message: deferredMessage, deferredBy: failure.kind },
+          });
+        }
         const message = routeOptions.toolChoice === "required"
           ? `The required governed writer ${params.terminalToolPolicy.writerToolName} could not be dispatched. The same TaskRun remains resumable. No receipt was created.`
           : `The governed review route failed before ${params.terminalToolPolicy.writerToolName} could be recorded. The same TaskRun remains resumable. No receipt was created.`;

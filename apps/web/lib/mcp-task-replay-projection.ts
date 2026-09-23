@@ -17,6 +17,9 @@ export type TerminalWriterWait = {
   dispatchContract?: "required-tool-call" | "receipt-verified";
   noncompliance?: "prose-without-required-writer";
   validationFailure?: { error: string; message: string; proposal?: Prisma.JsonValue };
+  /** BI-50B0C471: the wait was caused by a capacity deferral after banked reads,
+   * not by the writer; resuming it does not spend a writer attempt. */
+  capacityDeferred?: "capacity" | "busy";
 };
 
 type TerminalWriterDispatchFailure = {
@@ -51,6 +54,7 @@ export function parseTerminalWriterWait(value: unknown): TerminalWriterWait | nu
       && wait["dispatchContract"] !== "required-tool-call"
       && wait["dispatchContract"] !== "receipt-verified")
     || (wait["noncompliance"] !== undefined && wait["noncompliance"] !== "prose-without-required-writer")
+    || (wait["capacityDeferred"] !== undefined && wait["capacityDeferred"] !== "capacity" && wait["capacityDeferred"] !== "busy")
   ) return null;
   return wait as TerminalWriterWait;
 }
@@ -127,7 +131,8 @@ export function projectRemoteTaskReplay(input: {
         isError: true,
       } : terminalWriterWait ? {
         resumable: true,
-        waitReason: terminalWriterWait.kind,
+        // BI-50B0C471: a wait the writer never caused replays as the capacity wait it is.
+        waitReason: terminalWriterWait.capacityDeferred ? "provider-capacity" : terminalWriterWait.kind,
       } : resourceWait ? {
         resumable: true,
         waitReason: "provider-capacity",

@@ -698,10 +698,14 @@ describe("agent loop terminal writer integration", () => {
       name: "read_source_at_version",
       result: { success: true },
     });
+    // BI-50B0C471: still the banked writer wait, but it names the busy model
+    // that stopped it instead of reporting that the writer failed.
     expect(result.failure).toEqual({
       kind: "terminal-writer-missing",
       message: expect.stringContaining("No receipt was created"),
+      deferredBy: "busy",
     });
+    expect(result.failure?.message).not.toContain("could not be dispatched");
   });
 
   it("starts a resumed terminal-writer turn with only the governed writer", async () => {
