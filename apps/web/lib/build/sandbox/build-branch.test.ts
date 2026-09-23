@@ -64,6 +64,12 @@ describe("wrapSandboxGitCommand", () => {
     );
   });
 
+  it("also allows every worktree path with a guarded wildcard safe.directory (BI-518B5F69)", () => {
+    const wrapped = wrapSandboxGitCommand("git -C /workspace worktree add /workspace/.builds/FB-1 build/FB-1");
+    expect(wrapped).toContain("git config --global --add safe.directory '*'");
+    expect(wrapped).toMatch(/get-all safe\.directory .*grep -qx/);
+  });
+
   it("preserves the original command after the safe.directory setup", () => {
     expect(wrapSandboxGitCommand('git -C /workspace checkout "client/abc"')).toMatch(
       /safe\.directory "\/workspace".*git -C \/workspace checkout "client\/abc"/,

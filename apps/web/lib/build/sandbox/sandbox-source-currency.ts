@@ -190,6 +190,7 @@ export function buildSandboxSourceCurrencyProbeCommand(args: {
   return [
     `cd ${quotedWorkspace}`,
     `git config --global --add safe.directory ${quotedWorkspace} >/dev/null 2>&1 || true`,
+    `git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' || git config --global --add safe.directory '*' >/dev/null 2>&1 || true`,
     `if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then printf 'reason=not-git-repo\\n'; exit 0; fi`,
     `branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)`,
     `headSha=$(git rev-parse HEAD 2>/dev/null || true)`,
