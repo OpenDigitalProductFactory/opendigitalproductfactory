@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "../source-page-lines";
 import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
@@ -154,9 +155,37 @@ describe("terminal tool policy", () => {
         maxChars: 3200,
       },
     });
-    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", { maxLines: 201 })).toMatchObject({
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      maxLines: SOURCE_READ_MAX_LINES + 1,
+    })).toMatchObject({
       kind: "refuse",
       result: { error: "terminal_reader_pagination_invalid" },
+    });
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      maxChars: SOURCE_READ_MAX_CHARS + 1,
+    })).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_reader_pagination_invalid" },
+    });
+  });
+
+  // BI-E8237EAE. #5079 raised the reader's own page to 12,000 chars by default
+  // and 16,000 at most, but this guard still refused anything above 3,200 chars
+  // or 200 lines. A reviewer that asked for a page size was held to the old
+  // 3,200-char page, and six reads (the whole budget) covered 19,200 chars: a
+  // 14.5k design spent every read before the writer on 2026-09-22. The guard
+  // must accept exactly what the reader serves — one source of truth.
+  it("accepts every page size the immutable reader itself serves", () => {
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      maxLines: SOURCE_READ_MAX_LINES,
+      maxChars: SOURCE_READ_MAX_CHARS,
+    })).toEqual({
+      kind: "allow",
+      arguments: {
+        ...policy.immutableReaderArguments,
+        maxLines: SOURCE_READ_MAX_LINES,
+        maxChars: SOURCE_READ_MAX_CHARS,
+      },
     });
   });
 

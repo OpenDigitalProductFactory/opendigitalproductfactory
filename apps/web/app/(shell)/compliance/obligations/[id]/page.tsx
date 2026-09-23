@@ -6,6 +6,7 @@ import { UnlinkControlButton } from "@/components/compliance/UnlinkControlButton
 import { EditObligationForm } from "@/components/compliance/EditObligationForm";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { StatusBadge } from "@/components/ui/report-kit";
+import { formatRetentionMinimum } from "@/lib/compliance/format-retention-minimum";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -17,6 +18,11 @@ export default async function ObligationDetailPage({ params }: Props) {
   } catch {
     notFound();
   }
+
+  // BI-4DD2F087. The retention sweep already lengthens windows from this
+  // obligation's stated minimum; showing it here is what makes that derivation
+  // attributable to a regulator instead of unexplained.
+  const retentionMinimum = formatRetentionMinimum(obligation);
 
   const allControls = await listControls();
   const existingControlIds = obligation.controls.map((link) => link.control.id);
@@ -72,6 +78,12 @@ export default async function ObligationDetailPage({ params }: Props) {
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Applicability</p>
             <p className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.applicability}</p>
+          </div>
+        )}
+        {retentionMinimum && (
+          <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
+            <p className="text-xs text-[var(--dpf-muted)]">Retention minimum</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{retentionMinimum}</p>
           </div>
         )}
         {obligation.ownerEmployee && (
