@@ -148,7 +148,7 @@ export async function loadWorkforceActivity(
   const weekFloor = new Date(nowMs - 7 * 86_400_000);
 
   const [
-    agents,
+    coworkers,
     liveRuns,
     toolByAgentTool,
     lastActedByAgent,
@@ -242,6 +242,35 @@ export async function loadWorkforceActivity(
   const breakFixDoneWeekCount = new Set(breakFixDone.map((row) => row.backlogItemId)).size;
   const breakFixShareWeek = doneWeekIds.length === 0 ? 0 : breakFixDoneWeekCount / doneWeekIds.length;
 
+  // The coworker is the unit, but a specialist, orchestrator or cross-cutting
+  // agent that is working RIGHT NOW is working — it joins the roster for as long
+  // as it has a live run, under its own name. Idle non-coworkers stay off, so the
+  // roster does not fill with 88 dormant specialists (BI-F0B07F2B; kernel
+  // DI-A0A06D869B28). Before this a live specialist run read as "platform work"
+  // and "Working now" said 0.
+  const coworkerIds = new Set(coworkers.map((a) => a.agentId));
+  const activeOtherIds = [
+    ...new Set(
+      liveRuns
+        .filter((run) => isLiveStatus(run.status) && run.currentAgentId && !coworkerIds.has(run.currentAgentId))
+        .map((run) => run.currentAgentId as string),
+    ),
+  ];
+  const activeOthers = activeOtherIds.length === 0
+    ? []
+    : await prisma.agent.findMany({
+      where: { archived: false, agentId: { in: activeOtherIds } },
+      select: {
+        agentId: true,
+        name: true,
+        displayName: true,
+        valueStream: true,
+        humanSupervisorId: true,
+        hitlTierDefault: true,
+      },
+      orderBy: [{ tier: "asc" }, { name: "asc" }],
+    });
+  const agents = [...coworkers, ...activeOthers];
   const rosterIds = new Set(agents.map((a) => a.agentId));
 
   // First live task per agent (rows are newest-first). Live runs that no
