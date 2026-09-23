@@ -33,6 +33,7 @@ import { generateBacklogItemId } from "@/lib/operate/backlog-ingest";
 import { generateBuildId, normalizeHappyPathState } from "@/lib/explore/feature-build-types";
 import type { BuildDesignDoc, ReviewResult } from "@/lib/explore/feature-build-types";
 import { isPlanReviewOscillating } from "@/lib/build/plan-oscillation-decomposition";
+import { saveBuildArtifactRevisionWithDb } from "@/lib/build/build-artifact-provenance";
 import {
   applyChildIntakeToPlan,
   buildDecompositionChildIntakePatch,
@@ -136,6 +137,14 @@ export type ApproveDecompositionDb = {
     findUnique: typeof prisma.featureBuild.findUnique;
   };
   /**
+   * Reads the parent build's accepted design artifact, for the author
+   * provenance the children inherit (BI-0B7C1A9E). Read-only and outside the
+   * swap transaction — it needs no transactional guarantee.
+   */
+  buildArtifactRevision: {
+    findFirst: typeof prisma.buildArtifactRevision.findFirst;
+  };
+  /**
    * Reads the at-most-one Epic already anchored to a BacklogItem.
    * Epic.originatingBacklogItemId is `@unique` (spec Q5 hybrid FK), so this is a
    * genuine findUnique — see the one-epic-per-backlog-item precondition below.
@@ -171,6 +180,26 @@ export type TxShape = {
   };
   buildActivity: {
     create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+  };
+  /**
+   * Written by saveBuildArtifactRevisionWithDb when a child's canonical design
+   * artifact is minted (BI-0B7C1A9E). Declared here rather than cast past,
+   * because the swap transaction genuinely touches these now — a fake that
+   * omits them would pass typecheck and fail at runtime.
+   */
+  buildArtifactRevision: {
+    create: (args: { data: Record<string, unknown>; select?: Record<string, unknown> }) => Promise<{
+      id: string;
+      revisionNumber: number;
+      status: string;
+    }>;
+    findFirst: (args: Record<string, unknown>) => Promise<{ revisionNumber: number } | null>;
+  };
+  toolExecutionReceipt: {
+    findMany: (args: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>;
+  };
+  artifactReceiptUsage?: {
+    createMany: (args: Record<string, unknown>) => Promise<unknown>;
   };
 };
 
@@ -268,6 +297,9 @@ export async function approveDecomposition(
   const now = args.now ?? (() => new Date());
   const db: ApproveDecompositionDb = args.db ?? {
     featureBuild: { findUnique: prisma.featureBuild.findUnique.bind(prisma.featureBuild) },
+    buildArtifactRevision: {
+      findFirst: prisma.buildArtifactRevision.findFirst.bind(prisma.buildArtifactRevision),
+    },
     epic: {
       findUnique: prisma.epic.findUnique.bind(
         prisma.epic,
@@ -304,6 +336,20 @@ export async function approveDecomposition(
       createdById: true,
     },
   });
+
+  // Author of the parent design the decomposition children are projected from.
+  // Read once — every child shares the same source document — and used as the
+  // fallback provenance when no acting agent is supplied (human-driven
+  // approval). Pre-existing read-only data, so it is read outside the swap
+  // transaction rather than widening TxShape for a lookup that needs no
+  // transactional guarantee.
+  const parentDesignAuthorAgentId = (
+    await db.buildArtifactRevision.findFirst({
+      where: { buildId: args.buildId, field: "designDoc", status: "accepted" },
+      orderBy: [{ revisionNumber: "desc" }, { createdAt: "desc" }],
+      select: { savedByAgentId: true },
+    })
+  )?.savedByAgentId ?? null;
   if (!build) {
     return { ok: false, code: "build-not-found", error: `FeatureBuild ${args.buildId} not found.` };
   }
@@ -590,6 +636,31 @@ export async function approveDecomposition(
       });
       orderToRealBuildId.set(child.childOrder, created.buildId);
       orderToRealRowId.set(child.childOrder, created.id);
+
+      // BI-0B7C1A9E: mint the child's canonical design artifact.
+      //
+      // A child is born straight into `plan`, so it never passes through
+      // `reviewDesignDoc` — which is the only other place a designDoc artifact
+      // revision gets written. Writing `designDoc` onto the row above is not
+      // the same thing: initiative readiness resolves CANONICAL_DESIGN_REQUIRED
+      // through BuildArtifactRevision(field='designDoc', status='accepted'),
+      // never through the column. Without this, the design is real, reviewed
+      // and invisible to governance, and `plan -> build` can never pass for any
+      // decomposition child — permanently, since nothing later creates it.
+      //
+      // Author provenance is the actor performing the decomposition, falling
+      // back to whoever authored the parent design this child is projected
+      // from. Both are true statements about where the content came from; if
+      // neither resolves, the revision records no agent and readiness reports
+      // ARTIFACT_AUTHOR_REQUIRED, which is the honest outcome rather than a
+      // fabricated author that would let unattributed work through.
+      await saveBuildArtifactRevisionWithDb(tx as unknown as Parameters<typeof saveBuildArtifactRevisionWithDb>[0], {
+        buildId: created.buildId,
+        field: "designDoc",
+        value: child.designDoc,
+        savedByUserId: args.userId,
+        savedByAgentId: args.agentId ?? parentDesignAuthorAgentId,
+      });
     }
 
     // Create dependency edges.

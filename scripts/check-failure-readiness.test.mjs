@@ -59,3 +59,51 @@ test("failureReadinessConfigured treats absent, empty and whitespace publishers 
   }
   assert.equal(failureReadinessConfigured("dpf-bot"), true);
 });
+
+// BI-8B6A67BD: the gate was unpassable by construction. It read GitHub's
+// COMBINED status endpoint (`/commits/{sha}/status`), whose rows omit
+// `creator` entirely, so `creator?.login` was undefined for every row and a
+// genuine passing status published by the platform was rejected as "not
+// issued by the configured platform publisher". Measured on
+// 9640f133190bc0ed82893f619695a4efe362632c (2026-09-22): the combined endpoint
+// returned exactly the keys below and no creator, while the LIST endpoint
+// returned the same status WITH a creator.login. The publisher name here is a
+// placeholder; the real one is whatever the install's credential authenticates as.
+//
+// Every fixture above hand-builds `creator: { login }`, which is why no test
+// caught this: the mocked shape never matched what GitHub actually returns.
+const COMBINED_ENDPOINT_ROW = Object.freeze({
+  avatar_url: "https://avatars.githubusercontent.com/u/0?v=4",
+  context: "dpf/failure-readiness",
+  created_at: "2026-09-22T00:41:44Z",
+  description: "Current failure analysis and executed evidence were independently reviewed.",
+  id: 1, node_id: "SC_x", state: "success", target_url: null,
+  updated_at: "2026-09-22T00:41:44Z", url: "https://api.github.com/repos/o/r/statuses/x",
+});
+
+test("a status with no creator is reported as unidentified, not as the wrong publisher", () => {
+  const verdict = validateFailureStatus([COMBINED_ENDPOINT_ROW], "platform-publisher", Date.parse("2026-09-22T00:50:00Z"));
+  assert.equal(verdict.valid, false);
+  assert.equal(verdict.unidentified, true,
+    "a creator-less row means the wrong endpoint was read; it must not read as an impostor");
+  assert.match(verdict.reason, /\/statuses/, "the reason must name the endpoint that carries creator");
+  assert.notEqual(verdict.unconfigured, true, "the publisher IS configured here");
+});
+
+test("the real list-endpoint shape passes once the publisher matches", () => {
+  const listRow = { ...COMBINED_ENDPOINT_ROW, creator: { login: "platform-publisher" } };
+  assert.equal(validateFailureStatus([listRow], "platform-publisher", Date.parse("2026-09-22T00:50:00Z")).valid, true);
+  assert.equal(validateFailureStatus([listRow], "someone-else", Date.parse("2026-09-22T00:50:00Z")).valid, false);
+});
+
+test("evidence is read from the creator-bearing LIST endpoint, never the combined one", async () => {
+  const requested = [];
+  const listRow = { ...COMBINED_ENDPOINT_ROW, creator: { login: "platform-publisher" }, created_at: new Date().toISOString() };
+  await checkFailureReadiness({
+    event: { pull_request: { head: { sha } } }, repository: "owner/repo", token: "test", publisher: "platform-publisher",
+    fetchImpl: async (url) => { requested.push(url); return { ok: true, json: async () => [listRow] }; },
+  });
+  assert.equal(requested.length, 1);
+  assert.match(requested[0], /\/commits\/[0-9a-f]{40}\/statuses\?/, "must call /statuses (list), which returns creator");
+  assert.doesNotMatch(requested[0], /\/status\?/, "must not call /status (combined), which omits creator");
+});

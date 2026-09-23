@@ -12,6 +12,7 @@ import {
   EXIT_CHILD_SIGNAL_DEATH,
   EXIT_VITEST_RUNNER_TERMINATION,
   EXIT_CONTROL_PLANE_STARVATION,
+  EXIT_BUILDER_RESOURCE_EXHAUSTED,
   EXIT_GREEN,
   EXIT_SANDBOX_DRIFT,
   EXIT_SANDBOX_NOT_READY,
@@ -462,4 +463,38 @@ test("a status the recorder does not know still records rather than dropping the
   assert.ok(isLocalIntegrationStatus(fallback.status));
   assert.match(fallback.summaryPrefix, /BLOCKED_SOMETHING_NEW/);
   assert.match(fallback.summaryPrefix, /not product evidence/);
+});
+
+// BI-5A1FBCA6. Three different failures record blocked_control_plane_starvation:
+// the watchdog seeing the shared services degrade, the builder exhausting its
+// own memory cap, and a fenced lease. They have three different remedies, so
+// they must not share the sentence an operator reads. The STATUS stays shared
+// for now so an already-deployed portal keeps accepting the evidence write.
+test("a builder that exhausted its own cap does not send the reader to Docker", () => {
+  const outcome = classifyGateOutcome({
+    freshnessVerdict: null,
+    gateExitCode: EXIT_BUILDER_RESOURCE_EXHAUSTED,
+  });
+  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /BUILDER's own cap/);
+  assert.match(outcome.summary, /control plane was healthy/);
+  assert.match(outcome.summary, /build capacity/);
+});
+
+test("a real control-plane failure still names the control plane", () => {
+  const outcome = classifyGateOutcome({
+    freshnessVerdict: null,
+    gateExitCode: EXIT_CONTROL_PLANE_STARVATION,
+  });
+  assert.match(outcome.summary, /portal\/MCP\/Docker\/PostgreSQL/);
+  assert.equal(outcome.productEvidence, false);
+});
+
+test("the two causes are told apart by their summaries, not by their status", () => {
+  const builder = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_BUILDER_RESOURCE_EXHAUSTED });
+  const plane = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_CONTROL_PLANE_STARVATION });
+  assert.equal(builder.status, plane.status);
+  assert.notEqual(builder.summary, plane.summary);
 });

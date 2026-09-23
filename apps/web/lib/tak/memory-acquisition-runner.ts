@@ -87,6 +87,12 @@ type RecordNote = typeof recordCoworkerNote;
 const DEFAULT_LOOKBACK_DAYS = 14;
 const DEFAULT_EXPERIENCE_TAKE = 100;
 const DEFAULT_THREAD_TAKE = 100;
+// BI-CA79DB7B: how many threads with a stale updatedAt but recent message
+// activity one sweep admits after the recently-updated set. Appending a message
+// does not touch AgentThread.updatedAt, so the threads that have been growing
+// longest are exactly the ones the recency window never sees; this is the
+// second admission path that makes the nightly backfill reach them.
+const DEFAULT_WEDGED_THREAD_TAKE = 25;
 /**
  * BI-FDECBE0A: the nightly sweep is the backfill path for threads whose fold
  * had wedged (the largest needs ~110 folds at batch 10). Cap the summarizer
@@ -183,17 +189,38 @@ export async function runThreadCheckpointSweep(
     advance?: (threadId: string, keepRecentCount: number) => Promise<AdvanceResult | void>;
     maxFoldsPerRun?: number;
     maxFoldsPerThread?: number;
+    /** BI-CA79DB7B: cap on stale-timestamp threads admitted by message activity. */
+    wedgedTake?: number;
   } = {},
 ): Promise<ThreadCheckpointSweepResult> {
   const now = opts.now ?? new Date();
   const since = new Date(now.getTime() - (opts.lookbackDays ?? DEFAULT_LOOKBACK_DAYS) * 24 * 60 * 60 * 1000);
   const maxFoldsPerRun = opts.maxFoldsPerRun ?? DEFAULT_MAX_FOLDS_PER_RUN;
   const maxFoldsPerThread = opts.maxFoldsPerThread ?? DEFAULT_MAX_FOLDS_PER_THREAD;
-  const threads = await db.agentThread.findMany({
+  const recentThreads = await db.agentThread.findMany({
     where: { updatedAt: { gte: since }, cancelledAt: null },
     orderBy: { updatedAt: "desc" },
     take: opts.take ?? DEFAULT_THREAD_TAKE,
     select: { id: true, contextKey: true, updatedAt: true },
+  });
+  // BI-CA79DB7B: a thread that is active by its messages but stale by its own
+  // timestamp would otherwise never be a candidate, however long it grows.
+  // Ordered oldest-first so the longest-wedged thread gets its turn first.
+  const wedgedThreads = await db.agentThread.findMany({
+    where: {
+      updatedAt: { lt: since },
+      cancelledAt: null,
+      messages: { some: { createdAt: { gte: since } } },
+    },
+    orderBy: { updatedAt: "asc" },
+    take: opts.wedgedTake ?? DEFAULT_WEDGED_THREAD_TAKE,
+    select: { id: true, contextKey: true, updatedAt: true },
+  });
+  const seen = new Set<string>();
+  const threads = [...recentThreads, ...wedgedThreads].filter((thread) => {
+    if (seen.has(thread.id)) return false;
+    seen.add(thread.id);
+    return true;
   });
   const advance = opts.advance ?? advanceThreadCheckpointForThread;
   const result: ThreadCheckpointSweepResult = {

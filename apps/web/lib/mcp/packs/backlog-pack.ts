@@ -143,8 +143,17 @@ async function createBacklogItem(
       });
     }
     const { withScanAdvisory } = await import("@/lib/operate/implementation-scan");
+    const { renderFilingDuplicateAdvisory } = await import("@/lib/demand/dedup");
     const created = `Created backlog item ${result.itemId}`;
-    const message = withScanAdvisory(created, result.implementationCandidates ?? []);
+    // Both advisories ride the success message, the shape the implementation
+    // scan established (BI-1A1EC5EC): the filer sees them at the moment they
+    // can still act cheaply, and neither can refuse the filing (BI-3722E9A1).
+    const scanned = withScanAdvisory(created, result.implementationCandidates ?? []);
+    const duplicateAdvisory = renderFilingDuplicateAdvisory(
+      result.duplicateCandidates ?? [],
+      result.duplicateSemanticUnavailable ?? null,
+    );
+    const message = duplicateAdvisory ? `${scanned}\n\n${duplicateAdvisory}` : scanned;
     return { success: true, entityId: result.itemId, message };
   } catch (err) {
     const msg =

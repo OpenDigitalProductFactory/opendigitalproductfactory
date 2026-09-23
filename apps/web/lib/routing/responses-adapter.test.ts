@@ -204,6 +204,46 @@ describe("responsesAdapter", () => {
     expect(result.text).toBe("OAuth OK.");
   });
 
+  it("omits temperature on the ChatGPT backend, whose reasoning models reject it", async () => {
+    stubFetchText([
+      'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":1,"output_tokens":1}}}',
+      "data: [DONE]",
+    ].join("\n"));
+
+    await responsesAdapter.execute(
+      makeRequest({
+        providerId: "chatgpt",
+        modelId: "gpt-5.6-terra",
+        provider: {
+          baseUrl: "https://chatgpt.com/backend-api",
+          headers: { Authorization: "Bearer test", "Content-Type": "application/json" },
+        },
+        plan: { ...makeRequest().plan, temperature: 0.2 },
+      }),
+    );
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(sentBody.temperature).toBeUndefined();
+  });
+
+  it("retries once without a parameter the provider names as unsupported", async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response('{"detail":"Unsupported parameter: temperature"}', { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        output: [{ type: "message", content: [{ type: "output_text", text: "Done." }] }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const result = await responsesAdapter.execute(
+      makeRequest({ plan: { ...makeRequest().plan, temperature: 0.2 } }),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body).temperature).toBe(0.2);
+    expect(JSON.parse(mockFetch.mock.calls[1][1].body).temperature).toBeUndefined();
+    expect(result.text).toBe("Done.");
+  });
+
   it("uses the ChatGPT backend responses path for chatgpt subscription providers", async () => {
     stubFetchText([
       'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"Subscription OK."}]}],"usage":{"input_tokens":3,"output_tokens":2}}}',

@@ -68,3 +68,36 @@ admin password from a file (a credential handled in plain text by an agent).
    ten minutes is refused; a tampered link is refused.
 3. On a production-class installation the tool refuses unless the operator
    grant is recorded.
+
+## 5. Objectives and acceptance
+
+The decision in §1, the contract in §3 and the criteria in §4 already state all
+of this in prose. This section restates them as an identified manifest so the
+delivered work carries a machine-readable scope baseline; it adds no new scope.
+
+1. **OBJ-AGENT-VERIFIES-UNATTENDED:** An installation operated by agents alone
+   lets those agents open its session-gated pages in a real browser, with no
+   person present.
+2. **OBJ-NO-CREDENTIAL-IN-A-PROMPT:** No password is typed by an agent and no
+   credential passes through an agent prompt; the platform signs its own
+   browser in through a link it mints for itself.
+3. **OBJ-REFUSED-WHERE-IT-DOES-NOT-BELONG:** The capability is bounded by
+   environment class, so a production installation refuses it unless an
+   operator grant is recorded.
+
+| Criterion | Objectives | Statement |
+| --- | --- | --- |
+| AC-PERSONA-LANDS-SIGNED-IN | OBJ-AGENT-VERIFIES-UNATTENDED, OBJ-NO-CREDENTIAL-IN-A-PROMPT | On a development-class installation an agent holding a development token calls the tool, opens the link in the browser it drives, and lands on the requested page signed in as the persona. |
+| AC-SINGLE-USE | OBJ-NO-CREDENTIAL-IN-A-PROMPT | A minted link can be spent exactly once: a second exchange of the same token never mints a second session. |
+| AC-EXPIRY-AND-TAMPER | OBJ-NO-CREDENTIAL-IN-A-PROMPT | A link older than ten minutes is refused, and a tampered link is refused. |
+| AC-PRODUCTION-REFUSES | OBJ-REFUSED-WHERE-IT-DOES-NOT-BELONG | On a production-class installation the tool refuses unless the operator grant is recorded. |
+
+**A note on AC-SINGLE-USE, added 2026-09-23.** §4 item 2 was written as "the
+same link opened twice is refused the second time", which is how single use
+shows up to a caller. A browser, however, may fetch the link twice by itself,
+and the operator then sees a raw `UNAUTHORIZED` body while already signed in
+(BI-D146D071). The invariant that matters is the one stated above: the token is
+spent once and no second session is ever minted. A repeat request that already
+carries the session that spending produced is shown its destination instead of
+an error; a repeat request without that session, or with another, is still
+refused.
