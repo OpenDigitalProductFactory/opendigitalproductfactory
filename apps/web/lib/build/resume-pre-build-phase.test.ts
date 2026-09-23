@@ -48,6 +48,10 @@ vi.mock("@/lib/mcp-tools", () => ({
 }));
 const performPlanToBuildTransitionMock = vi.fn();
 const enforceReadinessMock = vi.fn();
+const healShapeMock = vi.fn();
+vi.mock("@/lib/build/heal-build-workroom-shape", () => ({
+  healBuildWorkroomShape: (...args: unknown[]) => healShapeMock(...args),
+}));
 vi.mock("@/lib/build/build-entry-gate", () => ({
   enforceBuildInitiativeReadiness: (...args: unknown[]) => enforceReadinessMock(...args),
 }));
@@ -71,6 +75,7 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     findUniqueMock.mockReset();
     queueBuildReviewVerificationMock.mockReset().mockResolvedValue(undefined);
     dispatchIdeateMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
+    healShapeMock.mockReset().mockResolvedValue({ healed: false, detail: "delivery shape already bound" });
     enforceReadinessMock.mockReset().mockResolvedValue({ allowed: true, message: "plan readiness allowed." });
     dispatchDesignFixMock.mockReset().mockResolvedValue({ kind: "repaired", rounds: 1 });
     dispatchPlanMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
@@ -467,6 +472,24 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(dispatchDesignFixMock).not.toHaveBeenCalled();
     expect(out.kind).toBe("skipped");
     expect((out as { reason: string }).reason).toContain("research behind this design");
+  });
+
+  // BI-454451F1: the shape heal sat after the ideate branch, which returns on
+  // every path, so an ideate build's room was never shaped and its passed design
+  // was gated as unshaped work.
+  it("binds an ideate build's missing delivery shape before gating it", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "pass", sizeAssessment: { decision: "ok" } },
+      plan: null,
+      originatingBacklogItemId: "bi-row",
+    });
+    healShapeMock.mockResolvedValue({ healed: true, detail: "bound delivery shape delivery-small@1.0.0 on WC-1" });
+    const out = await resumePreBuildPhase({ buildId: "FB-HEAL", phase: "ideate", userId: "uH" });
+    expect(healShapeMock).toHaveBeenCalledWith({ buildId: "FB-HEAL", userId: "uH" });
+    expect(enforceReadinessMock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: "resumed", via: "healBuildWorkroomShape" });
   });
 
   it("re-runs the review of a passed design once readiness allows plan, so it advances", async () => {

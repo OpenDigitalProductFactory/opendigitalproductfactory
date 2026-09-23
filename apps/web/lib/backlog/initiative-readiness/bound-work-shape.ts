@@ -20,6 +20,11 @@ export type BoundWorkShapeDb = {
  * persisted it, and every item was gated as unshaped (live install
  * 2026-09-23: a room carrying delivery-small@1.0.0, a decision with
  * shapeDecision absent). Accept either id: a semantic id resolves to its row.
+ *
+ * BI-454451F1: the column holds BOTH forms. Build Studio rooms store the row id
+ * (build-studio-attachment.ts); rooms claimed or adopted from a CLI store the
+ * semantic id (337 of 439 on the dev install). So the lookup matches either,
+ * as work-capsule-terminal-transition.ts already does.
  */
 async function resolveBacklogRowId(db: BoundWorkShapeDb, backlogItemId: string): Promise<string> {
   if (!/^BI-/i.test(backlogItemId) || !db.backlogItem?.findFirst) return backlogItemId;
@@ -45,7 +50,8 @@ async function resolveBacklogRowId(db: BoundWorkShapeDb, backlogItemId: string):
  */
 export async function readBoundWorkShapeRef(db: BoundWorkShapeDb, backlogItemRef: string): Promise<string | null> {
   if (!db.workroom?.findFirst) return null;
-  const backlogItemId = await resolveBacklogRowId(db, backlogItemRef);
+  const rowId = await resolveBacklogRowId(db, backlogItemRef);
+  const backlogItemId = rowId === backlogItemRef ? rowId : { in: [backlogItemRef, rowId] };
 
   const live = await db.workroom.findFirst({
     where: { backlogItemId, archivedAt: null, status: { notIn: ["abandoned", "archived", "superseded"] } },

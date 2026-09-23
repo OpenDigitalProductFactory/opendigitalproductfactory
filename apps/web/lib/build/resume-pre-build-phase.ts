@@ -366,6 +366,28 @@ export async function resumePreBuildPhase(params: {
       return { kind: "failed", phase, error: "build not found" };
     }
 
+    // Self-heal (BI-C60EB507): readiness gates a build by the delivery shape
+    // bound to its Workroom; a build with no room (decomposition children) or
+    // a room with no workShape claim falls to the unshaped gate table and is
+    // refused at plan→build with PLAN_REQUIRED — a committed plan document the
+    // automated lane never produces. Attach/bind before any phase work.
+    // Idempotent: no-op once a shape is bound or when there is no governed
+    // subject. Fixed forward at child-creation time in approve-decomposition.ts.
+    // BI-454451F1: runs before the ideate branch, which returns on every path —
+    // placed after it, an ideate build's room was never shaped, so the design
+    // it passed was gated as unshaped work (FB-9E4AA7F8, room WC-ED7E3226).
+    if (build.originatingBacklogItemId) {
+      try {
+        const { healBuildWorkroomShape } = await import("@/lib/build/heal-build-workroom-shape");
+        const shapeHeal = await healBuildWorkroomShape({ buildId, userId });
+        if (shapeHeal.healed) {
+          return { kind: "resumed", phase, via: "healBuildWorkroomShape", detail: shapeHeal.detail };
+        }
+      } catch (err) {
+        console.warn("[resume-pre-build-phase] workroom shape heal failed:", { buildId }, err);
+      }
+    }
+
     if (phase === "ideate") {
       // ── Decompose-gate park guard (BI-BD4F2D0D) ──────────────────────────
       // A build whose design PASSED review but whose deterministic size
@@ -571,25 +593,6 @@ export async function resumePreBuildPhase(params: {
         via: "executeTool:reviewDesignDoc",
         detail: typeof result.message === "string" ? result.message.slice(0, 160) : "review complete",
       };
-    }
-
-    // Self-heal (BI-C60EB507): readiness gates a build by the delivery shape
-    // bound to its Workroom; a build with no room (decomposition children) or
-    // a room with no workShape claim falls to the unshaped gate table and is
-    // refused at plan→build with PLAN_REQUIRED — a committed plan document the
-    // automated lane never produces. Attach/bind before any phase work.
-    // Idempotent: no-op once a shape is bound or when there is no governed
-    // subject. Fixed forward at child-creation time in approve-decomposition.ts.
-    if (build.originatingBacklogItemId) {
-      try {
-        const { healBuildWorkroomShape } = await import("@/lib/build/heal-build-workroom-shape");
-        const shapeHeal = await healBuildWorkroomShape({ buildId, userId });
-        if (shapeHeal.healed) {
-          return { kind: "resumed", phase, via: "healBuildWorkroomShape", detail: shapeHeal.detail };
-        }
-      } catch (err) {
-        console.warn("[resume-pre-build-phase] workroom shape heal failed:", { buildId }, err);
-      }
     }
 
     if (phase === "plan") {
