@@ -149,6 +149,48 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     );
   });
 
+  // BI-69178E02: a gate client runs from the branch, so the server is the only
+  // place a client defect fixed on main can be retired from un-rebased branches.
+  it("refuses a stale Windows gate client before touching any lease", async () => {
+    const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "local-integration-ci", ownerProvider: "claude", ownerSessionId: "s1",
+      claimKey: "local-ci:s1:abc", purpose: "Pre-PR local-CI gate for fix/x @ abc",
+      url: "http://localhost:3010", ports: [3010],
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      worktreePath: "D:\\DPF-source-root-worktrees\\stale",
+    }, "u1");
+
+    expect(res).toMatchObject({
+      success: false,
+      error: "gate_client_upgrade_required",
+      data: { admission: { status: "refused" }, minimumRevision: 1, clientRevision: 0 },
+    });
+    expect(res.message).toMatch(/Rebase the branch onto main/);
+    expect(res.message).toMatch(/not a verdict on the diff/);
+    expect(lease.claimNonprodEnvironmentLease).not.toHaveBeenCalled();
+  });
+
+  it("admits a current Windows gate client and a POSIX client of any revision", async () => {
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "admitted", lease: { leaseId: "NPEL-A1" }, slotKey: "slot-0", waitAgeMs: 0, poolPolicy: {},
+    });
+    const base = {
+      environmentKey: "local-integration-ci", ownerProvider: "claude", ownerSessionId: "s1",
+      claimKey: "local-ci:s1:abc", purpose: "Pre-PR local-CI gate for fix/x @ abc",
+      url: "http://localhost:3010", ports: [3010],
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const current = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      ...base, worktreePath: "D:\\DPF-source-root-worktrees\\fresh", gateClientRevision: 1,
+    }, "u1");
+    const posix = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      ...base, worktreePath: "/home/dev/dpf-worktrees/any",
+    }, "u1");
+    expect(current.error).not.toBe("gate_client_upgrade_required");
+    expect(posix.error).not.toBe("gate_client_upgrade_required");
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledTimes(2);
+  });
+
   it("settles the same durable TaskRun when a fresh claim is admitted", async () => {
     lease.claimNonprodEnvironmentLease.mockResolvedValue({
       status: "admitted",

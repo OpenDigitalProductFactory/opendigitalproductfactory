@@ -902,6 +902,10 @@
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
     ],
+    "apps/web/lib/nonprod/gate-client-revision.ts": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/lib/nonprod/host-resource-policy.ts": [
       "docs/architecture/dpf-patterns.md",
       "docs/user-guide/contributing/agent-dev-environments.md"
@@ -2690,6 +2694,7 @@
       "scripts/sbom/scan-dependencies.mjs"
     ],
     "docs/architecture/dpf-patterns.md": [
+      "apps/web/lib/nonprod/gate-client-revision.ts",
       "apps/web/lib/nonprod/host-resource-policy.ts",
       "apps/web/lib/nonprod/host-resource-profiles.json",
       "packages/db/prisma/schema/build-delivery.prisma",
@@ -3003,6 +3008,7 @@
       "apps/web/components/monitoring/health-summary.ts",
       "apps/web/components/monitoring/prometheus-config.test.ts",
       "apps/web/lib/govern/auth-redirect.ts",
+      "apps/web/lib/nonprod/gate-client-revision.ts",
       "docker-compose.edge-actions.yml",
       "docker-compose.linux.yml",
       "docker-entrypoint.sh",

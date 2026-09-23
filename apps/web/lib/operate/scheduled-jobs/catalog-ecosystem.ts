@@ -11,6 +11,22 @@ import type { ScheduledJobCatalogEntry } from "./catalog-types";
 
 export const ECOSYSTEM_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = [
   {
+    jobId: "ecosystem-weekly-watchdog",
+    inngestId: "ecosystem/weekly-watchdog",
+    honorsEnabledGate: true,
+    name: "Ecosystem: weekly watchdog",
+    purpose:
+      "Brings the week's ecosystem ballot into the room — what applies to this organisation, "
+      + "what others raised that affects it too, what happened to what it backed, and which "
+      + "shipped releases apply. Reports a quiet week as quiet rather than posting nothing.",
+    cron: "5 6 * * 1",
+    cadence: "Weekly (Mondays, 06:05)",
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: null,
+  },
+
+  {
     jobId: "ecosystem-issue-submission-sweep",
     inngestId: "ecosystem/issue-submission-sweep",
     honorsEnabledGate: true,

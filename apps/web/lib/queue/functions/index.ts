@@ -8,6 +8,7 @@ import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-gra
 import { routeWorkItem } from "./route-work-item";
 import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
 import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
+import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
 import { backlogTriageDrain } from "./backlog-triage-drain";
@@ -161,6 +162,7 @@ export const scheduledFunctions = [
   issueReportTriage,
   ecosystemInboundTriage,
   ecosystemSubmissionSweep,
+  ecosystemWatchdog,
   backlogTriageDrain,
   coworkerRegressionDetect,
   agentTaskDispatch,

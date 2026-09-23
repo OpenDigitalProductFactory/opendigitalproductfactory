@@ -441,9 +441,14 @@ async function resolveBuildPhase(
         flags.push({
           severity: "info",
           code: "embedding-model-first",
-          message: `The local endpoint lists a non-chat model ("${pre.models[0]}") first. The build auto-selects a coding model and skips non-chat models, so this is not a failure — pin the OpenCode model in Build Runtime to make the choice explicit.`,
+          // BI-8CFA1CA8: this used to advise pinning the OpenCode model, which
+          // is the one remedy the platform must not recommend — a pin outlives
+          // the reason for it and cannot be cleared once the model is gone.
+          // Reordering the served models fixes the actual nit and leaves
+          // selection with routing. Kernel: no-provider-pinning.
+          message: `The local endpoint lists a non-chat model ("${pre.models[0]}") first. The build auto-selects a coding model and skips non-chat models, so this is not a failure — the served order is just untidy.`,
           remediation:
-            "Optional: pin the OpenCode model in Build Runtime, or reorder the served models so a coder model is first.",
+            "Optional: reorder the served models so a coder model is first.",
         });
       }
     } catch (err) {

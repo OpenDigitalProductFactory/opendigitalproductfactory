@@ -55,6 +55,42 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # BI-DC04048A: three acceptance runs died inside the promotion step with
+      # no log — twice "the hosted runner lost communication with the server",
+      # once a silent exit 143 in the cleanup sweep. A standard runner has 14 GB
+      # of disk and 16 GB of memory, and this job builds the candidate portal
+      # image (an 8 GB Node heap) plus the sandbox image while the N-1 baseline
+      # stack is up. The runner ships ~25 GB of toolchains this job never
+      # touches; reclaim them first (same list publish-image.yml uses), then
+      # sample memory, disk and the Docker store every 30 s for the whole job
+      # so the next loss leaves a trace instead of a guess. The sampler is
+      # uploaded with `if: always()` below.
+      - name: Reclaim runner disk and start the resource sampler
+        run: |
+          echo "Disk before reclaim:"; df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift \
+            /usr/local/share/powershell \
+            /usr/local/share/chromium
+          sudo docker image prune --all --force >/dev/null
+          echo "Disk after reclaim:"; df -h /
+          free -m
+          log="$RUNNER_TEMP/runner-resources.log"
+          echo "RUNNER_RESOURCES_LOG=$log" >> "$GITHUB_ENV"
+          nohup sh -c 'while true; do
+            printf "\n=== %s ===\n" "$(date -u +%FT%TZ)"
+            free -m | sed -n 2p
+            df -h / | tail -1
+            docker system df 2>/dev/null | tail -n +2
+            docker ps --format "{{.Names}} {{.Status}}" 2>/dev/null
+            sleep 30
+          done' > "$log" 2>&1 &
+          echo "sampler pid $!"
       - name: Fast harness invariants
         run: |
           test "$(node -p "require('./promoter-contract.json').readinessProtocolFloorSha")" = "$DPF_PROMOTER_READINESS_PROTOCOL_FLOOR_SHA"
@@ -178,6 +214,19 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             candidate_ref="refs/pull/${EVENT_PR_NUMBER}/merge"
           fi
+          # BI-DC04048A: when the runner is reclaimed mid-step nothing after it
+          # runs — no artifact upload, no always() step — but THIS step's log
+          # survives. Sample into it every 20 s so the last lines before a
+          # shutdown name the memory and disk state that preceded it.
+          ( while true; do
+              printf '[resources %s] mem: %s | disk: %s | docker: %s\n' \
+                "$(date -u +%T)" \
+                "$(free -m | awk 'NR==2{printf "%s/%s MB used, %s avail", $3, $2, $7}')" \
+                "$(df -h / | awk 'NR==2{printf "%s used of %s (%s)", $3, $2, $5}')" \
+                "$(docker system df --format '{{.Type}} {{.Size}} ({{.Reclaimable}})' 2>/dev/null | tr '\n' ';')"
+              sleep 20
+            done ) &
+          sampler=$!
           node scripts/test-n-minus-one-upgrade.mjs \
             --base-sha "${{ steps.baseline.outputs.base_sha }}" \
             --candidate-sha "$GITHUB_SHA" \
@@ -187,6 +236,7 @@ jobs:
             --candidate-ref "$candidate_ref" \
             --project "$DPF_N1_PROJECT" \
             --evidence-dir "$DPF_N1_EVIDENCE"
+          kill "$sampler" 2>/dev/null || true
       # BI-D47955AF: deliberately sends NO DPF_HOST_* env, because the real N-1 caller
       # (a portal built before the host-identity contract) cannot send it. Readiness must
       # derive identity from the mounted install-state or every existing install wedges.
@@ -284,9 +334,21 @@ jobs:
             --arg decision "DI-FA01D947B1FA" \
             '{result:"passed",scope:"bounded-pr-contract",candidateSha:$candidate,wwmdDecision:$decision,fullNMinusOne:"scheduled-canonical-runtime"}' \
             > "$DPF_N1_EVIDENCE/n-minus-one-evidence.json"
+      - name: Runner resources at the end of the gate
+        if: always()
+        run: |
+          echo "Last samples:"; tail -n 40 "${RUNNER_RESOURCES_LOG:-/dev/null}" || true
+          df -h /; free -m
       - name: Safe cleanup
         if: always()
         run: node scripts/test-n-minus-one-upgrade.mjs --cleanup-project "$DPF_N1_PROJECT"
+      - name: Upload runner resource samples
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: n1-runner-resources-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runner-resources.log
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -57,6 +57,7 @@ exit 1
       : `'{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-MINE\\"}"}]}}'`;
 
   writeFileSync(curlStub, `#!/bin/sh
+printf '%s\\n' "$*" >> "${callsFile}.argv"
 data=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -286,6 +287,26 @@ test("dev-portal-lease.sh status reports the current holder", () => {
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /HELD lease NPEL-OTHER/);
+});
+
+test("dev-portal-lease.sh hands curl the install's root CA when NODE_EXTRA_CA_CERTS names one (BI-B29A586B)", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
+  const stubs = makeStubs(temp, "claimed");
+  const ca = join(temp, "root_ca.crt");
+  writeFileSync(ca, "-----BEGIN CERTIFICATE-----\nstub\n-----END CERTIFICATE-----\n");
+  const withCa = runLease(["status"], { env: baseEnv(stubs, { NODE_EXTRA_CA_CERTS: ca, DPF_MCP_URL: "https://localhost/api/mcp/v1" }) });
+  assert.equal(withCa.status, 0, `${withCa.stdout}\n${withCa.stderr}`);
+  const argv = readFileSync(`${stubs.callsFile}.argv`, "utf8");
+  assert.match(argv, new RegExp(`--cacert ${ca.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} `));
+
+  const temp2 = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
+  const stubs2 = makeStubs(temp2, "claimed");
+  const env2 = baseEnv(stubs2);
+  delete env2.NODE_EXTRA_CA_CERTS;
+  delete env2.DPF_MCP_CA_FILE;
+  const without = runLease(["status"], { env: env2 });
+  assert.equal(without.status, 0, `${without.stdout}\n${without.stderr}`);
+  assert.doesNotMatch(readFileSync(`${stubs2.callsFile}.argv`, "utf8"), /--cacert/);
 });
 
 test("dev-portal-lease.sh release releases the named lease", () => {

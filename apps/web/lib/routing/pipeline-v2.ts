@@ -718,7 +718,7 @@ export async function routeEndpointV2(
         winner.endpoint.providerId, winner.endpoint.modelId, contract,
       );
   const baseExecutionPlan = recipe
-    ? buildPlanFromRecipe(recipe, contract)
+    ? buildPlanFromRecipe(recipe, contract, winner.endpoint)
     : opts?.skipRecipe
       ? undefined
       : buildDefaultPlan(winner.endpoint, contract);

@@ -259,8 +259,8 @@ An install on `quiet` gets tier 1 and 2 in-app and nothing else. An install on `
 | **B** — `BI-B423912F` ✅ **delivered** | Federation transport for issue submission, so a linked install's issue is votable rather than opaque. | A |
 | **C** — `BI-F47386ED` ✅ **delivered** | Inbound read path (GitHub issues + demand mirrors) → BacklogItem with submitter provenance. the upstream install can finally *see* the queue. | — (parallel with A) |
 | **F** — `BI-7ED79807` ✅ **delivered** | **Prerequisite.** Populate `applicability` (archetype, capability, platform range) on projection. Until this lands every envelope is archetype-blind and no ballot can be scoped. | — |
-| **G** — `BI-4D924DB4` | Generalise the tri-state applicability evaluator; assemble the consent-gated, three-tier ballot per install. | C, F |
-| **H** — `BI-784D20FD` | `ecosystem-participation` proactivity family; the weekly two-directional watchdog in the derived room. | G |
+| **G** — `BI-4D924DB4` ✅ **delivered** | Generalise the tri-state applicability evaluator; assemble the consent-gated, three-tier ballot per install. | C, F |
+| **H** — `BI-784D20FD` ✅ **delivered** | `ecosystem-participation` proactivity family; the weekly two-directional watchdog in the derived room. | G |
 | **D** — `BI-4D1CAD69` | Vote budget, quadratic weighting, tally → `DemandScoreInputs`. Votes start moving the score. | B, C, G |
 | **E** — `BI-4C8A83AB` | Arbitration ordering + capacity draw + disposition writeback to every submitter. Closes the loop. | D |
 
@@ -300,6 +300,87 @@ ignored so a newer peer may add a dimension without breaking an older receiver.
 
 The cron is registered in `SCHEDULED_JOB_CATALOG`; the drift guard caught the
 omission, and an uncatalogued cron runs invisibly.
+
+### 5.2 Implementation notes — Phase G, delivered 2026-09-16
+
+**The two gates run in a fixed order, and the order is the point.** Consent is
+evaluated *before* relevance. An item that is relevant here but whose owner never
+granted forwarding consent is withheld — testing that exact combination is what
+stops the ordering from silently regressing into a single "relevance filter"
+that leaks.
+
+**A withheld item is a count, never a payload.** `withheld.{notRelevant,noConsent}`
+carry numbers only; the assembled ballot contains no trace of an item the reader
+may not see, which is asserted directly.
+
+**`review` is load-bearing in both directions.** An item is `reference` — hidden —
+only when *both* sides declared an archetype and they disagree. If the
+*submission* declares no scope, or if *this installation* has not declared its
+own archetype, the verdict is `review`, not `reference`: hiding a submission
+because the receiver forgot to declare itself would silence it for the wrong
+reason.
+
+**An unscored item sorts last, not as zero.** "Not scored" is not "scored zero",
+and coercing null to 0 would let unscored work outrank genuinely low-scored work.
+Ballot ordering consumes the score the demand engine already computed and never
+recomputes one.
+
+**Tier 1 bypasses the consent gate deliberately.** An install may always see what
+it itself submitted, whatever forwarding it granted others.
+
+### 5.3 Implementation notes — Phase H, delivered 2026-09-18
+
+**The family was the hard requirement, exactly as predicted.** `ecosystem-participation`
+is now a declarable activity family, so the resolver can govern the cadence. The
+posture rules follow the `marketing-campaign` precedent rather than inventing a
+second discipline:
+
+- the action boundary is **capped below `preauthorized`**, so no downstream room
+  declaration or agent preference can loosen it back and spend this
+  organisation's ecosystem voice without a human seeing it;
+- escalation goes to the **owner**, because how an organisation votes is not a
+  queue's call;
+- the **urgent channel is never used** — a ballot is not an outage, and spending
+  that channel here trains the owner to ignore it;
+- the routine weekly digest resolves **balanced**; only a ballot closing within
+  two days opens the assertive door.
+
+**A disposition without a reason is not closure.** `isClosure` withholds a bare
+`declined` or `deferred`. Ubuntu Brainstorm was retired for accumulating votes
+that were never answered, and an empty verdict reproduces that failure while
+*looking* like a response. A `scheduled` outcome speaks for itself.
+
+**A quiet posture suppresses the speculative tier**, not the substance: tiers 1
+and 2 still arrive; "might apply" is exactly the material a quiet install asked
+not to receive.
+
+**A quiet week is reported as quiet.** The digest carries an explicit `empty`
+flag rather than dressing up an uneventful week as activity.
+
+An install is never told its own submission is "coming for you too".
+
+**The digest now has a trigger, and that mattered.** `buildWatchdogDigest` was
+merged-shaped but had zero callers, which is precisely the "delivered a mechanism
+that never fires" failure the platform already named. There is now a weekly cron
+(`ecosystem/weekly-watchdog`, Mondays 06:05, catalogued) and a runner that asks
+the resolver for the posture rather than deciding for itself.
+
+**The delivery binding is explicit, not guessed.** Posting into a room needs two
+things this wiring must not invent: the derived room's case key and the coworker
+principal that speaks. Both room paths in the codebase resolve an agent principal
+before they will write, and fabricating one would post the ecosystem digest under
+an identity nobody authorised. So the binding is read from
+`ecosystem.watchdog-binding.v1`, and until it is set the run reports `no-room`
+with an actionable message in its run data rather than failing silently.
+**Choosing the standing room and the speaking coworker is an operator decision
+this spec does not pre-empt.**
+
+**A failed delivery is reported as failed.** A digest built and lost is worse
+than one never built, because the counters suggest it arrived.
+
+The archetype this install matches on is read from the same place the regulation
+applicability classifier reads it, since it is the same question asked of a
+different artefact.
 
 ### 5.5 Implementation notes — Phases A and B, delivered 2026-09-18
 

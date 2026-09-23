@@ -44,6 +44,16 @@ BRANCH=""
 LEASE_ID="${DPF_DEV_PORTAL_LEASE_ID:-}"
 GIT_BIN="${DPF_DEV_PORTAL_GIT_BIN:-git}"
 CURL_BIN="${DPF_DEV_PORTAL_CURL_BIN:-curl}"
+# BI-B29A586B: an install fronted by the TLS overlay publishes MCP on https
+# under the organization root CA. Node callers trust it through
+# NODE_EXTRA_CA_CERTS; curl does not read that variable, so hand it the same
+# bundle (the rule scripts/hooks/mcp-health.sh already applies).
+CURL_CA_ARGS=""
+if [ -n "${DPF_MCP_CA_FILE:-}" ] && [ -f "${DPF_MCP_CA_FILE}" ]; then
+  CURL_CA_ARGS="--cacert ${DPF_MCP_CA_FILE}"
+elif [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "${NODE_EXTRA_CA_CERTS}" ]; then
+  CURL_CA_ARGS="--cacert ${NODE_EXTRA_CA_CERTS}"
+fi
 DOCKER_BIN="${DPF_DEV_PORTAL_DOCKER_BIN:-docker}"
 HEARTBEAT_SECONDS="${DPF_DEV_PORTAL_HEARTBEAT_SECONDS:-30}"
 HEARTBEAT_TTL_MINUTES="${DPF_DEV_PORTAL_HEARTBEAT_TTL_MINUTES:-2}"
@@ -106,7 +116,8 @@ const name = process.argv[1];
 const args = JSON.parse(process.argv[2]);
 process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/call",params:{name,arguments:args}}));
 ' "$tool_name" "$arguments_json")"
-  "$CURL_BIN" -sS -X POST "$MCP_URL" \
+  # shellcheck disable=SC2086 # CURL_CA_ARGS is intentionally word-split ("--cacert <path>")
+  "$CURL_BIN" -sS $CURL_CA_ARGS -X POST "$MCP_URL" \
     -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
     -H "Content-Type: application/json" \
     --data "$request_json"
