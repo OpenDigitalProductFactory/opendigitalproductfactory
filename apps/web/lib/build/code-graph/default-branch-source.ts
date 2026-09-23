@@ -104,6 +104,25 @@ async function removeLeftoverWorktreeDir(path: string): Promise<void> {
   }
 }
 
+/**
+ * Drop this indexer's own stale registration under `<gitRoot>/.git/worktrees`
+ * when `worktree remove` could not (git refuses a registration whose directory
+ * is already gone). Never a `git worktree prune`: that judges every
+ * registration by paths as seen from THIS process, and the sandbox's build
+ * worktrees are registered by paths that only resolve inside the sandbox.
+ */
+async function removeOwnWorktreeRegistration(gitRoot: string): Promise<void> {
+  const { join } = lazyPath();
+  try {
+    await lazyFsPromises().rm(join(gitRoot, ".git", "worktrees", CODE_GRAPH_WORKTREE_DIRNAME), {
+      recursive: true,
+      force: true,
+    });
+  } catch {
+    // `worktree add --force` overrides a stale registration anyway.
+  }
+}
+
 export type DefaultBranchWorktree = {
   path: string;
   branch: string;
@@ -133,9 +152,16 @@ export async function ensureDefaultBranchWorktree(
     // something ran `git worktree prune` and dropped the registration, leaving
     // an orphaned directory. Every later run failed with
     // "fatal: '<path>' already exists", because `--force` overrides a stale
-    // REGISTRATION, not a leftover DIRECTORY. Recover from both.
-    await tryGit(gitRoot, "worktree prune", 30_000);
+    // REGISTRATION, not a leftover DIRECTORY. Recover from both — but only
+    // for OUR registration. A blanket `git worktree prune` here was the
+    // "something": `gitRoot` is the Build Studio sandbox volume seen from the
+    // portal's mount (/sandbox-workspace), where every build worktree's
+    // gitdir (/workspace/.builds/<id>/.git) does not exist, so the prune
+    // dropped every build's registration on each indexer pass and left each
+    // build's tree answering "not a git repository" (BI pending).
+    await tryGit(gitRoot, `worktree remove --force ${JSON.stringify(path)}`, 30_000);
     await removeLeftoverWorktreeDir(path);
+    await removeOwnWorktreeRegistration(gitRoot);
 
     const added = await tryGit(
       gitRoot,
