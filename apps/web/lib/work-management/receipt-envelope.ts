@@ -25,6 +25,13 @@ export interface ReceiptEnvelope {
   inputDigest?: string;
   outputDigest?: unknown;
   policyRefs: readonly string[];
+  /** Current-source evidence for a declared requirement; never a stage verdict. */
+  processEvidence?: {
+    definitionRef: string;
+    stageKey: string;
+    evidenceKind: string;
+    relationship: "required-evidence";
+  };
   governance?: {
     collaborationShape: WorkroomShapeKey;
     authorityLadderLevel: "none" | "discover" | "content" | "action";

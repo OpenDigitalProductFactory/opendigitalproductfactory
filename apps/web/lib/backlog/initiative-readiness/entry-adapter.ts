@@ -1,3 +1,4 @@
+import { validString, validStringArray, validAuthoritySnapshot, validInitiativeGateReceipt, normalizeInitiativeGate as normalizeGate } from "./receipt-validation";
 import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evidence";
 
 import { evaluateInitiativeReadiness } from "./evaluate";
@@ -59,17 +60,6 @@ type Baseline = {
   profile: InitiativeReadinessFacts["profile"];
 };
 
-const GATE_NAMES = new Set([
-  "classification", "research", "design-spec", "spec-approval", "architecture-review",
-  "data-review", "ux-fit-review", "security-review", "compliance-review", "domain-review",
-  "plan-review", "dependency-disposition", "archetype-provisioning", "archetype-completeness",
-  "post-implementation-review",
-]);
-
-function normalizeGate(value: string | null): string | null {
-  return value?.replaceAll("_", "-") ?? null;
-}
-
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -115,35 +105,6 @@ function parseBaselines(activities: readonly InitiativeReadinessActivity[], item
     malformed: false,
     ambiguous: heads.length > 1,
   };
-}
-
-function validString(value: unknown): value is string {
-  return typeof value === "string" && Boolean(value.trim());
-}
-
-function validStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(validString);
-}
-
-function validArtifactRef(value: Record<string, unknown> | null): boolean {
-  if (!value) return false;
-  if (value.kind === "feature-build-revision") return validString(value.revisionId);
-  if (value.kind === "document-version") return validString(value.versionId);
-  return value.kind === "repo-blob-at-commit"
-    && validString(value.repositoryFullName)
-    && validString(value.commitSha)
-    && validString(value.path)
-    && validString(value.providerBlobId);
-}
-
-function validAuthoritySnapshot(value: Record<string, unknown> | null): boolean {
-  return value?.decision === "allow"
-    && validString(value.effectiveHumanCapability)
-    && validString(value.effectiveAgentGrant)
-    && validString(value.tokenScope)
-    && validString(value.organizationId)
-    && validString(value.actionKey)
-    && validString(value.policyVersion);
 }
 
 function validTransitionObject(value: Record<string, unknown> | null): boolean {
@@ -258,34 +219,10 @@ function projectGateReceipt(
 ): { state: ReadinessEvidenceState; malformed: boolean; gate: string | null } {
   const payload = object(activity.payload);
   const gate = normalizeGate(activity.gateKey);
-  if (!payload || !gate || !GATE_NAMES.has(gate)) return { state: "malformed", malformed: true, gate };
-  const payloadGate = normalizeGate(typeof payload.gate === "string" ? payload.gate : null);
+  if (!payload || !gate || !validInitiativeGateReceipt(payload, {
+    receiptId: activity.id, gate, subject: { kind: "backlog-item", id: itemId },
+  })) return { state: "malformed", malformed: true, gate };
   const decision = payload.decision;
-  const artifactRef = object(payload.artifactRef);
-  const authority = object(payload.authoritySnapshot);
-  const subject = object(payload.subject);
-  const valid = payload.schemaVersion === 1
-    && payload.receiptId === activity.id
-    && payloadGate === gate
-    && ["pass", "fail", "not-applicable"].includes(String(decision))
-    && validString(payload.policyVersion)
-    && validString(payload.artifactDigest)
-    && validString(payload.artifactAuthorRef)
-    && validString(payload.reviewerPrincipalId)
-    && validString(payload.reviewerAgentId)
-    && validString(payload.authorityDecisionId)
-    && validString(payload.reason)
-    && subject?.kind === "backlog-item"
-    && subject.id === itemId
-    && validArtifactRef(artifactRef)
-    && validAuthoritySnapshot(authority)
-    && validStringArray(payload.findingRefs)
-    && validStringArray(payload.resolvedFindingRefs)
-    && (gate !== "classification" || decision !== "pass"
-      || ["doc-only", "fix", "feature", "cross-domain", "archetype"].includes(String(payload.selectedProfile)))
-    && (gate === "classification" || payload.selectedProfile === undefined)
-    && (decision === "fail" || payload.findingRefs.length === 0);
-  if (!valid) return { state: "malformed", malformed: true, gate };
   if (isStaleFor(gate, payload.artifactDigest, digests)) {
     return { state: "stale", malformed: false, gate };
   }

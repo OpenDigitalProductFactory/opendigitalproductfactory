@@ -408,6 +408,13 @@ not its previous wait. Brief checkpoint database retries reuse the provider resu
 they do not spend an additional provider call. Successful sibling checkpoints are
 saved before a failed branch puts the review into a wait.
 
+Independent initiative reviews also appear in **Observed execution**. A receipt
+can appear under a process step when its subject, repository and exact source
+commit match the room and its evidence kind matches that version's requirement.
+It identifies the reviewer, verdict and source commit. Historical or unresolved
+source versions stay in the evidence history. A matching review supports the
+requirement; it does not by itself prove the step or Workroom has completed.
+
 For nested rooms, accountability follows recorded responsibility links. Competing
 parents or a lineage that exceeds the read limit appear as setup gaps. They do
 not silently assign the organization owner. An explicit accountable assignment

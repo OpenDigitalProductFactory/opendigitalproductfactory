@@ -6,7 +6,7 @@ import type {
 } from "./case-types";
 import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 import type { ReviewerRoomClient } from "./semantic-review-room-projection";
-import { loadWorkroomExecutionEvidence } from "./workroom-execution-evidence";
+import { loadWorkroomExecutionEvidence, type WorkroomExecutionClient } from "./workroom-execution-evidence";
 import {
   buildWorkCaseDetail,
   buildWorkCaseSummary,
@@ -106,6 +106,9 @@ type WorkspaceWorkItemMessageRecord = {
 };
 
 export type WorkspaceWorkCapsuleRecord = {
+  backlogItemId?: string | null;
+  repositoryFullName?: string | null;
+  headSha?: string | null;
   /** The row the operator posture control writes back to. */
   id?: string;
   /** The WorkItem row this capsule is anchored to — lets the list loader group a
@@ -148,7 +151,7 @@ export type WorkspaceCasePrismaClient = {
   workroomActivity: {
     findMany(args: unknown): Promise<WorkspaceWorkroomActivityRecord[]>;
   };
-} & CoworkerEngagementCasePrismaClient & ReviewerRoomClient;
+} & CoworkerEngagementCasePrismaClient & ReviewerRoomClient & WorkroomExecutionClient;
 
 export type WorkspaceRoomAuthContext = {
   principalId: string | null;
@@ -596,6 +599,9 @@ export async function loadWorkspaceWorkCaseDetail({
         status: true,
         title: true,
         objective: true,
+        backlogItemId: true,
+        repositoryFullName: true,
+        headSha: true,
         scopeClaims: true,
         activityKind: true,
         decisionScope: true,
