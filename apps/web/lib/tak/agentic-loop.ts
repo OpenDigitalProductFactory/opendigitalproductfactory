@@ -33,6 +33,7 @@ import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-intercept
 import { agentEventBus } from "./agent-event-bus";
 import { terminalTruncationMessage } from "./terminal-response-truncation";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
+import { applyDeclaredEffortRouting } from "./stage-effort-routing"; // Phase G: declared stage tier → routing, after DB config
 import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
   resolveTurnGroundedGuidanceRoute,
@@ -1143,23 +1144,22 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     effectiveConfig.minimumDimensions,
     turnToolPosture,
   );
-  effectiveConfig.minimumDimensions = turnRoute.minimumDimensions;
+  Object.assign(effectiveConfig, applyDeclaredEffortRouting({ ...effectiveConfig, minimumDimensions: turnRoute.minimumDimensions }, effortWarrant?.declaredEffort));
 
   // BI-7F2FBDA3: a pinned model is a preference with lineage; routing moves to
   // the family successor rather than to whatever ranked first.
   effectiveConfig.preferredModelFamily ??= await lookupPinnedModelFamily(prisma, effectiveConfig.preferredProviderId, effectiveConfig.preferredModelId);
 
-  // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
-  // per turn and, when it is near the budget, bias the routing budget class
-  // toward cost so the router picks a cheaper (still capability-floor-respecting)
-  // model — instead of only logging the warning until the 100% hard-reject.
-  // Advisory: any failure leaves the class untouched and never blocks the turn.
+  // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once per
+  // turn; near budget, bias the budget class toward cost so the router picks a cheaper
+  // (still capability-floor-respecting) model instead of only logging until the 100%
+  // hard-reject. Advisory: any failure leaves the class untouched, never blocks the turn.
   try {
     const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
     const { spendAwareBudgetClass } = await import("@/lib/inference/spend-aware-routing");
     const budget = await checkAgentBudgetFromRegistry(agentId);
     const nearBudget = budget.status === "warning_80" || budget.status === "warning_95";
-    const biased = spendAwareBudgetClass(effectiveConfig.budgetClass, budget.status);
+    const biased = spendAwareBudgetClass(effectiveConfig.budgetClass, budget.status, effortWarrant?.declaredEffort); // a high/governed stage is never demoted
     if (nearBudget && biased !== effectiveConfig.budgetClass) {
       console.log(
         `[budget-gate] spend-aware downgrade agent=${JSON.stringify(agentId)} ` +

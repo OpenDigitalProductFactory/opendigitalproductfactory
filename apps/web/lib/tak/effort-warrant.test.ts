@@ -99,3 +99,57 @@ describe("deriveEffortWarrant", () => {
     expect(deriveEffortWarrant({ reasoningDepth: "high" }).contextTier).toBe("frontier");
   });
 });
+
+// Phase G (proactivity & capacity allocation §6.1) — a work-shape stage declares
+// its effort tier; the declaration beats the taskType / length proxy exactly as
+// reasoningDepth does, and the proxies may raise it but never lower it.
+describe("deriveEffortWarrant — stage-declared effort (Phase G)", () => {
+  const UNDECLARED_INPUTS = [
+    {},
+    { reasoningDepth: "minimal" as const },
+    { reasoningDepth: "high" as const, messageChars: 10 },
+    { taskType: "analysis" },
+    { taskType: "conversation", messageChars: 4000 },
+    { taskType: "unknown-type", availableToolNames: ["generate_code"] },
+    { messageChars: 1499 },
+    { messageChars: 1500, availableToolNames: ["list_backlog_items"] },
+  ];
+
+  it("leaves an undeclared turn bit-for-bit identical (null or absent)", () => {
+    for (const input of UNDECLARED_INPUTS) {
+      const today = deriveEffortWarrant(input);
+      expect(deriveEffortWarrant({ ...input, declaredEffort: null })).toStrictEqual(today);
+      expect(deriveEffortWarrant({ ...input, declaredEffort: undefined })).toStrictEqual(today);
+      expect(today).not.toHaveProperty("declaredEffort");
+    }
+  });
+
+  it("uses the declared tier as the base level instead of the proxies", () => {
+    const w = deriveEffortWarrant({ declaredEffort: "low", taskType: "analysis" });
+    expect(w.level).toBe("low");
+    expect(w.signals).toEqual(["declared:low"]);
+    expect(w.declaredEffort).toBe("low");
+    // Declared high beats a trivial taskType proxy.
+    expect(deriveEffortWarrant({ declaredEffort: "high", taskType: "greeting" }).level).toBe("high");
+  });
+
+  it("beats a content-classifier depth too — the shape declares, the run does not guess", () => {
+    const w = deriveEffortWarrant({ declaredEffort: "medium", reasoningDepth: "minimal" });
+    expect(w.level).toBe("medium");
+    expect(w.signals[0]).toBe("declared:medium");
+  });
+
+  it("lets the length and heavy-tool rules raise a declared tier, never lower it", () => {
+    const long = deriveEffortWarrant({ declaredEffort: "low", messageChars: 4000 });
+    expect(long.level).toBe("medium");
+    expect(long.signals).toEqual(["declared:low", "long-input"]);
+    const heavy = deriveEffortWarrant({ declaredEffort: "low", availableToolNames: ["generate_code"] });
+    expect(heavy.level).toBe("high");
+    // A declared high with a short prompt and no tools stays high.
+    const high = deriveEffortWarrant({ declaredEffort: "high", messageChars: 5, availableToolNames: [] });
+    expect(high.level).toBe("high");
+    expect(high.maxIterations).toBe(EFFORT_ITERATION_CEILING);
+    // The declared tier is carried unchanged even when the level rose.
+    expect(heavy.declaredEffort).toBe("low");
+  });
+});

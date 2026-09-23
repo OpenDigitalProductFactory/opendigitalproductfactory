@@ -347,3 +347,49 @@ describe("executeScheduledAgentTask — proactivity plan enforcement (BI-754C9E8
     );
   });
 });
+
+// Phase G (proactivity & capacity allocation §6.1) — a Workroom stage's declared
+// effort, carried on taskConfig.workroomStage by the drive, reaches the loop as
+// an effort warrant; a task without one runs exactly as before.
+describe("executeScheduledAgentTask — declared stage effort (Phase G)", () => {
+  function arrangeStageTask(taskConfig: unknown) {
+    arrangeMarketingSelfTask();
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "self-marketing-specialist-user-1",
+      agentId: "marketing-specialist",
+      title: "Workroom WC-TEST / decide",
+      prompt: "Decide the response to each finding.",
+      routeContext: "/customer/marketing",
+      schedule: "7 14 * * *",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+      attempts: 0,
+      taskConfig,
+    });
+    mocks.prisma.userFact.findMany.mockResolvedValue([]);
+    mocks.prisma.marketingCampaignBrief.findFirst.mockResolvedValue({ id: "brief-recent" });
+    mocks.runAgenticLoop.mockResolvedValue({ content: "ok", executedTools: [] });
+  }
+
+  it("forwards a warrant built from the declared tier, beside the coworker's own modelRequirements", async () => {
+    arrangeStageTask({ workroomStage: { shapeKey: "obligation-assurance-watch", stageKey: "decide", effort: "high" } });
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    const loopArgs = mocks.runAgenticLoop.mock.calls[0]?.[0];
+    expect(loopArgs.effortWarrant).toMatchObject({ level: "high", declaredEffort: "high" });
+    expect(loopArgs.effortWarrant.signals[0]).toBe("declared:high");
+    // The floor is applied in the loop AFTER the coworker's DB model config
+    // (stage-effort-routing.ts); the coworker's own requirements pass through.
+    expect(loopArgs.modelRequirements).toMatchObject({ defaultMinimumTier: "frontier", defaultBudgetClass: "balanced" });
+  });
+
+  it("forwards no warrant for a task with no stage record — today's call", async () => {
+    arrangeStageTask(null);
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    expect(mocks.runAgenticLoop.mock.calls[0]?.[0].effortWarrant).toBeUndefined();
+  });
+});

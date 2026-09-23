@@ -17,7 +17,7 @@ import { readWorkShapeDefinitionContract, getWorkShape } from "@/lib/work-manage
 const driveDb = {
   workroom: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   workroomActivity: { create: vi.fn() },
-  scheduledAgentTask: { upsert: vi.fn() },
+  scheduledAgentTask: { upsert: vi.fn(), findUnique: vi.fn().mockResolvedValue(null) },
   $transaction: vi.fn(),
 };
 

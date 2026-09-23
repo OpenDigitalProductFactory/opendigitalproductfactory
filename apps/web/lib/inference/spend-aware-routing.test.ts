@@ -30,3 +30,23 @@ describe("spendAwareBudgetClass", () => {
     expect(spendAwareBudgetClass("bogus", "warning_95")).toBe("minimize_cost");
   });
 });
+
+// Phase G (proactivity & capacity allocation §6.1) — a high / governed stage
+// floor is never demoted to save budget; that saving is not the operator's.
+describe("spendAwareBudgetClass with a declared stage effort", () => {
+  it("never downgrades a turn carrying a high floor, at any spend status", () => {
+    for (const status of ["ok", "warning_80", "warning_95"] as const) {
+      expect(spendAwareBudgetClass("quality_first", status, "high")).toBe("quality_first");
+      expect(spendAwareBudgetClass("balanced", status, "high")).toBe("balanced");
+    }
+    // An absent class stays absent rather than being rewritten (no spurious downgrade event).
+    expect(spendAwareBudgetClass(undefined, "warning_95", "high")).toBeUndefined();
+  });
+
+  it("still downgrades low / medium declared turns exactly as an undeclared one", () => {
+    for (const declared of ["low", "medium", null, undefined] as const) {
+      expect(spendAwareBudgetClass("quality_first", "warning_80", declared)).toBe("balanced");
+      expect(spendAwareBudgetClass("quality_first", "warning_95", declared)).toBe("minimize_cost");
+    }
+  });
+});

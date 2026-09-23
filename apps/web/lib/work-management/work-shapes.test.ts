@@ -9,8 +9,10 @@ import {
   listWorkShapes,
   projectWorkShapeCycleBoundary,
   readWorkShapeDefinitionContract,
+  resolveStageEffort,
   validateWorkShape,
   type WorkShapeDefinition,
+  type WorkShapeStage,
 } from "./work-shapes";
 
 describe("the §8.11 conformance rules", () => {
@@ -131,5 +133,69 @@ describe("the definition-level trigger/grant/measure contract (BI-EFFD97B4)", ()
     expect(contract).not.toHaveProperty("dispatch");
     expect(contract).not.toHaveProperty("schedule");
     expect(contract).not.toHaveProperty("participants");
+  });
+});
+
+// Phase G (proactivity & capacity allocation §6.1) — effort tier per stage.
+describe("resolveStageEffort", () => {
+  const stage = (over: Partial<WorkShapeStage>): WorkShapeStage => ({
+    key: "s",
+    title: "S",
+    accountablePrincipalRef: "agent:x",
+    advance: { kind: "status-change", condition: "done" },
+    evidence: [],
+    ...over,
+  });
+  const governed = { kind: "governed-decision" as const, condition: "decided", decisionScope: "x" };
+
+  it("returns the declared tier for a status-change stage", () => {
+    expect(resolveStageEffort(stage({ effort: "low" }))).toBe("low");
+    expect(resolveStageEffort(stage({ effort: "medium" }))).toBe("medium");
+  });
+
+  it("returns null for an undeclared status-change stage (today's behaviour)", () => {
+    expect(resolveStageEffort(stage({}))).toBeNull();
+    expect(resolveStageEffort(null)).toBeNull();
+    expect(resolveStageEffort(undefined)).toBeNull();
+  });
+
+  it("is always high for a governed decision — never demoted by a declaration", () => {
+    expect(resolveStageEffort(stage({ advance: governed }))).toBe("high");
+    expect(resolveStageEffort(stage({ advance: governed, effort: "low" }))).toBe("high");
+    expect(resolveStageEffort(stage({ advance: governed, effort: "minimal" }))).toBe("high");
+  });
+});
+
+describe("declared stage effort across the registry (Phase G guard)", () => {
+  it("resolves every governed-decision stage to high", () => {
+    for (const shape of listWorkShapes()) {
+      for (const s of shape.stages) {
+        if (s.advance.kind !== "governed-decision") continue;
+        expect(resolveStageEffort(s), `${shape.key}/${s.key}`).toBe("high");
+      }
+    }
+  });
+
+  it("never declares a governed-decision stage below high in source", () => {
+    for (const shape of listWorkShapes()) {
+      for (const s of shape.stages) {
+        if (s.advance.kind === "governed-decision" && s.effort !== undefined) {
+          expect(s.effort, `${shape.key}/${s.key}`).toBe("high");
+        }
+      }
+    }
+  });
+
+  it("declares a tier on every agent-principal stage of every standing (cadence) shape", () => {
+    const undeclared: string[] = [];
+    for (const shape of listWorkShapes()) {
+      if (!shape.triggers.includes("cadence")) continue;
+      for (const s of shape.stages) {
+        if (!s.accountablePrincipalRef.startsWith("agent:")) continue;
+        if (s.advance.kind === "governed-decision") continue; // resolves high regardless
+        if (s.effort === undefined) undeclared.push(`${shape.key}/${s.key}`);
+      }
+    }
+    expect(undeclared).toEqual([]);
   });
 });

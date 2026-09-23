@@ -82,6 +82,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every advisory source in scope has been read and correlated to the recorded manifest.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "raise",
@@ -92,6 +93,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each advisory that reaches a recorded dependency has an open finding; each one that no longer does is reconciled.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "decide",
@@ -139,6 +141,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Branch protection, sign-off enforcement, and token grants have been read for every repository in scope.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "diff",
@@ -149,6 +152,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every difference between enforced and declared policy is recorded as a drift finding.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "approve",
@@ -196,6 +200,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded credential has a reported age and exposure status.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "rotate",
@@ -244,6 +249,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open pull request in scope has a mechanically-read health state — never a visual scan of some checks.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "classify",
@@ -254,6 +260,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each open change is classified stalled, conflicted, awaiting-review, or ready, with the blocking reason named.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "merge",
@@ -302,6 +309,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every untriaged issue in scope is classified by kind and severity.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "dedupe",
@@ -312,6 +320,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each issue is matched to an existing backlog item or carries a proposed new one.",
         },
         evidence: ["assurance-finding"],
+        effort: "medium",
       },
       {
         key: "admit",
@@ -359,6 +368,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every required gate has its evidence collected or is explicitly recorded as missing.",
         },
         evidence: ["assurance-run"],
+        effort: "medium",
       },
       {
         key: "report",
@@ -369,6 +379,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each missing gate is named with what would satisfy it. An absent gate is never reported as passing.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "cut",
@@ -417,6 +428,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every waiting inquiry has a draft reply whose every claim cites recorded evidence.",
         },
         evidence: ["draft-artifact"],
+        effort: "medium",
       },
       {
         key: "send",
@@ -465,6 +477,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded adopter relationship has been read, with unknowns named as unknown.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "report",
@@ -475,6 +488,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each at-risk relationship is reported with the signal it rests on and what to record to make an unknown known.",
         },
         evidence: ["assurance-finding"],
+        effort: "medium",
       },
       {
         key: "act",
@@ -523,6 +537,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded bill and recurring commitment inside the horizon has been read.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "report",
@@ -533,6 +548,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each obligation inside the horizon is reported, and gaps are named as unknown with what to record — never as zero.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "pay",
@@ -580,6 +596,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded supplier agreement and its spend to date has been read.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "report",
@@ -590,6 +607,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each renewal inside the horizon is reported with spend against its commitment, and unknowns are named.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "decide",
@@ -638,6 +656,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "The recorded contributor inventory matches the observed contribution history.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "flag",
@@ -648,6 +667,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every contributor missing a required sign-off or licence fact is flagged with what is missing.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "admit",
@@ -695,6 +715,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every registered coworker has a measured capability and qualification state.",
         },
         evidence: ["assurance-run"],
+        effort: "medium",
       },
       {
         key: "report",
@@ -705,6 +726,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each unresolved gap or stale qualification is reported with what would close it.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "grant",

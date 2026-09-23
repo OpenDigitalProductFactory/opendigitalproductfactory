@@ -130,6 +130,33 @@ Steps:
 **Observable:** the same weekly pool serves materially more stage runs, with governed decisions
 unchanged in tier and count.
 
+### Phase G — delivered (branch `feat/stage-effort-tier`)
+
+- `WorkShapeStage.effort` (optional) and `resolveStageEffort` in `work-shapes.ts`: a
+  governed-decision stage resolves `high` whatever it declares; an undeclared stage resolves
+  `null` and behaves exactly as before.
+- `deriveEffortWarrant({ declaredEffort })`: the declared tier sets the base level (signal
+  `declared:<tier>`), beating reasoningDepth, taskType and the length proxy; length and
+  heavy-tool rules may raise it, never lower it. The warrant carries `declaredEffort`.
+- The drive writes the resolved tier to `ScheduledAgentTask.taskConfig.workroomStage`
+  (`workroom-stage-effort.ts`), writes nothing for an undeclared stage, and clears a stale record
+  when the room's task moves to an undeclared stage. The key cannot be read as a scheduled-work
+  `trigger`.
+- The scheduler derives the warrant from that record and forwards it. Routing is applied in the
+  loop by `tak/stage-effort-routing.ts`, after the coworker's AgentModelConfig is resolved
+  (that row overrides `modelRequirements`, so a floor merged there would be erased):
+  low/minimal → `minimize_cost` with the coworker's own capability floor kept; medium → unchanged;
+  high → minimum dimensions raised to at least frontier. `spendAwareBudgetClass` never demotes a
+  high turn.
+- Tiers declared on every agent-principal status-change stage of the standing, coworker and
+  orchestration shapes; delivery shapes and `external-build-handoff` stay undeclared. Shape
+  versions are unchanged: the tier is routing metadata, not a stage or gate change, and a version
+  bump would unbind live rooms' `shape@version` claims. A guard test holds both rules.
+- Not delivered here: the board's spend-per-stage-against-declared-tier report (it depends on
+  Phase A's board). Because nearly every stage brief exceeds the 1,500-character long-input
+  threshold, a `low` stage's warrant is raised to `medium`. The saving comes from routing, not from
+  the loop envelope.
+
 ## Sequencing
 
 A → B → C are the spine and must land in order; the board is worthless without the model, and

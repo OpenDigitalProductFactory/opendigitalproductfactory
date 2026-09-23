@@ -44,6 +44,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Asset, identity, and threat-intel context are attached to the case.",
         },
         evidence: ["security-case-timeline"],
+        effort: "low",
       },
       {
         key: "verdict",
@@ -60,6 +61,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "backed by named events rather than a guess.",
         },
         evidence: ["security-case-verdict"],
+        effort: "medium",
       },
       {
         key: "scope",
@@ -72,6 +74,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "case is marked needs-human because the evidence will not support a call.",
         },
         evidence: ["security-case-timeline"],
+        effort: "medium",
       },
       {
         key: "authorize-response",
@@ -127,6 +130,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Techniques and asset classes with no detection are enumerated, not characterised.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "hunt",
@@ -137,6 +141,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each hunt records what was looked for and what was found, including when nothing was.",
         },
         evidence: ["assurance-run"],
+        effort: "medium",
       },
       {
         key: "activate-content",
@@ -185,6 +190,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Both readings completed for every asset class in scope, with unreadable classes named.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "assess",
@@ -197,6 +203,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "with the evidence for the classification.",
         },
         evidence: ["assurance-finding"],
+        effort: "medium",
       },
       {
         key: "inventory",
@@ -207,6 +214,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Assets present in one reading and absent from the other are listed with their last-seen evidence.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "accept-or-remediate",
@@ -253,6 +261,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each capability in scope is compared, and capabilities with no recorded architecture are named as such.",
         },
         evidence: ["assurance-finding"],
+        effort: "medium",
       },
       {
         key: "ratify",
@@ -301,6 +310,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "source, and the check's outcome is recorded whether or not the rule changed.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "determine",
@@ -311,6 +321,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each changed requirement carries a jurisdiction-layered reading of what changed and for whom.",
         },
         evidence: ["assurance-finding"],
+        effort: "medium",
       },
       {
         key: "adopt",
@@ -359,6 +370,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Start date, role, location, and required records are captured, with missing items named rather than assumed.",
         },
         evidence: ["manual-check"],
+        effort: "low",
       },
       {
         key: "prepare",
@@ -371,6 +383,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "prepared, with any credential the role legally requires flagged as blocking.",
         },
         evidence: ["manual-check"],
+        effort: "medium",
       },
       {
         key: "admit",
@@ -419,6 +432,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "and unassignable jobs named rather than silently deferred.",
         },
         evidence: ["manual-check"],
+        effort: "medium",
       },
       {
         key: "commit",
@@ -440,6 +454,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Running-late, reassignment, and completion states are reflected against the committed schedule.",
         },
         evidence: ["manual-check"],
+        effort: "low",
       },
     ],
     stopConditions: [
@@ -477,6 +492,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each claim in the draft is traceable to something the business actually offers.",
         },
         evidence: ["manual-check"],
+        effort: "medium",
       },
       {
         key: "storefront-fit",
@@ -487,6 +503,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Offers, prices, and availability in the content match the storefront record, or the mismatch is named.",
         },
         evidence: ["manual-check"],
+        effort: "low",
       },
       {
         key: "document",
@@ -497,6 +514,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "User-facing documentation affected by the change is updated, or recorded as unaffected with a reason.",
         },
         evidence: ["manual-check"],
+        effort: "medium",
       },
       {
         key: "accessibility",
@@ -509,6 +527,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "blocking rather than advisory.",
         },
         evidence: ["ux-verified"],
+        effort: "medium",
       },
       {
         key: "publish",
@@ -622,6 +641,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each candidate carries its source, licence, and what gap it would close.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "adopt",
@@ -677,6 +697,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "provider id or its deterministic synthetic id; the cursor advances only after the store.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "triage-and-route",
@@ -690,6 +711,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "the queue room that owns it.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "chase",
@@ -702,6 +724,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "surface with the reason and the time it has waited.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "approve-reply",

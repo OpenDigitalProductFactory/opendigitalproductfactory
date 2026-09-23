@@ -13,7 +13,7 @@ import {
   resolveDriveConclusion,
 } from "@/lib/work-management/drive-conclusion";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
-import type { PrismaClient } from "@dpf/db";
+import type { Prisma, PrismaClient } from "@dpf/db";
 import { inngest } from "../inngest-client";
 import {
   COORDINATION_RESOURCE_TYPE,
@@ -48,7 +48,8 @@ import {
   type ProjectableWorkroomParticipantAssignment,
 } from "@/lib/work-management/room-participant-assignment";
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
-import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
+import { readWorkShapeDefinitionContract, resolveStageEffort } from "@/lib/work-management/work-shapes";
+import { nextWorkroomStageTaskConfig, type WorkroomStageEffortRecord } from "@/lib/work-management/workroom-stage-effort";
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
@@ -126,6 +127,8 @@ export type WorkroomDriveEffects = {
     prompt: string;
     now: Date;
     lease: { roomId: string; expiresAt: Date; holderPrincipalId: string | null };
+    /** Phase G: the dispatched stage's resolved effort tier; null when it declares none. */
+    workroomStage?: WorkroomStageEffortRecord | null;
   }) => Promise<boolean>;
   deactivateAgentTask: (taskId: string) => Promise<void>;
 };
@@ -319,6 +322,8 @@ export async function applyDrivePlan(input: {
       });
       return "skipped";
     }
+    const stage = plan.definition?.stages.find((candidate) => candidate.key === plan.stageKey);
+    const effort = resolveStageEffort(stage);
     const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
       agentId: plan.agentId,
@@ -336,14 +341,14 @@ export async function applyDrivePlan(input: {
         shapeTitle: plan.definition?.title ?? null,
         shapeDescription: plan.definition?.description ?? null,
         stageKey: plan.stageKey ?? "",
-        stageTitle: plan.definition?.stages.find((stage) => stage.key === plan.stageKey)?.title ?? null,
-        doneWhen:
-          plan.definition?.stages.find((stage) => stage.key === plan.stageKey)?.advance.condition ?? null,
+        stageTitle: stage?.title ?? null,
+        doneWhen: stage?.advance.condition ?? null,
         evidenceKinds: stageEvidenceKinds(plan.definition ?? null, plan.stageKey),
         stopConditions: (plan.definition?.stopConditions ?? []).map((entry) => entry.condition),
       }),
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
+      workroomStage: effort && stage ? { shapeKey: plan.shapeKey ?? "", stageKey: stage.key, effort } : null,
     });
     if (!scheduled) return "skipped";
     await effects.persist({
@@ -720,6 +725,9 @@ export function createWorkroomDriveEffects(
           data: { leaseExpiresAt: input.lease.expiresAt },
         });
         if (owned.count !== 1) return false;
+        // Phase G: undefined = leave taskConfig untouched (an undeclared stage writes nothing).
+        const existing = await tx.scheduledAgentTask.findUnique({ where: { taskId: input.taskId }, select: { taskConfig: true } });
+        const taskConfig = nextWorkroomStageTaskConfig(existing?.taskConfig ?? null, input.workroomStage ?? null);
         await tx.scheduledAgentTask.upsert({
           where: { taskId: input.taskId },
           create: {
@@ -733,6 +741,7 @@ export function createWorkroomDriveEffects(
             ownerUserId: input.ownerUserId,
             nextRunAt: input.now,
             isActive: true,
+            ...(taskConfig ? { taskConfig: taskConfig as Prisma.InputJsonValue } : {}),
           },
           update: {
             agentId: input.agentId,
@@ -740,6 +749,7 @@ export function createWorkroomDriveEffects(
             prompt: input.prompt,
             nextRunAt: input.now,
             isActive: true,
+            ...(taskConfig ? { taskConfig: taskConfig as Prisma.InputJsonValue } : {}),
           },
         });
         return true;

@@ -36,6 +36,7 @@ import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-r
 import { resolveDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import { resolveScheduledTickPlan } from "@/lib/scheduling/scheduled-work-posture.server";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
+import { scheduledStageEffortArgs } from "@/lib/tak/stage-effort-routing";
 import {
   isCoworkerSelfTaskId,
   coworkerSelfTaskRequiredTool,
@@ -549,15 +550,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     });
 
     // Mirror the interactive coworker path (agent-coworker.sendMessage): carry the
-    // coworker's configured model requirements into the scheduled run. Without
-    // this, executeAutonomousAgenticLoop routes at the default tier — for the
-    // Marketing Strategist that drops its route's frontier floor
-    // (defaultMinimumTier: "frontier", set precisely because weaker models were
-    // observed refusing to call tools) and the loop fabricates "Done" with zero
-    // tool calls (BI-3F09BDD4). The Golden Triangle posture is still applied
-    // independently at prepareRoute via agentId; this restores the per-coworker
-    // floor the interactive path sends, and benefits every autonomous coworker
-    // whose route declares modelRequirements.
+    // coworker's configured model requirements into the scheduled run. Without this,
+    // executeAutonomousAgenticLoop routes at the default tier — for the Marketing
+    // Strategist that drops its route's frontier floor (defaultMinimumTier: "frontier",
+    // set precisely because weaker models were observed refusing to call tools) and the
+    // loop fabricates "Done" with zero tool calls (BI-3F09BDD4). The Golden Triangle
+    // posture is still applied independently at prepareRoute via agentId; this restores
+    // the per-coworker floor the interactive path sends (every coworker declaring one).
     const rawModelRequirements =
       agentInfo.modelRequirements && typeof agentInfo.modelRequirements === "object"
         ? (agentInfo.modelRequirements as Record<string, unknown>)
@@ -582,6 +581,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunId: taskRunRef.taskRunId,
       proposeSideEffects: boundary === "propose",
       ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
+      ...scheduledStageEffortArgs(task.taskConfig, { toolNames: tools.map((tool) => tool.name), messageChars: scheduledPrompt.length }), // Phase G
     });
     const executedTools = [...(result.executedTools ?? [])];
 

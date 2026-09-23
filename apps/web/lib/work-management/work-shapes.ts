@@ -1,4 +1,5 @@
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
+import type { EffortLevel } from "@/lib/tak/effort-warrant";
 // apps/web/lib/work-management/work-shapes.ts
 //
 // Declared work shapes — TAK §8.11 ("Governed Activity Shapes and Triggers").
@@ -60,7 +61,29 @@ export type WorkShapeStage = {
   advance: WorkShapeAdvance;
   /** Evidence kinds the stage is expected to leave behind (§8.11). */
   evidence: readonly string[];
+  /**
+   * Phase G (proactivity & capacity allocation §6.1): the reasoning this stage
+   * needs, declared by the shape rather than guessed from prompt length. A
+   * capability FLOOR, not a cost target. Read it through `resolveStageEffort`,
+   * never directly — a governed-decision stage resolves `high` whatever it says.
+   * Absent = today's behaviour (the proxy decides).
+   */
+  effort?: EffortLevel;
 };
+
+/**
+ * The effort tier a stage runs at, or null when it declares none (the caller
+ * then behaves exactly as before Phase G). A governed decision is ALWAYS high:
+ * demoting one trades a real decision for a cheap one, and that saving is not
+ * the operator's to take (§6.1). Pure.
+ */
+export function resolveStageEffort(
+  stage: Pick<WorkShapeStage, "advance" | "effort"> | null | undefined,
+): EffortLevel | null {
+  if (!stage) return null;
+  if (stage.advance.kind === "governed-decision") return "high";
+  return stage.effort ?? null;
+}
 
 export type WorkShapeStopCondition = {
   /** A shape MUST declare its failure exit, not only its successful one. */
@@ -197,6 +220,7 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every obligation, control review, and licence reference in scope has been read.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "raise",
@@ -207,6 +231,7 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each item inside the horizon has an open finding; each item that has left the horizon is reconciled.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "decide",

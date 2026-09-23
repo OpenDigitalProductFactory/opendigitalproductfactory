@@ -12,6 +12,7 @@
 // cheapest CAPABLE model, never a broken one. Pure.
 
 import type { BudgetStatus } from "./budget-gate";
+import type { EffortLevel } from "@/lib/tak/effort-warrant";
 
 export type BudgetClass = "minimize_cost" | "balanced" | "quality_first";
 
@@ -29,8 +30,20 @@ function coerce(value: string | undefined): BudgetClass {
  *   - `ok` / `rejected`      → unchanged (`rejected` is hard-thrown by the gate,
  *                              not downgraded).
  * Never raises the class. Pure.
+ *
+ * Phase G (proactivity & capacity allocation §6.1): a turn whose work-shape
+ * stage resolved `high` — every governed decision does — is NEVER demoted. The
+ * tier is a capability floor, and trading a real decision for a cheap one is
+ * not a saving the operator authorised. The class is returned as it came.
  */
-export function spendAwareBudgetClass(current: string | undefined, status: BudgetStatus): BudgetClass {
+export function spendAwareBudgetClass(
+  current: string | undefined,
+  status: BudgetStatus,
+  declaredEffort?: EffortLevel | null,
+): BudgetClass | undefined {
+  if (declaredEffort === "high") {
+    return current && (ORDER as readonly string[]).includes(current) ? (current as BudgetClass) : undefined;
+  }
   const cls = coerce(current);
   if (status === "warning_95") return "minimize_cost";
   if (status === "warning_80") {

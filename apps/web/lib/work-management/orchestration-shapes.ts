@@ -38,6 +38,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "delegate",
@@ -50,6 +51,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "direct",
@@ -98,6 +100,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "delegate",
@@ -110,6 +113,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "direct",
@@ -158,6 +162,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "delegate",
@@ -170,6 +175,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "direct",
@@ -218,6 +224,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "delegate",
@@ -230,6 +237,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "direct",
@@ -278,6 +286,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "delegate",
@@ -290,6 +299,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "direct",
@@ -338,6 +348,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "delegate",
@@ -350,6 +361,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "direct",
@@ -398,6 +410,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "delegate",
@@ -410,6 +423,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "direct",
@@ -458,6 +472,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "delegate",
@@ -470,6 +485,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        effort: "low",
       },
       {
         key: "direct",
@@ -519,6 +535,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "measurable from them is named as unknown with what would have to be recorded.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "act",
@@ -577,6 +594,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "the record is named as unknown rather than estimated.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "name-the-stalls",
@@ -589,6 +607,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "accountable. 'Unowned' is a finding, not a blank.",
         },
         evidence: ["backlog-items"],
+        effort: "low",
       },
       {
         key: "owner-directs",

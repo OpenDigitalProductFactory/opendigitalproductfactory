@@ -50,6 +50,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "nobody can point at is not reviewable.",
         },
         evidence: ["screen-capture-set"],
+        effort: "low",
       },
       {
         key: "ground",
@@ -63,6 +64,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "was scoped around.",
         },
         evidence: ["cited-finding-list"],
+        effort: "medium",
       },
       {
         key: "adjudicate",
@@ -137,6 +139,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "context is read before any external search.",
         },
         evidence: ["research-question"],
+        effort: "medium",
       },
       {
         key: "research",
@@ -148,6 +151,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             "Every claim in the brief carries its source. An uncited claim is removed, not softened.",
         },
         evidence: ["cited-brief"],
+        effort: "medium",
       },
       {
         key: "act-on-it",
@@ -217,6 +221,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "from documentation. Documentation drift is itself a finding.",
         },
         evidence: ["surface-inventory"],
+        effort: "low",
       },
       {
         key: "assess",
@@ -230,6 +235,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "reported, not quietly retired.",
         },
         evidence: ["drift-report"],
+        effort: "medium",
       },
       {
         key: "authorize",
@@ -308,6 +314,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "the owner's own words. An unanswered question does not become an assumption.",
         },
         evidence: ["conversation-turn"],
+        effort: "medium",
       },
       {
         key: "capture",
@@ -321,6 +328,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "is a gate here, not advice.",
         },
         evidence: ["org-business-answer"],
+        effort: "low",
       },
       {
         key: "settle",

@@ -62,6 +62,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "the missing ones are named. A period that cannot name what is missing does not advance.",
         },
         evidence: ["source-document-set"],
+        effort: "low",
       },
       {
         key: "import",
@@ -74,6 +75,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "unprovenanced row is an exception, not a transaction.",
         },
         evidence: ["import-run"],
+        effort: "low",
       },
       {
         key: "categorize",
@@ -86,6 +88,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "a named exception. Silence is not a category.",
         },
         evidence: ["exception-list"],
+        effort: "low",
       },
       {
         key: "reconcile",
@@ -98,6 +101,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "attributed to named exceptions.",
         },
         evidence: ["reconciliation"],
+        effort: "medium",
       },
       {
         key: "owner-close",
@@ -176,6 +180,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "or the review records that none was found.",
         },
         evidence: ["policy-divergence-list"],
+        effort: "medium",
       },
       {
         key: "draft-revision",
@@ -188,6 +193,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "constraint cited where one applies. Drafting is the ceiling of this stage.",
         },
         evidence: ["policy-draft"],
+        effort: "medium",
       },
       {
         key: "publish",
@@ -263,6 +269,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "support it. An incident nobody can trace to evidence is a suspicion, not an incident.",
         },
         evidence: ["security-case-timeline"],
+        effort: "medium",
       },
       {
         key: "scope",
@@ -275,6 +282,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "is named. A scope that stops being updated is reported as stale rather than trusted.",
         },
         evidence: ["security-case-timeline"],
+        effort: "medium",
       },
       {
         key: "authorize-containment",
@@ -359,6 +367,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "cited. An unsourced condition is dropped, not softened.",
         },
         evidence: ["assurance-run"],
+        effort: "low",
       },
       {
         key: "file",
@@ -371,6 +380,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "Filing is the ceiling of this stage — nothing is scheduled or committed.",
         },
         evidence: ["backlog-items"],
+        effort: "low",
       },
       {
         key: "decide",
