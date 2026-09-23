@@ -17,8 +17,8 @@ status: draft
 | BI-40DA6D05 | Contract-family temperature replaces budget-class | §2 | landed |
 | BI-DBAFEC10 | Effort expression across all providers, proportional budgets | §3 | landed |
 | BI-5C48438C | Sampling and constrained decoding reach local | §4 | landed (partial — see below) |
-| BI-8B2DB9E8 | Native `/api/chat` for `top_k`, `min_p`, per-request `num_ctx` | §4 | carved out |
-| BI-B4081AA1 | Parameters and provenance in the explanation | §6 | explanation landed; routing-page display outstanding |
+| BI-8B2DB9E8 | Native `/api/chat` for `top_k`, `min_p`, per-request `num_ctx` | §4 | request builder landed, transport off by default |
+| BI-B4081AA1 | Parameters and provenance in the explanation | §6 | landed — persisted on the audit record and shown in the audit row |
 
 Every spec section maps to at least one item; no item is spec-less.
 
@@ -31,12 +31,20 @@ provider.
 
 Ollama's OpenAI-compatible endpoint **silently ignores** `top_k`, `min_p`,
 `repeat_penalty` and `num_ctx`. Qwen3's published thinking profile is
-0.6 / 0.95 / 20 / 0; we deliver the first two. The native transport needed for the
-rest is **BI-8B2DB9E8**, carved out rather than rushed: it replaces the transport
-on the primary local path, where streaming, tool-call extraction, usage accounting
-and truncation all differ, and the current local branch carries several hard-won
-tool-call rescue paths (textual `<tool_call>` markers, Anthropic-style `tool_use`
-in content) that a new transport must not lose.
+0.6 / 0.95 / 20 / 0; through `/v1` we deliver the first two.
+
+**BI-8B2DB9E8 now ships the request builder for `/api/chat`, with the transport
+switch defaulting to OFF.** The body construction is pure and unit-tested — the
+full sampling set, `num_predict`, `num_ctx` read from the reconciler, `think`, and
+schema-constrained `format`. What is *not* exercised is the response side:
+`/api/chat` returns a different shape, and the current local branch carries
+several hard-won tool-call rescue paths (textual `<tool_call>` markers,
+Anthropic-style `tool_use` emitted as content) that a new transport must not lose.
+
+Turning it on is therefore an explicit, evidence-backed decision rather than a
+default, because the local path is the platform's *fallback* — the one that
+catches everything during an outage or an upgrade drain. That is the worst path
+to gamble with on untested transport code.
 
 `num_ctx` is less urgent than it first appeared: the served window is already
 reconciled server-side, VRAM-aware, by `local-model-context-reconcile.ts`.

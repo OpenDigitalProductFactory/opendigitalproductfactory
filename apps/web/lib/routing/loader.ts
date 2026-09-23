@@ -542,6 +542,9 @@ export async function persistRouteDecision(
       // type wants an index signature, and widening the receipt type to get one
       // would lose the field names that make it readable.
       callParameters: (buildCallParameterReceipt(decision.executionPlan) ?? undefined) as any,
+      // BI-A08285BC: undefined when routing did not report confidence, so an
+      // absent value reads as "not recorded" rather than "routing was confident".
+      routingConfidence: (decision.routingConfidence ?? undefined) as any,
     },
   });
   return record.id;

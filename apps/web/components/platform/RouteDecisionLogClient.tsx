@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
+import type { RoutingConfidenceSignal } from "@/lib/deliberation/routing-confidence";
 import {
   describeProvenance,
   describeVariability,
@@ -196,6 +197,31 @@ export function CallParameters({ receipt }: { receipt: CallParameterReceipt }) {
   );
 }
 
+// ── How confident routing was (BI-A08285BC) ──────────────────────────────────
+//
+// A below-floor run used to leave only a sentence in `reason`. Showing it here
+// makes it countable by eye, and the panel stays silent when routing was
+// confident so it never becomes noise on a healthy decision.
+
+export function RoutingConfidence({ signal }: { signal: RoutingConfidenceSignal }) {
+  const belowFloor = signal.qualityFloorRelaxed === true;
+  const noChoice = typeof signal.candidateCount === "number" && signal.candidateCount <= 1;
+  if (!belowFloor && !noChoice && !signal.fallbackUsed) return null;
+
+  return (
+    <div style={{ marginTop: 12, padding: 10, background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-warning)", borderRadius: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-warning)", marginBottom: 4 }}>
+        Ran with low confidence
+      </div>
+      <div style={{ fontSize: 11, color: "var(--dpf-muted)", display: "grid", gap: 2 }}>
+        {belowFloor && <div>No model met the quality bar; the best available ran instead.</div>}
+        {noChoice && <div>Only one model was available, so nothing competed for this work.</div>}
+        {signal.fallbackUsed && <div>The model that ran was a fallback, not the ranked choice.</div>}
+      </div>
+    </div>
+  );
+}
+
 // ── Single decision row ───────────────────────────────────────────────────────
 
 function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
@@ -320,6 +346,7 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
               <CandidateTable candidates={row.excludedTrace} />
             </>
           )}
+          {row.routingConfidence && <RoutingConfidence signal={row.routingConfidence} />}
           {row.callParameters && <CallParameters receipt={row.callParameters} />}
           {row.suitabilityReceipt && <SuitabilityReceipt receipt={row.suitabilityReceipt} />}
         </div>

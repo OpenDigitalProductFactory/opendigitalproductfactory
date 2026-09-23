@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { CallParameters, RouteDecisionLogClient } from "./RouteDecisionLogClient";
+import { CallParameters, RoutingConfidence, RouteDecisionLogClient } from "./RouteDecisionLogClient";
 import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
 
 describe("RouteDecisionLogClient", () => {
@@ -34,6 +34,7 @@ describe("RouteDecisionLogClient", () => {
           suitabilityReceipt: null,
           inferenceDataScreenReceipt: null,
           callParameters: null,
+          routingConfidence: null,
           createdAt: new Date("2026-07-20T10:00:00.000Z"),
         }]}
       />,
@@ -105,5 +106,35 @@ describe("CallParameters", () => {
     );
     expect(html).toContain("JSON constrained");
     expect(html).toContain("no variation");
+  });
+});
+
+// BI-A08285BC — a below-floor run is visible, and a confident one is silent.
+describe("RoutingConfidence", () => {
+  it("names what went wrong when the floor was relaxed", () => {
+    const html = renderToStaticMarkup(
+      <RoutingConfidence signal={{ qualityFloorRelaxed: true, candidateCount: 3 }} />,
+    );
+    expect(html).toContain("Ran with low confidence");
+    expect(html).toContain("No model met the quality bar");
+  });
+
+  it("calls out a single candidate as an outcome rather than a choice", () => {
+    const html = renderToStaticMarkup(<RoutingConfidence signal={{ candidateCount: 1 }} />);
+    expect(html).toContain("nothing competed for this work");
+  });
+
+  it("names a fallback win", () => {
+    const html = renderToStaticMarkup(
+      <RoutingConfidence signal={{ fallbackUsed: true, candidateCount: 5 }} />,
+    );
+    expect(html).toContain("not the ranked choice");
+  });
+
+  it("renders nothing when routing was confident, so it never becomes noise", () => {
+    const html = renderToStaticMarkup(
+      <RoutingConfidence signal={{ qualityFloorRelaxed: false, candidateCount: 8 }} />,
+    );
+    expect(html).toBe("");
   });
 });

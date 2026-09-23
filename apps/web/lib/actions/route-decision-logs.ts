@@ -7,6 +7,7 @@ import type { CandidateTrace } from "@/lib/routing/types";
 import type { InferenceDataScreenReceipt } from "@/lib/inference/data-screening/types";
 import type { ProviderSuitabilityRouteReceipt } from "@/lib/routing/provider-suitability/evidence";
 import type { CallParameterReceipt } from "@/lib/routing/call-parameter-receipt";
+import type { RoutingConfidenceSignal } from "@/lib/deliberation/routing-confidence";
 import {
   rollUpProviderRoutingTelemetry,
   type ProviderRoutingTelemetryRollup,
@@ -37,6 +38,8 @@ export interface RouteDecisionLogRow {
    * column existed — read that as "not recorded", never as "no parameters".
    */
   callParameters: CallParameterReceipt | null;
+  /** BI-A08285BC: null on rows written before the column — "not recorded". */
+  routingConfidence: RoutingConfidenceSignal | null;
   createdAt: Date;
 }
 
@@ -70,6 +73,7 @@ export async function getRouteDecisionLogs(limit = 100): Promise<RouteDecisionLo
     suitabilityReceipt: r.suitabilityReceipt as ProviderSuitabilityRouteReceipt | null,
     inferenceDataScreenReceipt: r.inferenceDataScreenReceipt as InferenceDataScreenReceipt | null,
     callParameters: (r.callParameters as CallParameterReceipt | null) ?? null,
+    routingConfidence: (r.routingConfidence as RoutingConfidenceSignal | null) ?? null,
     createdAt: r.createdAt,
   }));
 }
