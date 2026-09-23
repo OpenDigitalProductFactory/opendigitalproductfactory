@@ -228,10 +228,10 @@ In your client's GitHub / PR settings, **disable any "create pull requests as dr
 
 After restarting, verify the `dpf` connector is present:
 - **Claude** — run `/mcp`; you should see the `dpf` server and its tools.
-- **Codex / Grok** — the `[mcp_servers.dpf]` block is in your config; the server appears once the client restarts with the token in its environment.
+- **Codex / Grok** — confirm the configured `dpf` server appears and complete the client-supported sign-in flow.
 - **Antigravity** — confirm `agy` can see an MCP server named `dpf`; if not, use the [Antigravity onboarding runbook](../../operations/antigravity-cli-onboarding.md) to let `agy` add the server from the active session.
 
-If it's missing, the token probably isn't in the running client's environment yet — restart the client (GUI apps need a full restart to pick up a freshly minted token), or re-run the bootstrap.
+If the server is missing, restart the client to load its configuration or re-run the current bootstrap. Supported OAuth clients need the endpoint and browser approval; they do not need a bearer-token environment variable.
 
 #### Let the client load project instructions
 
@@ -252,7 +252,7 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 #### Codex
 
-- Desktop/IDE app and CLI both read `~/.codex/config.toml`. The bearer token is referenced via `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`, never stored in the file.
+- Desktop/IDE app and CLI both read `~/.codex/config.toml`. Interactive OAuth uses the endpoint without a bearer override. The client stores and refreshes the approved connection.
 - The bootstrap publishes the repo-local package to Codex's personal marketplace, runs the equivalent of `codex plugin add dpf-platform@personal`, and verifies that the registry reports it installed and enabled. The canonical config key is `[plugins."dpf-platform@personal"]`; the bootstrap migrates the older invalid bare key without overriding an explicit user disable.
 - Codex's current plugin manifest exposes the skills and default prompts. The bootstrap separately wires the shared governance hooks and DPF MCP server in Codex's global configuration because those fields are not accepted in the Codex plugin manifest schema. **Check the draft-PR default** (above).
 
@@ -273,6 +273,19 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 ### How a client authenticates (all clients)
 
 **Point the client at the MCP URL and approve it once in your browser.** The client gets a `401` that tells it where to look, discovers this installation's authorization server, and runs the standard OAuth flow. A portal page opens naming the client, this installation, and what it is asking to do; you approve, and the client refreshes its own access from then on. **No environment variable, no copy-paste, no client restart.**
+
+Choose the assistant role you authorize on the approval page. This assigns a
+server-approved role; it does not verify a client's self-chosen name. All work
+remains within your current permissions, the permissions you approved, and the
+assistant's allowed tools. Build Studio access and access to each workroom are
+checked separately. Signing in does not admit the assistant to every room.
+
+The same connection supports multiple tasks and normal token refresh without
+another sign-in. Each task keeps its own target and evidence. If an older
+connection says it needs an assistant role, use your AI client's DPF reconnect
+action once and approve the role. Your existing browser login can be reused.
+Ordinary reconnects after that do not need a new role approval. A revoked
+authorization or a request for more permissions may require approval again.
 
 - **Permissions are six plain-language scopes**, not the platform's internal grant names: read your platform, do governed work, run Build Studio, act on business records, operate the platform, administer the platform. You can untick any of them on the approval screen — that grants less, never more.
 - **Least privilege is the default.** A client that asks for "everything advertised" gets read access only. Anything beyond read is a separate approval at the moment it is first needed.
@@ -442,14 +455,15 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 
 | Symptom | Fix |
 | ------- | --- |
-| `/mcp` (or the client's MCP panel) doesn't list `dpf` | Restart the client in the repo root; GUI apps need a full restart to pick up a new token; re-run the bootstrap if still missing |
-| Banner shows `missing_token` | Issue a write token in Admin → Platform Development → MCP, then re-run the bootstrap |
-| Every MCP call returns `401 unauthorized: invalid or expired token` | The persisted token expired or was revoked — re-run the bootstrap; it probes the token and mints a replacement inside the portal container (the issuer's own error output is printed if minting fails) |
-| Banner shows `needs_refresh` | Restart the client; if rotated, `POST /api/mcp/token/refresh` with the new token |
+| `/mcp` (or the client's MCP panel) doesn't list `dpf` | Restart the client to load its configured server; re-run the current bootstrap if still missing |
+| OAuth authorization is pending | Connect DPF from the client's MCP panel and approve it in your browser |
+| Connection needs an assistant role | Reconnect DPF once and approve an offered assistant role; no legacy token is needed |
+| Every MCP call returns `401 unauthorized: invalid or expired token` | Let the client refresh; if authorization was revoked, reconnect and review the new approval |
+| An old banner asks for `missing_token` or `needs_refresh` | Update the DPF plugin and rerun setup in OAuth mode for a supported client |
 | Skills / plugin not showing up | Re-run the bootstrap and inspect `--show-substrate`; on Codex, confirm the qualified `dpf-platform@personal` registry entry is installed and enabled, then restart the client |
 | Retired generic process skills are visible but DPF replacements are missing | Stop before project work, restart the client, and re-run the bootstrap; the readiness banner distinguishes plugin files installed from replacement skills loaded in the active session |
 | PRs keep opening as drafts | Disable the "create PRs as draft" default in your client's GitHub settings (DPF uses ready-for-review PRs only) |
-| Tool returns `insufficient_token_scope` | Issue a scoped token, refresh, retry — do **not** bypass with direct DB edits |
+| Tool returns `insufficient_token_scope` | Review the connection's approved permissions through OAuth. A role or room denial requires access from its owner, not another token |
 | New worktree has no `dpf` connector | Run `scripts/dpf-bootstrap-agent-toolchain.sh` inside the worktree, then restart |
 | Dev-server launch refused (a hook blocked it) | Use a lease for the shared runtime, or run in an isolated worktree compose stack |
 | Pushed branch isn't triggering promotion | That's the server-side webhook — confirm the GitHub repo webhook and `DPF_GIT_WEBHOOK_SECRET` are configured (operator task), not a per-session step |

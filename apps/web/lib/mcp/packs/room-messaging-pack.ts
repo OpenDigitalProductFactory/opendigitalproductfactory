@@ -157,9 +157,14 @@ async function readRoomMessagesHandler(
     };
   }
 
-  const children = await prisma.workItem.findMany({ where: { parentItemId: item.id }, select: { id: true } });
+  const children = await prisma.workItem.findMany({ where: { parentItemId: item.id }, select: ROOM_WORK_ITEM_SELECT });
+  const admittedChildIds: string[] = [];
+  for (const child of children) {
+    const childAccess = await resolveAgentRoomAccess({ agentId, userId, requested: "content", workItem: child });
+    if (childAccess.decision.level === "content") admittedChildIds.push(child.id);
+  }
   const rows = await prisma.workItemMessage.findMany({
-    where: { workItemId: { in: [item.id, ...children.map((child) => child.id)] } },
+    where: { workItemId: { in: [item.id, ...admittedChildIds] } },
     orderBy: [{ createdAt: "asc" }],
     take: 20,
     select: {
@@ -376,7 +381,7 @@ async function appointRoomCoordinatorHandler(
 
 async function getCoworkerRoomEngagementHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
   context?: PackContext,
 ): Promise<ToolResult> {
   const targetAgentId = str(params, "agentId") ?? context?.agentId ?? null;
@@ -384,10 +389,18 @@ async function getCoworkerRoomEngagementHandler(
     return { success: false, error: "invalid_input", message: "agentId is required (or call as a coworker)." };
   }
   const engagement = await getCoworkerRoomEngagement({ agentId: targetAgentId });
+  const rooms = [];
+  for (const room of engagement.rooms) {
+    const item = await resolveRoomWorkItem(room.caseKey);
+    if (!item) continue;
+    const access = await resolveAgentRoomAccess({ agentId: context?.agentId ?? targetAgentId,
+      userId, requested: "content", workItem: item });
+    if (access.decision.level === "content") rooms.push(room);
+  }
   return {
     success: true,
-    message: `${engagement.activeRoomCount} active Work Room(s) for ${targetAgentId}.`,
-    data: engagement as unknown as Record<string, unknown>,
+    message: `${rooms.length} active Work Room(s) for ${targetAgentId}.`,
+    data: { ...engagement, rooms, activeRoomCount: rooms.length },
   };
 }
 
