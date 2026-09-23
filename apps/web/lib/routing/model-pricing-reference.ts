@@ -1,4 +1,5 @@
 // apps/web/lib/routing/model-pricing-reference.ts
+import { EMPTY_PRICING, type ModelCardPricing } from "./model-card-types";
 //
 // Researched per-model list pricing, so a discovered model is costed at its OWN
 // rate rather than inheriting one flat provider rate.
@@ -129,6 +130,28 @@ export function referencePricingFor(modelId: string | null | undefined): Referen
   // family prices span two orders of magnitude, so a near-miss would be a guess
   // wearing a real number's clothes.
   return null;
+}
+
+/**
+ * The researched rates shaped as a ModelCard `pricing` block.
+ *
+ * Every provider adapter that does not get real prices from its own API should
+ * call this rather than writing EMPTY_PRICING. Writing nulls is not neutral:
+ * the router then falls back to the provider's single flat rate, which collapses
+ * every model under that provider to one number (BI-B5071C36), and on a
+ * re-discovery it actively erases a price a backfill had already recorded.
+ *
+ * A model the reference has not researched still returns all-nulls — that is the
+ * honest answer, and it is not the same as guessing one.
+ */
+export function referenceCardPricing(modelId: string | null | undefined): ModelCardPricing {
+  const priced = referencePricingFor(modelId);
+  if (!priced) return { ...EMPTY_PRICING };
+  return {
+    ...EMPTY_PRICING,
+    inputPerMToken: priced.inputPerMToken,
+    outputPerMToken: priced.outputPerMToken,
+  };
 }
 
 /** The cost model a provider bills on — subscription, metered tokens, or local compute. */

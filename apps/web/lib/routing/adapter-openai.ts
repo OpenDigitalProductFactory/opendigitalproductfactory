@@ -9,6 +9,7 @@ import {
   EMPTY_PRICING,
   DEFAULT_DIMENSION_SCORES,
 } from "./model-card-types";
+import { referenceCardPricing } from "./model-pricing-reference";
 import { classifyModel } from "./model-classifier";
 import { computeMetadataHash } from "./metadata-hash";
 
@@ -128,7 +129,12 @@ export const openAIAdapter: ProviderAdapter = {
       outputModalities: ["text"],
 
       capabilities,
-      pricing: { ...EMPTY_PRICING },
+      // BI-B5071C36: the API gives no prices here, so consult the researched
+      // reference rather than writing nulls. Nulls are not neutral — the router
+      // falls back to the provider's one flat rate, collapsing every model under
+      // it to a single number, and a re-discovery erases any price a backfill had
+      // already recorded.
+      pricing: referenceCardPricing(modelId),
 
       supportedParameters: [],
       defaultParameters: null,

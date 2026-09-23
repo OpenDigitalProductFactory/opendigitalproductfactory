@@ -11,6 +11,7 @@ import {
   providerCostModel,
   pricingProvenance,
   pricedModelIds,
+  referenceCardPricing,
 } from "./model-pricing-reference";
 
 describe("model pricing reference", () => {
@@ -76,5 +77,39 @@ describe("model pricing reference", () => {
       expect(referencePricingFor(id), id).not.toBeNull();
     }
     expect(pricedModelIds().length).toBeGreaterThan(40);
+  });
+});
+
+describe("referenceCardPricing — what a provider adapter writes", () => {
+  it("gives a researched model its real rate instead of nulls", () => {
+    // Writing nulls is not neutral: the router then falls back to the
+    // provider's single flat rate, collapsing every model under it to one
+    // number, and a re-discovery erases whatever a backfill had recorded.
+    // Measured live: gpt-6-astra was re-NULLed six days after the backfill,
+    // and unpriced rows went 11 -> 34.
+    const p = referenceCardPricing("claude-opus-5");
+    expect(p.inputPerMToken).toBe(5);
+    expect(p.outputPerMToken).toBe(25);
+  });
+
+  it("keeps returning nulls for a model it has not researched", () => {
+    // The honest answer for an unknown model. Not the same as guessing one.
+    const p = referenceCardPricing("glm-5-turbo");
+    expect(p.inputPerMToken).toBeNull();
+    expect(p.outputPerMToken).toBeNull();
+  });
+
+  it("carries the full card pricing shape, not a partial object", () => {
+    const p = referenceCardPricing("claude-sonnet-5");
+    expect(p).toHaveProperty("cacheReadPerMToken", null);
+    expect(p).toHaveProperty("imageInputPerMToken", null);
+  });
+
+  it("prices the models the live install had wrong", () => {
+    // These read 15/75 and 3/15 on the install — a generation stale, from an
+    // adapter that wrote nulls over them and a seed that never corrected.
+    expect(referenceCardPricing("claude-opus-5").outputPerMToken).toBe(25);
+    expect(referenceCardPricing("claude-sonnet-5").outputPerMToken).toBe(10);
+    expect(referenceCardPricing("gpt-6-astra").outputPerMToken).toBe(50);
   });
 });
