@@ -12,9 +12,10 @@ function commandment(
   return { id, name: id, tier: "commandment", weight, dimensionVector };
 }
 
-// A corpus that holds BOTH golden winners: rewards maintainability/soundness
-// (scenario 1 → proper fix) while penalizing blast radius and rewarding cost
-// efficiency (scenario 2 → the cheap sound option, not the maximalist rebuild).
+// A corpus that holds EVERY golden winner: rewards maintainability/soundness
+// (scenario 1 → proper fix), penalizes blast radius and rewards cost
+// efficiency (scenario 2 → the cheap sound option, not the maximalist rebuild),
+// and carries absorb-dont-adopt at its corpus weight (scenario 3 → absorb).
 const HEALTHY_CORPUS: DecisionPrinciple[] = [
   commandment("proper-fix-over-quick-fix", {
     long_term_maintainability: 0.9,
@@ -27,6 +28,16 @@ const HEALTHY_CORPUS: DecisionPrinciple[] = [
     cost_efficiency: 0.7,
     long_term_maintainability: 0.3,
   }),
+  commandment(
+    "absorb-dont-adopt",
+    {
+      operational_independence: 0.9,
+      long_term_maintainability: 0.8,
+      vendor_lock_in: -0.9,
+      speed_to_value: -0.3,
+    },
+    2,
+  ),
 ];
 
 describe("evaluateGoldenDrift", () => {
