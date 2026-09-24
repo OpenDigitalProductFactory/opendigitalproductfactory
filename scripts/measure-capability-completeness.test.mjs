@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import {
   canCall,
   expandGrants,
+  grantsSatisfy,
   loadSubstrate,
   objectLiteralBody,
   normalizeGeneratedPath,
@@ -115,6 +116,31 @@ test("canCall names the missing grants rather than just failing", () => {
 
   const allowed = canCall("evaluate_profession_decision", new Set(["registry_read"]), tools);
   assert.equal(allowed.reachable, true);
+});
+
+// BI-378D3659: the runtime (isToolAllowedByGrants) admits a tool when ANY one of
+// its required grants is held after expansion. Demanding every grant made this
+// report call reachable tools unreachable.
+test("canCall treats required grants as alternatives, like the runtime", () => {
+  const tools = new Map([["probe", ["web_search", "registry_read"]]]);
+  assert.equal(canCall("probe", new Set(["registry_read"]), tools).reachable, true);
+  assert.equal(canCall("probe", new Set(["web_search"]), tools).reachable, true);
+  assert.equal(canCall("probe", new Set(["web_search", "registry_read"]), tools).reachable, true);
+  const neither = canCall("probe", new Set(["file_read"]), tools);
+  assert.equal(neither.reachable, false);
+  assert.deepEqual(neither.missingGrants, ["web_search", "registry_read"]);
+});
+
+test("canCall honours a grant held only by implication", () => {
+  const impl = new Map([["backlog_write", ["build_evidence"]]]);
+  const tools = new Map([["probe", ["build_evidence"]]]);
+  assert.equal(canCall("probe", expandGrants(["backlog_write"], impl), tools).reachable, true);
+});
+
+test("grantsSatisfy: an empty requirement is universal, as at runtime", () => {
+  assert.equal(grantsSatisfy([], new Set()), true);
+  assert.equal(grantsSatisfy(["a", "b"], new Set(["b"])), true);
+  assert.equal(grantsSatisfy(["a", "b"], new Set(["c"])), false);
 });
 
 test("canCall reports an unknown tool as unreachable, never as allowed", () => {

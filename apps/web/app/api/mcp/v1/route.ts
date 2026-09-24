@@ -48,7 +48,7 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
-import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
+import { getToolGrantMapping, expandGrants, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import {
   resolveListingAuthorityForToken,
@@ -79,7 +79,7 @@ import {
   type ResolvedMcpTransportAuth as ResolvedAuth,
 } from "@/lib/mcp/transport-auth";
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
-import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -166,11 +166,17 @@ function tokenCanUseTool(
   userContext: UserContext,
   grantMap: Record<string, string[]>,
 ): boolean {
-  if (tool.requiredCapability && !can(userContext, tool.requiredCapability as CapabilityKey)) {
-    return false;
-  }
-  // Default-deny a tool with no grant entry; scope and expanded grants both
-  // admit it, the same rule the call-time check and the agent-grant layer use.
+  return roleAllowsTool(tool, userContext) && tokenScopesAllowTool(tool, token, grantMap);
+}
+
+function roleAllowsTool(tool: ToolDefinition, userContext: UserContext): boolean {
+  return !tool.requiredCapability || can(userContext, tool.requiredCapability as CapabilityKey);
+}
+
+// The token half on its own, so load_tools can tell a token gap from a role gap.
+// Default-deny a tool with no grant entry; scope and expanded grants both admit
+// it, the same rule the call-time check and the agent-grant layer use.
+function tokenScopesAllowTool(tool: ToolDefinition, token: ResolvedMcpToken, grantMap: Record<string, string[]>): boolean {
   return tokenAdmitsTool(tool, grantMap[tool.name], token);
 }
 
@@ -299,14 +305,14 @@ async function handleLoadTools(
   const granted = PLATFORM_TOOLS.filter((t) => tokenCanUseTool(t, token, userContext, grantMap));
   // Same authority filter as tools/list: a token can never load (and so never
   // call) a tool the agent's grants / the human's clearance would reject.
-  const authorized = filterListableTools(
-    granted,
-    await resolveListingAuthorityForToken(token, userContext),
-  );
+  const authority = await resolveListingAuthorityForToken(token, userContext);
+  const authorized = filterListableTools(granted, authority);
+  const toolByName = new Map(PLATFORM_TOOLS.map((tool) => [tool.name, tool]));
+  const knownNames = new Set(toolByName.keys());
+  const authorizedNames = new Set(authorized.map((tool) => tool.name));
   const selected = resolveLoadToolsSelection(authorized, args);
-  const noMatch = classifyLoadToolsNoMatch(
-    args, new Set(PLATFORM_TOOLS.map((tool) => tool.name)), new Set(granted.map((tool) => tool.name)), selected.length,
-  );
+  // Judge against what selection drew from (agent-filtered), not the token-only list.
+  const noMatch = classifyLoadToolsNoMatch(args, knownNames, authorizedNames, new Set(selected.map((t) => t.name)));
   // W12 (BI-EE64547B): internal session-JWT calls are per-call stateless — the
   // result still carries the selected definitions inline, but no per-token
   // session row is written (internal lists are full-tier; nothing to append).
@@ -314,10 +320,17 @@ async function handleLoadTools(
     token.source === "session-jwt"
       ? mergeLoadedToolNames([], selected.map((t) => t.name))
       : await loadToolsForSession(token.tokenId, selected.map((t) => t.name));
+  const status = buildLoadToolsStatus(args, {
+    knownNames, authorizedNames, loadedToolNames, authority, isAllowedByGrants: isToolAllowedByGrants,
+    tokenGrants: (name) => tokenScopesAllowTool(toolByName.get(name)!, token, grantMap),
+    roleAllows: (name) => roleAllowsTool(toolByName.get(name)!, userContext),
+    requiredGrants: (name) => grantMap[name] ?? [],
+  });
   const result = buildLoadToolsResult(
     selected.map((t) => ({ name: t.name, description: t.description })),
     loadedToolNames,
     noMatch,
+    status,
   );
   return acceptsEventStream && selected.length > 0
     ? loadToolsSseResponse(id, result)
