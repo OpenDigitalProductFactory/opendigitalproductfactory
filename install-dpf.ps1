@@ -1574,6 +1574,19 @@ $hostArch = switch ($rawHostArch) { "x64" { "amd64" }; "amd64" { "amd64" }; "arm
 Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key "DPF_HOST_PLATFORM" -Value "win32"
 Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key "DPF_HOST_ARCH" -Value $hostArch
 
+# Signing secret for GitHub update deliveries (BI-C26D5DC5). The portal refuses
+# every delivery in production without it. Added when missing or still an
+# example placeholder; never rotated once set, because the operator pastes it
+# into the repository webhook. The value is never printed.
+$gitWebhookEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+if ($null -eq $gitWebhookEnv) { $gitWebhookEnv = "" }
+$gitWebhookMatch = [System.Text.RegularExpressions.Regex]::Match($gitWebhookEnv, '(?m)^DPF_GIT_WEBHOOK_SECRET=(.*)$')
+$gitWebhookValue = if ($gitWebhookMatch.Success) { $gitWebhookMatch.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+if ($gitWebhookValue.Length -eq 0 -or $gitWebhookValue.StartsWith("<")) {
+    Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key "DPF_GIT_WEBHOOK_SECRET" -Value (New-RandomPassword 32)
+    Write-Host "  Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
+}
+
 if ($InstallMode -eq "consumer") {
     Set-DPFConsumerReleaseIdentity -InstallDir $DPF_DIR -Version $Version
 }

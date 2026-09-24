@@ -135,6 +135,15 @@ else
   ok "root .env already exists -- skipping"
 fi
 
+# GitHub update signing secret (BI-C26D5DC5): generated when missing or still
+# the example placeholder, never rotated once set. Distinct per file on
+# purpose: each is the secret of the portal that reads that file.
+for _env_file in apps/web/.env.local .env; do
+  if [ "$(dpf_env_ensure_secret_hex DPF_GIT_WEBHOOK_SECRET "$_env_file" 32)" != "kept" ]; then
+    ok "Generated DPF_GIT_WEBHOOK_SECRET in $_env_file"
+  fi
+done
+
 # ── Compose services ─────────────────────────────────────────────────────────
 
 # PostgreSQL owns relational, vector, and graph persistence.

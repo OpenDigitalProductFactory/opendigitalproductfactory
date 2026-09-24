@@ -476,6 +476,19 @@ else
   _host_bind_preserved=0
 fi
 
+# BI-C26D5DC5: the Git update receiver refuses every delivery in production
+# without DPF_GIT_WEBHOOK_SECRET, and no install ever wrote one. Same shape as
+# the bind address above: the portal is recreated in step 4 but the install
+# .env is written in step 7, so generate the value now, export it for compose,
+# and let install-release-assets.mjs persist this exact value when it commits
+# the release identity. An existing value is never replaced: the operator may
+# have pasted it into the repository webhook. The value is never printed.
+if [[ -z "${DPF_GIT_WEBHOOK_SECRET:-}" && -n "${PROMOTE_COMPOSE_ENV_FILE:-}" ]] \
+  && ! grep -Eq '^DPF_GIT_WEBHOOK_SECRET=[^<[:space:]"'"'"']' "$PROMOTE_COMPOSE_ENV_FILE"; then
+  DPF_GIT_WEBHOOK_SECRET="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+  export DPF_GIT_WEBHOOK_SECRET
+fi
+
 # Emit a tagged step line; always prints in both dry-run and real modes.
 # Only the step name and target SHA are printed — never source/backup/health
 # paths — so logs are safe to surface to operators.

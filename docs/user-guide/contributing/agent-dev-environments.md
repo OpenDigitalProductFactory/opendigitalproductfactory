@@ -435,7 +435,7 @@ sequenceDiagram
 
 Two things follow from this design:
 
-- **Webhooks are a platform-level integration, not a per-session setup step.** The operator configures the GitHub repository webhook and `DPF_GIT_WEBHOOK_SECRET` once. As a contributor you don't wire it per thread — you just push, and the loop picks it up.
+- **Webhooks are a platform-level integration, not a per-session setup step.** The installer generates `DPF_GIT_WEBHOOK_SECRET` into the install `.env`, and an upgrade adds it when missing. The operator pastes that value into the GitHub repository webhook once. As a contributor you don't wire it per thread — you just push, and the loop picks it up. A development install on loopback cannot be reached by GitHub; `gh webhook forward` relays deliveries to it (see the build gate runbook).
 - **No surface hand-advances the live install.** The webhook feeds the *promotion pipeline*; it does not deploy. Promotion still runs the sandbox verification and the gate evidence before anything reaches the running portal. This is the automated counterpart to the manual rule below (*"the live install advances only via the self-upgrade pipeline"*).
 
 Don't confuse this server-side **webhook** with the client-side **[hooks](#hooks-local-guardrails-not-to-be-confused-with-webhooks)** — hooks guard tool calls on your machine; the webhook carries git events between GitHub and the portal.
@@ -474,7 +474,7 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 | Tool returns `insufficient_token_scope` | Review the connection's approved permissions through OAuth. A role or room denial requires access from its owner, not another token |
 | New worktree has no `dpf` connector | Run `scripts/dpf-bootstrap-agent-toolchain.sh` inside the worktree, then restart |
 | Dev-server launch refused (a hook blocked it) | Use a lease for the shared runtime, or run in an isolated worktree compose stack |
-| Pushed branch isn't triggering promotion | That's the server-side webhook — confirm the GitHub repo webhook and `DPF_GIT_WEBHOOK_SECRET` are configured (operator task), not a per-session step |
+| Pushed branch isn't triggering promotion | That's the server-side webhook — confirm the GitHub repo webhook uses the install's `DPF_GIT_WEBHOOK_SECRET` and can reach the portal (operator task), not a per-session step. A 503 "secret is not configured" means the install predates BI-C26D5DC5; the next self-upgrade adds it |
 | Codex/Grok/Antigravity missing a hook guard | Expected on some surfaces — comply by construction: claim the lease before launching |
 
 ---

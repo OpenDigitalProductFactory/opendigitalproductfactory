@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -79,6 +79,27 @@ export const HOST_BIND_KEY = "DPF_HOST_BIND_ADDRESS";
 export const HOST_BIND_FRESH = "127.0.0.1";
 export const HOST_BIND_PRE_EXISTING = "0.0.0.0";
 
+// BI-C26D5DC5: the Git update receiver's signing secret. promote.sh exports the
+// value the recreated portal was started with; persisting that same value keeps
+// the running portal and the install .env in step. A real value is never
+// replaced, because the operator may have pasted it into the repository webhook.
+export const GIT_WEBHOOK_SECRET_KEY = "DPF_GIT_WEBHOOK_SECRET";
+
+function hasRealValue(text, key) {
+  const match = text.match(new RegExp(`^${key}=(.*)$`, "m"));
+  const value = match ? match[1].trim().replace(/^["']|["']$/g, "") : "";
+  return value.length > 0 && !value.startsWith("<");
+}
+
+export function ensureGitWebhookSecret(text, newline, secret = process.env[GIT_WEBHOOK_SECRET_KEY]) {
+  if (hasRealValue(text, GIT_WEBHOOK_SECRET_KEY)) return text;
+  const value = secret && secret.trim() ? secret.trim() : randomBytes(32).toString("hex");
+  const pattern = new RegExp(`^${GIT_WEBHOOK_SECRET_KEY}=.*$`, "m");
+  if (pattern.test(text)) return text.replace(pattern, `${GIT_WEBHOOK_SECRET_KEY}=${value}`);
+  const why = "# Signing secret for GitHub update deliveries (BI-C26D5DC5). Paste into the repository webhook Secret field.";
+  return `${text}${text && !text.endsWith("\n") ? newline : ""}${why}${newline}${GIT_WEBHOOK_SECRET_KEY}=${value}${newline}`;
+}
+
 export function updateEnv(bytes, releaseTag, ghcrOwner) {
   let text = bytes?.toString("utf8") ?? "";
   const preExisting = text.trim().length > 0;
@@ -95,6 +116,7 @@ export function updateEnv(bytes, releaseTag, ghcrOwner) {
       : "# Loopback by default (BI-FEE77B68). Set 0.0.0.0 to serve the LAN.";
     text += `${text && !text.endsWith("\n") ? newline : ""}${why}${newline}${HOST_BIND_KEY}=${value}${newline}`;
   }
+  text = ensureGitWebhookSecret(text, newline);
   return Buffer.from(text);
 }
 
