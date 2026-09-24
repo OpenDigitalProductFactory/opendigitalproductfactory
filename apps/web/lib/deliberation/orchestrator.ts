@@ -340,11 +340,9 @@ export async function orchestrateDeliberation(
     }
     taskRunDbId = existing.id;
   } else {
-    // TaskRun.status is a closed set (TASK_STATES); the legacy "active" is
-    // refused with 23514 (BI-CB4A6435). With a dispatcher the branches run
-    // here, now, so the run is born working with its first heartbeat in the
-    // same write. Without one the async deliberation runner executes it and
-    // moves it to working through markTaskRunWorking, so it is born submitted.
+    // TASK_STATES only — "active" is refused with 23514 (BI-CB4A6435). A dispatcher
+    // runs the branches here, so born working + first heartbeat; else the async
+    // runner (deliberation-run.ts) moves it to working via markTaskRunWorking.
     const bornAt = new Date();
     const birth = input.dispatcher
       ? { status: "working" satisfies TaskState, startedAt: bornAt, lastHeartbeatAt: bornAt }
