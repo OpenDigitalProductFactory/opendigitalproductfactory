@@ -100,6 +100,7 @@ import {
   looksLikeCliAuthFailure,
   looksLikeCliRateLimit,
   looksLikeCliUnsupportedModel,
+  cliFailureSignal,
 } from "./codex-cli-adapter";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
@@ -365,5 +366,45 @@ describe("looksLikeCliRateLimit", () => {
     "Reading prompt from stdin...",
   ])("does not misclassify non-capacity stderr %j", (text) => {
     expect(looksLikeCliRateLimit(text)).toBe(false);
+  });
+});
+
+// BI-18AF9BA0 (live, 2026-09-24, FB-1FAAA146): the Codex CLI echoes the whole prompt into
+// stderr. An architecture-review prompt that discussed "401 Unauthorized" and
+// "token expired" made a usage-limit failure classify as auth, and the fallback
+// chain DISABLED the codex provider — while the sibling chatgpt provider on the
+// same account was correctly marked rate_limited until the quota reset.
+describe("cliFailureSignal — classify the CLI's own error, not the echoed prompt", () => {
+  const stderr = [
+    "Reading prompt from stdin...",
+    "OpenAI Codex v0.149.1",
+    "--------",
+    "workdir: /workspace/.builds/FB-1FAAA146",
+    "model: gpt-5.6-luna",
+    "session id: 01a0d3c2-fd98-75d1-bd06-373f21c19644",
+    "--------",
+    "user",
+    "You are the Enterprise Architect. Review the plan: the endpoint must return 401 Unauthorized when the",
+    "session expired or the token has expired, and prompt the user to re-authenticate.",
+    "ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 30th, 2026 4:01 AM.",
+    "tokens used",
+    "39,484",
+  ].join("\n");
+
+  it("classifies a usage limit as a rate limit even when the prompt talks about auth", () => {
+    const signal = cliFailureSignal(stderr);
+    expect(looksLikeCliAuthFailure(signal)).toBe(false);
+    expect(looksLikeCliRateLimit(signal)).toBe(true);
+  });
+
+  it("still classifies the CLI's own auth error as auth", () => {
+    const expired = stderr.replace(/ERROR: You've hit[^\n]*/, "ERROR: unexpected status 401 Unauthorized: Missing bearer");
+    expect(looksLikeCliAuthFailure(cliFailureSignal(expired))).toBe(true);
+  });
+
+  it("falls back to the tail when the CLI printed no ERROR line", () => {
+    const text = "x".repeat(10_000) + "\nnot logged in";
+    expect(cliFailureSignal(text)).toContain("not logged in");
+    expect(cliFailureSignal(text).length).toBeLessThanOrEqual(2_000);
   });
 });
