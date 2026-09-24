@@ -11,6 +11,8 @@ import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import { TOOL_PACK_REGISTRY } from "@/lib/mcp/pack-registry";
 import { inferProviderIdFromRouteContext } from "@/lib/ai-provider-route-context";
 import type { AuthorizedSurfaceToolExecutionContext } from "@/lib/coworker/authorized-surface-execution-types";
+import type { ToolCallConsequenceRefiner, ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
+export { TOOL_CONSEQUENCES, type ToolConsequence, type ToolConsequenceScope } from "@/lib/tool-consequence";
 // ─── Types ───────────────────────────────────────────────────────────────────
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
 export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
@@ -67,28 +69,6 @@ export type ToolAnnotations = {
   irreversibleHint?: boolean;
 };
 
-/**
- * Declared reach of a tool's effect. See `ToolDefinition.consequence`.
- * Closed set: a new axis is a deliberate widening of what the gate governs,
- * not a string literal someone invents at a call site.
- */
-export type ToolConsequence = "outward" | "irreversible" | "authority";
-
-/**
- * The closed set, as a runtime value. `deriveConsequentialToolNames`
- * (apps/web/lib/tak/consequential-tool-coverage.ts) derives the consult-gated
- * set from `sideEffect && consequence != null` — TAK §8.4.1, classification is
- * derived from a declared property, never re-enumerated in a second allowlist.
- */
-export const TOOL_CONSEQUENCES: readonly ToolConsequence[] = [
-  "outward",
-  "irreversible",
-  "authority",
-] as const;
-
-/** See `ToolDefinition.consequenceScope`. Closed set. */
-export type ToolConsequenceScope = "business" | "platform";
-
 export type ToolDefinition = {
   name: string;
   description: string;
@@ -143,6 +123,8 @@ export type ToolDefinition = {
    * outward-reviewed, just not WWWD-alignment-gated.
    */
   consequenceScope?: ToolConsequenceScope;
+  /** Narrows `consequence` for one call; may only narrow (tool-consequence.ts). */
+  consequenceForCall?: ToolCallConsequenceRefiner;
   /**
    * Tool captures the coworker's own recommendation or work product as a
    * structured artifact (e.g. save_marketing_review). Persistence-only; no

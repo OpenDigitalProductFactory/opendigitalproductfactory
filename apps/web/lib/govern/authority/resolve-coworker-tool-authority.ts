@@ -9,6 +9,7 @@ import { prisma } from "@dpf/db";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 
 import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval-envelope";
+import { resolveCallConsequence } from "@/lib/tool-consequence";
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
@@ -423,6 +424,12 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     ].filter((value): value is string => Boolean(value));
 
     const roomAuthority = execution.context?.roomAuthority ?? null;
+    const callConsequence = await resolveCallConsequence(tool, {
+      toolName: execution.toolName,
+      params: execution.rawParams,
+      userId: execution.userId,
+      context: { agentId: execution.context?.agentId, authSource: execution.context?.authSource },
+    });
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
       organizationId: initiativeAuthority.organizationId,
@@ -441,7 +448,8 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         approvalPolicy,
         policyProjectionAllowed:
           agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
-        consequence: tool.consequence ?? null,
+        consequence: callConsequence.consequence,
+        ...(callConsequence.refinement ? { consequenceRefinement: callConsequence.refinement } : {}),
         ...(execution.context?.workCase
           ? { workCaseConsequential: isWorkCaseConsequential(execution.context.workCase) }
           : {}),

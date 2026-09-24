@@ -210,6 +210,9 @@ async function writeAuthorizationDecision(
         input.task?.taskRunId ?? execution.context?.taskRunId ?? null,
       subjectKind: input.subject?.kind ?? null,
       authorityOrganizationScope: input.organizationId ?? null,
+      ...(input.action.consequenceRefinement
+        ? { consequenceRefinement: input.action.consequenceRefinement }
+        : {}),
       // BI-12E5DD91: which escalation branch decided, so "why did this need a
       // person?" is answerable from the record instead of re-derived.
       ...("escalation" in decision && decision.escalation

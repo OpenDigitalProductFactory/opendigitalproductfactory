@@ -219,8 +219,12 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
-    // changes identity or authority → consult-gated (TAK §8.4.1).
+    // changes identity or authority → consult-gated (TAK §8.4.1). A plain
+    // claim on the caller's own room narrows to ordinary (BI-2D65BD1B); a forced
+    // claim or one over another principal's live lease stays `authority`.
     consequence: "authority",
+    consequenceForCall: async (call) =>
+      (await import("@/lib/work-capsules/scope-claim-consequence")).scopeClaimConsequenceForCall(call),
   },
   {
     name: "heartbeat_workroom",

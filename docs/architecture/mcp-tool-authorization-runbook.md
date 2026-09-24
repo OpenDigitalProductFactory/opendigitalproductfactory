@@ -178,6 +178,26 @@ decides whether the evidence satisfies completion. Missing or ambiguous
 Workroom, baseline, source, or eligible writer returns a typed escalation and
 no reviewer route.
 
+## When a Workroom scope claim needs a person
+
+`claim_workroom_scope` declares an `authority` consequence, because a forced
+claim can take work from another session. One call may narrow that
+declaration to ordinary (BI-2D65BD1B). The rule lives in
+`apps/web/lib/work-capsules/scope-claim-lease.ts`, and both the authority gate
+and the store read it:
+
+| Call | Outcome |
+|---|---|
+| Claim on your own room: you hold its lease, or the lease is empty or lapsed | Ordinary. An OAuth assistant runs under its human's connection consent. |
+| `force: true` | A person approves. |
+| Another principal holds the room's live lease | A person approves a forced claim. Without force the store refuses with `lease_held`. |
+| Unknown, archived or finished room | Gated, and the store refuses it. |
+
+A per-call refiner (`ToolDefinition.consequenceForCall`) may only narrow. Any
+answer other than `null` keeps the declaration, and so does a refiner error.
+The decision log records `consequenceRefinement: {declared, reason}` on every
+narrowed call.
+
 ## Acting-coworker binding — what lets a token join a Work Room
 
 A bearer token carries two separate things: **grants** (what tools it may call)

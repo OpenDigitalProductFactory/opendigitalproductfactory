@@ -60,6 +60,7 @@ import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
+import { ScopeClaimLeaseHeldError } from "./scope-claim-lease";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -288,6 +289,10 @@ export async function claimCapsuleScopeTool(
           "Coordinate with the holder, claim different scope, or pass force=true to deliberately co-claim.",
         data: { conflicts: error.conflicts },
       };
+    }
+    if (error instanceof ScopeClaimLeaseHeldError) {
+      return { success: false, error: "lease_held", message: error.message,
+        data: { holderPrincipalId: error.holderPrincipalId, leaseExpiresAt: error.leaseExpiresAt.toISOString() } };
     }
     throw error;
   }
