@@ -219,8 +219,9 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
   }
   let reconciled = 0;
   for (const capsule of capsules) {
+    // BI-62FB6505: Build Studio rooms store the item's row id, CLI rooms its itemId.
     const item = await args.db.backlogItem.findFirst({
-      where: { itemId: capsule.backlogItemId },
+      where: { OR: [{ itemId: capsule.backlogItemId }, { id: capsule.backlogItemId }] },
       select: { id: true, itemId: true, status: true, activeBuildId: true },
     });
     if (!item) continue;

@@ -108,6 +108,32 @@ describe("reconcileTerminalCapsuleBacklogs (BI-C2EB2C6B)", () => {
       }),
     }));
   });
+
+  // BI-62FB6505: Build Studio rooms store the item's ROW id in backlogItemId; the
+  // sweep looked items up by itemId only, found nothing, and never cleared the
+  // pointer — 8 items on the dev install were pinned to abandoned builds and
+  // refused every re-promotion ("Item already has an active build").
+  it("finds the item when the room stores its row id", async () => {
+    const findFirst = vi.fn(async (args: { where: { OR?: Array<Record<string, string>> } & Record<string, unknown> }) => {
+      const keys = (args.where.OR ?? [args.where]) as Array<Record<string, unknown>>;
+      return keys.some((k) => k.id === "row-bi" || k.itemId === "BI-DEAD")
+        ? { id: "row-bi", itemId: "BI-DEAD", status: "open", activeBuildId: "fb-row" }
+        : null;
+    });
+    const db = {
+      workroom: {
+        findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-BS", status: "abandoned", backlogItemId: "row-bi", featureBuildId: "fb-row" }]),
+      },
+      featureBuild: { findMany: vi.fn().mockResolvedValue([{ id: "fb-row", phase: "abandoned" }]) },
+      backlogItem: { findFirst, update: vi.fn().mockResolvedValue({}) },
+      backlogItemActivity: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({}) },
+    };
+
+    const result = await reconcileTerminalCapsuleBacklogs({ db: db as never, dryRun: false, now: NOW });
+
+    expect(result).toEqual({ scanned: 1, reconciled: 1 });
+    expect(db.backlogItem.update).toHaveBeenCalledWith({ where: { id: "row-bi" }, data: { activeBuildId: null } });
+  });
 });
 
 function capsule(overrides: Record<string, unknown> = {}) {
