@@ -381,13 +381,33 @@ export function expandGrants(held, implications) {
   return out;
 }
 
+/**
+ * The runtime's reachability rule, mirrored (BI-378D3659). isToolAllowedByGrants
+ * in agent-grants.ts admits a tool when ANY ONE of its required grants is held
+ * after expansion, and treats an empty requirement as universal. This measure
+ * used to demand EVERY grant, so it called tools unreachable that the runtime
+ * lets the coworker call. It cannot import the TypeScript predicate, so
+ * apps/web/lib/tak/grant-reachability-parity.test.ts runs the same fixtures
+ * through both. `expanded` is the Set returned by expandGrants().
+ */
+export function grantsSatisfy(required, expanded) {
+  return required.length === 0 || required.some((g) => expanded.has(g));
+}
+
+/** Plain-language form of an unmet requirement: one grant, or a list of alternatives. */
+export function describeMissingGrants(grants) {
+  if (grants.length === 0) return "grants undeclared";
+  return grants.length === 1 ? grants[0] : `any one of ${grants.join(", ")}`;
+}
+
 export function canCall(tool, expanded, toolToGrants) {
   const required = toolToGrants.get(tool);
   if (!required) return { reachable: false, reason: `tool "${tool}" not in TOOL_TO_GRANTS` };
-  const missing = required.filter((g) => !expanded.has(g));
-  return missing.length === 0
+  // Unreachable means NONE of the alternatives is held, so every one of them is
+  // a grant that would open the tool — all are reported, any one suffices.
+  return grantsSatisfy(required, expanded)
     ? { reachable: true, requires: required }
-    : { reachable: false, requires: required, missingGrants: missing };
+    : { reachable: false, requires: required, missingGrants: [...required] };
 }
 
 // ─────────────────────────── load substrate ───────────────────────────
@@ -740,7 +760,7 @@ export function scoreIdentity(ident, s) {
         ? `profession "${professionKey}" has no corpus pages`
         : wsid.reachable
           ? `${pages} corpus pages, reachable`
-          : `corpus exists (${pages} pages) but evaluate_profession_decision is unreachable — missing: ${(wsid.missingGrants ?? []).join(", ") || "grants undeclared"}`,
+          : `corpus exists (${pages} pages) but evaluate_profession_decision is unreachable — missing: ${describeMissingGrants(wsid.missingGrants ?? [])}`,
   };
 
   // ── Plane 3: Governance / WWWD ─────────────────────────────────────────
@@ -752,7 +772,7 @@ export function scoreIdentity(ident, s) {
   // ladder measures whether the agent can consult, this measures whether the
   // platform makes it. Folding them would blame the agent for a platform gap.
   const reachableSideEffecting = [...(s.toolDefs ?? new Map()).entries()]
-    .filter(([name, def]) => def.sideEffect && (s.toolToGrants.get(name) ?? []).every((g) => expanded.has(g)))
+    .filter(([name, def]) => def.sideEffect && grantsSatisfy(s.toolToGrants.get(name) ?? [], expanded))
     .map(([name]) => name);
   const reachableGated = reachableSideEffecting.filter((n) => (s.consequentialTools ?? new Set()).has(n));
 
@@ -769,7 +789,7 @@ export function scoreIdentity(ident, s) {
     detail: held.length === 0
       ? "holds no grants at all — no tool surface is authorised"
       : !wwmd.reachable
-        ? `principle_decide unreachable — missing: ${(wwmd.missingGrants ?? []).join(", ")}`
+        ? `principle_decide unreachable — missing: ${describeMissingGrants(wwmd.missingGrants ?? [])}`
         : escalates
           ? `principle_decide reachable; escalates to ${escalates}`
           : "principle_decide reachable, but no escalation target is declared",
@@ -820,7 +840,7 @@ export function scoreIdentity(ident, s) {
   const direct = s.skills.filter((sk) => sk.assignTo.some((t) => ident.handles.has(t)));
   const wildcard = s.skills.filter((sk) => sk.assignTo.includes("*"));
   const reachableTools = [...s.toolToGrants.entries()]
-    .filter(([, req]) => req.every((g) => expanded.has(g))).length;
+    .filter(([, req]) => grantsSatisfy(req, expanded)).length;
   const skillNames = new Set([...s.skills.map((sk) => sk.name), ...s.packSkillNames]);
   const services = [...ident.handles].flatMap((h) => s.servicesByAgent.get(h) ?? []);
   const unbacked = [...new Set(

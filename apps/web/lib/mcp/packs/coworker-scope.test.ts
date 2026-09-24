@@ -5,19 +5,41 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => db);
 
-import { resolveCoworkerBacklogScope, requireCurrentCoworker } from "./coworker-scope";
+import {
+  coworkerNotBoundRefusal,
+  coworkerNotBoundResult,
+  currentCoworkerId,
+  resolveCoworkerBacklogScope,
+} from "./coworker-scope";
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("requireCurrentCoworker", () => {
+describe("currentCoworkerId", () => {
   it("returns the trimmed agentId from context", () => {
-    expect(requireCurrentCoworker({ agentId: " agent-a " })).toBe("agent-a");
+    expect(currentCoworkerId({ agentId: " agent-a " })).toBe("agent-a");
   });
-  it("throws when no agentId is present", () => {
-    expect(() => requireCurrentCoworker({})).toThrow(/current coworker agentId is required/);
-    expect(() => requireCurrentCoworker(undefined)).toThrow(/current coworker agentId is required/);
+  it("returns null, never throws, when the connection has no acting coworker", () => {
+    expect(currentCoworkerId({})).toBeNull();
+    expect(currentCoworkerId({ agentId: "  " })).toBeNull();
+    expect(currentCoworkerId(undefined)).toBeNull();
+  });
+});
+
+describe("agentless-connection results", () => {
+  it("answers a self-describing read with success and says why there is no profile", () => {
+    expect(coworkerNotBoundResult()).toMatchObject({
+      success: true,
+      data: { agentBound: false, recovery: expect.stringMatching(/OAuth/) },
+    });
+  });
+  it("refuses a coworker-only action without throwing", () => {
+    expect(coworkerNotBoundRefusal()).toMatchObject({
+      success: false,
+      error: "coworker_not_bound",
+      data: { agentBound: false },
+    });
   });
 });
 

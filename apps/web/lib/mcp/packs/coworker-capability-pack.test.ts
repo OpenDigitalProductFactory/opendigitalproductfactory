@@ -97,10 +97,68 @@ describe("coworker-capability pack — handler behavior", () => {
     expect((res.data as { profile: { name: string } }).profile.name).toBe("Marketing Coworker");
   });
 
-  it("get_my_coworker_profile requires a current coworker agentId", async () => {
-    await expect(
-      coworkerCapabilityPack.handlers.get_my_coworker_profile({}, "u1", {}),
-    ).rejects.toThrow(/current coworker agentId is required/);
+  // BI-949FBBAE: the four self tools are listed to an agentless static token
+  // (core tier) and used to throw "A current coworker agentId is required".
+  // A listed tool answers; it says plainly that there is no coworker here.
+  const NOT_BOUND = {
+    agentBound: false,
+    message: "This connection is not bound to an AI coworker, so it has no coworker profile.",
+    recovery: "Connect through OAuth so the platform assigns your assistant, or reissue the MCP token with an acting coworker.",
+  };
+
+  it.each(["get_my_coworker_profile", "assess_my_capabilities", "list_my_capability_needs"])(
+    "%s answers an agentless connection with a structured result instead of throwing",
+    async (tool) => {
+      const res = await coworkerCapabilityPack.handlers[tool]({}, "u1", {});
+      expect(res.success).toBe(true);
+      expect(res.message).toBe(NOT_BOUND.message);
+      expect(res.data).toEqual(NOT_BOUND);
+      expect(db.prisma.agent.findFirst).not.toHaveBeenCalled();
+      expect(marketplace.getToolMarketplaceReadiness).not.toHaveBeenCalled();
+      expect(assessmentService.listCoworkerCapabilityNeeds).not.toHaveBeenCalled();
+    },
+  );
+
+  it("submit_coworker_capability_need refuses an agentless connection without writing or throwing", async () => {
+    const res = await coworkerCapabilityPack.handlers.submit_coworker_capability_need(
+      { verdict: "gaps", confidence: "high", needs: [{ kind: "tool", severity: "blocker", need: "x", blocks: "y" }] },
+      "u1",
+      { agentId: "   " },
+    );
+    expect(res).toMatchObject({ success: false, error: "coworker_not_bound", message: NOT_BOUND.message, data: NOT_BOUND });
+    expect(assessmentService.submitCoworkerSelfAssessment).not.toHaveBeenCalled();
+  });
+
+  // BI-378D3659: the profile showed only raw grant rows, while the runtime
+  // expands them through GRANT_IMPLICATIONS and intersects with the token.
+  it("reports effective grants the way the runtime computes them, beside the raw rows", async () => {
+    db.prisma.agent.findFirst.mockResolvedValue({
+      ...AGENT_ROW,
+      toolGrants: [{ grantKey: "backlog_write" }, { grantKey: "registry_read" }],
+    });
+    const res = await coworkerCapabilityPack.handlers.get_my_coworker_profile({}, "u1", {
+      agentId: "agent-1",
+      tokenGrantScopes: ["registry_read", "build_evidence", "file_read"],
+    });
+    const data = res.data as { profile: { grants: string[] }; effectiveGrants: Record<string, unknown> };
+    expect(data.profile.grants).toEqual(["backlog_write", "registry_read"]);
+    expect(data.effectiveGrants).toMatchObject({
+      agentGrantRows: ["backlog_write", "registry_read"],
+      agentGrantsExpanded: ["backlog_write", "build_evidence", "build_phase_advance", "registry_read"],
+      tokenGrantScopes: ["build_evidence", "file_read", "registry_read"],
+      effective: ["build_evidence", "registry_read"],
+    });
+    expect(data.effectiveGrants.label).toMatch(/runtime/i);
+  });
+
+  it("reports the expanded agent grants as effective when no token scopes apply (in-portal turn)", async () => {
+    db.prisma.agent.findFirst.mockResolvedValue({ ...AGENT_ROW, toolGrants: [{ grantKey: "crm_write" }] });
+    marketplace.getToolMarketplaceReadiness.mockResolvedValue({ summary: {}, entries: [] });
+    const res = await coworkerCapabilityPack.handlers.assess_my_capabilities({}, "u1", { agentId: "agent-1" });
+    expect((res.data as { effectiveGrants: unknown }).effectiveGrants).toMatchObject({
+      tokenGrantScopes: null,
+      effective: ["crm_read", "crm_write"],
+    });
   });
 
   it("assess_my_capabilities attaches readiness and the response shape", async () => {

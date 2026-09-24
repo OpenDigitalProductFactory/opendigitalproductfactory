@@ -72,6 +72,14 @@ export function expandGrants(grants: readonly string[]): string[] {
   }
   return Array.from(expanded);
 }
+/** THE runtime reachability rule (BI-378D3659): required grants are ALTERNATIVES — any one held after
+ *  expansion suffices; [] is universal. Report it with this, never an every-grant test; the .mjs
+ *  capability measure mirrors it (grant-reachability-parity.test.ts). */
+export function grantsSatisfyRequirement(required: readonly string[], held: readonly string[]): boolean {
+  if (required.length === 0) return true;
+  const expanded = new Set(expandGrants(held));
+  return required.some((g) => expanded.has(g));
+}
 /**
  * Read-only baseline every coworker holds, regardless of its agent-specific
  * grants. Encodes the platform design criterion (operator, 2026-06-06,
@@ -817,8 +825,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
  */
 export { WORKROOM_TOOL_ALIASES } from "./workroom-tool-aliases";
 
-
-
 /**
  * The catalog of every grant KEY known to the authority registry, derived from
  * the single source of truth (TOOL_TO_GRANTS values + GRANT_IMPLICATIONS keys
@@ -901,10 +907,8 @@ export async function getAgentToolGrantsAsync(agentId: string): Promise<string[]
   return getAgentToolGrants(agentId) ?? [];
 }
 
-/** Check if a specific tool is allowed by an agent's grants. The agent's
- *  held grants are expanded through GRANT_IMPLICATIONS before the check, so
- *  a coarse legacy grant (e.g. `backlog_write`) still satisfies a tool that
- *  has been refactored to require a finer grant (e.g. `build_evidence`). */
+/** Check if a tool is allowed by an agent's grants (expanded, so a coarse legacy grant such as
+ *  `backlog_write` still satisfies a tool refactored to a finer grant such as `build_evidence`). */
 export function isToolAllowedByGrants(
   toolName: string,
   agentGrants: string[],
@@ -917,11 +921,7 @@ export function isToolAllowedByGrants(
     console.warn(`[agent-grants] Tool ${JSON.stringify(toolName)} has no TOOL_TO_GRANTS entry — denied by default`);
     return false;
   }
-  if (requiredGrants.length === 0) return true;
-  // Expand the agent's grants through GRANT_IMPLICATIONS, then check that the
-  // expanded set includes at least one of the required grants.
-  const expanded = expandGrants(agentGrants);
-  return requiredGrants.some((g) => expanded.includes(g));
+  return grantsSatisfyRequirement(requiredGrants, agentGrants);
 }
 
 export type EffectivePermission = {

@@ -21,7 +21,9 @@ describe("isAgentToolListable", () => {
   });
 
   it("drops every tool under a blanket deny (unresolved agent or clearance shortfall)", () => {
-    const authority: ListingAuthority = { agentBound: true, blanketDeny: true };
+    const authority: ListingAuthority = {
+      agentBound: true, blanketDeny: true, cause: "clearance-denied", agentGrants: ["query_employees_grant"],
+    };
     expect(isAgentToolListable("query_employees", authority, isAllowed)).toBe(false);
     expect(isAgentToolListable("read_project_file", authority, isAllowed)).toBe(false);
   });
@@ -72,7 +74,9 @@ describe("resolveListingAuthority", () => {
         resolveHumanClearance: vi.fn(async () => ["public", "internal", "confidential"]),
       }),
     );
-    expect(result).toEqual({ agentBound: true, blanketDeny: true });
+    expect(result).toEqual({
+      agentBound: true, blanketDeny: true, cause: "clearance-denied", agentGrants: ["query_employees_grant"],
+    });
   });
 
   it("blanket-denies when the acting agent cannot be resolved (null sensitivity)", async () => {
@@ -80,7 +84,9 @@ describe("resolveListingAuthority", () => {
       { agentId: "AGT-GONE" },
       deps({ resolveAgentSensitivity: vi.fn(async () => null) }),
     );
-    expect(result).toEqual({ agentBound: true, blanketDeny: true });
+    expect(result).toEqual({
+      agentBound: true, blanketDeny: true, cause: "agent-unresolved", agentGrants: ["query_employees_grant"],
+    });
   });
 
   it("fails CLOSED for an unknown agent sensitivity label (coerced to restricted)", async () => {
@@ -93,6 +99,8 @@ describe("resolveListingAuthority", () => {
         resolveHumanClearance: vi.fn(async () => ["public", "internal", "confidential"]),
       }),
     );
-    expect(result).toEqual({ agentBound: true, blanketDeny: true });
+    expect(result).toEqual({
+      agentBound: true, blanketDeny: true, cause: "clearance-denied", agentGrants: ["query_employees_grant"],
+    });
   });
 });

@@ -224,9 +224,34 @@ empty, no active agent in the registry holds `work_room_write`.
 
 ### Diagnosing an empty `load_tools` result
 
-An empty exact-name discovery result now includes a structured `noMatch.reason`.
-`unknown-tool-name` means the name is not in the platform registry;
-`not-granted` means the known tool is unavailable to the current token; and
+Every requested name now gets an entry in `status[]` (BI-949FBBAE), whether or
+not anything else in the call loaded. Before, a request that loaded one name of
+four said nothing about the other three. Each entry reports:
+
+| Field | Meaning |
+|---|---|
+| `serverHasTool` | The platform registry has this tool. |
+| `tokenGranted` | This connection's token scope and grants admit it. |
+| `agentGranted` | The acting coworker holds any one of its required grants; `null` when the connection has no coworker. |
+| `callableByName` | `tools/call` would admit it now (token, role, coworker grants and clearance together). |
+| `loadedInSession` | It is in this connection's loaded set. |
+| `reason` | Why it is not callable: `unknown-tool-name`, `token-scope-missing`, `role-capability-missing`, `agent-grant-missing`, `clearance-denied` or `reviewer-route-required`. |
+| `recovery` | The supported next step, in plain words. |
+
 `reviewer-route-required` means an initiative review writer must be reached via
 `get_backlog_item` and its server-issued `reviewerRoutes` packet. Do not grant or
-invoke a reviewer writer directly to work around that boundary.
+invoke a reviewer writer directly to work around that boundary. `noMatch` keeps
+its one-line summary and now also covers a partial match. Whether the CLIENT
+shows a loaded tool in its own registry cannot be observed from the server: when
+`callableByName` is true and the client still lacks the tool, re-fetch
+`tools/list` or restart the client.
+
+A connection with no acting coworker (an operator token without an agent) now
+gets a structured answer from `get_my_coworker_profile` and
+`assess_my_capabilities` (`agentBound: false` with a recovery step), instead of
+the error "A current coworker agentId is required". The profile's
+`effectiveGrants` shows the stored grant rows, their expansion through grant
+implications, and the result intersected with the token's scopes: what the
+runtime actually checks. Capability reports (`get_capability_completeness`)
+count a tool reachable when any one required grant is held, the same rule the
+runtime applies (BI-378D3659).

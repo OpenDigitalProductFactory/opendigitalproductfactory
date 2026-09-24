@@ -14,14 +14,38 @@
 // the whole backlog via query_backlog, so this lens is strictly less powerful.)
 
 import { professionKeyFromRole } from "@/lib/decision-perspective/resolve-profession-profile";
+import type { ToolResult } from "@/lib/mcp-tools";
 
-/** Reads the acting coworker's agentId from MCP tool context; throws if absent. */
-export function requireCurrentCoworker(context?: { agentId?: string }): string {
-  const agentId = context?.agentId?.trim();
-  if (!agentId) {
-    throw new Error("A current coworker agentId is required for this tool.");
-  }
-  return agentId;
+/**
+ * The acting coworker's agentId from MCP tool context, or null when the
+ * connection is not bound to one (an agentless static token). The self tools
+ * are listed to such a token, so they answer rather than throw (BI-949FBBAE).
+ */
+export function currentCoworkerId(context?: { agentId?: string }): string | null {
+  return context?.agentId?.trim() || null;
+}
+
+/** What an agentless connection is told, and how to get a coworker. */
+export const COWORKER_NOT_BOUND = Object.freeze({
+  agentBound: false as const,
+  message: "This connection is not bound to an AI coworker, so it has no coworker profile.",
+  recovery:
+    "Connect through OAuth so the platform assigns your assistant, or reissue the MCP token with an acting coworker.",
+});
+
+/** A self-describing read on an agentless connection: a true answer, not an error. */
+export function coworkerNotBoundResult(): ToolResult {
+  return { success: true, message: COWORKER_NOT_BOUND.message, data: { ...COWORKER_NOT_BOUND } };
+}
+
+/** A coworker-only action or lens on an agentless connection: refused, never thrown. */
+export function coworkerNotBoundRefusal(): ToolResult {
+  return {
+    success: false,
+    error: "coworker_not_bound",
+    message: COWORKER_NOT_BOUND.message,
+    data: { ...COWORKER_NOT_BOUND },
+  };
 }
 
 export interface CoworkerBacklogScope {

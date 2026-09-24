@@ -14,7 +14,7 @@ import { getCoworkerBacklogSlice } from "@/lib/coworker-record/surface-backlog";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-import { requireCurrentCoworker } from "./coworker-scope";
+import { coworkerNotBoundRefusal, currentCoworkerId } from "./coworker-scope";
 
 const definitions: ToolDefinition[] = [
   {
@@ -52,7 +52,10 @@ async function listMyBacklogHandler(
   params: Record<string, unknown>,
   context: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
-  const agentId = requireCurrentCoworker(context);
+  // An agentless connection has no slice of its own. Refuse plainly rather than
+  // throw, and rather than return an empty list that would read as "no work".
+  const agentId = currentCoworkerId(context);
+  if (!agentId) return coworkerNotBoundRefusal();
   // The slice query is shared with the coworker-record "Backlog" panel
   // (lib/coworker-record/surface-backlog) so the tool and the UI never drift.
   const slice = await getCoworkerBacklogSlice(agentId, {
