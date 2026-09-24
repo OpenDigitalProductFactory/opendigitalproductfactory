@@ -645,7 +645,7 @@ async function runSandboxFileTool(
   // These use Node.js fs operations — no docker exec, no shell escaping.
   const { readFile, writeFile, mkdir } = lazyFsPromises();
   const { join, dirname } = lazyPath();
-  const SANDBOX_MOUNT = "/sandbox-workspace";
+  const { workdir: BUILD_WORKDIR, mount: SANDBOX_MOUNT } = await (await import("@/lib/build/sandbox/sandbox-tool-roots")).prepareSandboxToolRoots(buildId); // BI-972A386D
 
   const resolveSandboxPath = (p: string) => {
     const cleaned = p.replace(/^\/?workspace\//, "");
@@ -843,7 +843,7 @@ async function runSandboxFileTool(
     };
 
     try {
-      const output = await execInSandbox(sandboxId, `cd /workspace && ${command} 2>&1`);
+      const output = await execInSandbox(sandboxId, `cd ${BUILD_WORKDIR} && ${command} 2>&1`);
       logBuildActivity(buildId, "run_sandbox_command", `Ran: ${command.slice(0, 100)}`);
       return {
         success: true,
