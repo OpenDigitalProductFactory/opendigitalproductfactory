@@ -389,6 +389,18 @@ export const EXIT_VITEST_RUNNER_TERMINATION = 86;
  * code keeps the classifier's shape.
  */
 export const EXIT_CHILD_SIGNAL_DEATH = 87;
+/**
+ * A RESUMED gate found the lease it was waiting on cancelled (BI-D35B85BF).
+ * Cancellation is someone's decision, so the resumer stops instead of claiming
+ * again. Not a verdict on the diff: the run is recorded as unrun.
+ */
+export const EXIT_WAIT_CANCELLED = 81;
+/**
+ * A RESUMED gate found its worktree no longer holds the candidate it queued
+ * (HEAD or the branch moved, or the tree is dirty). Running would test other
+ * source than was queued, so it stops unrun instead of re-pointing silently.
+ */
+export const EXIT_SOURCE_DRIFT = 82;
 
 export function exitCodeForVerdict(verdict) {
   if (verdict === "green") return EXIT_GREEN;

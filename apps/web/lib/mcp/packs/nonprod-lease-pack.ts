@@ -174,6 +174,7 @@ const definitions: ToolDefinition[] = [
         },
         ownerSessionId: { type: "string" },
         claimKey: { type: "string", description: "Stable idempotency key reused while waiting for admission." },
+        resumeLeaseId: { type: "string", description: "The lease a resumed local-CI gate waits on. A cancelled one stays cancelled; this owner's obsolete queued wait is superseded." },
         gateIdentity: {
           type: "object",
           description: "Immutable local-CI identity components. The server derives the claim key and ignores caller claimKey.",
@@ -525,6 +526,7 @@ async function claimNonprodEnvironmentLeaseHandler(
   }
 
   const result = await claimNonprodEnvironmentLease({
+    resumeLeaseId: stringValue("resumeLeaseId") || undefined,
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci" | "host-heavy-resource",
     ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
     ownerSessionId,
@@ -545,8 +547,17 @@ async function claimNonprodEnvironmentLeaseHandler(
     ownerProcessId,
     ownerProcessIdentity: ownerProcessIdentity || undefined,
     hostResource,
+  }).catch((error: unknown) => {
+    // BI-D35B85BF: a resume that would cancel a running or foreign lease is refused, not thrown.
+    const code = getErrorMessage(error);
+    if (code === "nonprod_resume_lease_active" || code === "nonprod_resume_not_owner") return { refused: code } as const;
+    throw error;
   });
+  if ("refused" in result) {
+    return { success: false, error: result.refused, message: "This claim resumes a lease it may not replace; nothing was changed." };
+  }
   const toolLease = toolSafeLease(result.lease as unknown as Record<string, unknown>);
+  const common = { poolPolicy: result.poolPolicy, gateKey, ...(result.supersededLeaseId ? { supersededLeaseId: result.supersededLeaseId } : {}) };
   if (result.status === "reused") {
     return {
       success: true,
@@ -562,8 +573,7 @@ async function claimNonprodEnvironmentLeaseHandler(
           // with the evidence's clock, not the lease's (BI-03E1139A).
           evidenceValidity: result.evidenceValidity,
         },
-        poolPolicy: result.poolPolicy,
-        gateKey,
+        ...common,
       },
     };
   }
@@ -576,8 +586,7 @@ async function claimNonprodEnvironmentLeaseHandler(
       data: {
         lease: toolLease,
         admission: { status: "blocked", reason: result.reason },
-        poolPolicy: result.poolPolicy,
-        gateKey,
+        ...common,
       },
     };
   }
@@ -596,7 +605,7 @@ async function claimNonprodEnvironmentLeaseHandler(
       entityId: result.lease.leaseId,
       error: "lease_terminal",
       message: `Nonproduction lease request is already ${result.reason}; create a new claimKey to request admission again.`,
-      data: { lease: toolLease, reason: result.reason, poolPolicy: result.poolPolicy, gateKey },
+      data: { lease: toolLease, reason: result.reason, ...common },
     };
   }
   if (result.status === "subscribed") {
@@ -610,8 +619,7 @@ async function claimNonprodEnvironmentLeaseHandler(
           status: "subscribed",
           executionStatus: result.executionStatus,
         },
-        poolPolicy: result.poolPolicy,
-        gateKey,
+        ...common,
       },
     };
   }
@@ -637,19 +645,14 @@ async function claimNonprodEnvironmentLeaseHandler(
           resumeMode: "durable-task",
           taskRunId: durableWait.taskRunId,
         },
-        poolPolicy: result.poolPolicy,
-        gateKey,
+        ...common,
       },
     };
   }
   if (result.lease.taskRunId) {
     const { settleNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
-    await settleNonprodLeaseWait({
-      db: (await import("@dpf/db")).prisma,
-      taskRunId: result.lease.taskRunId,
-      leaseId: result.lease.leaseId,
-      state: "admitted",
-    });
+    const db = (await import("@dpf/db")).prisma;
+    await settleNonprodLeaseWait({ db, taskRunId: result.lease.taskRunId, leaseId: result.lease.leaseId, state: "admitted" });
   }
   return {
     success: true,
@@ -657,13 +660,8 @@ async function claimNonprodEnvironmentLeaseHandler(
     message: `Admitted nonproduction environment lease ${result.lease.leaseId} to ${result.slotKey}.`,
     data: {
       lease: toolLease,
-      admission: {
-        status: "admitted",
-        slotKey: result.slotKey,
-        waitAgeMs: result.waitAgeMs,
-      },
-      poolPolicy: result.poolPolicy,
-      gateKey,
+      admission: { status: "admitted", slotKey: result.slotKey, waitAgeMs: result.waitAgeMs },
+      ...common,
     },
   };
 }
