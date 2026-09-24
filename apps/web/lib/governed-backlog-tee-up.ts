@@ -150,6 +150,7 @@ type GovernedBacklogTeeUpTx = {
   featureBuild: {
     create(args: any): Promise<any>;
     update(args: any): Promise<any>;
+    findFirst?(args: any): Promise<any>;
   };
   buildActivity: {
     create(args: any): Promise<any>;
@@ -302,6 +303,24 @@ export async function promoteBacklogItemToBuildDraft(
       kind: "error",
       error: "Item already has an active build",
       message: `Item ${itemId} already has an active build`,
+    };
+  }
+
+  // BI-4ED5DB61: the pointer is not the only record of a live build. When it
+  // was cleared in error (BI-B940FE36) the daily tee-up minted a duplicate
+  // build. Every build carries originatingBacklogItemId; refuse on that too, and
+  // re-link the pointer so the item says what is true again.
+  const liveBuild = await tx.featureBuild.findFirst?.({
+    where: { originatingBacklogItemId: item.id, phase: { notIn: ["complete", "failed", "abandoned"] } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, buildId: true },
+  });
+  if (liveBuild) {
+    await tx.backlogItem.update({ where: { id: item.id }, data: { activeBuildId: liveBuild.id } });
+    return {
+      kind: "error",
+      error: "Item already has an active build",
+      message: `Item ${itemId} already has a live build (${liveBuild.buildId}); relinked it instead of starting another`,
     };
   }
 
