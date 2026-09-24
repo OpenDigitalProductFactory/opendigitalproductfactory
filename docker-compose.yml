@@ -296,6 +296,14 @@ services:
       PROJECT_ROOT: /sandbox-workspace
       SANDBOX_PREVIEW_URL: http://sandbox:3000
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # Signing secret for GitHub update deliveries to /api/platform/git/updates
+      # (BI-C26D5DC5). The receiver refuses every delivery in production without
+      # it. The installer writes it into the install .env, and a release
+      # self-upgrade adds it when missing (scripts/promote.sh +
+      # scripts/installer/install-release-assets.mjs). Base compose, not an
+      # override: override-only values are lost when the promoter recreates
+      # the portal.
+      DPF_GIT_WEBHOOK_SECRET: ${DPF_GIT_WEBHOOK_SECRET:-}
       HIVE_CONTRIBUTION_TOKEN: ${HIVE_CONTRIBUTION_TOKEN:-}
       HIVE_OPS_TOKEN: ${HIVE_OPS_TOKEN:-}
       INNGEST_BASE_URL: http://inngest:8288

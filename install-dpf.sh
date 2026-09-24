@@ -740,6 +740,17 @@ else
   fi
 fi
 
+# Signing secret for GitHub update deliveries (BI-C26D5DC5). The portal refuses
+# every delivery in production without it. A fresh .env carries the example
+# placeholder and is filled here; an existing .env that predates the key gets
+# one; a value already there is never rotated, because the operator pasted it
+# into the repository webhook. Never printed.
+_git_webhook_secret="$(dpf_env_ensure_secret_hex DPF_GIT_WEBHOOK_SECRET .env 32 \
+  '# Signing secret for GitHub update deliveries (BI-C26D5DC5). Paste into the repository webhook Secret field.')"
+if [ "$_git_webhook_secret" != "kept" ]; then
+  info "Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
+fi
+
 # Persist the same canonical host identity written to install-state.json. These
 # installer-owned values are the portal/promoter authority; container OS is not.
 dpf_platform

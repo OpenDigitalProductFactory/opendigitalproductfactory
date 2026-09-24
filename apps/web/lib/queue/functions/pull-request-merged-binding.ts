@@ -1,28 +1,56 @@
 // BI-A6E4D205 — bind a Workroom to the pull request that delivered it, at the
 // moment it merges.
 //
-// `resolvePullRequestBindings` (BI-0B3FED3D, #5218) already derives the binding
-// from the branch that determines it, and already refuses to overwrite an
-// existing answer. What it never had was a trigger: nothing observed a merge,
-// so `pullRequestNumber` was null on all 422 rooms measured 2026-09-08, and
-// `classifyWorkCapsuleLiveness` could never reach its open-PR precedence rule.
+// Nothing observed a merge, so `pullRequestNumber` was null on all 422 rooms
+// measured 2026-09-08, and `classifyWorkCapsuleLiveness` could never reach its
+// open-PR precedence rule. This subscriber reacts to the merge webhook.
 //
-// This is the first subscriber to the merge event. It is deliberately the
-// smallest useful one — bind and record — so it can ship and be judged before
-// the reaping and completion subscribers depend on the same signal.
+// It does NOT call `resolvePullRequestBindings` (BI-0B3FED3D, #5218). That
+// resolver works from inventory observations and is run by the contributor
+// inventory sync every ten minutes, which stays the backstop for a missed
+// delivery. This one applies the same two identity rules to a single event
+// (BI-C26D5DC5):
+//
+//   * a room is matched on repository AND head branch — a branch name alone is
+//     shared by every fork and every repository this install tracks;
+//   * the URL is the canonical https://github.com/<repo>/pull/<n>, the same
+//     form the inventory observation requires, so the two writers agree.
+//
+// It is deliberately the smallest useful subscriber — bind and record — so the
+// reaping and completion subscribers can depend on the same signal.
 
 import { inngest } from "../inngest-client";
 
-/** A room this event could be about: same head branch, not already bound. */
+const FULL_SHA_RE = /^[a-f0-9]{40}$/i;
+
+/** A room this event could be about: same repository and head branch. */
 export type MergeBindingCandidate = {
   id: string;
   capsuleId: string;
+  repositoryFullName: string | null;
   headBranch: string | null;
+  headSha: string | null;
   pullRequestNumber: number | null;
+  pullRequestUrl: string | null;
+};
+
+/** The merged pull request, as the webhook reported it. */
+export type MergedPullRequest = {
+  repositoryFullName: string;
+  number: number;
+  headSha: string;
 };
 
 export type MergeBindingPlan =
-  | { bind: true; roomId: string; capsuleId: string; pullRequestNumber: number }
+  | {
+      bind: true;
+      roomId: string;
+      capsuleId: string;
+      pullRequestNumber: number;
+      pullRequestUrl: string;
+      /** Written only when the room recorded no head; never overwrites one. */
+      headSha: string | null;
+    }
   | { bind: false; reason: MergeBindingSkipReason };
 
 export type MergeBindingSkipReason =
@@ -33,26 +61,44 @@ export type MergeBindingSkipReason =
   /** Bound to a DIFFERENT pull request. Two answers is a conflict, not an update. */
   | "bound-to-another-pull-request";
 
+/** The canonical pull request URL, in the form the inventory observation requires. */
+export function pullRequestUrlFor(repositoryFullName: string, number: number): string {
+  return `https://github.com/${repositoryFullName}/pull/${number}`;
+}
+
 /**
  * Decide, purely, whether this merge binds to this room.
  *
  * Idempotent by construction: a second delivery of the same webhook finds the
  * room already bound and reports `already-bound` rather than writing again.
- * A room bound to a DIFFERENT number is never silently repointed — that is a
- * conflict a person should see, not something a webhook resolves.
+ * A room bound to a DIFFERENT number or URL is never silently repointed — that
+ * is a conflict a person should see, not something a webhook resolves.
  */
 export function planMergeBinding(
   room: MergeBindingCandidate | null,
-  pullRequestNumber: number,
+  merged: MergedPullRequest,
 ): MergeBindingPlan {
   if (!room) return { bind: false, reason: "no-room-for-branch" };
-  if (room.pullRequestNumber === pullRequestNumber) {
-    return { bind: false, reason: "already-bound" };
-  }
-  if (room.pullRequestNumber !== null) {
+  const url = pullRequestUrlFor(merged.repositoryFullName, merged.number);
+  const sameUrl = room.pullRequestUrl !== null && room.pullRequestUrl.toLowerCase() === url.toLowerCase();
+
+  if (room.pullRequestNumber !== null && room.pullRequestNumber !== merged.number) {
     return { bind: false, reason: "bound-to-another-pull-request" };
   }
-  return { bind: true, roomId: room.id, capsuleId: room.capsuleId, pullRequestNumber };
+  if (room.pullRequestUrl !== null && !sameUrl) {
+    return { bind: false, reason: "bound-to-another-pull-request" };
+  }
+  if (room.pullRequestNumber === merged.number && sameUrl) {
+    return { bind: false, reason: "already-bound" };
+  }
+  return {
+    bind: true,
+    roomId: room.id,
+    capsuleId: room.capsuleId,
+    pullRequestNumber: merged.number,
+    pullRequestUrl: url,
+    headSha: room.headSha === null && FULL_SHA_RE.test(merged.headSha) ? merged.headSha : null,
+  };
 }
 
 export const pullRequestMergedBinding = inngest.createFunction(
@@ -63,8 +109,10 @@ export const pullRequestMergedBinding = inngest.createFunction(
     triggers: [{ event: "build/pr-merged.received" }],
   },
   async ({ event, step }) => {
-    const { headRefName, number, mergedAt, mergeCommitSha } = event.data as {
+    const { repositoryFullName, headRefName, headSha, number, mergedAt, mergeCommitSha } = event.data as {
+      repositoryFullName: string;
       headRefName: string;
+      headSha: string;
       number: number;
       mergedAt: string | null;
       mergeCommitSha: string | null;
@@ -75,35 +123,71 @@ export const pullRequestMergedBinding = inngest.createFunction(
       // Newest first: a branch name can be reused across rooms over time, and
       // the most recent claimant is the one that produced this merge.
       return prisma.workroom.findFirst({
-        where: { headBranch: headRefName, archivedAt: null },
+        where: { repositoryFullName, headBranch: headRefName, archivedAt: null },
         orderBy: { updatedAt: "desc" },
-        select: { id: true, capsuleId: true, headBranch: true, pullRequestNumber: true },
-      });
-    });
-
-    const plan = planMergeBinding(room, number);
-    if (!plan.bind) {
-      return { bound: false, reason: plan.reason, headRefName, number };
-    }
-
-    await step.run("bind-and-record", async () => {
-      const { prisma } = await import("@dpf/db");
-      await prisma.workroom.update({
-        where: { id: plan.roomId },
-        data: { pullRequestNumber: plan.pullRequestNumber },
-      });
-      await prisma.workroomActivity.create({
-        data: {
-          workCapsuleId: plan.roomId,
-          kind: "evidence",
-          summary:
-            `Pull request #${plan.pullRequestNumber} merged` +
-            `${mergedAt ? ` at ${mergedAt}` : ""}. Bound from the merge webhook, not a poll.`,
-          payload: { pullRequestNumber: plan.pullRequestNumber, headRefName, mergedAt, mergeCommitSha },
+        select: {
+          id: true,
+          capsuleId: true,
+          repositoryFullName: true,
+          headBranch: true,
+          headSha: true,
+          pullRequestNumber: true,
+          pullRequestUrl: true,
         },
       });
     });
 
+    const plan = planMergeBinding(room, { repositoryFullName, number, headSha });
+    if (!plan.bind) {
+      return { bound: false, reason: plan.reason, repositoryFullName, headRefName, number };
+    }
+
+    const bound = await step.run("bind-and-record", async () => {
+      const { prisma } = await import("@dpf/db");
+      return prisma.$transaction(async (tx) => {
+        // Compare-and-set on what the plan read. The inventory sync writes the
+        // same fields; whoever lands second finds the row changed and stops.
+        const update = await tx.workroom.updateMany({
+          where: {
+            id: plan.roomId,
+            archivedAt: null,
+            pullRequestNumber: room!.pullRequestNumber,
+            pullRequestUrl: room!.pullRequestUrl,
+            headSha: room!.headSha,
+          },
+          data: {
+            pullRequestNumber: plan.pullRequestNumber,
+            pullRequestUrl: plan.pullRequestUrl,
+            ...(plan.headSha ? { headSha: plan.headSha } : {}),
+          },
+        });
+        if (update.count !== 1) return false;
+        await tx.workroomActivity.create({
+          data: {
+            workCapsuleId: plan.roomId,
+            kind: "evidence",
+            summary:
+              `Pull request #${plan.pullRequestNumber} merged` +
+              `${mergedAt ? ` at ${mergedAt}` : ""}. Bound from the merge webhook, not a poll.`,
+            payload: {
+              repositoryFullName,
+              pullRequestNumber: plan.pullRequestNumber,
+              pullRequestUrl: plan.pullRequestUrl,
+              headRefName,
+              headSha,
+              headShaRecorded: plan.headSha !== null,
+              mergedAt,
+              mergeCommitSha,
+            },
+          },
+        });
+        return true;
+      });
+    });
+
+    if (!bound) {
+      return { bound: false, reason: "room-changed-before-bind", repositoryFullName, headRefName, number };
+    }
     return { bound: true, capsuleId: plan.capsuleId, number, headRefName };
   },
 );

@@ -10,6 +10,8 @@
 #                             python3.secrets, falling back to a clearly
 #                             marked dev-grade secret)
 #   dpf_random_secret_b64   - emit a base64 secret (same fallback chain)
+#   dpf_env_ensure_secret_hex - give an env key a hex secret only when it has
+#                             none (never rotates an existing value)
 #
 # Bash 3.2 baseline.
 
@@ -82,4 +84,43 @@ dpf_random_secret_b64() {
   else
     echo "dpf-dev-secret-$(date +%s)-NOT-FOR-PRODUCTION"
   fi
+}
+
+# Give KEY in an env file a random hex secret unless it already has a real one.
+# An existing value is NEVER replaced: an operator may have pasted it into
+# another system (the GitHub webhook Secret field for DPF_GIT_WEBHOOK_SECRET),
+# and rotating it silently would break that. An absent key, a blank value, or
+# an unfilled `<...>` example placeholder counts as missing. The file is
+# rewritten in place so its permissions survive. The secret is never printed.
+# Prints one word: added | filled | kept.
+# Args: $1 = key, $2 = env file, $3 = byte length (default 32),
+#       $4 = optional comment line written above an appended key
+dpf_env_ensure_secret_hex() {
+  local key="$1" file="$2" bytes="${3:-32}" comment="${4:-}"
+  local current value tmp
+  # `|| true`: callers run under `set -euo pipefail`, and grep finding no line
+  # is the normal "missing" answer, not a failure.
+  current="$(grep -E "^${key}=" "$file" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "\"' \t\r" || true)"
+  case "$current" in
+    ''|'<'*) ;;
+    *) printf 'kept\n'; return 0 ;;
+  esac
+  value="$(dpf_random_secret_hex "$bytes")"
+  if grep -qE "^${key}=" "$file" 2>/dev/null; then
+    tmp="${file}.dpf-secret.$$"
+    awk -v prefix="${key}=" -v value="$value" \
+      'index($0, prefix) == 1 { print prefix value; next } { print }' "$file" > "$tmp" \
+      && cat "$tmp" > "$file"
+    rm -f "$tmp"
+    printf 'filled\n'
+    return 0
+  fi
+  if [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ]; then
+    printf '\n' >> "$file"
+  fi
+  if [ -n "$comment" ]; then
+    printf '%s\n' "$comment" >> "$file"
+  fi
+  printf '%s=%s\n' "$key" "$value" >> "$file"
+  printf 'added\n'
 }
