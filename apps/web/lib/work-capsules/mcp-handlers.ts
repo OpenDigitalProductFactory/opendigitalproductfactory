@@ -49,14 +49,13 @@ import {
   updateWorkCapsuleStatus,
   WorkCapsuleCompletionDeniedError,
   WorkCapsulePublicationRefusedError,
-  ScopeOverlapError,
   type CapsuleDb,
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
 import { publicationRefusedToolResult } from "./publication-refusal";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
-import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
+import { invalidScopeResult, scopeClaimRefusal } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
@@ -279,16 +278,8 @@ export async function claimCapsuleScopeTool(
       }),
     });
   } catch (error) {
-    if (error instanceof ScopeOverlapError) {
-      return {
-        success: false,
-        error: "scope_conflict",
-        message:
-          `Scope overlaps ${error.conflicts.length} active claim(s) on another Work Capsule. ` +
-          "Coordinate with the holder, claim different scope, or pass force=true to deliberately co-claim.",
-        data: { conflicts: error.conflicts },
-      };
-    }
+    const refusal = scopeClaimRefusal(error);
+    if (refusal) return refusal;
     throw error;
   }
 

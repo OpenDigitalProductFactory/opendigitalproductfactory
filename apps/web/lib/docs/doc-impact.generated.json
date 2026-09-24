@@ -1225,6 +1225,9 @@
     "apps/web/lib/work-capsules/governed-work-claim.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
+    "apps/web/lib/work-capsules/scope-claim-lease.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
@@ -2774,6 +2777,7 @@
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
+      "apps/web/lib/work-capsules/scope-claim-lease.ts",
       "packages/integration-shared/src/mcp-client-credential-policy.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/gate-worktree.mjs",
