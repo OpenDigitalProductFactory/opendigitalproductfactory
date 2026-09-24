@@ -340,6 +340,15 @@ export async function orchestrateDeliberation(
     }
     taskRunDbId = existing.id;
   } else {
+    // TaskRun.status is a closed set (TASK_STATES); the legacy "active" is
+    // refused with 23514 (BI-CB4A6435). With a dispatcher the branches run
+    // here, now, so the run is born working with its first heartbeat in the
+    // same write. Without one the async deliberation runner executes it and
+    // moves it to working through markTaskRunWorking, so it is born submitted.
+    const bornAt = new Date();
+    const birth = input.dispatcher
+      ? { status: "working" satisfies TaskState, startedAt: bornAt, lastHeartbeatAt: bornAt }
+      : { status: "submitted" satisfies TaskState };
     const created = await prisma.taskRun.create({
       data: {
         taskRunId: `${BOOTSTRAPPED_TASK_RUN_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -352,8 +361,7 @@ export async function orchestrateDeliberation(
         title: `Deliberation: ${input.patternSlug}`,
         objective: `Run ${pattern.name} over artifactType=${input.artifactType}`,
         source: "proactive",
-        // TaskRun.status is a closed set (TASK_STATES); "active" is refused (BI-CB4A6435).
-        status: "working" satisfies TaskState,
+        ...birth,
         authorityScope: input.parentAuthorityScope ?? [],
       },
       select: { id: true, taskRunId: true },

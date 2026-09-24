@@ -330,7 +330,9 @@ async function extractBrandDesignSystemHandler(
         ? `Extract brand from ${url}`
         : "Extract brand from supplied sources",
       source: "coworker",
-      status: "working" satisfies TaskState,
+      // Queued for brand/extract.run, which moves it to working through
+      // markTaskRunWorking. "active" is outside TASK_STATES (BI-CB4A6435).
+      status: "submitted" satisfies TaskState,
     },
   });
 
