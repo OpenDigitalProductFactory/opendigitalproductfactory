@@ -135,6 +135,51 @@ describe("reconcileTerminalCapsuleBacklogs (BI-C2EB2C6B)", () => {
     expect(db.backlogItem.update).toHaveBeenCalledWith({ where: { id: "row-bi" }, data: { activeBuildId: null } });
   });
 
+  // BI-B940FE36 (live regression, 2026-09-24): BI-F73AE8D1 had an OLD abandoned room
+  // (WC-A1945DAF -> FB-12E10A82) and a LIVE build FB-09FC85CF. The room sweep
+  // cleared the item's pointer to the live build because the OLD room was
+  // terminal; the 14:00 tee-up then saw no active build and created a duplicate.
+  it("leaves a pointer to a different, live build alone", async () => {
+    const db = {
+      workroom: {
+        findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-OLD", status: "abandoned", backlogItemId: "row-bi", featureBuildId: "fb-old-row" }]),
+      },
+      featureBuild: {
+        findMany: vi.fn().mockResolvedValue([{ id: "fb-old-row", buildId: "FB-OLD", phase: "abandoned" }]),
+      },
+      backlogItem: {
+        findFirst: vi.fn().mockResolvedValue({ id: "row-bi", itemId: "BI-F73AE8D1", status: "open", activeBuildId: "fb-live-row" }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      backlogItemActivity: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({}) },
+    };
+
+    const result = await reconcileTerminalCapsuleBacklogs({ db: db as never, dryRun: false, now: NOW });
+
+    expect(result.reconciled).toBe(0);
+    expect(db.backlogItem.update).not.toHaveBeenCalled();
+  });
+
+  it("still clears a pointer that names the room's own build by its FB id", async () => {
+    const db = {
+      workroom: {
+        findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-OWN", status: "abandoned", backlogItemId: "row-bi", featureBuildId: "fb-own-row" }]),
+      },
+      featureBuild: {
+        findMany: vi.fn().mockResolvedValue([{ id: "fb-own-row", buildId: "FB-OWN", phase: "abandoned" }]),
+      },
+      backlogItem: {
+        findFirst: vi.fn().mockResolvedValue({ id: "row-bi", itemId: "BI-X", status: "open", activeBuildId: "FB-OWN" }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      backlogItemActivity: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({}) },
+    };
+
+    await reconcileTerminalCapsuleBacklogs({ db: db as never, dryRun: false, now: NOW });
+
+    expect(db.backlogItem.update).toHaveBeenCalledWith({ where: { id: "row-bi" }, data: { activeBuildId: null } });
+  });
+
   // BI-62FB6505 (live, 2026-09-24): abandon_stalled_build and the 7-day ideate
   // age-out abandon the BUILD without closing its room, so 4 of the 8 pinned
   // items had a room still "working" — no terminal room, nothing for the

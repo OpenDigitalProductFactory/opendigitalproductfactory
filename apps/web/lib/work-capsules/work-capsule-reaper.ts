@@ -212,12 +212,16 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
   });
   const buildIds = capsules.map((capsule: any) => capsule.featureBuildId).filter(Boolean);
   const phases = new Map<string, string | null>();
+  const semanticIds = new Map<string, string>();
   if (buildIds.length > 0 && args.db.featureBuild) {
     const rows = await args.db.featureBuild.findMany({
       where: { id: { in: [...new Set(buildIds)] } },
-      select: { id: true, phase: true },
+      select: { id: true, buildId: true, phase: true },
     });
-    for (const row of rows) phases.set(row.id, row.phase ?? null);
+    for (const row of rows) {
+      phases.set(row.id, row.phase ?? null);
+      if (row.buildId) semanticIds.set(row.id, row.buildId);
+    }
   }
   let reconciled = 0;
   const repair = async (
@@ -273,6 +277,13 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
       select: { id: true, itemId: true, status: true, activeBuildId: true },
     });
     if (!item) continue;
+    // BI-B940FE36: a terminal room speaks only for its own build. Clearing a pointer to a
+    // DIFFERENT, live build (BI-F73AE8D1 on 2026-09-24) let the daily tee-up
+    // create a duplicate; pointers at terminal builds are the item sweep below.
+    const ownRefs = capsule.featureBuildId
+      ? [capsule.featureBuildId, semanticIds.get(capsule.featureBuildId)]
+      : [];
+    if (item.activeBuildId && !ownRefs.includes(item.activeBuildId)) continue;
     await repair(item, {
       capsuleId: capsule.capsuleId,
       capsuleStatus: capsule.status,
