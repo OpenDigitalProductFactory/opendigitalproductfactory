@@ -31,16 +31,23 @@ describe("every Build Studio phase call states requiresStreaming:false (BI-77029
     "phase-compaction.ts",
     "change-narrative.ts",
     "coding-agent.ts",
+    // BI-77029256 follow-up: engine selection previews the route BEFORE any
+    // phase call. After #5615 shipped, FB-1FAAA146 still logged "no eligible
+    // endpoints task=code-gen" — this preview was the first wall.
+    "build-engine-selection-runtime.ts",
   ];
 
   function routeAndCallArgs(source: string): string[] {
     const calls: string[] = [];
     let from = 0;
     for (;;) {
-      const at = source.indexOf("routeAndCall(", from);
-      if (at < 0) return calls;
+      const match = /\b(routeAndCall|previewRoute)\(/g;
+      match.lastIndex = from;
+      const found = match.exec(source);
+      if (!found) return calls;
+      const at = found.index;
       let depth = 0;
-      let end = at + "routeAndCall".length;
+      let end = at + found[1].length;
       for (; end < source.length; end++) {
         if (source[end] === "(") depth++;
         else if (source[end] === ")" && --depth === 0) break;
