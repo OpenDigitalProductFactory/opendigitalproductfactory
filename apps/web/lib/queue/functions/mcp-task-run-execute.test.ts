@@ -21,6 +21,9 @@ vi.mock("@/lib/mcp-task-background-dispatch", () => ({
   externalMcpTaskAsyncEnabled: (...args: unknown[]) => feature.enabled(...args),
   reconcilePersistedRemoteTaskDispatches: (...args: unknown[]) => dispatch.reconcile(...args),
 }));
+vi.mock("@/lib/backlog/initiative-readiness/server-reviewer-dispatch", () => ({
+  dispatchOwedIndependentReviews: vi.fn(async () => []),
+}));
 vi.mock("../quiescence-gates", () => ({
   gateBetweenSteps: vi.fn().mockResolvedValue({ resumedAfterWait: false }),
   gateAtEntry: vi.fn().mockResolvedValue({ proceed: true }),
