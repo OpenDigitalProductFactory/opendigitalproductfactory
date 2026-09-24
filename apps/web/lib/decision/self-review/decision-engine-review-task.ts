@@ -10,6 +10,12 @@ import { prisma } from "@dpf/db";
 
 import { loadReviewWindow } from "./load-review-window";
 import { computeReviewLines, type ReviewLine } from "./measures";
+import {
+  describeRouting,
+  emptyRoutingSummary,
+  routeReviewFindings,
+  type RoutingSummary,
+} from "./route-review-findings";
 
 /** The scheduled-task fields this branch reads. */
 export interface DecisionEngineReviewTask {
@@ -36,6 +42,8 @@ export type ReviewRunSummary = {
   /** Lines that carry a proposed action a human or specialist must rule on. */
   actionableCount: number;
   idempotent: boolean;
+  /** Phase 3: where each actionable finding was addressed. */
+  routing: RoutingSummary;
 };
 
 function isActionable(line: ReviewLine): boolean {
@@ -68,6 +76,15 @@ export async function executeDecisionEngineReviewTask(
     const { periodKey, lines } = await computeWeeklyReview({ db: prisma, now: startedAt });
     const actionable = lines.filter(isActionable);
 
+    // Phase 3: each finding reaches the scope that owns it. Routing never
+    // fails the run — a review that measured correctly but could not draft a
+    // proposal is still worth recording, and the summary says what happened.
+    const routing = await routeReviewFindings({
+      db: prisma,
+      lines: actionable,
+      periodKey,
+    }).catch(() => emptyRoutingSummary());
+
     // Idempotent per ISO week: the unique key is the period, so a retry updates
     // the same row rather than filing a second review for one week.
     const existing = await prisma.backlogItemActivity
@@ -78,11 +95,12 @@ export async function executeDecisionEngineReviewTask(
       .catch(() => null);
 
     console.info(
-      "[decision-engine-review] %s — %d line(s), %d actionable%s",
+      "[decision-engine-review] %s — %d line(s), %d actionable%s; routed: %s",
       periodKey,
       lines.length,
       actionable.length,
       existing ? " (idempotent: already recorded for this week)" : "",
+      describeRouting(routing),
     );
 
     const nextRunAt = computeNextRun(task.schedule, startedAt);
