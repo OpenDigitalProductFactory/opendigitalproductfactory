@@ -56,14 +56,47 @@ export async function resumeApprovedRemoteTask(input: {
   userContext: UserContext;
   parsed: RemoteTaskSubmitParams;
 }): Promise<RemoteTaskSubmitOutcome | null> {
+  return resumeApprovedTask({
+    existing: input.existing,
+    userId: input.token.userId,
+    tokenId: input.token.tokenId,
+    tokenScope: input.token.capability,
+    userContext: input.userContext,
+    routeContext: input.parsed.routeContext,
+    agentId: input.parsed.agentId,
+    riskClass: input.parsed.riskClass,
+    reviewWriterToolName: input.parsed.initiativeReviewBinding?.writerToolName ?? null,
+  });
+}
+
+/**
+ * Who resumes an approved writer, and under which credential. A client replay
+ * supplies these from its request; the approval itself supplies them from the
+ * stored TaskRun (BI-9FD11E5E). Both take the same reservation below, so only
+ * one of them runs the writer.
+ */
+export type ApprovedTaskResume = {
+  existing: ExistingRemoteTask;
+  userId: string;
+  tokenId: string;
+  tokenScope: "read" | "write";
+  userContext: UserContext;
+  routeContext: string;
+  agentId: string;
+  riskClass: string;
+  /** The review writer, when the task carries an initiative review binding. */
+  reviewWriterToolName: string | null;
+};
+
+export async function resumeApprovedTask(input: ApprovedTaskResume): Promise<RemoteTaskSubmitOutcome | null> {
   const recoveringCompletedProjection = input.existing.status === "completed";
   if (input.existing.status !== "input-required" && !recoveringCompletedProjection) return null;
-  if (recoveringCompletedProjection && !input.parsed.initiativeReviewBinding) return null;
+  if (recoveringCompletedProjection && !input.reviewWriterToolName) return null;
 
   const envelope = await prisma.coworkerActionEnvelope.findFirst({
     where: {
       taskRunId: input.existing.taskRunId,
-      delegatingUserId: input.token.userId,
+      delegatingUserId: input.userId,
       status: "approved",
       expiresAt: { gt: new Date() },
     },
@@ -73,7 +106,7 @@ export async function resumeApprovedRemoteTask(input: {
   if (!envelope) return null;
   if (
     recoveringCompletedProjection
-    && envelope.manifestActionId !== input.parsed.initiativeReviewBinding?.writerToolName
+    && envelope.manifestActionId !== input.reviewWriterToolName
   ) return null;
 
   const proposedExecution = await prisma.toolExecution.findFirst({
@@ -112,14 +145,14 @@ export async function resumeApprovedRemoteTask(input: {
   const result = await executeAutonomousWorkTool({
     toolName: envelope.manifestActionId,
     args,
-    userId: input.token.userId,
+    userId: input.userId,
     userContext: input.userContext,
-    routeContext: input.parsed.routeContext,
-    agentId: resolveCanonicalAgentId(input.parsed.agentId),
+    routeContext: input.routeContext,
+    agentId: resolveCanonicalAgentId(input.agentId),
     threadId: envelope.threadId,
     taskRunId: input.existing.taskRunId,
-    apiTokenId: input.token.tokenId,
-    tokenScope: input.token.capability,
+    apiTokenId: input.tokenId,
+    tokenScope: input.tokenScope,
     externalAccessEnabled: true,
   });
   const currentRun = await prisma.taskRun.findUnique({
@@ -135,7 +168,7 @@ export async function resumeApprovedRemoteTask(input: {
       ? input.existing.progressPayload as Prisma.InputJsonObject
       : {}),
     summary: result.message,
-    riskClass: input.parsed.riskClass,
+    riskClass: input.riskClass,
     executedToolCount: 1,
     resumedFromApproval: true,
     requiresApproval: status === "input-required",
