@@ -49,7 +49,12 @@ const deny = (message: string): RequestAuthority => ({ bounded: true, refusal: {
 export async function authorizeCoworkerRequest(
   params: Record<string, unknown>, userId: string, context?: ToolExecutionContext,
 ): Promise<RequestAuthority> {
-  if (!context?.agentId) return deny("A current acting coworker is required.");
+  // BI-817556D8: a personal access token has no acting coworker, so it can never
+  // pass this guard. Say which connection can, instead of only what is missing.
+  if (!context?.agentId) {
+    return deny("A current acting coworker is required. Coworker and independent-review requests need an OAuth "
+      + "connection bound to a coworker admitted to the item's Workroom; a personal access token cannot make them.");
+  }
   // Read live grants: a cached registry fallback cannot keep revoked delegation alive.
   const agent = await prisma.agent.findUnique({ where: { agentId: context.agentId },
     select: { status: true, archived: true, toolGrants: { select: { grantKey: true } } } });
