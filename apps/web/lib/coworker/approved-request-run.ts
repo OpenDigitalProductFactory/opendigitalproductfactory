@@ -5,8 +5,9 @@ import "server-only";
 // A coworker call made straight over MCP (no TaskRun) used to park on an
 // approval card and then wait for the client to send the identical request
 // again. Nothing told the client to; the approval sat `approved` and never ran
-// (envelope cmue5mrlr3qw201uu09408gfh, 2026-09-23). Task-bound calls already
-// resume when their packet is replayed and are left alone here.
+// (envelope cmue5mrlr3qw201uu09408gfh, 2026-09-23). A call parked inside an
+// external task resumes that task the same way (approved-task-run.ts,
+// BI-9FD11E5E); a task the platform runs for itself resumes on its own.
 //
 // This runs the parked call once, as the person and coworker who made it,
 // through the ordinary governed executor: every grant, room, scope and
@@ -20,18 +21,20 @@ import "server-only";
 //   • an OAuth credential's consent must still name the same coworker.
 import { prisma } from "@dpf/db";
 
-import { resolveOAuthConsent } from "@/lib/auth/oauth-identity-binding";
 import { originalToolParameters } from "@/lib/attention/coworker-envelope-decision";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import {
   fingerprintCoworkerInput,
   type CoworkerApprovalBinding,
 } from "@/lib/govern/authority/coworker-authority-decision";
-import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
-import { tokenAdmitsTool, normalizeTokenScope } from "@/lib/mcp/token-tool-scope";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
-import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
-import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
+
+import {
+  approvalExecutionContext,
+  verifyApprovalCredential,
+  type ApprovalCredentialDb,
+} from "./approved-request-credential";
+import { runApprovedTaskRequest, type ApprovedTaskDb } from "./approved-task-run";
 
 export type ApprovedRequestRun =
   | { status: "executed"; message: string }
@@ -47,7 +50,9 @@ export type ApprovedRequestNotRunReason =
   | "arguments-not-provable"
   | "credential-unavailable"
   | "consent-changed"
-  | "scope-insufficient";
+  | "scope-insufficient"
+  | "task-not-waiting"
+  | "task-waiting-again";
 
 const NOT_RUN_COPY: Record<ApprovedRequestNotRunReason, string> = {
   "task-bound": "It resumes when your coworker's task continues.",
@@ -59,23 +64,20 @@ const NOT_RUN_COPY: Record<ApprovedRequestNotRunReason, string> = {
   "credential-unavailable": "The connection that made the request is no longer active, so it was not run.",
   "consent-changed": "The assistant's connection no longer carries the consent it had, so it was not run.",
   "scope-insufficient": "The connection's permissions no longer cover this action, so it was not run.",
+  "task-not-waiting": "The task is no longer waiting for this approval; it is already running or settled.",
+  "task-waiting-again": "The task continued and is now waiting on another approval.",
 };
 
 function notRun(reason: ApprovedRequestNotRunReason): ApprovedRequestRun {
   return { status: "not-run", reason, message: NOT_RUN_COPY[reason] };
 }
 
-type RunnerDb = {
+type RunnerDb = ApprovalCredentialDb & Partial<ApprovedTaskDb> & {
   coworkerActionEnvelope: { findUnique(args: unknown): Promise<{
     id: string; status: string; taskRunId: string | null; expiresAt: Date | null;
     delegatingUserId: string; coworkerAgentId: string; manifestActionId: string; argsJson: unknown;
   } | null> };
   toolExecution: { findFirst(args: unknown): Promise<{ parameters: unknown; apiTokenId: string | null } | null> };
-  mcpApiToken: { findUnique(args: unknown): Promise<{
-    id: string; userId: string; agentId: string | null; kind: string; revokedAt: Date | null;
-    scope: string; capability: string; scopes: string[]; publicScopes: string[];
-    authorityBindingId: string | null; oauthClientId: string | null; resource: string | null;
-  } | null> };
 };
 
 type Execute = typeof governedExecuteTool;
@@ -89,7 +91,7 @@ function storedBinding(argsJson: unknown): CoworkerApprovalBinding | null {
 
 export async function runApprovedExternalRequest(
   envelopeId: string,
-  deps: { db?: RunnerDb; execute?: Execute; now?: Date } = {},
+  deps: { db?: RunnerDb; execute?: Execute; now?: Date; resumeTask?: typeof runApprovedTaskRequest } = {},
 ): Promise<ApprovedRequestRun> {
   const db = deps.db ?? (prisma as unknown as RunnerDb);
   const execute = deps.execute ?? governedExecuteTool;
@@ -97,8 +99,11 @@ export async function runApprovedExternalRequest(
 
   const envelope = await db.coworkerActionEnvelope.findUnique({ where: { id: envelopeId } });
   if (!envelope || envelope.status !== "approved") return notRun("not-approved");
-  if (envelope.taskRunId) return notRun("task-bound");
   if (!envelope.expiresAt || envelope.expiresAt.getTime() <= now.getTime()) return notRun("expired");
+  if (envelope.taskRunId) {
+    const outcome = await (deps.resumeTask ?? runApprovedTaskRequest)({ ...envelope, taskRunId: envelope.taskRunId }, { db: db as never });
+    return outcome.status === "not-run" ? notRun(outcome.reason) : outcome;
+  }
   const binding = storedBinding(envelope.argsJson);
   if (!binding || binding.taskRunId || binding.routeContext || binding.chainId) return notRun("task-bound");
 
@@ -118,28 +123,12 @@ export async function runApprovedExternalRequest(
   const params = originalToolParameters(pending.parameters) ?? {};
   if (fingerprintCoworkerInput(params) !== binding.inputFingerprint) return notRun("arguments-not-provable");
 
-  const token = await db.mcpApiToken.findUnique({ where: { id: pending.apiTokenId } });
-  if (
-    !token
-    || token.revokedAt
-    || token.userId !== envelope.delegatingUserId
-    || token.agentId !== envelope.coworkerAgentId
-  ) {
-    return notRun("credential-unavailable");
-  }
-  const oauth = token.kind === "oauth_access";
-  if (oauth) {
-    if (!token.authorityBindingId || !token.oauthClientId || !token.resource) return notRun("consent-changed");
-    const consent = await resolveOAuthConsent({
-      bindingId: token.authorityBindingId, userId: token.userId,
-      clientId: token.oauthClientId, resource: token.resource, scopes: token.publicScopes,
-    });
-    if (!consent || consent.agentId !== envelope.coworkerAgentId) return notRun("consent-changed");
-  }
-  const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === envelope.manifestActionId);
-  if (!tokenAdmitsTool(tool, getToolGrantMapping()[envelope.manifestActionId], token)) {
-    return notRun("scope-insufficient");
-  }
+  const credential = await verifyApprovalCredential(db, pending.apiTokenId, {
+    delegatingUserId: envelope.delegatingUserId,
+    assistantAgentId: envelope.coworkerAgentId,
+    manifestActionId: envelope.manifestActionId,
+  });
+  if (typeof credential === "string") return notRun(credential);
 
   const userContext = await currentUserContext(envelope.delegatingUserId).catch(() => null)
     ?? { userId: envelope.delegatingUserId, platformRole: null, isSuperuser: false };
@@ -148,19 +137,7 @@ export async function runApprovedExternalRequest(
     rawParams: params,
     userId: envelope.delegatingUserId,
     userContext,
-    context: {
-      agentId: envelope.coworkerAgentId,
-      apiTokenId: token.id,
-      callerClient: "approval-completion",
-      authSource: oauth ? "oauth" : "pat",
-      tokenScope: normalizeTokenScope(token),
-      tokenGrantScopes: expandGrants(token.scopes),
-      ...connectionDelegationFor({
-        source: oauth ? "oauth" : "pat",
-        agentId: token.agentId,
-        authorityBindingId: token.authorityBindingId,
-      }),
-    },
+    context: approvalExecutionContext(credential, envelope.coworkerAgentId),
     source: "external-jsonrpc",
   });
   return result.success

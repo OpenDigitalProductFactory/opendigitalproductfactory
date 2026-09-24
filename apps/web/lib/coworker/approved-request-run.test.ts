@@ -103,7 +103,6 @@ describe("runApprovedExternalRequest (BI-12E5DD91)", () => {
   it.each([
     ["not approved", { envelope: { status: "proposed" } }, "not-approved"],
     ["declined", { envelope: { status: "declined" } }, "not-approved"],
-    ["task-bound", { envelope: { taskRunId: "TR-1" } }, "task-bound"],
     ["expired", { envelope: { expiresAt: new Date(NOW.getTime() - 1) } }, "expired"],
     ["missing pending call", { pending: null }, "no-pending-call"],
     ["arguments changed", { pending: { parameters: { ...PARAMS, title: "Other" } } }, "arguments-not-provable"],
@@ -139,5 +138,31 @@ describe("runApprovedExternalRequest (BI-12E5DD91)", () => {
         apiTokenId: { not: null },
       }),
     }));
+  });
+});
+
+describe("an approved request parked inside a task (BI-9FD11E5E)", () => {
+  it("resumes the task instead of waiting for the client to replay it", async () => {
+    const { db, execute } = fixtures({ envelope: { taskRunId: "TR-1" } });
+    const resumeTask = vi.fn(async () => ({ status: "executed" as const, message: "Recorded." }));
+    const run = await runApprovedExternalRequest("env-1", { db: db as never, execute: execute as never, now: NOW, resumeTask });
+    expect(run).toEqual({ status: "executed", message: "Recorded." });
+    expect(resumeTask).toHaveBeenCalledWith(expect.objectContaining({ taskRunId: "TR-1", delegatingUserId: "user-1" }), expect.anything());
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("says why a task was not resumed, in the card's words", async () => {
+    const { db, execute } = fixtures({ envelope: { taskRunId: "TR-1" } });
+    const resumeTask = vi.fn(async () => ({ status: "not-run" as const, reason: "task-not-waiting" as const }));
+    await expect(runApprovedExternalRequest("env-1", { db: db as never, execute: execute as never, now: NOW, resumeTask }))
+      .resolves.toMatchObject({ status: "not-run", reason: "task-not-waiting", message: expect.stringContaining("no longer waiting") });
+  });
+
+  it("never resumes an expired approval", async () => {
+    const { db, execute } = fixtures({ envelope: { taskRunId: "TR-1", expiresAt: new Date(NOW.getTime() - 1) } });
+    const resumeTask = vi.fn();
+    await expect(runApprovedExternalRequest("env-1", { db: db as never, execute: execute as never, now: NOW, resumeTask: resumeTask as never }))
+      .resolves.toMatchObject({ status: "not-run", reason: "expired" });
+    expect(resumeTask).not.toHaveBeenCalled();
   });
 });

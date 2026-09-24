@@ -145,7 +145,9 @@ says the effect is unresolved; decline unless you already know what it writes.
 When you authorize an assistant's request, the platform runs it once, straight
 away, with the same checks it would have run for the assistant. The card then
 says whether it finished. If the assistant sends the same request again, it
-gets that recorded outcome; the change is never made twice. A request is not
+gets that recorded outcome; the change is never made twice. The same holds
+when the request came from a task the assistant handed to a coworker: your
+approval resumes that task, even if the assistant has since restarted. A request is not
 run if its connection was revoked or narrowed, or if the stored request cannot
 be proven identical to what you saw. A card answered after its window closed
 marks the request expired instead.

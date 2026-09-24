@@ -626,8 +626,13 @@ call (no TaskRun) once, through the governed executor, as the same human and
 assistant. It runs only when three things hold. The stored arguments hash to
 the approved input fingerprint. The originating credential is live and still
 admits the tool. An OAuth credential's consent still names the same assistant.
-Otherwise the card states why it did not run. Task-bound calls keep resuming
-through their packet replay. Every approved run reserves its envelope with a
+Otherwise the card states why it did not run. A call parked inside an external
+task (tasks/submit) resumes that task on approval (BI-9FD11E5E), from what the
+task stored at submission: the same person, requested coworker, route and
+submitting credential, held to the same checks. It is the client replay's own
+resume, reserving the waiting task with a compare-and-set, so a racing replay
+and the approval's resume cannot both run the writer, and a client that
+restarted no longer lets the approval lapse. Every approved run reserves its envelope with a
 compare-and-set, so a platform run and a client retry cannot both spend one
 approval. A retry after a successful approved run returns the recorded outcome
 instead of a second run or a second card. A decision made after the window
