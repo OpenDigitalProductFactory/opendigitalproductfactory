@@ -617,3 +617,35 @@ this is the design extension it asked for. When admitted:
 
 Coverage: atomic under BI-05E0EA33. The parent decision id is pending the
 kernel recording named above.
+
+### Approval completes the call (BI-12E5DD91, follow-up)
+
+An approved direct MCP call used to wait for the client to send it again,
+and nothing told the client to. On approval, the platform now runs a direct
+call (no TaskRun) once, through the governed executor, as the same human and
+assistant. It runs only when three things hold. The stored arguments hash to
+the approved input fingerprint. The originating credential is live and still
+admits the tool. An OAuth credential's consent still names the same assistant.
+Otherwise the card states why it did not run. Task-bound calls keep resuming
+through their packet replay. Every approved run reserves its envelope with a
+compare-and-set, so a platform run and a client retry cannot both spend one
+approval. A retry after a successful approved run returns the recorded outcome
+instead of a second run or a second card. A decision made after the window
+closed settles the envelope as `expired`. Token-scope admission is one shared
+rule for the route and the runner (`lib/mcp/token-tool-scope.ts`).
+
+### Where WWMD, WWWD and WSID steer approvals
+
+Escalation reaches a person only when an action is damaging, or when nothing
+recorded can steer it (`escalation-gate.ts`). The three decision engines steer
+through the existing policy projector (`resolve-policy-action-authority.ts`).
+A sealed, autonomy-eligible `kernel-consult`, `build-studio` or `backlog-triage`
+judgment is WWMD authority. An `org-business` judgment is WWWD, and a
+`profession` judgment is WSID. The projector binds each to the exact action,
+subject and input fingerprint, and today it accepts only initiative-readiness
+receipt tools. Independent specialist reviewers steer as `independent-reviewer`.
+Room definitions steer as `room-authority`, and cadences as `scheduled-mandate`.
+A person's OAuth consent steers routine writes as `connection-delegation`.
+None of these can authorize a damaging action. Each decision log row records
+which one decided.
+

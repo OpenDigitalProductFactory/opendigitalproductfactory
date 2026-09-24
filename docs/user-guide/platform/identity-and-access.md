@@ -142,8 +142,13 @@ content, its consequence, why you are being asked, and what authorizing covers.
 Authorizing permits that one request. It does not review the content or confirm
 that any test it cites is correct. If the card cannot load the proposal, it
 says the effect is unresolved; decline unless you already know what it writes.
-After you authorize an assistant's request, nothing is written until the
-assistant sends the same request again.
+When you authorize an assistant's request, the platform runs it once, straight
+away, with the same checks it would have run for the assistant. The card then
+says whether it finished. If the assistant sends the same request again, it
+gets that recorded outcome; the change is never made twice. A request is not
+run if its connection was revoked or narrowed, or if the stored request cannot
+be proven identical to what you saw. A card answered after its window closed
+marks the request expired instead.
 
 ## Recovery And Evidence
 

@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { runApprovedExternalRequest } from "@/lib/coworker/approved-request-run";
 import { approveEnvelope } from "@/lib/coworker/envelope-actions";
 
 type RouteContext = {
@@ -45,5 +46,13 @@ export async function POST(_request: Request, context: RouteContext): Promise<Re
     return NextResponse.json({ error: result.reason }, { status: result.httpStatus });
   }
 
-  return NextResponse.json({ ok: true, envelope: result.envelope });
+  // BI-12E5DD91: the approval completes the call it approved. A direct MCP
+  // call runs here, once, through the governed executor; a task-bound call
+  // keeps resuming through its own replay. The approval itself is already
+  // recorded, so a run that cannot happen is reported, never an error.
+  const execution = await runApprovedExternalRequest(envelopeId).catch((error: unknown) => ({
+    status: "failed" as const,
+    message: error instanceof Error ? error.message : "The approved action could not be run.",
+  }));
+  return NextResponse.json({ ok: true, envelope: result.envelope, execution });
 }

@@ -323,10 +323,23 @@ describe("CoworkerEnvelopeApproval — exact effect (BI-12E5DD91)", () => {
     expect(screen.queryByText("Findings")).toBeNull();
   });
 
-  it("says authorizing has not yet written anything", async () => {
+  it("says what happened to the change after authorizing, never done when nothing ran", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, execution: { status: "executed", message: "ok" } }), { status: 200 }));
     render(<CoworkerEnvelopeApproval approval={evidence()} />);
     fireEvent.click(screen.getByText("Authorize"));
-    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Nothing is written until/));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Authorized and done."));
+    cleanup();
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, execution: { status: "not-run", message: "The approval window closed before it could run." } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={evidence()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Nothing has been written yet\. The approval window closed/));
+    cleanup();
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, execution: { status: "failed", message: "room refused" } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={evidence()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/did not complete: room refused/));
   });
 
   it("marks an unloadable proposal as unresolved instead of offering a generic record", () => {
@@ -351,5 +364,16 @@ describe("CoworkerEnvelopeApproval — exact effect (BI-12E5DD91)", () => {
     render(<CoworkerEnvelopeApproval approval={{ ...evidence(), actionable: false }} />);
     expect(screen.getByText("Closed: the window expired")).toBeTruthy();
     expect(screen.queryByText("Authorize")).toBeNull();
+  });
+});
+
+describe("CoworkerEnvelopeApproval — lapsed window (BI-12E5DD91)", () => {
+  it("says the request expired when the window closed before the decision reached the server", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      error: "This request's decision window closed before it was answered, so it has expired. Your coworker can ask again.",
+    }), { status: 409 }));
+    render(<CoworkerEnvelopeApproval approval={approval()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/has expired/));
   });
 });

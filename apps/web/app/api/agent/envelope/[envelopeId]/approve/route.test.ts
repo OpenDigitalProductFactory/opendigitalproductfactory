@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const authMock = vi.fn();
 const approveEnvelopeMock = vi.fn();
+const runApprovedMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   auth: () => authMock(),
@@ -17,9 +18,15 @@ vi.mock("@/lib/coworker/envelope-actions", () => ({
   approveEnvelope: (...args: unknown[]) => approveEnvelopeMock(...args),
 }));
 
+vi.mock("@/lib/coworker/approved-request-run", () => ({
+  runApprovedExternalRequest: (...args: unknown[]) => runApprovedMock(...args),
+}));
+
 beforeEach(() => {
   authMock.mockReset();
   approveEnvelopeMock.mockReset();
+  runApprovedMock.mockReset();
+  runApprovedMock.mockResolvedValue({ status: "not-run", reason: "task-bound", message: "resumes with its task" });
 });
 
 function makeContext(envelopeId: string) {
@@ -69,7 +76,47 @@ describe("POST /api/agent/envelope/:envelopeId/approve", () => {
     expect(approveEnvelopeMock).toHaveBeenCalledWith("env-1", "u1");
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ ok: true, envelope });
+    expect(body).toEqual({
+      ok: true,
+      envelope,
+      execution: { status: "not-run", reason: "task-bound", message: "resumes with its task" },
+    });
+  });
+
+  it("runs the approved request once after recording the approval (BI-12E5DD91)", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    approveEnvelopeMock.mockResolvedValue({ ok: true, envelope: { id: "env-1", status: "approved" } });
+    runApprovedMock.mockResolvedValue({ status: "executed", message: "Created BI-1." });
+
+    const { POST } = await import("./route");
+    const body = await (await POST(makeRequest(), makeContext("env-1"))).json();
+
+    expect(runApprovedMock).toHaveBeenCalledOnce();
+    expect(runApprovedMock).toHaveBeenCalledWith("env-1");
+    expect(body.execution).toEqual({ status: "executed", message: "Created BI-1." });
+  });
+
+  it("never runs anything when the approval itself is refused", async () => {
+    authMock.mockResolvedValue({ user: { id: "u2" } });
+    approveEnvelopeMock.mockResolvedValue({ ok: false, reason: "not the delegating user", httpStatus: 403 });
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest(), makeContext("env-1"));
+
+    expect(res.status).toBe(403);
+    expect(runApprovedMock).not.toHaveBeenCalled();
+  });
+
+  it("reports a run that throws as failed while keeping the recorded approval", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    approveEnvelopeMock.mockResolvedValue({ ok: true, envelope: { id: "env-1", status: "approved" } });
+    runApprovedMock.mockRejectedValue(new Error("db down"));
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest(), makeContext("env-1"));
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).execution).toEqual({ status: "failed", message: "db down" });
   });
 
   it("maps a state-machine refusal to the action's httpStatus + reason", async () => {

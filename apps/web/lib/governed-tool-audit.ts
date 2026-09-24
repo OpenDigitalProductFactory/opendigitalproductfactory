@@ -45,6 +45,8 @@ export async function writeGovernedToolAudit(data: {
   durationMs: number;
   alignmentDecision?: AlignmentGateDecision | null;
   preconditionDecision?: PreconditionOrderingDecision | null;
+  /** The approval this run spent, or the one it is parked on (BI-12E5DD91). */
+  envelopeId?: string | null;
 }): Promise<{ id: string } | null> {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const isMetricsOnly = auditClass === "metrics_only";
@@ -79,6 +81,7 @@ export async function writeGovernedToolAudit(data: {
       : null,
     apiTokenId: data.context?.apiTokenId ?? null, skillId: data.context?.skillId ?? null,
     delegationChainId: data.context?.delegationChainId ?? null,
+    envelopeId: data.envelopeId ?? pendingEnvelopeId(data.result),
   };
   try {
     const created = createOverride
@@ -107,4 +110,12 @@ export async function updateGovernedToolAudit(id: string, result: ToolResult, du
       JSON.stringify(id), err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
     );
   }
+}
+
+/** A parked call's audit row names the envelope it waits on, so the approval
+ *  card and the approved-request runner join on a column, not JSON. */
+function pendingEnvelopeId(result: ToolResult): string | null {
+  if (result.error !== "approval_required") return null;
+  const data = result.data as Record<string, unknown> | undefined;
+  return typeof data?.["envelopeId"] === "string" ? data["envelopeId"] : null;
 }

@@ -21,6 +21,9 @@ import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
 
 type Outcome = "authorized" | "declined" | "settled";
 
+/** What the approve endpoint reports about running the approved request. */
+type Execution = { status: "executed" | "failed" | "not-run"; message: string };
+
 export function CoworkerEnvelopeApproval({
   approval,
 }: {
@@ -29,6 +32,7 @@ export function CoworkerEnvelopeApproval({
   const router = useRouter();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [execution, setExecution] = useState<Execution | null>(null);
   const [pending, setPending] = useState(false);
   const decision = approval.decision;
 
@@ -44,6 +48,8 @@ export function CoworkerEnvelopeApproval({
         { method: "POST", headers: { "content-type": "application/json" } },
       );
       if (response.ok) {
+        const body = (await response.json().catch(() => null)) as { execution?: Execution } | null;
+        if (body?.execution) setExecution(body.execution);
         setOutcome(choice === "approve" ? "authorized" : "declined");
         router.refresh();
         return;
@@ -52,6 +58,10 @@ export function CoworkerEnvelopeApproval({
       // else, another tab, or an earlier retry got there first. That is the
       // idempotent outcome, not a failure to report.
       if (response.status === 409) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (body?.error && /expired/i.test(body.error)) {
+          setExecution({ status: "not-run", message: body.error });
+        }
         setOutcome("settled");
         router.refresh();
         return;
@@ -122,7 +132,7 @@ export function CoworkerEnvelopeApproval({
 
       {outcome ? (
         <p className="text-xs font-semibold text-[var(--dpf-text)]" role="status">
-          {outcomeMessage(outcome)}
+          {outcomeMessage(outcome, execution)}
         </p>
       ) : approval.actionable ? (
         <div className="flex flex-wrap gap-2">
@@ -153,14 +163,15 @@ export function CoworkerEnvelopeApproval({
   );
 }
 
-function outcomeMessage(outcome: Outcome): string {
-  // Authorizing permits the change; it does not perform it. Say so, so the
-  // card never reads as "done" while nothing has been written yet.
+function outcomeMessage(outcome: Outcome, execution: Execution | null): string {
+  // Say what actually happened to the change, never "done" while nothing ran.
   if (outcome === "authorized") {
-    return "Authorized. Nothing is written until your coworker sends this exact request again.";
+    if (execution?.status === "executed") return "Authorized and done.";
+    if (execution?.status === "failed") return `Authorized, but it did not complete: ${execution.message}`;
+    return `Authorized. Nothing has been written yet. ${execution?.message ?? ""}`.trim();
   }
   if (outcome === "declined") return "Declined. Nothing was changed.";
-  return "This request was already settled.";
+  return execution?.message ?? "This request was already settled.";
 }
 
 function statusLabel(approval: AttentionEnvelopeApproval): string {

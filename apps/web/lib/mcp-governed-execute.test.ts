@@ -107,7 +107,7 @@ function applyAuthorityOverrides(
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null,
     ...overrides,
   });
 }
@@ -142,7 +142,7 @@ beforeEach(() => {
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null,
   });
 });
 
@@ -159,7 +159,7 @@ afterEach(() => {
     authorityApprovalTaskResume: null,
     authorityApprovalEnvelopeFinalize: null,
     policyAuthorityProjectionAttempt: null,
-    policyAuthorityEnvelopeReserve: null,
+    policyAuthorityEnvelopeReserve: null, authorityExecutedOutcome: null,
   });
 });
 
