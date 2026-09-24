@@ -17,10 +17,30 @@ function admitted(principal: Principal, participants: Membership[], holders: (st
   return !action || participant.roles.some((role) => ["accountable", "coordinator", "contributor", "specialist", "approver", "reviewer"].includes(role));
 }
 
-/** Exact-room access; the case-wide messaging resolver cannot authorize sibling rooms. */
+const OWNER_ROLES = ["coordinator", "accountable"];
+const owns = (row: Membership) => row.lifecycle === "active" && row.roles.some((role) => OWNER_ROLES.includes(role));
+
+/**
+ * Whether a person owns a room: they oversee it, or (for a room nobody
+ * oversees yet) they created, requested, or hold it.
+ */
+function ownsRoom(principal: Principal, participants: Membership[], holders: (string | null)[]) {
+  const row = participants.find((entry) => entry.principalId === principal.id);
+  if (row) return owns(row);
+  return !participants.some(owns) && holders.includes(principal.id);
+}
+
+/**
+ * Exact-room access; the case-wide messaging resolver cannot authorize sibling rooms.
+ *
+ * `handover` asks whether a person who owns the room may hand it to this
+ * assistant (BI-821EEB18). Only an assistant nobody has admitted, narrowed, or
+ * removed qualifies; case policy and clearance still apply to it.
+ */
 export async function resolveAgentWorkroomAccess(input: {
   userId: string; agentId: string; workroomId: string;
   requested: Exclude<WorkroomAccessLevel, "none">;
+  handover?: boolean;
 }, db: Prisma.TransactionClient = prisma) {
   const fail = (agentPrincipalId: string | null = null, decision = denied) => ({ decision, agentPrincipalId });
   if (!await currentUserContext(input.userId, db)) return fail();
@@ -42,8 +62,11 @@ export async function resolveAgentWorkroomAccess(input: {
   const holders = [room.createdByPrincipalId, room.requestedByPrincipalId, room.leaseHolderPrincipalId];
   const policy = readWorkspaceRoomPolicy(room.workItem?.evidence);
   const ceiling = readWorkroomBoundaryClaim(room.scopeClaims)?.sensitivityCeiling ?? "internal";
+  const handover = input.handover === true && input.requested === "action"
+    && !room.participants.some((row) => row.principalId === assistant.id) && ownsRoom(human, room.participants, holders);
   for (const principal of [human, assistant]) {
-    if (!admitted(principal, room.participants, holders, input.requested === "action")) return fail(assistant.principalId);
+    const handedOver = handover && principal === assistant;
+    if (!handedOver && !admitted(principal, room.participants, holders, input.requested === "action")) return fail(assistant.principalId);
     // An explicit case policy restricts admission; it never supplies a room invitation.
     const policyRefs = input.requested === "action" ? policy.actionPrincipalRefs ?? policy.admittedPrincipalRefs
       : policy.admittedPrincipalRefs || policy.actionPrincipalRefs
@@ -56,5 +79,5 @@ export async function resolveAgentWorkroomAccess(input: {
       if (decision.level !== input.requested) return fail(assistant.principalId, decision);
     }
   }
-  return { agentPrincipalId: assistant.principalId, decision: { level: input.requested, reason: "authorized" } as WorkroomAccessDecision };
+  return { agentPrincipalId: assistant.principalId, decision: { level: input.requested, reason: "authorized" } as WorkroomAccessDecision, handover };
 }

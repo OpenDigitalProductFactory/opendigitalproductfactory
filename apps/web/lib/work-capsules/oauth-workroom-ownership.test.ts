@@ -49,3 +49,21 @@ it("explains insufficient data access without prescribing another login or an in
     error: "workroom_data_access_required", data: { recoveryUrl: "/platform/identity/agents" },
   }));
 });
+// BI-821EEB18 — a replacement assistant is told how to take the room over.
+it("names the handover when only the assistant is missing, and lets the handover itself through", async () => {
+  mocks.access.mockImplementation(async (args: { handover?: boolean }) => ({
+    decision: args.handover ? { level: "action", reason: "authorized" } : { level: "none", reason: "not-admitted" },
+  }));
+  const read = await workroomTargetAccessRefusal({ ...input, action: false, toolName: "get_workroom" });
+  expect(read).toMatchObject({
+    error: "workroom_assistant_not_admitted",
+    data: { handover: { tool: "reassign_workroom_executor", arguments: { capsuleId: "WC-ONE", toExecutorKind: "claude-desktop" } } },
+  });
+  expect(await workroomTargetAccessRefusal({ ...input, toolName: "reassign_workroom_executor" })).toBeNull();
+  expect(mocks.access).toHaveBeenLastCalledWith(expect.objectContaining({ handover: true, requested: "action" }));
+});
+it("keeps the plain refusal when the person could not hand the room over either", async () => {
+  mocks.access.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" } });
+  expect(await workroomTargetAccessRefusal({ ...input, toolName: "get_workroom" })).toMatchObject({ error: "workroom_access_denied" });
+  expect(await workroomTargetAccessRefusal({ ...input, toolName: "reassign_workroom_executor" })).toMatchObject({ error: "workroom_access_denied" });
+});

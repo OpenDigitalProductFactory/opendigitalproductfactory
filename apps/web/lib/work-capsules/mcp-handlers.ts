@@ -36,12 +36,12 @@ import {
 } from "@/lib/work-capsules";
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
 import { adoptWorktree } from "./adopt-worktree-handler";
+import { reassignCapsuleExecutor } from "./reassign-executor-handler";
 import {
   adoptWorktreeCapsule,
   claimWorkCapsuleScope,
   createWorkCapsule,
   heartbeatWorkCapsule,
-  reassignWorkCapsuleExecutor,
   planCapsuleWorkspace,
   releaseWorkCapsuleScope,
   recordWorkCapsuleEvidence,
@@ -576,46 +576,7 @@ export async function reassignCapsuleExecutorTool(
   userId: string,
   context: ToolContext,
 ): Promise<ToolResult> {
-  const capsuleId = stringParam(params, "capsuleId");
-  const toExecutorKind = stringParam(params, "toExecutorKind");
-  if (!capsuleId || !toExecutorKind) {
-    return { success: false, error: "invalid_input", message: "capsuleId and toExecutorKind are required." };
-  }
-  if (!isWorkCapsuleExecutorKind(toExecutorKind)) {
-    return {
-      success: false,
-      error: "invalid_executor_kind",
-      message: `toExecutorKind must be one of: ${WORK_CAPSULE_EXECUTOR_KINDS.join(", ")}.`,
-    };
-  }
-  const manifest =
-    params["handoffManifest"] && typeof params["handoffManifest"] === "object" && !Array.isArray(params["handoffManifest"])
-      ? (params["handoffManifest"] as Record<string, unknown>)
-      : undefined;
-
-  try {
-    const capsule = await reassignWorkCapsuleExecutor({
-      db: workCapsuleDb(),
-      capsuleId,
-      toExecutorKind,
-      toExecutorRef: stringParam(params, "toExecutorRef") ?? undefined,
-      reason: stringParam(params, "reason") ?? undefined,
-      handoffManifest: manifest,
-      actor: await actor(userId, context),
-    });
-    return {
-      success: true,
-      entityId: capsule.capsuleId,
-      message: `Reassigned ${capsule.capsuleId} to ${toExecutorKind}; lease transferred.`,
-      data: { capsule },
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: "reassign_failed",
-      message: getErrorMessage(error),
-    };
-  }
+  return reassignCapsuleExecutor({ params, db: workCapsuleDb(), resolveActor: () => actor(userId, context) });
 }
 
 export async function recordCapsuleEvidenceTool(

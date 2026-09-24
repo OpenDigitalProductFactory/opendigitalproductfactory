@@ -69,3 +69,38 @@ it("denies disabled humans and inactive assistant identities", async () => {
   m.alias.mockResolvedValue({ principal: { ...agent, status: "inactive" } });
   expect((await resolveAgentWorkroomAccess(input)).decision.reason).toBe("not-admitted");
 });
+
+// BI-821EEB18 — a person hands their own room to a replacement assistant.
+const replacement = { id: "new-agent-row", principalId: "PRN-new-agent", kind: "agent", status: "active", sensitivityClearance: ["internal"] };
+const ownedRoom = (participants: unknown[] = [{ principalId: human.id, lifecycle: "active", roles: ["coordinator"] }]) =>
+  ({ ...room(), leaseHolderPrincipalId: agent.id, requestedByPrincipalId: human.id, participants });
+const asReplacement = () => m.alias.mockImplementation(async ({ where }) => ({ principal: where.aliasType === "user" ? human : replacement }));
+it("lets the owner hand the room to an assistant nobody admitted, only through a handover", async () => {
+  asReplacement();
+  m.room.mockResolvedValue(ownedRoom());
+  expect((await resolveAgentWorkroomAccess(input)).decision.reason).toBe("not-admitted");
+  expect((await resolveAgentWorkroomAccess({ ...input, requested: "content" })).decision.reason).toBe("not-admitted");
+  const handover = await resolveAgentWorkroomAccess({ ...input, handover: true });
+  expect(handover).toMatchObject({ decision: { level: "action" }, handover: true });
+  // A handover grants no content read on its own terms.
+  expect((await resolveAgentWorkroomAccess({ ...input, requested: "content", handover: true })).decision.reason).toBe("not-admitted");
+});
+it.each([
+  ["removed", [{ principalId: human.id, lifecycle: "active", roles: ["coordinator"] }, { principalId: replacement.id, lifecycle: "removed", roles: ["contributor"] }]],
+  ["narrowed to observer", [{ principalId: human.id, lifecycle: "active", roles: ["coordinator"] }, { principalId: replacement.id, lifecycle: "active", roles: ["observer"] }]],
+  ["the person only contributes", [{ principalId: human.id, lifecycle: "active", roles: ["contributor"] }, { principalId: "bob", lifecycle: "active", roles: ["coordinator"] }]],
+  ["someone else oversees a legacy room", [{ principalId: "bob", lifecycle: "active", roles: ["coordinator"] }]],
+])("refuses a handover when %s", async (_case, participants) => {
+  asReplacement();
+  m.room.mockResolvedValue(ownedRoom(participants));
+  expect((await resolveAgentWorkroomAccess({ ...input, handover: true })).decision.level).toBe("none");
+});
+it("lets a legacy holder hand over a room nobody oversees, and still checks the assistant's clearance", async () => {
+  m.alias.mockImplementation(async ({ where }) => ({ principal: where.aliasType === "user" ? human : { ...replacement, sensitivityClearance: ["public"] } }));
+  m.room.mockResolvedValue(ownedRoom([]));
+  expect((await resolveAgentWorkroomAccess({ ...input, handover: true })).decision.reason).toBe("insufficient-clearance");
+  asReplacement();
+  expect((await resolveAgentWorkroomAccess({ ...input, handover: true })).decision.level).toBe("action");
+  m.room.mockResolvedValue({ ...ownedRoom([]), requestedByPrincipalId: "bob", leaseHolderPrincipalId: "bob" });
+  expect((await resolveAgentWorkroomAccess({ ...input, handover: true })).decision.level).toBe("none");
+});

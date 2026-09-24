@@ -8,7 +8,8 @@
 // admits the assistant acting for them, in the same transaction as the claim.
 //
 // One rule, three callers: claim_backlog_item_for_work, adopt_worktree, and the
-// drive's repair of rooms created before this rule existed.
+// drive's repair of rooms created before this rule existed. A handover
+// (reassign_workroom_executor, BI-821EEB18) admits the new assistant alone.
 //
 // It never overrides a decision someone made: an existing coordinator stays,
 // and a participant who was removed is not re-admitted.
@@ -121,24 +122,43 @@ export async function establishRoomOwnership(
 
   const assistant = input.assistantPrincipalId;
   if (assistant && assistant !== owner) {
-    const existing = byPrincipal.get(assistant);
-    if (existing && !isActive(existing)) {
-      outcome.skipped.push("The assistant was removed from this room earlier, so it was not re-admitted.");
-    } else if (!existing) {
-      await db.workroomParticipant.create({
-        data: {
-          workroomId: input.workroomId,
-          principalId: assistant,
-          roles: ["contributor"],
-          assignmentSource: "explicit",
-          enteredReason: ROOM_ASSISTANT_REASON,
-          lifecycle: "active",
-        },
-      });
-      outcome.assistantAdmitted = true;
-    }
+    const admission = await admitRoomAssistant(db, input.workroomId, assistant, byPrincipal.get(assistant) ?? null);
+    outcome.assistantAdmitted = admission.admitted;
+    if (admission.skipped) outcome.skipped.push(admission.skipped);
   }
   return outcome;
+}
+
+/**
+ * Admit an assistant to one room as a contributor. A participant already in the
+ * room keeps the roles someone gave it, and one who was removed stays removed.
+ * Pass `existing` when the roster is already loaded.
+ */
+export async function admitRoomAssistant(
+  db: RoomOwnershipDb,
+  workroomId: string,
+  assistantPrincipalId: string,
+  existing?: ParticipantRow | null,
+): Promise<{ admitted: boolean; skipped: string | null }> {
+  const row = existing !== undefined ? existing : (await db.workroomParticipant.findMany({
+    where: { workroomId, principalId: assistantPrincipalId },
+    select: { id: true, principalId: true, roles: true, lifecycle: true },
+  }))[0] ?? null;
+  if (row && !isActive(row)) {
+    return { admitted: false, skipped: "The assistant was removed from this room earlier, so it was not re-admitted." };
+  }
+  if (row) return { admitted: false, skipped: null };
+  await db.workroomParticipant.create({
+    data: {
+      workroomId,
+      principalId: assistantPrincipalId,
+      roles: ["contributor"],
+      assignmentSource: "explicit",
+      enteredReason: ROOM_ASSISTANT_REASON,
+      lifecycle: "active",
+    },
+  });
+  return { admitted: true, skipped: null };
 }
 
 /** One sentence for the room's activity trail, or null when nothing changed. */
