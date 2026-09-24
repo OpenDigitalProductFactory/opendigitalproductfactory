@@ -17,8 +17,8 @@ apps/web/components/platform/EffectivePermissionsPanel.tsx	844
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	923
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
 apps/web/components/workbooks/Grid.tsx	1830
-apps/web/instrumentation.test.ts	943
-apps/web/instrumentation.ts	1478
+apps/web/instrumentation.test.ts	979
+apps/web/instrumentation.ts	1485
 apps/web/lib/actions/agent-coworker-external.test.ts	901
 apps/web/lib/actions/agent-coworker.ts	2759
 apps/web/lib/actions/agent-task-scheduler.test.ts	1132

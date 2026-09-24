@@ -305,7 +305,10 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
     });
     let cleared = 0;
     let failedCoerced = 0;
+    const { recentlyActiveBuildIds } = await import("@/lib/build/build-liveness");
+    const live = await recentlyActiveBuildIds(prisma, candidates.map((build) => build.buildId), new Date());
     for (const build of candidates) {
+      if (live.has(build.buildId)) continue;
       const plan = planExecStateRecovery(
         build.buildExecState as ExecStateLike | null,
         build.verificationOut,
@@ -694,7 +697,11 @@ export async function resumeStrandedBuildsOnBoot(
     let flagged = 0;
     let advanced = 0;
     let abandoned = 0;
+    // BI-5BF650CB: updatedAt is not liveness; progress is recorded as BuildActivity.
+    const { recentlyActiveBuildIds } = await import("@/lib/build/build-liveness");
+    const live = await recentlyActiveBuildIds(prisma, candidates.map((build) => build.buildId), now);
     for (const build of candidates) {
+      if (live.has(build.buildId)) continue;
       // ── Pre-build phases (ideate/plan/review): no step-machine, but each
       // phase has a canonical generator/reviewer we can re-fire. BI-9257CF19:
       // auto-resume instead of merely flagging for operator rescue, so an
