@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { readPullRequestMergedSignal, type PullRequestMergedSignal } from "./pull-request-merged-signal";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type GitProvider = "github";
 
@@ -65,7 +66,7 @@ export class GitIntakeEmitError extends Error {
   constructor(candidateId: string, cause: unknown) {
     super(
       `Git update ${candidateId} was recorded but its events were not sent; ` +
-        `redeliver it to retry (${cause instanceof Error ? cause.message : String(cause)})`,
+        `redeliver it to retry (${getErrorMessage(cause)})`,
     );
     this.name = "GitIntakeEmitError";
   }

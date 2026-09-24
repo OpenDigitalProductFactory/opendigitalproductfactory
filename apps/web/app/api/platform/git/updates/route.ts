@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiErrorResponse } from "@/lib/api/error";
 import { GitIntakeEmitError, handleGitHubWebhook } from "@/lib/build/git-promotion-intake";
 
 /**
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     // Recorded but not announced. A server-side failure, so GitHub marks the
     // delivery failed and a redelivery re-sends what was owed.
     if (err instanceof GitIntakeEmitError) {
-      return NextResponse.json({ error: message }, { status: 503 });
+      return apiErrorResponse("GIT_UPDATE_NOT_ANNOUNCED", message, 503);
     }
     const status = message.includes("signature") ? 401 : 400;
     return NextResponse.json({ error: message }, { status });
