@@ -37,6 +37,14 @@ vi.mock("@/lib/work-capsules/liveness-inventory", () => ({
   })),
 }));
 
+vi.mock("@/lib/work-management/held-workrooms", () => ({
+  loadHeldWorkrooms: vi.fn(async () => [{
+    capsuleId: "WC-HELD", title: "Onboard new foster", action: "pause", reason: "conformance_pause",
+    deviationCodes: ["missing_explicit_coordinator"], stageKey: "intake",
+    since: new Date(Date.now() - 3 * 3_600_000).toISOString(), stuckTicks: 12, notifiedAt: new Date().toISOString(),
+  }]),
+}));
+
 import WorkroomsPage from "./page";
 
 describe("Work activity page", () => {
@@ -65,5 +73,13 @@ describe("Work activity page", () => {
     const html = renderToStaticMarkup(await WorkroomsPage());
     // The unplaced room has no liveness timestamp, so it must read unknown.
     expect(html).toContain('aria-label="Unknown"');
+  });
+
+  it("lists held Workrooms with why and for how long (BI-E8C78E80)", async () => {
+    const html = renderToStaticMarkup(await WorkroomsPage());
+    expect(html).toContain("Held Workrooms");
+    expect(html).toContain("Onboard new foster");
+    expect(html).toContain("missing explicit coordinator");
+    expect(html).toContain("3 h");
   });
 });

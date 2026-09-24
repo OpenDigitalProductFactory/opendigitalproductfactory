@@ -592,7 +592,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
   });
 
-  const attempt = () => executeRemoteTaskAttempt({
+  const attempt = (overrides: Partial<Parameters<typeof executeRemoteTaskAttempt>[0]> = {}) => executeRemoteTaskAttempt({
     run: { id: "run-internal", taskRunId: "TR-MCP-CAPACITY-DEFERRAL", contextId: "thread-1" },
     threadId: "thread-1",
     token: { tokenId: "PAT-WRITER-CAPACITY", userId: "user-1", capability: "write", source: "pat" },
@@ -600,6 +600,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     parsed,
     idempotentReplay: false,
     capacityAttempt: 1,
+    ...overrides,
   });
 
   it.each(["capacity", "busy"] as const)(
@@ -634,6 +635,16 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
       expect(payload).not.toHaveProperty("terminalWriterWait");
     },
   );
+
+  it("stops waiting after the last attempt and fails honestly as busy (BI-D25F867D)", async () => {
+    const busy = "Every AI provider is busy right now.";
+    autonomous.execute.mockResolvedValue({ content: busy, executedTools: [], failure: { kind: "busy", message: busy } });
+    const outcome = await attempt({ idempotentReplay: true, capacityAttempt: 5, resumeKind: "capacity" });
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "failed", resumable: false } });
+    const payload = db.updateTaskRun.mock.calls.at(-1)?.[0]?.data?.progressPayload;
+    expect(payload).toEqual(expect.objectContaining({ failureKind: "busy" }));
+    expect(payload).not.toHaveProperty("resourceWait");
+  });
 
   it("still parks a genuine writer no-show, where the model ran and did not write", async () => {
     // The optimisation this fix must not undo: a reviewer that reached a model,

@@ -23,6 +23,7 @@ import {
 } from "@/lib/work-management/coordinator-eligibility";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import { buildStageBrief, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
+import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
 
 import {
   loadCoordinationBindings,
@@ -110,8 +111,12 @@ export type WorkroomDriveEffects = {
     summary: string;
     payload: Record<string, unknown>;
     observationOnly?: boolean;
+    /** Update the snapshot but add no trail row: the hold did not change (BI-E8C78E80). */
+    quiet?: boolean;
     lease?: { expiresAt: Date; holderPrincipalId: string | null };
   }) => Promise<void>;
+  /** Tell a stuck room's owner once per stuck spell (BI-E8C78E80). Optional; tests may omit it. */
+  notifyStall?: (input: { room: WorkroomDriveRoom; hold: WorkroomDriveHold; reason: string; conformance: unknown }) => Promise<void>;
   acquireLease: (input: {
     roomId: string;
     now: Date;
@@ -240,6 +245,15 @@ export async function applyDrivePlan(input: {
     accountability,
   });
 
+  const priorHold = readDriveHold(room.workspaceState);
+  const hold = nextDriveHold(priorHold, { action: plan.action, reason: plan.reason, stageKey: plan.stageKey, conformance: plan.conformance }, now);
+  if (stallNoticeDue(hold) && effects.notifyStall) {
+    await effects.notifyStall({ room, hold, reason: plan.reason, conformance: plan.conformance })
+      .then(() => { hold.notifiedAt = now.toISOString(); }, () => undefined);
+  }
+  const quiet = !driveTickIsNews(priorHold, hold, plan.action);
+  const persist: WorkroomDriveEffects["persist"] = (args) => effects.persist({ ...args, quiet: quiet && !args.observationOnly });
+
   const snapshot = {
     kind: "workroom-drive",
     version: 1,
@@ -263,13 +277,14 @@ export async function applyDrivePlan(input: {
       : null,
     conformance: plan.conformance,
     ledger: plan.ledger,
+    hold,
   };
 
   if (plan.action === "do_not_wake") {
     if (plan.shapeKey) {
       await effects.deactivateAgentTask(workroomDriveTaskId(room.capsuleId, plan.shapeKey));
     }
-    await effects.persist({
+    await persist({
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
@@ -280,7 +295,7 @@ export async function applyDrivePlan(input: {
   }
 
   if (plan.action === "attention") {
-    await effects.persist({
+    await persist({
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ATTENTION_KIND,
@@ -302,7 +317,7 @@ export async function applyDrivePlan(input: {
       currentHolder: room.leaseHolderPrincipalId,
     });
     if (lease === "held") {
-      await effects.persist({
+      await persist({
         roomId: room.id,
         snapshot: { ...snapshot, reason: "lease_held" },
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
@@ -313,12 +328,12 @@ export async function applyDrivePlan(input: {
       return "skipped";
     }
     if (!room.ownerUserId) {
-      await effects.persist({
+      await persist({
         roomId: room.id,
         snapshot: { ...snapshot, reason: "missing_task_owner" },
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
         summary: "Agent stage is eligible but no owner user is bound for ScheduledAgentTask.",
-        payload: snapshot,
+        payload: { ...snapshot, reason: "missing_task_owner" },
       });
       return "skipped";
     }
@@ -349,7 +364,7 @@ export async function applyDrivePlan(input: {
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
     if (!scheduled) return "skipped";
-    await effects.persist({
+    await persist({
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
@@ -360,7 +375,7 @@ export async function applyDrivePlan(input: {
     return "dispatched";
   }
 
-  await effects.persist({
+  await persist({
     roomId: room.id,
     snapshot,
     activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
@@ -637,6 +652,7 @@ export function createWorkroomDriveEffects(
         { workroomId: roomId },
       );
     },
+    notifyStall: async (input) => (await import("@/lib/work-management/workroom-stall-notice")).notifyWorkroomStall(input),
     async persist(input) {
       const prisma = await loadDb();
       const activity = await prisma.$transaction(async (tx) => {
@@ -669,6 +685,7 @@ export function createWorkroomDriveEffects(
           });
           if (updated.count !== 1) return null;
         }
+        if (input.quiet) return null;
         return tx.workroomActivity.create({
           data: {
             workCapsuleId: input.roomId,

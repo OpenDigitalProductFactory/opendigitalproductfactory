@@ -558,6 +558,16 @@ exists and would be a second source of truth for the same fact.
   rendered before a policy change cannot bind the identity it showed.
 - Nothing is auto-approved for a DCR client. Revocation, room admission and
   `OAUTH_SETUP_REQUIRED` recovery are unchanged.
+- A `choice` is made by the person (2026-09-24). The page pre-selects
+  nothing: the select is required and starts on an empty placeholder, and a
+  Connect without a pick binds nothing and shows the screen again. Before
+  this, the least-authority candidate was pre-selected, and a live
+  acceptance run bound it without anyone choosing.
+- Only an explicit Connect or Cancel click decides. The form's first submit
+  button is disabled, so pressing Enter submits nothing. A POST whose
+  `Sec-Fetch-Site` is present and not `same-origin` is refused, as a foreign
+  `Origin` already was. The decision log records `Sec-Fetch-Site` and
+  `Sec-Fetch-User`.
 
 ### Acceptance criteria
 

@@ -1,0 +1,75 @@
+// Escalations for lanes a delivery shape owns, which never route through
+// objective mapping. Split from terminal-recovery.ts to keep it under the
+// module-size ceiling; the routing that picks them stays there.
+
+import type { TerminalInitiativeRecovery } from "./terminal-recovery";
+
+/**
+ * BI-05F8860A: under readiness.v3 a small or break-fix item owes no objective
+ * mapping — its acceptance lane belongs to the delivery-coordinator and is met
+ * by cited manual/ux evidence (the runtime check or the failing-to-passing
+ * test). Routing that lane at objective-mapping produced "baseline-not-found",
+ * then "eligible-evidence-not-found", then "objective-mapping-history-
+ * unavailable" — three misleading escalations for one missing evidence row.
+ */
+export function smallShapeAcceptanceEscalation(): TerminalInitiativeRecovery {
+  return {
+    reviewerRoutes: [],
+    unroutable: [],
+    escalations: [{
+      accountableRole: "delivery-coordinator",
+      toolName: "record_execution_evidence",
+      grant: "backlog_write",
+      reason: "acceptance-evidence-required",
+      nextAction: "This delivery shape is accepted by the runtime check on the live install or by the failing-to-passing test, not by objective mapping. Record it with record_execution_evidence (kind manual_check or ux_verified) inside the current completion window, then cite that activity id in completionEvidence.evidenceActivityIds. Do not re-claim the item to refresh readiness; a re-claim does not reopen the window.",
+    }],
+  };
+}
+
+/**
+ * BI-7876699F: research is satisfied by the AUTHOR, never by objective mapping.
+ *
+ * When RESEARCH_REQUIRED was the only unmet lane this function did not exist, so
+ * the packet fell through to the workroom/baseline chain and answered
+ * "baseline-not-found — complete independent spec approval". A delivery-small
+ * shape's requirement set contains no OBJECTIVE_BASELINE_REQUIRED at all, so that
+ * route could never legally be taken: the item was unclosable by anyone, and the
+ * packet was pointing at a gate its own policy said did not apply.
+ *
+ * Same principle as smallShapeAcceptanceEscalation above (BI-05F8860A): name the
+ * writer the accountable role can actually reach, and do not consult machinery
+ * this lane does not use.
+ */
+export function researchLaneEscalation(): TerminalInitiativeRecovery {
+  return {
+    reviewerRoutes: [],
+    unroutable: [],
+    escalations: [{
+      accountableRole: "design-author",
+      toolName: "record_initiative_evidence",
+      grant: "initiative_evidence_write",
+      reason: "research-evidence-required",
+      nextAction: "Research is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect on a named ref (commit or branch + file + line) and the failing-to-passing proof. This lane needs no objective baseline and no independent spec approval — the delivery shape does not require one.",
+    }],
+  };
+}
+
+/**
+ * BI-0F8E39D5: a small or medium item's baseline is the acceptance criteria in
+ * its body, and its shape owes no spec. Spec approval is the only writer of the
+ * persisted baseline acceptance mapping reads, so "complete independent spec
+ * approval" was advice the item could never follow. Say what is missing.
+ */
+export function bodyBaselineUnpersistedEscalation(): TerminalInitiativeRecovery {
+  return {
+    reviewerRoutes: [],
+    unroutable: [],
+    escalations: [{
+      accountableRole: "acceptance-reviewer",
+      toolName: "record_initiative_evidence",
+      grant: "initiative_evidence_write",
+      reason: "body-baseline-unpersisted",
+      nextAction: "This item's acceptance criteria are in its body, which satisfies its baseline, but acceptance mapping needs a persisted baseline that no lane writes for body criteria yet (BI-0F8E39D5). It cannot close through an acceptance reviewer until that repair lands; do not seek spec approval, which this shape does not owe.",
+    }],
+  };
+}

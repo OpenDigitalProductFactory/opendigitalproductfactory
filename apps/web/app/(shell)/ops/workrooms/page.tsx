@@ -2,12 +2,14 @@ import { prisma } from "@dpf/db";
 import Link from "next/link";
 
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { HeldWorkroomsList } from "@/components/ops/workrooms/HeldWorkroomsList";
 import { PortfolioActivityTree } from "@/components/ops/workrooms/PortfolioActivityTree";
 import { WorkroomInventory, type WorkroomInventoryRow } from "@/components/ops/workrooms/WorkroomInventory";
 import { Surface } from "@/components/ui/Surface";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import { loadHeldWorkrooms } from "@/lib/work-management/held-workrooms";
 import {
   projectPortfolioActivityPage,
   type RoomActivityInput,
@@ -19,7 +21,10 @@ export const dynamic = "force-dynamic";
 const WORKROOM_READ_LIMIT = 200;
 
 export default async function WorkroomsPage() {
-  const inventory = await loadCapsuleLivenessInventory(prisma, { where: {}, take: WORKROOM_READ_LIMIT });
+  const [inventory, held] = await Promise.all([
+    loadCapsuleLivenessInventory(prisma, { where: {}, take: WORKROOM_READ_LIMIT }),
+    loadHeldWorkrooms(prisma),
+  ]);
   // A full page means the read stopped at its limit, so branch counts describe
   // the rooms read rather than the rooms that exist. The tree is told, and says so.
   const roomReadBounded = inventory.capsulesAll.length >= WORKROOM_READ_LIMIT;
@@ -76,6 +81,14 @@ export default async function WorkroomsPage() {
         <Link data-owner-first-next-action href="#live-workrooms-heading" className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
           Review live Workrooms
         </Link>
+      </Surface>
+      {/* BI-E8C78E80: rooms the drive is holding, with why and for how long. */}
+      <Surface className="mt-6" rounded="xl">
+        <h2 className="text-base font-semibold text-[var(--dpf-text)]">Held Workrooms</h2>
+        <p className="mt-0.5 mb-3 text-xs text-[var(--dpf-muted)]">
+          Paused or escalated by their drive, longest held first.
+        </p>
+        <HeldWorkroomsList rows={held} nowIso={new Date().toISOString()} />
       </Surface>
       <Surface className="mt-6" rounded="xl">
         <h2 className="text-base font-semibold text-[var(--dpf-text)]">Activity by portfolio</h2>

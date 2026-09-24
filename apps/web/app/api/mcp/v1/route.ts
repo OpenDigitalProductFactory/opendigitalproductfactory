@@ -184,6 +184,9 @@ const QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS = new Set([
   // Releasing a lease is cleanup, and is what prevents quiescence-blocked
   // local-CI evidence writes from leaking scarce nonprod environments.
   "release_nonprod_environment_lease",
+  // Renewing keeps a gate that is already running alive through a drain, so
+  // its verdict is not lost to the lease lapsing mid-build (2026-09-24).
+  "renew_nonprod_environment_lease",
 ]);
 
 function isToolAllowedDuringQuiescence(toolName: string, tool: ToolDefinition | undefined): boolean {

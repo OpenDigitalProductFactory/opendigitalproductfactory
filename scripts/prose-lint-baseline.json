@@ -1597,7 +1597,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 23
+    "textMass": 34
   },
   "apps/web/app/(shell)/performance/loading.tsx": {
     "vocabulary": 0,
