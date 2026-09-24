@@ -91,6 +91,8 @@ export async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolu
   await db.workroom.update({ where: scopeWriteWhere({ ...row, capsuleId }), data: { scopeClaims } });
 }
 
+const FULL_SHA = /^[0-9a-f]{40}$/i;
+
 export async function claimBacklogItemForWork(args: {
   params: Record<string, unknown>;
   userId: string;
@@ -107,6 +109,12 @@ export async function claimBacklogItemForWork(args: {
   const requestedIntent = stringParam(params, "workIntent");
   if (!itemId || !worktreePath || !branchName || !provider || !sessionRef) {
     return { success: false, error: "invalid_input", message: "itemId, worktreePath, branchName, provider, and sessionRef are required." };
+  }
+  const baseSha = stringParam(params, "baseSha");
+  const headSha = stringParam(params, "headSha");
+  const badSha = [["baseSha", baseSha], ["headSha", headSha]].find(([, sha]) => sha && !FULL_SHA.test(sha));
+  if (badSha) {
+    return { success: false, error: "invalid_input", message: `${badSha[0]} must be a full 40-character commit SHA.` };
   }
   if (requestedIntent && !WORK_INTENTS.includes(requestedIntent as WorkIntent)) {
     return { success: false, error: "invalid_work_intent", message: `workIntent must be one of: ${WORK_INTENTS.join(", ")}.` };
@@ -137,6 +145,8 @@ export async function claimBacklogItemForWork(args: {
         headBranch: branchName,
         worktreePath,
         baseBranch: stringParam(params, "baseBranch") ?? "main",
+        baseSha,
+        headSha,
         executorKind,
         executorRef: sessionRef,
         force: params["force"] === true,

@@ -38,7 +38,7 @@ import {
   defaultPlatformRepositoryFullName,
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
-import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import type { CapsuleDb, ClaimBacklogWorkspaceInput, WorkCapsuleActor } from "./work-capsule-store-types";
 import { assertOAuthWorkroomOwner, workroomOwnershipData } from "./oauth-workroom-ownership";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
 import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
@@ -355,19 +355,7 @@ export type BacklogWorkspaceConflict = {
  */
 export async function claimBacklogItemWorkspace(args: {
   db: CapsuleDb;
-  input: {
-    backlogItemId: string;
-    repositoryFullName: string;
-    headBranch: string;
-    worktreePath: string;
-    baseBranch?: string | null;
-    executorKind?: WorkCapsuleExecutorKind | null;
-    executorRef?: string | null;
-    title?: string;
-    objective?: string;
-    force?: boolean;
-    overrideReason?: string | null;
-  };
+  input: ClaimBacklogWorkspaceInput;
   actor: WorkCapsuleActor;
   now?: Date;
 }): Promise<{
@@ -432,6 +420,8 @@ export async function claimBacklogItemWorkspace(args: {
       headBranch: args.input.headBranch,
       worktreePath: args.input.worktreePath,
       baseBranch: args.input.baseBranch ?? "main",
+      baseSha: args.input.baseSha ?? null,
+      headSha: args.input.headSha ?? null,
       backlogItemId: item.itemId,
       epicId: item.epicId ?? null,
       executorKind: args.input.executorKind ?? null,

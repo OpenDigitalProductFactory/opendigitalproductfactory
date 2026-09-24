@@ -151,7 +151,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
+      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction, and the room is born owned: the person the work is for becomes its Process Overseer and their assistant a contributor. Pass baseSha and headSha so reviewers can be routed to the exact source. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
     inputSchema: {
       type: "object",
       properties: {
@@ -160,6 +160,8 @@ const definitions: ToolDefinition[] = [
         branchName: { type: "string", description: "Branch (head) for this work — the workroom is keyed on (repo, branch)." },
         repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo." },
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
+        baseSha: { type: "string", description: "Full 40-character SHA of the base commit. With headSha, it lets reviewers be routed to the exact source; omit only before the first commit." },
+        headSha: { type: "string", description: "Full 40-character SHA of the branch head." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workShape: {
