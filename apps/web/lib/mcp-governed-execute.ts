@@ -10,7 +10,7 @@
 import { prisma } from "@dpf/db";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
 import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
-import { approvalPendingResult } from "./govern/authority/approval-pending-result";
+import { approvalPendingResult, settledApprovalResult } from "./govern/authority/approval-pending-result";
 import type { CoworkerAuthorityDecision } from "./govern/authority/coworker-authority-decision";
 import {
   enforceCoworkerToolAuthority,
@@ -23,6 +23,7 @@ import {
   type CoworkerAuthorityInputResolver,
   type PolicyAuthorityProjectionAttempt,
   type PolicyAuthorityEnvelopeReserve,
+  type AuthorityExecutedOutcome,
 } from "./govern/authority/coworker-tool-authority-gate";
 export type {
   AuthorityApprovalEnvelopeCreate,
@@ -206,6 +207,7 @@ export type GovernedExecuteResult = ToolResult & {
     alignment?: AlignmentGateDecision["alignment"];
     alignmentInteractionId?: string;
     precondition?: PreconditionOrderingDecision;
+    approvalReplayOf?: string;
   };
 };
 
@@ -269,6 +271,7 @@ export function _setGovernanceForTests(overrides: {
   authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
   policyAuthorityProjectionAttempt?: PolicyAuthorityProjectionAttempt | null;
   policyAuthorityEnvelopeReserve?: PolicyAuthorityEnvelopeReserve | null;
+  authorityExecutedOutcome?: AuthorityExecutedOutcome | null;
   lifecycleHooks?: ToolLifecycleHook[] | null;
   alignmentGate?: AlignmentGate | null;
   preconditionGate?: PreconditionGate | null;
@@ -358,6 +361,7 @@ async function writeAudit(data: {
   durationMs: number;
   alignmentDecision?: AlignmentGateDecision | null;
   preconditionDecision?: PreconditionOrderingDecision | null;
+  envelopeId?: string | null;
 }): Promise<{ id: string } | null> {
   const tool = findTool(data.toolName);
   return writeGovernedToolAudit({ ...data, tool });
@@ -508,6 +512,7 @@ export async function governedExecuteTool(
       tool,
       agentGrantAllowed,
     );
+    if (authorityGate.outcome === "settled") return settledApprovalResult(args.toolName, authorityGate);
     if (authorityGate.outcome === "reject") {
       const result: GovernedExecuteResult = {
         ...(authorityGate.rejection === "approval_required"
@@ -621,7 +626,7 @@ export async function governedExecuteTool(
     const reservedAudit = await writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result: reservationResult,
       userId: args.userId, source: args.source, context: args.context, durationMs: 0,
-      alignmentDecision, preconditionDecision,
+      alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId,
     });
     reservedAuditId = reservedAudit?.id ?? null;
     const reservedReceipt = reservedAuditId
@@ -768,7 +773,7 @@ export async function governedExecuteTool(
     auditRow = await writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,
       source: args.source, context: args.context, durationMs,
-      alignmentDecision, preconditionDecision,
+      alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId,
     });
   }
   if (auditRow?.id && shouldWriteReceipt && !reservedReceiptId) {

@@ -316,6 +316,85 @@ export function registerCoworkerAuthorityCases(
     });
   });
 
+  it("returns the recorded outcome to a retry after an approved run, without running or asking again (BI-12E5DD91)", async () => {
+    const pending = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+        consequence: "authority",
+      },
+    });
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => pending,
+      authorityExecutedOutcome: async () => ({
+        envelopeId: "ENV-DONE",
+        result: { success: true, message: "Created BI-9.", entityId: "BI-9", data: { itemId: "BI-9" } },
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "same request" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      entityId: "BI-9",
+      data: { itemId: "BI-9" },
+      governance: { approvalReplayOf: "ENV-DONE" },
+    });
+    expect(result.message).toContain("was not run again");
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+  });
+
+  it("never spends one approval twice: a consumed approval refuses the second run (BI-12E5DD91)", async () => {
+    const base = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+        consequence: "authority",
+      },
+    });
+    const approved = {
+      ...base,
+      approval: {
+        envelopeId: "ENV-APPROVED",
+        status: "approved" as const,
+        expiresAt: new Date(Date.now() + 60_000),
+        binding: buildCoworkerApprovalBinding(base),
+      },
+    };
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => approved,
+      authorityExecutedOutcome: async () => null,
+      policyAuthorityEnvelopeReserve: async () => false,
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: approved.rawParams,
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({ success: false, error: "authority_evidence_unavailable" });
+    expect(result.message).toContain("already used by another run");
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+  });
+
   it("puts the unresolved WWMD residue on the human decision card", async () => {
     const pending = harness.authorityInput({
       action: {

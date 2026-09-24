@@ -234,6 +234,37 @@ export async function findApprovedAuthorityEnvelope(
   };
 }
 
+/**
+ * BI-12E5DD91 — the recorded outcome of an identical call that already ran on
+ * a person's approval. A caller that retries after approval gets that outcome
+ * instead of a second run or a second card. Only a successful run within the
+ * approval window counts; a failed or declined one may be asked again.
+ */
+export async function findExecutedAuthorityOutcome(
+  binding: CoworkerApprovalBinding,
+  now: Date = new Date(),
+  db: AuthorityApprovalDb & {
+    toolExecution: { findFirst(args: unknown): Promise<{ result: unknown } | null> };
+  } = prisma as never,
+): Promise<{ envelopeId: string; result: unknown } | null> {
+  const envelope = await db.coworkerActionEnvelope.findFirst({
+    where: {
+      approvalBindingFingerprint: fingerprintCoworkerApprovalBinding(binding),
+      status: "executed",
+      resolvedAt: { gt: new Date(now.getTime() - AUTHORITY_APPROVAL_TTL_MS) },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, status: true, expiresAt: true },
+  });
+  if (!envelope) return null;
+  const run = await db.toolExecution.findFirst({
+    where: { envelopeId: envelope.id, success: true },
+    orderBy: { createdAt: "desc" },
+    select: { result: true },
+  });
+  return run ? { envelopeId: envelope.id, result: run.result } : null;
+}
+
 export async function resumeAuthorityApprovalTask(
   taskRunId: string,
   markWorking: MarkTaskWorking = markTaskRunWorking,

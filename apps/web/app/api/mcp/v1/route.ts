@@ -39,6 +39,7 @@ import {
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
+import { normalizeTokenScope, requiredTokenScopeForTool, tokenAdmitsTool, tokenScopeSatisfies } from "@/lib/mcp/token-tool-scope";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
 import { oauthSetupRequiredResult } from "@/lib/auth/oauth-setup-required";
 import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
@@ -148,13 +149,6 @@ function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
   return scope === "read" ? "read" : "write";
 }
 
-function normalizeTokenScope(token: Pick<ResolvedMcpToken, "scope" | "capability">): McpTokenScope {
-  if (token.scope === "admin" || token.scope === "write" || token.scope === "read") {
-    return token.scope;
-  }
-  return token.capability === "write" ? "write" : "read";
-}
-
 async function loadUserContext(userId: string): Promise<UserContext> {
   return await currentUserContext(userId).catch(() => null)
     ?? { userId, platformRole: null, isSuperuser: false };
@@ -175,30 +169,9 @@ function tokenCanUseTool(
   if (tool.requiredCapability && !can(userContext, tool.requiredCapability as CapabilityKey)) {
     return false;
   }
-  const required = grantMap[tool.name];
-  if (!required) return false; // default-deny tools without a grant entry
-  const requiredScope = requiredTokenScopeForTool(tool, required);
-  if (!tokenScopeSatisfies(normalizeTokenScope(token), requiredScope)) {
-    return false;
-  }
-  // Expand through GRANT_IMPLICATIONS so an implying grant (e.g. build_promote)
-  // surfaces the finer-grant tools it implies (e.g. build_lifecycle). Mirrors
-  // the call-time check below and the agent-grant layer.
-  return required.some((g) => expandGrants(token.scopes).includes(g));
-}
-
-function requiredTokenScopeForTool(
-  tool: ToolDefinition | undefined,
-  requiredGrants: readonly string[],
-): McpTokenScope {
-  if (requiredGrants.some((grant) => grant.startsWith("admin_"))) return "admin";
-  return tool?.sideEffect ? "write" : "read";
-}
-
-function tokenScopeSatisfies(actual: McpTokenScope, required: McpTokenScope): boolean {
-  if (required === "read") return true;
-  if (required === "write") return actual === "write" || actual === "admin";
-  return actual === "admin";
+  // Default-deny a tool with no grant entry; scope and expanded grants both
+  // admit it, the same rule the call-time check and the agent-grant layer use.
+  return tokenAdmitsTool(tool, grantMap[tool.name], token);
 }
 
 const QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS = new Set([

@@ -42,6 +42,7 @@ export interface EnvelopeRow {
   status: EnvelopeStatus;
   createdAt: Date;
   resolvedAt: Date | null;
+  expiresAt?: Date | null;
 }
 
 // Deliberately NOT lib/shared/action-result's ActionResult: this is an HTTP
@@ -82,6 +83,27 @@ function assertCallerIsDelegate(envelope: EnvelopeRow, callerUserId: string): En
   return { ok: true, envelope };
 }
 
+/**
+ * A decision that arrives after the window closed settles the request as
+ * `expired` instead of approving or declining it (BI-12E5DD91, BI-78D3CF1E).
+ * The periodic sweep does the same later; doing it here means a stale card
+ * can never approve a lapsed request, and the person sees why.
+ */
+async function refuseIfLapsed(envelope: EnvelopeRow): Promise<EnvelopeActionResult<EnvelopeRow> | null> {
+  if (!envelope.expiresAt || envelope.expiresAt.getTime() > Date.now()) return null;
+  if (envelope.status === "proposed" || envelope.status === "approved") {
+    await prisma.coworkerActionEnvelope.updateMany({
+      where: { id: envelope.id, status: { in: ["proposed", "approved"] }, resolvedAt: null },
+      data: { status: "expired", resolvedAt: new Date() },
+    });
+  }
+  return {
+    ok: false,
+    reason: "This request's decision window closed before it was answered, so it has expired. Your coworker can ask again.",
+    httpStatus: 409,
+  };
+}
+
 // ─── Verbs ───────────────────────────────────────────────────────────────────
 
 /** User-side approve: proposed → approved. The actual underlying-tool
@@ -97,6 +119,8 @@ export async function approveEnvelope(
   if (!load.ok) return load;
   const authz = assertCallerIsDelegate(load.envelope, callerUserId);
   if (!authz.ok) return authz;
+  const lapsed = await refuseIfLapsed(load.envelope);
+  if (lapsed) return lapsed;
 
   const transition = transitionOnApprove(load.envelope.status);
   if (!transition.ok) {
@@ -133,6 +157,8 @@ export async function denyEnvelope(
   if (!load.ok) return load;
   const authz = assertCallerIsDelegate(load.envelope, callerUserId);
   if (!authz.ok) return authz;
+  const lapsed = await refuseIfLapsed(load.envelope);
+  if (lapsed) return lapsed;
 
   const transition = transitionOnDeny(load.envelope.status);
   if (!transition.ok) {

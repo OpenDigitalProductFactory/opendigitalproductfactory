@@ -74,9 +74,21 @@ type AuthorityGateOverrides = {
   authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
   policyAuthorityProjectionAttempt?: PolicyAuthorityProjectionAttempt | null;
   policyAuthorityEnvelopeReserve?: PolicyAuthorityEnvelopeReserve | null;
+  authorityExecutedOutcome?: AuthorityExecutedOutcome | null;
 };
 
+/** BI-12E5DD91: the recorded outcome of an identical call that already ran on approval. */
+export type AuthorityExecutedOutcome = (
+  binding: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>["approvalBinding"],
+) => Promise<{ envelopeId: string; result: unknown } | null>;
+
 export type CoworkerToolAuthorityGateResult =
+  | {
+      /** The identical call already ran once on a person's approval. */
+      outcome: "settled";
+      envelopeId: string;
+      result: unknown;
+    }
   | {
       outcome: "allow";
       approvedEnvelopeId: string | null;
@@ -133,6 +145,17 @@ export function setCoworkerToolAuthorityOverridesForTests(
   if ("policyAuthorityEnvelopeReserve" in next) {
     overrides.policyAuthorityEnvelopeReserve = next.policyAuthorityEnvelopeReserve ?? null;
   }
+  if ("authorityExecutedOutcome" in next) {
+    overrides.authorityExecutedOutcome = next.authorityExecutedOutcome ?? null;
+  }
+}
+
+async function executedOutcome(
+  binding: Parameters<AuthorityExecutedOutcome>[0],
+): Promise<{ envelopeId: string; result: unknown } | null> {
+  if (overrides.authorityExecutedOutcome) return overrides.authorityExecutedOutcome(binding);
+  const { findExecutedAuthorityOutcome } = await import("@/lib/coworker/authority-approval-envelope");
+  return findExecutedAuthorityOutcome(binding);
 }
 
 async function attemptPolicyAuthorityProjection(input: Parameters<PolicyAuthorityProjectionAttempt>[0]) {
@@ -141,7 +164,13 @@ async function attemptPolicyAuthorityProjection(input: Parameters<PolicyAuthorit
   return projector(input);
 }
 
-async function reservePolicyAuthorityEnvelope(envelopeId: string): Promise<boolean> {
+/**
+ * Claim an approved envelope for exactly one run: a compare-and-set on
+ * `resolvedAt`. Every approved run reserves (BI-12E5DD91), not only
+ * policy-derived ones, because a person's approval can now be spent by the
+ * platform's own replay and by a client retry at the same moment.
+ */
+async function reserveApprovedEnvelope(envelopeId: string): Promise<boolean> {
   if (overrides.policyAuthorityEnvelopeReserve) {
     return overrides.policyAuthorityEnvelopeReserve(envelopeId);
   }
@@ -384,6 +413,9 @@ export async function enforceCoworkerToolAuthority(
   }
 
   if (decision.outcome === "require-approval") {
+    // A lookup failure only loses the shortcut; it falls back to asking.
+    const settled = await executedOutcome(decision.approvalBinding).catch(() => null);
+    if (settled) return { outcome: "settled", ...settled };
     try {
       const envelope = await ensureApproval({
         binding: decision.approvalBinding,
@@ -420,15 +452,13 @@ export async function enforceCoworkerToolAuthority(
   }
 
   const approvedEnvelopeId = input.approval?.envelopeId ?? null;
-  if (
-    projectedDecisionId
-    && approvedEnvelopeId
-    && !await reservePolicyAuthorityEnvelope(approvedEnvelopeId)
-  ) {
+  if (approvedEnvelopeId && !await reserveApprovedEnvelope(approvedEnvelopeId)) {
     return {
       outcome: "reject",
       rejection: "authority_evidence_unavailable",
-      message: "the policy-derived single-use authorization was already consumed",
+      message: projectedDecisionId
+        ? "the policy-derived single-use authorization was already consumed"
+        : "the approval was already used by another run of this exact request",
     };
   }
   if (approvedEnvelopeId && input.task?.taskRunId) {
