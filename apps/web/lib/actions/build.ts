@@ -886,18 +886,18 @@ export async function resetBuildExecution(buildId: string): Promise<void> {
 }
 
 // BI-E47D9C5E: refusals are values; a thrown server-action Error became React #441.
-export async function retryBuildExecution(buildId: string): Promise<{ ok: boolean; error?: string }> {
+export async function retryBuildExecution(buildId: string): Promise<ActionResult> {
   const userId = await requireBuildAccess();
 
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: { createdById: true, buildExecState: true, phase: true },
   });
-  if (!build) return { ok: false, error: "This build no longer exists." };
-  if (build.createdById !== userId) return { ok: false, error: "Only the person who started this build can retry it." };
+  if (!build) return err("This build no longer exists.");
+  if (build.createdById !== userId) return err("Only the person who started this build can retry it.");
 
   const state = build.buildExecState as import("@/lib/build-exec-types").BuildExecutionState | null;
-  if (!state || state.step !== "failed") return { ok: false, error: "This build is not in a failed state, so there is nothing to retry." };
+  if (!state || state.step !== "failed") return err("This build is not in a failed state, so there is nothing to retry.");
 
   if (build.phase === "failed") {
     await prisma.featureBuild.update({
@@ -913,7 +913,7 @@ export async function retryBuildExecution(buildId: string): Promise<{ ok: boolea
       JSON.stringify(buildId),
       err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err))),
   );
-  return { ok: true };
+  return ok();
 }
 
 export async function runBuildReviewVerification(buildId: string): Promise<void> {
