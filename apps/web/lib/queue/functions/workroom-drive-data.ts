@@ -166,11 +166,13 @@ export async function loadRecordedEvidence(
       capsuleId: string;
       stageKey: string | null;
       evidenceKind: string | null;
+      outcome: string | null;
       recordedAt: Date;
     }>>`
       SELECT w."capsuleId"                      AS "capsuleId",
              a."payload" ->> 'stageKey'         AS "stageKey",
              a."payload" ->> 'kind'             AS "evidenceKind",
+             a."payload" ->> 'outcome'          AS "outcome",
              a."recordedAt"                     AS "recordedAt"
       FROM "WorkCapsuleActivity" a
       JOIN "WorkCapsule" w ON w."id" = a."workCapsuleId"
@@ -183,6 +185,7 @@ export async function loadRecordedEvidence(
       const entry: RecordedEvidence = {
         stageKey: row.stageKey,
         kind: row.evidenceKind,
+        outcome: row.outcome,
         recordedAt: row.recordedAt,
       };
       const bucket = byRoom.get(row.capsuleId);

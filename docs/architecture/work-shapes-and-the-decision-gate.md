@@ -743,6 +743,14 @@ against that set: a shape cannot declare evidence it has no way to record. A
 generic `note` still does not advance a stage that declared `assurance-run`;
 the requirement is unchanged, only made satisfiable.
 
+**A recorded blocker is not the work.** The brief asks a coworker that cannot
+do a stage to record why, through the same write. So stage evidence carries an
+explicit `outcome` — `completed` or `blocked` — and the tool refuses stage
+evidence without one. Only `completed` earns a receipt; `blocked` or a missing
+outcome advances nothing (fail closed). The first live advance after the kind
+fix, on 2026-09-24, was a coworker's own "blocked: no tool available" record
+carrying the declared kind (BI-E0D23FD5).
+
 ## Failing closed is not the same as locking
 
 `#5166` stopped a real defect: a stage that produced no completing receipt was

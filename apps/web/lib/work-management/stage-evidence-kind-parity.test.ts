@@ -53,7 +53,7 @@ describe("work-shape evidence kinds are accepted by the evidence tool", () => {
         const receipts = earnEvidenceReceipts({
           stageKey: stage.key,
           declaredKinds: stage.evidence,
-          evidence: [{ stageKey: stage.key, kind: stage.evidence[0]!, recordedAt }],
+          evidence: [{ stageKey: stage.key, kind: stage.evidence[0]!, outcome: "completed", recordedAt }],
           dispatchedAt,
           existing: [],
         });
@@ -70,7 +70,7 @@ describe("work-shape evidence kinds are accepted by the evidence tool", () => {
     const receipts = earnEvidenceReceipts({
       stageKey: stage!.stage,
       declaredKinds: ["assurance-run"],
-      evidence: [{ stageKey: stage!.stage, kind: "note", recordedAt: new Date("2026-09-23T00:05:00Z") }],
+      evidence: [{ stageKey: stage!.stage, kind: "note", outcome: "completed", recordedAt: new Date("2026-09-23T00:05:00Z") }],
       dispatchedAt: new Date("2026-09-23T00:00:00Z"),
       existing: [],
     });

@@ -307,6 +307,13 @@ const definitions: ToolDefinition[] = [
             + "advance: the drive earns a completing receipt from stage-scoped evidence and "
             + "never from a run's self-reported status (BI-76B35820).",
         },
+        outcome: {
+          type: "string",
+          enum: ["completed", "blocked"],
+          description:
+            "REQUIRED with stageKey. \"completed\" when the stage's work is done — only this advances the stage. "
+            + "\"blocked\" when you could not do it (source unreachable, tool missing, authority insufficient); say what blocked you in the summary.",
+        },
         summary: { type: "string", description: "Evidence summary." },
         command: { type: "string", description: "Optional command that produced the evidence." },
         url: { type: "string", description: "Optional URL for PRs, CI runs, screenshots, or external evidence." },

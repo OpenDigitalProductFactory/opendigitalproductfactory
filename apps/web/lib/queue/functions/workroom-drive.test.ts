@@ -186,7 +186,7 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     const fx = effects();
     const current = room({ currentStageKey: "sweep", receipts: [{ stageKey: "sweep", kind: "blocked" }],
       stageDispatchedAt: new Date("2026-09-01T00:00:00Z"),
-      recordedEvidence: [{ stageKey: "sweep", kind: "assurance-run", recordedAt: new Date("2026-09-01T00:01:00Z") }],
+      recordedEvidence: [{ stageKey: "sweep", kind: "assurance-run", outcome: "completed", recordedAt: new Date("2026-09-01T00:01:00Z") }],
     });
     await runWorkroomDriveJob(new Date("2026-09-01T00:02:00Z"), { listRooms: async () => [current], effects: fx });
     const snapshot = fx.persist.mock.calls.at(-1)?.[0]?.snapshot as Record<string, unknown>;

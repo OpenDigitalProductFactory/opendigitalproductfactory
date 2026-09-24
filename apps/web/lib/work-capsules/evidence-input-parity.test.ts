@@ -30,4 +30,14 @@ describe("record_workroom_evidence schema/handler parity", () => {
     expect(body).toContain('stringParam(params, "stageKey")');
     expect(body).toContain("evidence.stageKey");
   });
+
+  it("advertises and requires outcome for stage evidence, so a blocker cannot complete a stage", () => {
+    const schema = packSource.slice(packSource.indexOf('name: "record_workroom_evidence"'));
+    expect(schema.slice(0, 2400)).toContain("outcome");
+    const handler = handlerSource.slice(handlerSource.indexOf("export async function recordCapsuleEvidenceTool"));
+    const body = handler.slice(0, 3600);
+    expect(body).toContain('stringParam(params, "outcome")');
+    expect(body).toContain("invalid_outcome");
+    expect(body).toContain("evidence.outcome");
+  });
 });

@@ -1,4 +1,5 @@
 import { normalizePersistedScope, parseScopeInput } from "./scope-input";
+import { STAGE_EVIDENCE_OUTCOMES, type StageEvidenceOutcome } from "@/lib/work-management/stage-evidence-receipts";
 import { prisma } from "@dpf/db";
 import {
   anchorCapsuleByIdNonFatal,
@@ -647,6 +648,7 @@ export async function recordCapsuleEvidenceTool(
     // The stage this evidence completes. Without it the drive cannot tell a
     // stage outcome from a room-level note, and the stage never advances.
     stageKey?: string;
+    outcome?: StageEvidenceOutcome;
     command?: string;
     url?: string;
     targetId?: string;
@@ -658,7 +660,21 @@ export async function recordCapsuleEvidenceTool(
     summary,
   };
   const stageKey = stringParam(params, "stageKey");
-  if (stageKey) evidence.stageKey = stageKey;
+  if (stageKey) {
+    // Stage evidence must say what happened. A coworker that could not do the
+    // work records that too, through this same write — and a blocker must never
+    // be read as the stage being done. Refuse rather than guess (fail closed).
+    const outcome = stringParam(params, "outcome");
+    if (!outcome || !(STAGE_EVIDENCE_OUTCOMES as readonly string[]).includes(outcome)) {
+      return {
+        success: false,
+        error: "invalid_outcome",
+        message: `Stage evidence needs outcome: ${STAGE_EVIDENCE_OUTCOMES.join(" or ")} — "completed" when the stage's work is done, "blocked" with what stopped you.`,
+      };
+    }
+    evidence.stageKey = stageKey;
+    evidence.outcome = outcome as StageEvidenceOutcome;
+  }
   const command = stringParam(params, "command");
   const url = stringParam(params, "url");
   const targetId = stringParam(params, "targetId");
