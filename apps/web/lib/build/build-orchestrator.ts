@@ -636,9 +636,12 @@ export function classifyOutcome(result: AgenticResult | CodexResult | ClaudeResu
   }
   if (calledBuildTools && !hasErrors) return "DONE";
   if (calledBuildTools && hasErrors) return "DONE_WITH_CONCERNS";
-  // No build tools called — normally BLOCKED, but a substantial text response
-  // without blocking language indicates the agent answered via reasoning alone.
-  if (content.length > 50) return "DONE";
+  // No build tools called. BI-38B82F67: a reply that called no tool at all
+  // changed nothing, however long — counting it DONE recorded "11/11 tasks
+  // complete" for builds that wrote no file (FB-2FE91CD3). A read-only
+  // investigation that concluded something may be legitimate (the behaviour
+  // already exists), so it is flagged for review rather than counted done.
+  if (agenticResult.executedTools.length > 0 && content.length > 50) return "DONE_WITH_CONCERNS";
   return "BLOCKED";
 }
 
