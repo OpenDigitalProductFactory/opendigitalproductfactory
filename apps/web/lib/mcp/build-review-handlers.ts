@@ -582,7 +582,9 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
               planReview: review, // the FAILED review — the gate decides if it matters
               happyPathState: nhpsFail(fgPlan.happyPathState),
             });
-            planReviewIsGating = !fgGate.allowed;
+            // BI-A87DE5E1: a plan naming no files is gating even where review is advisory.
+            const { planNamesNoFiles } = await import("@/lib/build/plan-review-advisory");
+            planReviewIsGating = !fgGate.allowed || planNamesNoFiles(fgBuild.buildPlan);
           }
         } catch {
           planReviewIsGating = true; // fail safe: keep the stricter loop on any gate-read error

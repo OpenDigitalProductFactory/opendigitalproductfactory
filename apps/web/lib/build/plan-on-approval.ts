@@ -469,7 +469,12 @@ async function dispatchPlanForApprovedBuildInner(params: {
     // revision that never ran is NOT self-repair exhausted, and must not be
     // treated as one.
     let regenerated = false;
-    while (review?.decision === "fail" && round < PLAN_FIX_MAX_ROUNDS) {
+    // BI-A87DE5E1: stop once the build has left plan (an advisory advance) —
+    // rewriting buildPlan under a running orchestrator swaps the plan mid-build.
+    const { shouldReviseRejectedPlan } = await import("./plan-review-advisory");
+    const phaseNow = async () =>
+      (await prisma.featureBuild.findUnique({ where: { buildId }, select: { phase: true } }).catch(() => null))?.phase ?? null;
+    while (shouldReviseRejectedPlan(review, await phaseNow()) && round < PLAN_FIX_MAX_ROUNDS) {
       round++;
       await log(`Plan review failed — revising (round ${round}/${PLAN_FIX_MAX_ROUNDS}) against ${review.issues.length} blocking issue(s)`);
       const revised = await generateNormalizedPlan({
