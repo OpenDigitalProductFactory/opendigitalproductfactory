@@ -104,6 +104,41 @@ export function scheduledRequiredToolNames(input: {
 }
 
 /**
+ * Does the prompt actually name this tool?
+ *
+ * A plain substring test is wrong whenever one tool's name is a prefix of
+ * another's, and this codebase has that pair: `create_marketing_campaign` and
+ * `create_marketing_campaign_brief` (marketing-pack.ts and
+ * marketing-ops-pack.ts). The Marketing Strategist's prompt asks for the
+ * BRIEF, and `"…create_marketing_campaign_brief…".includes("create_marketing_campaign")`
+ * is true — so the platform demanded a tool the prompt never mentioned, never
+ * saw it run, and filed the run as failed.
+ *
+ * Measured on the reference install 2026-09-23: the coworker wrote
+ * "Foster Carer Recruitment Drive" at 14:00:23 and the run was recorded
+ * `error` at 14:00:01 with "required governed tool create_marketing_campaign
+ * executed zero times", its own message continuing "OK. I've created a new
+ * campaign brief". The work landed and the verdict denied it — the mirror of
+ * the false green BI-4F64C5D3 removed.
+ *
+ * A tool name is a token, so it must match on token boundaries. Underscores
+ * are part of the name, which is why  is not enough on its own.
+ */
+function promptNamesTool(lowerPrompt: string, toolName: string): boolean {
+  const name = toolName.toLowerCase();
+  let from = 0;
+  for (;;) {
+    const at = lowerPrompt.indexOf(name, from);
+    if (at < 0) return false;
+    const before = at === 0 ? "" : lowerPrompt[at - 1]!;
+    const after = lowerPrompt[at + name.length] ?? "";
+    const boundary = (ch: string) => ch === "" || !/[a-z0-9_]/.test(ch);
+    if (boundary(before) && boundary(after)) return true;
+    from = at + 1;
+  }
+}
+
+/**
  * The governed writers this prompt names that are authorized but NOT attached.
  *
  * Returns an empty list when nothing needs pinning, so the caller re-resolves
@@ -132,7 +167,7 @@ export function classifyScheduledRequiredTools(input: {
   let proposed: ScheduledRequiredToolOutcome | null = null;
 
   for (const tool of input.authorizedTools) {
-    if (!tool.sideEffect || !prompt.includes(tool.name.toLowerCase())) continue;
+    if (!tool.sideEffect || !promptNamesTool(prompt, tool.name)) continue;
     const calls = input.executedTools.filter((execution) => execution.name === tool.name);
     if (
       calls.some(
