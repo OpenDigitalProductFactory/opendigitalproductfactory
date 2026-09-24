@@ -14,6 +14,8 @@ import {
 import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 import { adoptWorktreeCapsule } from "./work-capsule-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import { describeRoomOwnership, establishRoomOwnership, resolveRoomOwnershipPrincipals } from "./room-ownership";
+import { projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
 
 type ToolContext = { agentId?: string; threadId?: string; taskRunId?: string; routeContext?: string } | undefined;
 
@@ -38,6 +40,8 @@ export async function adoptWorktree(args: {
   db: CapsuleDb;
   bindingReader: BacklogBindingReader;
   resolveActor: (userId: string, context: ToolContext) => Promise<WorkCapsuleActor>;
+  /** Principal.id of a user; used when an agent adopts without OAuth. */
+  resolveUserPrincipalId?: (userId: string) => Promise<string | null>;
 }): Promise<ToolResult> {
   const { params } = args;
   const title = stringParam(params, "title");
@@ -75,6 +79,7 @@ export async function adoptWorktree(args: {
   const boundBacklogItemId = binding.backlogItemId;
 
   let capsule;
+  const actor = await args.resolveActor(args.userId, args.context);
   try {
     capsule = await adoptWorktreeCapsule({
       db: args.db,
@@ -92,7 +97,7 @@ export async function adoptWorktree(args: {
         backlogItemId: boundBacklogItemId,
         scope: parseScopeInput(params),
       },
-      actor: await args.resolveActor(args.userId, args.context),
+      actor,
     });
   } catch (error) {
     const occupied = branchOccupiedResult(error);
@@ -108,12 +113,56 @@ export async function adoptWorktree(args: {
   if (mismatch) return mismatch;
 
   await ensureCapsuleWorkItemAnchorNonFatal(capsule, "adopted");
+  // BI-36FC2981: delivery work is born owned, whichever door created the room.
+  const ownership = boundBacklogItemId && args.db.workroomParticipant
+    ? await establishAdoptedOwnership(args.db, capsule.id, actor, args.resolveUserPrincipalId)
+    : null;
+  // A bound room without both SHAs cannot have a reviewer routed to it. Say so
+  // now, with the exact call that repairs it, rather than at review time.
+  const identityRepair = boundBacklogItemId
+    ? projectWorkroomIdentityRepair(capsule, {
+      title, objective, backlogItemId: boundBacklogItemId, baseBranch: capsule.baseBranch ?? "main",
+    })
+    : null;
   return {
     success: true,
     entityId: capsule.capsuleId,
-    message: boundBacklogItemId
-      ? `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}, bound to ${boundBacklogItemId}.`
-      : `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}.`,
-    data: { capsule },
+    message: [
+      boundBacklogItemId
+        ? `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}, bound to ${boundBacklogItemId}.`
+        : `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}.`,
+      ownership ?? "",
+      identityRepair
+        ? `Add the full commit SHA for ${identityRepair.missingFields.join(" and ")} with the packet in data.identityRepair before asking for review.`
+        : "",
+    ].filter(Boolean).join(" "),
+    data: { capsule, ...(identityRepair ? { identityRepair } : {}) },
   };
+}
+
+async function establishAdoptedOwnership(
+  db: CapsuleDb,
+  workroomId: string,
+  actor: WorkCapsuleActor,
+  resolveUserPrincipalId?: (userId: string) => Promise<string | null>,
+): Promise<string | null> {
+  const principals = await resolveRoomOwnershipPrincipals(actor, resolveUserPrincipalId ?? (async (userId) => {
+    const { syncUserPrincipal } = await import("@/lib/identity/principal-linking");
+    return (await syncUserPrincipal(userId))?.id ?? null;
+  }));
+  const outcome = await establishRoomOwnership(db as never, { workroomId, ...principals });
+  const summary = describeRoomOwnership(outcome);
+  if (summary && (outcome.ownerAppointed || outcome.assistantAdmitted)) {
+    await db.workroomActivity.create({
+      data: {
+        workCapsuleId: workroomId,
+        kind: "coworker-joined",
+        summary,
+        payload: { ...outcome, source: "adopt" },
+        recordedById: actor.userId,
+        recordedByAgentId: actor.agentId,
+      },
+    });
+  }
+  return summary;
 }

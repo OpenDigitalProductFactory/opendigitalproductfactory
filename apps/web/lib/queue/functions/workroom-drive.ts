@@ -63,6 +63,7 @@ import {
   readStoredWorkroomDriveState,
 } from "@/lib/work-management/workroom-drive-state";
 import { appendCompletingWorkroomDriveReceipt, WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
 export type WorkroomDriveRoom = {
   id: string;
@@ -542,6 +543,8 @@ async function loadStandingRooms(
   const { prisma } = await import("@dpf/db");
   const ids = await loadStandingRoomIds(prisma as never);
   if (ids.length === 0) return [];
+  // BI-E8C78E80: rooms from before delivery work was born owned get their owner first.
+  await repairUnownedDeliveryRooms(prisma as never, ids).catch((error) => console.warn("[workroom-drive] owner repair skipped:", error));
   const rows = await prisma.workroom.findMany({
     where: {
       id: { in: ids },
@@ -563,15 +566,7 @@ async function loadStandingRooms(
           },
         },
       },
-      createdByPrincipal: {
-        select: {
-          aliases: {
-            where: { aliasType: "user", issuer: "" },
-            select: { aliasValue: true },
-            take: 1,
-          },
-        },
-      },
+      ...ROOM_OWNER_USER_INCLUDE,
     },
   });
 
@@ -592,7 +587,7 @@ async function loadStandingRooms(
       workspaceState: row.workspaceState,
       leaseExpiresAt: row.leaseExpiresAt,
       leaseHolderPrincipalId: row.leaseHolderPrincipalId,
-      ownerUserId: row.createdByPrincipal?.aliases[0]?.aliasValue ?? null,
+      ownerUserId: roomOwnerUserId(row),
       participants: row.participants.map((participant) => {
         const kind = participant.principal.kind === "agent"
           ? "agent" as const

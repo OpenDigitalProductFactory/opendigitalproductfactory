@@ -26,6 +26,12 @@ import { claimBacklogItemWorkspace } from "./work-capsule-store";
 import { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
+import {
+  describeRoomOwnership,
+  establishRoomOwnership,
+  resolveRoomOwnershipPrincipals,
+  type RoomOwnershipDb,
+} from "./room-ownership";
 
 type ClaimInput = {
   backlogItemId: string;
@@ -33,6 +39,9 @@ type ClaimInput = {
   headBranch: string;
   worktreePath: string;
   baseBranch?: string | null;
+  /** Exact source identity. Without both, reviewer routes cannot bind an artifact. */
+  baseSha?: string | null;
+  headSha?: string | null;
   executorKind?: WorkCapsuleExecutorKind | null;
   executorRef?: string | null;
   title?: string;
@@ -49,7 +58,14 @@ type Dependencies = {
   claimWorkspace?: typeof claimBacklogItemWorkspace;
   declareIntent?: typeof declareWorkCapsuleIntent;
   discoverCanonicalArtifact?: DiscoverCanonicalArtifact;
+  /** Principal.id of a user; used when an agent claims without OAuth. */
+  resolveUserPrincipalId?: (userId: string) => Promise<string | null>;
 };
+
+async function userPrincipalIdFromLinking(userId: string): Promise<string | null> {
+  const { syncUserPrincipal } = await import("@/lib/identity/principal-linking");
+  return (await syncUserPrincipal(userId))?.id ?? null;
+}
 
 type DiscoverCanonicalArtifact = (args: {
   repositoryFullName: string;
@@ -260,6 +276,8 @@ async function recordDecision(args: {
 function readbackMismatches(args: {
   row: Record<string, unknown> | null;
   intentPayload: unknown;
+  /** Active coordinators after ownership was established; undefined when unreadable. */
+  coordinatorCount?: number;
   input: ClaimInput;
   actor: WorkCapsuleActor;
   capsuleId: string;
@@ -281,6 +299,11 @@ function readbackMismatches(args: {
   differs("The recorded worktree path", row.worktreePath, args.input.worktreePath);
   differs("The executor kind", row.executorKind, args.input.executorKind ?? null);
   differs("The executor ref", row.executorRef, args.input.executorRef ?? null);
+  if (args.input.baseSha) differs("The recorded base commit", row.baseSha, args.input.baseSha);
+  if (args.input.headSha) differs("The recorded head commit", row.headSha, args.input.headSha);
+  if (args.coordinatorCount !== undefined && args.coordinatorCount !== 1) {
+    reasons.push(`The room has ${args.coordinatorCount} owners (Process Overseers); it needs exactly one`);
+  }
   if (row.archivedAt != null) reasons.push("The workroom is archived");
   if (["abandoned", "archived", "complete", "superseded"].includes(String(row.status))) {
     reasons.push(`The workroom status is ${format(row.status)}, which is terminal — claim a new one`);
@@ -330,6 +353,7 @@ function leaseExpiry(row: Record<string, unknown>): Date | null {
 function exactReadback(args: {
   row: Record<string, unknown> | null;
   intentPayload: unknown;
+  coordinatorCount?: number;
   input: ClaimInput;
   actor: WorkCapsuleActor;
   capsuleId: string;
@@ -378,6 +402,14 @@ export async function claimGovernedBacklogWorkspace(args: {
   let backlogItemRowId = "";
   let evaluated: InitiativeReadinessDecision | null = null;
   let pendingRecovery: PendingRecovery | null = null;
+  // Resolved before the transaction: identity sync writes outside it. Skipped
+  // for a db that cannot hold participants (isolated tests).
+  const ownership = args.db.workroomParticipant
+    ? await resolveRoomOwnershipPrincipals(
+      args.actor,
+      args.dependencies?.resolveUserPrincipalId ?? userPrincipalIdFromLinking,
+    )
+    : null;
 
   try {
     const outcome = await transact(async (tx) => {
@@ -507,6 +539,12 @@ export async function claimGovernedBacklogWorkspace(args: {
         actor: args.actor,
       });
       const row = await tx.workroom.findUnique({ where: { capsuleId: claim.capsuleId } }) as Record<string, unknown> | null;
+      // BI-36FC2981: the room is born owned, in the claim's own transaction.
+      const coordinatorCount = row && ownership && tx.workroomParticipant
+        ? await bornOwned(tx as CapsuleDb & { workroomParticipant: RoomOwnershipDb["workroomParticipant"] }, {
+          workroomRowId: String(row.id), ownership, actor: args.actor,
+        })
+        : undefined;
       const latestIntent = tx.workroomActivity.findFirst
         ? await tx.workroomActivity.findFirst({
           where: { workCapsuleId: row?.id, kind: "work-intent-declared" },
@@ -517,6 +555,7 @@ export async function claimGovernedBacklogWorkspace(args: {
       const readback = exactReadback({
         row,
         intentPayload: latestIntent?.payload,
+        coordinatorCount,
         input: args.input,
         actor: args.actor,
         capsuleId: claim.capsuleId,
@@ -525,7 +564,7 @@ export async function claimGovernedBacklogWorkspace(args: {
       });
       if (!readback) {
         throw new CapsuleIdentityMismatch(evaluated, readbackMismatches({
-          row, intentPayload: latestIntent?.payload, input: args.input,
+          row, intentPayload: latestIntent?.payload, coordinatorCount, input: args.input,
           actor: args.actor, capsuleId: claim.capsuleId, workIntent, now,
         }));
       }
@@ -571,4 +610,30 @@ export async function claimGovernedBacklogWorkspace(args: {
       },
     };
   }
+}
+
+/** Establish ownership and record it; returns the room's active coordinator count. */
+async function bornOwned(
+  tx: CapsuleDb & { workroomParticipant: RoomOwnershipDb["workroomParticipant"] },
+  args: { workroomRowId: string; ownership: Awaited<ReturnType<typeof resolveRoomOwnershipPrincipals>>; actor: WorkCapsuleActor },
+): Promise<number> {
+  const outcome = await establishRoomOwnership(tx, { workroomId: args.workroomRowId, ...args.ownership });
+  const summary = describeRoomOwnership(outcome);
+  if (summary && (outcome.ownerAppointed || outcome.assistantAdmitted)) {
+    await tx.workroomActivity.create({
+      data: {
+        workCapsuleId: args.workroomRowId,
+        kind: "coworker-joined",
+        summary,
+        payload: { ...outcome, source: "claim" },
+        recordedById: args.actor.userId,
+        recordedByAgentId: args.actor.agentId,
+      },
+    });
+  }
+  const active = await tx.workroomParticipant.findMany({
+    where: { workroomId: args.workroomRowId, lifecycle: "active" },
+    select: { roles: true },
+  });
+  return active.filter((row: { roles: string[] }) => row.roles.includes("coordinator")).length;
 }

@@ -11,6 +11,28 @@ type WorkroomIdentity = {
 
 type LinkedTaskRun = { taskRunId: string; status: string } | null;
 
+/** Room fields adopt_worktree requires besides the identity itself. */
+type WorkroomRepairContext = {
+  title?: string | null;
+  objective?: string | null;
+  backlogItemId?: string | null;
+  baseBranch?: string | null;
+};
+
+/**
+ * adopt_worktree refuses a call without title and objective, so a repair packet
+ * that leaves them out cannot be replayed as given (observed 2026-09-23). Carry
+ * every field the room already knows.
+ */
+function repairContextFields(room: WorkroomRepairContext): Record<string, unknown> {
+  return {
+    ...(room.title ? { title: room.title } : {}),
+    ...(room.objective ? { objective: room.objective } : {}),
+    ...(room.backlogItemId ? { backlogItemId: room.backlogItemId } : {}),
+    ...(room.baseBranch ? { baseBranch: room.baseBranch } : {}),
+  };
+}
+
 export function projectWorkroomIdentityRepair(
   room: WorkroomIdentity,
   packetFields: Record<string, unknown> = {},
@@ -42,8 +64,10 @@ export function projectWorkroomIdentityRepair(
   };
 }
 
-export function projectWorkroomRecovery(room: WorkroomIdentity & { taskRun?: LinkedTaskRun }) {
-  const identityRepair = projectWorkroomIdentityRepair(room);
+export function projectWorkroomRecovery(
+  room: WorkroomIdentity & WorkroomRepairContext & { taskRun?: LinkedTaskRun },
+) {
+  const identityRepair = projectWorkroomIdentityRepair(room, repairContextFields(room));
   // These are recorded states, not proof of a current heartbeat. In particular,
   // waiting for input or recovery must never look like queued execution.
   const executionState = room.taskRun ? projectRecordedTaskState(room.taskRun.status) : null;
@@ -63,7 +87,9 @@ export function projectWorkroomRecovery(room: WorkroomIdentity & { taskRun?: Lin
         accountableRole: "artifact-resolver" as const,
         missingFields: identityRepair.missingFields,
         retainedFields: identityRepair.retainedFields,
-        nextAction: "Re-sync the Workroom with adopt_worktree using the exact packet; resolve only the listed missing immutable identity fields.",
+        nextAction:
+          `Call adopt_worktree with this packet, adding the full 40-character commit SHA for ${identityRepair.missingFields.join(" and ")}. `
+          + "Without them no reviewer can be routed to this room's source.",
         repair: { toolName: identityRepair.toolName, packet: identityRepair.packet },
       }
       : null,
