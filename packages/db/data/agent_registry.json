@@ -2572,6 +2572,7 @@
           "document_read",
           "document_write",
           "file_read",
+          "sandbox_execute",
           "registry_read",
           "registry_write",
           "spec_plan_read",
