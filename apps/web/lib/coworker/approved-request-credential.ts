@@ -70,12 +70,13 @@ export async function verifyApprovalCredential(
 export function approvalExecutionContext(
   token: ApprovalCredential,
   agentId: string,
+  callerClient = "approval-completion",
 ): NonNullable<GovernedExecuteArgs["context"]> {
   const oauth = token.kind === "oauth_access";
   return {
     agentId,
     apiTokenId: token.id,
-    callerClient: "approval-completion",
+    callerClient,
     authSource: oauth ? "oauth" : "pat",
     tokenScope: normalizeTokenScope(token),
     tokenGrantScopes: expandGrants(token.scopes),

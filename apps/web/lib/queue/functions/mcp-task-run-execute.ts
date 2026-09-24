@@ -45,6 +45,10 @@ export const mcpTaskRunDispatchReconciliation = inngest.createFunction(
         includeOrdinary: externalMcpTaskAsyncEnabled(),
       }),
     );
-    return { native, external };
+    // BI-A835D300: independent reviews delivered items owe, routed without the author's client.
+    const reviews = await step.run("dispatch-owed-independent-reviews", async () =>
+      (await import("@/lib/backlog/initiative-readiness/server-reviewer-dispatch")).dispatchOwedIndependentReviews(),
+    );
+    return { native, external, reviews };
   },
 );

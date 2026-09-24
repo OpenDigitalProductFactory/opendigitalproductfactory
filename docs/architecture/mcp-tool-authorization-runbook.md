@@ -171,6 +171,21 @@ source path, provider blob, writer tool, and grant. Dispatch the returned
 `requestCoworker` packet unchanged; callers must not choose a different writer,
 reviewer, baseline, artifact, or gate.
 
+**The platform sends independent routes itself (BI-A835D300).** Every two
+minutes `mcp/task-run-dispatch-reconciliation` looks at a few items awaiting
+acceptance and sends each independent reviewer route readiness issues for
+them. It sends the unchanged packet through the author's own newest connection
+that queued work may still continue on (`findStandingConnection`: client,
+person, consent and a current or rotated token all live, and the connection
+admits `request_coworker`), as the governed call the client would have made.
+Every check that applies to the client applies here: current consent and
+grants, both principals admitted to the exact room, the packet equal to the one
+readiness issues now, and an independent reviewer. The request key makes client
+and server dispatch one TaskRun. A route is not sent again within 30 minutes,
+and each attempt, refusal, or missing connection is recorded on the room as a
+`reviewer-dispatch` activity. An author does not need a working client for its
+delivered work to be reviewed.
+
 `objective-mapping` is an evidence proposal for terminal evaluation, not an
 initiative approval receipt. The acceptance reviewer records it through
 `record_initiative_evidence`, and the canonical terminal repository alone
