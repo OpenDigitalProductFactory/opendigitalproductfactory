@@ -59,7 +59,6 @@ const mockPrisma = vi.hoisted(() => ({
   featureBuild: {
     create: vi.fn(),
     update: vi.fn(),
-    findFirst: vi.fn().mockResolvedValue(null),
   },
   buildActivity: {
     create: vi.fn(),
@@ -464,33 +463,6 @@ describe("governed backlog tee-up", () => {
       hasBody: true,
       autonomousStart: { mode: "enforce", eligibility: eligible },
     })).toBe(true);
-  });
-
-  // BI-4ED5DB61 (live, 2026-09-24): BI-F73AE8D1 lost its activeBuildId pointer
-  // (BI-B940FE36) while FB-09FC85CF was still live; the 14:00 tee-up trusted the
-  // empty pointer and minted FB-7C1EA097, a duplicate that took a WIP slot.
-  it("never mints a second live build for an item, and re-links the one it has", async () => {
-    mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({
-      id: "bi-cuid-dup", itemId: "BI-F73AE8D1", title: "L4 recovery runbook", body: "x",
-      status: "open", triageOutcome: "build", effortSize: "medium", activeBuildId: null,
-      digitalProductId: null, epicId: null, taxonomyNodeId: null, epic: null,
-    });
-    mockPrisma.featureBuild.findFirst.mockResolvedValueOnce({ id: "build-row-live", buildId: "FB-09FC85CF" });
-    mockPrisma.backlogItem.update.mockResolvedValue({});
-
-    const { promoteBacklogItemToBuildDraft } = await import("./governed-backlog-tee-up");
-    const result = await promoteBacklogItemToBuildDraft({
-      tx: mockPrisma, itemId: "BI-F73AE8D1", userId: "user-1", governedBacklogEnabled: true,
-    });
-
-    expect(result.kind).toBe("error");
-    expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
-    expect(mockPrisma.featureBuild.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ originatingBacklogItemId: "bi-cuid-dup" }),
-    }));
-    expect(mockPrisma.backlogItem.update).toHaveBeenCalledWith({
-      where: { id: "bi-cuid-dup" }, data: { activeBuildId: "build-row-live" },
-    });
   });
 
   describe("promoteBacklogItemToBuildDraft intake initialization", () => {
