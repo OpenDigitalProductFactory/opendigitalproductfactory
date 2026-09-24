@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -10,6 +10,7 @@ import {
   DEFAULT_RESUME_INTERVAL_MS,
   RESUME_MARKER_ENV,
   buildResumerInvocation,
+  pinnedGateFlags,
   shouldSpawnResumer,
   spawnDurableWaitResumer,
 } from "./durable-wait-resumer.mjs";
@@ -17,12 +18,16 @@ import {
   EXIT_QUEUED,
   INFRASTRUCTURE_BACKOFF_MS,
   RETRYABLE_EXITS,
+  classifyResumeOutcome,
   isRetryableExit,
+  parseResumerArgs,
   resumeUntilAdmitted,
 } from "../local-ci-durable-wait-resumer.mjs";
 import {
   EXIT_CONTROL_PLANE_STARVATION,
   EXIT_SANDBOX_DRIFT,
+  EXIT_SOURCE_DRIFT,
+  EXIT_WAIT_CANCELLED,
   classifyGateOutcome,
 } from "./sandbox-freshness.mjs";
 
@@ -361,4 +366,203 @@ test("every retryable exit is one the canonical classifier calls blocked", () =>
       `exit ${code} is treated as retryable but classifies as "${outcome.status}"`,
     );
   }
+});
+
+// ── BI-D35B85BF: a resumed gate is pinned, and a cancellation is final ──────
+
+const PIN = Object.freeze({
+  branch: "fix/x",
+  sha: "a".repeat(40),
+  worktree: "/repo/wt",
+  ownerProvider: "claude",
+  ownerSessionId: "session-1",
+  resumeLeaseId: "NPEL-PINNED",
+});
+
+/** The value the gate's parseArgs reads for `flag`: the LAST occurrence wins. */
+function lastValue(args, flag) {
+  const index = args.lastIndexOf(flag);
+  return index === -1 ? undefined : args[index + 1];
+}
+
+// Root cause 1: the resumer replayed process.argv verbatim, so every re-claim
+// re-resolved HEAD, branch and worktree afresh and re-derived the owner id.
+test("the pinned candidate is appended after the replayed argv so it wins", () => {
+  const replayed = [
+    "/usr/bin/node", "/repo/scripts/gate-worktree.mjs",
+    "--branch", "fix/other", "--sha", "b".repeat(40), "--worktree", "/elsewhere",
+  ];
+  const { args } = buildResumerInvocation({
+    runnerPath: "/runner.mjs",
+    gateArgv: replayed,
+    pin: PIN,
+  });
+  const gateArgs = args.slice(args.indexOf("--") + 1);
+  // The replay is still there, byte for byte, so tomorrow's flags still travel.
+  assert.deepEqual(gateArgs.slice(0, replayed.length - 1), replayed.slice(1));
+  // ...and the pin comes after it, so the gate's last-value-wins parser reads it.
+  assert.deepEqual(gateArgs.slice(replayed.length - 1), pinnedGateFlags(PIN));
+  assert.equal(lastValue(gateArgs, "--branch"), PIN.branch);
+  assert.equal(lastValue(gateArgs, "--sha"), PIN.sha);
+  assert.equal(lastValue(gateArgs, "--worktree"), PIN.worktree);
+  assert.equal(lastValue(gateArgs, "--owner-provider"), PIN.ownerProvider);
+  assert.equal(lastValue(gateArgs, "--owner-session-id"), PIN.ownerSessionId);
+  assert.equal(lastValue(gateArgs, "--resume-lease-id"), PIN.resumeLeaseId);
+});
+
+test("an empty pin field is omitted rather than pinned to an empty string", () => {
+  const flags = pinnedGateFlags({ ...PIN, ownerProvider: "", resumeLeaseId: undefined });
+  assert.equal(flags.includes("--owner-provider"), false);
+  assert.equal(flags.includes("--resume-lease-id"), false);
+  assert.equal(lastValue(flags, "--sha"), PIN.sha);
+});
+
+test("the pinned worktree becomes the gate's working directory", () => {
+  const { args } = buildResumerInvocation({ runnerPath: "/runner.mjs", gateArgv: GATE_ARGV, pin: PIN });
+  const runnerFlags = args.slice(1, args.indexOf("--"));
+  assert.equal(lastValue(runnerFlags, "--gate-cwd"), PIN.worktree);
+  assert.equal(parseResumerArgs(args.slice(1)).gateCwd, PIN.worktree);
+});
+
+test("spawnDurableWaitResumer carries the pin through to the resumer command line", () => {
+  let seen = null;
+  spawnDurableWaitResumer({
+    runnerPath: "/runner.mjs",
+    gateArgv: GATE_ARGV,
+    observerDirectory: "/observers",
+    cwd: "/repo/wt",
+    env: {},
+    pin: PIN,
+    spawnFn: (_command, args) => { seen = args; return stubChild(); },
+  });
+  const gateArgs = seen.slice(seen.indexOf("--") + 1);
+  assert.equal(lastValue(gateArgs, "--resume-lease-id"), PIN.resumeLeaseId);
+  assert.equal(lastValue(gateArgs, "--owner-session-id"), PIN.ownerSessionId);
+  // The observer record speaks for the same owner the gate now pins.
+  assert.equal(seen[seen.indexOf("--owner-session-id") + 1], PIN.ownerSessionId);
+});
+
+test("every gate attempt runs from an explicit working directory", async () => {
+  const seen = [];
+  await resumeUntilAdmitted({
+    gateArgv: ["/repo/scripts/gate-worktree.mjs"],
+    intervalMs: 1,
+    deadlineMs: 3_600_000,
+    cwd: "/repo/wt",
+    env: {},
+    now: () => 0,
+    sleepFn: async () => {},
+    spawnFn: (_command, _args, options) => {
+      seen.push(options.cwd);
+      return { once(event, handler) { if (event === "exit") queueMicrotask(() => handler(0)); } };
+    },
+  });
+  assert.deepEqual(seen, ["/repo/wt"]);
+});
+
+// AC-DW-01: an explicit cancellation stops automated reclaims.
+for (const [label, stopCode] of [["cancelled", EXIT_WAIT_CANCELLED], ["source-drifted", EXIT_SOURCE_DRIFT]]) {
+  test(`a ${label} gate ends the wait after one attempt and is never retried`, async () => {
+    let attempts = 0;
+    const result = await resumeUntilAdmitted({
+      gateArgv: ["/repo/scripts/gate-worktree.mjs"],
+      intervalMs: 10,
+      deadlineMs: 3_600_000,
+      env: {},
+      now: () => 0,
+      sleepFn: async () => { throw new Error("a stopped wait must not sleep toward another attempt"); },
+      spawnFn: () => {
+        attempts += 1;
+        return { once(e, h) { if (e === "exit") queueMicrotask(() => h(stopCode)); } };
+      },
+    });
+    assert.equal(isRetryableExit(stopCode), false);
+    assert.equal(result.code, stopCode);
+    assert.equal(result.attempts, 1);
+    assert.equal(attempts, 1);
+    assert.equal(result.outcome.evidence, "unrun");
+  });
+}
+
+test("the stop codes collide with no code that already means something", () => {
+  assert.notEqual(EXIT_WAIT_CANCELLED, EXIT_SOURCE_DRIFT);
+  for (const code of [EXIT_WAIT_CANCELLED, EXIT_SOURCE_DRIFT]) {
+    assert.equal(RETRYABLE_EXITS.includes(code), false);
+    // 88 is EXIT_STAGE_INCONCLUSIVE / TSC_TERMINATED_EXIT_CODE elsewhere.
+    assert.ok(![0, 1, 2, 3, 4, 5, 6, 7, 64, 70, 75, 86, 87, 88, 130, 143].includes(code), `exit ${code} is already taken`);
+  }
+});
+
+// AC-DW-06: the resumer's own record says whether it ended unrun, inconclusive,
+// failed or passed, instead of a bare exit code a reader has to decode.
+test("the resume outcome distinguishes unrun, inconclusive, failed and passed", () => {
+  assert.deepEqual(classifyResumeOutcome(0), { evidence: "passed", reason: "passed" });
+  assert.deepEqual(classifyResumeOutcome(EXIT_WAIT_CANCELLED), { evidence: "unrun", reason: "cancelled" });
+  assert.deepEqual(classifyResumeOutcome(EXIT_SOURCE_DRIFT), { evidence: "unrun", reason: "source-drift" });
+  assert.deepEqual(classifyResumeOutcome(EXIT_QUEUED), { evidence: "unrun", reason: "still-queued" });
+  assert.deepEqual(classifyResumeOutcome(null), { evidence: "unrun", reason: "unlaunched" });
+  assert.equal(classifyResumeOutcome(EXIT_CONTROL_PLANE_STARVATION).evidence, "inconclusive");
+  assert.equal(classifyResumeOutcome(EXIT_SANDBOX_DRIFT).evidence, "inconclusive");
+  assert.deepEqual(classifyResumeOutcome(1), { evidence: "failed", reason: "failed" });
+});
+
+test("eventual admission still ends on the gate's own verdict after queued attempts", async () => {
+  const codes = [EXIT_QUEUED, EXIT_QUEUED, 0];
+  let attempt = 0;
+  const result = await resumeUntilAdmitted({
+    gateArgv: ["/repo/scripts/gate-worktree.mjs"],
+    intervalMs: 5,
+    deadlineMs: 3_600_000,
+    env: {},
+    now: () => 0,
+    sleepFn: async () => {},
+    spawnFn: () => {
+      const code = codes[attempt];
+      attempt += 1;
+      return { once(e, h) { if (e === "exit") queueMicrotask(() => h(code)); } };
+    },
+  });
+  assert.equal(result.code, 0);
+  assert.equal(result.attempts, 3);
+  assert.deepEqual(result.outcome, { evidence: "passed", reason: "passed" });
+});
+
+// A real child: the working directory and the stop both have to survive the
+// detached process boundary, which an injected spawn cannot see.
+test("a real resumer stops on a cancelled gate and ran it from the pinned worktree", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-resumer-cancel-"));
+  const pinnedWorktree = mkdtempSync(join(tmpdir(), "dpf-resumer-wt-"));
+  const cwdFile = join(directory, "gate-cwd.txt");
+  const fakeGate = join(directory, "cancelled-gate.mjs");
+  writeFileSync(fakeGate, [
+    'import { appendFileSync } from "node:fs";',
+    `appendFileSync(${JSON.stringify(cwdFile)}, process.cwd() + "\\n");`,
+    `process.exit(${EXIT_WAIT_CANCELLED});`,
+    "",
+  ].join("\n"));
+
+  const runner = join(dirname(dirname(fileURLToPath(import.meta.url))), "local-ci-durable-wait-resumer.mjs");
+  const child = spawn(process.execPath, [
+    runner,
+    "--interval-ms", "100",
+    "--deadline-ms", "10000",
+    "--observer-dir", directory,
+    "--gate-cwd", pinnedWorktree,
+    "--", fakeGate,
+  ], { stdio: "ignore", cwd: directory });
+
+  const exitCode = await new Promise((resolve) => {
+    const timer = setTimeout(() => { child.kill(); resolve("still-running"); }, 15_000);
+    child.once("exit", (code) => { clearTimeout(timer); resolve(code); });
+  });
+
+  assert.equal(exitCode, EXIT_WAIT_CANCELLED, "a cancelled wait must end, not keep re-claiming");
+  const cwds = readFileSync(cwdFile, "utf8").split(/\r?\n/).filter(Boolean);
+  assert.equal(cwds.length, 1, "exactly one attempt: a cancellation is never retried");
+  assert.equal(realpathSync(cwds[0]), realpathSync(pinnedWorktree));
+  const logFile = readdirSync(directory).find((name) => name.endsWith(".resumer.log"));
+  const finished = readFileSync(join(directory, logFile), "utf8")
+    .split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    .find((entry) => entry.event === "finished");
+  assert.deepEqual(finished.outcome, { evidence: "unrun", reason: "cancelled" });
 });

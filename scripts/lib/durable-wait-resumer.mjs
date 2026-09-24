@@ -68,11 +68,34 @@ function noResumeReason(env) {
 }
 
 /**
+ * The flags that pin a resumed gate to the candidate it queued (BI-D35B85BF).
+ *
+ * Replaying argv alone re-resolved HEAD, the branch, the worktree and the owner
+ * on every attempt, so a refreshed main or a moved branch silently changed what
+ * would run and minted a second queue row. These are appended AFTER the replay:
+ * the gate's parser keeps the last value of a repeated flag, so the pin wins.
+ * An empty field is left out rather than pinned to an empty string.
+ */
+export function pinnedGateFlags(pin = {}) {
+  const flags = [];
+  const add = (flag, value) => {
+    if (typeof value === "string" && value.trim()) flags.push(flag, value.trim());
+  };
+  add("--branch", pin.branch);
+  add("--sha", pin.sha);
+  add("--worktree", pin.worktree);
+  add("--owner-provider", pin.ownerProvider);
+  add("--owner-session-id", pin.ownerSessionId);
+  add("--resume-lease-id", pin.resumeLeaseId);
+  return flags;
+}
+
+/**
  * The command line that re-runs THIS gate.
  *
- * `gateArgv` is the caller's own `process.argv` — the resumer replays the exact
- * invocation rather than reconstructing one from parsed options, so a flag the
- * gate grows tomorrow is carried without touching this file.
+ * `gateArgv` is the caller's own `process.argv`, replayed so a flag the gate
+ * grows tomorrow is still carried; `pin` then fixes the candidate, owner and
+ * lease so the replay cannot drift (see pinnedGateFlags).
  */
 export function buildResumerInvocation({
   runnerPath,
@@ -81,6 +104,7 @@ export function buildResumerInvocation({
   branch,
   sha,
   ownerSessionId,
+  pin = null,
   execPath = process.execPath,
   intervalMs = DEFAULT_RESUME_INTERVAL_MS,
   deadlineMs = DEFAULT_RESUME_DEADLINE_MS,
@@ -97,11 +121,13 @@ export function buildResumerInvocation({
   const observerFlags = observerDirectory
     ? [
       "--observer-dir", observerDirectory,
-      "--branch", String(branch ?? ""),
-      "--sha", String(sha ?? ""),
-      "--owner-session-id", String(ownerSessionId ?? ""),
+      "--branch", String(pin?.branch || branch || ""),
+      "--sha", String(pin?.sha || sha || ""),
+      "--owner-session-id", String(pin?.ownerSessionId || ownerSessionId || ""),
     ]
     : [];
+  // Every attempt runs from the pinned worktree, not whatever cwd the resumer inherited.
+  const cwdFlags = pin?.worktree ? ["--gate-cwd", pin.worktree] : [];
   return {
     command: execPath,
     // argv[0] is the node binary the resumer supplies itself; argv[1] onward is
@@ -111,8 +137,10 @@ export function buildResumerInvocation({
       "--interval-ms", String(intervalMs),
       "--deadline-ms", String(deadlineMs),
       ...observerFlags,
+      ...cwdFlags,
       "--",
       ...gateArgv.slice(1),
+      ...pinnedGateFlags(pin ?? {}),
     ],
   };
 }
@@ -132,6 +160,7 @@ export function spawnDurableWaitResumer({
   branch,
   sha,
   ownerSessionId,
+  pin = null,
   cwd,
   env = process.env,
   intervalMs = DEFAULT_RESUME_INTERVAL_MS,
@@ -148,6 +177,7 @@ export function spawnDurableWaitResumer({
     branch,
     sha,
     ownerSessionId,
+    pin,
     execPath: env.DPF_RESUMER_NODE || process.execPath,
     intervalMs,
     deadlineMs,

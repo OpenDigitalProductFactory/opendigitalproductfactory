@@ -21,6 +21,7 @@ import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import { isImmutableGateClaimKey, type LocalCiEvidenceValidity } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
+import { resolveResumeClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead } from "./durable-wait";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
@@ -230,13 +231,14 @@ async function reconcileEnvironmentInTransaction(input: {
   };
 }
 
-export type ClaimNonprodEnvironmentLeaseResult =
+/** `supersededLeaseId`: this owner's obsolete queued wait, retired by this claim (BI-D35B85BF). */
+export type ClaimNonprodEnvironmentLeaseResult = { supersededLeaseId?: string } & (
   | { status: "admitted"; lease: LeaseRow; slotKey: string; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "queued"; lease: LeaseRow; queuePosition: number; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "terminal"; lease: LeaseRow; reason: "released" | "expired" | "cancelled"; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "subscribed"; lease: LeaseRow; executionStatus: "admitted" | "queued"; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "reused"; lease: LeaseRow; evidenceRecordId: string; resultClass: "pass" | "fail"; evidenceValidity: LocalCiEvidenceValidity | null; poolPolicy: ResolvedNonprodPoolPolicy }
-  | { status: "blocked"; lease: LeaseRow; reason: "missing-evidence" | "mismatched-evidence" | "expired-evidence"; poolPolicy: ResolvedNonprodPoolPolicy };
+  | { status: "blocked"; lease: LeaseRow; reason: "missing-evidence" | "mismatched-evidence" | "expired-evidence"; poolPolicy: ResolvedNonprodPoolPolicy });
 
 type ResolvedNonprodPoolPolicy = ResolvedLocalCiPoolPolicy | ResolvedHostResourcePoolPolicy;
 
@@ -246,6 +248,8 @@ export async function claimNonprodEnvironmentLease(input: {
   ownerProvider: NonprodOwnerProvider;
   ownerSessionId: string;
   claimKey?: string;
+  /** The lease a resumed gate is waiting on; see environment-lease-resume.ts. */
+  resumeLeaseId?: string;
   purpose: string;
   url: string;
   ports: number[];
@@ -295,9 +299,8 @@ export async function claimNonprodEnvironmentLease(input: {
     throw new Error("host_resource_contract_wrong_environment");
   }
   const ttlMs = requestedTtlMs(now, input.expiresAt);
-  let created = false;
-  let admittedNow = false;
-  let queueDepth = 0;
+  let created = false, admittedNow = false, queueDepth = 0;
+  let superseded = null as LeaseRow | null; // assigned inside the transaction callback
 
   const result = await inLeaseTransaction<ClaimNonprodEnvironmentLeaseResult>(
     db,
@@ -335,10 +338,17 @@ export async function claimNonprodEnvironmentLease(input: {
         }),
       });
 
+    const resume = await resolveResumeClaim({ tx, resumeLeaseId: input.resumeLeaseId, claimLease: lease,
+      environmentKey: input.environmentKey, ownerSessionId: input.ownerSessionId, now });
+    if (resume.kind === "terminal") return { status: "terminal", lease: resume.lease, reason: "cancelled", poolPolicy };
+    superseded = resume.superseded;
+
+    // A resumed claim never revives a cancelled row: cancellation is final (AC-DW-01).
     if (
       lease
       && isTerminalLeaseStatus(lease.status)
       && isImmutableGateClaimKey(input.claimKey)
+      && !(input.resumeLeaseId && lease.status === "cancelled")
     ) {
       const settlement = await settleTerminalGateLease({
         tx,
@@ -354,12 +364,7 @@ export async function claimNonprodEnvironmentLease(input: {
     }
 
     if (lease && isTerminalLeaseStatus(lease.status)) {
-      return {
-        status: "terminal",
-        lease,
-        reason: lease.status,
-        poolPolicy,
-      };
+      return { status: "terminal", lease, reason: lease.status, poolPolicy };
     }
 
     if (lease) {
@@ -485,12 +490,7 @@ export async function claimNonprodEnvironmentLease(input: {
       if (!isTerminalLeaseStatus(current.status)) {
         throw new Error(`nonprod_claim_invalid_status:${current.status}`);
       }
-      return {
-        status: "terminal",
-        lease: current,
-        reason: current.status,
-        poolPolicy,
-      };
+      return { status: "terminal", lease: current, reason: current.status, poolPolicy };
     }
     const queue = await tx.nonProductionEnvironmentLease.findMany({
       where: {
@@ -533,7 +533,9 @@ export async function claimNonprodEnvironmentLease(input: {
       result_class: result.status === "reused" ? result.resultClass : "none",
     });
   }
-  return result;
+  if (!superseded) return result;
+  await afterNonprodLeaseRelease({ db: db as never, lease: superseded, priorStatus: "queued", now });
+  return { ...result, supersededLeaseId: superseded.leaseId };
 }
 
 export async function releaseNonprodEnvironmentLease(input: {

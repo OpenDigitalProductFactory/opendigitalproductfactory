@@ -61,7 +61,7 @@ export function describeLeaseCallFailure(error) {
     + "if this box regularly runs several gates at once";
 }
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_USAGE } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
 import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
@@ -111,6 +111,7 @@ import {
 } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
+import { decideTerminalClaim, isResumedGateRun, resumeClaimFields, verifyPinnedSource } from "./lib/gate-resume-pin.mjs";
 
 /**
  * Append the gate identity behind one queued claim, for BI-D35B85BF Wanted 2.
@@ -122,7 +123,7 @@ import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
  * Never throws: this is diagnostics, and a gate must not fail because a
  * diagnostic file could not be written.
  */
-function recordQueuedClaimIdentity({ directory, branch, sha, claimKey, leaseId, identity }) {
+function recordQueuedClaimIdentity({ directory, branch, sha, claimKey, gateKey = "", supersededLeaseId = "", leaseId, identity }) {
   if (!directory) return;
   try {
     mkdirSync(directory, { recursive: true });
@@ -134,6 +135,10 @@ function recordQueuedClaimIdentity({ directory, branch, sha, claimKey, leaseId, 
         sha,
         leaseId,
         claimKey,
+        // The key the server actually keyed the claim on, and the queued row
+        // it retired for this owner on identity drift (BI-D35B85BF).
+        gateKey: gateKey || null,
+        supersededLeaseId: supersededLeaseId || null,
         identity: identity ?? null,
       })}\n`,
     );
@@ -405,6 +410,8 @@ function parseArgs(argv) {
     pushBranch: false,
     dryRun: false,
     finalizeEvidence: false,
+    // Set only by the durable-wait resumer: the lease this run resumes.
+    resumeLeaseId: "",
   };
   const args = [...argv];
   while (args.length > 0) {
@@ -416,6 +423,7 @@ function parseArgs(argv) {
       case "--remote": options.remote = args.shift() ?? ""; break;
       case "--owner-provider": options.ownerProvider = args.shift() ?? ""; break;
       case "--owner-session-id": options.ownerSessionId = args.shift() ?? ""; break;
+      case "--resume-lease-id": options.resumeLeaseId = args.shift() ?? ""; break;
       case "--mcp-url": {
         options.mcpUrl = args.shift() ?? "";
         // --mcp-url is the operator naming the endpoint, the same signal
@@ -1368,6 +1376,29 @@ async function main() {
     );
   }
 
+  // BI-D35B85BF / AC-DW-03: a resumed gate runs the candidate it queued, or
+  // nothing. Its resumer pins --sha; a worktree whose HEAD, branch or tree has
+  // moved since would build other source, so stop unrun rather than re-point.
+  const resumed = isResumedGateRun({ resumeLeaseId: options.resumeLeaseId });
+  const stopOnSourceDrift = (reasons) => {
+    writeState(stateFile, {
+      branch, sha, gatePassed: false, leaseId: options.resumeLeaseId, evidenceId: "",
+      status: "blocked_source_drift", expiresAt: "", resilience: null,
+      leaseEvents: [{ type: "resume-source-drift", at: new Date().toISOString(), reasons }],
+      failureReason: `resumed gate stopped: ${reasons.join(", ")}`,
+    });
+    process.stderr.write(`${JSON.stringify({
+      status: "blocked_source_drift", code: "local_ci_resume_source_drift", reasons,
+      pinnedSha: options.sha || null, resumeLeaseId: options.resumeLeaseId || null,
+      nextAction: "The worktree no longer holds the queued commit. Commit or restore it, then run pregate again.",
+    })}\n`);
+    process.exit(EXIT_SOURCE_DRIFT);
+  };
+  if (resumed && !options.finalizeEvidence) {
+    const pinned = verifyPinnedSource({ worktreePath, branch, sha: options.sha });
+    if (!pinned.ok) stopOnSourceDrift(pinned.reasons);
+  }
+
   if (!options.finalizeEvidence) {
     const documentationResult = await runPreAdmissionDocumentationLane({
       branch,
@@ -1391,6 +1422,9 @@ async function main() {
       process.exit(documentationResult.status);
     }
     preAdmissionGateIdentity = documentationResult.gateIdentity ?? null;
+    // Never fall back to the legacy claim key on resume: that minted a second
+    // queue row for the same candidate.
+    if (resumed && !preAdmissionGateIdentity) stopOnSourceDrift(["gate-identity-unavailable"]);
   }
 
   if (!options.finalizeEvidence && !commandSpec && !allowStub) {
@@ -1502,6 +1536,7 @@ async function main() {
         ownerSessionId,
         claimKey,
         ...(preAdmissionGateIdentity ? { gateIdentity: preAdmissionGateIdentity } : {}),
+        ...resumeClaimFields({ heldLeaseId: leaseId, pinnedLeaseId: options.resumeLeaseId }),
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
         url,
         ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
@@ -1530,9 +1565,20 @@ async function main() {
       process.stderr.write(`gate-worktree: ${claimResponse.message || "this gate client is below the platform's revision floor; rebase onto main and re-run pregate"}\n`);
       process.exit(EXIT_USAGE);
     }
+    // BI-D35B85BF / AC-DW-02: the lease this run resumes is running, or is not
+    // this owner's. Replacing it is refused; stop unrun rather than queue twice.
+    if (claimResponse?.error === "nonprod_resume_lease_active" || claimResponse?.error === "nonprod_resume_not_owner") {
+      process.stderr.write(`${JSON.stringify({ status: "cancelled", code: "local_ci_resume_refused", reason: claimResponse.error, resumeLeaseId: options.resumeLeaseId || leaseId || null })}
+`);
+      process.exit(EXIT_WAIT_CANCELLED);
+    }
     const admission = claimResponse?.data?.admission;
     const canonicalLeaseId = claimResponse?.data?.lease?.leaseId || "";
     gateKey = claimResponse?.data?.gateKey || gateKey;
+    const supersededLeaseId = claimResponse?.data?.supersededLeaseId || "";
+    if (supersededLeaseId) {
+      leaseEvents.push({ type: "queued-wait-superseded", at: new Date().toISOString(), supersededLeaseId, gateKey });
+    }
     admissionPoolPolicy = claimResponse?.data?.poolPolicy ?? admissionPoolPolicy;
     if (claimResponse?.success === true && admission?.status === "reused") {
       const evidenceId = admission.evidenceRecordId || claimResponse.entityId || "";
@@ -1740,6 +1786,8 @@ async function main() {
           branch,
           sha,
           ownerSessionId,
+          // AC-DW-03: the resumer re-runs THIS candidate, owner and lease.
+          pin: { branch, sha, worktree: worktreePath, ownerProvider, ownerSessionId, resumeLeaseId: leaseId },
           cwd: worktreePath,
         });
         if (queueObserverPath) {
@@ -1762,6 +1810,8 @@ async function main() {
           branch,
           sha,
           claimKey,
+          gateKey,
+          supersededLeaseId,
           leaseId,
           identity: preAdmissionGateIdentity,
         });
@@ -1877,6 +1927,33 @@ async function main() {
       claimResponse?.error === "lease_terminal"
       && ["released", "cancelled", "expired"].includes(terminalReason)
     ) {
+      // AC-DW-01 / AC-DW-05: a cancellation of the lease this run waited on or
+      // held is final; only an expired claim interrupted by quiescence gets its
+      // queue intent back.
+      const terminalDecision = decideTerminalClaim({
+        terminalReason,
+        resumed,
+        heldLeaseId: leaseId || options.resumeLeaseId,
+        interruptedByQuiescence: queuedClaimInterruptedByQuiescence,
+      });
+      if (terminalDecision.action === "stop") {
+        const cancelledLeaseId = leaseId || options.resumeLeaseId;
+        leaseEvents.push({ type: "wait-cancelled", at: new Date().toISOString(), leaseId: cancelledLeaseId });
+        writeState(stateFile, {
+          branch, sha, gatePassed: false, leaseId: cancelledLeaseId, evidenceId: "",
+          status: "cancelled", expiresAt: "", resilience: null, leaseEvents,
+          failureReason: "the queued local-CI claim was cancelled; no replacement was made",
+        });
+        if (queueObserverPath) {
+          releaseLocalQueueObserver({ path: queueObserverPath, token: gateObserverIdentity.token });
+          queueObserverPath = "";
+        }
+        process.stderr.write(`${JSON.stringify({
+          status: "cancelled", code: "local_ci_wait_cancelled", leaseId: cancelledLeaseId || null,
+          nextAction: "The wait was cancelled and stays cancelled. Run pregate again to queue a new attempt.",
+        })}\n`);
+        process.exit(EXIT_WAIT_CANCELLED);
+      }
       if (Date.now() >= deadline) {
         die(`previous local-CI lease claim was already ${terminalReason} at the admission deadline`);
       }
@@ -1893,7 +1970,7 @@ async function main() {
         Number.isSafeInteger(priorAttemptSequence) ? priorAttemptSequence : 0,
       ) + 1;
       claimKey = `${baseClaimKey}:rerun-${terminalClaimAttemptSequence}`;
-      const interruptedByQuiescence = queuedClaimInterruptedByQuiescence;
+      const interruptedByQuiescence = terminalDecision.reestablishQueueIntent;
       leaseEvents.push({
         type: interruptedByQuiescence
           ? "queue-intent-reestablished"

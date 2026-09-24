@@ -124,6 +124,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // here rather than in ci-policy-test-inventory-allowlist.txt, where it
       // would never run.
       node("--test", "scripts/lib/durable-wait-resumer.test.mjs"),
+      // A resumed gate stays on its source and a cancelled wait stays cancelled.
+      node("--test", "scripts/lib/gate-resume-pin.test.mjs"),
+      node("--test", "scripts/gate-worktree-resume.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { classifyGateExit, GATE_EXIT } from "./lib/gate-exit-classification.mjs";
+import { EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
 import { delayForAttempt, waitForGate } from "./gate-wait.mjs";
 
 const noSleep = async () => {};
@@ -142,4 +143,15 @@ test("backoff ramps and then holds", () => {
   assert.equal(delayForAttempt(1), 20);
   assert.equal(delayForAttempt(3), 40);
   assert.equal(delayForAttempt(99), 60);
+});
+
+// BI-D35B85BF: a cancelled wait and a moved source are final, unrun, never retried.
+test("a cancelled wait and a drifted resume are final and never retried", () => {
+  assert.equal(GATE_EXIT.WAIT_CANCELLED, EXIT_WAIT_CANCELLED);
+  assert.equal(GATE_EXIT.SOURCE_DRIFT, EXIT_SOURCE_DRIFT);
+  for (const code of [EXIT_WAIT_CANCELLED, EXIT_SOURCE_DRIFT]) {
+    const result = classifyGateExit({ code });
+    assert.equal(result.retry, false);
+    assert.equal(result.verdict, "none");
+  }
 });

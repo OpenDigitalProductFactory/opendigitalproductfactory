@@ -12,6 +12,8 @@ import { isEntryModule } from "./lib/entry-module.mjs";
 import {
   EXIT_CHILD_SIGNAL_DEATH,
   EXIT_CONTROL_PLANE_STARVATION,
+  EXIT_SOURCE_DRIFT,
+  EXIT_WAIT_CANCELLED,
 } from "./lib/sandbox-freshness.mjs";
 import {
   createGateObserverIdentity,
@@ -67,6 +69,24 @@ export function isRetryableExit(code) {
   return RETRYABLE_EXITS.includes(code);
 }
 
+/**
+ * What the resumer's wait ended as, in the evidence vocabulary (AC-DW-06):
+ * `unrun` (nothing ran against the diff), `inconclusive` (infrastructure ended
+ * it), `failed` or `passed`. The gate's own state file stays the verdict; this
+ * only keeps the resumer's log from being a bare number.
+ */
+export function classifyResumeOutcome(code) {
+  if (code === null || code === undefined) return { evidence: "unrun", reason: "unlaunched" };
+  if (code === 0) return { evidence: "passed", reason: "passed" };
+  if (code === EXIT_WAIT_CANCELLED) return { evidence: "unrun", reason: "cancelled" };
+  if (code === EXIT_SOURCE_DRIFT) return { evidence: "unrun", reason: "source-drift" };
+  if (code === EXIT_QUEUED) return { evidence: "unrun", reason: "still-queued" };
+  if (isRetryableExit(code) || code === 3 || code === 4 || code === 6) {
+    return { evidence: "inconclusive", reason: "infrastructure" };
+  }
+  return { evidence: "failed", reason: "failed" };
+}
+
 // A detached process with stdio "ignore" that leaves no trace is undiagnosable:
 // when the first field build of this resumer died on its second re-claim there
 // was nothing at all to read. The log lives beside the observer record so the
@@ -95,6 +115,7 @@ export function parseResumerArgs(argv) {
     branch: "",
     sha: "",
     ownerSessionId: "",
+    gateCwd: "",
     gateArgv: [],
   };
   const separator = argv.indexOf("--");
@@ -109,6 +130,7 @@ export function parseResumerArgs(argv) {
       case "--branch": options.branch = value; break;
       case "--sha": options.sha = value; break;
       case "--owner-session-id": options.ownerSessionId = value; break;
+      case "--gate-cwd": options.gateCwd = value; break;
       default: break;
     }
   }
@@ -133,9 +155,11 @@ const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 // VISIBLE one: every re-claim opened a terminal window that stole the
 // operator's focus (observed 2026-09-22, six resumers, a window every few
 // seconds). The gate's own children inherit the hidden console.
-function runGateOnce({ gateArgv, env, spawnFn }) {
+function runGateOnce({ gateArgv, env, spawnFn, cwd }) {
   return new Promise((resolve) => {
     const child = spawnFn(process.execPath, gateArgv, {
+      // Explicit, so a resumed gate runs in the pinned worktree (BI-D35B85BF).
+      ...(cwd ? { cwd } : {}),
       stdio: "ignore",
       windowsHide: true,
       env: { ...env, [RESUME_MARKER_ENV]: "1" },
@@ -158,6 +182,7 @@ export async function resumeUntilAdmitted({
   intervalMs,
   deadlineMs,
   env = process.env,
+  cwd = "",
   now = () => Date.now(),
   spawnFn = spawn,
   sleepFn = sleep,
@@ -168,14 +193,19 @@ export async function resumeUntilAdmitted({
   let blockedAttempts = 0;
   for (;;) {
     attempts += 1;
-    const code = await runGateOnce({ gateArgv, env, spawnFn });
+    const code = await runGateOnce({ gateArgv, env, spawnFn, cwd });
     const blocked = code !== null && code !== EXIT_QUEUED && isRetryableExit(code);
     if (blocked) blockedAttempts += 1;
     log("gate-attempt", { attempts, code, ...(blocked ? { blocked: true } : {}) });
     // A real verdict - the gate passed or the product failed - ends the wait.
     // Anything the classifier calls blocked-and-transient does not.
-    if (code !== null && !isRetryableExit(code)) return { code, attempts, blockedAttempts };
-    if (now() >= giveUpAt) return { code: EXIT_QUEUED, attempts, blockedAttempts };
+    // A cancellation or a moved source is final too: both stop the wait unrun.
+    if (code !== null && !isRetryableExit(code)) {
+      return { code, attempts, blockedAttempts, outcome: classifyResumeOutcome(code) };
+    }
+    if (now() >= giveUpAt) {
+      return { code: EXIT_QUEUED, attempts, blockedAttempts, outcome: classifyResumeOutcome(EXIT_QUEUED) };
+    }
     await sleepFn(blocked ? Math.max(intervalMs, INFRASTRUCTURE_BACKOFF_MS) : intervalMs);
   }
 }
@@ -211,13 +241,14 @@ async function main() {
   const log = makeLogger(options.observerDirectory, identity.token);
   log("start", { pid: process.pid, gateArgv: options.gateArgv, intervalMs: options.intervalMs });
   try {
-    const { code, attempts, blockedAttempts } = await resumeUntilAdmitted({
+    const { code, attempts, blockedAttempts, outcome } = await resumeUntilAdmitted({
       gateArgv: options.gateArgv,
       intervalMs: options.intervalMs,
       deadlineMs: options.deadlineMs,
+      cwd: options.gateCwd,
       log,
     });
-    log("finished", { code, attempts, blockedAttempts });
+    log("finished", { code, attempts, blockedAttempts, outcome });
     process.exitCode = code ?? EXIT_QUEUED;
   } catch (error) {
     log("crashed", { message: String(error?.message || error) });
