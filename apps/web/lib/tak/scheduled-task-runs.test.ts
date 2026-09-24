@@ -363,3 +363,62 @@ describe("createTaskRunForScheduledTask", () => {
     });
   });
 });
+
+describe("a tool name is a token, not a substring (BI-4F64C5D3 follow-on)", () => {
+  // The live pair: create_marketing_campaign (marketing-pack) is a prefix of
+  // create_marketing_campaign_brief (marketing-ops-pack). On 2026-09-23 the
+  // coworker wrote "Foster Carer Recruitment Drive" and the run was still
+  // filed `error` for "create_marketing_campaign executed zero times".
+  const PROMPT =
+    "If there is NO active or recent campaign brief, create one with create_marketing_campaign_brief.";
+  const BOTH = [
+    { name: "create_marketing_campaign", sideEffect: true },
+    { name: "create_marketing_campaign_brief", sideEffect: true },
+  ];
+
+  it("does not demand a tool whose name is merely a prefix of the one asked for", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: BOTH,
+        executedTools: [
+          { name: "create_marketing_campaign_brief", result: { success: true } },
+        ],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+
+  it("still demands the prefix tool when the prompt names it on its own", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Run create_marketing_campaign for the quarter.",
+        authorizedTools: BOTH,
+        executedTools: [],
+      }),
+    ).toEqual({ kind: "absent", toolName: "create_marketing_campaign" });
+  });
+
+  it("matches a name followed by punctuation, not only whitespace", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Call `create_marketing_campaign`, then stop.",
+        authorizedTools: BOTH,
+        executedTools: [],
+      }),
+    ).toEqual({ kind: "absent", toolName: "create_marketing_campaign" });
+  });
+
+  it("is not fooled by a longer name that merely contains the tool", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Use xx_create_marketing_campaign_yy only.",
+        authorizedTools: [{ name: "create_marketing_campaign", sideEffect: true }],
+        executedTools: [],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+});
