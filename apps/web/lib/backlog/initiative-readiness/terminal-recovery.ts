@@ -17,6 +17,7 @@ import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inven
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
 import { discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
+import { designPhaseReviewDecision, loadPlanReviewArtifact } from "./design-phase-recovery";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   selectEligibleObjectiveEvidenceActivityIds,
@@ -151,6 +152,7 @@ export type TerminalRecoveryPorts = {
     purpose?: "post-implementation-review";
   }): Promise<Awaited<ReturnType<typeof discoverCanonicalReviewArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
+  loadPlanArtifact(args: { itemId: string; repositoryFullName: string }): ReturnType<typeof loadPlanReviewArtifact>;
 };
 
 function escalation(reason: TerminalRecoveryEscalationReason, nextAction: string): TerminalInitiativeRecovery {
@@ -455,6 +457,7 @@ const DEFAULT_PORTS: TerminalRecoveryPorts = {
   verifyHistoricalArtifact: (args) => readRepositoryProviderBlob(args),
   discoverArtifact: discoverCanonicalReviewArtifact,
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
+  loadPlanArtifact: loadPlanReviewArtifact,
 };
 
 function baselineAncestors(
@@ -657,7 +660,9 @@ export async function resolveTerminalInitiativeRecovery(args: {
     return escalation("baseline-ambiguous", "The objective baseline chain has no unique valid head. Reconcile or supersede the conflicting baseline before dispatch.");
   }
 
-  const needsObjectiveMapping = [...args.decision.blockers, ...args.decision.unmet]
+  const designPhase = designPhaseReviewDecision(args.decision); // BI-817556D8: before acceptance lanes fail closed
+  const decision = designPhase ?? args.decision;
+  const needsObjectiveMapping = [...decision.blockers, ...decision.unmet]
     .some((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED"
       || entry.code === "OBJECTIVE_RECONCILIATION_REQUIRED");
   const eligibleEvidence = needsObjectiveMapping
@@ -701,11 +706,12 @@ export async function resolveTerminalInitiativeRecovery(args: {
   }
 
   const recovery = await ports.resolveRecovery({
-    decision: args.decision,
+    decision,
     currentAgentId: args.currentAgentId,
     db: prisma as never,
     dispatchContext,
     canonicalArtifact: { resolved: true, ...artifact },
+    ...(designPhase ? { planArtifact: await ports.loadPlanArtifact({ itemId: decision.subject.id, repositoryFullName: room.repositoryFullName }) } : {}),
     expectedCurrentBaselineId: baseline.baselineId,
     ...(needsObjectiveMapping
       ? { eligibleEvidenceActivityIds: eligibleEvidence.data.activityIds }

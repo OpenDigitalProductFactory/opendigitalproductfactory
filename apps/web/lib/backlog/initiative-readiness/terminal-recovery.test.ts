@@ -55,6 +55,7 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
       activityIds: eligibleEvidenceActivityIds,
     })),
     loadObjectiveMappingHistory: vi.fn().mockResolvedValue(ok({ history: [] })),
+    loadPlanArtifact: vi.fn().mockResolvedValue({ resolved: true, path: "docs/superpowers/plans/plan.md", commitSha: headSha, providerBlobId: "4".repeat(40) }),
     verifyHistoricalArtifact: vi.fn().mockResolvedValue(ok(new Uint8Array([1]))),
     discoverArtifact: vi.fn().mockResolvedValue({
       resolved: true,
@@ -155,6 +156,47 @@ describe("terminal initiative recovery", () => {
     const unavailable = await resolveTerminalInitiativeRecovery({ decision: pirDecision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
     expect(unavailable.reviewerRoutes).toEqual([]);
     expect(unavailable.escalations).toEqual([expect.objectContaining({ reason: "no-canonical-artifact", nextAction: "The source provider is unavailable." })]);
+  });
+
+  it("BI-817556D8: a pre-delivery plan review routes on its own instead of dying on the acceptance lanes", async () => {
+    const ports = deps();
+    const reviewer = { agentId: "AGT-REVIEW", displayName: "Independent reviewer", status: "active", archived: false, lifecycleStage: "production" };
+    ports.resolveRecovery.mockImplementation((input) => resolveInitiativeReviewerRecovery({
+      ...input,
+      db: { agentToolGrant: { findMany: async () => [
+        { grantKey: "initiative_design_review", agent: reviewer },
+        { grantKey: "file_read", agent: reviewer },
+      ] } },
+    }));
+    // The live shape on BI-815D40C6: plan review owed, nothing delivered yet.
+    const preDelivery: InitiativeReadinessDecision = {
+      ...decision,
+      policyVersion: "initiative-readiness.v3",
+      unmet: [
+        readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" }),
+        readinessRequirement({ code: "DELIVERY_EVIDENCE_REQUIRED", state: "missing", accountableRole: "delivery-coordinator" }),
+        readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+        readinessRequirement({ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+      ],
+    };
+    const result = await resolveTerminalInitiativeRecovery({ decision: preDelivery, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(result.escalations).toEqual([]);
+    expect(result.reviewerRoutes).toHaveLength(1);
+    const packet = result.reviewerRoutes[0]!.requestCoworker;
+    expect(packet).toMatchObject({ targetAgent: "AGT-REVIEW", requiredToolNames: ["record_initiative_design_review", "read_source_at_version"] });
+    expect(packet.initiativeReviewBinding).toMatchObject({
+      gate: "plan-review", expectedCurrentBaselineId: "baseline-current",
+      workroomRef: { headSha, workroomId: room.capsuleId },
+      artifactRef: { path: "docs/superpowers/plans/plan.md", commitSha: headSha, providerBlobId: "4".repeat(40) },
+    });
+    expect(ports.loadPlanArtifact).toHaveBeenCalledWith({ itemId: "BI-TERMINAL", repositoryFullName: room.repositoryFullName });
+    expect(ports.loadEligibleEvidenceActivityIds).not.toHaveBeenCalled();
+    expect(ports.loadObjectiveMappingHistory).not.toHaveBeenCalled();
+
+    // Without a baseline-valid plan the route stays unroutable with a named next step, never a guessed artifact.
+    ports.loadPlanArtifact.mockResolvedValue({ resolved: false, nextAction: "Record valid plan coverage." });
+    const noPlan = await resolveTerminalInitiativeRecovery({ decision: preDelivery, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(noPlan.reviewerRoutes).toEqual([]);
   });
 
   it("BI-05F8860A: a small-shape acceptance lane escalates to record_execution_evidence, never to objective mapping", async () => {
