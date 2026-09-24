@@ -189,10 +189,12 @@ export async function abandonOwnStalledBuild(params: {
   });
   if (!build) return { kind: "not_found" };
 
+  // BI-3AD07E7F: the resumer logs a row on every tick; that is not the build doing anything.
+  const { RECONCILER_ACTIVITY_TOOLS } = await import("./build-liveness");
   const [liveTaskRunCount, lastActivity] = await Promise.all([
     prisma.taskRun.count({ where: { buildId, status: { in: [...TASK_LIVE_STATES] } } }),
     prisma.buildActivity.findFirst({
-      where: { buildId },
+      where: { buildId, tool: { notIn: RECONCILER_ACTIVITY_TOOLS } },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     }),
