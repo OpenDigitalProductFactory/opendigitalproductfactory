@@ -72,6 +72,7 @@ import {
   type BranchDispatcher,
 } from "./orchestrator";
 import type { ResolvedDeliberationPattern } from "./registry";
+import { TASK_IN_FLIGHT_STATES, TASK_STATES } from "@/lib/tak/task-states";
 
 function makeReviewPattern(): ResolvedDeliberationPattern {
   return {
@@ -562,5 +563,60 @@ describe("orchestrator wraps slow dispatch with withHeartbeatTicker (BI-e299d4d3
     // orchestrateDeliberation today; the bare-dispatch branch exists
     // defensively for future call sites that may pass null explicitly.
     expect(dispatcher.dispatch).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("bootstrapped TaskRun status is a TASK_STATES member (BI-CB4A6435)", () => {
+  it("creates the TaskRun as working and settles it only from in-flight states", async () => {
+    mocks.getPattern.mockResolvedValue(makeReviewPattern());
+    const dispatcher: BranchDispatcher = {
+      dispatch: vi.fn(async () => ({ routeDecision: null, providerId: "openai", modelId: "gpt-4o" })),
+    };
+
+    await orchestrateDeliberation({
+      userId: "user-1",
+      patternSlug: "review",
+      artifactType: "spec",
+      triggerSource: "stage",
+      strategyProfile: "balanced",
+      diversityMode: "single-model-multi-persona",
+      activatedRiskLevel: "low",
+      dispatcher,
+    });
+
+    // TaskRun_status_closed_set rejects anything outside TASK_STATES with 23514.
+    const created = mocks.taskRunCreate.mock.calls[0]![0].data;
+    expect(TASK_STATES).toContain(created.status);
+    expect(created.status).toBe("working");
+    // Born working = first heartbeat in the same write, or the watchdog
+    // reads the gap before the first branch boundary as never_started.
+    expect(created.lastHeartbeatAt).toBeInstanceOf(Date);
+    expect(created.startedAt).toBeInstanceOf(Date);
+
+    const settle = mocks.taskRunUpdateMany.mock.calls.find(
+      (c) => c[0].where.taskRunId === "taskrun-1",
+    );
+    expect(settle).toBeDefined();
+    expect(settle![0].data.status).toBe("completed");
+    expect([...settle![0].where.status.in].sort()).toEqual([...TASK_IN_FLIGHT_STATES].sort());
+  });
+
+  it("creates the TaskRun as submitted when the async runner will execute it", async () => {
+    mocks.getPattern.mockResolvedValue(makeReviewPattern());
+
+    await orchestrateDeliberation({
+      userId: "user-1",
+      patternSlug: "review",
+      artifactType: "spec",
+      triggerSource: "stage",
+      strategyProfile: "balanced",
+      diversityMode: "single-model-multi-persona",
+      activatedRiskLevel: "low",
+    });
+
+    // deliberation-run.ts moves it to working via markTaskRunWorking.
+    const created = mocks.taskRunCreate.mock.calls[0]![0].data;
+    expect(created.status).toBe("submitted");
+    expect(created.lastHeartbeatAt).toBeUndefined();
   });
 });

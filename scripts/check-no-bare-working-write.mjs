@@ -54,6 +54,12 @@ const ALLOWLIST = new Set([
   // provider operation can be admitted or dispatched.
   "apps/web/lib/inference/async-operation-workroom-runtime.ts",
 
+  // Bootstraps a deliberation TaskRun in "working" at birth only when it runs
+  // the branches in-process (dispatcher supplied), setting startedAt and
+  // lastHeartbeatAt in that same create; otherwise it is born "submitted" and
+  // deliberation-run.ts calls markTaskRunWorking (BI-CB4A6435).
+  "apps/web/lib/deliberation/orchestrator.ts",
+
   // Writes Workroom.status, not TaskRun.status — a durable maintenance room has
   // no heartbeat and no stall watchdog, so markTaskRunWorking does not apply
   // (BI-ED117C82).
