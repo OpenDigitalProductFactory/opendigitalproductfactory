@@ -35,6 +35,7 @@ import { updateWorkCapsuleStatus, type CapsuleDb, type WorkCapsuleActor } from "
 
 /** Capsule statuses the reaper will never touch — already closed out. */
 const TERMINAL_STATUSES = new Set(["complete", "abandoned", "archived"]);
+const TERMINAL_BUILD_PHASES = ["complete", "abandoned", "failed"] as const;
 
 export type TerminalBacklogReconciliationPlan = {
   changed: boolean;
@@ -182,6 +183,7 @@ type ReaperDb = CapsuleDb & {
   featureBuild?: { findMany(args: unknown): Promise<any[]> };
   backlogItem?: {
     findFirst(args: unknown): Promise<any>;
+    findMany?(args: unknown): Promise<any[]>;
     update(args: unknown): Promise<any>;
   };
   backlogItemActivity?: {
@@ -218,14 +220,11 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
     for (const row of rows) phases.set(row.id, row.phase ?? null);
   }
   let reconciled = 0;
-  for (const capsule of capsules) {
-    // BI-62FB6505: Build Studio rooms store the item's row id, CLI rooms its itemId.
-    const item = await args.db.backlogItem.findFirst({
-      where: { OR: [{ itemId: capsule.backlogItemId }, { id: capsule.backlogItemId }] },
-      select: { id: true, itemId: true, status: true, activeBuildId: true },
-    });
-    if (!item) continue;
-    const evidenceCount = await args.db.backlogItemActivity.count({
+  const repair = async (
+    item: { id: string; status: string; activeBuildId: string | null },
+    source: { capsuleId: string | null; capsuleStatus: string | null; buildPhase: string | null },
+  ): Promise<void> => {
+    const evidenceCount = await args.db.backlogItemActivity!.count({
       where: {
         backlogItemId: item.id,
         kind: { in: ["completion_evidence", "execution_evidence", "runtime_verification"] },
@@ -234,12 +233,12 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
     const plan = planTerminalBacklogReconciliation({
       backlogStatus: item.status,
       activeBuildId: item.activeBuildId,
-      buildPhase: capsule.featureBuildId ? phases.get(capsule.featureBuildId) ?? null : null,
-      capsuleStatus: capsule.status,
+      buildPhase: source.buildPhase,
+      capsuleStatus: source.capsuleStatus,
       hasCompletionEvidence: evidenceCount > 0,
     });
-    if (!plan.changed || args.dryRun !== false) continue;
-    await args.db.backlogItem.update({
+    if (!plan.changed || args.dryRun !== false) return;
+    await args.db.backlogItem!.update({
       where: { id: item.id },
       data: {
         ...(plan.clearActiveBuild ? { activeBuildId: null } : {}),
@@ -247,15 +246,15 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
         ...(plan.releaseClaim ? { claimStatus: "released" } : {}),
       },
     });
-    await args.db.backlogItemActivity.create({
+    await args.db.backlogItemActivity!.create({
       data: {
         backlogItemId: item.id,
         kind: "execution_reconciled",
-        summary: `${capsule.capsuleId} terminal execution reconciled (${plan.outcome})`,
+        summary: `${source.capsuleId ?? item.activeBuildId} terminal execution reconciled (${plan.outcome})`,
         payload: {
-          capsuleId: capsule.capsuleId,
-          capsuleStatus: capsule.status,
-          buildPhase: capsule.featureBuildId ? phases.get(capsule.featureBuildId) ?? null : null,
+          capsuleId: source.capsuleId,
+          capsuleStatus: source.capsuleStatus,
+          buildPhase: source.buildPhase,
           fromStatus: item.status,
           targetStatus: plan.targetStatus,
           completionEvidenceRequired: plan.completionEvidenceRequired,
@@ -266,6 +265,47 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
       },
     });
     reconciled += 1;
+  };
+  for (const capsule of capsules) {
+    // BI-62FB6505: Build Studio rooms store the item's row id, CLI rooms its itemId.
+    const item = await args.db.backlogItem.findFirst({
+      where: { OR: [{ itemId: capsule.backlogItemId }, { id: capsule.backlogItemId }] },
+      select: { id: true, itemId: true, status: true, activeBuildId: true },
+    });
+    if (!item) continue;
+    await repair(item, {
+      capsuleId: capsule.capsuleId,
+      capsuleStatus: capsule.status,
+      buildPhase: capsule.featureBuildId ? phases.get(capsule.featureBuildId) ?? null : null,
+    });
+  }
+
+  // BI-62FB6505: abandon_stalled_build and the 7-day ideate age-out abandon the
+  // BUILD without closing its room, so a room can still say "working" over a
+  // dead build. Sweep the item side too: any pointer at a terminal build.
+  if (args.db.backlogItem.findMany && args.db.featureBuild) {
+    const pinned: Array<{ id: string; status: string; activeBuildId: string | null }> =
+      await args.db.backlogItem.findMany({
+        where: { activeBuildId: { not: null } },
+        select: { id: true, itemId: true, status: true, activeBuildId: true },
+        take: 500,
+      });
+    const refs = [...new Set(pinned.map((item) => item.activeBuildId).filter((ref): ref is string => Boolean(ref)))];
+    if (refs.length > 0) {
+      const builds: Array<{ id: string; buildId: string; phase: string | null }> = await args.db.featureBuild.findMany({
+        where: { OR: [{ buildId: { in: refs } }, { id: { in: refs } }], phase: { in: [...TERMINAL_BUILD_PHASES] } },
+        select: { id: true, buildId: true, phase: true },
+      });
+      const phaseByRef = new Map<string, string | null>();
+      for (const build of builds) {
+        phaseByRef.set(build.buildId, build.phase);
+        phaseByRef.set(build.id, build.phase);
+      }
+      for (const item of pinned) {
+        if (!item.activeBuildId || !phaseByRef.has(item.activeBuildId)) continue;
+        await repair(item, { capsuleId: null, capsuleStatus: null, buildPhase: phaseByRef.get(item.activeBuildId) ?? null });
+      }
+    }
   }
   return { scanned: capsules.length, reconciled };
 }
@@ -504,7 +544,10 @@ export async function reapStaleWorkCapsules(args: {
   const candidates = selectReapCandidates(capsules, buildsById, now, idleMs);
 
   if (dryRun) {
-    return { dryRun: true, scanned: capsules.length, candidates, reaped: 0 };
+    // BI-62FB6505: observe-only governs REAPING rooms. Clearing an item's pointer
+    // at a build that is already terminal reaps nothing, so it runs either way.
+    const backlogRepair = await reconcileTerminalCapsuleBacklogs({ db: args.db, dryRun: false, now });
+    return { dryRun: true, scanned: capsules.length, candidates, reaped: 0, backlogReconciled: backlogRepair.reconciled };
   }
 
   let reaped = 0;
