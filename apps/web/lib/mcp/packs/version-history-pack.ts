@@ -45,6 +45,8 @@ type SourcePage = {
   startLine: number;
   endLine: number;
   totalLines: number;
+  /** Whole-artifact size, so a bounded reviewer can size its read budget (BI-E8237EAE). */
+  totalChars: number;
   hasMore: boolean;
   nextCursor: string | null;
 };
@@ -150,6 +152,7 @@ function pageSource(input: {
     startLine,
     endLine,
     totalLines: countSourceLines(input.content),
+    totalChars: input.content.length,
     hasMore,
     nextCursor: hasMore
       ? encodeReadCursor({ v: 1, offset: endOffset, binding })
