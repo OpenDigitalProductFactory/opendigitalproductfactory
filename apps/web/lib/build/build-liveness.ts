@@ -14,7 +14,7 @@ import type { prisma as Db } from "@dpf/db";
 export const BUILD_LIVENESS_WINDOW_MS = 15 * 60 * 1000;
 
 /** The reconcilers' own rows must not keep a build looking alive. */
-const RECONCILER_ACTIVITY_TOOLS = ["resumeStrandedBuildsOnBoot", "recoverContradictoryBuildExecStatesOnBoot"];
+export const RECONCILER_ACTIVITY_TOOLS = ["resumeStrandedBuildsOnBoot", "recoverContradictoryBuildExecStatesOnBoot"];
 
 export async function recentlyActiveBuildIds(
   prisma: Pick<typeof Db, "buildActivity">,
