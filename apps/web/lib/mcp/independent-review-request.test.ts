@@ -81,6 +81,28 @@ describe("consent-bound independent review request", () => {
     if (condition === "closed-gate") mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { completion: { verdict: "allowed" } } } } });
     expect((await authorizeCoworkerRequest(packet, "human", ctx)).refusal?.success).toBe(false);
   });
+  // BI-817556D8: design-phase packets (plan-review, spec-approval,
+  // architecture-review) are already issued through the completion recovery;
+  // pin that an exact one is accepted and an altered or unissued one is not.
+  it("accepts an exact design-phase packet issued by the implementation or plan decision", async () => {
+    const planBinding = { ...binding, writerToolName: "record_initiative_design_review", gate: "plan-review" };
+    const planPacket = { ...packet, requestKey: "plan-review:immutable", initiativeReviewBinding: planBinding,
+      requiredToolNames: ["record_initiative_design_review", "read_source_at_version"] };
+    const pending = { verdict: "input-required", subject: { id: "BI-TEST" }, unmet: [], blockers: [] };
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: {
+      plan: { verdict: "allowed" }, implementation: pending, completion: pending } } } });
+    mocks.recovery.mockImplementation(async ({ decision }) => ({ reviewerRoutes: decision === pending
+      ? [{ independent: true, requestCoworker: planPacket }] : [] }));
+    expect(await authorizeCoworkerRequest(planPacket, "human", context)).toEqual({ bounded: true });
+    expect((await authorizeCoworkerRequest({ ...planPacket, objective: "altered" }, "human", context)).refusal?.success).toBe(false);
+    mocks.recovery.mockResolvedValue({ reviewerRoutes: [] });
+    expect((await authorizeCoworkerRequest(planPacket, "human", context)).refusal?.success).toBe(false);
+  });
+  it("tells a caller without an acting coworker which connection it needs", async () => {
+    const refusal = (await authorizeCoworkerRequest(packet, "human", { ...context, agentId: undefined, authSource: "pat" })).refusal;
+    expect(refusal?.message).toMatch(/OAuth/);
+    expect(refusal?.message).toMatch(/coworker/);
+  });
   it("does not permit author-owned evidence through the independent-review lane", async () => {
     expect((await authorizeCoworkerRequest({ ...packet, initiativeReviewBinding: { ...binding,
       writerToolName: "record_initiative_evidence", gate: "research" } }, "human", context)).refusal?.success).toBe(false);
