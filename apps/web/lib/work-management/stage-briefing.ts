@@ -82,12 +82,12 @@ export function buildStageBrief(input: StageBriefInput): string {
     ``,
     `Do the work with your tools. Read the real sources; do not answer from memory or assumption.`,
     evidence.length > 0
-      ? `Before you finish, record what you did by calling ${STAGE_EVIDENCE_TOOL} with capsuleId "${input.capsuleId}", stageKey "${input.stageKey}", and kind ${evidence.map((kind) => `"${kind}"`).join(" or ")}.`
-      : `Before you finish, record what you did by calling ${STAGE_EVIDENCE_TOOL} with capsuleId "${input.capsuleId}" and stageKey "${input.stageKey}".`,
+      ? `Before you finish, record what you did by calling ${STAGE_EVIDENCE_TOOL} with capsuleId "${input.capsuleId}", stageKey "${input.stageKey}", kind ${evidence.map((kind) => `"${kind}"`).join(" or ")}, and outcome "completed".`
+      : `Before you finish, record what you did by calling ${STAGE_EVIDENCE_TOOL} with capsuleId "${input.capsuleId}", stageKey "${input.stageKey}", and outcome "completed".`,
     // Said plainly, because the platform now enforces it: the stage does not
     // advance on a claim of completion.
     `That recorded evidence is what advances this activity. Saying the work is done does not advance it, and a stage with no recorded evidence will simply be dispatched again.`,
-    `If you cannot do the work — a source is unreachable, a tool is missing, authority is insufficient — record that instead, with what blocked you. Do not report success for work you did not do.`,
+    `If you cannot do the work — a source is unreachable, a tool is missing, authority is insufficient — record that instead with outcome "blocked", saying what blocked you. A blocked record does not advance the stage. Do not report success for work you did not do.`,
     ``,
     `Stay inside the declared grants. Do not skip stages, widen authority, or invent occupants.`,
   ];

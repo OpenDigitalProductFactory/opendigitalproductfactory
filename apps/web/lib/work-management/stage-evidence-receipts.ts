@@ -27,8 +27,16 @@ export type RecordedEvidence = {
    *  advance one — it is a note on the room, not a stage outcome. */
   stageKey: string | null;
   kind: string | null;
+  /** What the worker says happened: `completed` or `blocked`. Only `completed`
+   *  can advance a stage; a blocker is recorded through the same governed write
+   *  (the brief asks for it) and must never be read as the work being done. */
+  outcome: string | null;
   recordedAt: Date;
 };
+
+/** Stage-evidence outcomes the evidence tool accepts. */
+export const STAGE_EVIDENCE_OUTCOMES = ["completed", "blocked"] as const;
+export type StageEvidenceOutcome = (typeof STAGE_EVIDENCE_OUTCOMES)[number];
 
 export type StageEvidenceInput = {
   stageKey: string | null;
@@ -48,6 +56,10 @@ export type StageEvidenceInput = {
  *
  * - Evidence must name THIS stage. Room-level notes do not advance a stage.
  * - It must be of a kind the stage declared, when the stage declared any.
+ * - It must state outcome `completed`. A recorded blocker, or evidence that
+ *   states no outcome, advances nothing (fail closed). Without this, the first
+ *   live advance on 2026-09-24 was a coworker's own "blocked: no tool
+ *   available" record carrying the declared kind.
  * - It must post-date the dispatch, so a previous attempt's evidence cannot
  *   satisfy a fresh one.
  *
@@ -59,6 +71,7 @@ export function stageHasCompletingEvidence(input: StageEvidenceInput): boolean {
   const declared = new Set(input.declaredKinds.filter((kind) => kind.trim().length > 0));
   return input.evidence.some((row) => {
     if (row.stageKey !== input.stageKey) return false;
+    if (row.outcome !== "completed") return false;
     if (declared.size > 0 && (row.kind === null || !declared.has(row.kind))) return false;
     if (input.dispatchedAt && row.recordedAt < input.dispatchedAt) return false;
     return true;
