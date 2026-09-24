@@ -22,6 +22,7 @@ import {
   searchPublicWeb,
 } from "@/lib/public-web-tools";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
+import type { TaskState } from "@/lib/tak/task-states";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
@@ -329,7 +330,7 @@ async function extractBrandDesignSystemHandler(
         ? `Extract brand from ${url}`
         : "Extract brand from supplied sources",
       source: "coworker",
-      status: "active",
+      status: "working" satisfies TaskState,
     },
   });
 

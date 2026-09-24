@@ -45,6 +45,7 @@ import {
 } from "./consensus";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { BOOTSTRAPPED_TASK_RUN_PREFIX } from "./bootstrapped-task-run";
+import { TASK_IN_FLIGHT_STATES, type TaskState } from "@/lib/tak/task-states";
 
 /* -------------------------------------------------------------------------- */
 /* Public shapes                                                              */
@@ -351,7 +352,8 @@ export async function orchestrateDeliberation(
         title: `Deliberation: ${input.patternSlug}`,
         objective: `Run ${pattern.name} over artifactType=${input.artifactType}`,
         source: "proactive",
-        status: "active",
+        // TaskRun.status is a closed set (TASK_STATES); "active" is refused (BI-CB4A6435).
+        status: "working" satisfies TaskState,
         authorityScope: input.parentAuthorityScope ?? [],
       },
       select: { id: true, taskRunId: true },
@@ -737,7 +739,7 @@ async function settleBootstrapTaskRun(
   await prisma.taskRun.updateMany({
     where: {
       taskRunId,
-      status: { in: ["active", "working", "queued", "running"] },
+      status: { in: [...TASK_IN_FLIGHT_STATES] },
     },
     data: {
       status,
