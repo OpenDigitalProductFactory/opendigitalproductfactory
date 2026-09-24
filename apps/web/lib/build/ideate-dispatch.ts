@@ -553,16 +553,17 @@ export async function dispatchIdeateResearch(params: {
       );
       const basePrompt = buildResearchPrompt(params) + codeGraphContext;
       const { routeAndCall } = await import("@/lib/inference/routed-inference");
+      const { buildPhaseRouteOptions } = await import("@/lib/build/build-phase-route-options");
       const systemPrompt =
         "You are a senior software architect producing a structured design document. Respond with the design document content only — no preamble.";
       const { designDoc, rawOutput } = await runLocalIdeateWithRetry(
         async (messages) => {
-          const response = await routeAndCall(messages, systemPrompt, params.sensitivity ?? "development", {
+          const response = await routeAndCall(messages, systemPrompt, params.sensitivity ?? "development", buildPhaseRouteOptions({
             budgetClass: "quality_first",
             ...(providerId ? { allowedProviders: [providerId] } : {}),
             ...(params.modelTier ? { modelTier: params.modelTier } : {}),
             ...(params.buildId ? { buildId: params.buildId } : {}),
-          });
+          }));
           return response.content ?? "";
         },
         basePrompt,

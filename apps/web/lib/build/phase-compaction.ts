@@ -28,6 +28,7 @@ export async function compactPhase(
 ): Promise<ChatMessage> {
   try {
     const { routeAndCall } = await import("@/lib/inference/routed-inference");
+    const { buildPhaseRouteOptions } = await import("@/lib/build/build-phase-route-options");
 
     const transcript = phaseMessages
       .map((m) => {
@@ -55,7 +56,7 @@ export async function compactPhase(
       ],
       "You are a Build Studio phase summarizer. Output only the bullet-point summary.",
       "internal",
-      { taskType: "analysis" },
+      buildPhaseRouteOptions({ taskType: "analysis" }),
     );
 
     return {
