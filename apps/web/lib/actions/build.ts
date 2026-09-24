@@ -885,19 +885,26 @@ export async function resetBuildExecution(buildId: string): Promise<void> {
   );
 }
 
-export async function retryBuildExecution(buildId: string): Promise<void> {
+/**
+ * BI-E47D9C5E: an expected refusal comes back as a value. A thrown server-action
+ * Error reaches the client as a production digest, so the owner saw "Minified
+ * React error #441" instead of why the retry was refused (FB-2FE91CD3).
+ */
+export async function retryBuildExecution(buildId: string): Promise<{ ok: boolean; error?: string }> {
   const userId = await requireBuildAccess();
 
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: { createdById: true, buildExecState: true, phase: true },
   });
-  if (!build) throw new Error("Build not found");
-  if (build.createdById !== userId) throw new Error("Forbidden");
+  if (!build) return { ok: false, error: "This build no longer exists." };
+  if (build.createdById !== userId) {
+    return { ok: false, error: "Only the person who started this build can retry it." };
+  }
 
   const state = build.buildExecState as import("@/lib/build-exec-types").BuildExecutionState | null;
   if (!state || state.step !== "failed") {
-    throw new Error("Build is not in a failed state. Cannot retry.");
+    return { ok: false, error: "This build is not in a failed state, so there is nothing to retry." };
   }
 
   if (build.phase === "failed") {
@@ -914,6 +921,7 @@ export async function retryBuildExecution(buildId: string): Promise<void> {
       JSON.stringify(buildId),
       err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err))),
   );
+  return { ok: true };
 }
 
 export async function runBuildReviewVerification(buildId: string): Promise<void> {

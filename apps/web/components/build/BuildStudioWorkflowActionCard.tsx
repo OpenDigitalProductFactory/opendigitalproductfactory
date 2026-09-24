@@ -195,7 +195,7 @@ export function BuildStudioWorkflowActionCard({
         // handles transient failures before we ever get here.
         openCoworkerPanel(action.coworkerPrompt, action.message);
       } else if (action.kind === "retry-build") {
-        await retryBuildExecution(build.buildId);
+        refusal = await retryBuildExecution(build.buildId);
       } else if (action.kind === "reset-build") {
         await resetBuildExecution(build.buildId);
       } else if (action.kind === "resume-implementation") {
