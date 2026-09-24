@@ -49,6 +49,19 @@ const CLI_AUTH_FAILURE_PATTERNS: RegExp[] = [
   /fix external api key/i,
 ];
 
+/**
+ * BI-18AF9BA0: the part of Codex CLI stderr that is the CLI's own verdict. stderr echoes the
+ * whole prompt (235K chars on FB-1FAAA146), so classifying all of it let a
+ * prompt that merely discussed "401 Unauthorized" turn a usage limit into an
+ * auth failure and disable the provider. Prefer the CLI's `ERROR:` lines; with
+ * none, fall back to the tail, where the CLI writes its outcome.
+ */
+export function cliFailureSignal(stderr: string): string {
+  const errorLines = stderr.match(/^ERROR:.*$/gm);
+  if (errorLines && errorLines.length > 0) return errorLines.join("\n");
+  return stderr.slice(-2_000);
+}
+
 export function looksLikeCliAuthFailure(text: string): boolean {
   return CLI_AUTH_FAILURE_PATTERNS.some((p) => p.test(text));
 }
@@ -374,19 +387,20 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
           } else if (code === 0 || stdout.trim()) {
             resolve({ stdout });
           } else {
-            if (looksLikeCliAuthFailure(stderr)) {
+            const signal = cliFailureSignal(stderr);
+            if (looksLikeCliAuthFailure(signal)) {
               reject(new InferenceError(
                 `Codex CLI auth failed: ${excerptHeadAndTail(stderr, 600)}`,
                 "auth",
                 providerId,
               ));
-            } else if (looksLikeCliUnsupportedModel(stderr)) {
+            } else if (looksLikeCliUnsupportedModel(signal)) {
               reject(new InferenceError(
                 `Codex CLI model not found: ${excerptHeadAndTail(stderr, 600)}`,
                 "model_not_found",
                 providerId,
               ));
-            } else if (looksLikeCliRateLimit(stderr)) {
+            } else if (looksLikeCliRateLimit(signal)) {
               // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
               void recordCliRateLimit("codex-cli", providerId, stderr);
               reject(new InferenceError(
