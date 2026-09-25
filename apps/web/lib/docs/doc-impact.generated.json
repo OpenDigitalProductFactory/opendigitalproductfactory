@@ -575,6 +575,9 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts": [
+      "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/evaluate.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -3037,6 +3040,7 @@
       "scripts/pre-push-dco-check.mjs"
     ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
+      "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts",
       "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
       "apps/web/lib/work-management/delivery-shapes.ts"
     ],

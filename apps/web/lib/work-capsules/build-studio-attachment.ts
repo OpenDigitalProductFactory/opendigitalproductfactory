@@ -48,9 +48,9 @@ export async function bindBuildStudioDeliveryShape(args: {
   capsuleId: string;
   backlogItem: BuildStudioCapsuleBacklogItem;
 }): Promise<{ bound: string | null; reason: string }> {
-  const [{ resolveDeliveryShape }, { deriveDeliverableSensitivity }, { persistClaimShape }] = await Promise.all([
+  const [{ resolveDeliveryShape }, { assessDeliverySensitivity }, { persistClaimShape }] = await Promise.all([
     import("@/lib/work-management/derive-delivery-shape"),
-    import("@/lib/explore/build-process-matrix"),
+    import("@/lib/backlog/initiative-readiness/delivery-sensitivity"),
     import("./claim-backlog-item-handler"),
   ]);
   const item = args.backlogItem;
@@ -58,7 +58,7 @@ export async function bindBuildStudioDeliveryShape(args: {
     signals: {
       effortSize: item.effortSize ?? null,
       workType: item.workType ?? null,
-      sensitivity: deriveDeliverableSensitivity({ text: `${item.title}\n${item.body ?? ""}`, workType: item.workType ?? null }),
+      sensitivity: assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType }).level,
     },
   });
   if (resolution.kind !== "declared" && resolution.kind !== "derived") {
