@@ -394,7 +394,7 @@ export async function taskrunEscalate(
           type: "taskrun.escalated",
           title: `Stalled task escalated for review`,
           body: `Stalled task ${taskRunId} (phase ${stalled.phase ?? "unknown"}) escalated by operator. ${notes ?? ""}`.trim(),
-          deepLink: stalled.buildId ? `/build` : `/platform/ai/operations`,
+          deepLink: stalled.buildId ? `/build` : `/platform/ai/build-studio`,
         },
       });
     }

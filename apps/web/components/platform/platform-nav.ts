@@ -50,7 +50,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
   {
     key: "ai",
     label: "AI Operations",
-    href: "/platform/ai",
+    href: "/platform/ai/overview",
     description: "Manage coworkers, assignments, skills, providers, routing, and build runtime from one AI operations surface.",
     matchPrefixes: ["/platform/ai"],
     subItems: [

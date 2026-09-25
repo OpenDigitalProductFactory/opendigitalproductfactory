@@ -7199,14 +7199,6 @@
     "longSentences": 0,
     "textMass": 14
   },
-  "apps/web/components/platform/AuditTabNav.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 8
-  },
   "apps/web/components/platform/AuthorityMatrixPanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -8087,14 +8079,6 @@
     "longSentences": 0,
     "textMass": 9
   },
-  "apps/web/components/platform/identity/IdentityTabNav.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 2
-  },
   "apps/web/components/platform/identity/PrincipalDirectoryPanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -8574,14 +8558,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 2
-  },
-  "apps/web/components/setup/SetupStepNav.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 8
   },
   "apps/web/components/shell/AppRail.tsx": {
     "vocabulary": 0,
