@@ -2189,6 +2189,9 @@
     ],
     "tests/release/pregate-node-gate-contract.test.mjs": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "tools/doctools/smoke.sh": [
+      "docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md"
     ]
   },
   "docToRoutes": {
@@ -3229,6 +3232,9 @@
     ],
     "docs/security/tool-evaluations/2026-09-15-bmad-method.md": [
       "apps/web/lib/explore/build-process-matrix.ts"
+    ],
+    "docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md": [
+      "tools/doctools/smoke.sh"
     ],
     "docs/specs/device-identification-and-portfolio-placement-spec.md": [
       "apps/web/lib/queue/functions/hive-scout-ingest.ts",

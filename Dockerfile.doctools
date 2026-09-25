@@ -1,0 +1,62 @@
+# dpf-doctools: the DPF-built, pinned office document engine image.
+#
+# BI-15D69168 (slice S1 of BI-815D40C6). Design:
+# docs/superpowers/specs/2026-09-22-office-document-conversion-design.md
+#
+# One-shot, never always-on: the portal runs it per conversion with no network,
+# a read-only root and stdin/stdout only (S2). It is published beside
+# dpf-promoter by .github/workflows/publish-image.yml and is deliberately NOT in
+# any compose file or profile: an optional pinned image in compose froze
+# promote-latest (PR #5290).
+#
+# Contents: the distribution's headless LibreOffice (writer, calc, impress,
+# draw), its python3-uno bridge (for dpf-render in S6), poppler-utils for text
+# extraction, and a bounded metric-compatible font set. No Java, no GUI, no Base.
+#
+# Base pinned by digest (debian:trixie-slim, multi-arch index). Bump the digest
+# deliberately; the smoke test and size budget in publish-image.yml gate it.
+FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+
+ARG DPF_VERSION=unknown
+LABEL org.opencontainers.image.title="DPF Doctools"
+LABEL org.opencontainers.image.description="One-shot office document engine: dpf-convert reads a document on stdin and writes the converted document on stdout"
+LABEL org.opencontainers.image.revision="${DPF_VERSION}"
+LABEL org.opencontainers.image.licenses="MPL-2.0 AND Apache-2.0"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    SAL_USE_VCLPLUGIN=svp
+
+# -nogui variants are the same distribution packages built without the X11/GTK
+# front ends; --no-install-recommends keeps Java and the GUI out.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      libreoffice-core-nogui \
+      libreoffice-writer-nogui \
+      libreoffice-calc-nogui \
+      libreoffice-impress-nogui \
+      libreoffice-draw-nogui \
+      python3-uno \
+      poppler-utils \
+      fonts-dejavu-core \
+      fonts-liberation2 \
+      fonts-crosextra-carlito \
+      fonts-crosextra-caladea \
+ && fc-cache -f \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /usr/share/doc/* /usr/share/man/*
+
+# Non-root runtime user. The root filesystem is read-only at run time; all
+# writes land in the per-run workspace under the /tmp tmpfs.
+RUN groupadd --system --gid 10001 doctools \
+ && useradd --system --uid 10001 --gid doctools --home-dir /tmp --shell /usr/sbin/nologin doctools
+
+# The hardened profile template: macro security very high, macro execution off,
+# linked content off. dpf-convert copies it into a fresh per-run profile.
+COPY tools/doctools/registrymodifications.xcu /opt/dpf-doctools/profile/user/registrymodifications.xcu
+COPY --chmod=0755 tools/doctools/dpf-convert /usr/local/bin/dpf-convert
+RUN chmod -R a+rX,go-w /opt/dpf-doctools \
+ && printf '%s\n' "${DPF_VERSION}" > /opt/dpf-doctools/.dpf-image-version
+
+USER 10001:10001
+WORKDIR /tmp
+ENTRYPOINT ["/usr/local/bin/dpf-convert"]

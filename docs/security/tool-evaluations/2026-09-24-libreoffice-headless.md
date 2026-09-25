@@ -1,0 +1,101 @@
+# Tool Evaluation: LibreOffice headless (dpf-doctools image)
+
+**Backlog item:** `BI-15D69168` (slice S1 of `BI-815D40C6`)
+**Decision:** conditional approval
+**Risk:** medium
+**Confidence:** 0.85
+**Re-evaluate after:** 2027-03-24, on any Debian base or LibreOffice major-version change, or immediately after a LibreOffice security advisory about document loading, macros or linked content
+
+The office document engine absorbs LibreOffice's headless converter as a
+DPF-built image, `dpf-doctools`, instead of adopting an office suite or a hosted
+conversion API. Governed decision `DI-3638BEF46CE9` scored this option 9.50,
+against Gotenberg at 5.28, a hosted API at 4.51 and absorbing Apache OpenOffice
+at 3.59. The design is
+[2026-09-22-office-document-conversion-design.md](../../superpowers/specs/2026-09-22-office-document-conversion-design.md).
+
+What is evaluated is the image built by `Dockerfile.doctools`:
+
+- `debian:trixie-slim`, pinned by digest;
+- Debian's `libreoffice-{core,writer,calc,impress,draw}-nogui` packages
+  (LibreOffice 25.2.3 when measured);
+- `python3-uno`, `poppler-utils`, and the DejaVu, Liberation, Carlito and
+  Caladea fonts;
+- the entry point `tools/doctools/dpf-convert` and the hardened profile
+  `tools/doctools/registrymodifications.xcu`.
+
+It is not a compose service and never runs always-on.
+
+## CoSAI security findings
+
+| # | Category | Severity | Finding | Required treatment |
+| --- | --- | --- | --- | --- |
+| 1 | Input validation | high | LibreOffice parses complex, untrusted binary formats (.doc, .xls, .ppt, .rtf). Parser defects are its main advisory class. | Containment rests on the container, not the parser: no network, a read-only root, no host mounts, all capabilities dropped, `no-new-privileges`, a non-root user, memory and pid limits, and a timeout kill. The runtime (S2) must emit every one of these flags. |
+| 2 | Code execution | high | Documents can carry Basic macros bound to load, save and view events. | The baked profile sets macro security to very high (3), turns macro execution off, and leaves the trusted-location list empty. `smoke.sh` proves a live auto-run macro fixture runs under a permissive profile and does not run under the hardened profile, even when the caller asks for `ALWAYS_EXECUTE_NO_WARN`, or through `dpf-convert`. |
+| 3 | Linked content | high | Linked documents, OLE and DDE can fetch or read resources beyond the input (the linked-document advisory class). | `DisableActiveContent`, `DisableOLEAutomation` and `BlockUntrustedRefererLinks` are on, and link update on load is set to never for Writer and Calc. The runner also removes the network. |
+| 4 | Data/control boundary | low | The engine receives document bytes only; it never receives prompts, credentials or tenant context. | stdin in, stdout out, and diagnostics on stderr. No arguments carry content. |
+| 5 | Resource management | medium | A crafted document can consume unbounded CPU or memory while it is laid out. | `DPF_CONVERT_MAX_BYTES` refuses oversized input before the engine starts (exit 4). `DPF_CONVERT_TIMEOUT_SECONDS` kills the run (exit 124). The container carries memory and pid limits. |
+| 6 | State isolation | low | A LibreOffice profile persists settings and could carry a weakened configuration between runs. | Each run copies the read-only template into a fresh profile under the `/tmp` tmpfs and removes it on exit. |
+| 7 | Integrity controls | low | The image is built by DPF from distribution packages. | The base image is pinned by digest. The image is published per release as a multi-arch manifest list whose digest is recorded by the merge job, with provenance and a BuildKit SBOM attestation. Callers pin `dpf-doctools@sha256:`. |
+| 8 | Supply chain | medium | LibreOffice ships frequent security fixes; a pinned base can age. | The image is rebuilt on every release, so it takes Debian security updates. The base digest is bumped deliberately. `smoke.sh` and the size budget gate every rebuild. |
+| 9 | Network isolation | low | The engine needs no network. | The runner uses `--network none` and the smoke test runs every conversion that way. |
+| 10 | Operational security | low | A failed conversion must not look like an empty document. | The exit codes are fixed and documented (0, 2, 3, 4, 124), and stdout carries only the converted file. |
+
+## Compliance and architecture fit
+
+- **Licences:**
+  - LibreOffice is MPL-2.0; some parts are under LGPLv3+ or Apache-2.0.
+  - `python3-uno` is MPL-2.0.
+  - `poppler-utils` is GPL-2.0/GPL-3.0.
+  - The fonts are under SIL OFL-1.1 (Liberation, Carlito, Caladea) and the Bitstream Vera licence (DejaVu).
+
+  Every one of these runs as a separate process in its own image; no DPF code links to it, so no licence obligation reaches DPF source. The image ships Debian's binary packages unmodified, and their corresponding source stays available from Debian.
+- **Data residency:** fully local. No document leaves the installation, which
+  is why a hosted conversion API was rejected.
+- **Regulatory:** not an AI system. It processes documents the installation
+  already holds; no new personal-data flow.
+- **Fit:** follows the `dpf-promoter` precedent: a DPF-built image published by
+  `publish-image.yml`, launched one-shot by the portal through the docker
+  socket it already holds. It is kept out of compose, because an optional
+  pinned image there froze `promote-latest` (PR #5290). S9 retires mammoth,
+  read-excel-file and pdf-parse once the engine serves every install shape.
+  That is the absorb-don't-adopt ledger for this image.
+
+## Integration evidence
+
+On 2026-09-24, `Dockerfile.doctools` was built on linux/amd64 (Docker 29.8) and
+`tools/doctools/smoke.sh` passed every check:
+
+- the runtime user is non-root;
+- all exit codes behave as documented;
+- `.doc`, `.xls`, `.ppt`, `.rtf`, `.odt`, `.pptx`, `.docx`, `.xlsx`, `.ods` and
+  `.odp` each converted to PDF and to text carrying the fixture sentinel;
+- the macro control fired under the permissive profile, and the marker stayed
+  absent under the hardened profile and through `dpf-convert`.
+
+The image measured 217,598,894 bytes compressed (about 208 MiB) and
+807,708,304 bytes unpacked. The size budget is set at 300 MiB compressed, well
+under the backlog item's 700 MB ceiling.
+
+One finding shaped the test: headless `--convert-to` loads documents hidden and
+fires no document events. A macro probe built only on it would pass whatever
+the profile said. The smoke test therefore uses a visible UNO load for its
+control.
+
+## Conditions
+
+1. The runtime (S2) must run the image with `--network none --read-only`, a
+   `/tmp` tmpfs, `--cap-drop ALL`, `no-new-privileges`, and memory and pid limits,
+   and must pin it by digest.
+2. Never add a compose service or profile for the engine.
+3. Never relax `registrymodifications.xcu`. A new document feature that needs
+   macros or links is a new evaluation.
+4. Keep `smoke.sh` and the size budget in the release path. A release that
+   cannot run them does not publish the image.
+5. Re-evaluate before adopting unoserver or any warm, always-on listener.
+
+## Sources
+
+- [LibreOffice security advisories](https://www.libreoffice.org/about-us/security/advisories/)
+- [LibreOffice licence (MPL-2.0)](https://www.libreoffice.org/about-us/licenses)
+- [Debian libreoffice source package](https://tracker.debian.org/pkg/libreoffice)
+- [Debian poppler source package](https://tracker.debian.org/pkg/poppler)

@@ -127,6 +127,15 @@ jobs:
             context: .
             file: Dockerfile.promoter
             target: ""
+          # One-shot office document engine (BI-15D69168). Published beside the
+          # promoter and, like it, run one-shot by the portal; deliberately NOT
+          # in any compose file (an optional pinned image there froze
+          # promote-latest, PR #5290). Smoke-tested and size-checked below
+          # before its push.
+          - name: dpf-doctools
+            context: .
+            file: Dockerfile.doctools
+            target: ""
           - name: dpf-browser-use
             context: ./services/browser-use
             file: ./services/browser-use/Dockerfile
@@ -191,6 +200,31 @@ jobs:
       - name: Normalize image owner
         id: owner
         run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      # dpf-doctools converts untrusted documents, so the release refuses to push
+      # an engine it has not exercised: build it into the local daemon for THIS
+      # architecture, run the offline/read-only smoke test (conversions, exit
+      # codes, macro containment) and hold it to its size budget. The push build
+      # below reuses the same builder cache, so the layers are not rebuilt.
+      - name: Build dpf-doctools for the smoke test
+        if: matrix.image.name == 'dpf-doctools'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
+          platforms: linux/${{ matrix.platform.arch }}
+          load: true
+          tags: dpf-doctools:smoke
+          build-args: |
+            DPF_VERSION=${{ github.sha }}
+
+      - name: Smoke-test dpf-doctools (offline, read-only, macro containment)
+        if: matrix.image.name == 'dpf-doctools'
+        run: bash tools/doctools/smoke.sh dpf-doctools:smoke
+
+      - name: Enforce the dpf-doctools size budget
+        if: matrix.image.name == 'dpf-doctools'
+        run: bash tools/doctools/size-budget.sh dpf-doctools:smoke
 
       - name: Build and push by digest
         id: build
@@ -264,6 +298,7 @@ jobs:
           - dpf-portal
           - dpf-sandbox
           - dpf-promoter
+          - dpf-doctools
           - dpf-browser-use
           - dpf-adp
           - dpf-edge-node
@@ -341,6 +376,31 @@ jobs:
             || { echo "::error::Missing linux/amd64 in ${IMAGE}:${TAG}"; exit 1; }
           echo "$raw" | grep -q '"architecture": "arm64"' \
             || { echo "::error::Missing linux/arm64 in ${IMAGE}:${TAG}"; exit 1; }
+
+      - name: Record the published manifest digest
+        # The immutable tag resolves to this manifest-list digest. Recording it
+        # per release gives consumers that pin by digest (the one-shot
+        # dpf-doctools runner pins name@sha256) an auditable reference.
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/${{ matrix.image }}"
+          TAG="${{ needs.gate.outputs.tag }}"
+          digest="$(docker buildx imagetools inspect "${IMAGE}:${TAG}" --format '{{json .Manifest}}' | jq -r .digest)"
+          case "${digest}" in
+            sha256:*) ;;
+            *) echo "::error::Could not resolve the digest of ${IMAGE}:${TAG}"; exit 1 ;;
+          esac
+          mkdir -p /tmp/release-digest
+          printf '%s:%s@%s\n' "${IMAGE}" "${TAG}" "${digest}" > "/tmp/release-digest/${{ matrix.image }}.txt"
+          printf '| %s | %s | %s |\n' "${{ matrix.image }}" "${TAG}" "${digest}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the published manifest digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-digest-${{ matrix.image }}
+          path: /tmp/release-digest/${{ matrix.image }}.txt
+          if-no-files-found: error
+          retention-days: 90
 
   # ─── Stage 3: End-to-end install verification ────────────────────
   # Runs install-dpf.sh in --release mode against the manifest lists
@@ -475,6 +535,7 @@ jobs:
           - dpf-portal
           - dpf-sandbox
           - dpf-promoter
+          - dpf-doctools
           - dpf-browser-use
           - dpf-adp
           - dpf-edge-node

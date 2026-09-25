@@ -242,7 +242,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/lib/published-image-freshness.test.mjs",
-        "scripts/publish-image-release-identity.test.mjs",
+        "scripts/publish-image-release-identity.test.mjs", "scripts/doctools-image-contract.test.mjs",
       ),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [

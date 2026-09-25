@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# dpf-convert: convert one office document, stdin to stdout.
+#
+# Entry point of the dpf-doctools image (BI-15D69168, slice S1 of BI-815D40C6).
+# The portal runs it one-shot (S2) as
+#   docker run --rm -i --network none --read-only --tmpfs /tmp ... \
+#     dpf-doctools@sha256:... --to pdf --from doc  < input > output
+#
+# Contract (callers depend on these exact exit codes):
+#   0    converted; the output bytes are on stdout
+#   2    bad arguments (unknown --to / --from, missing --to) or empty input
+#   3    conversion failed (the engine produced no output)
+#   4    input too large (more than DPF_CONVERT_MAX_BYTES), or empty
+#   124  timed out (DPF_CONVERT_TIMEOUT_SECONDS)
+#
+# Diagnostics go to stderr only. stdout carries the converted file and nothing
+# else, so a caller can stream it straight into storage.
+set -uo pipefail
+
+readonly EXIT_OK=0 EXIT_BAD_ARGS=2 EXIT_FAILED=3 EXIT_TOO_LARGE=4 EXIT_TIMEOUT=124
+
+MAX_BYTES="${DPF_CONVERT_MAX_BYTES:-52428800}"
+TIMEOUT_SECONDS="${DPF_CONVERT_TIMEOUT_SECONDS:-120}"
+PROFILE_TEMPLATE="${DPF_CONVERT_PROFILE_TEMPLATE:-/opt/dpf-doctools/profile}"
+
+die() { local code="$1"; shift; printf 'dpf-convert: %s\n' "$*" >&2; exit "$code"; }
+
+usage() {
+  cat >&2 <<'EOF'
+usage: dpf-convert --to <pdf|txt|docx|odt|rtf|doc|xlsx|ods|csv|xls|pptx|odp|ppt> [--from <ext>]
+Reads the document on stdin and writes the converted document on stdout.
+EOF
+}
+
+# The one filter table. Key = the --to value callers pass; value = the
+# LibreOffice --convert-to argument. `txt` is special-cased below: it renders
+# a PDF first and extracts its text with pdftotext, so every family (text,
+# spreadsheet, presentation, drawing) yields text through one path.
+filter_for() {
+  case "$1" in
+    pdf)  printf '%s' 'pdf' ;;
+    docx) printf '%s' 'docx:MS Word 2007 XML' ;;
+    odt)  printf '%s' 'odt' ;;
+    rtf)  printf '%s' 'rtf:Rich Text Format' ;;
+    xlsx) printf '%s' 'xlsx:Calc MS Excel 2007 XML' ;;
+    ods)  printf '%s' 'ods' ;;
+    csv)  printf '%s' 'csv:Text - txt - csv (StarCalc):44,34,76,1' ;;
+    pptx) printf '%s' 'pptx:Impress MS PowerPoint 2007 XML' ;;
+    odp)  printf '%s' 'odp' ;;
+    # Legacy binary formats: written for compatibility exports and fixtures.
+    doc)  printf '%s' 'doc:MS Word 97' ;;
+    xls)  printf '%s' 'xls:MS Excel 97' ;;
+    ppt)  printf '%s' 'ppt:MS PowerPoint 97' ;;
+    *)    return 1 ;;
+  esac
+}
+
+# Input extensions the engine is asked to read. The extension is a type hint
+# only; LibreOffice's type detection still reads the content.
+input_allowed() {
+  case "$1" in
+    doc|docx|docm|dot|dotx|odt|ott|fodt|rtf|txt|html|htm|wpd) return 0 ;;
+    xls|xlsx|xlsm|xlt|xltx|ods|ots|fods|csv) return 0 ;;
+    ppt|pptx|pptm|pot|potx|pps|ppsx|odp|otp|fodp) return 0 ;;
+    odg|otg|fodg|vsd|vsdx|svg|pdf) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+TO="" FROM="bin"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --to)   [ "$#" -ge 2 ] || { usage; die "$EXIT_BAD_ARGS" "--to needs a value"; }; TO="$2"; shift 2 ;;
+    --from) [ "$#" -ge 2 ] || { usage; die "$EXIT_BAD_ARGS" "--from needs a value"; }; FROM="$2"; shift 2 ;;
+    -h|--help) usage; exit "$EXIT_BAD_ARGS" ;;
+    *) usage; die "$EXIT_BAD_ARGS" "unknown argument: $1" ;;
+  esac
+done
+
+[ -n "$TO" ] || { usage; die "$EXIT_BAD_ARGS" "--to is required"; }
+TO="${TO,,}"; FROM="${FROM,,}"; FROM="${FROM#.}"
+if [ "$TO" != "txt" ]; then
+  filter_for "$TO" >/dev/null || die "$EXIT_BAD_ARGS" "unsupported --to: $TO"
+fi
+if [ "$FROM" != "bin" ]; then
+  input_allowed "$FROM" || die "$EXIT_BAD_ARGS" "unsupported --from: $FROM"
+fi
+case "$MAX_BYTES" in ''|*[!0-9]*) die "$EXIT_BAD_ARGS" "DPF_CONVERT_MAX_BYTES must be a byte count" ;; esac
+case "$TIMEOUT_SECONDS" in ''|*[!0-9]*) die "$EXIT_BAD_ARGS" "DPF_CONVERT_TIMEOUT_SECONDS must be whole seconds" ;; esac
+
+# A per-run workspace under /tmp: the image's root filesystem is read-only, and
+# the LibreOffice profile is rebuilt from the baked, hardened template on every
+# run so no state (and no macro-security change) survives between documents.
+WORK="$(mktemp -d /tmp/dpf-convert.XXXXXXXX)" || die "$EXIT_FAILED" "cannot create a workspace under /tmp"
+trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$WORK/in" "$WORK/out" "$WORK/profile" "$WORK/home"
+cp -R "$PROFILE_TEMPLATE/." "$WORK/profile/" || die "$EXIT_FAILED" "cannot seed the LibreOffice profile"
+export HOME="$WORK/home" XDG_CONFIG_HOME="$WORK/home/.config" XDG_CACHE_HOME="$WORK/home/.cache"
+
+INPUT="$WORK/in/input.$FROM"
+# Read at most MAX_BYTES + 1 so an oversized input is refused without being
+# buffered in full.
+head -c "$((MAX_BYTES + 1))" > "$INPUT"
+SIZE="$(stat -c %s "$INPUT")"
+[ "$SIZE" -gt 0 ] || die "$EXIT_BAD_ARGS" "empty input"
+[ "$SIZE" -le "$MAX_BYTES" ] || die "$EXIT_TOO_LARGE" "input exceeds DPF_CONVERT_MAX_BYTES ($MAX_BYTES)"
+
+run_engine() {  # run_engine <convert-to argument> <input file> <outdir>
+  timeout --kill-after=5 "$TIMEOUT_SECONDS" \
+    soffice --headless --invisible --nologo --nodefault --norestore --nolockcheck \
+      "-env:UserInstallation=file://$WORK/profile" \
+      --convert-to "$1" --outdir "$3" "$2" 1>&2
+}
+
+ENGINE_TARGET="$TO"; [ "$TO" = "txt" ] && ENGINE_TARGET="pdf"
+run_engine "$(filter_for "$ENGINE_TARGET")" "$INPUT" "$WORK/out"
+rc=$?
+# timeout(1) exits 124 when it had to stop soffice, 137 when it had to kill it.
+if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+  die "$EXIT_TIMEOUT" "conversion timed out after ${TIMEOUT_SECONDS}s"
+fi
+
+OUTPUT="$WORK/out/input.$ENGINE_TARGET"
+[ -s "$OUTPUT" ] || die "$EXIT_FAILED" "the engine produced no $ENGINE_TARGET output (soffice exit $rc)"
+
+if [ "$TO" = "txt" ]; then
+  pdftotext -enc UTF-8 -layout "$OUTPUT" - || die "$EXIT_FAILED" "text extraction failed"
+else
+  cat "$OUTPUT"
+fi
+exit "$EXIT_OK"
