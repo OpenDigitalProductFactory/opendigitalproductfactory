@@ -194,6 +194,86 @@ boundaries and slot isolation, followed by a canonical build recording worker
 count, peak memory and control-plane health. Unit tests alone do not establish
 runtime recovery or completion of BI-06AE6833.
 
+## 2026-09-25 amendment: the builder reserve comes from a measured peak (BI-D3BF53A9)
+
+The 2026-09-12 amendment reserved the whole 16 GiB builder ceiling "pending
+representative new measurements". Nobody took them. Every gate record's
+`builderMemoryUsageBytes` was `[0, 0]` because it is sampled at admission,
+before the build runs. With the 4 GiB safety floor, a gate therefore needed
+20 GiB free in the Docker VM before it could start. The DEV host's VM (24.6 GB,
+about 4.4 GB used by the always-on stack) had 19.0 to 19.3 GiB, so the pool sat
+closed while gates from three sessions queued.
+
+**Measurement.** On 2026-09-25 the gate's production build (`buildx build
+--target build`, tree 987adaa1fc2) ran three times on a dedicated builder with
+the gate's exact limits (16 GiB, 8 CPUs, `local-ci-buildkitd.toml`). Each run
+started from a freshly started builder, so each cgroup `memory.peak` belongs to
+that build alone. No gate was active, and no cache drop or `sync` was run.
+
+| run | cgroup `memory.peak` | sampled max anon | sampled max file | `next-build` RSS | workers | OOM kills |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 14,853,529,600 (13.83 GiB) | 11.72 GiB | 2.19 GiB | ≈11 GiB | 2 | 0 |
+| 2 | 14,644,989,952 (13.64 GiB) | 12.03 GiB | 2.00 GiB | 11.0 GiB | 2 | 0 |
+| 3 | 14,876,745,728 (13.86 GiB) | 11.91 GiB | 2.04 GiB | 11.0 GiB | 2 | 0 |
+
+The peak comes from the Turbopack compile. The `next-build` process alone
+reaches about 11 GiB RSS, which is more than its 8 GiB V8 heap, so most of the
+excess is native compiler memory. The two page-data workers come after the
+compile peak and add little. The 2026-09-12 worker bound is doing its job. What
+drives memory now is the compile of the whole portal, not page generation.
+
+**Calibration.** `builderPolicy.admissionCalibration` records
+`observedHighWaterBytes` = 14,876,745,728 (the highest of the three) plus
+`safetyMarginBytes` = 1 GiB, so `admissionReserveBytes` = 15,950,487,552
+(14.86 GiB). The margin is more than four times the spread between runs
+(0.22 GiB). The high-water already includes about 2 GiB of page cache charged
+to the builder, which the kernel reclaims inside the cgroup before it
+OOM-kills, so non-reclaimable demand sits about 3 GiB under the reserve. The
+16 GiB `memoryBytes` stays the hard cgroup limit. If a build exceeds the reserve,
+it is bounded by its own cgroup and reported as `builder:resource-exhausted`
+infrastructure. It cannot eat the VM's floor. Admission now needs 18.86 GiB
+available, not 20, and the DEV host admits one gate. Two slots need 33.7 GiB and
+stay out of reach on a 24 GB VM. That is correct.
+
+**Instrumentation.** `scripts/local-ci-bounded-build.mjs` samples the
+builder's cgroup every 5 s while it builds (`memory.current`, `memory.stat`
+anon/file, `memory.events` oom_kill, and the RSS of `node`/`next-*`
+processes). After the build it reads `memory.peak` once more, before cool-down
+stops the builder and discards its cgroup
+(`scripts/lib/local-ci-builder-memory.mjs`). Every gate record then carries
+`evidence.builderMemory`: `peakBytes`, `peakScope` (`this-build`, or
+`container-lifetime` when the builder was already running before the build),
+the sampled maxima and the worker count. A gate that ran no build records
+`status: unmeasured` with a reason, never a zero. To recalibrate, read
+`builderMemory.peakBytes` across recent gate records whose `peakScope` is
+`this-build`, and move `observedHighWaterBytes` in this file's record and the
+JSON together. The guard in `scripts/local-ci-pool-policy.test.mjs` requires
+reserve = high-water + margin ≤ ceiling.
+
+**Message.** A headroom closure now carries its arithmetic
+(`poolPolicy.headroom`: which machine was measured, available memory, floor,
+reserve and shortfall). The waiting line names the shortfall and says that no
+session action changes it: page cache already counts as available, so dropping
+caches cannot help, and `sync` wedges the VM (BI-903FB5F9).
+
+**Not decided here: admit on need.** The reserve protects only the Docker build
+stage. Typecheck and vitest run on the host first, for several minutes, while
+the reserve sits idle. Two directions go to the founder for scoping, and
+neither is built in this change:
+
+1. *Late builder reservation.* Admit on the host-stage reserve alone. Take the
+   builder reserve as a second, queued reservation when the gate reaches the
+   build stage. That lets typecheck and vitest start on a smaller VM and turns a
+   host that cannot fit the build into a clean refusal at the stage boundary,
+   not a queue that never moves. It overlaps BI-34955E1F: the reservation has
+   to be held for the stage's lifetime, not computed once.
+2. *Reuse or skip the production image build.* The stage-receipt reuse already
+   covers an exact-tree re-run. A wider reuse key covering the Dockerfile
+   `build` stage inputs (apps/web, packages, config, the lockfile) would skip
+   the build for changes outside them. That is a product decision about what
+   the local gate must prove, given that the cloud merge queue runs the full
+   build anyway (AGENTS.md §4, "the heavy build runs once, in the cloud").
+
 ## Dependency readiness for the bounded build
 
 
