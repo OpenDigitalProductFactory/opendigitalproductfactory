@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # DPF Development Model & Frontier-Harness Positioning — Consolidated Strategy
 
 > **2026-07-25 implementation companion:** Governed model x method experimentation and the
