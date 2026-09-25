@@ -21,7 +21,9 @@ describe("ensureMergeBaseWithMain", () => {
       .mockResolvedValueOnce("")                  // deepen 2
       .mockResolvedValueOnce("b763bdd\n__MB_OK__\n");
     expect(await ensureMergeBaseWithMain({ exec, containerId: "c", workdir: "/w" })).toEqual({ found: true, deepened: 2 });
-    expect(exec).toHaveBeenCalledWith("c", expect.stringContaining("git fetch -q --deepen="));
+    // First round unshallows (the guards re-shallow a shallow repo); later rounds deepen.
+    expect(exec.mock.calls[1]![1]).toContain("--unshallow");
+    expect(exec.mock.calls[3]![1]).toContain("--deepen=200");
   });
 
   it("reports honestly when no merge base can be reached", async () => {
