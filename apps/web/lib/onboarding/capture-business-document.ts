@@ -79,7 +79,7 @@ export async function captureBusinessDocument(
   if (!parsed) {
     throw new Error(
       `Unsupported document type: ${input.fileName} (${input.mimeType || "unknown"}). ` +
-        `Upload a PDF, Word doc, or text/markdown file.`,
+        `Upload a PDF, Word, OpenDocument, PowerPoint, or text/markdown file.`,
     );
   }
   // A recognised format DPF cannot read (legacy .doc, RTF, OpenDocument): say

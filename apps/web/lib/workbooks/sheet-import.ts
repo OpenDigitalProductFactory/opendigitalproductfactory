@@ -4,8 +4,16 @@
 // workbook table definition: deduped column names, an inferred field type per
 // column, and typed cell rows. Kept pure + unit-testable; the server action wires
 // it to the .xlsx parser (read-excel-file) and the workbook service.
+// readSheetMatrix is the one file → matrix reader both import actions share: it
+// converts .xls/.ods to .xlsx through the document converter first (BI-81524041).
 
-import { describeUnsupportedFormat, sniffOfficeContainer } from "@/lib/shared/file-parsers";
+import {
+  convertForIngestion,
+  describeUnsupportedFormat,
+  sniffOfficeContainer,
+  type ConvertForIngestion,
+} from "@/lib/shared/file-parsers";
+import { conversionRouteFor } from "@/lib/shared/office-conversion";
 import type { CellValue, FieldType } from "./types";
 
 /** What read-excel-file yields per cell. */
@@ -39,6 +47,51 @@ export function unreadableSheetReason(bytes: Uint8Array): string | null {
     return "This file is not a spreadsheet (it looks like a Word or PowerPoint file). Upload an .xlsx or CSV file.";
   }
   return null;
+}
+
+export type SheetReadResult = { ok: true; matrix: SheetCell[][] } | { ok: false; reason: string };
+
+export type SheetReadDeps = {
+  convert?: ConvertForIngestion;
+  readSheet?: (input: ArrayBuffer) => Promise<SheetCell[][]>;
+};
+
+// The universal entry, not /browser: this runs in server actions, and the
+// browser entry needs a DOMParser that Node does not have (BI-81524041).
+async function defaultReadSheet(input: ArrayBuffer): Promise<SheetCell[][]> {
+  const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/universal");
+  return (await readSheet(input)) as SheetCell[][];
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  return copy;
+}
+
+/**
+ * Read an uploaded spreadsheet (not CSV) into a row matrix. An Excel 97-2003 or
+ * OpenDocument spreadsheet is converted to .xlsx first, so it imports exactly
+ * as an .xlsx does; with no converter it is refused with S0's plain-language
+ * reason. Anything else unreadable is refused before the .xlsx reader sees it.
+ */
+export async function readSheetMatrix(
+  input: ArrayBuffer | Uint8Array,
+  fileName: string,
+  deps: SheetReadDeps = {},
+): Promise<SheetReadResult> {
+  let bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const route = conversionRouteFor(sniffOfficeContainer(bytes), bytes, fileName);
+  if (route?.family === "sheet") {
+    const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const converted = await convertForIngestion(buffer, route, deps.convert);
+    if (!converted.ok) return { ok: false, reason: converted.content.reason };
+    bytes = converted.bytes;
+  } else {
+    const unreadable = unreadableSheetReason(bytes);
+    if (unreadable) return { ok: false, reason: unreadable };
+  }
+  return { ok: true, matrix: await (deps.readSheet ?? defaultReadSheet)(toArrayBuffer(bytes)) };
 }
 
 export const MAX_IMPORT_COLUMNS = 100;

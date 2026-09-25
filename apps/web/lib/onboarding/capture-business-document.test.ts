@@ -94,7 +94,13 @@ describe("captureBusinessDocument", () => {
 
   it("refuses a real Word 97-2003 file with the parser's plain-language reason (BI-65D65EC0)", async () => {
     const legacyDoc = readFileSync(resolve(__dirname, "../shared/__fixtures__/office/plan.doc"));
-    const d = deps({ parse: parseFileContent });
+    // No document converter on this install: S0's reason stands (BI-81524041).
+    const d = deps({
+      parse: (buffer, mimeType, fileName) =>
+        parseFileContent(buffer, mimeType, fileName, {
+          convert: async () => ({ ok: false, error: "not configured", reason: "converter-unavailable" }),
+        }),
+    });
     await expect(
       captureBusinessDocument(
         { organizationId: ORG, fileName: "plan.doc", mimeType: "application/msword", buffer: legacyDoc },
@@ -102,6 +108,21 @@ describe("captureBusinessDocument", () => {
       ),
     ).rejects.toThrow(/Word 97-2003/);
     expect(d.save).not.toHaveBeenCalled();
+  });
+
+  it("captures a real Word 97-2003 file once the converter turns it into .docx (BI-81524041)", async () => {
+    const legacyDoc = readFileSync(resolve(__dirname, "../shared/__fixtures__/office/plan.doc"));
+    const docx = readFileSync(resolve(__dirname, "../shared/__fixtures__/office/plan.docx"));
+    const convert = vi.fn(async () => ({ ok: true as const, data: { bytes: docx, mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" } }));
+    const d = deps({ parse: (buffer, mimeType, fileName) => parseFileContent(buffer, mimeType, fileName, { convert }) });
+    const res = await captureBusinessDocument(
+      { organizationId: ORG, fileName: "plan.doc", mimeType: "application/msword", buffer: legacyDoc },
+      d,
+    );
+    expect(convert).toHaveBeenCalledWith({ input: legacyDoc, from: "doc", to: "docx" });
+    expect(res.textLength).toBeGreaterThan(0);
+    const saved = vi.mocked(d.save!).mock.calls[0]![0];
+    expect(saved.contentText).toContain("Second Chance fosters twelve dogs this quarter.");
   });
 
   it("invokes the enrichment seam when provided and text is present", async () => {

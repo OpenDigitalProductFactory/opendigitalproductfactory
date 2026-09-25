@@ -45,7 +45,7 @@ import {
   resolvePlatformReference,
   getReferenceTargetFields,
 } from "@/lib/workbooks/platform-tables";
-import { inferTableFromSheet, unreadableSheetReason, type SheetCell } from "@/lib/workbooks/sheet-import";
+import { inferTableFromSheet, readSheetMatrix, type SheetCell } from "@/lib/workbooks/sheet-import";
 import { parseDelimitedGrid } from "@/lib/onboarding/roster-import";
 import { mapGridToEmployees } from "@/lib/onboarding/roster-from-grid";
 import { importRoster } from "@/lib/onboarding/roster-import-actions";
@@ -353,7 +353,7 @@ export async function getReferenceTargetFieldsAction(
 }
 
 // ── Spreadsheet import (Phase 3) ────────────────────────────────────────────
-// Parse an uploaded .xlsx/.csv server-side and create a workbook table with
+// Parse an uploaded .xlsx/.xls/.ods/.csv server-side and create a workbook table with
 // inferred columns + typed rows, composing the same validated service the manual
 // flow uses (createTable → addColumn → createRow).
 
@@ -373,11 +373,10 @@ export async function importSheetAction(
       const { columns, rows } = parseDelimitedGrid(text);
       matrix = [columns, ...rows];
     } else {
-      const buffer = await file.arrayBuffer();
-      const unreadable = unreadableSheetReason(new Uint8Array(buffer));
-      if (unreadable) throw new WorkbookError(unreadable, 415);
-      const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
-      matrix = (await readSheet(buffer)) as SheetCell[][];
+      // .xlsx reads directly; .xls/.ods convert to .xlsx first (BI-81524041).
+      const sheet = await readSheetMatrix(await file.arrayBuffer(), file.name);
+      if (!sheet.ok) throw new WorkbookError(sheet.reason, 415);
+      matrix = sheet.matrix;
     }
 
     const { columns, rows, truncated } = inferTableFromSheet(matrix);
