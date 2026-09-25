@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { parseCsv, parseFileContent, sniffOfficeContainer } from "./file-parsers";
+import { parseCsv, parseFileContent, sniffOfficeContainer, type ParseFileDeps } from "./file-parsers";
 
 // Real bytes, saved from Word: an OLE compound file, RTF, OOXML, and the same
 // OOXML file carrying a .doc name (BI-65D65EC0).
@@ -21,7 +21,7 @@ function odfBytes(): Buffer {
   return Buffer.concat([header, name, body]);
 }
 
-vi.mock("read-excel-file/browser", () => ({
+vi.mock("read-excel-file/universal", () => ({
   readSheet: vi.fn(async () => [
     ["Name", "Score"],
     ["Alice", 10],
@@ -103,9 +103,15 @@ describe("sniffOfficeContainer", () => {
   });
 });
 
+// These S0 cases describe an install with no document converter; S3's
+// converter routing is covered in office-conversion.test.ts (BI-81524041).
+const noConverter: ParseFileDeps = {
+  convert: async () => ({ ok: false, error: "no dpf-doctools image is configured", reason: "converter-unavailable" }),
+};
+
 describe("parseFileContent office formats (BI-65D65EC0)", () => {
   it("returns an unsupported result for a real Word 97-2003 file instead of calling mammoth", async () => {
-    const result = await parseFileContent(legacyDoc, "application/msword", "plan.doc");
+    const result = await parseFileContent(legacyDoc, "application/msword", "plan.doc", noConverter);
     expect(result).toMatchObject({ type: "unsupported", format: "legacy-word" });
     if (result?.type !== "unsupported") throw new Error("expected unsupported");
     expect(result.reason).toMatch(/Word 97-2003/);
@@ -114,14 +120,14 @@ describe("parseFileContent office formats (BI-65D65EC0)", () => {
 
   it("never stores RTF control words as document text", async () => {
     for (const [mime, name] of [["application/rtf", "plan.rtf"], ["text/rtf", "plan.rtf"], ["text/plain", "notes.txt"]] as const) {
-      const result = await parseFileContent(rtf, mime, name);
+      const result = await parseFileContent(rtf, mime, name, noConverter);
       expect(result).toMatchObject({ type: "unsupported", format: "rtf" });
       expect(JSON.stringify(result)).not.toContain("\\rtf");
     }
   });
 
   it("returns an unsupported result for an OpenDocument file", async () => {
-    const result = await parseFileContent(odfBytes(), "application/vnd.oasis.opendocument.text", "plan.odt");
+    const result = await parseFileContent(odfBytes(), "application/vnd.oasis.opendocument.text", "plan.odt", noConverter);
     expect(result).toMatchObject({ type: "unsupported", format: "opendocument" });
   });
 
