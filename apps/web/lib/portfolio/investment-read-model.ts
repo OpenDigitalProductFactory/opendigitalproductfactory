@@ -25,6 +25,8 @@ export type InvestmentItemRow = {
   coworkerNeedPortfolioId: string | null;
   epicPortfolioId: string | null;
   activeBuildId: string | null;
+  /** A non-terminal Workroom is bound to the item (design §5.6: in flight). */
+  hasLiveWorkroom: boolean;
   completedAt: Date | null;
 };
 
@@ -60,7 +62,7 @@ function classify(item: InvestmentItemRow, period: { start: Date; end: Date }): 
     return at && at >= period.start && at < period.end ? "delivered" : null;
   }
   if (CLOSED_STATUSES.has(item.status)) return null;
-  return IN_FLIGHT_STATUSES.has(item.status) || item.activeBuildId ? "inFlight" : "ready";
+  return IN_FLIGHT_STATUSES.has(item.status) || item.activeBuildId || item.hasLiveWorkroom ? "inFlight" : "ready";
 }
 
 export function summarizePortfolioInvestment(items: InvestmentItemRow[], now: Date): PortfolioInvestmentSummary {
@@ -131,6 +133,9 @@ export async function loadInvestmentItems(db: Db, period: { start: Date; end: Da
         ORDER BY n."needId" LIMIT 1) AS "coworkerNeedPortfolioId",
       (SELECT MIN(ep."portfolioId") FROM "EpicPortfolio" ep WHERE ep."epicId" = b."epicId") AS "epicPortfolioId",
       b."activeBuildId"  AS "activeBuildId",
+      EXISTS (SELECT 1 FROM "WorkCapsule" w
+               WHERE w."backlogItemId" IN (b."itemId", b."id") AND w."archivedAt" IS NULL
+                 AND w."status" NOT IN ('complete', 'abandoned', 'archived')) AS "hasLiveWorkroom",
       b."completedAt"    AS "completedAt"
     FROM "BacklogItem" b
     LEFT JOIN "DigitalProduct" dp ON dp."id" = b."digitalProductId"

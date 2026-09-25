@@ -85,7 +85,7 @@ describe("proposePortfolioBudgets (AC-2)", () => {
   it("proposes the previous quarter's delivered points per portfolio and states the unplaced share", async () => {
     const done = (itemId: string, stored: string | null, effortSize: string) => ({
       itemId, status: "done", effortSize, jobSize: null, estimateAgreed: null, storedPortfolioId: stored, storedPortfolioDangling: false,
-      productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null,
+      productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasLiveWorkroom: false,
       completedAt: new Date("2026-08-10T00:00:00Z"),
     });
     const db = {

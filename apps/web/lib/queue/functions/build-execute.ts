@@ -18,9 +18,9 @@
  *    upgrade drain suspends on platform.quiescence-cleared rather than being
  *    silently dropped (plan Phase-1; guardrail A3).
  *  - Concurrency: one run per build via the event-keyed concurrency below.
- *    The global admission cap stays with assertWipCapacity() at the
- *    promote/advance call sites — one source of truth, per the plan's
- *    correction (a flat limit here would have serialized builds).
+ *    Admission stays at the promote call sites, by points in flight
+ *    (investment-admission.ts, BI-3430B3A4), and the sandbox pool is the
+ *    physical limit on acquire; a flat limit here would serialize builds.
  *
  * Step outputs are small checkpoint states only; artifacts live in their
  * existing DB homes (by-reference rule, 32MB run-state cap).

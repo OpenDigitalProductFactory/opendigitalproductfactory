@@ -33,7 +33,7 @@ vi.mock("@/lib/product-management/product-management-playbook-refresh", () => ({
 vi.mock("@/lib/governance-data", () => ({ createAuthorizationDecisionLog: mocks.authorizationLog }));
 // Budget reservation (BI-EF265C9A) has its own tests; here it stays out of the way.
 vi.mock("@/lib/portfolio/budget-reservation", () => ({
-  isAutonomousFundingCaller: () => false,
+  isAutonomousCaller: () => false,
   planFundingReservation: async () => ({ kind: "none", reason: "unsized", message: "not under test" }),
   commitFundingReservation: async () => ({ reservationId: "unused" }),
 }));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isAutonomousFundingCaller, planFundingReservation, settlementFor } from "./budget-reservation";
+import { isAutonomousCaller, planFundingReservation, settlementFor } from "./budget-reservation";
 
 const now = new Date("2026-09-25T12:00:00Z");
 
@@ -27,15 +27,15 @@ function planDb(options: { item?: Record<string, unknown> | null; open?: boolean
   };
 }
 
-describe("isAutonomousFundingCaller", () => {
+describe("isAutonomousCaller", () => {
   it("treats a background task, or an agent with no person's session, as autonomous", () => {
-    expect(isAutonomousFundingCaller({ taskRunId: "TR-1", threadId: "t" })).toBe(true);
-    expect(isAutonomousFundingCaller({ agentId: "AGT-1" })).toBe(true);
+    expect(isAutonomousCaller({ taskRunId: "TR-1", threadId: "t" })).toBe(true);
+    expect(isAutonomousCaller({ agentId: "AGT-1" })).toBe(true);
   });
   it("treats a person in a portal thread or an external client session as a person", () => {
-    expect(isAutonomousFundingCaller(undefined)).toBe(false);
-    expect(isAutonomousFundingCaller({ agentId: "AGT-1", threadId: "t" })).toBe(false);
-    expect(isAutonomousFundingCaller({ agentId: "external-claude-code", apiTokenId: "tok" })).toBe(false);
+    expect(isAutonomousCaller(undefined)).toBe(false);
+    expect(isAutonomousCaller({ agentId: "AGT-1", threadId: "t" })).toBe(false);
+    expect(isAutonomousCaller({ agentId: "external-claude-code", apiTokenId: "tok" })).toBe(false);
   });
 });
 

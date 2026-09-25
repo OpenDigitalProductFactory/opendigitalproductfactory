@@ -20,8 +20,8 @@ import { loadPortfolioBudgets, type Period } from "./portfolio-budget";
 
 type ReadDb = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]) => Promise<T> };
 
-/** A caller running inside a background task, or an agent with no person's session behind it, is autonomous. */
-export function isAutonomousFundingCaller(context?: {
+/** A caller running inside a background task, or an agent with no person's session behind it, is autonomous. Shared by funding (BI-EF265C9A) and admission (BI-3430B3A4). */
+export function isAutonomousCaller(context?: {
   taskRunId?: string;
   agentId?: string;
   threadId?: string;
