@@ -54,7 +54,7 @@
     "fast-xml-parser": "^5.10.0",
     "fuse.js": "^7.5.0",
     "gray-matter": "^4.0.3",
-    "imapflow": "^2.0.5",
+    "imapflow": "^2.0.6",
     "inngest": "^4.13.0",
     "jose": "^6.2.12",
     "jsep": "^1.4.0",
