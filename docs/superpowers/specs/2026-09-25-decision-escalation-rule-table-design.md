@@ -229,7 +229,7 @@ The input exists from day one; callers wire it as their facts exist:
   sets `thresholdExceeded` when the amount crosses the organization's configured
   funding threshold, if one is configured. Otherwise it does not set it.
 - `regulated` comes from BI-50DF2A92's `assessJurisdictionCoverage` once that
-  lands. That design (`2026-09-24-jurisdiction-setup-and-coverage-gap-design.md`)
+  lands. The jurisdiction setup and coverage-gap design (BI-50DF2A92)
   is not on `main` yet, so this design defines the input and does not wire it.
   Follow-up BI to wire it; the regulatory ceiling's fail-closed default on the
   ACTION path (`lib/autonomy/regulatory-ceiling.ts`) is out of scope here and is
