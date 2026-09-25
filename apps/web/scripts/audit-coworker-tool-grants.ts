@@ -134,6 +134,11 @@ function loadToolToGrants(): Record<string, string[]> {
       path: "apps/web/lib/tak/banking-tool-grants.ts",
       pattern: /BANKING_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
+    {
+      // Managed-document tools (doc_*, create_presentation; BI-543819B1), spread into TOOL_TO_GRANTS.
+      path: "apps/web/lib/tak/document-tool-grants.ts",
+      pattern: /DOCUMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
   ];
 
   for (const source of sources) {

@@ -28,6 +28,12 @@ A document can be a stored file: a Word, Excel, PowerPoint, OpenDocument or RTF 
 
 While the conversion runs, the page says it is preparing the PDF and searchable text. If the file cannot be converted, the page says why in plain words, and the reason is also recorded in the document's lifecycle history. On an install where document conversion is not set up, nothing is converted and **Download original** still works; the files are converted once conversion becomes available.
 
+## Slide Previews
+
+A presentation a coworker produced (see [Marketing](../customers/marketing.md#ask-for-a-presentation)) shows a preview of every slide in the Current Version panel, so you can read the deck without downloading it. Select a slide to open it at full size. The previews belong to the version you are looking at: when the coworker revises the deck, the new version brings its own previews and the version history keeps the earlier ones.
+
+A presentation you upload yourself has a PDF and searchable text but no slide previews; use **View PDF** to read it.
+
 ## Authoritative State
 
 The managed document record is authoritative for lifecycle state, owner, current version, references, and audit history. A document's source material can still live elsewhere, but the platform record is the place operators check before relying on it.

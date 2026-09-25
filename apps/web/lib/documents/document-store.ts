@@ -89,7 +89,7 @@ export type ManagedDocumentVersion = {
 
 export type ManagedDocumentRendition = {
   id: string;
-  kind: "pdf" | "plain_text";
+  kind: "pdf" | "plain_text" | "preview";
   mimeType: string | null;
   blobId: string | null;
   createdAt: Date;
@@ -161,6 +161,11 @@ async function resolveOrganizationId(db: DocumentStoreDb, organizationId?: strin
   const org = await db.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } });
   if (!org) throw new Error("No Organization row exists for document ownership.");
   return org.id;
+}
+
+/** The organization a new document belongs to when the caller names none: the install's own. */
+export async function resolveDocumentOrganizationId(organizationId?: string | null, db: DocumentStoreDb = prisma): Promise<string> {
+  return resolveOrganizationId(db, organizationId);
 }
 
 function projectDocument(row: any, scores?: { semanticScore?: number; fullTextScore?: number }): ManagedDocument {

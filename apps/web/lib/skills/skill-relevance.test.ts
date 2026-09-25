@@ -136,7 +136,12 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "hr-specialist": 9,
     "inventory-specialist": 14,
     "market-research-analyst": 7,
-    "marketing-specialist": 12,
+    // 12 -> 13: create-presentation (BI-543819B1) is the strategist's only path to
+    // a deck; it backs the create_presentation tool granted in the same change.
+    // Additive capability, not drift. At 13 the set is one over
+    // DEFAULT_SKILL_SUMMARY_CAP, so relevance ranking picks per turn; its narrow
+    // triggerPattern (deck, slides, presentation, pptx) ranks it only when asked.
+    "marketing-specialist": 13,
     "onboarding-coo": 6,
     "ops-coordinator": 13,
     "platform-engineer": 32,

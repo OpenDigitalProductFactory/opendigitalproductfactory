@@ -11,14 +11,16 @@
 // S4's rendition job for this version; that job skips kinds that already
 // exist, so the render's own PDF and text save it a second engine run.
 //
-// Seam: page previews. No rendition kind for them exists yet (S4 owns that
-// enum), so previews are stored as content-addressed DocumentBlobs and returned
-// in page order; S7 (BI-543819B1) shows them on the document page and is where
-// a `preview` rendition kind would be added. Additional formats (an .odp beside
-// a .pptx) are returned the same way.
+// Page previews are content-addressed DocumentBlobs, returned in page order and
+// recorded as the version's `preview` rendition (BI-543819B1, slice S7): its
+// blob is a manifest of the page images (lib/documents/preview-manifest.ts),
+// because the table holds one rendition per kind and a deck has one preview per
+// slide. The document page shows them. Additional formats (an .odp beside a
+// .pptx) are stored as blobs and returned.
 
 import { DocumentRenditionKind, prisma } from "@dpf/db";
 import { DOCUMENT_TEXT_INLINE_LIMIT_BYTES, storeDocumentBlob } from "@/lib/documents/blob-storage";
+import { buildPreviewManifest, PREVIEW_MANIFEST_MIME } from "@/lib/documents/preview-manifest";
 import type { RenderedDocument } from "./render";
 
 export type StoredBlob = { id: string; sha256: string };
@@ -40,7 +42,7 @@ export type RenderStoreDeps = {
   }) => Promise<{ documentId: string; currentVersionId: string | null; version: number }>;
   upsertRendition?: (
     row:
-      | { versionId: string; kind: typeof DocumentRenditionKind.pdf; blobId: string; mimeType: string }
+      | { versionId: string; kind: typeof DocumentRenditionKind.pdf | typeof DocumentRenditionKind.preview; blobId: string; mimeType: string }
       | { versionId: string; kind: typeof DocumentRenditionKind.plain_text; contentText: string; blobId: string | null; mimeType: string },
   ) => Promise<void>;
 };
@@ -70,7 +72,7 @@ async function saveDocument(input: Parameters<NonNullable<RenderStoreDeps["saveD
 
 async function upsertRendition(row: Parameters<NonNullable<RenderStoreDeps["upsertRendition"]>>[0]): Promise<void> {
   const data =
-    row.kind === DocumentRenditionKind.pdf
+    row.kind !== DocumentRenditionKind.plain_text
       ? { blobId: row.blobId, contentText: null, mimeType: row.mimeType }
       : { blobId: row.blobId, contentText: row.contentText, mimeType: row.mimeType };
   await prisma.documentRendition.upsert({
@@ -149,6 +151,15 @@ export async function saveRenderedDocument(
   for (const [index, png] of rendered.previews.entries()) {
     const blob = await put(png, "image/png");
     previews.push({ page: index + 1, blobId: blob.id, sha256: blob.sha256 });
+  }
+  if (previews.length > 0) {
+    const manifest = await put(buildPreviewManifest(previews), PREVIEW_MANIFEST_MIME);
+    await rendition({
+      versionId: saved.currentVersionId,
+      kind: DocumentRenditionKind.preview,
+      blobId: manifest.id,
+      mimeType: PREVIEW_MANIFEST_MIME,
+    });
   }
   return { documentId: saved.documentId, versionId: saved.currentVersionId, version: saved.version, files, previews };
 }

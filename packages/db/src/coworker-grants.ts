@@ -90,7 +90,9 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // mdm-stewardship pack tools (run_mdm_steward_sweep, merge_customer_*,
   // list_mdm_steward_tasks); web_search gates the enrich_customer_account door.
   "data-steward": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "tool_script_exec"],
-  "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
+  // document_write reaches create_presentation (BI-543819B1): the strategist
+  // produces branded decks. agent_registry.json AGT-WS-MARKETING carries it too.
+  "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read", "document_write"],
   "storefront-advisor": [
     "consumer_read",
     "registry_read",
