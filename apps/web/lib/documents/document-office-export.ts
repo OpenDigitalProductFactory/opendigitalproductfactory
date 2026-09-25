@@ -2,7 +2,7 @@
 //
 // A managed document version exports to .docx, .odt or .pdf through the
 // dpf-doctools engine (convertDocument):
-//   - a markdown version goes markdown -> HTML (markdown-html.ts, the page's own
+//   - a markdown version goes markdown -> HTML (markdown-to-html.ts, the page's own
 //     renderer) -> the engine; plain text and HTML take the same HTML path;
 //   - a stored word-processing file (.doc, .docx, .odt, .rtf) converts from its
 //     own format; any office file can export to PDF.
@@ -21,7 +21,7 @@ import { readDocumentBlob, storeDocumentBlob } from "./blob-storage";
 import { convertDocument, type ConversionFailureReason } from "./conversion/convert";
 import { CONVERTER_TARGET_MIME, normalizeMimeType, officeSourceExtension } from "./conversion/formats";
 import { contentFilename } from "./document-content";
-import { markdownToHtmlDocument, plainTextToHtmlDocument } from "./markdown-html";
+import { markdownToHtmlDocument, plainTextToHtmlDocument } from "./markdown-to-html";
 
 export const DOCUMENT_EXPORT_FORMATS = ["docx", "odt", "pdf"] as const;
 export type DocumentExportFormat = (typeof DOCUMENT_EXPORT_FORMATS)[number];

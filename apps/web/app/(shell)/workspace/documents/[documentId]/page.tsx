@@ -7,7 +7,7 @@ import { listManagedDocumentReferences, loadManagedDocument } from "@/lib/docume
 import { loadRenditionTextPreview, renditionFailureMessage } from "@/lib/documents/document-content";
 import { officeSourceExtension } from "@/lib/documents/conversion/formats";
 import { getConverterAvailability } from "@/lib/documents/conversion/availability";
-import { exportableFormats } from "@/lib/documents/document-export";
+import { exportableFormats } from "@/lib/documents/document-office-export";
 import { DocumentExportMenu } from "./DocumentExportMenu";
 import { DocumentFilePanel } from "./DocumentFilePanel";
 import { changeDocumentStateAction } from "../actions";

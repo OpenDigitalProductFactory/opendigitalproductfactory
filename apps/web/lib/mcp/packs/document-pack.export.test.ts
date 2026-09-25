@@ -9,7 +9,7 @@ const documentExport = vi.hoisted(() => ({
   documentExportFailureMessage: (reason: string) => `failed: ${reason}`,
 }));
 vi.mock("@/lib/documents/document-store", () => documentStore);
-vi.mock("@/lib/documents/document-export", () => documentExport);
+vi.mock("@/lib/documents/document-office-export", () => documentExport);
 
 import { DOC_LOAD_EXPORT_INLINE_LIMIT_BYTES, documentPack } from "./document-pack";
 

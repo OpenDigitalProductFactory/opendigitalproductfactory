@@ -2,7 +2,7 @@
   "version": "1",
   "accountableOwner": "data-steward",
   "affectedCopies": [
-    "DocumentRendition rows of kind docx, odt and pdf written by the document export (apps/web/lib/documents/document-export.ts)",
+    "DocumentRendition rows of kind docx, odt and pdf written by the document export (apps/web/lib/documents/document-office-export.ts)",
     "Exported file bytes stored as content-addressed DocumentBlob rows (apps/web/lib/documents/blob-storage.ts storeDocumentBlob)"
   ],
   "privacyAssessment": {
@@ -18,8 +18,8 @@
   },
   "tests": [
     "packages/db/src/document-rendition-export-kinds-migration.test.ts",
-    "apps/web/lib/documents/document-export.test.ts",
-    "apps/web/lib/documents/document-export.docker.test.ts"
+    "apps/web/lib/documents/document-office-export.test.ts",
+    "apps/web/lib/documents/document-office-export.docker.test.ts"
   ],
   "changes": [
     {

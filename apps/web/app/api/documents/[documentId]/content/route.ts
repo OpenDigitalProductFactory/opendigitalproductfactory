@@ -17,7 +17,7 @@ import {
   exportDocumentVersion,
   isDocumentExportFormat,
   type DocumentExportFailureReason,
-} from "@/lib/documents/document-export";
+} from "@/lib/documents/document-office-export";
 
 export const runtime = "nodejs";
 

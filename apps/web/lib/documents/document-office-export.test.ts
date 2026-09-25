@@ -5,7 +5,7 @@ vi.mock("@dpf/db", () => ({
   DocumentRenditionKind: { pdf: "pdf", plain_text: "plain_text", docx: "docx", odt: "odt" },
 }));
 
-import { exportDocumentVersion, isDocumentExportFormat, type DocumentExportDeps } from "./document-export";
+import { exportDocumentVersion, isDocumentExportFormat, type DocumentExportDeps } from "./document-office-export";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -133,7 +133,7 @@ describe("exportDocumentVersion", () => {
 
 describe("exportableFormats", () => {
   it("offers every format for text and word-processing versions and PDF only for other office files", async () => {
-    const { exportableFormats } = await import("./document-export");
+    const { exportableFormats } = await import("./document-office-export");
     expect(exportableFormats("text/markdown")).toEqual(["docx", "odt", "pdf"]);
     expect(exportableFormats("text/plain; charset=utf-8")).toEqual(["docx", "odt", "pdf"]);
     expect(exportableFormats(DOCX)).toEqual(["docx", "odt", "pdf"]);

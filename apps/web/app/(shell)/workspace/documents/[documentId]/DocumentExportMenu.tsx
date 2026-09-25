@@ -5,7 +5,7 @@
 // UX fit: docs/ux-fit/2026-09-25-office-export-documents.ux-fit.json (DI-EECCCF15B277).
 import { Download } from "lucide-react";
 import { Surface } from "@/components/ui/Surface";
-import { DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_LABELS, type DocumentExportFormat } from "@/lib/documents/document-export";
+import { DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_LABELS, type DocumentExportFormat } from "@/lib/documents/document-office-export";
 
 type Props = {
   documentId: string;

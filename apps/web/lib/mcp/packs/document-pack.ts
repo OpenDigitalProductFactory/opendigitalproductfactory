@@ -290,7 +290,7 @@ async function docLoad(params: Record<string, unknown>): Promise<ToolResult> {
     return { success: true, entityId: document.documentId, message: `Loaded document ${document.documentId}.`, data };
   }
   // Export (BI-4865EB4D): the version as a .docx / .odt / .pdf file.
-  const { documentExportFailureMessage, exportDocumentVersion, isDocumentExportFormat } = await import("@/lib/documents/document-export");
+  const { documentExportFailureMessage, exportDocumentVersion, isDocumentExportFormat } = await import("@/lib/documents/document-office-export");
   if (!isDocumentExportFormat(exportFormat)) {
     return { success: false, message: "exportFormat must be docx, odt or pdf.", error: "exportFormat must be docx, odt or pdf." };
   }

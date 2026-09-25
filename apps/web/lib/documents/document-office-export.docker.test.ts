@@ -21,7 +21,7 @@ vi.mock("@dpf/db", () => ({
 
 import { isPinnedImageReference } from "./conversion/command";
 import { convertDocument, createConversionLimiter } from "./conversion/convert";
-import { exportDocumentVersion, type DocumentExportDeps } from "./document-export";
+import { exportDocumentVersion, type DocumentExportDeps } from "./document-office-export";
 import { parseDocx } from "@/lib/shared/file-parsers";
 
 const IMAGE = process.env.DPF_DOCTOOLS_TEST_IMAGE?.trim() ?? "";

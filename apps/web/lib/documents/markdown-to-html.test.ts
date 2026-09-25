@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { markdownToHtmlDocument } from "./markdown-html";
+import { markdownToHtmlDocument } from "./markdown-to-html";
 
 const PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

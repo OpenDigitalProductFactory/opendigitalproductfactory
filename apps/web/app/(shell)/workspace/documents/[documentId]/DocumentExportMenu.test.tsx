@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-vi.mock("@/lib/documents/document-export", () => ({
+vi.mock("@/lib/documents/document-office-export", () => ({
   DOCUMENT_EXPORT_FORMATS: ["docx", "odt", "pdf"],
   DOCUMENT_EXPORT_LABELS: { docx: "Word (.docx)", odt: "OpenDocument (.odt)", pdf: "PDF (.pdf)" },
 }));
