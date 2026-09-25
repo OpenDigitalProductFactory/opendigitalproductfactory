@@ -290,6 +290,7 @@ model Agent {
   payrollTaxRulesProposed PayrollTaxRule[] @relation("PayrollTaxRuleProposedBy")
   epicPortfoliosConfirmed EpicPortfolio[]  @relation("EpicPortfolioConfirmedByAgent")
   portfolioBudgetsSet     PortfolioBudgetPeriod[] @relation("PortfolioBudgetSetByAgent")
+  budgetReservations      BudgetReservation[]     @relation("BudgetReservationActorAgent")
 
   @@index([portfolioId]) // FK-leading (spine): active-agents-per-portfolio groupBy, apps/web/lib/evaluate/portfolio-data.ts:72
 }

@@ -251,12 +251,13 @@ const definitions: ToolDefinition[] = [
   {
     name: "approve_demand_for_funding",
     description:
-      "Route a scored demand item's funding decision through the organization's own WWWD stance (governed, audited) and, if approved, advance it to the 'ready' funnel stage so it can be promoted to build. This is the investment-approval gate: the decision is recorded to the decision ledger and surfaces in the decision-review workspace. When the org's stance escalates or defers, the item stays at its current stage for a human call.",
+      "Route a scored demand item's funding decision through the organization's own WWWD stance (governed, audited) and, if approved, advance it to the 'ready' funnel stage so it can be promoted to build. This is the investment-approval gate: the decision is recorded to the decision ledger and surfaces in the decision-review workspace. When the org's stance escalates or defers, the item stays at its current stage for a human call. Funding reserves the item's points against its portfolio's budget for the quarter; past the allocation an autonomous caller is refused and a person must give overrideReason.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "The scored demand item to consider funding (must have a demandScore)." },
         rationale: { type: "string", description: "Optional short reason recorded with the funding decision." },
+        overrideReason: { type: "string", description: "Required only when this approval takes the portfolio past its quarterly budget; recorded with the reservation." },
       },
       required: ["itemId"],
     },

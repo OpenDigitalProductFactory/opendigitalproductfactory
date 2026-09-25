@@ -118,6 +118,22 @@ export async function attributeBacklogPortfolio(
   return resolved;
 }
 
+/**
+ * One item's portfolio with the path that attributed it, stored portfolioId
+ * first (BI-EF265C9A). Returns null when the item does not exist.
+ */
+export async function resolveBacklogItemPortfolio(
+  itemId: string,
+  options: { db?: BacklogPortfolioClient } = {},
+): Promise<BacklogPortfolioResolution | null> {
+  const db = options.db ?? (prisma as unknown as BacklogPortfolioClient);
+  const item = (await db.backlogItem.findUnique({
+    where: { itemId },
+    select: LINK_SELECT,
+  })) as LinkedItem | null;
+  return item ? resolveBacklogPortfolioWithPath(item) : null;
+}
+
 /** Backfill portfolioId across all backlog items (idempotent). */
 export async function backfillBacklogPortfolios(
   options: { db?: BacklogPortfolioClient } = {},

@@ -661,7 +661,8 @@ async function linkBacklogItemToEpic(
 const handlers: Record<string, ToolPackHandler> = {
   create_backlog_item: (params, userId, context) => createBacklogItem(params, userId, context),
   triage_backlog_item: (params) => triageBacklogItem(params),
-  retire_backlog_item: (params, userId, context) => retireBacklogItem(params, userId, context),
+  retire_backlog_item: (params, userId, context) =>
+    settleReservationsAfter(params, retireBacklogItem(params, userId, context)),
   size_backlog_item: (params) => sizeBacklogItem(params),
   process_backlog_for_build_studio: (params, userId, context) => processBacklogForBuildStudio(params, userId, context),
   update_backlog_item: (params, userId, context) =>
@@ -672,10 +673,31 @@ const handlers: Record<string, ToolPackHandler> = {
   list_epics: (params) => listEpics(params),
   list_backlog_items: (params) => listBacklogItems(params),
   get_backlog_item: (params, _userId, context) => getBacklogItem(params, context?.agentId ?? null),
-  update_backlog_item_status: (params, userId, context) => updateBacklogItemStatus(params, userId, context),
+  update_backlog_item_status: (params, userId, context) =>
+    settleReservationsAfter(params, updateBacklogItemStatus(params, userId, context)),
   link_backlog_item_to_epic: (params, userId, context) => linkBacklogItemToEpic(params, userId, context),
   get_next_recommended_work: (params) => getNextRecommendedWork(params),
 };
+
+/**
+ * Settle the item's budget reservation right after a status change
+ * (BI-EF265C9A). Best-effort: the scheduled sweep settles anything this misses,
+ * so a failure here never fails the status change.
+ */
+async function settleReservationsAfter(params: Record<string, unknown>, result: Promise<ToolResult>): Promise<ToolResult> {
+  const outcome = await result;
+  const itemId = typeof params["itemId"] === "string" ? params["itemId"] : null;
+  if (outcome.success && itemId) {
+    try {
+      const { settleBudgetReservations } = await import("@/lib/portfolio/budget-reservation");
+      const { prisma } = await import("@dpf/db");
+      await settleBudgetReservations(prisma as never, { itemIds: [itemId] });
+    } catch {
+      // the scheduled sweep settles it
+    }
+  }
+  return outcome;
+}
 
 export const backlogPack: ToolPack = {
   packId: "backlog",
