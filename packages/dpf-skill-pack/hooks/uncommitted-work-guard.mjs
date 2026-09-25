@@ -24,6 +24,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
@@ -32,7 +33,7 @@ import {
   buildUnattributedWarning,
   findLosableWork,
   subtractBaseline,
-  workSignature,
+  warnedSetSignature,
 } from "./uncommitted-work-scan.mjs";
 
 const STATE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -79,16 +80,21 @@ function sessionIdOf(payload) {
 }
 
 // Per-repository, per-session state under the git common dir: never tracked,
-// shared by every worktree of the clone, gone with the clone.
+// shared by every worktree of the clone, gone with the clone. When git cannot
+// name that dir, fall back to the OS temp dir keyed by the repo path, so the
+// once-per-set promise does not silently lapse into warning on every Stop.
 function stateRoot(baseDir) {
   const r = spawnSync("git", ["-C", baseDir, "rev-parse", "--git-common-dir"], {
     encoding: "utf8",
     timeout: 10_000,
   });
-  if (r.status !== 0 || !r.stdout?.trim()) return null;
-  const common = r.stdout.trim();
-  const abs = isAbsolute(common) ? common : resolve(baseDir, common);
-  return join(abs, "dpf-hook-state", "uncommitted-work-guard");
+  if (r.status === 0 && r.stdout?.trim()) {
+    const common = r.stdout.trim();
+    const abs = isAbsolute(common) ? common : resolve(baseDir, common);
+    return join(abs, "dpf-hook-state", "uncommitted-work-guard");
+  }
+  const repoKey = createHash("sha256").update(resolve(baseDir)).digest("hex").slice(0, 16);
+  return join(tmpdir(), "dpf-hook-state", "uncommitted-work-guard", repoKey);
 }
 
 function sessionDir(baseDir, sessionId) {
@@ -150,11 +156,11 @@ function readBaseline(dir) {
   }
 }
 
-// True exactly once per session for a given set of paths-in-a-given-state.
+// True exactly once per session for a given dirty set (paths + status codes).
 // An exclusive create makes this race-free when two hooks files both run it.
 function claimFirstWarning(dir, hits) {
   if (!dir) return true;
-  const sig = createHash("sha256").update(workSignature(hits)).digest("hex").slice(0, 32);
+  const sig = createHash("sha256").update(warnedSetSignature(hits)).digest("hex").slice(0, 32);
   try {
     mkdirSync(dir, { recursive: true });
     closeSync(openSync(join(dir, `warned-${sig}`), "wx"));
@@ -164,15 +170,18 @@ function claimFirstWarning(dir, hits) {
   }
 }
 
+// Stop accepts `hookSpecificOutput.additionalContext`; SessionEnd does not —
+// Claude Code rejects it ("Hook JSON output validation failed"). SessionEnd
+// cannot reach the model anyway, so it tells the operator via `systemMessage`.
+function claudeHookOutput(warning, hookEventName) {
+  if (hookEventName === "Stop") {
+    return { hookSpecificOutput: { hookEventName, additionalContext: warning } };
+  }
+  return { systemMessage: warning };
+}
+
 function emitClaudeWarning(warning, hookEventName) {
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName,
-        additionalContext: warning,
-      },
-    }),
-  );
+  process.stdout.write(JSON.stringify(claudeHookOutput(warning, hookEventName)));
 }
 
 function main() {
@@ -242,9 +251,12 @@ function main() {
   // blocked the turn from ending 9 consecutive times").
   if (stopHookActive) process.exit(0);
 
-  // `stop_hook_active` resets every turn, so it alone still repeated the same
-  // list at the end of every turn. Say each distinct set once per session;
-  // a new or further-edited file changes the set and is reported.
+  // `stop_hook_active` resets every turn, and some hosts (the desktop Code tab,
+  // 2026-09-25) never set it at all, so it alone still repeated the same list
+  // at the end of every turn. Say each distinct set once per session, keyed on
+  // paths and status codes — not mtimes, which a regenerator such as the
+  // bootstrap's `.mcp.json` write changes without changing the set. A new
+  // path, or a path whose status changes, is a new set and is reported.
   if (!claimFirstWarning(dir, losable)) process.exit(0);
 
   emitClaudeWarning(warning, hookEventName);
