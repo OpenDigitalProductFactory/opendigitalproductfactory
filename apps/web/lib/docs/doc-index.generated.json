@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 719,
+  "pageCount": 720,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9532,6 +9532,27 @@
         "7-the-plan-to-accommodate-impacted-organisations-phased",
         "8-suggested-forum-flow-architects-audience",
         "9-key-sources"
+      ]
+    },
+    "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md": {
+      "publicHref": "/strategy/2026-09-us-dependency-inventory-and-sovereign-channel/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "us-vendor-dependency-inventory-the-sovereign-open-source-channel-sept-2026",
+        "1-classification",
+        "2-inventory",
+        "21-required-on-the-supported-install-path-the-ones-that-matter",
+        "22-operator-opt-in-not-structural-disclose-dont-remove",
+        "23-required-only-for-a-specific-feature",
+        "24-oss-us-low-risk-sbom-disclosure-only",
+        "3-mapping-onto-work-that-already-exists",
+        "4-tappaas-verified-facts-sept-2026",
+        "5-is-the-sovereign-open-source-ecosystem-a-valid-path-to-market",
+        "51-parties-plausibly-interested-to-qualify-not-claims-of-interest",
+        "52-caveats-dont-overclaim",
+        "6-recommended-next-steps"
       ]
     },
     "docs/testing/archetype-audit-plan.md": {

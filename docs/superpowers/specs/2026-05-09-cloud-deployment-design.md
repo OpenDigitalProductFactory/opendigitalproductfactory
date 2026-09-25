@@ -368,7 +368,12 @@ canonical deployment contracts independent.
   Contributors (2026)"; team size and release cadence aren't
   documented in pages reviewed. Run TAPPaaS through the AGENTS.md §9
   Tool Evaluation Pipeline before committing DPF to a hard
-  dependency.
+  dependency. *Update 2026-09-25:* founders, Codeberg forge, MPL-2.0
+  licence, module template and FOSDEM 2026 positioning are now
+  verified — see
+  [US-dependency inventory §4](../../strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md#4-tappaas-verified-facts-sept-2026).
+  Funding, legal entity, release cadence and catalogue vetting remain
+  open.
 - **Upstream IdP federation timing:** when does TAPPaaS's
   `identity:identity` automation reach the maturity bar where DPF can
   hard-depend on it (vs treating it as optional upstream OIDC)?
