@@ -6,6 +6,7 @@ status: draft
 
 **Backlog:** `BI-7AE90091`
 **Extends:** [Coordinated Workrooms](2026-09-03-coordinated-workrooms-design.md) — supersedes its Phase E (COO surface) by adding the allocation dimension the surface was missing.
+**Budget side:** [Portfolio budgets and investment-weighted WIP](2026-09-24-portfolio-budget-and-investment-wip-design.md) (2026-09-24) holds the investment budget per portfolio and replaces the build count cap with points in flight; this design remains the capacity side for the weekly AI pool, and its board is a candidate host for the budget tie-out.
 
 ## 1. The question this answers
 
