@@ -215,7 +215,7 @@ async function quiescenceRefusalResult(
     readOperationsAllowed: true,
     cleanupOperationsAllowed: [...QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS],
     implications:
-      "Mutating MCP writes are refused while the portal is quiescing. Retry after quiescence clears; cleanup-safe lease release remains available.",
+      "Mutating MCP writes are refused while the portal is quiescing. Retry after quiescence clears; lease release and renewal remain available.",
   };
   return {
     content: [
