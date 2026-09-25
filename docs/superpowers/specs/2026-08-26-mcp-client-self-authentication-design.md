@@ -619,17 +619,25 @@ except loopback).
    `PUBLIC_URL` is chosen without operator input in this order: an explicit
    operator DNS name; the machine's DNS name when the network resolves it to
    one of the machine's own addresses (forward lookup verified at setup);
-   otherwise `https://localhost`. `PUBLIC_URL_ALIASES` carries the loopback
-   spellings, so a browser that types `localhost` or `127.0.0.1` is redirected
-   rather than refused. The portal certificate's SANs are the canonical host
-   plus every alias, and a changed name set reissues the certificate.
+   otherwise `https://localhost`. The portal certificate's SANs are the
+   canonical host plus the loopback spellings (`localhost`, `127.0.0.1`), and
+   a changed name set reissues the certificate. `PUBLIC_URL_ALIASES` stays
+   empty: an alias is served rather than redirected, which would give the
+   browser and its cookies a second origin; every other host is redirected to
+   the canonical one (corrected 2026-09-25 during S1).
 2. **https always.** Every install runs the organization CA and `portal-tls`
    in authority mode by default. Claude refuses OAuth over http
    (BI-46B636B0), and one origin cannot be http for one client and https for
    another without splitting token audiences.
 3. **The machine trusts its own CA and knows its address (S2).** Setup adds
-   the root to the OS machine trust store without an interactive dialog and
-   persists `DPF_MCP_URL` and `NODE_EXTRA_CA_CERTS` for the installing user.
+   the root to the installing user's trust store and persists `DPF_MCP_URL`
+   and `NODE_EXTRA_CA_CERTS` for that user. The installers do not run
+   elevated, so the operating system asks once: the Windows certificate
+   confirmation, the macOS keychain password, or a Linux `sudo` password.
+   That prompt is the operating system's own floor; a declined prompt leaves
+   the install working over https with a browser warning, reported by setup
+   (corrected 2026-09-25 during S1; the root install ships with S1 because a
+   canonical https redirect without trust would show a warning).
 4. **One connector per client, owned by the plugin (S3).** Every plugin
    descriptor is URL-only, `${DPF_MCP_URL:-<loopback https default>}`, with
    no bearer header on https; Claude keeps the scope pin. Writers of a second
