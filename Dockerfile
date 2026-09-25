@@ -29,6 +29,7 @@ COPY patches/ ./patches/
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
 COPY scripts/sbom/generate-platform-sbom.mjs ./scripts/sbom/
+COPY scripts/lib/pnpm-lock.mjs ./scripts/lib/
 COPY .github/workflows/publish-image.yml ./.github/workflows/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
