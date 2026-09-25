@@ -9,6 +9,7 @@ status: active
   - `BI-6EA9E25A` (L0.1): the umbrella for this plan
   - `BI-9A44B227` (L0.2)
   - `BI-4690CB37` (L0.3)
+- **Canonical design (objectives and acceptance criteria):** `docs/superpowers/specs/2026-09-25-localization-foundation-design.md`
 - **Spec:** `docs/superpowers/specs/2026-09-24-localization-and-multi-currency-architecture-design.md`, §5.1–5.4, §5.13 and §9.
 - **Kernel decisions:**
   - `DI-ADAE8489B6A2`: an owned catalog over native `Intl`, not next-intl.
