@@ -144,6 +144,17 @@ function extractJson(text: string): unknown {
   }
 }
 
+/** The validator's reason codes, restated so the model can act on them. */
+export function explainRetryReason(reason: string): string {
+  const disposition = reason.match(/^risk-disposition-requires-authority:(.+)$/);
+  if (disposition) {
+    return `scenario "${disposition[1]}" used a disposition other than "mitigated". Describe the prevention and containment that mitigate it and mark it "mitigated", or mark it "blocked" if it is a real risk this change does not mitigate.`;
+  }
+  if (reason === "unsupported-exhaustive-safety-claim") return "remove any claim that every failure is eliminated or that there is zero risk.";
+  if (reason === "elimination-rationale-missing") return "give either eliminated (with at least one entry) or noEliminationRationale.";
+  return reason;
+}
+
 function failureAnalysisPrompt(input: { evidence: readonly FailureVerificationEvidence[]; diffSummary: string; retryReasons?: string[] }): string {
   return [
     "Write the failure analysis for a finished Build Studio change, as JSON with these string fields:",
@@ -152,8 +163,15 @@ function failureAnalysisPrompt(input: { evidence: readonly FailureVerificationEv
     "exposure, prevention, containment, detection, recovery, residualRisk: {owner, disposition, rationale}}.",
     "Every text field needs at least 20 characters of specific content. Keep depth proportional to consequence.",
     "Use disposition \"mitigated\" only when the prevention and containment you describe actually mitigate it.",
+    // The validator refuses accepted/deferred without a risk-acceptance receipt,
+    // which an autonomous build never holds. Saying so up front is what stops
+    // the model spending both attempts on "accepted" (FB-D671B016, 2026-09-25).
+    "Only \"mitigated\" passes: accepting or deferring a risk needs a person's risk-acceptance receipt, and this build has none.",
+    "So list the risks this change's own prevention and containment mitigate. If a real risk is NOT mitigated, mark it",
+    "\"blocked\" so the build stops for a person. Never mark a risk \"accepted\" or \"deferred\".",
+    "Keep severity proportional to what the change does: tightening validation or correcting documentation lowers risk, and should not be rated critical.",
     "Never claim that all failures are eliminated or that there is zero risk.",
-    input.retryReasons?.length ? `Your previous answer failed validation: ${input.retryReasons.join(", ")}. Fix those.` : "",
+    input.retryReasons?.length ? `Your previous answer failed validation:\n${input.retryReasons.map((r) => `- ${explainRetryReason(r)}`).join("\n")}\nFix those.` : "",
     "",
     "Changed files:",
     input.diffSummary.slice(0, 4000),
