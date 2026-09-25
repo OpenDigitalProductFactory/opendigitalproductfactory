@@ -14,8 +14,8 @@ export type AgentUploadOutcome =
 
 /** File extensions the coworker upload endpoint accepts (mirrors ALLOWED_EXTENSIONS server-side). */
 export const ACCEPTED_UPLOAD_EXTENSIONS = [
-  "csv", "xlsx", "pdf", "doc", "docx", "txt", "json", "md", "xml", "yaml", "yml",
-  "tsv", "log", "ppt", "pptx", "rtf", "png", "jpg", "jpeg", "gif", "webp",
+  "csv", "xlsx", "xls", "ods", "pdf", "doc", "docx", "odt", "txt", "json", "md", "xml", "yaml", "yml",
+  "tsv", "log", "ppt", "pptx", "odp", "rtf", "png", "jpg", "jpeg", "gif", "webp",
 ] as const;
 
 /** The `accept` attribute string for a file <input>, derived from the allow-list. */

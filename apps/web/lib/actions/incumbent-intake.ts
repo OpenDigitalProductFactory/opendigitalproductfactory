@@ -4,7 +4,7 @@ import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { parseDelimitedGrid } from "@/lib/onboarding/roster-import";
-import { inferTableFromSheet, unreadableSheetReason, type SheetCell } from "@/lib/workbooks/sheet-import";
+import { inferTableFromSheet, readSheetMatrix, type SheetCell } from "@/lib/workbooks/sheet-import";
 import {
   createIncumbentApplication,
   type IncumbentIntakeInput,
@@ -29,7 +29,7 @@ export async function intakeIncumbentApplication(
   return result;
 }
 
-// D2 P2: spreadsheet import. Parses an uploaded CSV/TSV/XLSX into a row matrix
+// D2 P2: spreadsheet import. Parses an uploaded CSV/TSV/XLSX/XLS/ODS into a row matrix
 // (the same path workbooks.ts uses), then intakes every row through the P1 core.
 // The file→matrix→rows parsing is the only I/O here; the mapping + orchestration
 // live in the unit-tested lib/incumbent/spreadsheet.ts core.
@@ -48,11 +48,9 @@ export async function importIncumbentSpreadsheet(
     const { columns, rows } = parseDelimitedGrid(text);
     matrix = [columns, ...rows];
   } else {
-    const buffer = await file.arrayBuffer();
-    const unreadable = unreadableSheetReason(new Uint8Array(buffer));
-    if (unreadable) throw new Error(unreadable);
-    const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
-    matrix = (await readSheet(buffer)) as SheetCell[][];
+    const sheet = await readSheetMatrix(await file.arrayBuffer(), file.name);
+    if (!sheet.ok) throw new Error(sheet.error);
+    matrix = sheet.data;
   }
 
   const { rows } = inferTableFromSheet(matrix);

@@ -12643,6 +12643,17 @@
         "what-you-can-do"
       ]
     },
+    "docs/user-guide/workspace/supported-file-formats.md": {
+      "publicHref": "/user-guide/workspace/supported-file-formats/",
+      "portalHref": "/docs/workspace/supported-file-formats",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "which-files-are-read",
+        "when-the-converter-is-off"
+      ]
+    },
     "docs/user-guide/workspace/work-rooms.md": {
       "publicHref": "/user-guide/workspace/work-rooms/",
       "portalHref": "/docs/workspace/work-rooms",
