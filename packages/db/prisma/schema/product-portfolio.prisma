@@ -22,6 +22,7 @@ model Portfolio {
   valueStreamTeams              ValueStreamTeam[]
   workQueues                    WorkQueue[]
   budgetPeriods                 PortfolioBudgetPeriod[]
+  budgetReservations            BudgetReservation[]
 }
 
 /// One portfolio's investment budget for one quarter, in points (BI-9EC60FE0,
@@ -947,4 +948,42 @@ model ServiceOffering {
 
   @@index([digitalProductId])
   @@index([status])
+}
+
+// BudgetReservation.state — where a funded item's points stand against its
+// portfolio's quarterly budget (BI-EF265C9A).
+enum BudgetReservationState {
+  reserved
+  consumed
+  released
+}
+
+/// Points a funding approval reserved against a portfolio's quarterly budget
+/// (BI-EF265C9A, EP-PORTFOLIO-BUDGET-WIP). Reserved on approval, consumed when
+/// the item is done, released when it is retired or deferred; a re-size adjusts
+/// the points and records the change. One open (reserved) row per item.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=operational,financial owner=founder-business-owner steward=data-steward
+model BudgetReservation {
+  id             String                 @id @default(cuid())
+  backlogItemId  String
+  backlogItem    BacklogItem            @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  portfolioId    String
+  portfolio      Portfolio              @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  periodStart    DateTime
+  periodEnd      DateTime
+  points         Int
+  state          BudgetReservationState @default(reserved)
+  /// The person's reason for approving past the allocation; null when within it.
+  overrideReason String?
+  actorId        String?
+  actor          User?                  @relation("BudgetReservationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorAgentId   String?
+  actorAgent     Agent?                 @relation("BudgetReservationActorAgent", fields: [actorAgentId], references: [agentId], onDelete: SetNull)
+  createdAt      DateTime               @default(now())
+  settledAt      DateTime?
+
+  @@index([backlogItemId])
+  @@index([portfolioId, periodStart, state])
+  @@index([actorId])
+  @@index([actorAgentId])
 }

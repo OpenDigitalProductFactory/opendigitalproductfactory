@@ -253,7 +253,7 @@ export async function sweepDuplicateDemandHandler(params: Record<string, unknown
 export async function approveDemandForFundingHandler(
   params: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string; agentId?: string; threadId?: string; callerClient?: string; apiTokenId?: string; authSource?: string },
+  context?: { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string; callerClient?: string; apiTokenId?: string; authSource?: string },
 ): Promise<ToolResult> {
   const itemId = String(params["itemId"] ?? "");
   const item = await prisma.backlogItem.findUnique({
@@ -330,6 +330,19 @@ export async function approveDemandForFundingHandler(
     };
   }
 
+  // Budget first (BI-EF265C9A): an approval past the portfolio's allocation is
+  // refused for an autonomous caller and needs a recorded reason from a person.
+  const budgetReservation = await import("@/lib/portfolio/budget-reservation");
+  const reservationPlan = await budgetReservation.planFundingReservation(prisma as never, {
+    itemId,
+    now: new Date(),
+    autonomous: budgetReservation.isAutonomousFundingCaller(context),
+    overrideReason: typeof params["overrideReason"] === "string" ? params["overrideReason"] : null,
+  });
+  if (reservationPlan.kind === "refuse") {
+    return { success: false, error: reservationPlan.code, message: reservationPlan.message };
+  }
+
   const { evaluateOrgBusinessDecisionGate } = await import("@/lib/decision-perspective/org-business-gate");
   const rationale = typeof params["rationale"] === "string" ? (params["rationale"] as string).trim() : "";
   const decision = await evaluateOrgBusinessDecisionGate({
@@ -374,6 +387,9 @@ export async function approveDemandForFundingHandler(
         message: transition.message,
       };
     }
+    if (reservationPlan.kind === "reserve") {
+      await budgetReservation.commitFundingReservation(prisma as never, reservationPlan, { userId, agentId: context?.agentId ?? null });
+    }
     // AI-led execution (EP-DELIVERY-FLOW BI-A6648529): crossing the bet pulls a
     // coworker forward. Kernel decision (high conf) = ask-first — raise a
     // coworker-pickup offer for a human to approve, not an autonomous claim.
@@ -408,6 +424,7 @@ export async function approveDemandForFundingHandler(
         orgProfileSelected: decision.orgProfileSelected,
         demandScore: item.demandScore,
         investmentBucket: item.investmentBucket,
+        budget: budgetOutcome(reservationPlan, funded),
       },
       recordedById: userId,
       recordedByAgentId: context?.agentId ?? null,
@@ -433,8 +450,20 @@ export async function approveDemandForFundingHandler(
       interactionId: decision.interactionId,
       outcomeType: decision.evaluation.outcomeType,
       orgProfileSelected: decision.orgProfileSelected,
+      budget: budgetOutcome(reservationPlan, funded),
     },
   };
+}
+
+/** What funding did to the portfolio budget, for the decision record and the caller. */
+function budgetOutcome(
+  plan: Awaited<ReturnType<typeof import("@/lib/portfolio/budget-reservation").planFundingReservation>>,
+  funded: boolean,
+) {
+  if (plan.kind === "reserve") {
+    return { reserved: funded, points: plan.points, portfolioId: plan.portfolioId, overrideReason: plan.overrideReason, warning: plan.warning };
+  }
+  return { reserved: false, reason: plan.kind === "none" ? plan.reason : plan.code, message: plan.message };
 }
 
 export async function runCapacityDrainHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
