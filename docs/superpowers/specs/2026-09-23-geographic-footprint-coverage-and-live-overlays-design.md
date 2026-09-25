@@ -6,7 +6,7 @@ status: draft
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft — research complete; decisions recorded 2026-09-23 with WWMD evidence, two open (§9) |
+| **Status** | Draft — research complete; all §9 decisions recorded with WWMD evidence (2026-09-25) |
 | **Created** | 2026-09-23 |
 | **Author** | Claude Opus 5.5 for Mark Bodman |
 | **Amends** | [2026-07-21 Spatial Operational Views](./2026-07-21-spatial-operational-views-design.md) — does not supersede it |
@@ -103,10 +103,10 @@ The people involved are inspectors, who may be staff, board volunteers or a cont
 - **Re-inspection** is a scheduled follow-up on the same case at the cure deadline, not a fresh finding.
 - **Map role:** this is the archetype's most important map. The inspector drives the community with the phone following their GPS position, and every home shows its standing at a glance.
 
-**Incumbent benchmark (operator screenshots, 2026-09-25).** The details are generic, because the screenshots show a real community and are not stored:
+**Incumbent benchmark (operator screenshots, 2026-09-25).** The product is **Smartwebs Mobile Offline**; its [App Store map screenshot](https://apps.apple.com/us/app/smartwebs-mobile-offline/id823768927) matches the operator's photos. Community details are generic, because the screenshots show a real community and are not stored:
 
 - a street basemap with one house icon per lot at a geocoded point, labelled by house number;
-- a status colour per home (four colours, some two-toned), with extra markers for documents and a letter code;
+- a status colour per home (four colours, some two-toned), with extra markers for documents and a letter code. A black **"C"** marks an open violation in its cure period ([Smartwebs Violations user guide](https://solutions.smartwebs.com/en-us/smartwebs-solutions/user-guide-violations-)). The house colours on the map are not publicly documented; green appears to mean no violations and red open violations;
 - phone controls: Tracking (GPS follow-me), Recenter, Legend, Filter and a compass;
 - tap a home to see its violation history.
 
@@ -121,7 +121,10 @@ Zoomed out, its labels pile up unreadably.
 
 **DPF improves on:**
 
-- *Accessibility:* status carries colour **plus** a letter or shape, because colour alone fails WCAG. States map to the Work Case: open violation, in cure period, re-inspection due, escalated, clear.
+- *Layered status, not one colour:* every incumbent shows more than one kind of open item per home. For example, [HOALife](https://help.hoalife.com/article/w6nwuyupj0-mobile-inspector-app-user-guide) distinguishes a new violation from a previous one and adds notes, and Vantaca uses separate markers for violations, work orders, architectural requests and closings. DPF's home marker therefore has two parts:
+  - a **base** set by the highest-severity open violation stage (none, courtesy, notice *n*, cure, hearing, fine);
+  - **badges** for an open architectural request, an open work order, notes, and "in cure".
+- *Accessibility:* each state carries a letter or shape as well as colour, because colour alone fails WCAG. The legend is in the product; it never depends on a help article, which is where Smartwebs leaves its map legend today.
 - *Density:* clustering and label collision at low zoom.
 - *Offline:* the community's region pack lives on the phone.
 
@@ -147,7 +150,7 @@ Zoomed out, its labels pile up unreadably.
   - a **point** for a tree, light or gate;
   - a **boundary** for a lawn zone, pool enclosure or pond.
 - **Recurrence reuses `RecurrenceSchedule`** (RFC 5545 RRULE, the platform's one recurrence primitive; see `ai-coworker.prisma:135` and its canonical-primitive note). Examples: trim yearly in the dormant season; mow weekly in season; pool chemistry twice weekly and inspection annually. Each occurrence materializes a work item for the assigned vendor. No parallel scheduler.
-- **Why boundaries matter:** a lawn contract covers a drawn area, so the vendor knows exactly what is and is not in scope, and a dispute about "you missed the strip by the entrance" has an answer. The boundary travels with the work order as a snapshot. How the vendor opens it (expiring link or portal account) is open in §9.
+- **Why boundaries matter:** a lawn contract covers a drawn area, so the vendor knows exactly what is and is not in scope, and a dispute about "you missed the strip by the entrance" has an answer. The boundary travels with the work order as a snapshot. The vendor opens it through a signed, expiring link for that one work order, with no login (§9).
 - **Substrate gap:** there is no maintained-asset record. `FixedAsset` is a finance record, and `Resource` is bookable capacity (the pool is already a bookable amenity through `Resource`). Before proposing anything new, check whether a common-area feature can be a `Resource` / `CustomerSiteNode` with maintenance attributes, versus a new typed record. This is `dpf-verify-substrate-first` work and is not decided here.
 - **Tree specifics:** species, size, last trimmed, next due, and an arborist note are attributes, not map layers. The map shows only where the tree is.
 
@@ -177,6 +180,9 @@ Internal live data (work-order status, technician position, occupancy) is alread
 | **SuiteCRM** | Bundled Google Maps module; cron geocoding cached in custom fields ([docs](https://docs.suitecrm.com/admin/administration-panel/google-maps/)) | **Adopt** batch geocode-and-cache; **reject** Google, whose terms allow caching coordinates for only 30 days ([policy](https://developers.google.com/maps/documentation/geocoding/policies)) |
 | **Traccar** | MapLibre, switchable basemaps, weather/traffic overlays ([DeepWiki](https://deepwiki.com/traccar/traccar-web/3-map-system)) | **Adopt** overlays as switchable layers over one engine |
 | **Grafana Geomap** | Chose OpenLayers over Leaflet for robustness; accepts a MapLibre style as a basemap ([PR #36188](https://github.com/grafana/grafana/pull/36188)) | **Confirms** MapLibre-style compatibility is the convergence point |
+| **Smartwebs** (HOA) | Drive-by inspection map: Apple Maps, house icon per lot, Tracking/Recenter/Filter, cure marker, offline app ([App Store](https://apps.apple.com/us/app/smartwebs-mobile-offline/id823768927)) | **Adopt** geocoded lot points, follow-me, filter; **improve** with layered and accessible status and an in-product legend; **reject** the vendor basemap |
+| **AppFolio / Buildium / Vantaca** (HOA / property) | Resident-login maintenance intake by default. Vendors: AppFolio [portal only](https://www.appfolio.com/help/vendor-portal); Buildium a no-login work-order link plus a portal; Vantaca [emailed work orders, portal for payments](https://support.vantaca.com/hc/en-us/articles/360028972631-Communicating-with-Vendors-through-Work-Orders) | **Adopt** the Buildium/Vantaca split: a link for the job, an account for money |
+| **SeeClickFix** (311) | Per-city ["anonymous" versus "guest"](https://www.civicplus.help/seeclickfix/docs/anonymous-reporting-compared-to-guest-reporting) reporting with moderation | **Adopt** tiered reporter identity and a moderated guest triage queue |
 
 Engine comparison (sizes measured from npm tarballs on 2026-09-23): MapLibre GL JS 6.11.1, BSD-3, ~302 KB gzip, WebGL2-only, ESM-only since v6.0 (2026-07-22) · Leaflet 1.9.4, BSD-2, ~42 KB, raster-only · OpenLayers 10.10, BSD-2, ~290 KB · Mapbox GL ≥2 proprietary, billed per load. **The parent spec's MapLibre choice stands.** Two new facts:
 
@@ -231,10 +237,10 @@ Platform-direction choices were scored with WWMD `principle_decide` on 2026-09-2
 | HOA layout default (§3.3) | Geocoded point per lot for homes; site plan for common areas and boundaries | Revised 2026-09-25: the operator's incumbent evidence showed inspection needs real-world position. WWMD, high confidence, margin 0.35. Supersedes the 2026-09-23 site-plan-first answer |
 | Phone map renderer (§3.3.2) | Native MapLibre React Native | WWMD 2026-09-25, high confidence, margin 0.59 |
 | Deployment-footprint source (§3.1.1) | CRM first, then opt-in country-only federation | Operator; WWMD uncertain (margin 0.02), a human call |
-| Who may file public reports (§3.3.3) | **An org-level (WWWD) setting**; platform default **open** | Operator chose "anyone, rate-limited"; WWMD leaned residents-only on a thin margin (0.20) |
-| Vendor access (§3.3.4) | **Open** | Operator chose signed expiring link; WWMD leaned portal accounts on a thin margin (0.33) |
+| Who may file public reports (§3.3.3) | A per-community (WWWD) setting with three levels: residents only (**default**), confidential (known to staff, hidden from the accused), public guest. Guest reports go to a rate-limited triage queue and never escalate to enforcement without staff verification | Researched 2026-09-25 (§5): incumbents default to resident login; 311 separates anonymous from guest; anonymous complainants weaken fine evidence. WWMD `tiered-default-residents`, high confidence, margin 2.79. Supersedes the 2026-09-23 "anyone" answer |
+| Vendor access (§3.3.4) | The job goes by a signed, per-work-order, expiring, revocable link following [W3C capability-URL](https://www.w3.org/2001/tag/doc/capability-urls) guidance (accept/decline, notes, photos, complete; it closes with the job). Money (invoices, banking) requires a portal account with OTP or MFA | Researched 2026-09-25 (§5). WWMD `link-for-work-portal-for-money`, high confidence, margin 0.85 |
 
-WWMD's margins on the last two are narrow, and the principles it cites for them are only loosely related. Both remain with the operator.
+The operator deferred the last two to research. Research-backed options replaced the thin 2026-09-23 scores, and nothing in §9 remains open.
 
 ## 10. Backlog
 

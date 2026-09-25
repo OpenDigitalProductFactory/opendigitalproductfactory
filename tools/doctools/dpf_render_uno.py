@@ -43,8 +43,10 @@ def render_profile(path):
     Charts are embedded chart objects, and DisableActiveContent refuses every
     embedded object. dpf-render creates those objects itself from validated
     numbers and only opens screened flat-ODF templates (TEMPLATE_FORBIDDEN), so
-    it lifts that one switch. Macros stay off, OLE automation stays off, links
-    are never updated, and the container still has no network.
+    it lifts that one switch. Document mode (BI-BFF142A1) opens DPF-generated
+    flat ODF whose only embedded objects are screened inline charts. Macros stay
+    off, OLE automation stays off, links are never updated, and the container
+    still has no network.
     """
     with open(path, encoding="utf-8") as handle:
         xml = handle.read()
@@ -96,10 +98,10 @@ class Engine:
         self.desktop = self.smgr.createInstanceWithContext("com.sun.star.frame.Desktop", self.ctx)
         self.graphics = self.smgr.createInstanceWithContext("com.sun.star.graphic.GraphicProvider", self.ctx)
 
-    def open(self, url, filter_name=None):
+    def open(self, url, filter_name=None, as_template=True):
         args = [prop("Hidden", True), prop("MacroExecutionMode", 0), prop("UpdateDocMode", 0)]
         if filter_name:
-            args += [prop("AsTemplate", True), prop("FilterName", filter_name)]
+            args += [prop("AsTemplate", as_template), prop("FilterName", filter_name)]
         doc = self.desktop.loadComponentFromURL(url, "_blank", 0, tuple(args))
         if doc is None:
             raise RuntimeError("the engine could not open %s" % url)

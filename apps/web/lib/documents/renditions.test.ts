@@ -5,6 +5,7 @@ vi.mock("@dpf/db", () => ({
   DocumentRenditionKind: { pdf: "pdf", plain_text: "plain_text" },
 }));
 
+import { CHART_OBJECT_PARTS, odfPackage } from "@/lib/shared/__fixtures__/odf-package";
 import {
   backfillDocumentRenditions,
   generateDocumentRenditions,
@@ -189,6 +190,29 @@ describe("generateDocumentRenditions", () => {
     expect(await generateDocumentRenditions("ver-1", deps)).toEqual({ status: "failed", reason: "conversion-failed", kind: "plain_text" });
     expect(upserts).toHaveLength(1);
     expect(events[0]!.data).toMatchObject({ reason: "rendition conversion-failed: plain_text of v2. exit 3" });
+  });
+
+  it("records embedded-objects when the converter refuses an OpenDocument file with a chart (BI-BFF142A1)", async () => {
+    const { deps, events, upserts } = makeDeps(
+      {
+        readBlob: vi.fn(async () => odfPackage("spreadsheet", CHART_OBJECT_PARTS)),
+        convert: vi.fn(async () => ({ ok: false as const, error: "exit 3: source file could not be loaded", reason: "conversion-failed" as const })) as never,
+      },
+      versionRow({ contentFormat: "application/vnd.oasis.opendocument.spreadsheet" }),
+    );
+    expect(await generateDocumentRenditions("ver-1", deps)).toEqual({ status: "failed", reason: "embedded-objects", kind: "pdf" });
+    expect(upserts).toHaveLength(0);
+    const reason = String((events[0]!.data as Row).reason);
+    expect(reason.startsWith("rendition embedded-objects: pdf of v2. This file contains embedded objects (such as charts)")).toBe(true);
+    expect(reason).toContain("Embedded: Object 1/");
+  });
+
+  it("renders an OpenDocument file with a chart that the converter accepts, as before", async () => {
+    const { deps } = makeDeps(
+      { readBlob: vi.fn(async () => odfPackage("text", CHART_OBJECT_PARTS)) },
+      versionRow({ contentFormat: "application/vnd.oasis.opendocument.text" }),
+    );
+    expect(await generateDocumentRenditions("ver-1", deps)).toEqual({ status: "rendered", kinds: ["pdf", "plain_text"] });
   });
 
   it("records an unreadable original blob instead of throwing", async () => {

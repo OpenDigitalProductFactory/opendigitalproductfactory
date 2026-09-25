@@ -201,7 +201,7 @@ describe("Stop hook re-entry (stop_hook_active)", () => {
 // now snapshots dirty paths at SessionStart and says each distinct set once.
 
 import { appendFileSync } from "node:fs";
-import { subtractBaseline, workSignature } from "./uncommitted-work-scan.mjs";
+import { subtractBaseline, warnedSetSignature } from "./uncommitted-work-scan.mjs";
 
 const stop = (session_id) => ({ hook_event_name: "Stop", stop_hook_active: false, session_id });
 
@@ -273,7 +273,68 @@ describe("once per distinct set, per session", () => {
   });
 });
 
-describe("subtractBaseline / workSignature", () => {
+// ── 2026-09-25: desktop Code tab, 7+ warnings in one session ─────────────────
+//
+// In the shared root clone the only dirty file was a `.mcp.json` the bootstrap
+// wrote, and the guard re-prompted on every Stop. That host does not mark a
+// re-entry pass with `stop_hook_active`, so the once-per-set memory is the only
+// thing between it and a loop — and it must not be reset by a rewrite that
+// leaves the dirty set unchanged.
+
+describe("once per session, without stop_hook_active", () => {
+  const plainStop = (session_id) => ({ hook_event_name: "Stop", session_id });
+
+  it("says nothing the second time for the same session and dirty set", () => {
+    const dir = dirtyRepo();
+    const first = runGuard(dir, plainStop("desk-1"));
+    assert.equal(first.status, 0);
+    assert.match(first.stdout, /a\.txt/);
+    const second = runGuard(dir, plainStop("desk-1"));
+    assert.equal(second.status, 0);
+    assert.equal(second.stdout, "");
+  });
+
+  it("stays silent when a file in the set is rewritten in place", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, plainStop("desk-2"));
+    writeFileSync(join(dir, "a.txt"), "rewritten by a generator, longer than before\n");
+    assert.equal(runGuard(dir, plainStop("desk-2")).stdout, "");
+  });
+
+  it("warns again when the dirty set changes", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, plainStop("desk-3"));
+    writeFileSync(join(dir, "c.txt"), "c\n");
+    const r = runGuard(dir, plainStop("desk-3"));
+    assert.match(r.stdout, /c\.txt/);
+  });
+
+  it("does not let one session's warning silence another's", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, plainStop("desk-4"));
+    assert.match(runGuard(dir, plainStop("desk-5")).stdout, /a\.txt/);
+  });
+});
+
+describe("SessionEnd output shape", () => {
+  it("emits a systemMessage, not hookSpecificOutput.additionalContext", () => {
+    const r = runGuard(dirtyRepo(), { hook_event_name: "SessionEnd", session_id: "end-1" });
+    assert.equal(r.status, 0);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.hookSpecificOutput, undefined);
+    assert.match(out.systemMessage, /uncommitted-work-guard/);
+    assert.match(out.systemMessage, /a\.txt/);
+  });
+
+  it("keeps additionalContext for Stop", () => {
+    const r = runGuard(dirtyRepo(), { hook_event_name: "Stop", session_id: "end-2" });
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.hookSpecificOutput.hookEventName, "Stop");
+    assert.match(out.hookSpecificOutput.additionalContext, /a\.txt/);
+  });
+});
+
+describe("subtractBaseline / warnedSetSignature", () => {
   const hits = [
     { path: "a", xy: " M", fingerprint: "f1" },
     { path: "b", xy: "??", fingerprint: "f2" },
@@ -285,7 +346,13 @@ describe("subtractBaseline / workSignature", () => {
     assert.equal(subtractBaseline(hits, null).length, 2);
   });
   it("is order-independent", () => {
-    assert.equal(workSignature(hits), workSignature([...hits].reverse()));
+    assert.equal(warnedSetSignature(hits), warnedSetSignature([...hits].reverse()));
+  });
+  it("ignores fingerprints but not status", () => {
+    const rewritten = hits.map((h) => ({ ...h, fingerprint: "changed" }));
+    assert.equal(warnedSetSignature(hits), warnedSetSignature(rewritten));
+    const deleted = [{ ...hits[0], xy: " D" }, hits[1]];
+    assert.notEqual(warnedSetSignature(hits), warnedSetSignature(deleted));
   });
 });
 

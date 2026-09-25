@@ -166,6 +166,10 @@ export default defineConfig({
         find: "@dpf/db/installation-operating-intent",
         replacement: resolve(rootDir, "packages/db/src/installation-operating-intent.ts"),
       },
+      {
+        find: "@dpf/db/backlog-portfolio",
+        replacement: resolve(rootDir, "packages/db/src/backlog-portfolio.ts"),
+      },
       { find: "@dpf/db", replacement: resolve(rootDir, "packages/db/src/client.ts") },
       {
         find: "@dpf/finance-templates",

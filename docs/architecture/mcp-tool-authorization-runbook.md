@@ -6,7 +6,9 @@ before the consent screen renders (BI-05E0EA33): it takes the eligible set,
 proves the candidates carry the same grants, clearance and tier, and only
 then lets the client's self-declared name pick a label inside that class;
 a prior consent by the same human for the same name and redirect family wins
-over the name. A self-declared name can never choose a coworker outside the
+over the name. An administrator, whose eligible set also holds room
+coordinators, lands on the external development profile (Claude Code, Codex,
+Grok) and can pick a wider coworker under `Change`. A self-declared name can never choose a coworker outside the
 eligible set or widen a scope. The default flow is one Connect action;
 `Change` and `Adjust permissions` are disclosures, and a picker is opened
 only when eligible coworkers differ in authority. Reconnects, refreshes and

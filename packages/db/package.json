@@ -33,6 +33,7 @@
     "./installation-instance-stance": "./src/installation-instance-stance.ts",
     "./installation-peer-pairing": "./src/installation-peer-pairing.ts",
     "./installation-operating-intent": "./src/installation-operating-intent.ts",
+    "./backlog-portfolio": "./src/backlog-portfolio.ts",
     "./federation-pairing-types": "./src/federation-pairing-types.ts",
     "./federated-demand-contract": "./src/federated-demand-contract.ts",
     "./federated-work-contract": "./src/federated-work-contract.ts",

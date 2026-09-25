@@ -199,6 +199,56 @@ describe("terminal initiative recovery", () => {
     expect(noPlan.reviewerRoutes).toEqual([]);
   });
 
+  it("BI-1D8E53D9: a new item's design reviews route before a baseline exists, because spec approval mints it", async () => {
+    const ports = deps([room], []);
+    const reviewer = { agentId: "AGT-REVIEW", displayName: "Change Reviewer", status: "active", archived: false, lifecycleStage: "production" };
+    const architect = { agentId: "AGT-EA", displayName: "Enterprise Architect", status: "active", archived: false, lifecycleStage: "production" };
+    ports.resolveRecovery.mockImplementation((input) => resolveInitiativeReviewerRecovery({
+      ...input,
+      db: { agentToolGrant: { findMany: async () => [
+        { grantKey: "initiative_design_review", agent: reviewer },
+        { grantKey: "file_read", agent: reviewer },
+        { grantKey: "initiative_architecture_review", agent: architect },
+        { grantKey: "file_read", agent: architect },
+      ] } },
+    }));
+    // The live shape on BI-5F3D6A37 (2026-09-25): research passed, design reviews owed, no baseline yet.
+    const newFeature: InitiativeReadinessDecision = {
+      ...decision,
+      policyVersion: "initiative-readiness.v3",
+      profile: "feature",
+      unmet: [
+        readinessRequirement({ code: "CANONICAL_DESIGN_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+        readinessRequirement({ code: "SPEC_APPROVAL_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+        readinessRequirement({ code: "REVIEW_REQUIRED", state: "missing", accountableRole: "architecture-reviewer" }),
+        readinessRequirement({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+        readinessRequirement({ code: "DELIVERY_EVIDENCE_REQUIRED", state: "missing", accountableRole: "delivery-coordinator" }),
+        readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+      ],
+    };
+    const result = await resolveTerminalInitiativeRecovery({ decision: newFeature, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+
+    expect(result.escalations).toEqual([]);
+    expect(result.reviewerRoutes.map((route) => [route.gate, route.targetAgentId]).sort()).toEqual([
+      ["architecture-review", "AGT-EA"],
+      ["design-spec", "AGT-REVIEW"],
+      ["spec-approval", "AGT-REVIEW"],
+    ]);
+    for (const route of result.reviewerRoutes) {
+      expect(route.requestCoworker.initiativeReviewBinding).toMatchObject({
+        expectedCurrentBaselineId: null,
+        workroomRef: { headSha, workroomId: room.capsuleId },
+        artifactRef: { path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
+      });
+    }
+    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha });
+    expect(ports.loadEligibleEvidenceActivityIds).not.toHaveBeenCalled();
+
+    // With no design review owed, a missing baseline still fails closed on the acceptance chain.
+    const acceptanceOnly = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(acceptanceOnly.escalations).toEqual([expect.objectContaining({ reason: "baseline-not-found" })]);
+  });
+
   it("BI-05F8860A: a small-shape acceptance lane escalates to record_execution_evidence, never to objective mapping", async () => {
     const ports = deps();
     const smallShapeDecision: InitiativeReadinessDecision = {

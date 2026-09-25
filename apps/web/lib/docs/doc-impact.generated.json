@@ -726,6 +726,9 @@
     "apps/web/lib/documents/generation/create-presentation.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
+    "apps/web/lib/documents/generation/render-flat.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/documents/generation/render-store.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
@@ -2771,6 +2774,7 @@
       "apps/web/lib/documents/document-previews.ts",
       "apps/web/lib/documents/generation/brand-master.ts",
       "apps/web/lib/documents/generation/create-presentation.ts",
+      "apps/web/lib/documents/generation/render-flat.ts",
       "apps/web/lib/documents/generation/render-store.ts",
       "apps/web/lib/documents/generation/render.ts",
       "apps/web/lib/documents/generation/spec.ts",

@@ -4,7 +4,9 @@ import { WORKBOOK_EXPORT_FIXTURE } from "./export-fixture";
 
 const xml = buildFlatOds(WORKBOOK_EXPORT_FIXTURE);
 
-function rowsOf(doc: string, sheet: string): string[] {
+/** A sheet's own rows; a chart's shapes (and its cached local table) are not rows of the sheet. */
+function rowsOf(source: string, sheet: string): string[] {
+  const doc = source.replace(/<table:shapes>.*?<\/table:shapes>/gs, "");
   const start = doc.indexOf(`<table:table table:name="${sheet}">`);
   const end = doc.indexOf("</table:table>", start);
   return doc.slice(start, end).split("<table:table-row>").slice(1);
@@ -84,8 +86,14 @@ describe("buildFlatOds", () => {
     expect(rows[0]).toContain("<text:p>Sum of Total</text:p>");
     expect(rows[1]).toContain('<text:p>North</text:p></table:table-cell><table:table-cell office:value-type="float" office:value="47"');
     expect(rows).toHaveLength(4);
-    // No embedded chart object: the engine's hardened profile refuses ODF files that carry one.
-    expect(xml).not.toContain("<draw:object");
+    // The bar chart itself: one inline chart sub-document over the sheet's cells (BI-BFF142A1).
+    expect(xml.match(/<draw:object[\s>]/g)).toHaveLength(1);
+    expect(xml).toContain('office:mimetype="application/vnd.oasis.opendocument.chart"');
+    expect(xml).toContain('chart:values-cell-range-address="&apos;Chart data&apos;.B2:&apos;Chart data&apos;.B4"');
+    expect(xml).toContain('<chart:categories table:cell-range-address="&apos;Chart data&apos;.A2:&apos;Chart data&apos;.A4"/>');
+    expect(xml).toContain("<text:p>Sum of Total by Region</text:p>");
+    // Nothing dpf-render's document screen refuses: no scripts, events, DDE or links.
+    expect(xml).not.toMatch(/office:script|event-listener|dde-|xlink:href/);
   });
 
   it("counts rows per group when the chart has no value column, and omits the chart sheet when there are no rows", () => {

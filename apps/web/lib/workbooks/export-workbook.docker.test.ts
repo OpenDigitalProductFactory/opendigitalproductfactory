@@ -10,13 +10,16 @@
 // re-imported through Workbooks' own sheet import (readSheetMatrix, which S3
 // BI-81524041 routes: .xlsx straight to the reader, .ods through the engine to
 // .xlsx first). The values must come back unchanged, and the file must carry the formulas,
-// formats, conditional format and chart-view data, not only the values.
+// formats, conditional format, the chart-view data and the chart itself, not only
+// the values. The export runs through dpf-render's trusted document mode
+// (BI-BFF142A1): dpf-convert refuses any ODF file with an embedded chart.
 
 import { spawnSync } from "node:child_process";
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { isPinnedImageReference } from "@/lib/documents/conversion/command";
 import { convertDocument, createConversionLimiter } from "@/lib/documents/conversion/convert";
+import { renderFlatDocument } from "@/lib/documents/generation/render-flat";
 import { WORKBOOK_EXPORT_FIXTURE } from "./export-fixture";
 import { exportWorkbook } from "./export-workbook";
 import { readSheetMatrix } from "./sheet-import";
@@ -35,8 +38,10 @@ function dockerHasImage(image: string): boolean {
 
 const ready = dockerHasImage(IMAGE);
 const limiter = createConversionLimiter(2);
-const convert: typeof convertDocument = (request) =>
-  convertDocument(request, { resolveImage: async () => ({ status: "pinned", image: IMAGE }), limiter });
+const resolveImage = async () => ({ status: "pinned" as const, image: IMAGE });
+const convert: typeof convertDocument = (request) => convertDocument(request, { resolveImage, limiter });
+const render: typeof renderFlatDocument = (request) => renderFlatDocument(request, { resolveImage, limiter });
+
 
 /** The entries of a ZIP (stored or deflated), by name. */
 function unzip(bytes: Buffer): Map<string, Buffer> {
@@ -79,8 +84,8 @@ function expectedSheet(): unknown[][] {
 }
 
 describe.skipIf(!ready)("Workbook export against the real dpf-doctools image", () => {
-  it("exports .xlsx with formulas, formats, a conditional format and the chart data, and re-imports the same values", async () => {
-    const out = await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "xlsx", { convert });
+  it("exports .xlsx with formulas, formats, a conditional format, the chart data and the chart, and re-imports the same values", async () => {
+    const out = await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "xlsx", { render });
     if (!out.ok) throw new Error(`xlsx export failed: ${out.reason}: ${out.error}`);
     const xlsx = out.data.bytes;
     expect(out.data.filename).toBe("Orders.xlsx");
@@ -100,10 +105,19 @@ describe.skipIf(!ready)("Workbook export against the real dpf-doctools image", (
     const workbook = parts.get("xl/workbook.xml")!.toString("utf8");
     expect(workbook).toMatch(/<sheet name="Chart data"/);
     expect(parts.get("xl/worksheets/sheet2.xml")!.toString("utf8")).toMatch(/<v>47<\/v>/);
+    // AC-1 (BI-BFF142A1): the chart itself, a bar chart over the Chart data sheet.
+    const chartPart = [...parts.keys()].find((name) => /^xl\/charts\/chart\d+\.xml$/.test(name));
+    expect(chartPart, "the .xlsx carries a chart part").toBeDefined();
+    const chart = parts.get(chartPart!)!.toString("utf8");
+    expect(chart).toContain("<c:barChart>");
+    expect(chart).toContain("<c:f>&apos;Chart data&apos;!$B$2:$B$4</c:f>");
+    expect(chart).toContain("<c:f>&apos;Chart data&apos;!$A$2:$A$4</c:f>");
+    // Both axes keep their labels (categories and values are readable).
+    expect(chart).not.toContain('<c:tickLblPos val="none"/>');
   }, 240_000);
 
   it("exports .ods with the same content and re-imports the same values through the sheet import", async () => {
-    const out = await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "ods", { convert });
+    const out = await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "ods", { render });
     if (!out.ok) throw new Error(`ods export failed: ${out.reason}: ${out.error}`);
     const parts = unzip(out.data.bytes);
     expect(parts.get("mimetype")!.toString("utf8")).toBe("application/vnd.oasis.opendocument.spreadsheet");
@@ -111,6 +125,12 @@ describe.skipIf(!ready)("Workbook export against the real dpf-doctools image", (
     expect(content).toContain('table:formula="of:=[.C2]*[.D2]"');
     expect(content).toContain("calcext:conditional-format");
     expect(content).toContain('table:name="Chart data"');
+    // AC-1 (BI-BFF142A1): the chart travels as an embedded chart sub-document.
+    const manifest = parts.get("META-INF/manifest.xml")!.toString("utf8");
+    const object = /manifest:full-path="([^"]+\/)"[^>]*manifest:media-type="application\/vnd\.oasis\.opendocument\.chart"/.exec(manifest)
+      ?? /manifest:media-type="application\/vnd\.oasis\.opendocument\.chart"[^>]*manifest:full-path="([^"]+\/)"/.exec(manifest);
+    expect(object, "the .ods manifest lists a chart object").not.toBeNull();
+    expect(parts.get(`${object![1]}content.xml`)!.toString("utf8")).toContain('chart:class="chart:bar"');
 
     expect(await reimport(out.data.bytes, out.data.filename)).toEqual(expectedSheet());
   }, 240_000);

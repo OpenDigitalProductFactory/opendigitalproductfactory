@@ -62,7 +62,7 @@ function giftCount(count: number): string {
 function donationsOutcome(input: ArchetypeOutcomeInput): TwinOutcome {
   const totals = input.donationTotals;
   const money = (total: DonationTotal) =>
-    formatMoney(total.amount, total.currency, input.locale);
+    formatMoney(total.amount, total.currency, input.locale, { maximumFractionDigits: 0 });
 
   if (totals == null) {
     return {
@@ -89,7 +89,7 @@ function donationsOutcome(input: ArchetypeOutcomeInput): TwinOutcome {
   return {
     key: "donations-received",
     label: "Donations received",
-    value: only ? money(only) : formatMoney(0, input.currency, input.locale),
+    value: only ? money(only) : formatMoney(0, input.currency, input.locale, { maximumFractionDigits: 0 }),
     intent: "success",
     hint: giftCount(only?.count ?? 0),
   };
@@ -202,7 +202,7 @@ export function buildArchetypeOutcomes(
       {
         key: "revenue",
         label: "Revenue in",
-        value: formatMoney(input.paidRevenue, input.currency, input.locale),
+        value: formatMoney(input.paidRevenue, input.currency, input.locale, { maximumFractionDigits: 0 }),
         intent: "success",
         hint: "Paid · 90 days",
       },
