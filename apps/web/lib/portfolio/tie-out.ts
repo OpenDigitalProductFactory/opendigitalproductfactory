@@ -9,7 +9,7 @@
 import { quarterBounds } from "./investment-points";
 import { loadInvestmentItems, resolveInvestmentItem, type InvestmentItemRow } from "./investment-read-model";
 import { loadPortfolioBudgets, type PortfolioBudget } from "./portfolio-budget";
-import { measureThroughput, THROUGHPUT_WINDOW_WEEKS, type PortfolioThroughput } from "./throughput";
+import { deliveredPointsFrom, loadThroughput, measureThroughput, THROUGHPUT_WINDOW_WEEKS, type PortfolioThroughput } from "./throughput";
 
 const WEEK_MS = 7 * 86_400_000;
 
@@ -60,14 +60,7 @@ export function assembleTieOut(input: {
   const period = quarterBounds(input.now);
   const weeksRemaining = Math.max(0, (period.end.getTime() - input.now.getTime()) / WEEK_MS);
 
-  const windowStart = { start: new Date(input.now.getTime() - THROUGHPUT_WINDOW_WEEKS * WEEK_MS), end: new Date(input.now.getTime() + 1) };
-  const delivered = input.windowItems.flatMap((item) => {
-    const { resolution, itemClass, points } = resolveInvestmentItem(item, windowStart);
-    return itemClass === "delivered" && points !== null && item.completedAt
-      ? [{ portfolioId: resolution.portfolioId, points, completedAt: new Date(item.completedAt), surface: item.deliverySurface }]
-      : [];
-  });
-  const throughput = measureThroughput(delivered, { now: input.now, historyStart: input.historyStart });
+  const throughput = measureThroughput(deliveredPointsFrom(input.windowItems, input.now), { now: input.now, historyStart: input.historyStart });
 
   const reservedByItem = new Map(input.openReservations.map((r) => [r.itemId, r]));
   const acc = new Map<string | null, { reserved: number; inFlight: number; delivered: number; committed: number; tracedDelivered: number }>();
@@ -132,10 +125,9 @@ type ReadDb = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]
 export async function loadPortfolioTieOut(db: ReadDb, now: Date = new Date()): Promise<PortfolioTieOut> {
   const period = quarterBounds(now);
   const window = { start: new Date(now.getTime() - THROUGHPUT_WINDOW_WEEKS * WEEK_MS), end: new Date(now.getTime() + 1) };
-  const [quarterItems, windowItems, [history], budgets, openReservations, [untraced]] = await Promise.all([
+  const [quarterItems, { windowItems, historyStart }, budgets, openReservations, [untraced]] = await Promise.all([
     loadInvestmentItems(db, period),
-    loadInvestmentItems(db, window),
-    db.$queryRaw<Array<{ start: Date | null }>>`SELECT MIN("completedAt") AS "start" FROM "BacklogItem" WHERE "status" = 'done'`,
+    loadThroughput(db, now),
     loadPortfolioBudgets(db, period),
     db.$queryRaw<Array<{ itemId: string; portfolioId: string; points: number }>>`
       SELECT b."itemId", r."portfolioId", r."points" FROM "BudgetReservation" r JOIN "BacklogItem" b ON b."id" = r."backlogItemId"
@@ -149,7 +141,7 @@ export async function loadPortfolioTieOut(db: ReadDb, now: Date = new Date()): P
     portfolios: budgets.map((b) => ({ id: b.id, name: b.name })),
     quarterItems,
     windowItems,
-    historyStart: history?.start ? new Date(history.start) : null,
+    historyStart,
     budgets: new Map(budgets.map((b) => [b.id, b.budget])),
     openReservations: openReservations.map((r) => ({ ...r, points: Number(r.points) })),
     untracedChanges: Number(untraced?.n ?? 0),
