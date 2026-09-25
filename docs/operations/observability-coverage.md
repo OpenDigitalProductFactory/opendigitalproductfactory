@@ -37,6 +37,7 @@ and observed through the portal-side `dpf_voice_stt_*` counters.
 | `dpf_dependency_up{service="neo4j"}` | `lib/operate/dependency-health.ts` | `Neo4jDown` |
 | `dpf_dependency_up{service="model-runner"}` | same | gauge only (see follow-ups) |
 | `dpf_dependency_up{service="stt"}` | same | gauge only (see follow-ups) |
+| `dpf_dependency_up{service="doctools"}` | same, via `lib/documents/conversion/availability.ts` | gauge only. Optional: unset (never 0) when the install has no docker socket or no configured `doctoolsImage` |
 | `dpf_http_unhandled_errors_total` | `instrumentation.ts` `onRequestError` | `UnhandledServerErrors` |
 | `dpf_coworker_envelopes_awaiting_decision` | `lib/coworker/envelope-observability.ts` | gauge only |
 | `dpf_coworker_envelopes_expired_unactioned` | same | see below — worth an alert |

@@ -1405,6 +1405,9 @@ async function seedPlatformConfig(): Promise<void> {
         repositoryBranch: process.env.DPF_SELF_UPGRADE_BRANCH ?? "main",
         healthUrl: process.env.DPF_SELF_UPGRADE_HEALTH_URL ?? "http://localhost:3000/api/health",
         promoterImage: process.env.DPF_PROMOTER_IMAGE ?? "dpf-promoter",
+        // Digest-pinned dpf-doctools image for the document converter
+        // (BI-52E565DA). No default: without one, conversion is off by design.
+        ...(process.env.DPF_DOCTOOLS_IMAGE ? { doctoolsImage: process.env.DPF_DOCTOOLS_IMAGE } : {}),
       },
     },
   });

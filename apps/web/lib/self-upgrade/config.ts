@@ -87,6 +87,12 @@ export type SelfUpgradeConfig = {
   repositoryBranch?: string;
   healthUrl?: string;
   promoterImage?: string;
+  /**
+   * Digest-pinned dpf-doctools image (`name@sha256:…`) the document converter
+   * runs one-shot (BI-52E565DA). Resolved through the same channel as
+   * `promoterImage`; unset means office conversion is off on this install.
+   */
+  doctoolsImage?: string;
   /** How the upgrade source is resolved. Defaults to "upstream". */
   sourceMode: UpgradeSourceMode;
   /**
@@ -254,6 +260,7 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
     "repositoryBranch",
     "healthUrl",
     "promoterImage",
+    "doctoolsImage",
     "upgradeWorkspaceMountPath",
     "upgradeWorkspaceHostPath",
   ] as const) {

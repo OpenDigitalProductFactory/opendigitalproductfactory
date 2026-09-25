@@ -7,6 +7,7 @@
 
 import { dependencyUp } from "@/lib/metrics"
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url"
+import { probeDoctools } from "@/lib/documents/conversion/availability"
 
 const PROBE_TIMEOUT_MS = 3000
 
@@ -45,9 +46,13 @@ export async function probeStt(): Promise<boolean | null> {
   return probe(`${configured.replace(/\/$/, "")}/v1/models`)
 }
 
+// The office document converter (BI-52E565DA) is an OPTIONAL dependency: its
+// probe answers null on an install with no docker socket or no configured
+// dpf-doctools image, so its absence there is never an outage.
 const SERVICES: Array<readonly [string, () => Promise<boolean | null>]> = [
   ["model-runner", probeModelRunner],
   ["stt", probeStt],
+  ["doctools", probeDoctools],
 ]
 
 /**

@@ -148,6 +148,13 @@ describe("parseSelfUpgradeConfig", () => {
     expect(cfg.promoterImage).toBe("dpf-promoter");
   });
 
+  it("resolves doctoolsImage through the same channel as promoterImage (BI-52E565DA)", () => {
+    const pinned = `ghcr.io/o/dpf-doctools@sha256:${"e".repeat(64)}`;
+    expect(parseSelfUpgradeConfig({ doctoolsImage: pinned }).doctoolsImage).toBe(pinned);
+    expect(parseSelfUpgradeConfig({ doctoolsImage: "  " }).doctoolsImage).toBeUndefined();
+    expect(parseSelfUpgradeConfig({}).doctoolsImage).toBeUndefined();
+  });
+
   it("parses the seeded disabled config", () => {
     const cfg = parseSelfUpgradeConfig({
       enabled: false,
