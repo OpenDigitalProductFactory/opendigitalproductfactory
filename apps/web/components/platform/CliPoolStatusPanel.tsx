@@ -1,6 +1,6 @@
 // apps/web/components/platform/CliPoolStatusPanel.tsx
 //
-// EP-COST Phase 4: Surfaces CLI pool rate-limit state on Admin > AI Providers.
+// EP-COST Phase 4: Surfaces CLI pool rate-limit state on External Services (/platform/ai/providers).
 // Shows a banner only when at least one pool is exhausted; hidden when all
 // pools are healthy. No persistent exhaustion rows means no banner.
 
