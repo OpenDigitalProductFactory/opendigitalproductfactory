@@ -126,6 +126,9 @@ test("Windows consumer release carries the verified organization-join lifecycle 
     "docker-compose.edge-actions.yml",
     "scripts/pki/edge-client.tpl",
     "scripts/bootstrap-organization-pki.ps1",
+    // BI-6DC1CD5B: the standalone https path the consumer installer runs.
+    "scripts/installer/lib/canonical-origin.ps1",
+    "scripts/installer/lib/machine-trust.ps1",
   ]) {
     assert.match(dockerfile, new RegExp(asset.replaceAll(".", "\\.")));
   }

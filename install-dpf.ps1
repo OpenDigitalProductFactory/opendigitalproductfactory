@@ -1713,15 +1713,50 @@ Write-Action "Open a new terminal for the PATH change to take effect in other wi
 
 # --- Step 6: Start Platform ---------------------------------------------------
 
+# Every install is https at one canonical origin (BI-6DC1CD5B, design section
+# 12): Claude refuses OAuth over plain http, and one origin keeps OAuth token
+# audiences, cookies and the MCP address whole. A member install gets its
+# certificate from the organization join; a standalone install is its own CA.
+$script:DpfPortalUrl = "http://localhost:3000"
+$bootstrap = Join-Path $DPF_DIR "scripts\bootstrap-organization-pki.ps1"
+if (-not (Test-Path -LiteralPath $bootstrap)) { $bootstrap = Join-Path $PSScriptRoot "scripts\bootstrap-organization-pki.ps1" }
 if ($OrganizationJoinPackagePath) {
     Write-Host ""
     Write-Host "  Configuring organization trust..." -ForegroundColor Cyan
-    $bootstrap = Join-Path $DPF_DIR "scripts\bootstrap-organization-pki.ps1"
-    if (-not (Test-Path -LiteralPath $bootstrap)) { $bootstrap = Join-Path $PSScriptRoot "scripts\bootstrap-organization-pki.ps1" }
     if (-not (Test-Path -LiteralPath $bootstrap)) { throw "organization_pki_bootstrap_missing" }
     & $bootstrap -Mode join -JoinPackage $OrganizationJoinPackagePath -NoStartTls
     $env:DPF_ORGANIZATION_TRUST_ENABLED = "1"
     Write-OK "Organization HTTPS trust configured; the one-time package was consumed"
+} else {
+    Write-Host ""
+    Write-Host "  Configuring HTTPS for this installation..." -ForegroundColor Cyan
+    $libDir = Join-Path $DPF_DIR "scripts\installer\lib"
+    if (-not (Test-Path -LiteralPath (Join-Path $libDir "canonical-origin.ps1"))) { $libDir = Join-Path $PSScriptRoot "scripts\installer\lib" }
+    . (Join-Path $libDir "canonical-origin.ps1")
+    . (Join-Path $libDir "machine-trust.ps1")
+    try {
+        if (-not (Test-Path -LiteralPath $bootstrap)) { throw "organization_pki_bootstrap_missing" }
+        $canonical = Resolve-DpfCanonicalOrigin -InstallDir $DPF_DIR
+        & $bootstrap -Mode authority -Hostname $canonical.Host -San $canonical.CertificateSans -NoStartTls
+        Set-DpfEnvValue -InstallDir $DPF_DIR -Name "PUBLIC_URL" -Value $canonical.PublicUrl
+        $env:DPF_ORGANIZATION_TRUST_ENABLED = "1"
+        $script:DpfPortalUrl = $canonical.PublicUrl
+        $rootCertificate = Join-Path $HOME ".dpf\pki\root_ca.crt"
+        # One operating-system confirmation: the installer is not elevated, so
+        # Windows asks before adding a root to the user's trusted store.
+        $trust = Install-DpfRootTrust -RootCertificatePath $rootCertificate
+        Write-OK "HTTPS configured at $($canonical.PublicUrl)"
+        if ($trust -eq "declined") {
+            Write-Host "  Your browser will warn about this address until you trust $rootCertificate." -ForegroundColor Yellow
+        }
+        if ($canonical.Source -eq "no-network-name") {
+            Write-Host "  AI agents on other computers need a DNS name for this machine to connect." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "  [!] HTTPS could not be configured: $_" -ForegroundColor Yellow
+        Write-Host "      The portal stays at http://localhost:3000. AI clients that require https" -ForegroundColor Yellow
+        Write-Host "      cannot sign in until the installer is run again." -ForegroundColor Yellow
+    }
 }
 
 Write-Step 7 10 "Starting the platform..."
@@ -2193,13 +2228,17 @@ Write-Step 10 10 "Opening your portal!"
 # Read admin password from .env
 $adminPass = (Get-Content "$DPF_DIR\.env" | Where-Object { $_ -match "^ADMIN_PASSWORD=" }) -replace "^ADMIN_PASSWORD=", ""
 
-Start-Process "http://localhost:3000"
+if (-not $script:DpfPortalUrl) {
+    $publicUrlLine = Get-Content "$DPF_DIR\.env" | Where-Object { $_ -match "^PUBLIC_URL=https://" } | Select-Object -Last 1
+    $script:DpfPortalUrl = if ($publicUrlLine) { ($publicUrlLine -replace "^PUBLIC_URL=", "").Trim('"') } else { "http://localhost:3000" }
+}
+Start-Process $script:DpfPortalUrl
 
 Write-Host ""
 Write-Host "  ========================================================" -ForegroundColor Green
 Write-Host "  |  Your Digital Product Factory is ready!              |" -ForegroundColor Green
 Write-Host "  |                                                      |" -ForegroundColor Green
-Write-Host "  |  URL:      http://localhost:3000                     |" -ForegroundColor Green
+Write-Host "  |  URL:      $($script:DpfPortalUrl.PadRight(42))|" -ForegroundColor Green
 Write-Host "  |  Email:    admin@dpf.local                           |" -ForegroundColor Green
 Write-Host "  |  Password: $($adminPass.PadRight(40))|" -ForegroundColor Green
 Write-Host "  |                                                      |" -ForegroundColor Green
@@ -2221,7 +2260,7 @@ Write-Host "  ========================================================" -Foregro
 @"
 Digital Product Factory -- Admin Credentials
 ============================================
-URL:      http://localhost:3000
+URL:      $($script:DpfPortalUrl)
 Email:    admin@dpf.local
 Password: $adminPass
 
