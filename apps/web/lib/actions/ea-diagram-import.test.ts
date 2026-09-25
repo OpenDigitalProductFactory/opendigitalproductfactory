@@ -1,16 +1,15 @@
 // Diagram import action (BI-4C17BF51).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/permissions", () => ({ can: vi.fn() }));
+vi.mock("@/lib/ea/diagram-import/load-imports", () => ({ loadDiagramImports: vi.fn() }));
 vi.mock("@/lib/ea/diagram-import/import-diagram", () => ({
   MAX_DIAGRAM_IMPORT_BYTES: 16,
   MAX_DIAGRAM_IMPORT_LABEL: "16 bytes",
   importDiagramFile: vi.fn(),
 }));
 
-import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { importDiagramFile } from "@/lib/ea/diagram-import/import-diagram";
@@ -46,11 +45,10 @@ describe("importEaDiagram", () => {
     expect(mockImport).not.toHaveBeenCalled();
   });
 
-  it("stages the file as the signed-in user and refreshes the views page", async () => {
+  it("stages the file as the signed-in user", async () => {
     mockImport.mockResolvedValue({ ok: true, data: { importId: "imp-1" } as never });
     const result = await importEaDiagram(form(new File(["visio"], "Order platform.vsdx")));
     expect(result.ok).toBe(true);
     expect(mockImport).toHaveBeenCalledWith({ fileName: "Order platform.vsdx", bytes: Buffer.from("visio"), userId: "u1" });
-    expect(revalidatePath).toHaveBeenCalledWith("/ea/views");
   });
 });

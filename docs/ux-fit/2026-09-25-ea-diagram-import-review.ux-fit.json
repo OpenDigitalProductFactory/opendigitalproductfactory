@@ -1,18 +1,19 @@
 {
   "version": "1",
-  "decidedOption": "views-page-import-section",
-  "decisionInteractionId": "DI-123855D2B3FC",
+  "decidedOption": "canvas-menu-import-dialog",
+  "decisionInteractionId": "DI-0B5031E0F1A9",
   "scope": {
     "files": [
+      "apps/web/components/ea/DiagramImportDialog.tsx",
       "apps/web/components/ea/DiagramImportPanel.tsx"
     ]
   },
   "evidence": {
     "kind": "propose-n-pick",
     "consideredOptions": [
-      "views-page-import-section",
+      "canvas-menu-import-dialog",
       "new-imports-route",
-      "reference-model-proposal-queue"
+      "views-page-collapsed-disclosure"
     ]
   }
 }

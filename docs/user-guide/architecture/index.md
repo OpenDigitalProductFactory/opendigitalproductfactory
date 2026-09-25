@@ -60,8 +60,8 @@ The overview room count is a real total. The plan list and the Coordination list
 
 ## Exporting a view as a drawing
 
-Open a view and choose **Export** at the top right of the canvas to download it
-as a drawing that people can open without DPF:
+Open a view and choose **Export / Import** at the top right of the canvas to
+download it as a drawing that people can open without DPF:
 
 - **Draw (.odg)** opens in LibreOffice Draw with one shape per element and a
   connector for each relationship, so it can still be edited there.
@@ -85,9 +85,8 @@ model itself into another ArchiMate tool, use the ArchiMate exchange export.
 ## Importing a Visio or Draw diagram
 
 If your organization already keeps architecture diagrams in Visio (.vsd, .vsdx)
-or LibreOffice Draw (.odg), you can bring what they show into review. Open
-**Architecture > Views & Viewpoints** (`/ea/views`) and use **Imported
-diagrams** at the bottom of the page:
+or LibreOffice Draw (.odg), you can bring what they show into review. Open any
+view, choose **Export / Import**, then **Import a diagram…**:
 
 1. Choose the file and select **Import diagram**. Files up to 900 KB are accepted.
 2. The platform's document engine reads the drawing. Each labelled shape becomes

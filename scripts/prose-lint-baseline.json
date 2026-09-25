@@ -5583,6 +5583,14 @@
     "longSentences": 0,
     "textMass": 13
   },
+  "apps/web/components/ea/DiagramImportDialog.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
   "apps/web/components/ea/DiagramImportPanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -5613,7 +5621,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 20
+    "textMass": 13
   },
   "apps/web/components/ea/ElementInspector.tsx": {
     "vocabulary": 0,

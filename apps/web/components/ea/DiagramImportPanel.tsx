@@ -14,7 +14,12 @@ import { DataTable, type Column } from "@/components/ui/report-kit";
 import type { DiagramImportView } from "@/lib/ea/diagram-import/load-imports";
 
 type ImportItem = Omit<DiagramImportView, "importedAt"> & { importedAt: string };
-type Props = { imports: ImportItem[]; canManage: boolean };
+type Props = {
+  imports: ImportItem[];
+  canManage: boolean;
+  /** Called after an upload or a review is saved; defaults to refreshing the route. */
+  onChanged?: () => void;
+};
 type Review = (id: string, status: "approved" | "rejected") => void;
 
 const STATUS_LABEL: Record<string, string> = { proposed: "To review", approved: "Accepted", rejected: "Rejected" };
@@ -51,8 +56,9 @@ function withReview<T extends { id: string; status: string }>(
   ];
 }
 
-export function DiagramImportPanel({ imports, canManage }: Props) {
+export function DiagramImportPanel({ imports, canManage, onChanged }: Props) {
   const router = useRouter();
+  const changed = onChanged ?? (() => router.refresh());
   const input = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<{ tone: "error" | "info"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -73,7 +79,7 @@ export function DiagramImportPanel({ imports, canManage }: Props) {
           : `Found ${data.elementCount} shapes and ${data.relationshipCount} connections to review.`,
       });
       if (input.current) input.current.value = "";
-      router.refresh();
+      changed();
     });
   }
 
@@ -81,7 +87,7 @@ export function DiagramImportPanel({ imports, canManage }: Props) {
     startTransition(async () => {
       try {
         await reviewReferenceProposal({ proposalId: id, status });
-        router.refresh();
+        changed();
       } catch {
         setMessage({ tone: "error", text: "The review was not saved. Try again." });
       }
@@ -126,7 +132,7 @@ export function DiagramImportPanel({ imports, canManage }: Props) {
   );
 
   return (
-    <Surface as="section" aria-labelledby="diagram-imports" className="mt-8">
+    <Surface as="section" aria-labelledby="diagram-imports">
       <h2 id="diagram-imports" className="text-sm font-semibold text-[var(--dpf-text)]">Imported diagrams</h2>
       <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">
         Shapes and connectors from a Visio or Draw file become candidates to review. Nothing is added to the model.

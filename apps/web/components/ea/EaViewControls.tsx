@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { exportEaViewDrawing } from "@/lib/actions/ea-drawing";
 import type { EaDrawingFormat } from "@/lib/ea/view-drawing-export";
+import { DiagramImportDialog } from "./DiagramImportDialog";
 
 export type PresentationMode = "diagram" | "table";
 export type EdgeVariant = "straight" | "bezier" | "step";
@@ -79,9 +80,13 @@ const DRAWING_EXPORTS: Array<{ format: EaDrawingFormat; label: string }> = [
   { format: "png", label: "PNG (.png)" },
 ];
 
-/** Export the view as a drawing (BI-4C17BF51). Renders the saved layout on the server. */
+/**
+ * Export the view as a drawing, or import a Visio/Draw diagram for review
+ * (BI-4C17BF51). Both sit behind one menu so the canvas's first view is unchanged.
+ */
 export function EaDrawingExportMenu({ viewId }: { viewId: string }) {
   const [open, setOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState<EaDrawingFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,7 +121,7 @@ export function EaDrawingExportMenu({ viewId }: { viewId: string }) {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        title="Export the saved layout as a drawing"
+        title="Export this view as a drawing, or import a diagram to review"
         style={{
           fontSize: 10, padding: "2px 9px", borderRadius: 3, cursor: "pointer", minHeight: 24,
           background: open ? "var(--dpf-surface-2)" : "transparent",
@@ -124,12 +129,12 @@ export function EaDrawingExportMenu({ viewId }: { viewId: string }) {
           color: open ? "var(--dpf-accent)" : "var(--dpf-muted)",
         }}
       >
-        {busy ? "Exporting…" : "Export ▾"}
+        {busy ? "Exporting…" : "Export / Import ▾"}
       </button>
       {open && (
         <div
           role="menu"
-          aria-label="Export view as"
+          aria-label="Export or import"
           style={{
             position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20, minWidth: 160, padding: 4,
             background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 6,
@@ -154,6 +159,18 @@ export function EaDrawingExportMenu({ viewId }: { viewId: string }) {
               </span>
             </button>
           ))}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setOpen(false); setImporting(true); }}
+            style={{
+              display: "block", width: "100%", textAlign: "left", padding: "6px 8px", borderRadius: 4, cursor: "pointer",
+              border: "none", borderTop: "1px solid var(--dpf-border)", background: "transparent",
+              fontSize: 11, fontWeight: 600, color: "var(--dpf-text)",
+            }}
+          >
+            Import a diagram…
+          </button>
           {error && (
             <p role="alert" style={{ margin: "4px 8px", fontSize: 10, color: "var(--dpf-error)" }}>
               {error}
@@ -161,6 +178,7 @@ export function EaDrawingExportMenu({ viewId }: { viewId: string }) {
           )}
         </div>
       )}
+      {importing && <DiagramImportDialog onClose={() => setImporting(false)} />}
     </div>
   );
 }

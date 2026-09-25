@@ -3,10 +3,6 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { EaTabNav } from "@/components/ea/EaTabNav";
 import { LocalTime } from "@/components/ui/LocalTime";
-import { DiagramImportPanel } from "@/components/ea/DiagramImportPanel";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
-import { loadDiagramImports } from "@/lib/ea/diagram-import/load-imports";
 
 const LAYOUT_LABELS: Record<string, string> = {
   graph:    "Graph",
@@ -22,9 +18,6 @@ const SCOPE_LABELS: Record<string, string> = {
 };
 
 export default async function EaViewsPage() {
-  const [session, imports] = await Promise.all([auth(), loadDiagramImports()]);
-  const user = session?.user;
-  const canManage = Boolean(user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_ea_model"));
   const views = await prisma.eaView.findMany({
     orderBy: [{ createdAt: "desc" }],
     select: {
@@ -86,11 +79,6 @@ export default async function EaViewsPage() {
           </p>
         </div>
       )}
-
-      <DiagramImportPanel
-        canManage={canManage}
-        imports={imports.map((item) => ({ ...item, importedAt: item.importedAt.toISOString() }))}
-      />
     </div>
   );
 }
