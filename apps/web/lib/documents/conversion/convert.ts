@@ -23,6 +23,7 @@ import {
   type BudgetedProcessResult,
 } from "@/lib/shared/run-process-with-budget";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { buildConverterCommand, CONVERTER_CONTAINER_PREFIX } from "./command";
 import {
   CONVERTER_SOURCE_EXTENSIONS,
@@ -45,9 +46,15 @@ export type ConversionFailureReason =
   | "timeout"
   | "conversion-failed";
 
-export type ConversionResult =
-  | { ok: true; bytes: Buffer; mime: string }
-  | { ok: false; reason: ConversionFailureReason; detail: string };
+export type ConvertedDocument = { bytes: Buffer; mime: string };
+
+/**
+ * Composed from the shared action-result primitive: success carries the
+ * converted document as `data`; failure carries a plain-language `error` plus a
+ * typed `reason` callers branch on.
+ */
+export type ConversionFailure = ActionFailure & { reason: ConversionFailureReason };
+export type ConversionResult = ActionSuccess<ConvertedDocument> | ConversionFailure;
 
 export type ConvertRequest = {
   input: Buffer;
@@ -119,7 +126,7 @@ function engineTimeoutSeconds(timeoutMs: number): number {
   return Math.max(1, Math.floor((timeoutMs * 0.85) / 1000));
 }
 
-const fail = (reason: ConversionFailureReason, detail: string): ConversionResult => ({ ok: false, reason, detail });
+const fail = (reason: ConversionFailureReason, error: string): ConversionFailure => ({ ok: false, error, reason });
 
 function lastLines(text: string, count = 3): string {
   return text.trim().split(/\r?\n/).slice(-count).join(" | ");
@@ -137,7 +144,7 @@ function interpret(result: BudgetedProcessResult, to: ConverterTarget): Conversi
   switch (result.exitCode) {
     case 0:
       return result.stdoutBytes.length > 0
-        ? { ok: true, bytes: result.stdoutBytes, mime: CONVERTER_TARGET_MIME[to] }
+        ? ok({ bytes: result.stdoutBytes, mime: CONVERTER_TARGET_MIME[to] })
         : fail("conversion-failed", "the converter exited 0 but produced no output");
     case 4:
       return fail("input-too-large", detail);

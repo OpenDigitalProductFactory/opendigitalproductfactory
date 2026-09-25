@@ -44,7 +44,7 @@ describe("convertDocument (BI-52E565DA)", () => {
     const input = Buffer.from("legacy word document");
     const out = await convertDocument({ input, from: "doc", to: "pdf" }, deps(run));
 
-    expect(out).toEqual({ ok: true, bytes: PDF, mime: "application/pdf" });
+    expect(out.ok && out.data).toEqual({ bytes: PDF, mime: "application/pdf" });
     expect(calls).toHaveLength(1);
     expect(calls[0].command).toBe("docker");
     expect(calls[0].args).toContain(IMAGE);
@@ -94,7 +94,7 @@ describe("convertDocument (BI-52E565DA)", () => {
       const { run } = recordingRunner(result({ exitCode, stderr: `dpf-convert: exit ${exitCode}` }));
       const out = await convertDocument({ input: Buffer.from("x"), from: "doc", to: "pdf" }, deps(run));
       expect(out).toMatchObject({ ok: false, reason });
-      if (!out.ok) expect(out.detail).toContain(`exit ${exitCode}`);
+      if (!out.ok) expect(out.error).toContain(`exit ${exitCode}`);
     }
   });
 
@@ -204,9 +204,7 @@ describe("convertDocument (BI-52E565DA)", () => {
     expect(limiter.active()).toBe(0);
 
     const ok = recordingRunner(result({ stdoutBytes: PDF }));
-    expect(await convertDocument({ input: Buffer.from("x"), to: "pdf" }, deps(ok.run, { limiter }))).toMatchObject({
-      ok: true,
-    });
+    expect((await convertDocument({ input: Buffer.from("x"), to: "pdf" }, deps(ok.run, { limiter }))).ok).toBe(true);
   });
 
   it("frees the slot when the runner throws", async () => {

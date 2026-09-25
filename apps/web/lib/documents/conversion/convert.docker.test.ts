@@ -22,6 +22,7 @@ const FIXTURE = resolve(__dirname, "../../../../../tools/doctools/fixtures/sampl
 function dockerHasImage(image: string): boolean {
   if (!isPinnedImageReference(image)) return false;
   try {
+    // ambient-host-guard: allow the docker gate itself; a host without the image reports this suite SKIPPED
     return spawnSync("docker", ["image", "inspect", image], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
@@ -38,17 +39,19 @@ const deps = (overrides: Partial<ConvertDeps> = {}): ConvertDeps => ({
 describe.skipIf(!ready)("convertDocument against the real dpf-doctools image", () => {
   it("converts a legacy .doc to PDF and to text end to end", async () => {
     const doc = await convertDocument({ input: readFileSync(FIXTURE), from: "fodt", to: "doc" }, deps());
-    expect(doc).toMatchObject({ ok: true, mime: "application/msword" });
-    if (!doc.ok) return;
+    if (!doc.ok) throw new Error(`fodt -> doc failed: ${doc.reason}: ${doc.error}`);
+    expect(doc.data.mime).toBe("application/msword");
     // OLE compound file magic: a real legacy .doc, not a renamed text file.
-    expect(doc.bytes.subarray(0, 8).toString("hex")).toBe("d0cf11e0a1b11ae1");
+    expect(doc.data.bytes.subarray(0, 8).toString("hex")).toBe("d0cf11e0a1b11ae1");
 
-    const pdf = await convertDocument({ input: doc.bytes, from: "doc", to: "pdf" }, deps());
-    expect(pdf).toMatchObject({ ok: true, mime: "application/pdf" });
-    if (pdf.ok) expect(pdf.bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    const pdf = await convertDocument({ input: doc.data.bytes, from: "doc", to: "pdf" }, deps());
+    if (!pdf.ok) throw new Error(`doc -> pdf failed: ${pdf.reason}: ${pdf.error}`);
+    expect(pdf.data.mime).toBe("application/pdf");
+    expect(pdf.data.bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
 
-    const text = await convertDocument({ input: doc.bytes, from: "doc", to: "txt" }, deps());
-    expect(text.ok && text.bytes.toString("utf8")).toContain("DPFSENTINELWRITER");
+    const text = await convertDocument({ input: doc.data.bytes, from: "doc", to: "txt" }, deps());
+    if (!text.ok) throw new Error(`doc -> txt failed: ${text.reason}: ${text.error}`);
+    expect(text.data.bytes.toString("utf8")).toContain("DPFSENTINELWRITER");
   }, 240_000);
 
   it("kills a conversion that outruns its budget, removes the container, and frees the slot", async () => {
@@ -73,6 +76,7 @@ describe.skipIf(!ready)("convertDocument against the real dpf-doctools image", (
     expect(out).toMatchObject({ ok: false, reason: "timeout" });
     expect(limiter.active()).toBe(0);
 
+    // ambient-host-guard: allow proving the kill path removed the real container; runs only inside the docker-gated suite
     const listed = spawnSync("docker", ["ps", "-a", "--filter", `name=${names[0]}`, "--format", "{{.Names}}"], {
       encoding: "utf8",
     });
