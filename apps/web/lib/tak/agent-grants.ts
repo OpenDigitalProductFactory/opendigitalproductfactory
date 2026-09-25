@@ -166,6 +166,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   sweep_duplicate_demand: ["backlog_read"],
   run_capacity_drain: ["backlog_write"],
   approve_demand_for_funding: ["backlog_write"],
+  propose_epic_portfolios: ["backlog_read"],
+  confirm_epic_portfolios: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],

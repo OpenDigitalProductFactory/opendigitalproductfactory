@@ -84,6 +84,14 @@ enum InvestmentBucket {
   transform
 }
 
+// EpicPortfolio.proposalConfidence — how strongly an epic's own items pointed at
+// the proposed portfolio (BI-A73A7DA3). high: one portfolio holds at least 80% of
+// three or more attributed items. low: anything else, including a text match.
+enum EpicPortfolioConfidence {
+  high
+  low
+}
+
 // Workroom.decisionScope — which decision surface governs the work.
 // Canonical union: apps/web/lib/work-capsules.ts
 enum DecisionScope {
@@ -568,9 +576,21 @@ model EpicPortfolio {
   portfolioId String
   epic        Epic      @relation(fields: [epicId], references: [id], onDelete: Cascade)
   portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  /// Who confirmed this attribution and why (BI-A73A7DA3). Null on links written
+  /// by paths that record no actor, such as the epic edit form.
+  confirmedById      String?
+  confirmedBy        User?    @relation("EpicPortfolioConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  confirmedByAgentId String?
+  confirmedByAgent   Agent?   @relation("EpicPortfolioConfirmedByAgent", fields: [confirmedByAgentId], references: [agentId], onDelete: SetNull)
+  confirmationReason String?
+  confirmedAt        DateTime?
+  /// Confidence of the proposal the person confirmed; null when no proposal was shown.
+  proposalConfidence EpicPortfolioConfidence?
 
   @@id([epicId, portfolioId])
   @@index([portfolioId]) // FK-leading (join table): portfolio-side lookups; @@id only covers epicId
+  @@index([confirmedById])
+  @@index([confirmedByAgentId])
   @@index([epicId])
 }
 
