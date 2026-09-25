@@ -288,6 +288,7 @@ model Agent {
   oauthClients       OAuthClient[]
   oauthRefreshTokens OAuthRefreshToken[]
   payrollTaxRulesProposed PayrollTaxRule[] @relation("PayrollTaxRuleProposedBy")
+  epicPortfoliosConfirmed EpicPortfolio[]  @relation("EpicPortfolioConfirmedByAgent")
 
   @@index([portfolioId]) // FK-leading (spine): active-agents-per-portfolio groupBy, apps/web/lib/evaluate/portfolio-data.ts:72
 }

@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 414,
-      "reason": "create_presentation (BI-543819B1) is the only way a coworker produces a presentation: it takes an outline and returns a branded .pptx, PDF and slide previews stored as a managed document, and a revision becomes the next version. doc_save could not carry it: doc_save stores bytes the caller already has, and a coworker has no way to author an office file, which is the point of never hand-writing office XML. It sits in the document pack beside doc_save, gated by the same document_write grant.",
+      "value": 416,
+      "reason": "propose_epic_portfolios and confirm_epic_portfolios (BI-A73A7DA3). Portfolio budgets need every item attributed, and 1,201 items reached a portfolio only through an epic with none. No existing tool writes an epic's portfolio: update_epic has no portfolio field, and the portal's epic form writes EpicPortfolio with no actor or reason, which the design forbids for an attribution. The proposal is read-only and separate so an agent can show evidence without the power to apply it; confirm requires a reason and a person, and refuses an unverified high-confidence batch.",
       "recordedAt": "2026-09-25"
     },
     "registry.packFiles": {
-      "value": 102,
-      "reason": "New decision-outcome-pack.ts (BI-F302B80E). It is its own pack rather than a tool added to principle-decide-pack for the separation stated above: the outcome is reported after the work, by the party that did it, and the two must not share a surface that could report its own result. One tool, one handler, modelled on decision-reverify-pack which exists for the same reason.",
-      "recordedAt": "2026-09-22"
+      "value": 103,
+      "reason": "New portfolio-budget-pack.ts (EP-PORTFOLIO-BUDGET-WIP). It holds the epic attribution tools now and the budget tools the next slices add (set_portfolio_budget, propose_portfolio_budgets), so the budget domain has one pack rather than growing demand-scoring-pack, which is already large and owns funding decisions, not portfolio budgets.",
+      "recordedAt": "2026-09-25"
     },
     "tier.coreToolNames": {
       "value": 35,
