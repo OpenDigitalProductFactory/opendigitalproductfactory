@@ -12,7 +12,6 @@ import sys
 import time
 
 import uno
-from com.sun.star.awt import Point, Size
 from com.sun.star.beans import PropertyValue
 from com.sun.star.connection import NoConnectException
 

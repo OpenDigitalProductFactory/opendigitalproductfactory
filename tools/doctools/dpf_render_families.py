@@ -4,16 +4,13 @@ document from a validated content spec; tools/doctools/dpf-render opens the
 document, exports it and archives the result."""
 
 import uno
-from com.sun.star.awt import Rectangle
+from com.sun.star.awt import Point, Rectangle, Size
 from com.sun.star.lang import Locale
 from com.sun.star.table import CellRangeAddress
 from com.sun.star.text.ControlCharacter import PARAGRAPH_BREAK
 
 from dpf_render_uno import (
     CHART_CLSID,
-    DEFAULT_CHART_COLOURS,
-    Point,
-    Size,
     colour,
     fill_chart,
     fitted_size,
