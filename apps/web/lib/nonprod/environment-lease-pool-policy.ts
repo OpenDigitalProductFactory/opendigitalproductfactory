@@ -78,6 +78,9 @@ export interface ResolvedHostResourcePoolPolicy {
  * What kind of answer each host admission is — total over the union, so a new
  * admission status cannot be added without deciding what it MEANS (§10 rule 6).
  */
+/** Pause before re-reading a server probe that failed, so a builder mid-transition can settle. */
+const SERVER_PROBE_RETRY_MS = 750;
+
 const HOST_ADMISSION_DISPOSITION: Record<HostResourceAdmission["status"], OutcomeDisposition> = {
   // Not heavyweight, so the gate does not apply and the work proceeds.
   bypass: "proceed",
@@ -170,19 +173,26 @@ export async function resolveNonprodPoolPolicy(input: {
   // unsafe host.
   if (preliminary.config === null) return preliminary;
 
-  let serverPressure: LocalCiHostPressure;
-  try {
-    serverPressure = await (
-      input.capacityBroker ?? observeLocalCiServerPressure
-    )();
-  } catch {
-    serverPressure = {
-      observedAt: input.now.toISOString(),
-      dockerHealthy: false,
-      convergenceActive: true,
-      fencesHealthy: false,
-      evidenceIsolationHealthy: false,
-    };
+  const sampleServer = async (): Promise<LocalCiHostPressure> => {
+    try {
+      return await (input.capacityBroker ?? observeLocalCiServerPressure)();
+    } catch {
+      return {
+        observedAt: input.now.toISOString(),
+        dockerHealthy: false,
+        convergenceActive: true,
+        fencesHealthy: false,
+        evidenceIsolationHealthy: false,
+        probeFailures: ["broker"],
+      };
+    }
+  };
+  let serverPressure = await sampleServer();
+  // A probe caught mid-transition (a builder starting or stopping) is read once
+  // more before the pool is closed on it for this claim.
+  if (serverPressure.probeFailures?.length) {
+    await new Promise((resolve) => setTimeout(resolve, SERVER_PROBE_RETRY_MS));
+    serverPressure = await sampleServer();
   }
   const decidedHostPressure = mergeLocalCiHostPressure({
     client: clientPressure,

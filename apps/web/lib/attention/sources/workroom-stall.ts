@@ -10,6 +10,7 @@
 import type { prisma } from "@dpf/db";
 
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import { WORKROOM_DRIVE_STALL_TICKS } from "@/lib/work-management/workroom-drive-hold";
 import { resolveRoomOwner, type RoomOwner } from "@/lib/work-management/room-owner-ladder";
 import { STANDING_SHAPES } from "@/lib/work-management/standing-operations-shapes";
 import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
@@ -21,8 +22,8 @@ type Db = typeof prisma;
 /** Consecutive refusals before a pause is a stall. The drive cron is every 15
  *  minutes, so this is one hour — long enough that a room between cycles or
  *  behind a quiescent gate stays quiet, short enough that a genuinely stuck room
- *  is reported the same working day. */
-export const STALL_TICK_THRESHOLD = 4;
+ *  is reported the same working day. One constant with the drive's own notice. */
+export const STALL_TICK_THRESHOLD = WORKROOM_DRIVE_STALL_TICKS;
 
 /** Drive actions that mean the room is NOT advancing.
  *
@@ -44,6 +45,8 @@ export type RoomStallRow = {
   /** workspaceState.workroomDrive — untyped JSON written by the queue function. */
   drive: unknown;
   consecutivePauses: number;
+  /** When the room last stopped advancing, from the drive's hold (BI-E8C78E80). */
+  stuckSince?: string | null;
   /** What the ownership ladder resolves for this room, when it resolves anything.
    *  A SUGGESTION only: it names who should be appointed, and never routes the
    *  item to them — conformance still requires an explicit appointment, and an
@@ -137,7 +140,9 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
       decideEffort: "judgment",
       irreversible: false,
     },
-    createdAtIso: row.updatedAt.toISOString(),
+    // The age of the stall, not of the last tick: every tick bumps updatedAt, so
+    // reading it made a room stuck for a week sort as minutes old.
+    createdAtIso: row.stuckSince ?? row.updatedAt.toISOString(),
     actions: [{ kind: "open-in-context", label: "Open room", href: roomHref }],
     deepLink: roomHref,
     audience: { operator: true, ...(overseer ? { assigneePrincipalId: overseer } : {}) },
@@ -169,6 +174,7 @@ type StallScanRow = {
   updatedAt: Date;
   drive: unknown;
   consecutivePauses: bigint | number;
+  stuckSince: string | null;
   /** scopeClaims, from which the room's workShape ref is read. */
   scopeClaims: unknown;
 };
@@ -176,48 +182,17 @@ type StallScanRow = {
 /**
  * Rooms currently refusing, with the length of the current refusal streak.
  *
- * The streak is counted from the WorkroomActivity model — the drive's own
- * append-only trail — because workspaceState holds only the latest tick. Raw SQL
- * must use its PHYSICAL table name, "WorkCapsuleActivity" (@@map), exactly as
- * Workroom maps to "WorkCapsule"; the model name compiles fine and fails only at
- * runtime. Counting stops at
- * the most recent non-pause activity, so a room that recovered and stalled again
- * reports the NEW streak, not its lifetime total.
- * Compute each room's advancing boundary once. A correlated boundary lookup
- * per activity repeatedly scanned the entire materialized history, exhausting
- * the portal pool as activity accumulated (BI-70B2ED84).
+ * The streak is the drive's own count, `workroomDrive.hold.stuckTicks` in the
+ * snapshot it writes every tick (BI-E8C78E80). It used to be counted from the
+ * WorkroomActivity trail, which only worked because the drive wrote an
+ * identical row every tick; the trail now gets a row only when the hold
+ * changes, so counting rows would under-report every stuck room. The snapshot
+ * resets the count when the room advances, so a room that recovered and stalled
+ * again reports the NEW streak, not its lifetime total. One indexed read of
+ * each room row; no scan of the activity history (BI-70B2ED84).
  */
 export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
   const rows = await db.$queryRaw<StallScanRow[]>`
-    WITH drive_activity AS (
-      SELECT
-        a."workCapsuleId",
-        a."recordedAt",
-        a."payload" ->> 'action' AS action,
-        ROW_NUMBER() OVER (PARTITION BY a."workCapsuleId" ORDER BY a."recordedAt" DESC) AS rn
-      FROM "WorkCapsuleActivity" a
-      JOIN "WorkCapsule" active_room ON active_room."id" = a."workCapsuleId"
-      WHERE a."kind" = 'workroom-drive'
-        AND active_room."archivedAt" IS NULL
-        AND active_room."status" NOT IN ('abandoned', 'archived', 'complete')
-    ),
-    boundary AS (
-      SELECT
-        "workCapsuleId",
-        MIN(rn) FILTER (WHERE action IS NULL OR action NOT IN ('pause', 'escalate')) AS first_advancing
-      FROM drive_activity
-      GROUP BY "workCapsuleId"
-    ),
-    streak AS (
-      SELECT
-        d."workCapsuleId",
-        COUNT(*) AS consecutive_pauses
-      FROM drive_activity d
-      JOIN boundary b ON b."workCapsuleId" = d."workCapsuleId"
-      WHERE (b.first_advancing IS NULL OR d.rn < b.first_advancing)
-      AND d.action IN ('pause', 'escalate')
-      GROUP BY d."workCapsuleId"
-    )
     SELECT
       w."capsuleId"      AS "capsuleId",
       w."title"          AS "title",
@@ -225,13 +200,14 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
       w."updatedAt"      AS "updatedAt",
       w."workspaceState" -> 'workroomDrive' AS "drive",
       w."scopeClaims"    AS "scopeClaims",
-      s.consecutive_pauses AS "consecutivePauses"
+      COALESCE((w."workspaceState" #>> '{workroomDrive,hold,stuckTicks}')::int, 0) AS "consecutivePauses",
+      w."workspaceState" #>> '{workroomDrive,hold,stuckSince}' AS "stuckSince"
     FROM "WorkCapsule" w
-    JOIN streak s ON s."workCapsuleId" = w."id"
     WHERE w."archivedAt" IS NULL
       AND w."status" NOT IN ('abandoned', 'archived', 'complete')
-      AND s.consecutive_pauses >= ${STALL_TICK_THRESHOLD}
-    ORDER BY s.consecutive_pauses DESC, w."updatedAt" ASC
+      AND w."workspaceState" #>> '{workroomDrive,action}' IN ('pause', 'escalate')
+      AND COALESCE((w."workspaceState" #>> '{workroomDrive,hold,stuckTicks}')::int, 0) >= ${STALL_TICK_THRESHOLD}
+    ORDER BY "consecutivePauses" DESC, w."updatedAt" ASC
     LIMIT ${ROOM_STALL_SCAN_LIMIT}
   `;
   return rows.map((r) => ({
@@ -241,6 +217,7 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
     updatedAt: r.updatedAt,
     drive: r.drive,
     consecutivePauses: Number(r.consecutivePauses),
+    stuckSince: r.stuckSince,
     ladderOwner: resolveLadderOwner(r.scopeClaims),
   }));
 }

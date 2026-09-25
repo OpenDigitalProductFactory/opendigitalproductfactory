@@ -146,6 +146,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
               resumeMode: "same-taskrun",
               attempt: 1,
               observedAt: expect.any(String),
+              // BI-D25F867D: the next attempt waits out a bounded backoff.
+              nextAttemptAt: expect.any(String),
             },
           },
         },
@@ -495,4 +497,19 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     },
   );
 
+});
+
+// BI-D25F867D — a capacity wait is bounded and paced.
+describe("resource wait pacing", () => {
+  it("backs off 1, 2, 4, 8 then 15 minutes and is due only after its time", async () => {
+    const { createResourceWaitProjection, resourceWaitBackoffMs, resourceWaitDue } = await import("./mcp-task-capacity-contract");
+    expect([1, 2, 3, 4, 5, 6].map(resourceWaitBackoffMs)).toEqual([1, 2, 4, 8, 15, 15].map((m) => m * 60_000));
+    const now = new Date("2026-09-24T12:00:00.000Z");
+    const wait = createResourceWaitProjection("busy", 3, now);
+    expect(wait.nextAttemptAt).toBe("2026-09-24T12:04:00.000Z");
+    expect(resourceWaitDue(wait, new Date("2026-09-24T12:03:59.000Z"))).toBe(false);
+    expect(resourceWaitDue(wait, new Date("2026-09-24T12:04:00.000Z"))).toBe(true);
+    // A wait written before pacing existed is due at once.
+    expect(resourceWaitDue({ ...wait, nextAttemptAt: undefined }, now)).toBe(true);
+  });
 });

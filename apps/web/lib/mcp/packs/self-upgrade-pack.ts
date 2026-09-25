@@ -288,12 +288,13 @@ async function getQuiescenceStatusTool(): Promise<ToolResult> {
       retryAfterSeconds,
       writesRefused,
       readOperationsAllowed: true,
-      cleanupOperationsAllowed: ["release_nonprod_environment_lease"],
+      // Mirrors QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS in app/api/mcp/v1/route.ts.
+      cleanupOperationsAllowed: ["release_nonprod_environment_lease", "renew_nonprod_environment_lease"],
       refusedOperations: writesRefused
         ? ["mutating MCP writes", "new lease claims", "local-CI evidence writes"]
         : [],
       writeImplications: writesRefused
-        ? "Mutating MCP writes are refused during active quiescence; retry after the level returns to normal. Lease release remains cleanup-safe so local-CI can finalize without leaking a lease."
+        ? "Mutating MCP writes are refused during active quiescence; retry after the level returns to normal. Lease release and renewal remain allowed, so a running local-CI gate keeps its lease and can finalize without leaking it."
         : "Mutating MCP writes are accepted. Continue normal local-CI evidence recording and lease operations.",
     },
   };

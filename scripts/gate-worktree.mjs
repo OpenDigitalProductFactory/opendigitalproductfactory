@@ -712,12 +712,33 @@ export function createProcessTreeTracker({
   onEvent = () => {},
 } = {}) {
   const root = Number(rootPid);
-  const remembered = new Set();
+  // pid -> command line when first seen. Windows reuses process ids quickly, so
+  // an id alone can name a stranger by the time the run ends: on 2026-09-24
+  // detached durable-wait resumers died without a trace. A remembered id is only
+  // terminated while it still runs the command it ran when it was our descendant.
+  const remembered = new Map();
+  let lastRows = [];
 
   const remember = (rows) => {
-    const descendants = collectDescendantPids(root, rows);
-    for (const pid of descendants) remembered.add(pid);
+    lastRows = Array.isArray(rows) ? rows : [];
+    const descendants = collectDescendantPids(root, lastRows);
+    const commandByPid = new Map(lastRows.map((row) => [row.pid, row.commandLine ?? ""]));
+    for (const pid of descendants) {
+      if (!remembered.has(pid)) remembered.set(pid, commandByPid.get(pid) ?? "");
+    }
     return descendants;
+  };
+
+  const stillOurs = (pid) => {
+    if (lastRows.length === 0) return true; // no listing: keep the old behaviour
+    const row = lastRows.find((entry) => entry.pid === pid);
+    if (!row) return true;
+    const same = (row.commandLine ?? "") === remembered.get(pid);
+    if (!same) {
+      remembered.delete(pid);
+      onEvent({ type: "descendant-pid-reused", pid });
+    }
+    return same;
   };
 
   const sample = () => remember(listProcessRows());
@@ -735,7 +756,7 @@ export function createProcessTreeTracker({
   );
 
   const liveRememberedDescendants = () =>
-    [...remembered].filter((pid) => pid !== root && processAlive(pid));
+    [...remembered.keys()].filter((pid) => pid !== root && processAlive(pid) && stillOurs(pid));
 
   const waitForQuiescence = async ({ graceMs = 5000, pollMs = 250 } = {}) => {
     const deadline = now() + graceMs;
@@ -760,7 +781,7 @@ export function createProcessTreeTracker({
     sampleAsync,
     waitForQuiescence,
     liveRememberedDescendants,
-    rememberedPids: () => [...remembered],
+    rememberedPids: () => [...remembered.keys()],
   };
 }
 

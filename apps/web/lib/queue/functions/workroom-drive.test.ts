@@ -353,3 +353,37 @@ describe("applyDrivePlan lease expiry", () => {
     expect(fx.acquireLease).toHaveBeenCalled();
   });
 });
+
+// BI-E8C78E80 — a tick that changed nothing updates the snapshot but adds no
+// trail row, and a room stuck for an hour tells its owner once.
+describe("applyDrivePlan hold", () => {
+  const plan = (over: Record<string, unknown> = {}) => ({
+    action: "pause", reason: "conformance_pause", roomId: "row-1", shapeKey: null, shapeVersion: null,
+    definition: null, stageKey: "spec", accountablePrincipalRef: null, agentId: null, attentionPrincipalRef: null,
+    taskId: null, conformance: { deviations: [{ code: "missing_explicit_coordinator" }] }, cycle: null,
+    deviations: [], ledger: [], ...over,
+  }) as unknown as Parameters<typeof applyDrivePlan>[0]["plan"];
+
+  it("records the first tick of a hold and keeps the repeats quiet", async () => {
+    const fx = effects();
+    await applyDrivePlan({ room: room(), plan: plan(), now: new Date("2026-09-24T00:00:00Z"), effects: fx });
+    const stored = fx.persist.mock.calls[0][0].snapshot;
+    expect(fx.persist.mock.calls[0][0].quiet).toBe(false);
+    await applyDrivePlan({ room: room({ workspaceState: { workroomDrive: stored } }), plan: plan(),
+      now: new Date("2026-09-24T00:15:00Z"), effects: fx });
+    expect(fx.persist.mock.calls[1][0]).toMatchObject({ quiet: true, snapshot: { hold: { ticks: 2 } } });
+  });
+
+  it("tells the owner once after an hour stuck, and not again in the same spell", async () => {
+    const notifyStall = vi.fn(async () => {});
+    const fx = { ...effects(), notifyStall };
+    let state: unknown = {};
+    for (let i = 0; i < 6; i++) {
+      await applyDrivePlan({ room: room({ workspaceState: state }), plan: plan(),
+        now: new Date(Date.UTC(2026, 8, 24, 0, 15 * i)), effects: fx });
+      state = { workroomDrive: fx.persist.mock.calls.at(-1)?.[0].snapshot };
+    }
+    expect(notifyStall).toHaveBeenCalledTimes(1);
+    expect(notifyStall).toHaveBeenCalledWith(expect.objectContaining({ hold: expect.objectContaining({ stuckTicks: 4 }) }));
+  });
+});

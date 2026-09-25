@@ -264,7 +264,9 @@ export async function callWithFallbackChain(
     return true;
   });
 
-  const attempts: Array<{ endpointId: string; error: string }> = [];
+  // `code` is the provider's typed error (rate_limit, overloaded, ...) so the dead-end
+  // classifier does not have to guess from wording (BI-D25F867D).
+  const attempts: Array<{ endpointId: string; error: string; code?: string }> = [];
   const reconciledProviders = new Set<string>();
   const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
   let rateLimitRetried = false;
@@ -445,11 +447,13 @@ export async function callWithFallbackChain(
     } catch (e) {
       if (e instanceof LocalProviderCapacityDeferredError) {
         capacityDeferrals.push(e);
-        attempts.push({ endpointId: entry.providerId, error: e.reason });
+        attempts.push({ endpointId: entry.providerId, error: e.reason, code: "capacity" });
         continue;
       }
       const errMsg = getErrorMessage(e);
-      attempts.push({ endpointId: entry.providerId, error: errMsg });
+      const errCode = e && typeof e === "object" && typeof (e as { code?: unknown }).code === "string"
+        ? (e as { code: string }).code : undefined;
+      attempts.push({ endpointId: entry.providerId, error: errMsg, ...(errCode ? { code: errCode } : {}) });
       // BI-7F2FBDA3: a provider refusing THIS model under THIS account is a
       // fact about the catalog, not about the request. Learn it (benched for a
       // day, audited), drop the loader cache so the next route excludes it, and

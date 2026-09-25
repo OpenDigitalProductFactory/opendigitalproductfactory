@@ -57,13 +57,26 @@ describe("consent rendering", () => {
     expect(html).toContain('type="hidden" name="acting_coworker" value="AGT-EXT-CLAUDE"');
     expect(html).not.toContain("<summary>Change</summary>");
   });
-  it("opens a specific choice, least authority first, only when candidates differ in authority", () => {
+  it("asks for an explicit choice, least authority first, when candidates differ in authority", () => {
     const html = renderConsentPage({ ...base, assistant: { kind: "choice", selected: assistant.candidates[0],
       candidates: [{ ...assistant.candidates[0], detail: "13 permissions" }, { ...assistant.candidates[1], detail: "14 permissions" }] } });
-    expect(html).toMatch(/<details[^>]*open[^>]*>\s*<summary>Change<\/summary>/);
     expect(html).toContain("differ in what they can do");
-    expect(html).toContain("13 permissions");
-    expect(html).toContain("14 permissions");
+    expect(html.indexOf("13 permissions")).toBeLessThan(html.indexOf("14 permissions"));
+    // Nothing is chosen for the person: a required select behind an empty placeholder, no default field.
+    expect(html).toMatch(/<select name="acting_coworker"[^>]*required[^>]*><option value="" selected disabled>/);
+    expect(html).not.toMatch(/<option value="AGT-[^"]*" selected>/);
+    expect(html).not.toContain('name="default_coworker"');
+  });
+  it("gives Enter nothing to submit: the form's first submit button is disabled", () => {
+    const html = renderConsentPage(base);
+    const form = html.slice(html.indexOf("<form"));
+    const firstSubmit = form.match(/<button[^>]*type="submit"[^>]*>/)?.[0] ?? "";
+    expect(firstSubmit).toContain("disabled");
+    expect(form).toContain('name="decision" value="approve"');
+  });
+  it("says why nothing was connected when Connect came without a choice", () => {
+    const html = renderConsentPage({ ...base, choiceNotice: true });
+    expect(html).toContain("Choose which assistant this connection works as. Nothing was connected.");
   });
   it("lists permissions plainly by default and keeps the checkboxes behind Adjust permissions", () => {
     const html = renderConsentPage(base);

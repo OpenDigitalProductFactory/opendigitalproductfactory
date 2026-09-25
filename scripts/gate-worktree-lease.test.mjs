@@ -2210,3 +2210,33 @@ test("no test in this file wrote gate artifacts into the checkout running it", (
     `gate records were written into ${CALLER_GATE_DIRECTORY}; a test spawned gate-worktree.mjs against the real checkout instead of a temp repository`,
   );
 });
+
+// 2026-09-24: detached durable-wait resumers died without a trace. Windows
+// reuses process ids, so the gate's end-of-run cleanup must not kill an id that
+// now runs a different command than the descendant it once remembered.
+test("the descendant cleanup never kills a reused process id", async () => {
+  let rows = [
+    { pid: 100, parentPid: 1, commandLine: "node local-ci-runner.mjs" },
+    { pid: 101, parentPid: 100, commandLine: "docker build ." },
+  ];
+  const terminated = [];
+  const events = [];
+  const tracker = createProcessTreeTracker({
+    rootPid: 1,
+    listProcessRows: () => rows,
+    processAlive: (pid) => rows.some((row) => row.pid === pid),
+    terminate: (pid) => { terminated.push(pid); rows = rows.filter((row) => row.pid !== pid); },
+    wait: async () => {},
+    now: (() => { let t = 0; return () => (t += 1000); })(),
+    onEvent: (event) => events.push(event),
+  });
+  tracker.sample();
+  // The build exits; its id is reused by a stranger's resumer, and the runner lingers.
+  rows = [
+    { pid: 100, parentPid: 1, commandLine: "node local-ci-runner.mjs" },
+    { pid: 101, parentPid: 4242, commandLine: "node local-ci-durable-wait-resumer.mjs --branch other" },
+  ];
+  await tracker.waitForQuiescence({ graceMs: 0, pollMs: 1 });
+  assert.deepEqual(terminated, [100]);
+  assert.ok(events.some((event) => event.type === "descendant-pid-reused" && event.pid === 101));
+});

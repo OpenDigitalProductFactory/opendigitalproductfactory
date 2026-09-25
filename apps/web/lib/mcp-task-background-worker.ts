@@ -16,6 +16,7 @@ import {
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
 import {
+  parseResourceWaitProjection,
   remoteTaskRequestDigest,
   remoteTaskRequestMatches,
 } from "./mcp-task-capacity-contract";
@@ -635,10 +636,14 @@ export async function executePersistedRemoteTask(input: {
     };
   }
 
+  // A task parked for capacity resumes as its next attempt on the same TaskRun,
+  // so the wait's bound counts real attempts instead of restarting at 1 (BI-D25F867D).
+  const capacityWait = parseResourceWaitProjection(row.progressPayload);
   const outcome = await executeRemoteTaskAttempt({
     ...reconstructed.data,
-    idempotentReplay: false,
-    capacityAttempt: 1,
+    idempotentReplay: capacityWait !== null,
+    capacityAttempt: capacityWait ? capacityWait.attempt + 1 : 1,
+    ...(capacityWait ? { resumeKind: "capacity" as const } : {}),
     terminalWriterAttempt: 1,
   });
   const outcomeStatus = outcome.kind === "result" ? outcome.result["status"] : null;

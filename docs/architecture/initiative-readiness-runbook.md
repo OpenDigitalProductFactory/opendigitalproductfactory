@@ -116,6 +116,10 @@ Routing a review correctly is necessary but not currently *sufficient*. A dispat
 
 This is a tracked platform defect, **BI-ECFE0AC2** ("External initiative reviewers complete with zero tool executions, blocking governed terminal transitions"), under epic EP-E1F1DB58, with two observed contributing causes: the reviewer's terminal-writer context not hydrating its bound tools, and a stale Codex model catalog forcing a fallback that omits the writer. Until it is fixed, a `feature` initiative on a single-principal install can be fully authored, correctly bound, and correctly routed, yet still not reach `completion` — and that is the defect's fault, not a step the operator or author missed. Do not proxy the receipt from the author principal to "unblock" it: that would defeat the independence rule the gate exists to enforce (§2). Read the live BI for current status before assuming the strand is unfixed.
 
+## 7. Known limitation — a small or medium item cannot close through an acceptance reviewer (BI-0F8E39D5)
+
+A small or medium item's objective baseline is the acceptance criteria in its body; its shape owes no spec, so nothing ever runs spec approval, and spec approval is the only writer of the persisted `initiative_scope_baseline` that acceptance mapping reads. The recovery packet used to answer "complete independent spec approval" — advice the shape can never follow. Since 2026-09-24 it escalates `body-baseline-unpersisted` instead, and says so. Which repair is right (persist a baseline from the body, or let acceptance cite the delivery evidence directly) is an open decision on BI-0F8E39D5; until it lands, do not seek a spec approval for such an item and do not self-approve.
+
 ## Anti-patterns (observed)
 
 - **Driving the workroom from gate-refusal errors instead of the packet.** Get the packet; it names every actor and hands you the call.

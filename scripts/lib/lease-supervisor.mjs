@@ -34,6 +34,21 @@ export function uncertainRetryDelayMs(ttlMs, attempt) {
   return Math.min(intervalMs, base * 2 ** exponent);
 }
 
+/**
+ * Refusals that mean "not now", not "the lease is gone". A quiescing portal and
+ * a tool that threw say nothing about who holds the lease, so treating them as
+ * final killed healthy gate runs mid-build and lost their verdicts (2026-09-24).
+ */
+const TRANSIENT_REFUSALS = new Set(["portal_quiescing", "tool_threw"]);
+
+/** A renewal response that proves the lease is gone. Anything else is retried until the deadline. */
+export function isAuthoritativeRefusal(response) {
+  if (!response || typeof response !== "object" || typeof response.success !== "boolean") return false;
+  if (response.success) return false;
+  if (response.data?.retryable === true) return false;
+  return !TRANSIENT_REFUSALS.has(response.error);
+}
+
 function parsedExpiryMs(value) {
   const parsed = typeof value === "string" ? Date.parse(value) : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -164,8 +179,22 @@ export async function superviseLeaseRun({
         });
         return;
       }
-      // A response that refuses is authoritative: the lease is genuinely gone and
-      // another holder may exist. Never retry that -- only unreachability.
+      // A transient refusal (quiescence, a server that threw, a malformed reply)
+      // is as uncertain as an unreachable service: retry it inside the budget.
+      if (!isAuthoritativeRefusal(response)) {
+        uncertainStreak += 1;
+        onEvent({
+          type: "heartbeat-uncertain",
+          at: new Date().toISOString(),
+          reason: response?.error || "renewal-response-unreadable",
+          expiresAt: new Date(knownExpiryMs).toISOString(),
+          attempt: uncertainStreak,
+        });
+        scheduleUncertainRetry();
+        return;
+      }
+      // A refusal that says the lease is gone is authoritative: another holder
+      // may exist. Never retry that.
       cancelRetryTimer();
       await fence(
         response?.error || "lease-renewal-failed",
@@ -190,7 +219,13 @@ export async function superviseLeaseRun({
     if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
     if (heartbeatInFlight) await heartbeatInFlight;
     if (deadlineInFlight) await deadlineInFlight;
-    await release();
-    onEvent({ type: "released", at: new Date().toISOString() });
+    // A failed release must not take the run's verdict with it: the evidence is
+    // recorded after this, and an unreleased lease still accepts it.
+    try {
+      await release();
+      onEvent({ type: "released", at: new Date().toISOString() });
+    } catch (error) {
+      onEvent({ type: "release-failed", at: new Date().toISOString(), reason: error?.message || String(error) });
+    }
   }
 }

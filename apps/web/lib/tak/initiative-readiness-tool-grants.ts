@@ -205,7 +205,7 @@ function isBindableReviewWriter(toolName: string): boolean {
  * the failing-to-passing proof, recorded by the author. Routing that lane
  * through the spec-bound reviewer packet asked the author to commit a spec
  * solely to receive a route — the terminal path already refuses to do that
- * (terminal-recovery.ts researchLaneEscalation, BI-7876699F); the claim path
+ * (shape-lane-escalations.ts researchLaneEscalation, BI-7876699F); the claim path
  * now says the same thing. The escalation names the author's writer and the
  * evidence it needs; it grants nothing.
  */

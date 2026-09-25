@@ -240,6 +240,12 @@ standing activity that can start itself is the highest-consequence thing in this
   ledger — the lesson `obligation-assurance-watch` already encodes at 200 findings.
 - **Every shape is reviewed on its `reviewPoint` whether or not it moved.** A watch that has found
   nothing for a month is as likely to be broken as to be reassuring.
+- **A held room is news once, not every tick (2026-09-24, BI-E8C78E80).** The drive keeps a `hold`
+  on its snapshot: what it is holding on (action, reason, stage, deviation codes), since when, and
+  for how many ticks. A tick that repeats an unchanged hold updates the snapshot but writes no
+  activity row; a pause or escalation held for `WORKROOM_DRIVE_STALL_TICKS` (4, about an hour)
+  raises one attention notice and records when. The Workroom stall source reads the same hold, and
+  Operations > Workrooms lists every held room with its reason and how long it has been held.
 - **An enforcement refusal is a stop.** A runner that cannot claim its lease, cannot reach the forge,
   or reads an empty substrate reports and stops; it never raises findings from an empty read.
 

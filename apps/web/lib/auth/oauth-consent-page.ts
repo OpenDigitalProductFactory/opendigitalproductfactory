@@ -108,6 +108,8 @@ export type ConsentView = {
   assistant: ConsentAssistant;
   /** Set when the POST re-derived a different answer than the GET showed. */
   driftNotice?: boolean;
+  /** Set when the person pressed Connect without choosing between assistants that differ in authority. */
+  choiceNotice?: boolean;
 };
 
 export type ConsentAssistant = {
@@ -143,7 +145,9 @@ export function renderConsentPage(view: ConsentView): string {
     .join("");
   const driftNotice = view.driftNotice
     ? `<p class="warn">What this connection is allowed to act as changed while this page was open. Nothing was connected. Check the details below and connect again.</p>`
-    : "";
+    : view.choiceNotice
+      ? `<p class="warn">Choose which assistant this connection works as. Nothing was connected.</p>`
+      : "";
 
   return shell(
     `Connect ${view.clientName}`,
@@ -153,6 +157,7 @@ export function renderConsentPage(view: ConsentView): string {
 ${selfAssertedNote}
 ${driftNotice}
 <form method="post" action="/api/oauth/authorize">
+<button type="submit" disabled hidden aria-hidden="true" tabindex="-1"></button>
 ${hidden}
 ${assistantBlock}
 <fieldset><legend>It will be able to:</legend>
@@ -189,21 +194,30 @@ function renderAssistant(view: ConsentView): string {
   const selected = assistant.selected;
   const consequence = `<p class="consequence">It will work as <strong>${esc(selected.displayName)}</strong> under your account.</p>`;
 
+  if (assistant.kind === "choice") {
+    // Candidates differ in what they can do, so the person picks one; nothing
+    // is pre-selected and the server refuses a Connect without a pick.
+    const options = assistant.candidates.map((c) =>
+      `<option value="${esc(c.agentId)}">${esc(c.displayName)}${c.detail ? ` — ${esc(c.detail)}` : ""}</option>`,
+    ).join("");
+    return `<p class="consequence">Choose which assistant it will work as under your account.</p>
+<p class="choice">The assistants you may authorize differ in what they can do. They are listed with the least authority first; nothing is chosen for you.</p>
+<select name="acting_coworker" aria-label="Assistant role" required><option value="" selected disabled>Choose an assistant…</option>${options}</select>
+${view.nextAssistantsUrl ? `<p><a href="${esc(view.nextAssistantsUrl)}">More approved assistants</a></p>` : ""}`;
+  }
+
   if (assistant.kind === "single") {
     return `${consequence}<input type="hidden" name="acting_coworker" value="${esc(selected.agentId)}">
 <p class="scope-detail">This assigns a role to this connection. It does not verify the app's name or grant access to a workroom.</p>`;
   }
 
-  const choice = assistant.kind === "choice";
   const options = assistant.candidates.map((c) =>
     `<option value="${esc(c.agentId)}"${c.agentId === selected.agentId ? " selected" : ""}>${esc(c.displayName)}${c.detail ? ` — ${esc(c.detail)}` : ""}</option>`,
   ).join("");
-  const note = choice
-    ? `<p class="choice">The assistants you may authorize differ in what they can do. The one with the least authority is selected; pick another only if you mean to.</p>`
-    : `<p class="scope-detail">This assigns a role to this connection. It does not verify the app's name or grant access to a workroom.</p>`;
+  const note = `<p class="scope-detail">This assigns a role to this connection. It does not verify the app's name or grant access to a workroom.</p>`;
   return `${consequence}
 <input type="hidden" name="default_coworker" value="${esc(selected.agentId)}">
-<details${choice ? " open" : ""}><summary>Change</summary>
+<details><summary>Change</summary>
 ${note}
 <select name="acting_coworker" aria-label="Assistant role">${options}</select>
 ${view.nextAssistantsUrl ? `<p><a href="${esc(view.nextAssistantsUrl)}">More approved assistants</a></p>` : ""}
