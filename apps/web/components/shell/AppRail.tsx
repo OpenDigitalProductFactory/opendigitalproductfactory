@@ -157,22 +157,22 @@ export function AppRail({ sections, mode = "operator" }: Props) {
         <div className="grid min-w-0 gap-3 lg:overflow-visible">
           {sections.map((section) => (
             <section key={section.key} className="min-w-0">
-              {section.portfolioRole ? (
-                // EP-2FB6C0CC (spec §9.3): a portfolio section is a workroom-shaped
-                // area. Its heading opens the area home: Work, Team and Setup.
-                <Link
-                  href={areaHref(section.key)}
-                  aria-current={matchesPath(pathname, `/area/${section.key}`) ? "page" : undefined}
-                  onClick={() => setMobileOpen(false)}
-                  className="block rounded-md px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] aria-[current=page]:text-[var(--dpf-accent)]"
-                >
-                  {section.label}
-                </Link>
-              ) : (
-                <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
-                  {section.label}
-                </p>
-              )}
+              <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+                {section.portfolioRole ? (
+                  // EP-2FB6C0CC (spec §9.3): a portfolio section is a workroom-shaped
+                  // area. Its heading opens the area home: Work, Team and Setup.
+                  <Link
+                    href={areaHref(section.key)}
+                    aria-current={matchesPath(pathname, `/area/${section.key}`) ? "page" : undefined}
+                    onClick={() => setMobileOpen(false)}
+                    className="hover:text-[var(--dpf-text)] aria-[current=page]:text-[var(--dpf-accent)]"
+                  >
+                    {section.label}
+                  </Link>
+                ) : (
+                  section.label
+                )}
+              </p>
 
               <div className="mt-1 grid gap-1">
                 {section.items.map((item) => {

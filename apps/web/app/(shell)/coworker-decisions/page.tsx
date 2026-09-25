@@ -233,7 +233,7 @@ export default async function WikiBrowsePage({
           How coworkers decide
         </h1>
         <p className="text-sm text-[var(--dpf-muted)]">
-          The Coworker Decision Engine: how your AI workforce decides on your behalf — and where you shape it.
+          The Coworker Decision Engine: how your AI workforce decides, and where you shape it.
           Three disciplines govern every call: platform doctrine (WWMD), your
           business (WWWD), and each role&rsquo;s craft (WSID).
         </p>

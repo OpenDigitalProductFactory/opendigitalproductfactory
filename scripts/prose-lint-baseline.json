@@ -439,6 +439,14 @@
     "longSentences": 0,
     "textMass": 38
   },
+  "apps/web/app/(shell)/area/[key]/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
   "apps/web/app/(shell)/build/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -902,14 +910,6 @@
     "readability": 4,
     "longSentences": 0,
     "textMass": 121
-  },
-  "apps/web/app/(shell)/delivery/page.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 82
   },
   "apps/web/app/(shell)/docs/[[...slug]]/page.tsx": {
     "vocabulary": 0,
@@ -1597,7 +1597,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 34
+    "textMass": 31
   },
   "apps/web/app/(shell)/performance/loading.tsx": {
     "vocabulary": 0,
@@ -3911,14 +3911,6 @@
     "longSentences": 0,
     "textMass": 66
   },
-  "apps/web/components/admin/ContributionModelBanner.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 4
-  },
   "apps/web/components/admin/ContributionProvenanceTable.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -4213,7 +4205,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 57
+    "textMass": 58
   },
   "apps/web/components/agent/AgentCoworkerPanel.tsx": {
     "vocabulary": 0,
@@ -7029,7 +7021,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 9
   },
   "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": {
     "vocabulary": 0,
@@ -7038,6 +7030,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 25
+  },
+  "apps/web/components/ops/workrooms/WorkroomActivitySection.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
   },
   "apps/web/components/ops/workrooms/WorkroomInventory.tsx": {
     "vocabulary": 0,
@@ -8101,7 +8101,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 106
+    "textMass": 119
   },
   "apps/web/components/platform/service-desk/ServiceTicketsTable.tsx": {
     "vocabulary": 0,

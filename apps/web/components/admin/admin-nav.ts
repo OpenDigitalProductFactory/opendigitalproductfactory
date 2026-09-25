@@ -29,7 +29,7 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
     key: "organization",
     label: "Organization & settings",
     href: "/admin/settings",
-    description: "Shape organization identity, global settings and reference data.",
+    description: "Identity, settings and reference data.",
     matchPrefixes: [
       "/admin/settings",
       "/admin/branding",
@@ -53,7 +53,7 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
     key: "contributing",
     label: "Contributing & GitHub",
     href: "/admin/platform-development",
-    description: "Decide whether to share what you build, connect GitHub, and review contributions.",
+    description: "Share what you build and connect GitHub.",
     matchPrefixes: [
       "/admin/platform-development",
       "/admin/hive",
@@ -71,7 +71,7 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
     key: "health",
     label: "Health & recovery",
     href: "/admin/backups",
-    description: "Backups, scheduled jobs, diagnostics and issue reports.",
+    description: "Backups, jobs and diagnostics.",
     matchPrefixes: [
       "/admin/backups",
       "/admin/scheduled-jobs",

@@ -307,7 +307,6 @@
     "apps/web/app/(shell)/customer/(crm)/quotes/[id]/page.tsx": 7,
     "apps/web/app/(shell)/customer/marketing/page.tsx": 8,
     "apps/web/app/(shell)/customer/marketing/strategy/page.tsx": 3,
-    "apps/web/app/(shell)/delivery/page.tsx": 1,
     "apps/web/app/(shell)/ea/capabilities/page.tsx": 1,
     "apps/web/app/(shell)/ea/data-model/page.tsx": 3,
     "apps/web/app/(shell)/ea/models/[slug]/page.tsx": 1,

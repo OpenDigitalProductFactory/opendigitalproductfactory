@@ -92,7 +92,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
           ) : (
             <ul className="grid gap-3" aria-label={`${section.label} team`}>
               {team.map((member) => (
-                <li key={member.id} className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3">
+                <Surface as="li" key={member.id} rounded="lg" padding="md">
                   <p className="text-sm font-semibold text-[var(--dpf-text)]">
                     {member.href ? (
                       <Link href={member.href} className="hover:underline">
@@ -110,7 +110,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
                       <li key={line}>{line}</li>
                     ))}
                   </ul>
-                </li>
+                </Surface>
               ))}
             </ul>
           )}
@@ -127,14 +127,11 @@ export default async function AreaPage({ params, searchParams }: Props) {
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2" aria-label={`${section.label} setup`}>
               {setupEntries.map((entry) => (
-                <li key={entry.key}>
-                  <Link
-                    href={entry.path}
-                    className="block rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3 text-sm font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
-                  >
+                <Surface as="li" key={entry.key} rounded="lg" padding="md">
+                  <Link href={entry.path} className="block text-sm font-medium text-[var(--dpf-text)] hover:underline">
                     {entry.label}
                   </Link>
-                </li>
+                </Surface>
               ))}
             </ul>
           )}
