@@ -711,6 +711,19 @@
     "apps/web/lib/docs/doc-link-resolver.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "apps/web/lib/documents/generation/brand-master.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
+    "apps/web/lib/documents/generation/render-store.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
+    "apps/web/lib/documents/generation/render.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
+    "apps/web/lib/documents/generation/spec.ts": [
+      "docs/architecture/document-generation-facility.md",
+      "docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md"
+    ],
     "apps/web/lib/ea/ai-routing-architecture-extract.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
       "docs/architecture/ai-routing-document-map.md"
@@ -2208,6 +2221,7 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "tools/doctools/smoke.sh": [
+      "docs/architecture/document-generation-facility.md",
       "docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md"
     ]
   },
@@ -2725,6 +2739,13 @@
       "scripts/sbom/internalization-candidates.mjs",
       "scripts/sbom/runtime-surface.mjs",
       "scripts/sbom/scan-dependencies.mjs"
+    ],
+    "docs/architecture/document-generation-facility.md": [
+      "apps/web/lib/documents/generation/brand-master.ts",
+      "apps/web/lib/documents/generation/render-store.ts",
+      "apps/web/lib/documents/generation/render.ts",
+      "apps/web/lib/documents/generation/spec.ts",
+      "tools/doctools/smoke.sh"
     ],
     "docs/architecture/dpf-patterns.md": [
       "apps/web/lib/nonprod/gate-client-revision.ts",
@@ -3253,6 +3274,7 @@
       "apps/web/lib/explore/build-process-matrix.ts"
     ],
     "docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md": [
+      "apps/web/lib/documents/generation/spec.ts",
       "tools/doctools/smoke.sh"
     ],
     "docs/specs/device-identification-and-portfolio-placement-spec.md": [

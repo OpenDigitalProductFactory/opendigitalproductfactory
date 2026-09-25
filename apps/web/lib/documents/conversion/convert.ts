@@ -101,7 +101,11 @@ function positiveEnvInt(name: string, fallback: number): number {
 }
 
 let processLimiter: ConversionLimiter | undefined;
-function defaultLimiter(): ConversionLimiter {
+/**
+ * The one per-process cap on dpf-doctools containers. Conversions and renders
+ * (generation/render.ts) share it, so together they never exceed the cap.
+ */
+export function sharedDoctoolsLimiter(): ConversionLimiter {
   processLimiter ??= createConversionLimiter(
     positiveEnvInt("DPF_CONVERT_CONCURRENCY", DEFAULT_CONVERSION_CONCURRENCY),
   );
@@ -193,7 +197,7 @@ export async function convertDocument(request: ConvertRequest, deps: ConvertDeps
   });
   const run = deps.run ?? runProcessWithBudget;
 
-  return (deps.limiter ?? defaultLimiter()).run(async () => {
+  return (deps.limiter ?? sharedDoctoolsLimiter()).run(async () => {
     try {
       const result = await run(command, args, {
         timeoutMs,

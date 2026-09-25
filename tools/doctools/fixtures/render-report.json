@@ -1,0 +1,101 @@
+{
+ "formats": [
+  "docx",
+  "odt",
+  "pdf"
+ ],
+ "previews": {
+  "maxPages": 5,
+  "dpi": 48
+ },
+ "issuedAt": "2026-09-25T12:00:00Z",
+ "content": {
+  "family": "report",
+  "title": "DPFRENDERREPORT Quarterly report",
+  "subtitle": "Q3 2026",
+  "sections": [
+   {
+    "heading": "Summary",
+    "level": 1,
+    "blocks": [
+     {
+      "kind": "paragraph",
+      "text": "Adoptions rose by a third this quarter."
+     },
+     {
+      "kind": "bullets",
+      "items": [
+       "More fosters",
+       "Faster intake"
+      ]
+     }
+    ]
+   },
+   {
+    "heading": "Numbers",
+    "level": 2,
+    "blocks": [
+     {
+      "kind": "table",
+      "table": {
+       "columns": [
+        "Month",
+        "Adoptions"
+       ],
+       "rows": [
+        [
+         "July",
+         11
+        ],
+        [
+         "August",
+         15
+        ]
+       ]
+      },
+      "caption": "Adoptions per month"
+     },
+     {
+      "kind": "chart",
+      "chart": {
+       "type": "line",
+       "categories": [
+        "July",
+        "August"
+       ],
+       "series": [
+        {
+         "name": "Adoptions",
+         "values": [
+          11,
+          15
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "kind": "image",
+      "image": {
+       "data": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAYCAIAAAAUMWhjAAAAJElEQVR42mPQyp9OU8QwasGoBaMWjFowasGoBaMWjFowNCwAAHUGkC6iyGvjAAAAAElFTkSuQmCC",
+       "mimeType": "image/png",
+       "alt": "placeholder"
+      }
+     }
+    ]
+   },
+   {
+    "heading": "Appendix",
+    "blocks": [
+     {
+      "kind": "page-break"
+     },
+     {
+      "kind": "paragraph",
+      "text": "Detail follows."
+     }
+    ]
+   }
+  ]
+ }
+}

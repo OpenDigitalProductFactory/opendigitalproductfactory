@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 717,
+  "pageCount": 718,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1478,6 +1478,21 @@
       "publishedPortal": false,
       "anchors": [
         "design-research-runbook"
+      ]
+    },
+    "docs/architecture/document-generation-facility.md": {
+      "publicHref": "/architecture/document-generation-facility/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "document-generation-facility",
+        "parts",
+        "templates-and-placeholders",
+        "determinism",
+        "degraded-behaviour",
+        "seams",
+        "verification"
       ]
     },
     "docs/architecture/dpf-patterns.md": {
@@ -9368,6 +9383,7 @@
         "compliance-and-architecture-fit",
         "integration-evidence",
         "conditions",
+        "addendum-2026-09-25-dpf-render-bi-3a0e5413-slice-s6",
         "sources"
       ]
     },

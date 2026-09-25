@@ -1,0 +1,68 @@
+{
+ "formats": [
+  "xlsx",
+  "ods",
+  "pdf"
+ ],
+ "previews": {
+  "maxPages": 3,
+  "dpi": 48
+ },
+ "content": {
+  "family": "sheet",
+  "title": "DPFRENDERSHEET Donations",
+  "sheets": [
+   {
+    "name": "2026",
+    "columns": [
+     "Month",
+     "Amount",
+     "Share"
+    ],
+    "columnFormats": [
+     "general",
+     "currency",
+     "percent"
+    ],
+    "rows": [
+     [
+      "DPFRENDERSHEET Jan",
+      100,
+      0.25
+     ],
+     [
+      "Feb",
+      300,
+      0.75
+     ],
+     [
+      "Total",
+      {
+       "formula": "=SUM(B2:B3)"
+      },
+      {
+       "formula": "=IF(B4>0,1,0)"
+      }
+     ]
+    ],
+    "chart": {
+     "type": "pie",
+     "title": "Share",
+     "categories": [
+      "Jan",
+      "Feb"
+     ],
+     "series": [
+      {
+       "name": "Amount",
+       "values": [
+        100,
+        300
+       ]
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

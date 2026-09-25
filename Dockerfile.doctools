@@ -10,8 +10,9 @@
 # promote-latest (PR #5290).
 #
 # Contents: the distribution's headless LibreOffice (writer, calc, impress,
-# draw), its python3-uno bridge (for dpf-render in S6), poppler-utils for text
-# extraction, and a bounded metric-compatible font set. No Java, no GUI, no Base.
+# draw), its python3-uno bridge (for dpf-render), poppler-utils for text
+# extraction and page previews, and a bounded metric-compatible font set.
+# No Java, no GUI, no Base.
 #
 # Base pinned by digest (debian:trixie-slim, multi-arch index). Bump the digest
 # deliberately; the smoke test and size budget in publish-image.yml gate it.
@@ -54,6 +55,10 @@ RUN groupadd --system --gid 10001 doctools \
 # linked content off. dpf-convert copies it into a fresh per-run profile.
 COPY tools/doctools/registrymodifications.xcu /opt/dpf-doctools/profile/user/registrymodifications.xcu
 COPY --chmod=0755 tools/doctools/dpf-convert /usr/local/bin/dpf-convert
+# dpf-render (S6, BI-3A0E5413): fills a template from a JSON content spec on the
+# python3-uno bridge above. Run with --entrypoint /usr/local/bin/dpf-render.
+COPY --chmod=0755 tools/doctools/dpf-render /usr/local/bin/dpf-render
+COPY tools/doctools/dpf_render_uno.py tools/doctools/dpf_render_families.py /opt/dpf-doctools/lib/
 RUN chmod -R a+rX,go-w /opt/dpf-doctools \
  && printf '%s\n' "${DPF_VERSION}" > /opt/dpf-doctools/.dpf-image-version
 
