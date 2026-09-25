@@ -106,7 +106,7 @@ describe("buildGauntletEvidence", () => {
       diffDigest: "d".repeat(64),
       commands: ["node scripts/pregate-preflight.mjs"],
       completedAt: "2026-09-12T04:00:00.000Z",
-      evidenceValidity: { expiresAt: "2026-09-13T04:00:00.000Z" },
+      evidenceValidity: { expiresAt: "2026-09-13T04:00:00.000Z" }, // clock-bomb-guard: allow expected value derived from the fixed completedAt fixture; nothing compares it to the wall clock
     });
   });
 
