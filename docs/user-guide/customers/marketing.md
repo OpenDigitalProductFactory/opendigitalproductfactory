@@ -221,6 +221,34 @@ do exist and corrects itself rather than reporting an unexplained failure.
 Campaign detail is scoped to your organization. A campaign belonging to another
 organization is not readable, even by its exact identifier.
 
+## Ask for a Presentation
+
+The **Marketing Strategist** can produce a presentation for you: a board
+update, a campaign pitch, a volunteer briefing. Ask for it in plain words, for
+example "six slides for Thursday's board meeting on the spring adoption drive".
+
+1. The strategist reads the marketing workspace first (your playbook, the
+   campaign's plan and its measured results), so it asks you only what it
+   cannot find there: usually the audience, the decision you want, and how many
+   slides.
+2. It drafts the slides and produces a PowerPoint file, a PDF and a preview of
+   every slide, in your organization's brand: the colours, fonts, logo and name
+   from your brand settings.
+3. It replies with a link to the document. Review the slide previews there, and
+   use **Download original** for the `.pptx`.
+4. To change it, tell the strategist what to change ("make slide 3 a chart").
+   It regenerates the deck and saves it as the next version of the same
+   document, so the version history shows every revision.
+
+Figures on the slides come from your marketing workspace or from you. If a
+number is missing, the strategist says so rather than making one up. A deck is
+never sent or published by producing it; sharing it is your decision.
+
+For final polish, edit the downloaded `.pptx` in your own office suite and save
+it back to the document as a new version. If document conversion is not set up
+on this install, the strategist tells you it cannot produce the file and offers
+the slide text instead.
+
 ## What To Watch
 
 - campaign ideas generated without checking the current funnel constraint;

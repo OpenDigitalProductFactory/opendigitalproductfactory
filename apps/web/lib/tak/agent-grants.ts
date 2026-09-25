@@ -4,6 +4,7 @@ import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surfac
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
+import { DOCUMENT_TOOL_GRANTS } from "./document-tool-grants";
 import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
@@ -428,13 +429,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   search_knowledge_base: ["registry_read"],
   create_knowledge_article: ["registry_write"],
   flag_stale_knowledge: ["registry_read"],
-  doc_save: ["document_write", "registry_write"],
-  doc_load: ["document_read", "registry_read"],
-  doc_search: ["document_read", "registry_read"],
-  doc_link: ["document_write", "registry_write"],
-  doc_version_list: ["document_read", "registry_read"],
-  doc_state_change: ["document_publish", "registry_write"],
-  doc_list_references: ["document_read", "registry_read"],
+  // Managed documents (doc_* and create_presentation) — document-tool-grants.ts.
+  ...DOCUMENT_TOOL_GRANTS,
 
   // EP-WIKI-001 Phase 3b2: Founder kernel + per-org overlay wiki
   wiki_query: ["registry_read"],

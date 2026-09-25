@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 662,
+  "routeCount": 663,
   "routes": [
     {
       "routePath": "/",
@@ -812,6 +812,23 @@
         "documentId"
       ],
       "file": "apps/web/app/api/documents/[documentId]/content/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/documents/[documentId]/previews/[page]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents",
+        "[documentId]",
+        "previews",
+        "[page]"
+      ],
+      "dynamicParams": [
+        "documentId",
+        "page"
+      ],
+      "file": "apps/web/app/api/documents/[documentId]/previews/[page]/route.ts",
       "exposure": "authenticated"
     },
     {

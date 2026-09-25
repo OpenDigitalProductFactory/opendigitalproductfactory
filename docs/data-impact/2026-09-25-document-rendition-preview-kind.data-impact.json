@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "DocumentRendition rows of kind preview, written by saveRenderedDocument (apps/web/lib/documents/generation/render-store.ts)",
+    "Preview manifest and page PNG bytes stored as content-addressed DocumentBlob rows (apps/web/lib/documents/blob-storage.ts storeDocumentBlob)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "same as the source document",
+    "dataSubjectRights": "not-applicable: a preview is an image of a page of a document the organization already stores. It adds no new personal data; anything a page shows is already in the document's content, under the same Document access scope.",
+    "reviewDisposition": "Preview renditions cascade-delete with their DocumentVersion and are served only to a signed-in session, the same access as the document page and its content route. No new retention path is introduced."
+  },
+  "migration": {
+    "name": "20260925140000_document_rendition_preview_kind",
+    "backfill": "None. The migration only adds the enum member 'preview' and touches no row. Previews exist only for documents the generation facility renders from now on; existing documents keep their pdf and plain_text renditions and show no previews.",
+    "rollback": "Forward-only. Older code never reads a preview rendition and ignores the extra enum member; the manifest and page blobs remain as ordinary DocumentBlob rows."
+  },
+  "tests": [
+    "packages/db/src/document-rendition-preview-kind-migration.test.ts",
+    "apps/web/lib/documents/preview-manifest.test.ts",
+    "apps/web/lib/documents/document-previews.test.ts",
+    "apps/web/lib/documents/generation/render-store.test.ts",
+    "apps/web/lib/documents/generation/create-presentation.docker.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:documentrendition",
+      "prismaModel": "DocumentRendition",
+      "lifecycleDisposition": "Derived projection of a DocumentVersion; cascades with the version. The preview kind is written by the generation facility's store alongside pdf and plain_text.",
+      "fields": [
+        {
+          "fieldId": "data:documentrendition#renditionKind",
+          "resolution": "governed",
+          "reason": "The closed DocumentRenditionKind enum widens by one member, preview, per AGENTS.md section 8. The rendition's blob is a JSON manifest of page PNG blobs in page order, so the one-rendition-per-kind unique key holds.",
+          "provenance": "BI-543819B1; docs/superpowers/plans/2026-09-22-office-document-conversion-plan.md S7; docs/architecture/document-generation-facility.md Previews"
+        }
+      ]
+    }
+  ]
+}
