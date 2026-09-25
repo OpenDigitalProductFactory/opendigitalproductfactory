@@ -49,8 +49,8 @@ export async function importIncumbentSpreadsheet(
     matrix = [columns, ...rows];
   } else {
     const sheet = await readSheetMatrix(await file.arrayBuffer(), file.name);
-    if (!sheet.ok) throw new Error(sheet.reason);
-    matrix = sheet.matrix;
+    if (!sheet.ok) throw new Error(sheet.error);
+    matrix = sheet.data;
   }
 
   const { rows } = inferTableFromSheet(matrix);

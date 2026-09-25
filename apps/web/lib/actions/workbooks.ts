@@ -375,8 +375,8 @@ export async function importSheetAction(
     } else {
       // .xlsx reads directly; .xls/.ods convert to .xlsx first (BI-81524041).
       const sheet = await readSheetMatrix(await file.arrayBuffer(), file.name);
-      if (!sheet.ok) throw new WorkbookError(sheet.reason, 415);
-      matrix = sheet.matrix;
+      if (!sheet.ok) throw new WorkbookError(sheet.error, 415);
+      matrix = sheet.data;
     }
 
     const { columns, rows, truncated } = inferTableFromSheet(matrix);

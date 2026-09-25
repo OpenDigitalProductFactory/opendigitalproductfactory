@@ -58,8 +58,8 @@ describe.skipIf(!ready)("converter-backed ingestion against the real dpf-doctool
     for (const ext of ["xls", "ods"] as const) {
       const bytes = await produce("sample.fods", "fods", ext);
       const sheet = await readSheetMatrix(bytes, `roster.${ext}`, { convert });
-      if (!sheet.ok) throw new Error(`.${ext}: ${sheet.reason}`);
-      expect(sheet.matrix.flat().map(String)).toContain("DPFSENTINELCALC");
+      if (!sheet.ok) throw new Error(`.${ext}: ${sheet.error}`);
+      expect(sheet.data.flat().map(String)).toContain("DPFSENTINELCALC");
       const parsed = await parseFileContent(bytes, "", `roster.${ext}`, { convert });
       expect(parsed?.type).toBe("spreadsheet");
     }

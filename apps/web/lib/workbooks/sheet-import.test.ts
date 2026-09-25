@@ -101,7 +101,7 @@ describe("readSheetMatrix: converter-backed sheet import (BI-81524041)", () => {
     const converted = Buffer.from("converted xlsx");
     const convert = vi.fn(async () => ({ ok: true as const, data: { bytes: converted, mime: "x" } }));
     const result = await readSheetMatrix(fixture("roster.xls"), "roster.xls", { convert, readSheet });
-    expect(result).toEqual({ ok: true, matrix: MATRIX });
+    expect(result).toEqual({ ok: true, data: MATRIX });
     expect(convert).toHaveBeenCalledWith(expect.objectContaining({ from: "xls", to: "xlsx" }));
     expect(Buffer.from(readSheet.mock.calls.at(-1)![0]).toString()).toBe("converted xlsx");
   });
@@ -118,15 +118,15 @@ describe("readSheetMatrix: converter-backed sheet import (BI-81524041)", () => {
     const result = await readSheetMatrix(fixture("roster.xls"), "roster.xls", { convert, readSheet });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a refusal");
-    expect(result.reason).toMatch(/Excel 97-2003/);
+    expect(result.error).toMatch(/Excel 97-2003/);
   });
 
   it("reads an .xlsx directly and refuses a Word file, without calling the converter", async () => {
     const convert = vi.fn();
     const xlsxHead = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(26), Buffer.from("[Content_Types].xml xl/workbook.xml")]);
-    expect(await readSheetMatrix(xlsxHead, "roster.xlsx", { convert, readSheet })).toEqual({ ok: true, matrix: MATRIX });
+    expect(await readSheetMatrix(xlsxHead, "roster.xlsx", { convert, readSheet })).toEqual({ ok: true, data: MATRIX });
     const word = await readSheetMatrix(fixture("plan.docx"), "plan.docx", { convert, readSheet });
-    expect(word).toMatchObject({ ok: false, reason: expect.stringMatching(/not a spreadsheet/) });
+    expect(word).toMatchObject({ ok: false, error: expect.stringMatching(/not a spreadsheet/) });
     expect(convert).not.toHaveBeenCalled();
   });
 
@@ -143,6 +143,6 @@ describe("readSheetMatrix with the real .xlsx reader", () => {
   // server, where there is no DOMParser (read-excel-file/browser needs one).
   it("reads a real .xlsx in Node", async () => {
     const bytes = buildXlsx([["Name", "Breed"], ["Biscuit", "Beagle"]]);
-    expect(await readSheetMatrix(bytes, "roster.xlsx")).toEqual({ ok: true, matrix: [["Name", "Breed"], ["Biscuit", "Beagle"]] });
+    expect(await readSheetMatrix(bytes, "roster.xlsx")).toEqual({ ok: true, data: [["Name", "Breed"], ["Biscuit", "Beagle"]] });
   });
 });

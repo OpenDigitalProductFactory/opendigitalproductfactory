@@ -14,6 +14,7 @@ import {
   type ConvertForIngestion,
 } from "@/lib/shared/file-parsers";
 import { conversionRouteFor } from "@/lib/shared/office-conversion";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { CellValue, FieldType } from "./types";
 
 /** What read-excel-file yields per cell. */
@@ -49,7 +50,8 @@ export function unreadableSheetReason(bytes: Uint8Array): string | null {
   return null;
 }
 
-export type SheetReadResult = { ok: true; matrix: SheetCell[][] } | { ok: false; reason: string };
+/** The sheet as a row matrix, or the plain-language reason it cannot be read. */
+export type SheetReadResult = ActionResult<SheetCell[][]>;
 
 export type SheetReadDeps = {
   convert?: ConvertForIngestion;
@@ -85,13 +87,13 @@ export async function readSheetMatrix(
   if (route?.family === "sheet") {
     const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const converted = await convertForIngestion(buffer, route, deps.convert);
-    if (!converted.ok) return { ok: false, reason: converted.content.reason };
-    bytes = converted.bytes;
+    if (!converted.ok) return converted;
+    bytes = converted.data;
   } else {
     const unreadable = unreadableSheetReason(bytes);
-    if (unreadable) return { ok: false, reason: unreadable };
+    if (unreadable) return err(unreadable);
   }
-  return { ok: true, matrix: await (deps.readSheet ?? defaultReadSheet)(toArrayBuffer(bytes)) };
+  return ok(await (deps.readSheet ?? defaultReadSheet)(toArrayBuffer(bytes)));
 }
 
 export const MAX_IMPORT_COLUMNS = 100;

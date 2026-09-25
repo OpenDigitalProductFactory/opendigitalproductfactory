@@ -1,4 +1,5 @@
 import type { ConversionResult } from "@/lib/documents/conversion/convert";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { conversionRouteFor, type ConversionFamily, type ConversionRoute } from "./office-conversion";
 
@@ -208,55 +209,57 @@ const RESAVE_ADVICE: Record<ConversionFamily, string> = {
   slides: "Save it as PDF and upload it again.",
 };
 
-function conversionFailedContent(route: ConversionRoute, why: string): UnsupportedFileContent {
-  const reason = `DPF could not convert this file${why}. ${RESAVE_ADVICE[route.family]}`;
-  return { type: "unsupported", format: route.fallback, reason, summary: reason };
+function conversionFailedReason(route: ConversionRoute, why: string): string {
+  return `DPF could not convert this file${why}. ${RESAVE_ADVICE[route.family]}`;
 }
 
-export type IngestionConversion = { ok: true; bytes: Buffer } | { ok: false; content: UnsupportedFileContent };
+function unsupportedWithReason(format: UnsupportedFileFormat, reason: string): UnsupportedFileContent {
+  return { type: "unsupported", format, reason, summary: reason };
+}
 
 /**
- * Run one routed file through the converter. With no converter the file keeps
- * S0's unsupported result; any other failure is named in plain language, and
- * the technical detail goes to the log, never to the person (BI-81524041).
+ * Run one routed file through the converter: the converted bytes, or the
+ * plain-language reason it could not be read. With no converter that reason is
+ * S0's; any other failure is named, and the technical detail goes to the log,
+ * never to the person (BI-81524041).
  */
 export async function convertForIngestion(
   buffer: Buffer,
   route: ConversionRoute,
   convert: ConvertForIngestion = defaultConvert,
-): Promise<IngestionConversion> {
+): Promise<ActionResult<Buffer>> {
   let result: ConversionResult;
   try {
     result = await convert({ input: buffer, from: route.from, to: route.to });
-  } catch (err) {
-    result = { ok: false, error: getErrorMessage(err), reason: "conversion-failed" };
+  } catch (error) {
+    result = { ...err(getErrorMessage(error)), reason: "conversion-failed" };
   }
-  if (result.ok) return { ok: true, bytes: result.data.bytes };
+  if (result.ok) return ok(result.data.bytes);
   if (result.reason !== "converter-unavailable") {
     console.warn(`[file-parsers] ${route.from} -> ${route.to} conversion failed (${result.reason}): ${result.error}`);
   }
   switch (result.reason) {
     case "converter-unavailable":
-      return { ok: false, content: unsupportedFileContent(route.fallback) };
+      return err(describeUnsupportedFormat(route.fallback));
     case "input-too-large":
-      return { ok: false, content: conversionFailedContent(route, " because it is larger than the document converter accepts") };
+      return err(conversionFailedReason(route, " because it is larger than the document converter accepts"));
     case "timeout":
-      return { ok: false, content: conversionFailedContent(route, " because the conversion took too long") };
+      return err(conversionFailedReason(route, " because the conversion took too long"));
     default:
-      return { ok: false, content: conversionFailedContent(route, "; it may be damaged or password-protected") };
+      return err(conversionFailedReason(route, "; it may be damaged or password-protected"));
   }
 }
 
 async function parseConverted(buffer: Buffer, route: ConversionRoute, convert?: ConvertForIngestion): Promise<ParsedFileContent> {
   const converted = await convertForIngestion(buffer, route, convert);
-  if (!converted.ok) return converted.content;
+  if (!converted.ok) return unsupportedWithReason(route.fallback, converted.error);
   try {
-    if (route.to === "docx") return await parseDocx(converted.bytes);
-    if (route.to === "xlsx") return await parseXlsx(converted.bytes);
-    return parseTextFile(converted.bytes);
-  } catch (err) {
-    console.warn(`[file-parsers] converted ${route.from} -> ${route.to} could not be parsed: ${getErrorMessage(err)}`);
-    return conversionFailedContent(route, "; it may be damaged or password-protected");
+    if (route.to === "docx") return await parseDocx(converted.data);
+    if (route.to === "xlsx") return await parseXlsx(converted.data);
+    return parseTextFile(converted.data);
+  } catch (error) {
+    console.warn(`[file-parsers] converted ${route.from} -> ${route.to} could not be parsed: ${getErrorMessage(error)}`);
+    return unsupportedWithReason(route.fallback, conversionFailedReason(route, "; it may be damaged or password-protected"));
   }
 }
 
