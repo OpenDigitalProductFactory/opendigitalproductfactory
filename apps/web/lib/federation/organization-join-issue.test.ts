@@ -80,6 +80,50 @@ describe("resolveAuthorityHost", () => {
 });
 
 describe("issueOrganizationJoinFile", () => {
+  // BI-860A9668. A member holds the authority's root (it pinned it when it
+  // joined) and a provisioner password of its own, so the relay check passes on
+  // a member too. It used to fall through to the CA and fail there with
+  // `ca-unreachable (unable to get local issuer certificate)` — an
+  // infrastructure story for a role mismatch, made undiagnosable because both
+  // CAs carry the subject `O=DPF Organization CA, CN=DPF Organization CA Root CA`
+  // and differ only by key.
+  it("tells a member it is not the authority, and where the authority is, without opening a socket", async () => {
+    const ca = fakeCa([installer, edge]);
+    const memberFiles = async (path: string) => {
+      if (path.endsWith("membership.json")) {
+        return JSON.stringify({
+          schemaVersion: 1,
+          caUrl: "https://192.168.0.152:9000/",
+          intendedPeer: "192.168.0.200",
+          rootFingerprint,
+          packageId: "5c3232d9c0d116356cd2a2d96b916a51",
+          joinedAt: "2026-09-23T04:37:17.024Z",
+        });
+      }
+      return authorityFiles(path);
+    };
+
+    const result = await issueOrganizationJoinFile(
+      { intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.200:3000", now },
+      { db: db(), env: {}, readText: memberFiles, exists: async () => true, caRequest: ca, configuredBaseUrl: null },
+    );
+
+    expect(result).toMatchObject({ issued: false, reason: "not-the-authority" });
+    if (result.issued) throw new Error("a member must not mint a join file");
+    expect(result.detail).toContain("https://192.168.0.152:9000/");
+    // The whole point: the role is decided from local facts, so no CA call happens.
+    expect(ca.calls).toHaveLength(0);
+  });
+
+  it("still issues on the authority, which has no membership facts row", async () => {
+    const ca = fakeCa([installer, edge]);
+    const result = await issueOrganizationJoinFile(
+      { intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.152:3000", now },
+      { db: db(), env: {}, readText: authorityFiles, exists: async () => true, caRequest: ca, configuredBaseUrl: null },
+    );
+    expect(result.issued).toBe(true);
+  });
+
   it("mints a V2 package the importer accepts, with tokens the CA's provisioner keys verify", async () => {
     const ca = fakeCa([installer, edge]);
     const result = await issueOrganizationJoinFile(
