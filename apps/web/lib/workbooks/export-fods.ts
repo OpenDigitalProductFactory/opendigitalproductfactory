@@ -19,7 +19,7 @@
 // Pure and deterministic: the same model always yields the same XML.
 
 import type { CfColor, CfOperator } from "@/components/workbooks/grid-conditional-format";
-import { isNumericFieldType, type FieldType } from "./types";
+import type { FieldType } from "./types";
 import { normalizeName } from "./formula/evaluate";
 import { columnLetter, toOpenFormula } from "./formula/to-openformula";
 
@@ -155,7 +155,7 @@ function cellXml(value: WorkbookExportCell, column: WorkbookExportColumn, styleN
     const iso = isoDateValue(value);
     if (iso) return `<table:table-cell${style} office:value-type="date" office:date-value="${iso}"><text:p>${escapeXml(value)}</text:p></table:table-cell>`;
   }
-  return `<table:table-cell${style}${f} office:value-type="string"><text:p>${escapeXml(value).split(/\r?\n/).join("</text:p><text:p>")}</text:p></table:table-cell>`;
+  return `<table:table-cell${style}${f} office:value-type="string">${textParagraphs(value)}</table:table-cell>`;
 }
 
 /** An ISO date or date-time as an ODF date value (no zone), or null. */
@@ -335,9 +335,4 @@ export function buildFlatOds(model: WorkbookExportModel): string {
     chartXml,
     `</office:spreadsheet></office:body></office:document>`,
   ].join("\n");
-}
-
-/** Numeric-backed columns write their values as numbers; exported for the model builder. */
-export function isNumericExportColumn(column: WorkbookExportColumn): boolean {
-  return isNumericFieldType(column.fieldType);
 }
