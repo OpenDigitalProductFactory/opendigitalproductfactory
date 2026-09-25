@@ -32,6 +32,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generatePlatformSbom } from "./generate-platform-sbom.mjs";
+import { LOCKFILE_ROOTS } from "./lockfile-roots.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BASELINE_PATH = join(ROOT, "sbom", "baseline.json");
@@ -87,6 +88,14 @@ function flagValue(argv, flag) {
   return v && !v.startsWith("--") ? v.trim() : "";
 }
 
+/** Totals for every lockfile root other than the platform one. */
+function otherRootTotals(gitRef) {
+  return LOCKFILE_ROOTS.filter((root) => root.dir !== ".").map((root) => ({
+    root,
+    totals: generatePlatformSbom({ root: join(ROOT, root.dir), gitRef, generatedAt: new Date(0) }).analysis.totals,
+  }));
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const update = argv.includes("--update-baseline");
@@ -107,12 +116,23 @@ function main() {
   if (update || raiseReason) {
     const budgets = nextBudgets(t, baseline?.budgets, { raise: Boolean(raiseReason) });
     const lastBudgetRaise = raiseReason ? { reason: raiseReason, budgets } : baseline?.lastBudgetRaise;
+    // Each separately resolved lockfile root keeps its own budgets, with the
+    // same only-down ratchet (scripts/sbom/lockfile-roots.mjs).
+    const roots = {};
+    for (const { root, totals } of otherRootTotals(gitRef)) {
+      roots[root.id] = {
+        lockfile: `${root.dir}/pnpm-lock.yaml`,
+        totals,
+        budgets: nextBudgets(totals, baseline?.roots?.[root.id]?.budgets, { raise: Boolean(raiseReason) }),
+      };
+    }
     const next = {
       note: BASELINE_NOTE,
       totals: t,
       budgets,
       ...(lastBudgetRaise ? { lastBudgetRaise } : {}),
       firstPartyDivergent: currentDivergent,
+      roots,
     };
     writeFileSync(BASELINE_PATH, JSON.stringify(next, null, 2) + "\n");
     process.stdout.write(
@@ -171,7 +191,23 @@ function main() {
     failed = true;
   }
 
-  const { over, under } = evaluateBudgets(t, baseline.budgets);
+  const platform = evaluateBudgets(t, baseline.budgets);
+  const over = [...platform.over];
+  const under = [...platform.under];
+  for (const { root, totals } of otherRootTotals(gitRef)) {
+    const section = baseline.roots?.[root.id];
+    if (!section) {
+      process.stderr.write(`::error::sbom/baseline.json has no budgets for lockfile root "${root.id}" (${root.dir}). Add them with --update-baseline.\n`);
+      failed = true;
+      continue;
+    }
+    const r = evaluateBudgets(totals, section.budgets);
+    process.stdout.write(
+      `  ${root.id} lockfile: ${totals.resolvedComponents} components (budget ${section.budgets?.resolvedComponents}), ${totals.duplicatedNames} duplicated names (budget ${section.budgets?.duplicatedNames})\n`,
+    );
+    over.push(...r.over.map((o) => ({ ...o, key: `${root.id}.${o.key}` })));
+    under.push(...r.under.map((u) => ({ ...u, key: `${root.id}.${u.key}` })));
+  }
   if (over.length) {
     process.stderr.write(
       [

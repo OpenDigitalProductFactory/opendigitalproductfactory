@@ -116,6 +116,55 @@ updates:
       # pin is bumped deliberately.
       - dependency-name: "read-excel-file"
 
+  # apps/mobile resolves in its own workspace and lockfile (plan 2026-09-08 M6),
+  # so root updates no longer reach it. Same cooldown as the root. The Expo /
+  # React Native lockstep rules live here, where they apply to the mobile tree.
+  - package-ecosystem: "npm"
+    directory: "/apps/mobile"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "mobile"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Expo SDK is a lockstep upgrade: `expo` core and every `expo-*` companion
+      # moves to the same SDK line together, so only patches flow automatically.
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # React Native minors (0.x) are breaking and follow the Expo SDK.
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-native-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@react-native/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # React must match the renderer React Native embeds (BI-E5E72FE3; pinned in
+      # apps/mobile/pnpm-workspace.yaml), so it moves with an SDK upgrade.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-test-renderer"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
