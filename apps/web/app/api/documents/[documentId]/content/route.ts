@@ -31,12 +31,13 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     return apiErrorResponse(result.status === 404 ? "NOT_FOUND" : "GONE", result.error, result.status);
   }
 
-  return new Response(new Uint8Array(result.bytes), {
+  const { bytes, mimeType, disposition } = result.data;
+  return new Response(new Uint8Array(bytes), {
     status: 200,
     headers: {
-      "Content-Type": result.mimeType,
-      "Content-Length": String(result.bytes.byteLength),
-      "Content-Disposition": result.disposition,
+      "Content-Type": mimeType,
+      "Content-Length": String(bytes.byteLength),
+      "Content-Disposition": disposition,
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, no-store",
     },

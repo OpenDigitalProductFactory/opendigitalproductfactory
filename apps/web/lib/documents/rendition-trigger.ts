@@ -23,8 +23,8 @@ type RenditionEvent =
 type Send = (event: RenditionEvent) => Promise<unknown>;
 
 const defaultSend: Send = async (event) => {
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  return inngest.send(event);
+  const { sendDocumentRenditionEvent } = await import("@/lib/queue/document-rendition-events");
+  return sendDocumentRenditionEvent(event);
 };
 
 /** Ask for a version's renditions. Best effort: never fails the save. */

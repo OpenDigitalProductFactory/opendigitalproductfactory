@@ -11,6 +11,7 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 // Local coercion helpers — copies of the mcp-tools.ts module helpers so the pack
 // owns its inputs without depending on that module's internals.
@@ -38,18 +39,16 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 export const DOCUMENT_BINARY_SAVE_LIMIT_BYTES = 20 * 1024 * 1024;
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 
-type DecodedBinary = { ok: true; bytes: Buffer } | { ok: false; error: string };
-
-function decodeContentBase64(value: string): DecodedBinary {
+function decodeContentBase64(value: string): ActionResult<Buffer> {
   const compact = value.replace(/\s+/g, "");
   if (compact.length === 0 || compact.length % 4 !== 0 || !BASE64_PATTERN.test(compact)) {
-    return { ok: false, error: "contentBase64 is not valid base64." };
+    return err("contentBase64 is not valid base64.");
   }
   const bytes = Buffer.from(compact, "base64");
   if (bytes.byteLength > DOCUMENT_BINARY_SAVE_LIMIT_BYTES) {
-    return { ok: false, error: `contentBase64 decodes to ${bytes.byteLength} bytes; the limit is ${DOCUMENT_BINARY_SAVE_LIMIT_BYTES}.` };
+    return err(`contentBase64 decodes to ${bytes.byteLength} bytes; the limit is ${DOCUMENT_BINARY_SAVE_LIMIT_BYTES}.`);
   }
-  return { ok: true, bytes };
+  return ok(bytes);
 }
 
 const definitions: ToolDefinition[] = [
@@ -216,7 +215,7 @@ async function docSave(
     const decoded = decodeContentBase64(contentBase64);
     if (!decoded.ok) return { success: false, message: decoded.error, error: decoded.error };
     const { storeDocumentBlob } = await import("@/lib/documents/blob-storage");
-    const blob = await storeDocumentBlob({ content: decoded.bytes, mimeType: optionalString(params["contentFormat"]) });
+    const blob = await storeDocumentBlob({ content: decoded.data, mimeType: optionalString(params["contentFormat"]) });
     contentBlobId = blob.id;
     contentSha256 = blob.sha256;
   }

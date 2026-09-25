@@ -31,9 +31,11 @@ describe("resolveDocumentContent (BI-9D43CBEF)", () => {
     const result = await resolveDocumentContent({ documentId: "DOC-1", rendition: "original" }, d);
     expect(result).toEqual({
       ok: true,
-      bytes: Buffer.from("bytes"),
-      mimeType: DOCX,
-      disposition: 'attachment; filename="Q3 Board Pack - final.docx"',
+      data: {
+        bytes: Buffer.from("bytes"),
+        mimeType: DOCX,
+        disposition: 'attachment; filename="Q3 Board Pack - final.docx"',
+      },
     });
     expect(readBlob).toHaveBeenCalledWith({ storageKey: "orig-key", sha256: "o".repeat(64) });
   });
@@ -41,7 +43,7 @@ describe("resolveDocumentContent (BI-9D43CBEF)", () => {
   it("serves the PDF rendition inline", async () => {
     const { deps: d, readBlob } = deps(documentRow());
     const result = await resolveDocumentContent({ documentId: "DOC-1", rendition: "pdf" }, d);
-    expect(result).toMatchObject({ ok: true, mimeType: "application/pdf", disposition: 'inline; filename="Q3 Board Pack - final.pdf"' });
+    expect(result).toMatchObject({ ok: true, data: { mimeType: "application/pdf", disposition: 'inline; filename="Q3 Board Pack - final.pdf"' } });
     expect(readBlob).toHaveBeenCalledWith({ storageKey: "pdf-key", sha256: "p".repeat(64) });
   });
 

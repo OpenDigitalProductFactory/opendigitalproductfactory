@@ -4,12 +4,14 @@
   "decisionInteractionId": "DI-9E9A81E55BC7",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/workspace/documents/[documentId]/DocumentFilePanel.tsx",
-      "apps/web/app/(shell)/workspace/documents/[documentId]/page.tsx"
+      "apps/web/app/(shell)/workspace/documents/[documentId]/DocumentFilePanel.tsx"
     ]
   },
   "evidence": {
     "kind": "propose-n-pick",
-    "consideredOptions": ["current-version-file-panel", "header-action-row"]
+    "consideredOptions": [
+      "current-version-file-panel",
+      "header-action-row"
+    ]
   }
 }

@@ -6,12 +6,16 @@
 import { prisma } from "@dpf/db";
 import { readDocumentBlob } from "./blob-storage";
 import { officeSourceExtension } from "./conversion/formats";
+import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 
 export type DocumentContentKind = "original" | "pdf";
 
+export type DocumentContent = { bytes: Buffer; mimeType: string; disposition: string };
 export type DocumentContentResult =
-  | { ok: true; bytes: Buffer; mimeType: string; disposition: string }
-  | { ok: false; status: 404 | 410; error: string };
+  | ActionSuccess<DocumentContent>
+  | (ActionFailure & { status: 404 | 410 });
+
+const missing = (error: string): DocumentContentResult => ({ ...err(error), status: 404 });
 
 type BlobRef = { storageKey: string; sha256: string };
 
@@ -57,22 +61,22 @@ export async function resolveDocumentContent(
       ? { title: true, versions: { where: { version: input.version! }, take: 1, select: VERSION_SELECT } }
       : { title: true, currentVersion: { select: VERSION_SELECT } },
   }) as { title: string; currentVersion?: VersionRow | null; versions?: VersionRow[] } | null;
-  if (!document) return { ok: false, status: 404, error: "Document not found." };
+  if (!document) return missing("Document not found.");
   const version = pinned ? document.versions?.[0] : document.currentVersion;
-  if (!version) return { ok: false, status: 404, error: "Document version not found." };
+  if (!version) return missing("Document version not found.");
 
   let blob: BlobRef | null;
   let mimeType: string;
   let disposition: string;
   if (input.rendition === "pdf") {
     const pdf = version.renditions.find((rendition) => rendition.renditionKind === "pdf");
-    if (!pdf?.blob) return { ok: false, status: 404, error: "This version has no PDF rendition yet." };
+    if (!pdf?.blob) return missing("This version has no PDF rendition yet.");
     blob = pdf.blob;
     mimeType = pdf.mimeType ?? "application/pdf";
     disposition = `inline; filename="${contentFilename(document.title, "pdf")}"`;
   } else {
     blob = version.contentBlob;
-    if (!blob) return { ok: false, status: 404, error: "This version has no stored file." };
+    if (!blob) return missing("This version has no stored file.");
     mimeType = version.contentBlob?.mimeType ?? version.contentFormat;
     // Always an attachment: a stored original is never rendered by the browser.
     disposition = `attachment; filename="${contentFilename(document.title, officeSourceExtension(version.contentFormat) ?? "bin")}"`;
@@ -80,9 +84,9 @@ export async function resolveDocumentContent(
 
   try {
     const bytes = await deps.readBlob({ storageKey: blob.storageKey, sha256: blob.sha256 });
-    return { ok: true, bytes, mimeType, disposition };
+    return ok({ bytes, mimeType, disposition });
   } catch {
-    return { ok: false, status: 410, error: "The stored file could not be read." };
+    return { ...err("The stored file could not be read."), status: 410 };
   }
 }
 
