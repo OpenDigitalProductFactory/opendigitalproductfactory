@@ -1,4 +1,4 @@
-export type ParsedFileContent = {
+export type ReadableFileContent = {
   type: "spreadsheet" | "document";
   summary: string;
   columns?: string[];
@@ -7,6 +7,91 @@ export type ParsedFileContent = {
   sections?: { heading: string; text: string }[];
   fullText?: string;
 };
+
+/** A file DPF recognised but cannot read. `summary` repeats `reason` so every
+ *  reader of stored parsed content (the coworker's file context, attachment
+ *  lists) shows the honest reason rather than garbled text (BI-65D65EC0). */
+export type UnsupportedFileContent = {
+  type: "unsupported";
+  format: UnsupportedFileFormat;
+  reason: string;
+  summary: string;
+};
+
+export type ParsedFileContent = ReadableFileContent | UnsupportedFileContent;
+
+export type UnsupportedFileFormat = "legacy-word" | "legacy-excel" | "legacy-powerpoint" | "legacy-office" | "rtf" | "opendocument";
+
+/** What the bytes say the file is, whatever its name claims. */
+export type OfficeContainer =
+  | { kind: "ole"; format: "legacy-word" | "legacy-excel" | "legacy-powerpoint" | "legacy-office" }
+  | { kind: "rtf" }
+  | { kind: "ooxml"; part: "word" | "xl" | "ppt" | "other" }
+  | { kind: "odf" }
+  | { kind: "zip" }
+  | { kind: "unknown" };
+
+const OLE_MAGIC = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04];
+const UTF8_BOM = [0xef, 0xbb, 0xbf];
+
+function startsWithBytes(buffer: Uint8Array, bytes: number[], offset = 0): boolean {
+  if (buffer.length < offset + bytes.length) return false;
+  return bytes.every((b, i) => buffer[offset + i] === b);
+}
+
+/** OLE directory entries are UTF-16LE names; the main stream names the application. */
+function oleFormat(buffer: Buffer): Extract<OfficeContainer, { kind: "ole" }>["format"] {
+  const has = (stream: string) => buffer.includes(Buffer.from(stream, "utf16le"));
+  if (has("WordDocument")) return "legacy-word";
+  if (has("Workbook") || has("Book")) return "legacy-excel";
+  if (has("PowerPoint Document")) return "legacy-powerpoint";
+  return "legacy-office";
+}
+
+/**
+ * Identify an office container from its bytes: the OLE compound-file magic
+ * (Word/Excel/PowerPoint 97-2003), `{\rtf`, or a ZIP whose `[Content_Types].xml`
+ * entry marks OOXML or whose leading `mimetype` entry marks OpenDocument.
+ * ZIP entry names are stored as plain bytes in each local header and in the
+ * central directory, so a byte search finds them without inflating anything.
+ */
+export function sniffOfficeContainer(input: Uint8Array): OfficeContainer {
+  const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+  if (startsWithBytes(buffer, OLE_MAGIC)) return { kind: "ole", format: oleFormat(buffer) };
+  const textStart = startsWithBytes(buffer, UTF8_BOM) ? UTF8_BOM.length : 0;
+  if (buffer.toString("latin1", textStart, textStart + 5) === "{\\rtf") return { kind: "rtf" };
+  if (!startsWithBytes(buffer, ZIP_MAGIC)) return { kind: "unknown" };
+  if (buffer.toString("latin1", 30, 38) === "mimetype" && buffer.toString("latin1", 38, 73).startsWith("application/vnd.oasis.opendocument")) {
+    return { kind: "odf" };
+  }
+  if (buffer.includes("[Content_Types].xml", 0, "latin1")) {
+    if (buffer.includes("word/document.xml", 0, "latin1")) return { kind: "ooxml", part: "word" };
+    if (buffer.includes("xl/workbook.xml", 0, "latin1")) return { kind: "ooxml", part: "xl" };
+    if (buffer.includes("ppt/presentation.xml", 0, "latin1")) return { kind: "ooxml", part: "ppt" };
+    return { kind: "ooxml", part: "other" };
+  }
+  return { kind: "zip" };
+}
+
+const UNSUPPORTED_REASONS: Record<UnsupportedFileFormat, string> = {
+  "legacy-word": "This is a Word 97-2003 document (.doc). DPF cannot read that older format yet, so its text was not extracted. Save it as .docx or PDF and upload it again.",
+  "legacy-excel": "This is an Excel 97-2003 workbook (.xls). DPF cannot read that older format yet, so its data was not extracted. Save it as .xlsx or CSV and upload it again.",
+  "legacy-powerpoint": "This is a PowerPoint 97-2003 presentation (.ppt). DPF cannot read that older format yet, so its text was not extracted. Save it as PDF and upload it again.",
+  "legacy-office": "This is an older Microsoft Office file (97-2003 format). DPF cannot read it yet, so its content was not extracted. Save it in a current format (.docx, .xlsx or PDF) and upload it again.",
+  rtf: "This is a Rich Text (RTF) file. DPF cannot read RTF yet, so its text was not extracted. Save it as .docx, PDF or plain text and upload it again.",
+  opendocument: "This is an OpenDocument file (.odt, .ods or .odp). DPF cannot read OpenDocument files yet, so its content was not extracted. Save it as .docx, .xlsx or PDF and upload it again.",
+};
+
+/** The plain-language reason for a recognised format DPF cannot read. */
+export function describeUnsupportedFormat(format: UnsupportedFileFormat): string {
+  return UNSUPPORTED_REASONS[format];
+}
+
+export function unsupportedFileContent(format: UnsupportedFileFormat): UnsupportedFileContent {
+  const reason = describeUnsupportedFormat(format);
+  return { type: "unsupported", format, reason, summary: reason };
+}
 
 const MAX_COLUMNS = 200;
 const MAX_COLUMN_LEN = 100;
@@ -20,7 +105,7 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 3) + "..." : s;
 }
 
-export function parseCsv(buffer: Buffer): ParsedFileContent {
+export function parseCsv(buffer: Buffer): ReadableFileContent {
   const text = buffer.toString("utf-8");
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length === 0) return { type: "spreadsheet", summary: "Empty spreadsheet", columns: [], rowCount: 0 };
@@ -41,7 +126,7 @@ function stringifySpreadsheetCell(value: unknown): string {
   return String(value);
 }
 
-export async function parseXlsx(buffer: Buffer): Promise<ParsedFileContent> {
+export async function parseXlsx(buffer: Buffer): Promise<ReadableFileContent> {
   const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
   const input = new ArrayBuffer(buffer.byteLength);
   new Uint8Array(input).set(buffer);
@@ -58,7 +143,7 @@ export async function parseXlsx(buffer: Buffer): Promise<ParsedFileContent> {
   return { type: "spreadsheet", summary: `${columns.length} columns, ${dataRows.length} rows`, columns, sampleRows, rowCount: dataRows.length };
 }
 
-export async function parsePdf(buffer: Buffer): Promise<ParsedFileContent> {
+export async function parsePdf(buffer: Buffer): Promise<ReadableFileContent> {
   const { PDFParse } = await import(/* turbopackIgnore: true */ "pdf-parse");
   const pdf = new PDFParse({ data: new Uint8Array(buffer) });
   const textResult = await pdf.getText();
@@ -69,7 +154,7 @@ export async function parsePdf(buffer: Buffer): Promise<ParsedFileContent> {
   return { type: "document", summary: `${numPages} page${numPages !== 1 ? "s" : ""}, ${fullText.length} characters`, fullText: truncate(fullText, MAX_TEXT_LEN) };
 }
 
-export async function parseDocx(buffer: Buffer): Promise<ParsedFileContent> {
+export async function parseDocx(buffer: Buffer): Promise<ReadableFileContent> {
   const mammoth = await import(/* turbopackIgnore: true */ "mammoth");
   const result = await mammoth.extractRawText({ buffer });
   const htmlResult = await mammoth.convertToHtml({ buffer });
@@ -88,12 +173,12 @@ export async function parseDocx(buffer: Buffer): Promise<ParsedFileContent> {
     }
     sections.push({ heading, text: "" });
   }
-  const base: ParsedFileContent = { type: "document", summary: `${sections.length} section${sections.length !== 1 ? "s" : ""}, ${result.value.length} characters`, fullText: truncate(result.value, MAX_TEXT_LEN) };
+  const base: ReadableFileContent = { type: "document", summary: `${sections.length} section${sections.length !== 1 ? "s" : ""}, ${result.value.length} characters`, fullText: truncate(result.value, MAX_TEXT_LEN) };
   if (sections.length > 0) base.sections = sections;
   return base;
 }
 
-function parseTextFile(buffer: Buffer, fileName: string): ParsedFileContent {
+function parseTextFile(buffer: Buffer, fileName: string): ReadableFileContent {
   const text = buffer.toString("utf-8");
   return {
     type: "document",
@@ -104,22 +189,32 @@ function parseTextFile(buffer: Buffer, fileName: string): ParsedFileContent {
 
 export async function parseFileContent(buffer: Buffer, mimeType: string, fileName: string): Promise<ParsedFileContent | null> {
   const ext = fileName.split(".").pop()?.toLowerCase();
+  // The bytes decide before the name does: a real .doc is an OLE file mammoth
+  // cannot read, RTF would otherwise be stored as control words, and a .docx
+  // renamed .doc is still a .docx (BI-65D65EC0).
+  const container = sniffOfficeContainer(buffer);
+  if (container.kind === "ole") return unsupportedFileContent(container.format);
+  if (container.kind === "rtf") return unsupportedFileContent("rtf");
+  if (container.kind === "odf") return unsupportedFileContent("opendocument");
+  if (container.kind === "ooxml" && container.part === "word") return parseDocx(buffer);
   if (mimeType === "text/csv" || ext === "csv" || ext === "tsv") return parseCsv(buffer);
   if (ext === "xlsx" || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return parseXlsx(buffer);
   if (mimeType === "application/pdf" || ext === "pdf") return parsePdf(buffer);
-  if (ext === "doc" || ext === "docx" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mimeType === "application/msword") return parseDocx(buffer);
+  if (ext === "docx" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return parseDocx(buffer);
   // Text-based formats
-  if (ext && ["txt", "json", "md", "xml", "yaml", "yml", "log", "rtf"].includes(ext)) return parseTextFile(buffer, fileName);
+  if (ext && ["txt", "json", "md", "xml", "yaml", "yml", "log"].includes(ext)) return parseTextFile(buffer, fileName);
   if (mimeType?.startsWith("text/")) return parseTextFile(buffer, fileName);
   return null;
 }
 
-export function capParsedContentSize(content: ParsedFileContent): ParsedFileContent {
-  const json = JSON.stringify(content);
+export function capParsedContentSize<T extends ParsedFileContent>(content: T): T {
+  if (content.type === "unsupported") return content;
+  const readable = content as ReadableFileContent;
+  const json = JSON.stringify(readable);
   if (json.length <= MAX_PARSED_JSON_SIZE) return content;
-  if (content.fullText) {
+  if (readable.fullText) {
     const excess = json.length - MAX_PARSED_JSON_SIZE;
-    content.fullText = content.fullText.slice(0, Math.max(1000, content.fullText.length - excess));
+    readable.fullText = readable.fullText.slice(0, Math.max(1000, readable.fullText.length - excess));
   }
   return content;
 }

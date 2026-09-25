@@ -29,6 +29,12 @@ docker-entrypoint.sh text eol=lf
 *.docx filter=lfs diff=lfs merge=lfs -text
 *.pptx filter=lfs diff=lfs merge=lfs -text
 
+# Parser test fixtures (BI-65D65EC0): small real office files that unit tests
+# read byte-for-byte. Kept as plain git blobs, because the unit-test CI shards
+# do not fetch LFS, and never line-ending normalized, because the bytes are
+# the test input.
+apps/web/lib/shared/__fixtures__/office/** -filter -diff -merge -text
+
 # Upstream Model Context Protocol spec — preserve LF line endings so the local
 # copy stays byte-identical to upstream and refresh diffs are clean.
 docs/Reference/mcp/spec/** text eol=lf

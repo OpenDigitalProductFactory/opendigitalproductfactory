@@ -5,6 +5,7 @@
 // column, and typed cell rows. Kept pure + unit-testable; the server action wires
 // it to the .xlsx parser (read-excel-file) and the workbook service.
 
+import { describeUnsupportedFormat, sniffOfficeContainer } from "@/lib/shared/file-parsers";
 import type { CellValue, FieldType } from "./types";
 
 /** What read-excel-file yields per cell. */
@@ -20,6 +21,24 @@ export interface ImportedTable {
   /** Rows keyed by column name (the action maps names → columnIds after creation). */
   rows: Record<string, CellValue>[];
   truncated: boolean;
+}
+
+/**
+ * Why these bytes cannot go to the .xlsx reader, in plain language, or null
+ * when they may. An Excel 97-2003 file, RTF, OpenDocument or a Word/PowerPoint
+ * package would otherwise fail inside read-excel-file with an error that names
+ * neither the file nor a fix (BI-65D65EC0). Unrecognised bytes pass through and
+ * the reader decides, as before.
+ */
+export function unreadableSheetReason(bytes: Uint8Array): string | null {
+  const container = sniffOfficeContainer(bytes);
+  if (container.kind === "ole") return describeUnsupportedFormat(container.format);
+  if (container.kind === "rtf") return describeUnsupportedFormat("rtf");
+  if (container.kind === "odf") return describeUnsupportedFormat("opendocument");
+  if (container.kind === "ooxml" && container.part !== "xl") {
+    return "This file is not a spreadsheet (it looks like a Word or PowerPoint file). Upload an .xlsx or CSV file.";
+  }
+  return null;
 }
 
 export const MAX_IMPORT_COLUMNS = 100;

@@ -19,22 +19,28 @@ const IMAGE_MIME: Record<string, string> = {
   webp: "image/webp",
 };
 
-const MAGIC_BYTES: Record<string, number[]> = {
-  pdf: [0x25, 0x50, 0x44, 0x46],
-  xlsx: [0x50, 0x4b, 0x03, 0x04],
-  docx: [0x50, 0x4b, 0x03, 0x04],
-  pptx: [0x50, 0x4b, 0x03, 0x04],
-  doc: [0xd0, 0xcf, 0x11, 0xe0],
-  ppt: [0xd0, 0xcf, 0x11, 0xe0],
+const ZIP = [0x50, 0x4b, 0x03, 0x04];
+const OLE = [0xd0, 0xcf, 0x11, 0xe0];
+
+// Each extension lists the prefixes its content may start with. A .doc may be
+// a real OLE file or a .docx someone renamed; the parser sniffs which and
+// reads or declines it honestly (BI-65D65EC0).
+const MAGIC_BYTES: Record<string, number[][]> = {
+  pdf: [[0x25, 0x50, 0x44, 0x46]],
+  xlsx: [ZIP],
+  docx: [ZIP],
+  pptx: [ZIP],
+  doc: [OLE, ZIP],
+  ppt: [OLE],
   // Image formats (screenshots / diagrams). webp is a RIFF container — we can
   // only check the RIFF prefix here; the "WEBP" fourcc at offset 8 is beyond
   // the prefix validator, but extension + RIFF + the downstream image decode
   // are sufficient guards.
-  png: [0x89, 0x50, 0x4e, 0x47],
-  jpg: [0xff, 0xd8, 0xff],
-  jpeg: [0xff, 0xd8, 0xff],
-  gif: [0x47, 0x49, 0x46],
-  webp: [0x52, 0x49, 0x46, 0x46],
+  png: [[0x89, 0x50, 0x4e, 0x47]],
+  jpg: [[0xff, 0xd8, 0xff]],
+  jpeg: [[0xff, 0xd8, 0xff]],
+  gif: [[0x47, 0x49, 0x46]],
+  webp: [[0x52, 0x49, 0x46, 0x46]],
 };
 
 async function getUploadStoragePath(): Promise<string> {
@@ -43,11 +49,10 @@ async function getUploadStoragePath(): Promise<string> {
   return process.env.UPLOAD_STORAGE_PATH ?? "./data/uploads";
 }
 
-function validateMagicBytes(buffer: Buffer, ext: string): boolean {
-  const expected = MAGIC_BYTES[ext];
-  if (!expected) return true;
-  if (buffer.length < expected.length) return false;
-  return expected.every((byte, i) => buffer[i] === byte);
+export function validateMagicBytes(buffer: Buffer, ext: string): boolean {
+  const prefixes = MAGIC_BYTES[ext];
+  if (!prefixes) return true;
+  return prefixes.some((prefix) => buffer.length >= prefix.length && prefix.every((byte, i) => buffer[i] === byte));
 }
 
 export type UploadResult = { attachmentId: string; fileName: string; parsedContent: unknown };
@@ -83,6 +88,8 @@ export async function handleFileUpload(file: File, threadId: string, userId: str
   // a parser bug — must never fail the whole upload. Store the file and let the
   // attachment exist without parsed content (the agent surfaces "uploaded but
   // content not available"). Images legitimately have no parser and return null.
+  // A recognised format DPF cannot read (legacy .doc/.ppt, RTF) is stored as the
+  // parser's `unsupported` result, whose summary the coworker reads as the reason.
   let parsedContent: ParsedFileContent | null = null;
   try {
     parsedContent = await parseFileContent(buffer, file.type, file.name);

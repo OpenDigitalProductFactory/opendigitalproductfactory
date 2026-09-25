@@ -4,7 +4,7 @@ import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { parseDelimitedGrid } from "@/lib/onboarding/roster-import";
-import { inferTableFromSheet, type SheetCell } from "@/lib/workbooks/sheet-import";
+import { inferTableFromSheet, unreadableSheetReason, type SheetCell } from "@/lib/workbooks/sheet-import";
 import {
   createIncumbentApplication,
   type IncumbentIntakeInput,
@@ -49,6 +49,8 @@ export async function importIncumbentSpreadsheet(
     matrix = [columns, ...rows];
   } else {
     const buffer = await file.arrayBuffer();
+    const unreadable = unreadableSheetReason(new Uint8Array(buffer));
+    if (unreadable) throw new Error(unreadable);
     const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
     matrix = (await readSheet(buffer)) as SheetCell[][];
   }
