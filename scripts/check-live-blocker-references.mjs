@@ -112,8 +112,6 @@ export function interpretStatus(id, body) {
 }
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-// Fail-open as before: partial stdout (or "") when git fails.
-const git = (...args) => runGit(args, { cwd: REPO_ROOT }).stdout;
 
 function isScannedSource(file) {
   return (file.startsWith("apps/") || file.startsWith("packages/"))

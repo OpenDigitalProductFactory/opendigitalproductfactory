@@ -47,7 +47,6 @@ import { requireChangedFiles } from "./lib/git-changed-files.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
-import { runGit } from "./lib/git.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = path.join(REPO_ROOT, "scripts", "spec-status-frontmatter-baseline.txt");
@@ -152,8 +151,6 @@ function serializeBaseline(paths, budget = DEFAULT_BUDGET) {
 }
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-// Fail-open as before: partial stdout (or "") when git fails.
-const git = (...args) => runGit(args, { cwd: REPO_ROOT }).stdout;
 
 function main() {
   const files = listScopeFiles();
