@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Portfolio Budgets, Per-Portfolio Prioritization & Dependency Cascade — Plan
 
 | Field | Value |
