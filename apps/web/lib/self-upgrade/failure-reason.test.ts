@@ -123,3 +123,12 @@ describe("describeFailureReason", () => {
     expect(`${why!.title} ${why!.detail}`).not.toContain("some-future-class");
   });
 });
+
+describe("doctools-prepull-failed (BI-698B7F9A)", () => {
+  it("explains a converter that did not download before the swap, in plain words", () => {
+    const explanation = describeFailureReason("doctools-prepull-failed: could not download the v2026.09.25-x.1 document converter: toomanyrequests");
+    expect(explanation?.title).toBe("The update's document reader didn't download");
+    expect(explanation?.detail).toContain("Nothing was installed");
+    expect(explanation?.retryable).toBe(true);
+  });
+});
