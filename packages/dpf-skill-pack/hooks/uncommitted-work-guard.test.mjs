@@ -435,3 +435,43 @@ describe("one live copy per event: the plugin copy stands down for the checkout'
     assert.match(runAs(PLUGIN_COPY, dir, stop("p5"), "").stdout, /uncommitted-work-guard/);
   });
 });
+
+// ── No state in the shared temp dir ──────────────────────────────────────────
+//
+// CodeQL js/insecure-temporary-file (alerts #412, #413): when git could not name
+// its common dir, the guard kept session state under a predictable path in the
+// OS temp dir, which any local user can pre-create to read the baseline or
+// suppress warnings. Outside a git repo there is no work to lose, so the guard
+// must keep no state there at all.
+
+import { existsSync, readdirSync } from "node:fs";
+
+describe("state location", () => {
+  it("writes nothing to the OS temp dir when the folder is not a git repo", () => {
+    const privateTmp = mkdtempSync(join(tmpdir(), "uwg-tmp-"));
+    const notARepo = mkdtempSync(join(privateTmp, "plain-"));
+    const script = fileURLToPath(new URL("./uncommitted-work-guard.mjs", import.meta.url));
+    const env = {
+      ...process.env,
+      TMPDIR: privateTmp,
+      TMP: privateTmp,
+      TEMP: privateTmp,
+      GIT_CEILING_DIRECTORIES: privateTmp,
+      CLAUDE_PROJECT_DIR: "",
+      DPF_SKIP_UNCOMMITTED_WORK_GUARD: "",
+    };
+    for (const [payload, extra] of [
+      [{ hook_event_name: "SessionStart", session_id: "t1" }, ["--snapshot"]],
+      [stop("t1"), []],
+    ]) {
+      const r = spawnSync(process.execPath, [script, "--repo-root", notARepo, ...extra], {
+        encoding: "utf8",
+        input: JSON.stringify(payload),
+        env,
+      });
+      assert.equal(r.status, 0);
+    }
+    assert.equal(existsSync(join(privateTmp, "dpf-hook-state")), false);
+    assert.deepEqual(readdirSync(privateTmp).filter((n) => !n.startsWith("plain-")), []);
+  });
+});
