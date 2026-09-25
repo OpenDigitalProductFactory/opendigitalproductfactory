@@ -253,7 +253,7 @@ export function chartBars(model: WorkbookExportModel, chart: WorkbookExportChart
  * object itself is not written yet: the engine's hardened profile
  * (DisableActiveContent in tools/doctools/registrymodifications.xcu) refuses to
  * load any ODF file that embeds a chart object, so a flat ODS carrying one
- * fails to convert at all. See the follow-up recorded on BI-4865EB4D.
+ * fails to convert at all. Follow-up: BI-BFF142A1.
  */
 function chartSheetXml(model: WorkbookExportModel, chart: WorkbookExportChart): string {
   const bars = chartBars(model, chart);
