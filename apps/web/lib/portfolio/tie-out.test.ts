@@ -70,3 +70,21 @@ describe("assembleTieOut (BI-CBF5D708, design §6)", () => {
     expect(t.rows[0]!.forecast.label).toBe("estimated");
   });
 });
+
+describe("AI beside points in the tie-out (BI-0CA5DA2B)", () => {
+  it("sums AI use per portfolio and reports runs that reach no row as not traced", () => {
+    const aiByItem = new Map<string | null, { runs: number; tokens: number; recordedUsd: number | null; subscriptionTokens: number; durationMs: number }>([
+      ["BI-FLIGHT", { runs: 2, tokens: 1000, recordedUsd: null, subscriptionTokens: 1000, durationMs: 60_000 }],
+      ["BI-GONE", { runs: 1, tokens: 50, recordedUsd: 0.2, subscriptionTokens: 0, durationMs: 0 }],
+      [null, { runs: 3, tokens: 70, recordedUsd: null, subscriptionTokens: 70, durationMs: 0 }],
+    ]);
+    const quarterItems = [item({ itemId: "BI-FLIGHT", status: "in-progress", effortSize: "medium" })];
+    const t = assembleTieOut({
+      now, portfolios: [{ id: "p1", name: "Foundational" }], historyStart: daysAgo(300),
+      budgets: new Map(), openReservations: [], untracedChanges: 0, quarterItems, windowItems: quarterItems, aiByItem,
+    });
+    expect(t.rows[0]!.ai).toMatchObject({ runs: 2, tokens: 1000, recordedUsd: null });
+    expect(t.rows[1]!.ai.runs).toBe(0);
+    expect(t.aiNotTraced).toMatchObject({ runs: 4, tokens: 120, recordedUsd: 0.2 });
+  });
+});
