@@ -125,7 +125,7 @@ describe("buildLocalDoctoolsImage", () => {
         return { exitCode: 0, stdout: `${IMAGE_ID}\n`, stderr: "" };
       },
     });
-    expect(result).toEqual({ ok: true, image: IMAGE_ID });
+    expect(result).toEqual({ ok: true, data: IMAGE_ID });
     expect(seen?.context).toEqual(["Dockerfile.doctools", "tools"]);
     expect(seen?.tools).toEqual(["dpf-convert", "fixtures"]);
     expect(seen?.args).toEqual(
@@ -159,7 +159,7 @@ describe("buildLocalDoctoolsImage", () => {
       scratchRoot,
       runDocker: async () => ({ exitCode: 1, stdout: "", stderr: "failed to resolve debian:trixie-slim" }),
     });
-    expect(failed).toEqual({ ok: false, detail: "failed to resolve debian:trixie-slim" });
+    expect(failed).toEqual({ ok: false, error: "failed to resolve debian:trixie-slim" });
     const silent = await buildLocalDoctoolsImage({
       sourceRoot: root,
       imageTag: "v2026.08.21",

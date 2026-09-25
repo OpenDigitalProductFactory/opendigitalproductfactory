@@ -26,6 +26,7 @@
 import { cp, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { RELEASE_IMAGE_TAG } from "./registry-release";
 
@@ -37,9 +38,8 @@ export type SourceLineageContext = Readonly<{
   sourceRoot: string;
 }>;
 
-export type LocalDoctoolsBuildResult =
-  | { ok: true; image: string }
-  | { ok: false; detail: string };
+/** The built image id, or why the build did not complete. */
+export type LocalDoctoolsBuildResult = ActionResult<string>;
 
 type DockerRunner = (
   args: string[],
@@ -115,7 +115,7 @@ export async function buildLocalDoctoolsImage(input: {
   const dockerfile = join(input.sourceRoot, DOCTOOLS_DOCKERFILE);
   const sources = join(input.sourceRoot, DOCTOOLS_SOURCE_DIR);
   if (!(await exists(dockerfile)) || !(await exists(sources))) {
-    return { ok: false, detail: `${input.sourceRoot} has no ${DOCTOOLS_DOCKERFILE}` };
+    return err(`${input.sourceRoot} has no ${DOCTOOLS_DOCKERFILE}`);
   }
   let context: string | undefined;
   try {
@@ -137,12 +137,12 @@ export async function buildLocalDoctoolsImage(input: {
       { timeoutMs: LOCAL_BUILD_TIMEOUT_MS },
     );
     if (result.exitCode !== 0) {
-      return { ok: false, detail: (result.stderr || result.stdout).trim().slice(-300) || `exit ${result.exitCode}` };
+      return err((result.stderr || result.stdout).trim().slice(-300) || `exit ${result.exitCode}`);
     }
     const image = parseBuiltImageId(result.stdout);
-    return image ? { ok: true, image } : { ok: false, detail: "docker build printed no image id" };
+    return image ? ok(image) : err("docker build printed no image id");
   } catch (error) {
-    return { ok: false, detail: getErrorMessage(error) };
+    return err(getErrorMessage(error));
   } finally {
     if (context) await rm(context, { recursive: true, force: true }).catch(() => undefined);
   }

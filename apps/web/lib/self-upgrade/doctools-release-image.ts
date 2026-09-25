@@ -200,12 +200,12 @@ async function buildLocally(
   deps.logger.log(`[doctools-image] no published ${DOCTOOLS_IMAGE_NAME} reachable for ${lineage.imageTag} (${why}); building it from the install's source`);
   const built = await deps.buildLocal(lineage.source);
   if (!built.ok) {
-    deps.logger.warn(`[doctools-image] local build of ${DOCTOOLS_IMAGE_NAME} did not complete; the next tick retries: ${built.detail}`);
-    return { outcome: "unavailable", detail: `local build failed: ${built.detail}` };
+    deps.logger.warn(`[doctools-image] local build of ${DOCTOOLS_IMAGE_NAME} did not complete; the next tick retries: ${built.error}`);
+    return { outcome: "unavailable", detail: `local build failed: ${built.error}` };
   }
-  await deps.writeStored({ image: built.image, releaseTag: lineage.imageTag, resolvedAt: deps.now().toISOString(), origin: "local-build" });
-  deps.logger.log(`[doctools-image] ${lineage.imageTag} -> ${built.image} (built locally)`);
-  return { outcome: "built-locally", image: built.image };
+  await deps.writeStored({ image: built.data, releaseTag: lineage.imageTag, resolvedAt: deps.now().toISOString(), origin: "local-build" });
+  deps.logger.log(`[doctools-image] ${lineage.imageTag} -> ${built.data} (built locally)`);
+  return { outcome: "built-locally", image: built.data };
 }
 
 export async function reconcileReleaseDoctoolsImage(deps: DoctoolsReconcileDeps): Promise<DoctoolsReconcileOutcome> {

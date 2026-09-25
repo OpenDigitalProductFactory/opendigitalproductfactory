@@ -9,7 +9,7 @@ import {
   type StoredReleaseDoctoolsImage,
 } from "./doctools-release-image";
 import type { ReleaseInstallContext } from "./release-target";
-import type { SourceLineageContext } from "./doctools-source-lineage";
+import type { LocalDoctoolsBuildResult, SourceLineageContext } from "./doctools-source-lineage";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
 const OLD_DIGEST = `sha256:${"b".repeat(64)}`;
@@ -267,14 +267,14 @@ describe("reconcileReleaseDoctoolsImage on a customizable, source-built install 
   function sourceHarness(opts: {
     stored?: StoredReleaseDoctoolsImage | null;
     docker: (args: string[]) => DockerReply;
-    build?: () => Promise<{ ok: true; image: string } | { ok: false; detail: string }>;
+    build?: () => Promise<LocalDoctoolsBuildResult>;
   }) {
     const h = harness({ context: null, stored: opts.stored, docker: opts.docker });
     const builds: SourceLineageContext[] = [];
     h.deps.loadSourceLineage = async () => LINEAGE;
     h.deps.buildLocal = async (lineage) => {
       builds.push(lineage);
-      return opts.build ? opts.build() : { ok: true, image: LOCAL_ID };
+      return opts.build ? opts.build() : { ok: true, data: LOCAL_ID };
     };
     return { ...h, builds };
   }
@@ -312,7 +312,7 @@ describe("reconcileReleaseDoctoolsImage on a customizable, source-built install 
   it("a failed local build leaves conversion off without throwing, and keeps no stale pin", async () => {
     const h = sourceHarness({
       docker: () => ({ exitCode: 1, stderr: "i/o timeout" }),
-      build: async () => ({ ok: false, detail: "no base image offline" }),
+      build: async () => ({ ok: false, error: "no base image offline" }),
     });
     expect(await reconcileReleaseDoctoolsImage(h.deps)).toMatchObject({ outcome: "unavailable" });
     expect(h.writes).toEqual([]);
