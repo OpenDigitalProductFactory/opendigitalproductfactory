@@ -16,6 +16,27 @@ export const BUILD_LIVENESS_WINDOW_MS = 15 * 60 * 1000;
 /** The reconcilers' own rows must not keep a build looking alive. */
 export const RECONCILER_ACTIVITY_TOOLS = ["resumeStrandedBuildsOnBoot", "recoverContradictoryBuildExecStatesOnBoot"];
 
+// BI-4EB33E54: an orchestration records task results only when its whole run ends, so a
+// long first task looks like silence (FB-D671B016, 2026-09-25: 22 quiet
+// minutes, checkpoint cleared under it). The registry is process-wide via
+// globalThis because the reconcilers (instrumentation) and the orchestrator
+// can load this module from different bundle chunks. A portal restart empties
+// it, which is right: the orchestration died with the process.
+const REGISTRY_KEY = "__dpfRunningBuildOrchestrations";
+function runningOrchestrations(): Set<string> {
+  const scope = globalThis as unknown as Record<string, Set<string> | undefined>;
+  return (scope[REGISTRY_KEY] ??= new Set<string>());
+}
+
+export async function withOrchestrationRunning<T>(buildId: string, run: () => Promise<T>): Promise<T> {
+  runningOrchestrations().add(buildId);
+  try {
+    return await run();
+  } finally {
+    runningOrchestrations().delete(buildId);
+  }
+}
+
 export async function recentlyActiveBuildIds(
   prisma: Pick<typeof Db, "buildActivity">,
   buildIds: string[],
@@ -31,6 +52,8 @@ export async function recentlyActiveBuildIds(
     select: { buildId: true },
     distinct: ["buildId"],
   });
-  return new Set(rows.map((row) => row.buildId));
+  const live = new Set(rows.map((row) => row.buildId));
+  for (const buildId of buildIds) if (runningOrchestrations().has(buildId)) live.add(buildId);
+  return live;
 }
 

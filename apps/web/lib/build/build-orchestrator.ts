@@ -792,6 +792,11 @@ async function dispatchSpecialist(params: {
     taskTitle: task.title,
     specialist: ROLE_LABELS[role],
   });
+  // A durable progress row per task: the UI and the reconcilers otherwise see
+  // nothing until the whole run ends.
+  prisma.buildActivity.create({
+    data: { buildId, tool: "specialist_dispatch", summary: `Started task "${task.title}" (${ROLE_LABELS[role]}).` },
+  }).catch(() => {});
 
   // ─── CLI dispatch path: Codex or Claude Code running inside the sandbox ──
   if (config.provider === "codex" || config.provider === "claude" || config.provider === "grok" || config.provider === "opencode") {
@@ -1065,7 +1070,13 @@ export type OrchestratorResult = {
  * This is a DIRECT DISPATCH FUNCTION — not an agentic loop.
  * It calls runAgenticLoop for each specialist, not for itself.
  */
-export async function runBuildOrchestrator(params: {
+/** Runs the orchestration registered as live, so the reconcilers leave it alone. */
+export async function runBuildOrchestrator(params: Parameters<typeof runBuildOrchestratorInner>[0]): Promise<OrchestratorResult> {
+  const { withOrchestrationRunning } = await import("./build-liveness");
+  return withOrchestrationRunning(params.buildId, () => runBuildOrchestratorInner(params));
+}
+
+async function runBuildOrchestratorInner(params: {
   buildId: string;
   plan: BuildPlanDoc;
   userId: string;
