@@ -6,8 +6,9 @@ Platform SBOM + dependency-reduction outputs. See
 **Committed (tracked):**
 
 - `baseline.json` — drift anchor for `scripts/sbom/check-sbom-drift.mjs`. Lists
-  the accepted set of first-party version splits; the CI **SBOM Divergence
-  Guard** fails when a new one appears.
+  the accepted set of first-party version splits and the dependency-shape
+  `budgets`. The CI **SBOM Divergence Guard** fails when a new split appears or
+  a total exceeds its budget.
 - `README.md` — this file.
 
 **Generated (git-ignored, produced by `pnpm sbom`):**

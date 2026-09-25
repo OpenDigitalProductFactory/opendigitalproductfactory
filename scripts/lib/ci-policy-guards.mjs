@@ -586,6 +586,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-build-namespace.mjs"),
     ]),
     guard("sbom-divergence-guard", "SBOM Divergence Guard", [
+      node("--test", "scripts/sbom/check-sbom-drift.test.mjs"),
       node("scripts/sbom/check-sbom-drift.mjs"),
     ]),
     guard("new-dependency-gate", "New Dependency Gate", [
