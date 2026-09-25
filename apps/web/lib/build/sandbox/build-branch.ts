@@ -201,10 +201,21 @@ export function buildSandboxWorktreeAddCommand(
 ): string {
   const path = buildWorktreePath(buildId, workspace);
   // `ln -sfn` so re-linking an already-provisioned worktree is a no-op rather
-  // than an error — the reuse branch below relies on it.
-  const symlinks = WORKTREE_SHARED_NODE_MODULES.map(
-    (rel) => `ln -sfn ${workspace}/${rel} ${path}/${rel}`,
-  ).join(" && ");
+  // than an error — the reuse branch below relies on it. A REAL directory at the
+  // link path (an agent ran `pnpm install` in the worktree) is removed first:
+  // `ln -sfn` into an existing directory nests the link inside it, the worktree
+  // keeps a private install, and its tests load a second React (FB-D671B016,
+  // 2026-09-25: 9 Grid tests "Cannot read properties of null (reading 'use')").
+  // `node_modules` also goes in the repository's shared info/exclude, so a
+  // branch cut before .gitignore ignored links never shows one as untracked.
+  const excludeFile = `"$(git rev-parse --git-common-dir)/info/exclude"`;
+  const symlinks = [
+    `mkdir -p "$(git rev-parse --git-common-dir)/info"`,
+    `{ grep -qx node_modules ${excludeFile} 2>/dev/null || echo node_modules >> ${excludeFile}; }`,
+    ...WORKTREE_SHARED_NODE_MODULES.map(
+      (rel) => `{ [ -L ${path}/${rel} ] || rm -rf ${path}/${rel}; } && ln -sfn ${workspace}/${rel} ${path}/${rel}`,
+    ),
+  ].join(" && ");
   // An orphaned directory — present on disk but unknown to git because the
   // registry under .git/worktrees is gone — defeats both halves of the
   // recreate: `worktree remove` refuses it ("is not a working tree") and
