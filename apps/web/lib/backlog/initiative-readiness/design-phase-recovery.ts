@@ -1,9 +1,14 @@
 import { prisma } from "@dpf/db";
 
-import type { InitiativeRecoveryCanonicalArtifact } from "@/lib/tak/initiative-readiness-tool-grants";
+import type {
+  InitiativeRecoveryCanonicalArtifact,
+  InitiativeRecoveryDispatchContext,
+  InitiativeReviewerRecovery,
+} from "@/lib/tak/initiative-readiness-tool-grants";
 
 import { projectBacklogItemReadiness } from "./entry-adapter";
 import { loadInheritedInitiativeScope } from "./parent-scope-inheritance";
+import type { TerminalRecoveryPorts } from "./terminal-recovery";
 import type { InitiativeReadinessDecision } from "./types";
 
 /**
@@ -32,6 +37,40 @@ export function designPhaseReviewDecision(
     blockers: decision.blockers.filter(isDesignReview),
     unmet: decision.unmet.filter(isDesignReview),
   };
+}
+
+/**
+ * BI-1D8E53D9: a passing spec-approval MINTS the objective baseline, so an item
+ * still owed its design reviews has none yet. Route those reviews against the
+ * room's discovered design, exactly as a refused plan claim issues them, before
+ * the terminal recovery's baseline chain. Otherwise that recovery, the only one
+ * the independent-review lane accepts, answers baseline-not-found and no new
+ * item can ever request its own spec review.
+ */
+export async function routeDesignReviewsBeforeBaseline(args: {
+  designPhase: InitiativeReadinessDecision;
+  currentAgentId: string | null;
+  baseSha: string;
+  dispatchContext: InitiativeRecoveryDispatchContext;
+  ports: Pick<TerminalRecoveryPorts, "discoverArtifact" | "resolveRecovery" | "loadPlanArtifact">;
+}): Promise<InitiativeReviewerRecovery> {
+  const { dispatchContext: room, ports } = args;
+  const discovered = await ports.discoverArtifact({
+    repositoryFullName: room.repositoryFullName,
+    baseSha: args.baseSha,
+    headSha: room.headSha,
+  });
+  return ports.resolveRecovery({
+    decision: args.designPhase,
+    currentAgentId: args.currentAgentId,
+    db: prisma as never,
+    dispatchContext: args.dispatchContext,
+    canonicalArtifact: discovered.resolved
+      ? { resolved: true, ...discovered.artifact }
+      : { resolved: false, nextAction: discovered.nextAction },
+    planArtifact: await ports.loadPlanArtifact({ itemId: args.designPhase.subject.id, repositoryFullName: room.repositoryFullName }),
+    expectedCurrentBaselineId: null,
+  });
 }
 
 const PLAN_UNAVAILABLE: InitiativeRecoveryCanonicalArtifact = {
