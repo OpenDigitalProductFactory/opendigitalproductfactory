@@ -16,6 +16,13 @@ export type ReadinessShape = (typeof READINESS_SHAPES)[number];
 export const READINESS_SENSITIVITIES = ["low", "elevated", "high"] as const;
 export type ReadinessSensitivity = (typeof READINESS_SENSITIVITIES)[number];
 
+/** What raised a delivery shape, and where it was read (BI-243BC956). */
+export type SensitivityTrigger = {
+  signal: string;
+  source: "declared-scope" | "item-body-paths" | "item-prose";
+  evidence: string;
+};
+
 export type ReadinessVerdict = "allowed" | "input-required" | "denied";
 
 /**
@@ -102,6 +109,10 @@ export type InitiativeReadinessFacts = {
   /** Declared or derived delivery shape; absent for pre-taxonomy items. */
   shape?: ReadinessShape | null;
   sensitivity?: ReadinessSensitivity | null;
+  /** What produced `sensitivity`, and where it was read (BI-243BC956). */
+  sensitivityTrigger?: SensitivityTrigger | null;
+  /** The item's work type: a `refactor` takes the fix raise ceiling (BI-243BC956). */
+  workType?: string | null;
   evaluatedAt: string;
   classification: ReadinessEvidenceState;
   canonicalDesign: ReadinessEvidenceState;
@@ -180,6 +191,18 @@ export type InitiativeReadinessDecision = {
     effective: ReadinessShape;
     sensitivity: ReadinessSensitivity | null;
     raised: boolean;
+    /**
+     * The signal that set `sensitivity` and where it was read (BI-243BC956):
+     * a changed path from the declared scope or the body, or — only when no
+     * change fact exists — a keyword in the prose. Null when nothing matched;
+     * absent on decisions persisted before BI-243BC956.
+     */
+    trigger?: SensitivityTrigger | null;
+    /**
+     * The shape sensitivity asked for but the profile cannot satisfy — refused
+     * on the record rather than owed. Present only when the raise was capped.
+     */
+    refusedRaise?: { shape: ReadinessShape; reason: string };
   } | null;
   target: ReadinessTarget;
   verdict: ReadinessVerdict;

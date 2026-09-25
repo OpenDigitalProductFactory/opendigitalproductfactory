@@ -434,15 +434,16 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const hasSpec = specPlanRefs.some((entry) => entry.kind === "spec");
   const hasPlan = specPlanRefs.some((entry) => entry.kind === "plan");
   const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
-  const { readBoundWorkShapeRef } = await import("@/lib/backlog/initiative-readiness/bound-work-shape");
-  const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+  const { readBoundEditPaths, readBoundWorkShapeRef } = await import("@/lib/backlog/initiative-readiness/bound-work-shape");
+  const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
   const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
+  const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
   const readiness = projectBacklogItemReadinessSummary({
     inheritedScope,
     item: {
       id: item.id,
       workShape: boundWorkShape,
-      deliverySensitivity: deriveDeliverableSensitivity({ text: `${item.title ?? ""}\n${item.body ?? ""}`, workType: item.workType }),
+      deliverySensitivity: assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
       body: item.body,
       itemId: item.itemId,
       status: item.status,
