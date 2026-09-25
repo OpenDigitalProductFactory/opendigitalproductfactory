@@ -19,6 +19,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -26,6 +27,7 @@ import {
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   attributeWork,
   buildAttributedWarning,
@@ -76,6 +78,37 @@ function sessionIdOf(payload) {
   const id = payload?.session_id ?? payload?.sessionId;
   if (typeof id !== "string" || id.trim() === "") return null;
   return id.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 128);
+}
+
+// BI-F4BE47B5: Claude Code registers this guard twice in a DPF checkout — from
+// the checkout's .claude/settings.json and from the dpf-platform plugin. The
+// plugin copy runs from ~/.claude/plugins/cache, which every checkout shares
+// and which holds whatever tree last ran `claude plugin install`; on 2026-09-24
+// that was a tree from before #5568 and #5592, so it warned on every Stop and
+// every re-entry. When the project registers its own copy, that copy matches
+// the checkout, so any other copy stands down. Codex and Grok set no
+// CLAUDE_PROJECT_DIR and keep running the plugin copy.
+const PROJECT_COPY = join("packages", "dpf-skill-pack", "hooks", "uncommitted-work-guard.mjs");
+
+function realOrNull(p) {
+  try {
+    return realpathSync(p);
+  } catch {
+    return null;
+  }
+}
+
+export function yieldsToProjectCopy(env = process.env, self = fileURLToPath(import.meta.url)) {
+  const projectDir = env.CLAUDE_PROJECT_DIR;
+  if (!projectDir) return false;
+  const projectCopy = realOrNull(join(projectDir, PROJECT_COPY));
+  if (!projectCopy || projectCopy === realOrNull(self)) return false;
+  try {
+    const settings = readFileSync(join(projectDir, ".claude", "settings.json"), "utf8");
+    return settings.includes(PROJECT_COPY.replace(/\\/g, "/"));
+  } catch {
+    return false;
+  }
 }
 
 // Per-repository, per-session state under the git common dir: never tracked,
@@ -180,6 +213,7 @@ function main() {
 
   const argv = process.argv.slice(2);
   const isGitHook = argv.includes("--git-hook");
+  if (!isGitHook && yieldsToProjectCopy()) process.exit(0);
   const isSnapshot = argv.includes("--snapshot");
   const rootArgIdx = argv.indexOf("--repo-root");
   const baseDir = repoRoot(rootArgIdx >= 0 ? argv[rootArgIdx + 1] : null);
