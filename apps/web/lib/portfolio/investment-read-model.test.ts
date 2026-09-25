@@ -8,7 +8,7 @@ function row(overrides: Partial<InvestmentItemRow>): InvestmentItemRow {
   return {
     itemId: "BI-1", status: "open", effortSize: "medium", jobSize: null, estimateAgreed: null,
     storedPortfolioId: null, storedPortfolioDangling: false, productPortfolioId: null, taxonomyPortfolioId: null,
-    coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasLiveWorkroom: false, completedAt: null,
+    coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasLiveWorkroom: false, deliverySurface: "other", traced: false, completedAt: null,
     ...overrides,
   };
 }
