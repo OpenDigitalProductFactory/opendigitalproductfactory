@@ -1,0 +1,108 @@
+import { prisma } from "@dpf/db";
+import Link from "next/link";
+
+import { PortfolioActivityTree } from "@/components/ops/workrooms/PortfolioActivityTree";
+import { WorkroomInventory, type WorkroomInventoryRow } from "@/components/ops/workrooms/WorkroomInventory";
+import { Surface } from "@/components/ui/Surface";
+import type { WorkPortfolioRoleKey } from "@/lib/navigation/area-portfolio";
+import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
+import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
+import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import {
+  projectPortfolioActivityPage,
+  type RoomActivityInput,
+} from "@/lib/work-management/portfolio-activity-projection";
+
+/** Rooms read for one render. */
+const WORKROOM_READ_LIMIT = 200;
+
+/** The one Workroom query both views run: every room, or one portfolio's rooms. */
+export function workroomInventoryWhere(portfolioRole?: WorkPortfolioRoleKey): Record<string, unknown> {
+  return portfolioRole ? { portfolioRole } : {};
+}
+
+type Props = {
+  /** Scope the inventory to one portfolio (an area's Work view). Unset = all rooms. */
+  portfolioRole?: WorkPortfolioRoleKey;
+  /** What to call the scope in the lead band, e.g. "Serve & grow". */
+  scopeLabel?: string;
+  /** Rendered between the lead band and the activity tree (the page's held rooms). */
+  children?: React.ReactNode;
+};
+
+/**
+ * The workroom inventory: live-vs-history lead band, activity by portfolio and
+ * the room list. `/ops/workrooms` renders it unscoped; each area's Work view
+ * renders it for one portfolio (EP-2FB6C0CC, spec §9.3). One loader and one
+ * component, so an area view can never drift into a second inventory.
+ */
+export async function WorkroomActivitySection({ portfolioRole, scopeLabel, children }: Props) {
+  const inventory = await loadCapsuleLivenessInventory(prisma, {
+    where: workroomInventoryWhere(portfolioRole),
+    take: WORKROOM_READ_LIMIT,
+  });
+  // A full page means the read stopped at its limit, so branch counts describe
+  // the rooms read rather than the rooms that exist. The tree is told, and says so.
+  const roomReadBounded = inventory.capsulesAll.length >= WORKROOM_READ_LIMIT;
+  const workrooms = inventory.capsulesAll.map((room) => ({
+    ...room,
+    updatedAt: room.updatedAt instanceof Date ? room.updatedAt.toISOString() : String(room.updatedAt),
+  })) as WorkroomInventoryRow[];
+
+  // Map only from evidence the inventory actually carries. `latestAction` stays
+  // null where no concrete action was recorded — the projection then says so
+  // rather than manufacturing one — and a blocked room contributes its recorded
+  // liveness reason as the blocker. Nothing here asserts a verified receipt,
+  // because a terminal status is not one.
+  const activityRooms: RoomActivityInput[] = workrooms.map((room) => ({
+    roomId: room.capsuleId,
+    title: room.title,
+    portfolioRole: (room.portfolioRole ?? null) as RoomActivityInput["portfolioRole"],
+    branchId: room.portfolioRole ?? "unplaced",
+    href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId })}`,
+    status: room.status,
+    latestAction: null,
+    blocker: room.status === "blocked" ? room.livenessReason : null,
+    evidenceAt: room.trueLivenessAt ?? null,
+  }));
+  const activity = projectPortfolioActivityPage({ rooms: activityRooms, now: new Date(), pageSize: 50 });
+  // Labels are resolved here and passed as data. The tree is a client component,
+  // and a formatter function cannot cross the server/client boundary.
+  const activityRows = activity.rows.map((row) => ({
+    ...row,
+    label:
+      row.branchId === "unplaced"
+        ? "Not placed in a portfolio"
+        : portfolioRoleLabel(row.branchId as Parameters<typeof portfolioRoleLabel>[0]),
+  }));
+  const live = inventory.livenessSummary.live;
+  const where = scopeLabel ? ` in ${scopeLabel}` : "";
+
+  return (
+    <>
+      <Surface data-dpf-lead className="my-6" rounded="xl">
+        <p className="text-sm font-medium text-[var(--dpf-text)]">
+          {live === 0
+            ? `No Workrooms${where} have live execution evidence right now.`
+            : `${live} Workroom${live === 1 ? " is" : "s are"} live${where} right now.`}
+        </p>
+        <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+          {inventory.livenessSummary.history} retained record{inventory.livenessSummary.history === 1 ? " is" : "s are"} history, not active work.
+        </p>
+        <Link data-owner-first-next-action href="#live-workrooms-heading" className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
+          Review live Workrooms
+        </Link>
+      </Surface>
+      {children}
+      {!portfolioRole && (
+        <Surface className="mt-6" rounded="xl">
+          <h2 className="text-base font-semibold text-[var(--dpf-text)]">Activity by portfolio</h2>
+          <PortfolioActivityTree rows={activityRows} partial={activity.partial} roomReadBounded={roomReadBounded} />
+        </Surface>
+      )}
+      <div className="mt-6">
+        <WorkroomInventory workrooms={workrooms} summary={inventory.livenessSummary} />
+      </div>
+    </>
+  );
+}

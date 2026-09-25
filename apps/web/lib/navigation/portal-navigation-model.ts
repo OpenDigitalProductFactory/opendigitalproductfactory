@@ -3,7 +3,7 @@ import { MAILROOM_NAV_ROUTES } from "./mailroom-nav-routes";
 
 export type PortalAudienceMode = "worker" | "operator" | "customer" | "diagnostic";
 
-import type { PortalShellSectionKey } from "./portal-shell-sections";
+import { AREA_SECTIONS, type PortalShellSectionKey } from "./portal-shell-sections";
 import { BUSINESS_VIEW_ROUTES } from "./business-view-routes";
 
 export {
@@ -58,6 +58,13 @@ export type PortalNavRecord = {
     description: string;
   };
   sectionSiblings?: readonly string[];
+  /**
+   * EP-2FB6C0CC (spec §9.3-9.4): this route holds settings that the named
+   * area's work reads, so it is listed in that area's Setup view. A setting's
+   * home is the area whose runtime reads it; cross-cutting access, security
+   * and upkeep settings belong to the platform area.
+   */
+  setupFor?: PortalShellSectionKey;
 };
 
 export type PortalNavEntry = Pick<
@@ -76,6 +83,18 @@ export type PortalShellNavEntry = PortalNavEntry & {
 };
 
 const platformSectionSiblings = ["/platform", "/platform/archetype-readiness", "/platform/identity", "/platform/ai", "/platform/tools", "/platform/audit"] as const;
+
+function setupRoute(
+  key: string,
+  label: string,
+  path: string,
+  parentPath: string,
+  domain: PortalDomain,
+  capabilityKey: CapabilityKey,
+  setupFor: PortalShellSectionKey,
+): PortalNavRecord {
+  return { key, label, path, parentPath, domain, audienceModes: ["operator"], destinationKind: "settings", capabilityKey, setupFor };
+}
 
 function platformAiRoute(
   key: string,
@@ -233,7 +252,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_employee",
     shellNav: {
-      sectionKey: "business",
+      sectionKey: "team",
       description: "Human users, contractors, and workforce records.",
     },
   },
@@ -254,7 +273,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_platform",
     shellNav: {
-      sectionKey: "business",
+      sectionKey: "team",
       description: "Your AI coworkers as identities — what they do, cost, engagements, and skills.",
     },
   },
@@ -356,7 +375,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "storefront",
-    label: "Portal",
+    label: "Storefront",
     path: "/storefront",
     parentPath: "/storefront",
     domain: "business",
@@ -366,7 +385,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     primaryOrder: 50,
     shellNav: {
       sectionKey: "business",
-      description: "Customer-facing portal experience and setup.",
+      description: "Run the public storefront your customers and supporters use.",
     },
   },
   {
@@ -391,7 +410,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "portfolio",
-    label: "Portfolio",
+    label: "Products",
     path: "/portfolio",
     parentPath: "/portfolio",
     domain: "delivery",
@@ -399,15 +418,15 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_portfolio",
     shellNav: {
-      sectionKey: "products",
-      description: "Digital products and their lifecycle homes.",
+      sectionKey: "business",
+      description: "What you offer and each product's lifecycle home.",
     },
   },
   {
     // One operator entry for work activity (PWA-08), onto the canonical
     // destination. Distinct from the coworker directory at `/workforce`.
     key: "work_activity",
-    label: "Work",
+    label: "Work in progress",
     path: "/ops/workrooms",
     parentPath: "/ops",
     domain: "delivery",
@@ -415,12 +434,13 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "section-page",
     capabilityKey: "view_operations",
     primaryOrder: 55,
-    // In the rail: a model-only entry stayed unreachable (BI-9DC43E17).
-    shellNav: { sectionKey: "delivery", description: "Work in motion across the four portfolios." },
+    // The one operator entry for all work in motion (PWA-08). Each area's Work
+    // view is a filtered view of this same inventory (EP-2FB6C0CC, BI-2EA3BB99).
+    shellNav: { sectionKey: "delivery", description: "Every Workroom in motion, across all areas." },
   },
   {
     key: "backlog",
-    label: "Backlog",
+    label: "Requests",
     path: "/ops",
     parentPath: "/ops",
     domain: "delivery",
@@ -429,8 +449,8 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: "view_operations",
     primaryOrder: 60,
     shellNav: {
-      sectionKey: "products",
-      description: "Cross-cutting work queues and improvements.",
+      sectionKey: "delivery",
+      description: "Ask for a change and follow it from idea to delivery.",
     },
   },
   {
@@ -443,7 +463,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_ea_modeler",
     shellNav: {
-      sectionKey: "products",
+      sectionKey: "knowledge",
       description: "Capability map, value streams, EA views, and data architecture.",
     },
     sectionSiblings: [
@@ -463,10 +483,6 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["operator"],
     destinationKind: "section-page",
     capabilityKey: "view_platform",
-    shellNav: {
-      sectionKey: "platform",
-      description: "Oversee AI specialists and their authority.",
-    },
   },
   platformAiRoute("platform-ai-readiness", "Readiness", "/platform/ai/readiness"),
   platformAiRoute("platform-ai-overview", "AI Workforce Directory", "/platform/ai/overview"),
@@ -484,13 +500,11 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     parentPath: "/delivery",
     domain: "delivery",
     audienceModes: ["operator"],
-    destinationKind: "domain-home",
+    destinationKind: "legacy-redirect",
     capabilityKey: "view_platform",
     primaryOrder: 65,
-    shellNav: {
-      sectionKey: "delivery",
-      description: "Build, ship, and track delivery work from one operator home.",
-    },
+    // EP-2FB6C0CC: superseded by the Improve & deliver area home (/area/delivery);
+    // the route redirects there so old links keep working.
   },
   {
     key: "build",
@@ -512,7 +526,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "platform",
-    label: "Platform Hub",
+    label: "Platform",
     path: "/platform",
     parentPath: "/platform",
     domain: "platform",
@@ -546,6 +560,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["operator"],
     destinationKind: "section-page",
     capabilityKey: "view_platform",
+    setupFor: "platform",
     sectionSiblings: [
       "/platform/identity",
       "/platform/identity/principals",
@@ -637,15 +652,15 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   // likewise has no nav record). Redirect-only routes carry neither a nav subItem
   // nor a record.
   platformAiRoute("platform-ai-capacity-continuity", "Capacity Continuity", "/platform/ai/capacity-continuity"),
-  platformAiRoute("platform-ai-assignments", "Priority & Models", "/platform/ai/assignments"),
-  platformAiRoute("platform-ai-prompts", "Prompts", "/platform/ai/prompts"),
-  platformAiRoute("platform-ai-skills", "Skills", "/platform/ai/skills"),
+  { ...platformAiRoute("platform-ai-assignments", "Priority & Models", "/platform/ai/assignments"), setupFor: "team" },
+  { ...platformAiRoute("platform-ai-prompts", "Prompts", "/platform/ai/prompts"), setupFor: "team" },
+  { ...platformAiRoute("platform-ai-skills", "Skills", "/platform/ai/skills"), setupFor: "team" },
   platformAiRoute("platform-ai-memory", "Coworker Memory", "/platform/ai/memory"),
   // Capability needs converged into the Backlog (EP-INTAKE-UNIFY); this route stays
   // known as a redirect shim without rendering an AI Operations tab.
   platformAiRoute("platform-ai-capability-needs", "Capability Needs", "/platform/ai/capability-needs", "legacy-redirect"),
-  platformAiRoute("platform-ai-providers", "Providers & Routing", "/platform/ai/providers"),
-  platformAiRoute("platform-ai-build-studio", "Build Runtime", "/platform/ai/build-studio", "settings"),
+  { ...platformAiRoute("platform-ai-providers", "Providers & Routing", "/platform/ai/providers"), setupFor: "team" },
+  { ...platformAiRoute("platform-ai-build-studio", "Build Runtime", "/platform/ai/build-studio", "settings"), setupFor: "delivery" },
   {
     key: "platform-tools",
     label: "Tools & Services",
@@ -655,6 +670,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["operator"],
     destinationKind: "section-page",
     capabilityKey: "view_platform",
+    setupFor: "platform",
     sectionSiblings: [
       "/platform/tools",
       "/platform/tools/catalog",
@@ -761,6 +777,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["operator"],
     destinationKind: "section-page",
     capabilityKey: "view_platform",
+    setupFor: "platform",
     sectionSiblings: [
       "/platform/audit",
       "/platform/audit/ledger",
@@ -841,11 +858,35 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_admin",
     primaryOrder: 90,
-    shellNav: {
-      sectionKey: "platform",
-      description: "Core platform configuration and access.",
-    },
+    setupFor: "platform",
   },
+  // EP-2FB6C0CC (BI-811C588E): platform upkeep. Routes stay under /ops for
+  // bookmarks; the platform domain and parent put them in Run the platform.
+  ...([
+    ["platform-updates-self-upgrade", "Self-upgrade", "/ops/self-upgrade"],
+    ["platform-updates-patches", "Patches", "/ops/patches"],
+    ["platform-updates-installation", "Installation", "/ops/installation"],
+    ["platform-updates-dev-loop", "Dev loop", "/ops/dev-loop"],
+    ["platform-updates-teardown", "Teardown", "/ops/teardown"],
+    ["platform-updates-security", "Security", "/ops/security"],
+    ["platform-updates-change-lanes", "Change lanes", "/platform/development/change-lanes"],
+  ] as const).map(
+    ([key, label, path]): PortalNavRecord => ({ key, label, path, parentPath: "/platform", domain: "platform", audienceModes: ["operator"], destinationKind: "section-page", capabilityKey: "view_operations" }),
+  ),
+  // EP-2FB6C0CC (spec §9.4): settings homed in the area whose runtime reads them.
+  setupRoute("storefront-settings", "Storefront settings", "/storefront/settings", "/storefront", "business", "view_storefront", "business"),
+  setupRoute("storefront-settings-business", "Business profile", "/storefront/settings/business", "/storefront/settings", "business", "view_storefront", "business"),
+  setupRoute("storefront-settings-operations", "Business hours", "/storefront/settings/operations", "/storefront/settings", "business", "view_storefront", "business"),
+  setupRoute("admin-branding", "Branding", "/admin/branding", "/admin", "admin", "view_admin", "business"),
+  setupRoute("finance-settings", "Finance settings", "/finance/settings", "/finance", "business", "view_finance", "business"),
+  setupRoute("admin-reference-data", "Work locations", "/admin/reference-data", "/admin", "admin", "view_admin", "team"),
+  setupRoute("admin-platform-development", "Contributing & GitHub", "/admin/platform-development", "/admin", "admin", "view_admin", "delivery"),
+  setupRoute("admin-build-studio-stall-thresholds", "Build stall thresholds", "/admin/build-studio/stall-thresholds", "/admin", "admin", "view_admin", "delivery"),
+  setupRoute("admin-settings", "Sign-in, email and storage", "/admin/settings", "/admin", "admin", "view_admin", "platform"),
+  setupRoute("admin-backups", "Backups", "/admin/backups", "/admin", "admin", "view_admin", "platform"),
+  setupRoute("admin-scheduled-jobs", "Scheduled jobs", "/admin/scheduled-jobs", "/admin", "admin", "view_admin", "platform"),
+  setupRoute("admin-diagnostics", "Diagnostics", "/admin/diagnostics", "/admin", "admin", "view_admin", "platform"),
+  setupRoute("admin-data-stewardship", "Data stewardship", "/admin/data-stewardship", "/admin", "admin", "view_admin", "platform"),
   {
     key: "admin-storefront-redirect",
     label: "Storefront Admin Redirect",
@@ -878,7 +919,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "knowledge",
-    label: "Knowledge",
+    label: "Knowledge Base",
     path: "/knowledge",
     parentPath: "/knowledge",
     domain: "knowledge",
@@ -893,21 +934,20 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "wiki",
-    label: "Coworker Decision Engine",
+    label: "How coworkers decide",
     path: "/coworker-decisions",
     parentPath: "/coworker-decisions",
     domain: "knowledge",
     audienceModes: ["worker", "operator"],
     destinationKind: "domain-home",
     capabilityKey: null,
-    shellNav: {
-      sectionKey: "knowledge",
-      description: "How your AI decides on your behalf - WWMD, WWWD, WSID - and where you shape it.",
-    },
+    // EP-2FB6C0CC: where coworker stance, perspectives and proactivity are set,
+    // so it is Team setup rather than a rail entry of its own.
+    setupFor: "team",
   },
   {
     key: "docs",
-    label: "All docs",
+    label: "User Guide",
     path: "/docs",
     parentPath: "/docs",
     domain: "knowledge",
@@ -919,7 +959,24 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       description: "Reference documentation and specs.",
     },
   },
+  ...AREA_SECTIONS.map(
+    (section): PortalNavRecord => ({
+      key: `area-${section.key}`,
+      label: section.label,
+      path: `/area/${section.key}`,
+      parentPath: `/area/${section.key}`,
+      domain: "workspace",
+      audienceModes: ["worker", "operator"],
+      destinationKind: "domain-home",
+      capabilityKey: null,
+    }),
+  ),
 ] as const;
+
+/** Settings records listed in an area's Setup view, in model order. */
+export function getAreaSetupEntries(area: PortalShellSectionKey): PortalNavEntry[] {
+  return PORTAL_NAV_ROUTES.filter((route) => route.setupFor === area).map(toEntry);
+}
 
 const ROUTES_BY_PATH = new Map(
   PORTAL_NAV_ROUTES.map((route) => [normalizePath(route.path), route] as const),

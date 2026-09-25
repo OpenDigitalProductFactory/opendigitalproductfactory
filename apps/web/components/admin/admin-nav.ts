@@ -1,8 +1,8 @@
 export type AdminFamilyKey =
   | "access"
   | "organization"
-  | "configuration"
-  | "advanced";
+  | "contributing"
+  | "health";
 
 export type AdminFamily = {
   key: AdminFamilyKey;
@@ -13,6 +13,9 @@ export type AdminFamily = {
   subItems: Array<{ label: string; href: string }>;
 };
 
+// EP-2FB6C0CC (spec §9, BI-3ED24FA2): the "Advanced" holding tab is retired. Each
+// page has a family named for its job, and the family count stays at four. The
+// same pages also appear in the Setup view of the area whose work reads them.
 export const ADMIN_FAMILIES: AdminFamily[] = [
   {
     key: "access",
@@ -24,22 +27,13 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
   },
   {
     key: "organization",
-    label: "Organization",
-    href: "/admin/branding",
-    description: "Shape organization identity and brand presentation.",
-    matchPrefixes: [
-      "/admin/branding",
-      "/admin/business-context",
-    ],
-    subItems: [{ label: "Branding", href: "/admin/branding" }],
-  },
-  {
-    key: "configuration",
-    label: "Configuration",
+    label: "Organization & settings",
     href: "/admin/settings",
-    description: "Manage global settings, reference data, operating rules, and model configuration.",
+    description: "Shape organization identity, global settings and reference data.",
     matchPrefixes: [
       "/admin/settings",
+      "/admin/branding",
+      "/admin/business-context",
       "/admin/reference-data",
       "/admin/data-stewardship",
       "/admin/business-models",
@@ -48,6 +42,7 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
     ],
     subItems: [
       { label: "Settings", href: "/admin/settings" },
+      { label: "Branding", href: "/admin/branding" },
       { label: "Reference Data", href: "/admin/reference-data" },
       { label: "Data Stewardship", href: "/admin/data-stewardship" },
       { label: "Business Models", href: "/admin/business-models" },
@@ -55,31 +50,43 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
     ],
   },
   {
-    key: "advanced",
-    label: "Advanced",
+    key: "contributing",
+    label: "Contributing & GitHub",
     href: "/admin/platform-development",
-    description: "Reach specialist controls that still live under Admin while Platform consolidation continues.",
+    description: "Decide whether to share what you build, connect GitHub, and review contributions.",
     matchPrefixes: [
       "/admin/platform-development",
+      "/admin/hive",
+      "/admin/build-studio",
       "/admin/prompts",
       "/admin/skills",
-      "/admin/issue-reports",
-      "/admin/diagnostics",
+    ],
+    subItems: [
+      { label: "Contributing & GitHub", href: "/admin/platform-development" },
+      { label: "Hive Contributions", href: "/admin/hive" },
+      { label: "Build stall thresholds", href: "/admin/build-studio/stall-thresholds" },
+    ],
+  },
+  {
+    key: "health",
+    label: "Health & recovery",
+    href: "/admin/backups",
+    description: "Backups, scheduled jobs, diagnostics and issue reports.",
+    matchPrefixes: [
       "/admin/backups",
       "/admin/scheduled-jobs",
+      "/admin/diagnostics",
+      "/admin/issue-reports",
       "/admin/cockpit",
-      "/admin/hive",
       "/admin/graph-explorer",
     ],
     subItems: [
-      { label: "Platform Development", href: "/admin/platform-development" },
-      { label: "Graph Explorer", href: "/admin/graph-explorer" },
-      { label: "Hive Contributions", href: "/admin/hive" },
-      { label: "Issue Reports", href: "/admin/issue-reports" },
-      { label: "Diagnostics", href: "/admin/diagnostics" },
       { label: "Backups", href: "/admin/backups" },
       { label: "Scheduled Jobs", href: "/admin/scheduled-jobs" },
+      { label: "Diagnostics", href: "/admin/diagnostics" },
+      { label: "Issue Reports", href: "/admin/issue-reports" },
       { label: "Cockpit", href: "/admin/cockpit" },
+      { label: "Graph Explorer", href: "/admin/graph-explorer" },
     ],
   },
 ];

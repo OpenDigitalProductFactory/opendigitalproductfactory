@@ -29,6 +29,7 @@ import { PhoneCountryProvider } from "@/components/ui/PhoneCountryContext";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { UxInitialLoadBoundary } from "@/components/shell/UxInitialLoadBoundary";
 import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
+import { resolveFinanceSurface } from "@/lib/finance/finance-surface";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -80,7 +81,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       return new Set<string>() as ReadonlySet<string>;
     }),
     prisma.storefrontConfig.findFirst({
-      select: { archetype: { select: { archetypeId: true } } },
+      select: { archetype: { select: { archetypeId: true, category: true } } },
     }),
   ]);
 
@@ -171,6 +172,14 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     isSuperuser: user.isSuperuser,
   };
   const customerSurface = resolveCustomerSurface(storefrontConfig?.archetype.archetypeId, []);
+  // Rail and breadcrumb use the page's own title when the archetype renames a
+  // section, so a label never opens a page called something else (EP-2FB6C0CC).
+  const financeShellLabel =
+    resolveFinanceSurface(storefrontConfig?.archetype.category, storefrontConfig?.archetype.archetypeId).shellLabel ?? null;
+  const shellLabelOverrides: Record<string, string> = {
+    customer: customerSurface.shellLabel,
+    ...(financeShellLabel ? { finance: financeShellLabel } : {}),
+  };
   const shellNavSections = (activeSetup
     ? []
     : getShellNavSections(userContext, { activeOrgCapabilities, mode: navMode })).map((section) => ({
@@ -182,7 +191,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
               label: customerSurface.shellLabel,
               description: customerSurface.detailHint,
             }
-          : item,
+          : shellLabelOverrides[item.key]
+            ? { ...item, label: shellLabelOverrides[item.key]! }
+            : item,
       ),
     }));
   // The breadcrumb offers only what this principal can open. Same registry the
@@ -294,7 +305,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                   {shellNavSections.length > 0 && (
                     <ShellBreadcrumb
                       capabilities={grantedCapabilities}
-                      labelOverrides={{ customer: customerSurface.shellLabel }}
+                      labelOverrides={shellLabelOverrides}
                     />
                   )}
                   <UxInitialLoadBoundary>{children}</UxInitialLoadBoundary>

@@ -5,7 +5,8 @@ export type PlatformFamilyKey =
   | "identity"
   | "ai"
   | "tools"
-  | "audit";
+  | "audit"
+  | "updates";
 
 export type PlatformFamily = {
   key: PlatformFamilyKey;
@@ -125,11 +126,30 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Metrics", href: "/platform/audit/metrics" },
     ],
   },
+  {
+    // EP-2FB6C0CC (BI-811C588E): keeping the install current, recoverable and secure.
+    // The routes stay under /ops for bookmarks; their nav records carry the
+    // platform domain, so this family is not a cross-domain teleport.
+    key: "updates",
+    label: "Updates & health",
+    href: "/ops/self-upgrade",
+    description: "Keep this install current, patched, recoverable and secure.",
+    matchPrefixes: ["/ops/self-upgrade", "/ops/patches", "/ops/teardown", "/ops/dev-loop", "/ops/security", "/ops/installation", "/platform/development"],
+    subItems: [
+      { label: "Self-upgrade", href: "/ops/self-upgrade" },
+      { label: "Patches", href: "/ops/patches" },
+      { label: "Installation", href: "/ops/installation" },
+      { label: "Dev loop", href: "/ops/dev-loop" },
+      { label: "Change lanes", href: "/platform/development/change-lanes" },
+      { label: "Teardown", href: "/ops/teardown" },
+      { label: "Security", href: "/ops/security" },
+    ],
+  },
   // NOTE: "Core Admin" was removed here (EP-NAV-COHERENCE keystone, BI-8866F144).
   // A secondary-nav tab pointing at /admin was a cross-domain teleport — clicking
   // it swapped the whole tab row to Admin's families with no way back, the exact
   // "you took them out of context with no path back" defect. Admin is reachable
-  // from the persistent AppRail; P1 (BI-CB07C8BA) unifies Platform + Admin into
+  // from the Run the platform area's Setup view and the Platform hub card; P1 (BI-CB07C8BA) unifies Platform + Admin into
   // one operator console so the boundary stops being a context swap entirely.
 ];
 

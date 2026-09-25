@@ -151,6 +151,9 @@ export const ROUTE_AUDIENCE_OVERRIDES: Record<
   // The AI Coworkers directory landing (business-domain peer to People/Customers).
   // section-home → an owner's cockpit shell, matching /employee and /customer.
   "/workforce": { audience: "owner", destinationKind: "section-home" },
+  // EP-2FB6C0CC: an area home (Work, Team, Setup) for one portfolio section of
+  // the rail — an owner's cockpit like the section homes above.
+  "/area/[key]": { audience: "owner", destinationKind: "section-home" },
 };
 
 // ─── Classifier ──────────────────────────────────────────────────────────────

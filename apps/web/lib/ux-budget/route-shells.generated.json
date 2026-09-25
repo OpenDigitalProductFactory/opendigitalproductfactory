@@ -280,6 +280,19 @@
       "confidence": "high"
     },
     {
+      "routePath": "/area/[key]",
+      "shell": "cockpit",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
+      "confidence": "high"
+    },
+    {
       "routePath": "/build",
       "shell": "list",
       "audience": "builder",
@@ -985,18 +998,6 @@
     {
       "routePath": "/customer/sales-orders",
       "shell": "detail",
-      "audience": "owner",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": true,
-      "confidence": "high"
-    },
-    {
-      "routePath": "/delivery",
-      "shell": "cockpit",
       "audience": "owner",
       "migrated": false,
       "exemptChecks": [

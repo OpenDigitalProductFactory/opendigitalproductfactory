@@ -87,7 +87,7 @@ Tooling detail, hygiene cadence and the enforced-gate list: [backlog & planning 
 ## 6. Tool Authorization
 
 - **Discover MCP tools before fallback.** Codex/Grok start with a lean `tools/list`; call `load_tools` by name/query (`search_tool_marketplace` if needed), refresh the list, then declare it absent. → [MCP authorization runbook](docs/architecture/mcp-tool-authorization-runbook.md)
-- **External coding agents use the MCP JSON-RPC transport at `/api/mcp/v1`.** Bearer tokens follow the `dpfmcp_...` pattern, are issued from Admin > Platform Development > MCP, and live only in local credential files — never commit them.
+- **External coding agents use the MCP JSON-RPC transport at `/api/mcp/v1`.** Bearer tokens follow the `dpfmcp_...` pattern, are issued from Improve & deliver › Setup › Contributing & GitHub (MCP tokens), and live only in local credential files — never commit them.
 - **Tokens carry a coarse scope (`read`/`write`/`admin`) plus granular per-tool grants; default tokens are `read` and cannot call side-effecting tools.** Agent `tool_grants` in `agent_registry.json` are enforced at runtime, intersected with the user's role capabilities. `insufficient_token_scope` is a §1 refusal.
 - **A side-effect tool may stay visible in advise mode only if it is advise-safe** — read-shaped, reversible, and non-committing. Anything else is hidden, not merely warned about.
 - **`"use server"` modules export only functions and concrete values.** Type aliases and interfaces stay local or move to a non-server module.

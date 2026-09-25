@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 664,
+  "routeCount": 665,
   "routes": [
     {
       "routePath": "/",
@@ -4130,6 +4130,18 @@
       "exposure": "authenticated"
     },
     {
+      "routePath": "/area/[key]",
+      "kind": "page",
+      "segments": [
+        "area",
+        "[key]"
+      ],
+      "dynamicParams": [
+        "key"
+      ],
+      "file": "apps/web/app/(shell)/area/[key]/page.tsx"
+    },
+    {
       "routePath": "/auth/callback",
       "kind": "route",
       "segments": [
@@ -4808,7 +4820,8 @@
         "delivery"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/delivery/page.tsx"
+      "file": "apps/web/app/(shell)/delivery/page.tsx",
+      "redirectTo": "/area/delivery"
     },
     {
       "routePath": "/docs/[[...slug]]",

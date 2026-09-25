@@ -55,7 +55,7 @@ Every self-developing install begins in `policy_pending`.
 
 This lets people begin working before they have decided how their install should participate in the Hive Mind.
 
-Contributions carry a **stable pseudonym** (`dpf-agent-<shortId>`) that is the same across every commit, PR, and issue raised by the install. Real identity (name, email, hostname) stays on the local install and never reaches the upstream repository. The pseudonym lets the community recognize repeat contributors without exposing anyone's personal identity. Admins can see their install's pseudonym on the Platform Development page.
+Contributions carry a **stable pseudonym** (`dpf-agent-<shortId>`) that is the same across every commit, PR, and issue raised by the install. Real identity (name, email, hostname) stays on the local install and never reaches the upstream repository. The pseudonym lets the community recognize repeat contributors without exposing anyone's personal identity. Admins can see their install's pseudonym on the Contributing & GitHub page (Improve & deliver › Setup).
 
 ## Shared Workspace
 
@@ -88,7 +88,7 @@ On portal bootstrap, the runtime compares:
 
 If the versions match, nothing is shown. If the image is newer and the shared workspace has no user changes, the bootstrap refreshes the managed source workspace from the image and clears the pending-update flag.
 
-If the image is newer and the shared workspace has local/source changes, the bootstrap does not overwrite them. Instead it writes `PlatformDevConfig.updatePending = true` and stores the image version in `PlatformDevConfig.pendingVersion`. Users with `manage_platform` see a portal banner that links to **Admin > Platform Development**, where the **Apply update** panel merges the new platform source into the install's `my-changes` branch.
+If the image is newer and the shared workspace has local/source changes, the bootstrap does not overwrite them. Instead it writes `PlatformDevConfig.updatePending = true` and stores the image version in `PlatformDevConfig.pendingVersion`. Users with `manage_platform` see a portal banner that links to **Improve & deliver › Setup › Contributing & GitHub**, where the **Apply update** panel merges the new platform source into the install's `my-changes` branch.
 
 The apply action preserves customisations. A clean merge writes the new `.dpf-version` value and clears the banner. If Git reports conflicts, the merge pauses in the shared workspace and the panel lists the conflicted files for review instead of guessing a resolution.
 

@@ -80,7 +80,6 @@
     "/customer/quotes",
     "/customer/quotes/[id]",
     "/customer/sales-orders",
-    "/delivery",
     "/docs/[[...slug]]",
     "/ea",
     "/ea/capabilities",
