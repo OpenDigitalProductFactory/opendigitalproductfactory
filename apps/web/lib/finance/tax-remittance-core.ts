@@ -265,6 +265,30 @@ export function buildInvoiceLiabilityDrafts(
   return drafts;
 }
 
+/** The liability draft for an operator's manual period adjustment. It has no
+ *  document of its own, so it is in the org's base currency (BI-6030131C). */
+export function buildManualAdjustmentDraft(
+  registration: TaxRegistrationRecord,
+  input: { periodId: string | null; periodStart: Date; periodEnd: Date; dueDate: Date; amount: number; orgCurrency: string },
+): LiabilityDraft {
+  const { periodStart, periodEnd } = input;
+  return {
+    entryId: stableTaxEntityId("TAX-LIAB", registration.id, "manual_adjustment", periodStart, periodEnd),
+    sourceType: "manual_adjustment",
+    sourceId: input.periodId ?? stableTaxEntityId("TAX-PERIOD", registration.id, periodStart, periodEnd),
+    sourceLineItemId: null,
+    direction: "adjustment",
+    taxType: registration.taxType,
+    taxCode: "manual_adjustment",
+    taxableAmount: 0,
+    taxRate: null,
+    taxAmount: input.amount,
+    currency: input.orgCurrency,
+    occurredAt: input.dueDate,
+    notes: "Manual period adjustment carried on the obligation period.",
+  };
+}
+
 export function buildBillLiabilityDrafts(
   registration: TaxRegistrationRecord,
   bills: Array<{

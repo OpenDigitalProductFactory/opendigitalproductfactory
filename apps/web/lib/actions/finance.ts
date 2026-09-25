@@ -2,6 +2,7 @@
 
 import { prisma } from "@dpf/db";
 import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
+import { generateInvoiceRef, generatePaymentRef } from "@/lib/finance/invoice-payment-refs";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { newId } from "@/lib/shared/new-id";
@@ -31,22 +32,6 @@ import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 
 async function requireManageFinance(): Promise<string> {
   return (await requireCapability("manage_finance")).userId;
-}
-
-// ─── Ref generators ───────────────────────────────────────────────────────────
-
-async function generateInvoiceRef(): Promise<string> {
-  const year = new Date().getFullYear();
-  const count = await prisma.invoice.count();
-  const seq = String(count + 1).padStart(4, "0");
-  return `INV-${year}-${seq}`;
-}
-
-async function generatePaymentRef(): Promise<string> {
-  const year = new Date().getFullYear();
-  const count = await prisma.payment.count();
-  const seq = String(count + 1).padStart(4, "0");
-  return `PAY-${year}-${seq}`;
 }
 
 // ─── createInvoice ────────────────────────────────────────────────────────────
