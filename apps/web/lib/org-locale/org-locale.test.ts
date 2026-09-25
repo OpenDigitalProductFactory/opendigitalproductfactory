@@ -5,7 +5,9 @@ import {
   deriveLocaleCurrencyFromCountry,
   formatMoney,
   localeForCurrency,
+  orgCurrencyFromSettings,
   resolveOrgBaseCurrency,
+  setupCurrencyPrefill,
   resolveOrgLocale,
   type OrgLocaleClient,
 } from "./org-locale";
@@ -125,5 +127,26 @@ describe("resolveOrgBaseCurrency", () => {
 
   it("falls back to USD when there is no settings row, never GBP", async () => {
     expect(await resolveOrgBaseCurrency(db(null))).toBe("USD");
+  });
+});
+
+describe("setupCurrencyPrefill", () => {
+  // Setup applies the chosen country to OrgSettings; finance setup must not
+  // then write a website guess or USD over it (BI-6030131C).
+  it("prefills the org's currency once its country is known", () => {
+    expect(setupCurrencyPrefill({ baseCurrency: "MXN", countryCode: "MX" }, "USD")).toBe("MXN");
+  });
+
+  it("uses the website-import suggestion only before the country is known", () => {
+    expect(setupCurrencyPrefill({ baseCurrency: "USD", countryCode: null }, "EUR")).toBe("EUR");
+    expect(setupCurrencyPrefill(null, null)).toBeNull();
+  });
+});
+
+describe("orgCurrencyFromSettings", () => {
+  it("prefers the set currency, then the country's, then USD", () => {
+    expect(orgCurrencyFromSettings({ baseCurrency: "EUR", countryCode: "US" })).toBe("EUR");
+    expect(orgCurrencyFromSettings({ baseCurrency: null, countryCode: "JP" })).toBe("JPY");
+    expect(orgCurrencyFromSettings(null)).toBe("USD");
   });
 });

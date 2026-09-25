@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { newId } from "@/lib/shared/new-id";
 import {
   netFromComponents,
@@ -294,6 +295,8 @@ export async function generateTaxObligationPeriods() {
   const generatedPeriods: Array<{ id: string; periodId: string }> = [];
   const canSummarizeOrgTax = registrations.length === 1;
   const generationBoundary = new Date();
+  // A manual adjustment carries no currency of its own; it is in the org's.
+  const orgCurrency = await getOrgBaseCurrency();
 
   for (const registration of registrations) {
     const monthsPerPeriod = periodMonthsForFrequency(registration.filingFrequency);
@@ -377,8 +380,8 @@ export async function generateTaxObligationPeriods() {
           }),
         ]);
 
-        liabilityDrafts.push(...buildInvoiceLiabilityDrafts(registration, invoices));
-        liabilityDrafts.push(...buildBillLiabilityDrafts(registration, bills));
+        liabilityDrafts.push(...buildInvoiceLiabilityDrafts(registration, invoices, orgCurrency));
+        liabilityDrafts.push(...buildBillLiabilityDrafts(registration, bills, orgCurrency));
       }
 
       if (manualAdjustmentAmount !== 0) {
@@ -393,7 +396,7 @@ export async function generateTaxObligationPeriods() {
           taxableAmount: 0,
           taxRate: null,
           taxAmount: manualAdjustmentAmount,
-          currency: "GBP",
+          currency: orgCurrency,
           occurredAt: dueDate,
           notes: "Manual period adjustment carried on the obligation period.",
         });

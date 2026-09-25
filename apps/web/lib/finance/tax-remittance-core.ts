@@ -212,6 +212,8 @@ export function buildInvoiceLiabilityDrafts(
       taxAmount: unknown;
     }>;
   }>,
+  /** The org base currency, for a document that carries none (BI-6030131C). */
+  orgCurrency: string,
 ): LiabilityDraft[] {
   const drafts: LiabilityDraft[] = [];
 
@@ -250,7 +252,7 @@ export function buildInvoiceLiabilityDrafts(
         taxableAmount: taxableBaseFromLine(lineItem.lineTotal, Math.abs(rawTaxAmount)),
         taxRate,
         taxAmount: signedTaxAmount,
-        currency: invoice.currency ?? "GBP",
+        currency: invoice.currency ?? orgCurrency,
         occurredAt: invoice.issueDate,
         evidence: {
           invoiceRef: invoice.invoiceRef ?? null,
@@ -278,6 +280,8 @@ export function buildBillLiabilityDrafts(
       taxAmount: unknown;
     }>;
   }>,
+  /** The org base currency, for a document that carries none (BI-6030131C). */
+  orgCurrency: string,
 ): LiabilityDraft[] {
   const drafts: LiabilityDraft[] = [];
 
@@ -298,7 +302,7 @@ export function buildBillLiabilityDrafts(
         taxableAmount: taxableBaseFromLine(lineItem.lineTotal, taxAmount),
         taxRate: roundCurrency(decimalValue(lineItem.taxRate)),
         taxAmount,
-        currency: bill.currency ?? "GBP",
+        currency: bill.currency ?? orgCurrency,
         occurredAt: bill.issueDate,
         evidence: {
           billRef: bill.billRef ?? null,

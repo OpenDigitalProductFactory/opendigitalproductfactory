@@ -26,7 +26,7 @@ export const createInvoiceSchema = z.object({
   contactId: z.string().optional(),
   type: z.enum(INVOICE_TYPES).default("standard"),
   dueDate: z.string().min(1),
-  currency: z.string().length(3).default("GBP"),
+  currency: z.string().length(3).optional(), // absent = the org base currency, filled by the writer (BI-6030131C)
   paymentTerms: z.string().optional(),
   notes: z.string().optional(),
   internalNotes: z.string().optional(),
@@ -65,7 +65,7 @@ export const recordPaymentSchema = z.object({
   direction: z.enum(PAYMENT_DIRECTIONS),
   method: z.enum(PAYMENT_METHODS),
   amount: z.number().positive(),
-  currency: z.string().length(3).default("GBP"),
+  currency: z.string().length(3).optional(), // absent = the org base currency, filled by the writer (BI-6030131C)
   reference: z.string().optional(),
   invoiceId: z.string().optional(),
   billId: z.string().optional(),

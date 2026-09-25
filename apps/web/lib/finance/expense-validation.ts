@@ -8,7 +8,7 @@ const expenseItemSchema = z.object({
   category: z.enum(EXPENSE_CATEGORIES),
   description: z.string().min(1),
   amount: z.number().positive(),
-  currency: z.string().length(3).default("GBP"),
+  currency: z.string().length(3).optional(), // absent = the org base currency, filled by the writer (BI-6030131C)
   receiptUrl: z.string().optional(),
   taxReclaimable: z.boolean().default(false),
   taxAmount: z.number().min(0).default(0),
@@ -17,7 +17,7 @@ const expenseItemSchema = z.object({
 
 export const createExpenseClaimSchema = z.object({
   title: z.string().min(1),
-  currency: z.string().length(3).default("GBP"),
+  currency: z.string().length(3).optional(), // absent = the org base currency, filled by the writer (BI-6030131C)
   notes: z.string().optional(),
   items: z.array(expenseItemSchema).min(1),
 });

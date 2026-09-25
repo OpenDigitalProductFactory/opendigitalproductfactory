@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { newId } from "@/lib/shared/new-id";
@@ -69,7 +70,7 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<{ id: st
       sourceType: input.sourceType ?? null,
       sourceId: input.sourceId ?? null,
       dueDate: new Date(input.dueDate),
-      currency: input.currency ?? "USD",
+      currency: input.currency ?? (await getOrgBaseCurrency()),
       subtotal,
       taxAmount,
       discountAmount,
@@ -370,7 +371,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{ id: st
       method: input.method,
       status: "completed",
       amount: input.amount,
-      currency: input.currency ?? "USD",
+      currency: input.currency ?? (await getOrgBaseCurrency()),
       reference: input.reference ?? null,
       notes: input.notes ?? null,
       receivedAt: input.receivedAt ? new Date(input.receivedAt) : new Date(),
