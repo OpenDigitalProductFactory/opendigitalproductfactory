@@ -57,6 +57,10 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/docker.sh"
 # shellcheck source=scripts/installer/lib/autostart.sh
 . "$LIB_DIR/autostart.sh"
+# shellcheck source=scripts/installer/lib/canonical-origin.sh
+. "$LIB_DIR/canonical-origin.sh"
+# shellcheck source=scripts/installer/lib/machine-trust.sh
+. "$LIB_DIR/machine-trust.sh"
 # shellcheck source=scripts/installer/lib/github-cli.sh
 . "$LIB_DIR/github-cli.sh"
 # shellcheck source=scripts/installer/native-edge-host.sh
@@ -938,6 +942,11 @@ fi
 #     happen inside portal-init using whatever DPF_LLM_PROVIDER
 #     resolves to (Docker Model Runner on Docker Desktop; Ollama on
 #     Linux native Docker via docker-compose.linux.yml).
+# Every install is https at one canonical origin (BI-6DC1CD5B, design section
+# 12): Claude refuses OAuth over plain http, and one origin keeps OAuth token
+# audiences, cookies and the MCP address whole. A member install gets its
+# certificate from the organization join; a standalone install is its own CA.
+DPF_PORTAL_URL="http://localhost:3000"
 if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
   step "Organization trust"
   bash "$REPO_ROOT/scripts/bootstrap-organization-pki.sh" \
@@ -945,6 +954,35 @@ if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
   export DPF_ORGANIZATION_TRUST_ENABLED=1
   dpf_compose_files "$DPF_MODE"
   ok "Organization HTTPS trust configured; the one-time package was consumed"
+else
+  step "HTTPS for this installation"
+  canonical_san_args=()
+  if dpf_resolve_canonical_origin "$REPO_ROOT"; then
+    old_ifs="$IFS"; IFS=','
+    for canonical_san in $DPF_CANONICAL_CERT_SANS; do canonical_san_args+=(--san "$canonical_san"); done
+    IFS="$old_ifs"
+  fi
+  if [ -n "${DPF_CANONICAL_HOST:-}" ] && \
+     bash "$REPO_ROOT/scripts/bootstrap-organization-pki.sh" \
+       --mode authority --hostname "$DPF_CANONICAL_HOST" "${canonical_san_args[@]}" --no-start-tls; then
+    dpf_set_env_value "$REPO_ROOT" PUBLIC_URL "$DPF_CANONICAL_PUBLIC_URL"
+    export DPF_ORGANIZATION_TRUST_ENABLED=1
+    dpf_compose_files "$DPF_MODE"
+    DPF_PORTAL_URL="$DPF_CANONICAL_PUBLIC_URL"
+    # One operating-system prompt: the installer is not root, so macOS asks for
+    # the keychain password and Linux asks sudo before trusting the root.
+    trust="$(dpf_install_root_trust "$HOME/.dpf/pki/root_ca.crt" || echo declined)"
+    ok "HTTPS configured at $DPF_CANONICAL_PUBLIC_URL"
+    if [ "$trust" = "declined" ]; then
+      warn "Your browser will warn about this address until you trust $HOME/.dpf/pki/root_ca.crt."
+    fi
+    if [ "$DPF_CANONICAL_SOURCE" = "no-network-name" ]; then
+      warn "AI agents on other computers need a DNS name for this machine to connect."
+    fi
+  else
+    warn "HTTPS could not be configured. The portal stays at http://localhost:3000;"
+    warn "AI clients that require https cannot sign in until the installer is run again."
+  fi
 fi
 
 step "Bringing up the platform"
@@ -1224,7 +1262,7 @@ bash "$REPO_ROOT/scripts/setup-worktree-hygiene.sh" "$REPO_ROOT" || true
 echo ""
 printf '%b  Install complete!%b\n' "${DPF_GREEN:-}" "${DPF_NC:-}"
 echo ""
-echo "  Portal:        $HEALTH_URL"
+echo "  Portal:        $DPF_PORTAL_URL"
 echo "  Login:         admin@dpf.local"
 echo "  Password:      see ADMIN_PASSWORD in .env"
 echo ""

@@ -28,6 +28,9 @@ export { WriteGateRequirement } from "../generated/client/client";
 // organisation's EmploymentType label (BI-C61CEEA9). Exported as a value so the
 // app composes from the generated enum instead of re-typing its members.
 export { WorkerClassification } from "../generated/client/client";
+// Document rendition kinds (BI-9D43CBEF): exported as a value so the app
+// composes from the generated enum instead of re-typing its members.
+export { DocumentRenditionKind } from "../generated/client/client";
 // Decision-resolution proposal vocabulary (BI-3D0FB84B). Exported as values so
 // the app composes from the generated enum instead of re-typing its members.
 export {

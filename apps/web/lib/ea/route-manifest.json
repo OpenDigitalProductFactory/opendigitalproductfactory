@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 661,
+  "routeCount": 662,
   "routes": [
     {
       "routePath": "/",
@@ -798,6 +798,21 @@
         "path"
       ],
       "file": "apps/web/app/api/docs-asset/[...path]/route.ts"
+    },
+    {
+      "routePath": "/api/documents/[documentId]/content",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents",
+        "[documentId]",
+        "content"
+      ],
+      "dynamicParams": [
+        "documentId"
+      ],
+      "file": "apps/web/app/api/documents/[documentId]/content/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/health",

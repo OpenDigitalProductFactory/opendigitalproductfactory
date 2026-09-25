@@ -54,6 +54,20 @@ export interface IssueReportCreatedEvent {
   data: { reportId: string };
 }
 
+/** BI-9D43CBEF: derive PDF + plain-text renditions of one saved office
+ *  DocumentVersion (handled by functions/document-renditions.ts). */
+export interface DocumentRenditionRequestedEvent {
+  name: "documents/rendition.requested";
+  data: { documentVersionId: string };
+}
+
+/** BI-9D43CBEF: bounded rendition backfill, requested when the document
+ *  converter becomes available (lib/documents/rendition-trigger.ts). */
+export interface DocumentRenditionBackfillRequestedEvent {
+  name: "documents/rendition.backfill-requested";
+  data: { reason: string; limit?: number };
+}
+
 export interface CwqItemCreatedEvent {
   name: "cwq/item.created";
   data: { workItemId: string; sourceType: string; urgency: string };

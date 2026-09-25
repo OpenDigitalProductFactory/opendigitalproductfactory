@@ -176,6 +176,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // were stale (they now read compose-chain.ps1).
       conformanceTest("scripts/installer/mcp-loopback-tls-contract.test.mjs"),
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
+      // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
+      conformanceTest("scripts/installer/canonical-origin.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their

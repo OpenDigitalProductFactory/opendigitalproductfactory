@@ -285,6 +285,14 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
   "CareIntakeAccessGrant.packet",
   "CareIntakeException.packet",
   "CareIntakeStatusEvent.packet",
+  // 2026-09-25 BI-9D43CBEF (S4 of BI-815D40C6): DocumentRendition.renditionKind
+  // CONVERTS String -> the DocumentRenditionKind enum (the field is KEPT, only
+  // its type strengthens; same shape as BI-817ED2D4 above). The two legacy
+  // spellings map, and rows with no enum member (derived, regenerable
+  // projections) are removed before `USING ("renditionKind"::"DocumentRenditionKind")`.
+  // Migration: 20260925060000_document_rendition_kind_enum. Prune once shipped
+  // fleet-wide.
+  "DocumentRendition.renditionKind",
 ]);
 
 // Model attributes intentionally removed through a steward-reviewed migration.

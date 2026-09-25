@@ -9,7 +9,7 @@ this file; never retype them into prose, where they drift (Simplify & Strengthen
 | Count | Value | Source of truth |
 |---|---:|---|
 | Prisma models | 628 | `packages/db/prisma/schema/` |
-| Prisma enums | 95 | `packages/db/prisma/schema/` |
-| Migrations | 593 | `packages/db/prisma/migrations/` |
+| Prisma enums | 96 | `packages/db/prisma/schema/` |
+| Migrations | 594 | `packages/db/prisma/migrations/` |
 | Kernel principles | 111 | `docs/founder-kernel/wiki/principles/` |
-| App routes | 661 | `apps/web/lib/ea/route-manifest.json` |
+| App routes | 662 | `apps/web/lib/ea/route-manifest.json` |

@@ -97,10 +97,18 @@ re-runs without re-prompting.
      and `DPF_PLATFORM_VERSION` (`git describe --tags`) so
      `/ops/self-upgrade` reports the correct identity, then
      `docker compose build`.
-6. **`docker compose up -d`** — brings up postgres, portal-init
+6. **HTTPS at the canonical address** — the install becomes its own
+   certificate authority and serves the portal over https at one address:
+   `https://localhost` when it serves only this machine, or the machine's
+   DNS name when the network resolves it here. It writes `PUBLIC_URL` and
+   adds the certificate to your user's trusted roots, so Windows asks you to
+   confirm once. AI clients such as Claude Code sign in with OAuth only over
+   https. If this step fails, the portal stays at `http://localhost:3000` and
+   the installer says so.
+7. **`docker compose up -d`** — brings up postgres, portal-init
    (migrations + seed), and the portal.
-7. **Health check** — polls `http://localhost:3000/api/health`.
-8. **Edge Node bootstrap** — mints a single-use auto-approve token, downloads
+8. **Health check** — polls `http://localhost:3000/api/health`.
+9. **Edge Node bootstrap** — mints a single-use auto-approve token, downloads
    and checksum-verifies the native Go Edge Node, and supervises it with a
    Windows Scheduled Task at logon. The host process owns the physical
    multicast interfaces that Docker Desktop hides from Linux containers. It
@@ -117,7 +125,7 @@ re-runs without re-prompting.
    will not validate — still pairs, but through the short code both operators
    confirm. The pairing screen names which condition could not be proved, so a
    peer that should be pairing automatically and is not tells you why.
-9. **Autostart** — registers a Windows **Scheduled Task** so the stack
+10. **Autostart** — registers a Windows **Scheduled Task** so the stack
    starts at logon (see [Autostart](#autostart)).
 
 ### Login
@@ -128,8 +136,10 @@ Login credentials are written to `.env` in the install directory:
 - **Password:** `ADMIN_PASSWORD` in `.env` (randomly generated on first
   install). Change it after first login.
 
-The portal is at **`http://localhost:3000`** — always use `localhost`,
-not the machine's LAN IP.
+The portal is at the address the installer printed, normally
+**`https://localhost`** (its `PUBLIC_URL` in `.env`). Other addresses, such as
+`http://localhost:3000` or the machine's LAN IP, redirect there. If HTTPS setup
+failed, use `http://localhost:3000`.
 
 ## Network exposure after install
 

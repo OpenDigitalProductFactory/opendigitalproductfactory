@@ -18,6 +18,16 @@ order: 2
 4. Publish only when the content is ready to be treated as the current operating record.
 5. Archive documents that should remain discoverable as history but should not guide current work.
 
+## Office Files
+
+A document can be a stored file: a Word, Excel, PowerPoint, OpenDocument or RTF file saved by a coworker or an integration. After it is saved, the platform converts it in the background into a PDF and a plain-text copy.
+
+- **View PDF** opens that PDF in a new tab, so you can read the file without an office suite.
+- **Download original** gives you the file exactly as it was stored. To change it, edit it in your own office suite and save it back as a new version; the new version is converted the same way.
+- The extracted text appears on the page and makes the body of the file findable in document search.
+
+While the conversion runs, the page says it is preparing the PDF and searchable text. If the file cannot be converted, the page says why in plain words, and the reason is also recorded in the document's lifecycle history. On an install where document conversion is not set up, nothing is converted and **Download original** still works; the files are converted once conversion becomes available.
+
 ## Authoritative State
 
 The managed document record is authoritative for lifecycle state, owner, current version, references, and audit history. A document's source material can still live elsewhere, but the platform record is the place operators check before relying on it.
