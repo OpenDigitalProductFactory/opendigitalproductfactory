@@ -79,6 +79,76 @@ export function providersBusyHandoff(): string {
   });
 }
 
+/**
+ * Every endpoint failed, but not all of them transiently (BI-D25F867D). Name
+ * what each one hit instead of claiming nothing is misconfigured: on
+ * 2026-09-24 "every provider is busy" covered a stopped sandbox container and
+ * a local model reserved for a local-CI gate, and nobody could act on it.
+ */
+export function providersUnavailableHandoff(attempts: readonly EndpointAttempt[]): string {
+  const seen = new Set<string>();
+  const causes = attempts.flatMap((attempt) => {
+    const line = `${attempt.endpointId}: ${plainAttemptCause(attempt.error)}`;
+    if (seen.has(line)) return [];
+    seen.add(line);
+    return [line];
+  });
+  return buildHumanHandoff({
+    blocker: `No AI provider could take this turn. ${causes.join("; ")}.`,
+    steps: [
+      "If the build sandbox is stopped, start it (start_sandbox); a local model reserved for a local-CI gate frees when the gate finishes.",
+      "Otherwise open Platform > AI Operations > Providers & Routing and check the provider named above.",
+    ],
+    verify: "re-check the providers and pick this straight back up",
+  });
+}
+
+export type EndpointAttempt = { endpointId: string; error: string; code?: string };
+
+/** The attempts behind "All endpoints failed", or null when the message carries none. */
+export function parseEndpointAttempts(message: string): EndpointAttempt[] | null {
+  if (!/All endpoints failed/i.test(message)) return null;
+  const marker = message.match(/Attempts:\s*/i);
+  if (marker?.index === undefined) return null;
+  try {
+    const parsed: unknown = JSON.parse(message.slice(marker.index + marker[0].length).trim());
+    if (!Array.isArray(parsed)) return null;
+    return parsed.flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const record = entry as Record<string, unknown>;
+      return [{
+        endpointId: typeof record.endpointId === "string" ? record.endpointId : "unknown",
+        error: typeof record.error === "string" ? record.error : "",
+        ...(typeof record.code === "string" ? { code: record.code } : {}),
+      }];
+    });
+  } catch {
+    return null;
+  }
+}
+
+const NETWORK_ERROR = /network error|fetch failed|\bECONN(?:REFUSED|RESET|ABORTED)\b|\bENOTFOUND\b|\bEAI_AGAIN\b|\bETIMEDOUT\b|\bUND_ERR_(?:CONNECT_TIMEOUT|SOCKET)\b|socket hang up|getaddrinfo|connect(?:ion)? (?:refused|reset|timed out)|connect timeout/i;
+const LIMIT_ERROR = /rate.?limit|overload|\bbusy\b|\b429\b|\b529\b|pool exhausted|usage limit/i;
+const CAPACITY_DEFERRAL = /local-ci-active-capacity-reservation|Local provider dispatch deferred|capacity (?:reservation|deferr)/i;
+const TRANSIENT_CODES: ReadonlySet<string> = new Set(["rate_limit", "overloaded", "transient", "network", "capacity"]);
+
+/** Whether waiting would help: a limit, an overload, a network blip, or capacity held by other work. */
+export function isTransientAttempt(attempt: EndpointAttempt): boolean {
+  if (attempt.code && TRANSIENT_CODES.has(attempt.code)) return true;
+  return NETWORK_ERROR.test(attempt.error) || LIMIT_ERROR.test(attempt.error) || CAPACITY_DEFERRAL.test(attempt.error);
+}
+
+function plainAttemptCause(error: string): string {
+  if (/container [0-9a-f]+ is not running|sandbox .*not running|is not running/i.test(error)) {
+    return "it runs in the build sandbox, which is not running";
+  }
+  if (CAPACITY_DEFERRAL.test(error)) return "it is reserved for a running local-CI gate";
+  if (LIMIT_ERROR.test(error)) return "it has reached its usage or rate limit for now";
+  if (NETWORK_ERROR.test(error)) return "it could not be reached";
+  const first = error.split("\n")[0].trim();
+  return first ? first.slice(0, 160) : "it failed without a reason";
+}
+
 export function modelMissingHandoff(): string {
   return buildHumanHandoff({
     blocker: "The selected AI model is no longer available from its provider, so the platform could not answer this turn.",
@@ -373,9 +443,13 @@ function describeToolRouteFailureMessage(
     return noEligibleModelHandoff();
   }
 
-  // Endpoints exist but all transiently failed (rate-limit / overload / network).
+  // Endpoints exist but all failed. Only a wholly transient failure is "busy";
+  // anything else names what each endpoint hit.
   if (/All endpoints failed/i.test(msg)) {
-    return providersBusyHandoff();
+    const attempts = dispatchedAttempts(msg);
+    return attempts && attempts.length > 0 && !attempts.every(isTransientAttempt)
+      ? providersUnavailableHandoff(attempts)
+      : providersBusyHandoff();
   }
 
   return unexplainedDeadEndHandoff();
@@ -400,30 +474,22 @@ export type InferenceDeadEndOutcome = {
   deferredBy?: "capacity" | "busy";
 };
 
-function isAllEndpointNetworkOutage(message: string): boolean {
-  if (!/All endpoints failed/i.test(message)) return false;
-  const attemptsMarker = message.match(/Attempts:\s*/i);
-  if (attemptsMarker?.index === undefined) return false;
-  const serializedAttempts = message.slice(attemptsMarker.index + attemptsMarker[0].length).trim();
-  let attempts: unknown;
-  try {
-    attempts = JSON.parse(serializedAttempts);
-  } catch {
-    return false;
-  }
-  if (!Array.isArray(attempts) || attempts.length === 0) return false;
-  const dispatchedAttempts = attempts.filter((attempt) => {
-    if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return true;
-    const error = (attempt as Record<string, unknown>)["error"];
-    return typeof error !== "string" || !/required-terminal-writer-not-enforceable/i.test(error);
-  });
-  if (dispatchedAttempts.length === 0) return false;
-  return dispatchedAttempts.every((attempt) => {
-    if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
-    const error = (attempt as Record<string, unknown>)["error"];
-    if (typeof error !== "string" || error.trim().length === 0) return false;
-    return /network error|fetch failed|\bECONN(?:REFUSED|RESET|ABORTED)\b|\bENOTFOUND\b|\bEAI_AGAIN\b|\bETIMEDOUT\b|\bUND_ERR_(?:CONNECT_TIMEOUT|SOCKET)\b|socket hang up|getaddrinfo|connect(?:ion)? (?:refused|reset|timed out)|connect timeout/i.test(error);
-  });
+/** Attempts that actually dispatched: a writer the route cannot enforce is not a provider failure. */
+function dispatchedAttempts(message: string): EndpointAttempt[] | null {
+  const attempts = parseEndpointAttempts(message);
+  return attempts?.filter((attempt) => !/required-terminal-writer-not-enforceable/i.test(attempt.error)) ?? null;
+}
+
+/**
+ * Every dispatched endpoint failed for a reason that waiting fixes. Once only
+ * network errors counted (BI-A50F6B7B), so a pool or usage limit, a typed
+ * rate_limit and a capacity reservation all read as "unknown" and the task
+ * failed instead of waiting (2026-09-24).
+ */
+function isAllEndpointTransient(message: string): boolean {
+  const attempts = dispatchedAttempts(message);
+  if (!attempts || attempts.length === 0) return false;
+  return attempts.every((attempt) => attempt.error.trim().length > 0 && isTransientAttempt(attempt));
 }
 
 export function describeToolRouteFailureOutcome(
@@ -447,7 +513,7 @@ export function describeToolRouteFailureOutcome(
   if (/No credential|auth(?:entication|orization)? (?:failed|error)|unauthorized/i.test(msg)) return { kind: "credentials", message };
   if (/No eligible endpoints|toolUse required|tool-capable/i.test(msg)) return { kind: "policy-or-capability", message };
   if (/rate.?limit|overload|\bbusy\b|status(?:Code)?[\"']?:\s*(?:429|529)/i.test(msg)) return { kind: "busy", message };
-  if (isAllEndpointNetworkOutage(msg)) return { kind: "busy", message };
+  if (isAllEndpointTransient(msg)) return { kind: "busy", message };
   return { kind: "unknown", message };
 }
 

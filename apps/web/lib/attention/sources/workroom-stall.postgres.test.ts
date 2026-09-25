@@ -1,5 +1,8 @@
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { nextDriveHold, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
+
 import { loadRoomStallRows } from "./workroom-stall";
 
 // Explicit opt-in to a governed PostgreSQL target. Every statement is read-only;
@@ -25,42 +28,47 @@ databaseSuite("Workroom stall SQL on PostgreSQL", () => {
   });
   afterAll(async () => { await client?.end(); });
 
+  /** The drive's own hold after replaying these tick actions (BI-E8C78E80). */
+  function holdAfter(actions: Array<string | null>): WorkroomDriveHold | null {
+    let hold: WorkroomDriveHold | null = null;
+    actions.forEach((action, i) => {
+      hold = nextDriveHold(hold, { action: action ?? "unknown", reason: "r", stageKey: "s", conformance: null },
+        new Date(Date.UTC(2026, 0, 1, 0, 15 * i)));
+    });
+    return hold;
+  }
+
   function fixture(histories: Array<{ id: string; actions: Array<string | null>; status?: string; archived?: boolean }>) {
     const rooms = histories.map(h => ({
       id: h.id, capsuleId: h.id, title: h.id, portfolioRole: null,
       updatedAt: "2026-01-01T00:00:00Z", archivedAt: h.archived ? "2026-01-01T00:00:00Z" : null,
-      status: h.status ?? "ready", scopeClaims: {}, workspaceState: { workroomDrive: { action: h.actions.at(-1) } },
+      status: h.status ?? "ready", scopeClaims: {},
+      workspaceState: { workroomDrive: { action: h.actions.at(-1) ?? null, hold: holdAfter(h.actions) } },
     }));
-    const activities = histories.flatMap(h => h.actions.map((action, i) => ({
-      id: `${h.id}-${String(i).padStart(6, "0")}`, workCapsuleId: h.id,
-      recordedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
-      kind: "workroom-drive", payload: { action },
-    })));
     return {
       text: `WITH "WorkCapsule" AS (
         SELECT * FROM jsonb_to_recordset($3::jsonb) AS w(id text, "capsuleId" text, title text, "portfolioRole" text,
           "updatedAt" timestamptz, "archivedAt" timestamptz, status text, "scopeClaims" jsonb, "workspaceState" jsonb)
-      ), "WorkCapsuleActivity" AS (
-        SELECT * FROM jsonb_to_recordset($4::jsonb) AS a(id text, "workCapsuleId" text, "recordedAt" timestamptz, kind text, payload jsonb)
-      ), ${sql.replace(/^\s*WITH\s+/i, "")}`,
-      values: [...parameters, JSON.stringify(rooms), JSON.stringify(activities)],
+      ) ${sql}`,
+      values: [...parameters, JSON.stringify(rooms)],
     };
   }
 
-  it("does not rescan the history through a correlated subplan for each tick", async () => {
+  it("reads the drive's hold from the room row, with no scan of the activity history", async () => {
     const query = fixture([{ id: "room", actions: Array(100).fill("pause") }]);
     const plan = await client.query({ ...query, text: `EXPLAIN (FORMAT JSON) ${query.text}` });
+    expect(JSON.stringify(plan.rows)).not.toContain("WorkCapsuleActivity");
     expect(JSON.stringify(plan.rows)).not.toContain("SubPlan");
   });
 
   it("keeps mixed refusal streaks, resets, null actions, threshold and terminal exclusions", async () => {
     const p = Array(4).fill("pause");
     const query = fixture([
-      { id: "mixed", actions: ["dispatch", "pause", "escalate", "pause", "escalate", "pause"] },
-      { id: "reset", actions: [...p, "dispatch", ...p] },
+      { id: "mixed", actions: ["dispatch_agent", "pause", "escalate", "pause", "escalate", "pause"] },
+      { id: "reset", actions: [...p, "dispatch_agent", ...p] },
       { id: "null-reset", actions: [...p, null, "pause"] },
       { id: "short", actions: p.slice(1) },
-      { id: "advancing", actions: [...p, "dispatch"] },
+      { id: "advancing", actions: [...p, "dispatch_agent"] },
       { id: "complete", actions: p, status: "complete" },
       { id: "abandoned", actions: p, status: "abandoned" },
       { id: "archived", actions: p, archived: true },
@@ -68,13 +76,6 @@ databaseSuite("Workroom stall SQL on PostgreSQL", () => {
     ]);
     const result = await client.query(query);
     expect(result.rows.map(r => [r.capsuleId, Number(r.consecutivePauses)])).toEqual([["mixed", 5], ["reset", 4]]);
-  });
-
-  it("handles 40000 refusal ticks within the database statement budget", async () => {
-    const result = await client.query(fixture(Array.from({ length: 20 }, (_, i) => ({
-      id: `room-${i}`, actions: Array(2000).fill("pause"),
-    }))));
-    expect(result.rows).toHaveLength(20);
-    expect(result.rows.every(r => Number(r.consecutivePauses) === 2000)).toBe(true);
+    expect(result.rows.find(r => r.capsuleId === "mixed")?.stuckSince).toBe("2026-01-01T00:15:00.000Z");
   });
 });

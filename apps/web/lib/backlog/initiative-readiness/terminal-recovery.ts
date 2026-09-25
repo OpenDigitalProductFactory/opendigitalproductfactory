@@ -22,6 +22,7 @@ import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   selectEligibleObjectiveEvidenceActivityIds,
 } from "./objective-reconciliation";
+import { bodyBaselineUnpersistedEscalation, researchLaneEscalation, smallShapeAcceptanceEscalation } from "./shape-lane-escalations";
 import type { InitiativeReadinessDecision } from "./types";
 import { readRepositoryProviderBlob } from "./repository-artifact";
 
@@ -42,6 +43,7 @@ export type TerminalRecoveryEscalationReason =
   | "workroom-ambiguous"
   | "workroom-identity-incomplete"
   | "baseline-not-found"
+  | "body-baseline-unpersisted"
   | "baseline-ambiguous"
   | "eligible-evidence-not-found"
   | "eligible-evidence-unbounded"
@@ -61,56 +63,6 @@ type TerminalEscalation = {
   reason: TerminalRecoveryEscalationReason;
   nextAction: string;
 };
-
-/**
- * BI-05F8860A: under readiness.v3 a small or break-fix item owes no objective
- * mapping — its acceptance lane belongs to the delivery-coordinator and is met
- * by cited manual/ux evidence (the runtime check or the failing-to-passing
- * test). Routing that lane at objective-mapping produced "baseline-not-found",
- * then "eligible-evidence-not-found", then "objective-mapping-history-
- * unavailable" — three misleading escalations for one missing evidence row.
- */
-function smallShapeAcceptanceEscalation(): TerminalInitiativeRecovery {
-  return {
-    reviewerRoutes: [],
-    unroutable: [],
-    escalations: [{
-      accountableRole: "delivery-coordinator",
-      toolName: "record_execution_evidence",
-      grant: "backlog_write",
-      reason: "acceptance-evidence-required",
-      nextAction: "This delivery shape is accepted by the runtime check on the live install or by the failing-to-passing test, not by objective mapping. Record it with record_execution_evidence (kind manual_check or ux_verified) inside the current completion window, then cite that activity id in completionEvidence.evidenceActivityIds. Do not re-claim the item to refresh readiness; a re-claim does not reopen the window.",
-    }],
-  };
-}
-
-/**
- * BI-7876699F: research is satisfied by the AUTHOR, never by objective mapping.
- *
- * When RESEARCH_REQUIRED was the only unmet lane this function did not exist, so
- * the packet fell through to the workroom/baseline chain and answered
- * "baseline-not-found — complete independent spec approval". A delivery-small
- * shape's requirement set contains no OBJECTIVE_BASELINE_REQUIRED at all, so that
- * route could never legally be taken: the item was unclosable by anyone, and the
- * packet was pointing at a gate its own policy said did not apply.
- *
- * Same principle as smallShapeAcceptanceEscalation above (BI-05F8860A): name the
- * writer the accountable role can actually reach, and do not consult machinery
- * this lane does not use.
- */
-function researchLaneEscalation(): TerminalInitiativeRecovery {
-  return {
-    reviewerRoutes: [],
-    unroutable: [],
-    escalations: [{
-      accountableRole: "design-author",
-      toolName: "record_initiative_evidence",
-      grant: "initiative_evidence_write",
-      reason: "research-evidence-required",
-      nextAction: "Research is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect on a named ref (commit or branch + file + line) and the failing-to-passing proof. This lane needs no objective baseline and no independent spec approval — the delivery shape does not require one.",
-    }],
-  };
-}
 
 export type TerminalInitiativeRecovery = Omit<InitiativeReviewerRecovery, "escalations"> & {
   escalations: Array<InitiativeReviewerRecovery["escalations"][number] | TerminalEscalation>;
@@ -652,6 +604,8 @@ export async function resolveTerminalInitiativeRecovery(args: {
 
   const payloads = await ports.loadBaselinePayloads(args.decision.subject.id);
   if (payloads.length === 0) {
+    const effective = args.decision.shapeDecision?.effective;
+    if (effective === "small" || effective === "medium") return bodyBaselineUnpersistedEscalation();
     return escalation("baseline-not-found", "No current objective baseline exists. Complete independent spec approval before acceptance mapping.");
   }
   const baselineRows = parseBaselinePayloads(payloads);

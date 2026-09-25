@@ -39,7 +39,7 @@ function assistantNotAdmitted(capsuleId: string, toExecutorKind: WorkCapsuleExec
     error: "workroom_assistant_not_admitted",
     message:
       "The person you act for owns this workroom, but you have not been admitted to it. " +
-      `Take it over with ${WORKROOM_HANDOVER_TOOL} (the exact call is in data.handover); they will be asked to approve it. ` +
+      `Take it over with ${WORKROOM_HANDOVER_TOOL} (the exact call is in data.handover). They may be asked to approve it, unless an operator has already graduated you for this kind of action. ` +
       "After that, get_workroom shows where the work stands and what to do next.",
     data: {
       handover: {

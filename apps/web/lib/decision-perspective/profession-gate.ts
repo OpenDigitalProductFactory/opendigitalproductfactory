@@ -14,6 +14,11 @@
 // resolver/evaluator error escalates to a human and is still recorded to the
 // DecisionInteraction ledger.
 
+import {
+  nominateAcumenCorpusGap,
+  type AcumenGapConsultOutcome,
+  type AcumenGapNominationResult,
+} from "./acumen-gap-nomination";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { evaluateDecisionPerspective } from "./evaluator";
 import { resolveProfileMaterialForProfession } from "./material";
@@ -37,6 +42,11 @@ type ProfessionGateClient = Parameters<typeof resolveProfileMaterialForProfessio
 
 type GateEvaluator = (input: DecisionPerspectiveEvaluationInput) => DecisionPerspectiveEvaluationResult;
 
+/** Corpus-gap nomination hook: the gate's optimisation dispatch (BI-F6FD946F). */
+export type ProfessionGapNominator = (
+  consult: AcumenGapConsultOutcome,
+) => Promise<AcumenGapNominationResult>;
+
 /** Every row this gate writes audits as WSID, whatever doctrine it fell back to. */
 export const PROFESSION_GATE_KEY: DecisionGateKey = "profession";
 
@@ -57,6 +67,12 @@ export type ProfessionDecisionGateResult = {
   professionProfileSelected: boolean;
   /** The profession family that governed (null when the role is unbound). */
   professionKey: string | null;
+  /**
+   * The corpus-gap nomination this consult dispatched, or null when none was
+   * attempted. `nominated` or a `duplicate-open-need` reason both mean a gap is
+   * open for the topic: the miss is optimisation work, not an owner call.
+   */
+  corpusGap: AcumenGapNominationResult | null;
 };
 
 function traceWsid(event: string, payload: Record<string, unknown>): void {
@@ -67,11 +83,43 @@ function errorClass(error: unknown): string {
   return error instanceof Error && error.name ? error.name : "UnknownError";
 }
 
+/** True when a corpus gap is open for this consult's topic, new or existing. */
+function corpusGapIsOpen(result: AcumenGapNominationResult | null): boolean {
+  return Boolean(result && (result.nominated || result.reason === "duplicate-open-need"));
+}
+
+/**
+ * Founder doctrine, 2026-09-24: the middle uncertainty band is where the corpus
+ * is optimised, not where a person is asked. A thin corpus that has already
+ * dispatched its gap says so plainly. Critical risk is the exception and still
+ * goes to a person whatever the corpus says.
+ */
+function optimisationDispatched(
+  evaluation: DecisionPerspectiveEvaluationResult,
+  corpusGap: AcumenGapNominationResult | null,
+): boolean {
+  return (
+    corpusGapIsOpen(corpusGap)
+    && (evaluation.outcomeType === "escalate" || evaluation.outcomeType === "defer")
+    && evaluation.riskTier !== "critical"
+  );
+}
+
 function operatorMessageFor(
   evaluation: DecisionPerspectiveEvaluationResult,
   professionProfileSelected: boolean,
   professionKey: string | null,
+  corpusGap: AcumenGapNominationResult | null = null,
 ): string {
+  if (optimisationDispatched(evaluation, corpusGap)) {
+    return (
+      `Insufficient craft corpus: the ${professionKey} profession cannot decide this `
+      + `${evaluation.domainClass} question yet (confidence ${evaluation.confidenceScore}). `
+      + `Corpus gap ${corpusGap?.needId ?? "(pending)"} is open for consolidation, so this `
+      + `miss teaches the craft; it is not an owner call. Proceed on your own judgment `
+      + `within your normal authority.`
+    );
+  }
   const scope = professionProfileSelected
     ? `the ${professionKey} profession's recorded craft`
     : professionKey
@@ -180,6 +228,12 @@ export async function evaluateProfessionDecisionGate(input: {
   evaluator?: GateEvaluator;
   /** Injectable for tests; defaults to the real profession resolver. */
   resolver?: typeof resolveProfileMaterialForProfession;
+  /**
+   * Corpus-gap nomination (BI-F6FD946F). Defaults to the real
+   * nominateAcumenCorpusGap; `null` disables it. Fail-open: a nomination
+   * failure never changes the verdict.
+   */
+  nominateGap?: ProfessionGapNominator | null;
   now?: Date;
   recentOverrideCount?: number;
 }): Promise<ProfessionDecisionGateResult> {
@@ -271,6 +325,7 @@ export async function evaluateProfessionDecisionGate(input: {
       operatorMessage: operatorMessageFor(evaluation, professionProfileSelected, professionKey),
       professionProfileSelected,
       professionKey,
+      corpusGap: null,
     };
   }
 
@@ -369,6 +424,28 @@ export async function evaluateProfessionDecisionGate(input: {
     principleConflict: evaluation.principleConflict,
   });
 
+  // BI-F6FD946F: a miss in the uncertainty band dispatches corpus optimisation
+  // here, at the one seam every caller passes, instead of being spent on an
+  // owner card. The predicate and topic dedupe live in the nomination module.
+  const corpusGap = await dispatchCorpusGap({
+    nominateGap: input.nominateGap,
+    evaluation,
+    interactionId,
+    professionKey,
+    professionProfileSelected,
+    // A borrow has no coworker of its own; the acumen registry names the owner.
+    fallbackAgentId: borrow
+      ? null
+      : input.agentIdentity.agentId ?? input.agentIdentity.slugId ?? null,
+    routeContext: input.routeContext,
+    question,
+  });
+  if (optimisationDispatched(evaluation, corpusGap)) {
+    evaluation.rationale =
+      `${evaluation.rationale} Corpus gap ${corpusGap?.needId ?? "(pending)"} is open for `
+      + `consolidation; this is optimisation work, not an owner call.`;
+  }
+
   const persisted = await persistDecisionInteraction({
     db: input.db,
     evaluation,
@@ -388,6 +465,7 @@ export async function evaluateProfessionDecisionGate(input: {
       professionKey,
       caller: input.caller ?? null,
       ...borrowLedgerFields,
+      corpusGapNomination: corpusGap,
     },
   });
   traceWsid("wsid.ledger.written", {
@@ -399,8 +477,48 @@ export async function evaluateProfessionDecisionGate(input: {
     allowed: evaluation.outcomeType === "recommend" || evaluation.outcomeType === "arbitrate",
     interactionId: persisted.interactionId,
     evaluation,
-    operatorMessage: operatorMessageFor(evaluation, professionProfileSelected, professionKey),
+    operatorMessage: operatorMessageFor(evaluation, professionProfileSelected, professionKey, corpusGap),
     professionProfileSelected,
     professionKey,
+    corpusGap,
   };
+}
+
+/** Run the nomination hook fail-open. Null when nothing was attempted. */
+async function dispatchCorpusGap(args: {
+  nominateGap: ProfessionGapNominator | null | undefined;
+  evaluation: DecisionPerspectiveEvaluationResult;
+  interactionId: string;
+  professionKey: string | null;
+  professionProfileSelected: boolean;
+  fallbackAgentId: string | null;
+  routeContext: string;
+  question: string;
+}): Promise<AcumenGapNominationResult | null> {
+  const nominate = args.nominateGap === undefined ? nominateAcumenCorpusGap : args.nominateGap;
+  // No profession, no corpus to grow: an unbound role is a staffing gap, not
+  // a craft one.
+  if (!nominate || !args.professionKey) return null;
+  try {
+    return await nominate({
+      professionKey: args.professionKey,
+      interactionId: args.interactionId,
+      outcomeType: args.evaluation.outcomeType,
+      confidenceScore: args.evaluation.confidenceScore,
+      professionProfileSelected: args.professionProfileSelected,
+      coverageGap: args.evaluation.coverageGap,
+      domainClass: args.evaluation.domainClass,
+      question: args.question,
+      fallbackAgentId: args.fallbackAgentId,
+      routeContext: args.routeContext,
+    });
+  } catch (error) {
+    traceWsid("wsid.corpus-gap.nomination-failed", {
+      interactionId: args.interactionId,
+      professionKey: args.professionKey,
+      errorClass: errorClass(error),
+      errorMessage: getErrorMessage(error),
+    });
+    return { nominated: false, reason: "error" };
+  }
 }

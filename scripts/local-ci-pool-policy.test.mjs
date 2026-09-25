@@ -500,3 +500,15 @@ test("loads the policy through the existing PlatformConfig substrate", async () 
   }]);
   assert.equal(loaded, value);
 });
+
+// 2026-09-24: a builder memory read that failed closed the pool as
+// "host-cpu-unmeasurable". The reason now names the probe.
+test("a failed server probe closes the pool under its own name", () => {
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: PILOT_CONFIG,
+    host: { ...SAFE_HOST, probeFailures: ["builderMemoryUsageBytes"] },
+    manifestSlotCount: 2,
+  });
+  assert.equal(resolved.effectiveCapacity, 0);
+  assert.equal(resolved.rollbackReason, "host-probe-unreadable:builderMemoryUsageBytes");
+});

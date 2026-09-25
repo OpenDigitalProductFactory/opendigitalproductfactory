@@ -1,6 +1,6 @@
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { loadPirEvidenceContext } from "./pir-evidence-context";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
@@ -20,6 +20,7 @@ import {
 import {
   createResourceWaitProjection,
   preInferenceResourceWait,
+  RESOURCE_WAIT_MAX_ATTEMPTS,
 } from "./mcp-task-capacity-contract";
 import {
   narrowInitiativeReviewTools,
@@ -508,8 +509,15 @@ export async function executeRemoteTaskAttempt(input: {
       };
     }
 
-    const waitFailureKind = preInferenceResourceWait(result);
+    // A wait is bounded: after the last attempt the task fails as busy instead of parking forever.
+    const waitFailureKind = input.capacityAttempt < RESOURCE_WAIT_MAX_ATTEMPTS ? preInferenceResourceWait(result) : null;
     if (waitFailureKind) {
+      // Keep the dispatch history, so the next re-send gets a new event id rather
+      // than repeating the first one, which the queue drops as a duplicate.
+      const progressRow = currentRun
+        ?? await prisma.taskRun.findUnique({ where: { taskRunId: run.taskRunId }, select: { progressPayload: true } });
+      const priorDispatch = progressRow?.progressPayload && typeof progressRow.progressPayload === "object"
+        ? (progressRow.progressPayload as Record<string, unknown>)["dispatch"] : undefined;
       await prisma.taskRun.update({
         where: { taskRunId: run.taskRunId },
         data: {
@@ -520,6 +528,7 @@ export async function executeRemoteTaskAttempt(input: {
             riskClass: parsed.riskClass,
             executedToolCount: 0,
             resourceWait: createResourceWaitProjection(waitFailureKind, input.capacityAttempt),
+            ...(priorDispatch ? { dispatch: priorDispatch as Prisma.InputJsonValue } : {}),
           },
         },
       });

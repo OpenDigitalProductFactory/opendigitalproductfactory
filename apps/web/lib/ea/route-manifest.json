@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 663,
+  "routeCount": 664,
   "routes": [
     {
       "routePath": "/",
@@ -4115,6 +4115,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/work-capsules/delivery-stream/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/workbooks/export",
+      "kind": "route",
+      "segments": [
+        "api",
+        "workbooks",
+        "export"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/workbooks/export/route.ts",
       "exposure": "authenticated"
     },
     {

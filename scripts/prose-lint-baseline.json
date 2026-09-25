@@ -1597,7 +1597,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 23
+    "textMass": 34
   },
   "apps/web/app/(shell)/performance/loading.tsx": {
     "vocabulary": 0,
@@ -2382,6 +2382,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 4
+  },
+  "apps/web/app/(shell)/workspace/documents/[documentId]/DocumentExportMenu.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
   },
   "apps/web/app/(shell)/workspace/documents/[documentId]/DocumentFilePanel.tsx": {
     "vocabulary": 0,
@@ -9309,7 +9317,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 8
+    "textMass": 10
   },
   "apps/web/components/workbooks/GridFindBar.tsx": {
     "vocabulary": 0,
@@ -9360,6 +9368,14 @@
     "textMass": 3
   },
   "apps/web/components/workbooks/grid-named-views.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/workbooks/grid-office-export.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,

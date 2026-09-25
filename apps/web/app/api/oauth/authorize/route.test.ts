@@ -96,3 +96,40 @@ describe("one-click consent (BI-05E0EA33)", () => {
     expect(mock.binding).not.toHaveBeenCalled();
   });
 });
+
+describe("consent needs a person's explicit decision", () => {
+  it("binds nothing and asks again when Connect arrives without an assistant chosen", async () => {
+    mock.resolveDefault.mockResolvedValue({ kind: "choice", selected: codex, candidates: [codex, claude] });
+    const { acting_coworker: _a, default_coworker: _d, ...rest } = baseForm;
+    const response = await POST(form(rest));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Nothing was connected");
+    expect(mock.binding).not.toHaveBeenCalled();
+    expect(mock.code).not.toHaveBeenCalled();
+  });
+
+  it("treats a submission without the Connect decision as a refusal", async () => {
+    const { decision: _d, ...rest } = baseForm;
+    const response = await POST(form(rest));
+    expect(response.headers.get("location")).toContain("error=access_denied");
+    expect(mock.binding).not.toHaveBeenCalled();
+  });
+
+  it("refuses a decision that did not come from the consent page itself", async () => {
+    const request = form(baseForm);
+    request.headers.set("sec-fetch-site", "cross-site");
+    const response = await POST(request);
+    expect(response.status).toBe(403);
+    expect(mock.binding).not.toHaveBeenCalled();
+  });
+
+  it("records how an approved decision arrived", async () => {
+    const request = form(baseForm);
+    request.headers.set("sec-fetch-site", "same-origin");
+    request.headers.set("sec-fetch-user", "?1");
+    await POST(request);
+    expect(mock.log).toHaveBeenCalledWith({ data: expect.objectContaining({
+      rationale: expect.objectContaining({ submittedFrom: { fetchSite: "same-origin", fetchUser: "?1" } }),
+    }) });
+  });
+});

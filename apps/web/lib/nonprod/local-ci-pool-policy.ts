@@ -39,6 +39,8 @@ export type LocalCiHostPressure = {
   convergenceActive?: boolean;
   fencesHealthy?: boolean;
   evidenceIsolationHealthy?: boolean;
+  /** Server probes that could not be read this sample, by name (2026-09-24). */
+  probeFailures?: string[];
 };
 
 export type LocalCiPoolConfig = {
@@ -441,6 +443,11 @@ function hostRollbackReason(
   if (!Number.isFinite(observedAt)) return "host-observation-unmeasurable";
   if (Math.abs(now.getTime() - observedAt) > 2 * 60_000) {
     return "host-observation-stale";
+  }
+  // Name the probe that failed rather than the first number it left missing:
+  // a builder memory read that timed out used to report "host-cpu-unmeasurable".
+  if (host.probeFailures && host.probeFailures.length > 0) {
+    return `host-probe-unreadable:${[...host.probeFailures].sort().join(",")}`;
   }
   if (!finiteAtLeast(host.availableMemoryBytes, 0)) {
     return "host-memory-unmeasurable";

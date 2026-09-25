@@ -626,4 +626,32 @@ describe("terminal initiative recovery", () => {
     expect(result.escalations).toMatchObject([{ reason: "baseline-ambiguous" }]);
     expect(ports.discoverArtifact).not.toHaveBeenCalled();
   });
+
+  // BI-0F8E39D5: a medium item's baseline is the criteria in its body, so
+  // "complete spec approval" was advice its shape can never follow.
+  it("names the unpersisted body baseline for a small or medium shape instead of sending it to spec approval", async () => {
+    for (const effective of ["small", "medium"] as const) {
+      const ports = deps([room], []);
+      const result = await resolveTerminalInitiativeRecovery({
+        decision: { ...decision, policyVersion: "initiative-readiness.v3", shapeDecision: { declared: effective, effective, sensitivity: null, raised: false } },
+        currentAgentId: null,
+        refusedWorkroomId: room.capsuleId,
+        ports,
+      });
+      expect(result.reviewerRoutes).toEqual([]);
+      expect(result.escalations).toMatchObject([{ reason: "body-baseline-unpersisted" }]);
+      expect(String(result.escalations[0]?.nextAction)).not.toMatch(/complete independent spec approval/i);
+    }
+  });
+
+  it("still asks a large shape with no baseline for spec approval", async () => {
+    const ports = deps([room], []);
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: { ...decision, policyVersion: "initiative-readiness.v3", shapeDecision: { declared: "large", effective: "large", sensitivity: null, raised: false } },
+      currentAgentId: null,
+      refusedWorkroomId: room.capsuleId,
+      ports,
+    });
+    expect(result.escalations).toMatchObject([{ reason: "baseline-not-found" }]);
+  });
 });
