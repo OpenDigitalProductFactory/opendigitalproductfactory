@@ -61,6 +61,24 @@ test("reads static imports but ignores dynamic ones", () => {
   assert.deepEqual(specs.sort(), ["../lib/b.mjs", "./lib/a.mjs", "./lib/side-effect.mjs"]);
 });
 
+// Regression: generate-platform-sbom.mjs imports ../lib/pnpm-lock.mjs with a
+// binding list over several lines, which the single-line pattern never saw.
+test("reads a static import whose binding list spans lines", () => {
+  const specs = staticRelativeImports(
+    [
+      "import {",
+      "  parseImporters as parseLockImporters,",
+      "  unquote,",
+      '} from "../lib/pnpm-lock.mjs";',
+      "export {",
+      "  x,",
+      "} from './lib/x.mjs';",
+      "const y = Buffer.from('z');",
+    ].join("\n"),
+  );
+  assert.deepEqual(specs.sort(), ["../lib/pnpm-lock.mjs", "./lib/x.mjs"]);
+});
+
 // The measured regression: set-hooks-path.mjs gained a top-level import of
 // ./lib/hooks-dir.mjs, which no COPY line delivered.
 test("catches a copied script whose static import is never copied", () => {

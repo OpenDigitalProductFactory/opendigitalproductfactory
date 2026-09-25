@@ -589,6 +589,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/sbom/check-sbom-drift.test.mjs"),
       conformanceTest("scripts/sbom/lockfile-roots.test.mjs"),
       node("scripts/sbom/check-sbom-drift.mjs"),
+      // One lockfile reader for every script (plan 2026-09-08 §10.5 S3).
+      node("--test", "scripts/lib/pnpm-lock.test.mjs"),
+      conformanceTest("scripts/check-no-local-lockfile-parser.test.mjs"),
+      node("scripts/check-no-local-lockfile-parser.mjs"),
     ]),
     guard("new-dependency-gate", "New Dependency Gate", [
       conformanceTest("scripts/sbom/check-new-dependencies.test.mjs"),

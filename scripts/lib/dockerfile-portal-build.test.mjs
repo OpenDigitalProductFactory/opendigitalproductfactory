@@ -4,7 +4,6 @@ import { test } from "node:test";
 
 const dockerfile = readFileSync(new URL("../../Dockerfile", import.meta.url), "utf8");
 const dockerignore = readFileSync(new URL("../../.dockerignore", import.meta.url), "utf8");
-const workspace = readFileSync(new URL("../../pnpm-workspace.yaml", import.meta.url), "utf8");
 
 test("portal image build uses the default Next builder under Docker", () => {
   assert.match(dockerfile, /pnpm --filter web exec next build/);
@@ -17,7 +16,9 @@ test("portal image build reserves enough heap for Next production tracing", () =
 });
 
 test("portal dependency stage includes repository-owned pnpm patches before install", () => {
-  assert.match(workspace, /^patchedDependencies:/m, "fixture requires at least one repository-owned patch");
+  // The root workspace may carry no patch at a given moment (the only one moved
+  // to apps/mobile's own workspace, plan 2026-09-08 M6). The ordering must still
+  // hold, so the next root patch cannot break the image build.
   const patchCopy = dockerfile.indexOf("COPY patches/ ./patches/");
   const frozenInstall = dockerfile.indexOf("RUN pnpm install --frozen-lockfile");
 

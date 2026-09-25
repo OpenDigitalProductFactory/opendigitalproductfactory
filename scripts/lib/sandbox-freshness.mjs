@@ -12,6 +12,7 @@
 // a red sandbox is reported as SANDBOX_DRIFT — never as product evidence.
 // Filesystem/process collection lives in scripts/sandbox-freshness-preflight.mjs.
 
+import { baseVersion, findImporterDependency, parseImporters } from "./pnpm-lock.mjs";
 import path from "node:path";
 
 /**
@@ -35,59 +36,18 @@ export const CRITICAL_PACKAGES = [
 ];
 
 /** Strip a pnpm peer-dependency suffix: "16.2.9(@babel/core@7.29.7)(...)" -> "16.2.9". */
-export function baseVersion(lockVersion) {
-  if (typeof lockVersion !== "string") return "";
-  const parenIndex = lockVersion.indexOf("(");
-  return (parenIndex >= 0 ? lockVersion.slice(0, parenIndex) : lockVersion).trim();
-}
+export { baseVersion };
 
 /**
  * Parse the resolved version of `packageName` for one importer out of a pnpm
- * v9 lockfile's `importers:` section. Returns "" when not found. Pure text
- * parsing on purpose: no YAML dependency, and the two lockfiles we compare
- * (checked-in pnpm-lock.yaml and node_modules/.pnpm/lock.yaml) share this shape.
+ * v9 lockfile's `importers:` section. Returns "" when not found. The two
+ * lockfiles compared (checked-in pnpm-lock.yaml and node_modules/.pnpm/lock.yaml)
+ * share this shape, read by the shared parser in ./pnpm-lock.mjs.
  */
 export function parseLockedVersion(lockfileText, importerPath, packageName) {
   if (!lockfileText) return "";
-  const lines = lockfileText.split("\n");
-  let inImporters = false;
-  let inTargetImporter = false;
-  let packageIndent = -1;
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (/^importers:\s*$/.test(line)) {
-      inImporters = true;
-      continue;
-    }
-    if (inImporters && /^\S/.test(line)) {
-      // Left the importers block (e.g. hit top-level `packages:`).
-      break;
-    }
-    if (!inImporters) continue;
-    const importerMatch = line.match(/^  (\S[^:]*):\s*$/);
-    if (importerMatch) {
-      inTargetImporter = importerMatch[1] === importerPath;
-      continue;
-    }
-    if (!inTargetImporter) continue;
-    // Package entries sit under dependencies:/devDependencies: at a deeper
-    // indent than the importer header; match by name then read `version:`.
-    const packageMatch = line.match(/^(\s+)(\S[^:]*):\s*$/);
-    if (packageMatch && packageMatch[2] === packageName && packageMatch[1].length >= 4) {
-      packageIndent = packageMatch[1].length;
-      continue;
-    }
-    if (packageIndent >= 0) {
-      const versionMatch = line.match(/^(\s+)version:\s*(.+?)\s*$/);
-      if (versionMatch && versionMatch[1].length > packageIndent) {
-        return baseVersion(versionMatch[2].replace(/^['"]|['"]$/g, ""));
-      }
-      // Any line at or above the package's indent means we left its block.
-      const indent = (line.match(/^(\s*)/)[1] || "").length;
-      if (line.trim() && indent <= packageIndent) packageIndent = -1;
-    }
-  }
-  return "";
+  const hit = findImporterDependency(parseImporters(lockfileText), importerPath, packageName);
+  return hit ? baseVersion(hit.version) : "";
 }
 
 /**

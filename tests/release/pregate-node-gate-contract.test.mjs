@@ -244,6 +244,8 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "host-command-invocation.mjs"), join(temp, "scripts", "lib", "host-command-invocation.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-failure-summary.mjs"), join(temp, "scripts", "lib", "local-ci-failure-summary.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "sandbox-freshness.mjs"), join(temp, "scripts", "lib", "sandbox-freshness.mjs"));
+  // sandbox-freshness.mjs reads lockfiles through the shared reader (plan 2026-09-08 S3).
+  cpSync(join(repoRoot, "scripts", "lib", "pnpm-lock.mjs"), join(temp, "scripts", "lib", "pnpm-lock.mjs"));
   // The client revision every claim reports to the admission server (BI-69178E02).
   cpSync(join(repoRoot, "scripts", "lib", "gate-client-revision.mjs"), join(temp, "scripts", "lib", "gate-client-revision.mjs"));
   // gate-worktree.mjs static-imports these lease-safety modules at load time

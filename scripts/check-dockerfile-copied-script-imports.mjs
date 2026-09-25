@@ -36,9 +36,13 @@ import { isEntryModule } from "./lib/entry-module.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(new URL(import.meta.url))), "..");
 
-/** Static `import ... from "x"` / `export ... from "x"`, plus bare `import "x"`. */
+/**
+ * Static `import ... from "x"` / `export ... from "x"`, plus bare `import "x"`.
+ * A `{ ... }` binding list may span lines: a multi-line import of
+ * ../lib/pnpm-lock.mjs once slipped past a single-line-only pattern.
+ */
 const STATIC_IMPORT_RE =
-  /(?:^|\n)\s*(?:import|export)\b[^;\n]*?\bfrom\s*["']([^"']+)["']|(?:^|\n)\s*import\s*["']([^"']+)["']/g;
+  /(?:^|\n)\s*(?:import|export)\b(?:[^;\n{]|\{[^}]*\})*?\bfrom\s*["']([^"']+)["']|(?:^|\n)\s*import\s*["']([^"']+)["']/g;
 
 /** Flags that may precede COPY operands. */
 const COPY_FLAG_RE = /^--(from|chown|chmod|link|parents)=?/;

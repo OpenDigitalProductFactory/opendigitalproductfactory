@@ -30,6 +30,7 @@
 //                                                    [--require-online]
 //                                                    [--json <path>]
 
+import { parsePackageKeys, splitNameVersion } from "../lib/pnpm-lock.mjs";
 import { LOCKFILE_ROOTS, rootFile } from "./lockfile-roots.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -77,33 +78,14 @@ export function parseReleaseAgePolicy(workspaceYaml) {
  * Collect `name@version` keys from a pnpm lockfile's top-level `packages:` map.
  * `packages:` holds clean name@version keys; `snapshots:` holds the same
  * packages with peer-suffixed keys, so reading `packages:` alone is both
- * sufficient and unambiguous.
+ * sufficient and unambiguous. (Shared reader: scripts/lib/pnpm-lock.mjs.)
  */
 export function parseLockfilePackages(lockYaml) {
-  const lines = lockYaml.replace(/\r\n/g, "\n").split("\n");
-  const start = lines.indexOf("packages:");
-  if (start < 0) return new Set();
-  const out = new Set();
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^\S/.test(lines[i])) break; // next top-level key
-    const m = lines[i].match(/^ {2}'?(.+?)'?:\s*$/);
-    if (m) out.add(m[1]);
-  }
-  return out;
+  return new Set(parsePackageKeys(lockYaml));
 }
 
 /** Split `@scope/name@1.2.3` → { name, version }. Null for non-registry specs. */
-export function splitNameVersion(key) {
-  const at = key.lastIndexOf("@");
-  if (at <= 0) return null;
-  const name = key.slice(0, at);
-  const version = key.slice(at + 1);
-  if (!name || !version) return null;
-  // file:/link:/http: specs and git URLs are not registry releases — the floor
-  // does not apply and the registry has no publish time for them.
-  if (version.includes(":") || version.includes("/")) return null;
-  return { name, version };
-}
+export { splitNameVersion };
 
 /** Entries present in head but not in base, as {key,name,version}. */
 export function newRegistryEntries(baseKeys, headKeys) {
