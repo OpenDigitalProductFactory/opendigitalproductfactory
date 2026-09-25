@@ -23,17 +23,13 @@ const TAG_RE =
 
 // Non-security pins: dedup, major-version floors, compat. Never require a tag.
 const EXEMPT_DEDUP = new Set([
-  "@types/react",
   // react / react-dom are compat pins, not CVE floors: React enforces an exact
   // react===react-native-renderer runtime match, so the hoisted copy is pinned
   // to the version RN 0.85.3 (Expo SDK 56) embeds (19.2.3). Rationale lives in
   // the pnpm-workspace.yaml comment. See BI-E5E72FE3.
   "react",
   "react-dom",
-  "@expo/cli@0.24.24>picomatch",
   "lodash",
-  "lodash-es",
-  "@tootallnate/once",
   "uuid",
   "ip-address",
   // Types-only major unification: @inngest/ai, @types/net-snmp and docx each
@@ -57,12 +53,7 @@ const EXEMPT_PATTERNS = [
 // Security floors that predate the provenance convention. Backfill their GHSA /
 // Dependabot ids via the stale-override audit (BI-CDB2E8AB). This list is CLOSED:
 // a new override may NOT be added here — tag it instead.
-const GRANDFATHERED_DEBT = new Set([
-  "node-forge",
-  "postcss",
-  "@opentelemetry/otlp-transformer>protobufjs",
-  "ws@>=8.0.0 <8.20.1",
-]);
+const GRANDFATHERED_DEBT = new Set(["postcss"]);
 
 // Entries covered by a shared advisory comment above a sibling entry (the comment
 // tags the whole contiguous run). Keyed explicitly so the sibling still counts.
