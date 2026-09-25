@@ -6,6 +6,7 @@
 //
 // Spec: docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md
 
+import { addAiUse, loadAiUseByItem, NO_AI_USE, type AiUse } from "./ai-resource";
 import { quarterBounds } from "./investment-points";
 import { loadInvestmentItems, resolveInvestmentItem, type InvestmentItemRow } from "./investment-read-model";
 import { loadPortfolioBudgets, type PortfolioBudget } from "./portfolio-budget";
@@ -35,6 +36,8 @@ export type TieOutRow = {
   /** Share of this quarter's delivered points that carry Workroom or PR evidence; null when nothing was delivered. */
   tracedShare: number | null;
   bySurface: PortfolioThroughput["bySurface"];
+  /** AI tokens, recorded spend and run time this quarter, beside the points and never converted into them. */
+  ai: AiUse;
 };
 
 export type PortfolioTieOut = {
@@ -44,6 +47,8 @@ export type PortfolioTieOut = {
   rows: TieOutRow[];
   /** Merged pull requests whose Workroom names no backlog item: work the rows cannot see. */
   untracedChanges: number;
+  /** AI runs this quarter that reach no item in the rows. */
+  aiNotTraced: AiUse;
 };
 
 /** Pure: assemble the tie-out from loaded facts. */
@@ -56,6 +61,7 @@ export function assembleTieOut(input: {
   budgets: Map<string, PortfolioBudget | null>;
   openReservations: Array<{ itemId: string; portfolioId: string; points: number }>;
   untracedChanges: number;
+  aiByItem?: Map<string | null, AiUse>;
 }): PortfolioTieOut {
   const period = quarterBounds(input.now);
   const weeksRemaining = Math.max(0, (period.end.getTime() - input.now.getTime()) / WEEK_MS);
@@ -70,8 +76,16 @@ export function assembleTieOut(input: {
     return row;
   };
   for (const r of input.openReservations) bucket(r.portfolioId).reserved += r.points;
+  const aiByPortfolio = new Map<string | null, AiUse>();
+  let aiNotTraced = NO_AI_USE;
+  const quarterItemIds = new Set<string>();
   for (const item of input.quarterItems) {
     const { resolution, itemClass, points } = resolveInvestmentItem(item, period);
+    const ai = input.aiByItem?.get(item.itemId);
+    if (ai) {
+      quarterItemIds.add(item.itemId);
+      aiByPortfolio.set(resolution.portfolioId, addAiUse(aiByPortfolio.get(resolution.portfolioId) ?? NO_AI_USE, ai));
+    }
     if (itemClass === null || points === null) continue;
     const row = bucket(resolution.portfolioId);
     if (itemClass === "inFlight") row.inFlight += points;
@@ -80,6 +94,10 @@ export function assembleTieOut(input: {
       if (item.traced) row.tracedDelivered += points;
     }
     if (itemClass !== "delivered" && (itemClass === "inFlight" || reservedByItem.has(item.itemId))) row.committed += points;
+  }
+
+  for (const [itemId, ai] of input.aiByItem ?? []) {
+    if (itemId === null || !quarterItemIds.has(itemId)) aiNotTraced = addAiUse(aiNotTraced, ai);
   }
 
   const rowFor = (portfolioId: string | null, name: string): TieOutRow => {
@@ -108,6 +126,7 @@ export function assembleTieOut(input: {
       },
       tracedShare: a.delivered > 0 ? Math.round((a.tracedDelivered / a.delivered) * 1000) / 1000 : null,
       bySurface: t?.bySurface ?? { "build-studio": 0, external: 0, other: 0 },
+      ai: aiByPortfolio.get(portfolioId) ?? NO_AI_USE,
     };
   };
 
@@ -117,6 +136,7 @@ export function assembleTieOut(input: {
     weeksOfHistory: throughput.weeksOfHistory,
     rows: [...input.portfolios.map((p) => rowFor(p.id, p.name)), rowFor(null, "Unallocated")],
     untracedChanges: input.untracedChanges,
+    aiNotTraced,
   };
 }
 
@@ -125,7 +145,7 @@ type ReadDb = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]
 export async function loadPortfolioTieOut(db: ReadDb, now: Date = new Date()): Promise<PortfolioTieOut> {
   const period = quarterBounds(now);
   const window = { start: new Date(now.getTime() - THROUGHPUT_WINDOW_WEEKS * WEEK_MS), end: new Date(now.getTime() + 1) };
-  const [quarterItems, { windowItems, historyStart }, budgets, openReservations, [untraced]] = await Promise.all([
+  const [quarterItems, { windowItems, historyStart }, budgets, openReservations, [untraced], aiByItem] = await Promise.all([
     loadInvestmentItems(db, period),
     loadThroughput(db, now),
     loadPortfolioBudgets(db, period),
@@ -135,6 +155,7 @@ export async function loadPortfolioTieOut(db: ReadDb, now: Date = new Date()): P
     db.$queryRaw<Array<{ n: number | string }>>`
       SELECT COUNT(*) AS "n" FROM "WorkCapsule" w
        WHERE w."pullRequestNumber" IS NOT NULL AND w."backlogItemId" IS NULL AND w."updatedAt" >= ${window.start}`,
+    loadAiUseByItem(db, period),
   ]);
   return assembleTieOut({
     now,
@@ -145,5 +166,6 @@ export async function loadPortfolioTieOut(db: ReadDb, now: Date = new Date()): P
     budgets: new Map(budgets.map((b) => [b.id, b.budget])),
     openReservations: openReservations.map((r) => ({ ...r, points: Number(r.points) })),
     untracedChanges: Number(untraced?.n ?? 0),
+    aiByItem,
   });
 }

@@ -34,7 +34,7 @@ databaseSuite("admission by points in flight on PostgreSQL (BI-3430B3A4)", () =>
     if (!present.ok) await client.query(readFileSync(MIGRATION, "utf8"));
     const { rows: [mode] } = await client.query(`SELECT to_regtype('"WipAdmissionMode"') IS NOT NULL AS ok`);
     if (!mode.ok) await client.query(readFileSync(MODE_MIGRATION, "utf8"));
-    await client.query(`INSERT INTO "PlatformDevConfig" ("id","updatedAt") VALUES ('singleton',now()) ON CONFLICT ("id") DO NOTHING`);
+    await client.query(`INSERT INTO "PlatformDevConfig" ("id") VALUES ('singleton') ON CONFLICT ("id") DO NOTHING`);
     await client.query(`INSERT INTO "Portfolio" ("id","slug","name","updatedAt") VALUES ('p-admission-test','admission-test','Admission test',now())`);
   });
   afterAll(async () => {
