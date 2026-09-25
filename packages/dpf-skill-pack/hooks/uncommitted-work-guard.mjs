@@ -25,7 +25,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -113,21 +112,16 @@ export function yieldsToProjectCopy(env = process.env, self = fileURLToPath(impo
 }
 
 // Per-repository, per-session state under the git common dir: never tracked,
-// shared by every worktree of the clone, gone with the clone. When git cannot
-// name that dir, fall back to the OS temp dir keyed by the repo path, so the
-// once-per-set promise does not silently lapse into warning on every Stop.
+// shared by every worktree of the clone, gone with the clone.
 function stateRoot(baseDir) {
   const r = spawnSync("git", ["-C", baseDir, "rev-parse", "--git-common-dir"], {
     encoding: "utf8",
     timeout: 10_000,
   });
-  if (r.status === 0 && r.stdout?.trim()) {
-    const common = r.stdout.trim();
-    const abs = isAbsolute(common) ? common : resolve(baseDir, common);
-    return join(abs, "dpf-hook-state", "uncommitted-work-guard");
-  }
-  const repoKey = createHash("sha256").update(resolve(baseDir)).digest("hex").slice(0, 16);
-  return join(tmpdir(), "dpf-hook-state", "uncommitted-work-guard", repoKey);
+  if (r.status !== 0 || !r.stdout?.trim()) return null;
+  const common = r.stdout.trim();
+  const abs = isAbsolute(common) ? common : resolve(baseDir, common);
+  return join(abs, "dpf-hook-state", "uncommitted-work-guard");
 }
 
 function sessionDir(baseDir, sessionId) {
