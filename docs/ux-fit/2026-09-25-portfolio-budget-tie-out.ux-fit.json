@@ -4,7 +4,6 @@
   "decisionInteractionId": "DI-5DCFAEA03A6D",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/ops/demand/page.tsx",
       "apps/web/components/ops/PortfolioTieOutPanel.tsx"
     ]
   },

@@ -6951,6 +6951,14 @@
     "longSentences": 0,
     "textMass": 36
   },
+  "apps/web/components/ops/PortfolioTieOutPanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
   "apps/web/components/ops/PromotionsClient.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
