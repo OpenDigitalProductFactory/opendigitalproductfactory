@@ -163,13 +163,18 @@ export function evaluateGateVerdict(head, opts = {}) {
 
   const files = listSlotStateFiles(head.statePath);
   if (files.length === 0) {
-    return evaluateGateRecord(head.statePath, head.sha);
+    return evaluateGateRecord(head.statePath, head.sha, head.branch);
   }
   let firstMiss = null;
   for (const file of files) {
-    const verdict = evaluateGateRecord(file, head.sha);
-    if (verdict.ok) return verdict;
-    if (!firstMiss) firstMiss = verdict;
+    const verdict = evaluateGateRecord(file, head.sha, head.branch);
+    // BI-53B189C8: once the reader has answered, its verdict stands for every
+    // gate record. The fallback may add only what the reader does not grade:
+    // a recorded override. It used to accept any gatePassed record for the
+    // SHA, which let a lease-test fixture bound to another branch overturn the
+    // reader's STALE and publish.
+    if (verdict.ok && (!canonical || verdict.kind === "override")) return verdict;
+    if (!verdict.ok && !firstMiss) firstMiss = verdict;
   }
   if (canonical && canonical.reason) {
     return { ok: false, reason: `pregate:status ${canonical.verdict} — ${canonical.reason}` };
@@ -180,9 +185,10 @@ export function evaluateGateVerdict(head, opts = {}) {
 /**
  * @param {string} statePath
  * @param {string} headSha
- * @returns {{ ok: boolean, reason?: string }}
+ * @param {string} [headBranch] when given, a record bound to another branch is refused
+ * @returns {{ ok: boolean, reason?: string, kind?: "pass" | "override" }}
  */
-export function evaluateGateRecord(statePath, headSha) {
+export function evaluateGateRecord(statePath, headSha, headBranch = "") {
   if (!existsSync(statePath)) {
     return { ok: false, reason: "no dpf-local-ci-gate.json for this worktree" };
   }
@@ -195,10 +201,24 @@ export function evaluateGateRecord(statePath, headSha) {
   if (!rec || typeof rec !== "object") {
     return { ok: false, reason: "invalid gate record" };
   }
+  // BI-53B189C8: DPF_ALLOW_LOCAL_CI_STUB=1 records a pass without building
+  // anything. It is contract-test plumbing, never evidence for a publish.
+  if (rec.testStub === true) {
+    return {
+      ok: false,
+      reason: `gate record was written by the DPF_ALLOW_LOCAL_CI_STUB=1 test stub (branch ${rec.branch || "unknown"}) — no sandbox build ran, so it is not evidence; re-run pregate`,
+    };
+  }
   if (rec.sha && headSha && rec.sha !== headSha) {
     return {
       ok: false,
       reason: `gate record SHA ${String(rec.sha).slice(0, 12)} ≠ HEAD ${headSha.slice(0, 12)} — re-run pregate`,
+    };
+  }
+  if (rec.branch && headBranch && rec.branch !== headBranch) {
+    return {
+      ok: false,
+      reason: `gate record is bound to branch ${rec.branch}, not ${headBranch} — re-run pregate`,
     };
   }
   if (rec.gatePassed === true) {
@@ -208,7 +228,7 @@ export function evaluateGateRecord(statePath, headSha) {
         return { ok: false, reason: "local-CI gate record expired — re-run pregate" };
       }
     }
-    return { ok: true };
+    return { ok: true, kind: "pass" };
   }
   if (rec.skipped && rec.skipReason) {
     const c = classifyLocalCiOverride(rec.skipReason);
@@ -216,9 +236,9 @@ export function evaluateGateRecord(statePath, headSha) {
     if (c.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE) {
       // BI-02E5F2A1: evidence-gated — the record must carry the probe's capture.
       const e = classifyGateInfrastructureEvidence(rec.infrastructureEvidence);
-      return e.ok ? { ok: true } : { ok: false, reason: e.reason };
+      return e.ok ? { ok: true, kind: "override" } : { ok: false, reason: e.reason };
     }
-    return { ok: true };
+    return { ok: true, kind: "override" };
   }
   return { ok: false, reason: "gate record present but not passed" };
 }

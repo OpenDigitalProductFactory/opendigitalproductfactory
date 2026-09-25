@@ -35,6 +35,8 @@
 // INCONCLUSIVE, not FAIL. A metadata candidateSha that is not HEAD is STALE
 // in the headline, not FAIL with a buried metadata line.
 
+import { isTestStubGateRecord } from "./local-ci-gate-state.mjs";
+
 /** Terminal verdicts, ordered worst-to-best for slot reconciliation. */
 export const PREGATE_VERDICTS = Object.freeze([
   "NO-RECORD",
@@ -302,6 +304,22 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
 
   if (!state) {
     return { ...base, verdict: "NO-RECORD", reason: "no gate record for this worktree — pregate has not run here" };
+  }
+
+  // BI-53B189C8. The DPF_ALLOW_LOCAL_CI_STUB run builds nothing and still
+  // records "passed", and a lease test once wrote such records into the git dir
+  // of the checkout running it, bound to that checkout's real HEAD. Name it
+  // before any SHA or branch check, so it is never read as a gate at all: not
+  // as a PASS for HEAD, and not as an ordinary STALE record either.
+  if (isTestStubGateRecord(state)) {
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      testStub: true,
+      reason:
+        `gate record was written by the DPF_ALLOW_LOCAL_CI_STUB=1 test stub for ${boundBranch || "(unknown branch)"} @ ${boundSha.slice(0, 12) || "(unknown)"} `
+        + "— no sandbox build ran, so it is not evidence for any push. A test or a stub run wrote it into this checkout. Re-run pregate.",
+    };
   }
 
   // A record for a DIFFERENT commit is not weaker evidence for HEAD; it is no

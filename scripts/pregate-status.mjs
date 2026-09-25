@@ -136,6 +136,7 @@ function main() {
       boundBranch: result.boundBranch ?? "",
       candidateSha: result.candidateSha ?? "",
       staleness: result.staleness ?? "",
+      testStub: result.testStub === true,
       evidenceId: result.evidenceId ?? "",
       recordedAt: result.recordedAt ?? "",
       slot: result.slot,

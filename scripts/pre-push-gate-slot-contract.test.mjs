@@ -86,3 +86,20 @@ test("the gate-infrastructure-unavailable record is gate-UNRUN, never a pass", (
   assert.match(hook, /gate-UNRUN recorded for/);
   assert.doesNotMatch(hook, /gatePassed:\s*true[\s\S]*infrastructureEvidence/, "the evidence path must not mint a pass");
 });
+
+// BI-53B189C8: the hook's own record readers (the slot selector and the legacy
+// fallback for trees without pregate-status.mjs) must refuse a
+// DPF_ALLOW_LOCAL_CI_STUB record exactly as the canonical reader does.
+test("the hook's inline readers refuse a test-stub record", () => {
+  assert.match(
+    hook,
+    /state\.gatePassed === true && state\.testStub !== true/,
+    "the slot selector must not pick a testStub record as the passing slot",
+  );
+  const legacy = hook.slice(hook.indexOf('if [ ! -f "$state_file" ]'));
+  assert.match(
+    legacy,
+    /if \(state\.testStub === true\) \{[\s\S]*?process\.exit\(1\)/,
+    "the legacy reader must refuse a testStub record",
+  );
+});

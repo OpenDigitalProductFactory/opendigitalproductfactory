@@ -217,3 +217,56 @@ test("a reader verdict other than PASS with no override blocks and quotes the re
   assert.equal(verdict.block, true);
   assert.match(verdict.reason, /vitest stage failed on slot-0/);
 });
+
+// BI-53B189C8. The per-slot fallback used to run whenever the reader's verdict
+// was not PASS, and it matched on SHA alone, so it overturned the reader. On
+// 2026-09-24 a lease-test fixture record (branch fix/admitted-owner-recovery,
+// gatePassed:true) sat in a worktree's git dir bound to its real HEAD:
+// pregate:status said STALE (branch moved) and this hook allowed the push.
+test("a PASS-shaped record cannot overturn the reader's non-PASS verdict", () => {
+  const head = headWithSlotRecords({
+    "dpf-local-ci-gate.json": {
+      branch: "fix/admitted-owner-recovery",
+      sha: HEAD,
+      gatePassed: true,
+      status: "passed",
+      evidenceRecordId: "EVIDENCE-HOST-FENCE-WAIT",
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    },
+  });
+  mkdirSync(join(head.topLevel, "scripts"));
+  writeFileSync(
+    join(head.topLevel, "scripts", "pregate-status.mjs"),
+    `process.stdout.write(JSON.stringify({ verdict: "STALE", reason: "gate record is bound to branch fix/admitted-owner-recovery but HEAD is on feat/x" })); process.exit(1);\n`,
+  );
+  const verdict = decide("git push", {}, { head });
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, /fix\/admitted-owner-recovery/);
+});
+
+test("without the reader, a PASS bound to another branch is not a pass for this one", () => {
+  const head = headWithRecord({
+    branch: "fix/admitted-owner-recovery",
+    sha: HEAD,
+    gatePassed: true,
+    status: "passed",
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+  });
+  const verdict = decide("git push", {}, { head });
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, /branch/);
+});
+
+test("without the reader, a test-stub record is never a pass", () => {
+  const head = headWithRecord({
+    branch: "feat/x",
+    sha: HEAD,
+    gatePassed: true,
+    status: "passed",
+    testStub: true,
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+  });
+  const verdict = decide("git push", {}, { head });
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, /DPF_ALLOW_LOCAL_CI_STUB/);
+});
