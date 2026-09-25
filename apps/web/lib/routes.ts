@@ -38,3 +38,20 @@ export const ROUTES = {
 
 /** A known top-level route path value (e.g. `"/compliance"`). */
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];
+
+// Public token pages that emails link to. The recipient may not be signed in,
+// so these live under the storefront group (`app/(storefront)/s/<x>/[token]`).
+// A wrong path here is a silent 404 in someone's inbox (BI-1876D718,
+// BI-451F6E1C); routes.test.ts asserts every entry has a page.
+export const TOKEN_LINK_ROUTES = {
+  billApproval: "/s/approve",
+  expenseApproval: "/s/expense-approve",
+  invoicePayment: "/s/pay",
+} as const;
+
+export type TokenLinkKind = keyof typeof TOKEN_LINK_ROUTES;
+
+/** Absolute link to a public token page, for emails and other off-portal messages. */
+export function tokenLinkUrl(baseUrl: string, kind: TokenLinkKind, token: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}${TOKEN_LINK_ROUTES[kind]}/${encodeURIComponent(token)}`;
+}

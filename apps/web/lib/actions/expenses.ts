@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { sendEmail, composeExpenseApprovalEmail } from "@/lib/email";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { resolveAppBaseUrl } from "@/lib/app-url";
+import { tokenLinkUrl } from "@/lib/routes";
 import type { CreateExpenseClaimInput } from "@/lib/expense-validation";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -221,7 +222,7 @@ export async function submitExpenseClaim(id: string): Promise<void> {
     const manager = managers[0]!;
     const issuer = await getOrgIdentity();
     const fromHeader = issuer?.email ? `${issuer.name} <${issuer.email}>` : undefined;
-    const approveUrl = `${baseUrl}/finance/expenses/approvals/${approvalToken}`;
+    const approveUrl = tokenLinkUrl(baseUrl, "expenseApproval", approvalToken);
 
     const emailPayload = composeExpenseApprovalEmail({
       to: manager.email,

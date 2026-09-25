@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { sendEmail, composeApprovalEmail } from "@/lib/email";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { resolveAppBaseUrl } from "@/lib/app-url";
+import { tokenLinkUrl } from "@/lib/routes";
 import { recordPayment } from "@/lib/actions/finance";
 import { postBillFinalized } from "@/lib/finance/ledger-service";
 import { getBillPoMatch } from "@/lib/finance/po-match-service";
@@ -354,7 +355,7 @@ export async function submitBillForApproval(billId: string): Promise<void> {
       );
       continue;
     }
-    const approveUrl = `${baseUrl}/finance/ap/approvals/${token}`;
+    const approveUrl = tokenLinkUrl(baseUrl, "billApproval", token);
     const emailPayload = composeApprovalEmail({
       to: rule.approver.email,
       billRef: bill.billRef,
