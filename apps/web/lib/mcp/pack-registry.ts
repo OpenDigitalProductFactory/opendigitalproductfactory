@@ -55,6 +55,7 @@ import { surfacePack } from "./packs/surface-pack";
 import { nonprodLeasePack } from "./packs/nonprod-lease-pack";
 import { knowledgePack } from "./packs/knowledge-pack";
 import { demandScoringPack } from "./packs/demand-scoring-pack";
+import { portfolioBudgetPack } from "./packs/portfolio-budget-pack";
 import { workforcePack } from "./packs/workforce-pack";
 import { policyPack } from "./packs/policy-pack";
 import { staffingPack } from "./packs/staffing-pack";
@@ -152,6 +153,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   nonprodLeasePack,
   knowledgePack,
   demandScoringPack,
+  portfolioBudgetPack,
   workforcePack,
   policyPack,
   staffingPack,

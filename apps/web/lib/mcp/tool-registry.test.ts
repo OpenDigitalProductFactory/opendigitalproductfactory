@@ -22,6 +22,7 @@ import { coworkerServiceCatalogPack } from "./packs/coworker-service-catalog-pac
 import { coworkerToolGrantPack } from "./packs/coworker-tool-grant-pack";
 import { coworkerMemoryPack } from "./packs/coworker-memory-pack";
 import { demandScoringPack } from "./packs/demand-scoring-pack";
+import { portfolioBudgetPack } from "./packs/portfolio-budget-pack";
 import { composeToolPacks } from "./tool-registry";
 // The inline-case ratchet's extractor lives in the CI guard (scripts/), kept as
 // the single source of truth so this test and the guard can never disagree.
@@ -275,6 +276,31 @@ describe("coworker memory pack", () => {
   it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
     const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
     for (const def of coworkerMemoryPack.definitions) {
+      expect(platformNames.has(def.name), def.name).toBe(true);
+    }
+  });
+});
+
+describe("portfolio-budget tool pack", () => {
+  it("bundles the epic attribution doors with handlers", () => {
+    expect(portfolioBudgetPack.definitions.map((t) => t.name)).toEqual([
+      "propose_epic_portfolios",
+      "confirm_epic_portfolios",
+    ]);
+    for (const def of portfolioBudgetPack.definitions) {
+      expect(portfolioBudgetPack.handlers[def.name], def.name).toBeTypeOf("function");
+    }
+  });
+
+  it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
+    for (const [name, grants] of Object.entries(portfolioBudgetPack.grants)) {
+      expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
+    }
+  });
+
+  it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
+    const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
+    for (const def of portfolioBudgetPack.definitions) {
       expect(platformNames.has(def.name), def.name).toBe(true);
     }
   });
