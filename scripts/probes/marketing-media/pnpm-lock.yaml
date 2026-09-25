@@ -25,8 +25,8 @@ importers:
         specifier: 3.15.0
         version: 3.15.0
       hyperframes:
-        specifier: 0.8.61
-        version: 0.8.61
+        specifier: 0.8.62
+        version: 0.8.62
 
 packages:
 
@@ -526,8 +526,8 @@ packages:
     resolution: {integrity: sha512-dFcAjpTQFgoLMzC2VwU+C/CbS7uRL0lWmxDITmqm7C+7F0Odmj6s9l6alZc6AELXhrnggM2CeWSXHGOdX2YtwA==}
     engines: {node: '>= 6'}
 
-  hyperframes@0.8.61:
-    resolution: {integrity: sha512-OZeccCLZe7ZsfaAgfLB72mYCqQRQAKv5/WzHZgZRFHgWJggA1+5CxId9o5KsfSccJPrLtPTBAlDwi1e8Q/FPmw==}
+  hyperframes@0.8.62:
+    resolution: {integrity: sha512-YY4+RKaVL1M8piwo5AZUXADnIzovB4lKy2UTi3wSM2ih71G79gEffOeait5wPtkRrhWqSrsRMedBRK4nVIGdSA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1075,7 +1075,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  hyperframes@0.8.61:
+  hyperframes@0.8.62:
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.8)
       '@puppeteer/browsers': 3.2.2
