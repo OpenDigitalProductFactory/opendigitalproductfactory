@@ -69,9 +69,11 @@ export function isRefreshTokenGrantClient(body) {
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
+    // Skip excluded names BEFORE stat: a dangling node_modules link in a
+    // worktree throws ENOENT on stat and used to fail the whole guard.
+    if (entry === "node_modules" || entry === ".next" || entry === "__snapshots__" || entry === "dist") continue;
     const s = statSync(full);
     if (s.isDirectory()) {
-      if (entry === "node_modules" || entry === ".next" || entry === "__snapshots__" || entry === "dist") continue;
       yield* walk(full);
     } else if (s.isFile()) {
       if (full.endsWith(".test.ts") || full.endsWith(".test.tsx") || full.endsWith(".d.ts")) continue;
