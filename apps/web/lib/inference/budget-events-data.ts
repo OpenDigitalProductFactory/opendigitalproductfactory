@@ -1,7 +1,7 @@
 // apps/web/lib/inference/budget-events-data.ts
 //
 // EP-COST-001 Phase 2: data helpers for surfacing AgentBudgetEvent rows
-// in the Admin > AI Providers UI.
+// in the External Services UI (/platform/ai/providers).
 //
 // Fetches the most recent budget pressure events (warning_95 + rejected)
 // for display so operators can see which agents are near or over their

@@ -1078,6 +1078,9 @@
     "apps/web/lib/security/safe-log.ts": [
       "docs/security/codeql-advanced-setup.md"
     ],
+    "apps/web/lib/self-upgrade/doctools-release-image.test.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/lib/self-upgrade/host-memory-preflight.ts": [
       "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
@@ -3028,6 +3031,7 @@
       "apps/web/components/monitoring/prometheus-config.test.ts",
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
+      "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
       "docker-compose.edge-actions.yml",
       "docker-compose.linux.yml",
       "docker-entrypoint.sh",

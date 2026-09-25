@@ -19,6 +19,7 @@ import {
   writeSandboxFile,
 } from "./sandbox/agent-cli-runtime";
 import type { ChatMessage } from "@/lib/inference/ai-inference";
+import { providerSetupLocation } from "@/lib/ai-provider-routes";
 const IDEATE_TIMEOUT_MS = 600_000; // 10 minutes — complex features need time for codebase research
 
 // Local models often wrap the design JSON in prose or emit malformed JSON that
@@ -96,7 +97,7 @@ async function ensureGrokAuth(providerId: string): Promise<void> {
   const apiKey = credential?.secretRef ?? credential?.cachedToken;
 
   if (!apiKey) {
-    throw new Error(`No xAI API key for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
+    throw new Error(`No xAI API key for provider "${providerId}". Configure via ${providerSetupLocation(providerId)}.`);
   }
 
   // Write the key to a temp file and export it in the runner script.
@@ -137,7 +138,7 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
   // request after tokenExpiresAt, causing a 401 from the CLI.
   const result = await getProviderBearerToken(providerId);
   if ("error" in result) {
-    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via Admin > AI Providers > Anthropic Subscription.`);
+    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via ${providerSetupLocation(providerId)}.`);
   }
   return { mode: "oauth", token: result.token };
 }
@@ -612,7 +613,7 @@ export async function dispatchIdeateResearch(params: {
       rawOutput: "",
       success: false,
       durationMs: 0,
-      error: `No provider configured for ${dispatchEngine} dispatch. Configure via Admin > AI Workforce > External Services.`,
+      error: `No provider configured for ${dispatchEngine} dispatch. Configure via ${providerSetupLocation()}.`,
     };
   }
 
@@ -728,7 +729,7 @@ export async function dispatchIdeateResearch(params: {
             success: false,
             durationMs,
             error: isAuth
-              ? "Claude authentication failed (401). The Anthropic OAuth token has expired — go to Admin > AI Providers > Anthropic Subscription and reconnect."
+              ? `Claude authentication failed (401). The Anthropic OAuth token has expired — go to ${providerSetupLocation(providerId)} and reconnect.`
               : `Claude CLI error: ${errText.slice(0, 150)}`,
           };
         }

@@ -29,6 +29,7 @@ import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
 import { isSideEffectingGrant } from "./grant-capability";
 import { toCliParsedUsage, type CliParsedUsage, type CliUsagePayload } from "./cli-usage";
+import { providerSetupLocation } from "@/lib/ai-provider-routes";
 
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -96,7 +97,7 @@ async function resolveCliAuth(providerId: string): Promise<CliAuth> {
     const tokenResult = await getProviderBearerToken(providerId);
     if ("error" in tokenResult) {
       throw new InferenceError(
-        `OAuth token error for "${providerId}": ${tokenResult.error}. Configure via Admin > AI Workforce > External Services.`,
+        `OAuth token error for "${providerId}": ${tokenResult.error}. Configure via ${providerSetupLocation(providerId)}.`,
         "auth",
         providerId,
       );
