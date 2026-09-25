@@ -1,25 +1,47 @@
 {
   "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.",
   "totals": {
-    "resolvedComponents": 1759,
-    "uniqueNames": 1558,
-    "duplicatedNames": 165,
-    "excessInstances": 201,
-    "multiMajorNames": 94,
-    "firstPartyDivergentNames": 1,
-    "directButTransitiveNames": 11,
-    "dedupeCandidateNames": 71,
-    "directProdNames": 80,
-    "directDevNames": 35,
-    "workspaces": 16
+    "resolvedComponents": 1062,
+    "uniqueNames": 991,
+    "duplicatedNames": 68,
+    "excessInstances": 71,
+    "multiMajorNames": 32,
+    "firstPartyDivergentNames": 0,
+    "directButTransitiveNames": 5,
+    "dedupeCandidateNames": 36,
+    "directProdNames": 59,
+    "directDevNames": 30,
+    "workspaces": 15
   },
   "budgets": {
-    "resolvedComponents": 1759,
-    "duplicatedNames": 165,
-    "excessInstances": 201,
-    "multiMajorNames": 94
+    "resolvedComponents": 1062,
+    "duplicatedNames": 68,
+    "excessInstances": 71,
+    "multiMajorNames": 32
   },
-  "firstPartyDivergent": [
-    "tailwindcss"
-  ]
+  "firstPartyDivergent": [],
+  "roots": {
+    "mobile": {
+      "lockfile": "apps/mobile/pnpm-lock.yaml",
+      "totals": {
+        "resolvedComponents": 952,
+        "uniqueNames": 848,
+        "duplicatedNames": 88,
+        "excessInstances": 104,
+        "multiMajorNames": 47,
+        "firstPartyDivergentNames": 0,
+        "directButTransitiveNames": 1,
+        "dedupeCandidateNames": 41,
+        "directProdNames": 24,
+        "directDevNames": 12,
+        "workspaces": 1
+      },
+      "budgets": {
+        "resolvedComponents": 952,
+        "duplicatedNames": 88,
+        "excessInstances": 104,
+        "multiMajorNames": 47
+      }
+    }
+  }
 }

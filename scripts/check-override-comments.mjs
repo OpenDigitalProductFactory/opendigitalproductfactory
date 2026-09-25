@@ -16,6 +16,7 @@
 // Convention introduced by PR #3357 (each floor comment names its GHSA / Dependabot #).
 
 import { readFile } from "node:fs/promises";
+import { LOCKFILE_ROOTS, rootFile } from "./sbom/lockfile-roots.mjs";
 import { fileURLToPath } from "node:url";
 
 const TAG_RE =
@@ -23,10 +24,10 @@ const TAG_RE =
 
 // Non-security pins: dedup, major-version floors, compat. Never require a tag.
 const EXEMPT_DEDUP = new Set([
-  // react / react-dom are compat pins, not CVE floors: React enforces an exact
-  // react===react-native-renderer runtime match, so the hoisted copy is pinned
-  // to the version RN 0.85.3 (Expo SDK 56) embeds (19.2.3). Rationale lives in
-  // the pnpm-workspace.yaml comment. See BI-E5E72FE3.
+  // react / react-dom are compat pins, not CVE floors. In apps/mobile they hold
+  // the exact version React Native's embedded renderer needs (BI-E5E72FE3); at
+  // the root they keep one React in the platform tree. Rationale lives beside
+  // each pin in its pnpm-workspace.yaml.
   "react",
   "react-dom",
   "lodash",
@@ -150,19 +151,30 @@ export function auditOverrides(text) {
 }
 
 async function main() {
-  const text = await readFile("pnpm-workspace.yaml", "utf8");
-  let result;
-  try {
-    result = auditOverrides(text);
-  } catch (err) {
-    console.error(`Override provenance guard: ${err.message}`);
-    process.exit(1);
-  }
-  if (result.untagged.length > 0) {
-    console.error("Override provenance guard failed — untagged security floor(s):");
-    for (const key of result.untagged) {
-      console.error(`  - ${key}`);
+  // Every lockfile root carries its own overrides (scripts/sbom/lockfile-roots.mjs):
+  // apps/mobile repeats the root floors its tree needs, so it is scanned too.
+  let scanned = 0;
+  let failed = false;
+  for (const root of LOCKFILE_ROOTS) {
+    const file = rootFile(root, "pnpm-workspace.yaml");
+    const text = await readFile(file, "utf8");
+    let result;
+    try {
+      result = auditOverrides(text);
+    } catch (err) {
+      console.error(`Override provenance guard (${file}): ${err.message}`);
+      process.exit(1);
     }
+    scanned += result.scanned;
+    if (result.untagged.length > 0) {
+      failed = true;
+      console.error(`Override provenance guard failed — untagged security floor(s) in ${file}:`);
+      for (const key of result.untagged) {
+        console.error(`  - ${key}`);
+      }
+    }
+  }
+  if (failed) {
     console.error(
       "\nAdd a comment naming the advisory (Dependabot #NN / GHSA-… / CVE-…) directly",
     );
@@ -173,7 +185,7 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    `Override provenance guard passed — ${result.scanned} overrides scanned, all security floors carry an advisory tag.`,
+    `Override provenance guard passed — ${scanned} overrides scanned across ${LOCKFILE_ROOTS.length} workspace files, all security floors carry an advisory tag.`,
   );
 }
 

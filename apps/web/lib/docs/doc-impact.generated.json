@@ -2182,6 +2182,9 @@
     "scripts/sbom/internalization-candidates.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
+    "scripts/sbom/lockfile-roots.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
+    ],
     "scripts/sbom/runtime-surface.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
@@ -2764,6 +2767,7 @@
       "scripts/sbom/check-sbom-drift.mjs",
       "scripts/sbom/check-singleton-safety.mjs",
       "scripts/sbom/internalization-candidates.mjs",
+      "scripts/sbom/lockfile-roots.mjs",
       "scripts/sbom/runtime-surface.mjs",
       "scripts/sbom/scan-dependencies.mjs"
     ],

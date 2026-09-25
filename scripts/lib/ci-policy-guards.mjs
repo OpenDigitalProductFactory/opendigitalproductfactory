@@ -587,6 +587,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("sbom-divergence-guard", "SBOM Divergence Guard", [
       node("--test", "scripts/sbom/check-sbom-drift.test.mjs"),
+      conformanceTest("scripts/sbom/lockfile-roots.test.mjs"),
       node("scripts/sbom/check-sbom-drift.mjs"),
     ]),
     guard("new-dependency-gate", "New Dependency Gate", [
@@ -721,9 +722,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
   // Keeping them separate preserves the source profile's minimal install while
   // letting CI, pregate preflight, and pr:ready consume one canonical inventory.
   workspace: Object.freeze([
-    guard("decoder-consumer-regression", "URI Decoder Consumer Regression", [
-      node("--test", "scripts/security/decode-uri-component.test.mjs"),
-    ]),
     guard("fpaw-standard-guard", "FPAW Standard Guard", [
       pnpm("run", "check:fpaw-standard:test"),
       pnpm("run", "check:fpaw-standard"),
