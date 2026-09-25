@@ -12,7 +12,7 @@
     "reviewDisposition": "Export renditions cascade-delete with their DocumentVersion and are served through the same signed-in document content route as the version itself. No new retention path is introduced."
   },
   "migration": {
-    "name": "20260925120000_document_rendition_export_kinds",
+    "name": "20260925150000_document_rendition_export_kinds",
     "backfill": "None. The migration only adds the enum members docx and odt (ALTER TYPE ... ADD VALUE IF NOT EXISTS) and touches no row, so it applies identically to an empty table and a populated one. Export renditions are written on demand when someone exports a version, never in bulk.",
     "rollback": "Forward-only. Postgres cannot drop an enum member; older code never writes or reads the docx and odt kinds, and a version's rendition list projection ignores kinds it does not display."
   },

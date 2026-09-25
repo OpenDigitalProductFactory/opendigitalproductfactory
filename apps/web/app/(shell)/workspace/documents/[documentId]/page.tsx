@@ -9,7 +9,10 @@ import { officeSourceExtension } from "@/lib/documents/conversion/formats";
 import { getConverterAvailability } from "@/lib/documents/conversion/availability";
 import { exportableFormats } from "@/lib/documents/document-office-export";
 import { DocumentExportMenu } from "./DocumentExportMenu";
+import { loadPreviewPages } from "@/lib/documents/document-previews";
+import { PRESENTATION_DOCUMENT_KIND } from "@/lib/documents/generation/create-presentation";
 import { DocumentFilePanel } from "./DocumentFilePanel";
+import { DocumentPagePreviews } from "./DocumentPagePreviews";
 import { changeDocumentStateAction } from "../actions";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -51,6 +54,7 @@ export default async function DocumentDetailPage({ params }: Props) {
   const converterAvailable = exportFormats.length > 0
     ? (await getConverterAvailability().catch(() => ({ available: false }))).available
     : false;
+  const previewPages = storedFile ? await loadPreviewPages(storedFile.id) : [];
 
   return (
     <div className="space-y-6">
@@ -104,13 +108,21 @@ export default async function DocumentDetailPage({ params }: Props) {
             )}
           </div>
           {storedFile ? (
-            <DocumentFilePanel
-              documentId={document.documentId}
-              version={storedFile}
-              isOfficeFile={isOfficeFile}
-              textPreview={textPreview}
-              failureMessage={renditionFailureMessage(document.lifecycleEvents, storedFile.version)}
-            />
+            <div className="space-y-6">
+              <DocumentPagePreviews
+                documentId={document.documentId}
+                version={storedFile.version}
+                pages={previewPages}
+                isPresentation={document.documentKind === PRESENTATION_DOCUMENT_KIND}
+              />
+              <DocumentFilePanel
+                documentId={document.documentId}
+                version={storedFile}
+                isOfficeFile={isOfficeFile}
+                textPreview={textPreview}
+                failureMessage={renditionFailureMessage(document.lifecycleEvents, storedFile.version)}
+              />
+            </div>
           ) : document.contentFormat === "text/markdown" ? (
             <div className="prose prose-sm max-w-none text-[var(--dpf-text)] prose-headings:text-[var(--dpf-text)] prose-p:text-[var(--dpf-text)] prose-strong:text-[var(--dpf-text)]">
               <ReactMarkdown>{content}</ReactMarkdown>

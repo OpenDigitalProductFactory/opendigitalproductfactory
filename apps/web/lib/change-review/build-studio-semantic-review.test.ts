@@ -95,6 +95,31 @@ describe("Build Studio assembled semantic review", () => {
     expect(publishFailureReadinessStatus).not.toHaveBeenCalled();
   });
 
+  // BI-941C1F83 (live, 2026-09-25, FB-D671B016): the finalize stage stamps the Workroom's
+  // head SHA before review so evidence can bind, which made the room look
+  // publishable. GitHub answered 422 for a commit only the sandbox has, the
+  // step threw, and every retry failed the review-verification run.
+  it("completes the review when GitHub does not have the commit yet (422)", async () => {
+    publishFailureReadinessStatus.mockRejectedValueOnce(
+      new Error("Failure readiness status publication failed (422); retry the same committed verdict."),
+    );
+
+    const result = await reviewBuildStudioAssembledChange({
+      build: { id: "build-row", buildId: "FB-1", title: "Change", createdById: "user-1", diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts", verificationOut: null },
+      sandboxState: { sourceCurrency: { headTreeSha: "b".repeat(40), targetTreeSha: "c".repeat(40), dirty: false }, sourceDiffstat: [{ path: "apps/web/lib/a.ts" }], headSha: "d".repeat(40) } as never,
+    });
+
+    expect(result.kind).toBe("reviewed");
+  });
+
+  it("still fails loudly on a publication error that is not a missing commit", async () => {
+    publishFailureReadinessStatus.mockRejectedValueOnce(new Error("Failure readiness status publication failed (401); retry the same committed verdict."));
+    await expect(reviewBuildStudioAssembledChange({
+      build: { id: "build-row", buildId: "FB-1", title: "Change", createdById: "user-1", diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts", verificationOut: null },
+      sandboxState: { sourceCurrency: { headTreeSha: "b".repeat(40), targetTreeSha: "c".repeat(40), dirty: false }, sourceDiffstat: [{ path: "apps/web/lib/a.ts" }], headSha: "d".repeat(40) } as never,
+    })).rejects.toThrow("401");
+  });
+
   it("publishes the commit status when the room is bound to a pushed commit", async () => {
     const result = await reviewBuildStudioAssembledChange({
       build: { id: "build-row", buildId: "FB-1", title: "Change", createdById: "user-1", diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts", verificationOut: null },

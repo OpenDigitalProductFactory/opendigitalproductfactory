@@ -163,6 +163,11 @@ async function resolveOrganizationId(db: DocumentStoreDb, organizationId?: strin
   return org.id;
 }
 
+/** The organization a new document belongs to when the caller names none: the install's own. */
+export async function resolveDocumentOrganizationId(organizationId?: string | null, db: DocumentStoreDb = prisma): Promise<string> {
+  return resolveOrganizationId(db, organizationId);
+}
+
 function projectDocument(row: any, scores?: { semanticScore?: number; fullTextScore?: number }): ManagedDocument {
   return {
     id: row.id,

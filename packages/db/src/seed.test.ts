@@ -63,6 +63,10 @@ describe("coworker seed invariants", () => {
     );
   });
 
+  it("grants marketing-specialist document_write, which reaches create_presentation", () => {
+    expect(HARDCODED_COWORKER_GRANTS["marketing-specialist"]).toContain("document_write");
+  });
+
   it("grants customer-advisor the CRM grants it operates with — not backlog_write", () => {
     // The Customer Success Manager resolves its runtime grants from THIS map (the
     // slug agent row), so the CRM grants must be here. Regression guard for the

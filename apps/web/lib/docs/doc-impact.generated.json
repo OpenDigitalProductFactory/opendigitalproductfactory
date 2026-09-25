@@ -717,7 +717,13 @@
     "apps/web/lib/docs/doc-link-resolver.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "apps/web/lib/documents/document-previews.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/documents/generation/brand-master.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
+    "apps/web/lib/documents/generation/create-presentation.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/documents/generation/render-store.ts": [
@@ -729,6 +735,9 @@
     "apps/web/lib/documents/generation/spec.ts": [
       "docs/architecture/document-generation-facility.md",
       "docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md"
+    ],
+    "apps/web/lib/documents/preview-manifest.ts": [
+      "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/ea/ai-routing-architecture-extract.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
@@ -2753,10 +2762,13 @@
       "scripts/sbom/scan-dependencies.mjs"
     ],
     "docs/architecture/document-generation-facility.md": [
+      "apps/web/lib/documents/document-previews.ts",
       "apps/web/lib/documents/generation/brand-master.ts",
+      "apps/web/lib/documents/generation/create-presentation.ts",
       "apps/web/lib/documents/generation/render-store.ts",
       "apps/web/lib/documents/generation/render.ts",
       "apps/web/lib/documents/generation/spec.ts",
+      "apps/web/lib/documents/preview-manifest.ts",
       "tools/doctools/smoke.sh"
     ],
     "docs/architecture/dpf-patterns.md": [

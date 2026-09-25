@@ -3568,6 +3568,7 @@
         "tool_grants": [
           "backlog_write",
           "consumer_read",
+          "document_write",
           "marketing_read",
           "marketing_write",
           "work_engagement_read",

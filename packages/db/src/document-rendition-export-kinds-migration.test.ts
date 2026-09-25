@@ -13,8 +13,12 @@ const priorMigration = new URL(
   "../prisma/migrations/20260925060000_document_rendition_kind_enum/migration.sql",
   import.meta.url,
 );
+const previewMigration = new URL(
+  "../prisma/migrations/20260925140000_document_rendition_preview_kind/migration.sql",
+  import.meta.url,
+);
 const migrationPath = new URL(
-  "../prisma/migrations/20260925120000_document_rendition_export_kinds/migration.sql",
+  "../prisma/migrations/20260925150000_document_rendition_export_kinds/migration.sql",
   import.meta.url,
 );
 
@@ -70,6 +74,7 @@ describeDatabase("DocumentRenditionKind export-kinds migration against live Post
     await client.query(FIXTURE_TABLES);
     if (rows) await client.query(rows);
     await client.query(await readFile(priorMigration, "utf8"));
+    await client.query(await readFile(previewMigration, "utf8"));
   }
 
   async function kinds(): Promise<string[]> {
@@ -86,7 +91,7 @@ describeDatabase("DocumentRenditionKind export-kinds migration against live Post
     const sql = await readFile(migrationPath, "utf8");
     await client.query(sql);
     await client.query(sql);
-    expect(await kinds()).toEqual(["pdf", "plain_text", "docx", "odt"]);
+    expect(await kinds()).toEqual(["pdf", "plain_text", "preview", "docx", "odt"]);
     await client.query(`
       INSERT INTO "DocumentVersion" (id) VALUES ('v');
       INSERT INTO "DocumentRendition" (id, "documentVersionId", "renditionKind") VALUES ('x', 'v', 'docx'), ('y', 'v', 'odt');

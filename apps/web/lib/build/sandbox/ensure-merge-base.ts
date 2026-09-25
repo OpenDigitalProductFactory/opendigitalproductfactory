@@ -26,7 +26,13 @@ export async function ensureMergeBaseWithMain(input: {
   for (;;) {
     if ((await probe()).includes(PROBE_OK)) return { found: true, deepened };
     if (deepened >= maxRounds) return { found: false, deepened };
-    await input.exec(input.containerId, `${cd} && git fetch -q --deepen=200 origin main 2>&1 || true`);
+    // Unshallow first: the guard scripts re-fetch origin/main at depth 1 in a
+    // shallow repo (fetchOriginMainSharedSafe), undoing any deepen. A complete
+    // repo stays complete. Deepen only if unshallowing is not possible.
+    const fetch = deepened === 0
+      ? `${cd} && ((git rev-parse --is-shallow-repository | grep -q true && git fetch -q --unshallow origin main) || git fetch -q --deepen=200 origin main) 2>&1 || true`
+      : `${cd} && git fetch -q --deepen=200 origin main 2>&1 || true`;
+    await input.exec(input.containerId, fetch);
     deepened++;
   }
 }

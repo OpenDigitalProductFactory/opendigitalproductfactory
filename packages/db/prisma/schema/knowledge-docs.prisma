@@ -176,6 +176,9 @@ model DocumentLifecycleEvent {
 enum DocumentRenditionKind {
   pdf
   plain_text
+  /// Page preview images. The blob is a manifest (lib/documents/preview-manifest.ts)
+  /// of one content-addressed PNG per page, in page order (BI-543819B1).
+  preview
   docx
   odt
 }

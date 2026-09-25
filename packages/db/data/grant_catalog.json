@@ -602,6 +602,7 @@
       "category": "registry",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "create_presentation",
         "doc_link",
         "doc_save"
       ],

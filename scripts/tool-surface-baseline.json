@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 413,
-      "reason": "record_decision_outcome (BI-F302B80E) is the return half of principle_decide. The kernel records what it would do; nothing recorded what the caller then did, so of 1,080 governed decisions exactly one carried a known outcome and no agreement rate was computable. It earns a permanent place because the alternative is not a smaller surface but an unmeasurable one: the skill for this asked the agent to write the disposition as prose in an evidence blob, and prose cannot be selected or counted. It is deliberately NOT folded into principle_decide - a decision must not certify its own outcome, the same separation reverify_decision_evidence exists for.",
-      "recordedAt": "2026-09-22"
+      "value": 414,
+      "reason": "create_presentation (BI-543819B1) is the only way a coworker produces a presentation: it takes an outline and returns a branded .pptx, PDF and slide previews stored as a managed document, and a revision becomes the next version. doc_save could not carry it: doc_save stores bytes the caller already has, and a coworker has no way to author an office file, which is the point of never hand-writing office XML. It sits in the document pack beside doc_save, gated by the same document_write grant.",
+      "recordedAt": "2026-09-25"
     },
     "registry.packFiles": {
       "value": 102,

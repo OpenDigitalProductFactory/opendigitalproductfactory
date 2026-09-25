@@ -1491,6 +1491,7 @@
         "templates-and-placeholders",
         "determinism",
         "degraded-behaviour",
+        "previews",
         "seams",
         "verification"
       ]
@@ -11905,6 +11906,7 @@
         "during-the-campaign",
         "after-the-review-window",
         "asking-the-marketing-strategist-about-a-campaign",
+        "ask-for-a-presentation",
         "what-to-watch",
         "related-guides"
       ]
@@ -12631,6 +12633,7 @@
         "workflow",
         "office-files",
         "export",
+        "slide-previews",
         "authoritative-state",
         "ai-coworker-support",
         "what-to-watch"
