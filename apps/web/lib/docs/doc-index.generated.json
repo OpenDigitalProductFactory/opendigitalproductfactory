@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 720,
+  "pageCount": 722,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9395,6 +9395,19 @@
         "sources"
       ]
     },
+    "docs/security/tool-evaluations/2026-09-25-maplibre-pmtiles.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-25-maplibre-pmtiles/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-maplibre-gl-js-and-pmtiles",
+        "what-is-evaluated",
+        "cosai-security-findings",
+        "compliance-and-architecture-fit",
+        "conditions"
+      ]
+    },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
       "publicHref": "/specs/device-identification-and-portfolio-placement-spec/",
       "portalHref": null,
@@ -12416,6 +12429,20 @@
         "use-the-specific-guides-when",
         "specific-guides",
         "connections"
+      ]
+    },
+    "docs/user-guide/platform/map-packs.md": {
+      "publicHref": "/user-guide/platform/map-packs/",
+      "portalHref": "/docs/platform/map-packs",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "why-it-matters",
+        "what-works-without-a-map-pack",
+        "what-a-map-pack-adds",
+        "attribution",
+        "privacy"
       ]
     },
     "docs/user-guide/platform/tools-and-integrations.md": {
