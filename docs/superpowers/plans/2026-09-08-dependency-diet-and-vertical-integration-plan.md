@@ -269,7 +269,7 @@ _Founder direction, 2026-09-25: too many dependencies, too much complexity, too 
 | M1 production dependency set in the image | done | #5267 |
 | M2 diagram toolchain out of the workspace | mermaid half done; `docx` is still a root devDependency for four `docs:*` generators | #5253 |
 | M3 durable jobs onto Postgres | open, needs WWMD | none since 2026-09-08 |
-| M4 Prism replaced in the harness | open, needs WWMD | none |
+| M4 Prism replaced in the harness | done: an owned OpenAPI contract runtime; Prism retired on the dependency allowlist | [design](../specs/2026-09-25-harness-owned-contract-validator-design.md) |
 | M5 document cluster | partly absorbed by the office-document engine; its S9 retires mammoth, read-excel-file and pdf-parse | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md) |
 | M6 mobile workspace split | open, needs a founder decision | none |
 | M7 multi-version cleanup | first pass done (#5289); second pass in this branch | this branch |
