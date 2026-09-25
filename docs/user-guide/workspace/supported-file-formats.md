@@ -46,5 +46,13 @@ When a conversion is attempted but does not finish, because the file is too
 large, takes too long, or is damaged or password-protected, the message says
 which of these happened.
 
+OpenDocument files can carry embedded objects, such as a chart. The converter
+does not open embedded objects, for safety. A normal `.odt` or `.ods` with a
+chart is still read: its text and numbers come through, and its PDF copy shows
+the chart as a picture. If the converter refuses a file because of its embedded
+objects, the message says that the file contains embedded objects (such as
+charts) that the platform does not open. Save a copy without them, or as PDF,
+and upload that instead.
+
 For the technical detail behind the converter, see the platform-support
 watchlist entry D18 in the install documentation.

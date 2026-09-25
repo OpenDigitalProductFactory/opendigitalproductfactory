@@ -25,6 +25,6 @@ relatedCode:
   - column formats carry over: decimal places, currency symbols and percentages;
   - calculated columns keep their formulas, so the file still calculates when you edit it. A formula that only makes sense inside the platform, such as a count across the whole table or a lookup of a linked record, is written as its current value;
   - highlighting rules from **Format** carry over as conditional formatting;
-  - when the summary panel is open as a chart, its bars are added on a second sheet, **Chart data**. The chart itself is not drawn in the file yet.
+  - when the summary panel is open as a chart, its bars are added on a second sheet, **Chart data**, with the bar chart drawn below them.
 
 These files are made by the platform's document conversion. On an install where conversion is not set up, **Excel (.xlsx)** still downloads, with values only, and the grid says so. **OpenDocument (.ods)** needs conversion and says so when it is missing.

@@ -36,21 +36,27 @@ describe("parseWorkbookExportModel", () => {
 });
 
 describe("exportWorkbook", () => {
-  it("converts the flat ODS to the requested format and names the file after the sheet", async () => {
-    const convert = vi.fn(async () => ({ ok: true as const, data: { bytes: Buffer.from("PK xlsx"), mime: XLSX } }));
-    const out = await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "xlsx", { convert: convert as never });
+  it("exports the flat ODS through dpf-render's document mode and names the file after the sheet", async () => {
+    const render = vi.fn(async () => ({ ok: true as const, data: [{ format: "xlsx" as const, bytes: Buffer.from("PK xlsx"), mime: XLSX }] }));
+    const out = await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "xlsx", { render: render as never });
     expect(out).toEqual({ ok: true, data: { bytes: Buffer.from("PK xlsx"), mimeType: XLSX, filename: "Orders.xlsx" } });
-    const call = (convert.mock.calls[0] as unknown as [{ input: Buffer; from: string; to: string }])[0];
-    expect(call.from).toBe("fods");
-    expect(call.to).toBe("xlsx");
-    expect(call.input.toString("utf8")).toContain('office:mimetype="application/vnd.oasis.opendocument.spreadsheet"');
+    const call = (render.mock.calls[0] as unknown as [{ ext: string; xml: string; formats: string[] }])[0];
+    expect(call.ext).toBe("fods");
+    expect(call.formats).toEqual(["xlsx"]);
+    expect(call.xml).toContain('office:mimetype="application/vnd.oasis.opendocument.spreadsheet"');
+    expect(call.xml).toContain('office:mimetype="application/vnd.oasis.opendocument.chart"');
   });
 
-  it("passes the engine's failure reason through, so the caller can fall back", async () => {
-    const convert = vi.fn(async () => ({ ok: false as const, error: "off", reason: "converter-unavailable" as const }));
-    expect(await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "ods", { convert: convert as never })).toMatchObject({
+  it("passes converter-unavailable through, so the caller can fall back, and reports a refused render as a failed export", async () => {
+    const off = vi.fn(async () => ({ ok: false as const, error: "off", reason: "converter-unavailable" as const }));
+    expect(await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "ods", { render: off as never })).toMatchObject({
       ok: false,
       reason: "converter-unavailable",
+    });
+    const refused = vi.fn(async () => ({ ok: false as const, error: "exit 2", reason: "render-failed" as const }));
+    expect(await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "ods", { render: refused as never })).toMatchObject({
+      ok: false,
+      reason: "conversion-failed",
     });
   });
 

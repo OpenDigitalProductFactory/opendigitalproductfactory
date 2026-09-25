@@ -12,6 +12,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConversionResult } from "@/lib/documents/conversion/convert";
 import { parseFileContent, sniffOfficeContainer, type ConvertForIngestion } from "./file-parsers";
 import { conversionRouteFor } from "./office-conversion";
+import { CHART_OBJECT_PARTS, odfPackage } from "./__fixtures__/odf-package";
+import { readSheetMatrix } from "@/lib/workbooks/sheet-import";
 
 const fixture = (name: string) => readFileSync(resolve(__dirname, "__fixtures__/office", name));
 const legacyDoc = fixture("plan.doc");
@@ -176,6 +178,40 @@ describe("parseFileContent without a converter keeps S0's honest result", () => 
       expect(result.reason).toMatch(text);
       expect(result.summary).toBe(result.reason);
     }
+  });
+
+  it("tells the person when the converter refuses an OpenDocument file that embeds a chart (BI-BFF142A1)", async () => {
+    const cases = [
+      ["text", "report.odt", "application/vnd.oasis.opendocument.text"],
+      ["spreadsheet", "budget.ods", "application/vnd.oasis.opendocument.spreadsheet"],
+      ["presentation", "deck.odp", "application/vnd.oasis.opendocument.presentation"],
+    ] as const;
+    for (const [flavor, name, mime] of cases) {
+      const { convert, calls } = fakeConverter({});
+      const result = await parseFileContent(odfPackage(flavor, CHART_OBJECT_PARTS), mime, name, { convert });
+      expect(calls).toHaveLength(1);
+      expect(result).toMatchObject({ type: "unsupported", format: "opendocument" });
+      if (result?.type !== "unsupported") throw new Error("expected unsupported");
+      expect(result.reason).toContain("contains embedded objects (such as charts) that DPF does not open");
+      expect(result.reason).not.toContain("damaged");
+    }
+    const sheet = await readSheetMatrix(odfPackage("spreadsheet", CHART_OBJECT_PARTS), "budget.ods", { convert: fakeConverter({}).convert });
+    expect(sheet).toMatchObject({ ok: false });
+    if (!sheet.ok) expect(sheet.error).toContain("embedded objects (such as charts)");
+  });
+
+  it("reads an OpenDocument file with a chart when the converter accepts it, and keeps the generic reason without embedded objects", async () => {
+    const accepted = fakeConverter({ xlsx: docx });
+    const read = await parseFileContent(odfPackage("spreadsheet", CHART_OBJECT_PARTS), "", "budget.ods", { convert: accepted.convert });
+    expect(accepted.calls).toEqual([{ from: "ods", to: "xlsx" }]);
+    expect(read?.type).not.toBe("unsupported");
+
+    const refused = await parseFileContent(odfPackage("spreadsheet"), "", "budget.ods", { convert: fakeConverter({}).convert });
+    if (refused?.type !== "unsupported") throw new Error("expected unsupported");
+    expect(refused.reason).toContain("damaged or password-protected");
+    const timedOut = await parseFileContent(odfPackage("spreadsheet", CHART_OBJECT_PARTS), "", "budget.ods", { convert: failing("timeout") });
+    if (timedOut?.type !== "unsupported") throw new Error("expected unsupported");
+    expect(timedOut.reason).toContain("took too long");
   });
 
   it("reports a converter that returns bytes the parser cannot read, instead of throwing", async () => {

@@ -3,8 +3,10 @@
 //
 // The grid posts the view it shows (columns, rows, rules, chart) as a
 // WorkbookExportModel. This validates it, writes it as flat ODS
-// (export-fods.ts), and has the dpf-doctools engine convert that to .xlsx or
-// .ods. The model carries data the caller already holds on screen, so export
+// (export-fods.ts), and has the dpf-doctools engine export that to .xlsx or
+// .ods through dpf-render's trusted document mode (renderFlatDocument): the
+// flat ODS embeds its bar chart, which dpf-convert's hardened profile refuses
+// by design (BI-BFF142A1). The model carries data the caller already holds on screen, so export
 // reads nothing from the database and grants nothing new.
 //
 // Expected failures come back typed and never throw. `converter-unavailable`
@@ -14,8 +16,10 @@
 import { CF_COLORS, CF_OPERATORS } from "@/components/workbooks/grid-conditional-format";
 import { isRecord } from "@/lib/shared/coerce";
 import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
-import { convertDocument, type ConversionFailureReason } from "@/lib/documents/conversion/convert";
+import type { ConversionFailureReason } from "@/lib/documents/conversion/convert";
 import { CONVERTER_TARGET_MIME } from "@/lib/documents/conversion/formats";
+import type { RenderFailureReason } from "@/lib/documents/generation/render";
+import { renderFlatDocument } from "@/lib/documents/generation/render-flat";
 import { contentFilename } from "@/lib/documents/document-content";
 import { FIELD_TYPES, MAX_GRID_ROWS, type FieldType } from "./types";
 import {
@@ -136,19 +140,29 @@ export function parseWorkbookExportModel(input: unknown): ActionSuccess<Workbook
   return ok({ sheetName, columns, rows, conditionalRules, chart });
 }
 
-/** Export a Workbook view as .xlsx or .ods through the engine. */
+/** The renderer's failures in the export's vocabulary: a refused or failed render is a failed export. */
+const EXPORT_REASON: Readonly<Record<RenderFailureReason, ConversionFailureReason>> = {
+  "converter-unavailable": "converter-unavailable",
+  "input-too-large": "input-too-large",
+  timeout: "timeout",
+  "invalid-spec": "conversion-failed",
+  "render-failed": "conversion-failed",
+};
+
+/** Export a Workbook view as .xlsx or .ods through the engine's trusted document mode. */
 export async function exportWorkbook(
   model: WorkbookExportModel,
   format: WorkbookExportFormat,
-  deps: { convert?: typeof convertDocument } = {},
+  deps: { render?: typeof renderFlatDocument } = {},
 ): Promise<WorkbookExportResult> {
-  const convert = deps.convert ?? convertDocument;
-  const fods = Buffer.from(buildFlatOds(model), "utf-8");
-  const converted = await convert({ input: fods, from: "fods", to: format });
-  if (!converted.ok) return { ...err(converted.error), reason: converted.reason };
+  const render = deps.render ?? renderFlatDocument;
+  const rendered = await render({ ext: "fods", xml: buildFlatOds(model), formats: [format] });
+  if (!rendered.ok) return { ...err(rendered.error), reason: EXPORT_REASON[rendered.reason] };
+  const file = rendered.data.find((entry) => entry.format === format);
+  if (!file) return { ...err(`the engine returned no .${format}`), reason: "conversion-failed" };
   return ok({
-    bytes: converted.data.bytes,
-    mimeType: converted.data.mime || CONVERTER_TARGET_MIME[format],
+    bytes: file.bytes,
+    mimeType: file.mime || CONVERTER_TARGET_MIME[format],
     filename: contentFilename(model.sheetName, format),
   });
 }

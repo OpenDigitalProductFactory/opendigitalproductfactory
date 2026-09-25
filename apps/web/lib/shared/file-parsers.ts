@@ -1,6 +1,7 @@
 import type { ConversionResult } from "@/lib/documents/conversion/convert";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { EMBEDDED_OBJECTS_REASON, hasOdfEmbeddedObjects } from "./odf-embedded-objects";
 import { conversionRouteFor, type ConversionFamily, type ConversionRoute } from "./office-conversion";
 
 export type ReadableFileContent = {
@@ -217,11 +218,16 @@ function unsupportedWithReason(format: UnsupportedFileFormat, reason: string): U
   return { type: "unsupported", format, reason, summary: reason };
 }
 
+/** The routes whose source is an OpenDocument package (office-conversion.ts). */
+const ODF_SOURCES: ReadonlySet<string> = new Set(["odt", "ods", "odp"]);
+
 /**
  * Run one routed file through the converter: the converted bytes, or the
  * plain-language reason it could not be read. With no converter that reason is
  * S0's; any other failure is named, and the technical detail goes to the log,
- * never to the person (BI-81524041).
+ * never to the person (BI-81524041). When the converter refuses an
+ * OpenDocument file that embeds objects (its hardened profile does not open
+ * them), the person is told that, not "damaged" (BI-BFF142A1).
  */
 export async function convertForIngestion(
   buffer: Buffer,
@@ -237,6 +243,9 @@ export async function convertForIngestion(
   if (result.ok) return ok(result.data.bytes);
   if (result.reason !== "converter-unavailable") {
     console.warn(`[file-parsers] ${route.from} -> ${route.to} conversion failed (${result.reason}): ${result.error}`);
+  }
+  if (result.reason === "conversion-failed" && ODF_SOURCES.has(route.from) && hasOdfEmbeddedObjects(buffer)) {
+    return err(EMBEDDED_OBJECTS_REASON);
   }
   switch (result.reason) {
     case "converter-unavailable":

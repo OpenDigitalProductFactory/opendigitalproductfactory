@@ -19,7 +19,12 @@
 #      the render-*.json specs into every format with PNG previews, renders the deck
 #      twice to the same text layer, fills a clean flat-ODF template, refuses a
 #      template with scripts, and keeps its exit codes (2 bad request, 4 too large
-#      or empty, 124 timeout).
+#      or empty, 124 timeout);
+#   6. the trusted document path (BI-BFF142A1): dpf-convert refuses a flat ODS that
+#      embeds a chart (DisableActiveContent stays on), dpf-render's document mode
+#      exports it with the chart to .xlsx and .ods, refuses any other embedded
+#      object, external link or script, and the macro probe stays negative under
+#      the render profile.
 # The binary fixtures are produced from the committed flat-ODF sources by the
 # image itself, so the repository carries no opaque office binaries.
 #
@@ -188,6 +193,48 @@ render "$WORK/bad-format.json" "$WORK/bad-format.tar"; expect_exit "render refus
 render /dev/null "$WORK/empty.tar"; expect_exit "render refuses an empty request" 4 $?
 render "$FIXTURES/render-deck.json" "$WORK/big.tar" -e DPF_RENDER_MAX_BYTES=64; expect_exit "render input over DPF_RENDER_MAX_BYTES" 4 $?
 render "$FIXTURES/render-deck.json" "$WORK/slow.tar" -e DPF_RENDER_TIMEOUT_SECONDS=1; expect_exit "render timeout" 124 $?
+
+# 6. The trusted document path (BI-BFF142A1). A flat ODS that embeds a chart:
+#    dpf-convert, the path for customer files, must refuse it (its profile keeps
+#    DisableActiveContent on); dpf-render's document mode must export it with
+#    the chart; the document screen must refuse anything else embedded, any
+#    script and any external link; and macros must stay off under the render
+#    profile too.
+convert xlsx fods "$FIXTURES/chart.fods" "$WORK/chart-convert.xlsx"; expect_exit "dpf-convert refuses a flat ODS with an embedded chart (DisableActiveContent on)" 3 $?
+with_document() {  # with_document <ext> <file> <formats-json>: a document-mode request
+  printf '{"document":{"ext":"%s","data":"%s"},"formats":%s}' "$1" "$(base64 -w0 < "$2")" "$3"
+}
+with_document fods "$FIXTURES/chart.fods" '["xlsx","ods"]' > "$WORK/chart-document.json"
+mkdir -p "$WORK/chart-document"
+if render "$WORK/chart-document.json" "$WORK/chart-document.tar" && tar -xf "$WORK/chart-document.tar" -C "$WORK/chart-document" \
+   && grep -qa 'xl/charts/chart1.xml' "$WORK/chart-document/document.xlsx" \
+   && grep -qa 'Object 1/' "$WORK/chart-document/document.ods" \
+   && grep -q '"charts": 1' "$WORK/chart-document/manifest.json"; then
+  pass "dpf-render document mode exports the chart to .xlsx (xl/charts/chart1.xml) and .ods (Object 1/)"
+else
+  fail "dpf-render document mode: $(tail -3 "$WORK/chart-document.tar.err")"
+fi
+if convert txt xlsx "$WORK/chart-document/document.xlsx" "$WORK/chart-document.txt" && grep -q DPFSENTINELCHART "$WORK/chart-document.txt"; then
+  pass "the exported .xlsx reads back through dpf-convert (sentinel found)"
+else
+  fail "the exported .xlsx does not read back: $(tail -3 "$WORK/chart-document.txt.err")"
+fi
+sed 's#application/vnd.oasis.opendocument.chart#application/vnd.oasis.opendocument.text#' "$FIXTURES/chart.fods" > "$WORK/not-a-chart.fods"
+with_document fods "$WORK/not-a-chart.fods" '["xlsx"]' > "$WORK/not-a-chart.json"
+render "$WORK/not-a-chart.json" "$WORK/not-a-chart.tar"; expect_exit "document mode refuses an embedded object that is not a chart" 2 $?
+sed 's#<chart:title>#<chart:title xlink:href="https://example.invalid/x">#' "$FIXTURES/chart.fods" > "$WORK/linked-chart.fods"
+with_document fods "$WORK/linked-chart.fods" '["xlsx"]' > "$WORK/linked-chart.json"
+render "$WORK/linked-chart.json" "$WORK/linked-chart.tar"; expect_exit "document mode refuses a chart with an external link" 2 $?
+with_document fodt "$FIXTURES/macro.fodt" '["pdf"]' > "$WORK/macro-document.json"
+render "$WORK/macro-document.json" "$WORK/macro-document.tar"; expect_exit "document mode refuses a document with scripts" 2 $?
+with_document fodp "$FIXTURES/sample.fodp" '["pdf"]' > "$WORK/fodp-document.json"
+render "$WORK/fodp-document.json" "$WORK/fodp-document.tar"; expect_exit "document mode refuses a family it does not export" 2 $?
+render_profile="$(probe render 4)"
+if [ "$render_profile" = "MARKER=absent" ]; then
+  pass "the render profile (DisableActiveContent lifted) still blocks the macro under ALWAYS_EXECUTE_NO_WARN"
+else
+  fail "render profile macro probe: $render_profile"
+fi
 
 echo
 if [ "$FAILURES" -eq 0 ]; then echo "smoke: all checks passed for $IMAGE"; exit 0; fi
