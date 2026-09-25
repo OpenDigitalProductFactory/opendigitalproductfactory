@@ -15,7 +15,7 @@
     "@dpf/validators": "workspace:*",
     "net-snmp": "^3.14.0",
     "undici": "^8.10.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/net-snmp": "^3.11.0",
