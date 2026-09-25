@@ -29,7 +29,7 @@ model Portfolio {
 /// supersedes the current one, so the chain is the audit trail. The current
 /// budget is the row nothing supersedes. A portfolio with no row has no budget
 /// set, which is never read as zero.
-/// @dpf lifecycle=business-record retention=domain
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=operational,financial owner=founder-business-owner steward=data-steward
 model PortfolioBudgetPeriod {
   id                 String                 @id @default(cuid())
   portfolioId        String
