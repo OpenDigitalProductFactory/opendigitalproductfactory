@@ -239,26 +239,6 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "@stoplight/prism-cli": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "services/integration-test-harness"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
-    "@stoplight/prism-http": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "services/integration-test-harness"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "@tailwindcss/postcss": {
       "added": "2026-06-21",
       "workspaces": [
@@ -883,16 +863,6 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "pino": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "services/integration-test-harness"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "postcss": {
       "added": "2026-06-21",
       "workspaces": [
@@ -1187,6 +1157,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "yaml": {
+      "added": "2026-09-25",
+      "workspaces": [
+        "services/integration-test-harness"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "Vetted 2026-09-25 as the YAML parser for the harness-owned OpenAPI contract runtime that replaced Stoplight Prism (plan 2026-09-08 M4). ISC, zero dependencies, 2.9.0 already resolved in the lockfile before adoption (vite, postcss-load-config), so it adds no package. ~150M weekly downloads, published since 2011. OSV: no advisories for 2.9.0. Risks recorded: single maintainer (eemeli) and no npm provenance attestation on 2.9.0. Parses only repo-committed vendor specs, never untrusted input."
+    },
     "zod": {
       "added": "2026-06-21",
       "workspaces": [
@@ -1209,6 +1189,24 @@
         "prod"
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    }
+  },
+  "retired": {
+    "@mermaid-js/mermaid-cli": {
+      "retired": "2026-09-08",
+      "reason": "Diagram rendering runs from the pinned minlag/mermaid-cli tool image (scripts/lib/mermaid-renderer.mjs); plan 2026-09-08 M2, BI-DBDB8C6D, PR #5253."
+    },
+    "puppeteer": {
+      "retired": "2026-09-08",
+      "reason": "Only mermaid-cli needed a headless browser; it left with M2 (BI-DBDB8C6D, PR #5253). The browser sidecar and Playwright cover browser work."
+    },
+    "@stoplight/prism-cli": {
+      "retired": "2026-09-25",
+      "reason": "The integration-test harness validates vendor contracts with its own OpenAPI runtime (services/integration-test-harness/src/openapi-contract.ts); plan 2026-09-08 M4."
+    },
+    "@stoplight/prism-http": {
+      "retired": "2026-09-25",
+      "reason": "The integration-test harness validates vendor contracts with its own OpenAPI runtime (services/integration-test-harness/src/openapi-contract.ts); plan 2026-09-08 M4."
     }
   }
 }

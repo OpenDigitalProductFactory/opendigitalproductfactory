@@ -13,6 +13,12 @@ This service is test-only infrastructure for connector development. It provides:
 
 This is not a production connector runtime.
 
+## Contract validation
+
+Each vendor's `vendors/<vendor>/openapi.yaml` is loaded by `src/openapi-contract.ts`, the harness's own OpenAPI 3.0 runtime (it replaced Stoplight Prism in 2026-09; see [the design](../../docs/superpowers/specs/2026-09-25-harness-owned-contract-validator-design.md)). Every request is checked against its operation's path, query and header parameters and its request body. The response is the operation's `example` from its lowest `2xx` response, validated against its schema. A contract failure returns `422` with the diagnostics.
+
+The runtime supports a closed subset: schema keywords `type`, `properties`, `required`, `items`, `enum`, `nullable` and local `$ref`; `GET` and `POST`; JSON and form-encoded bodies. A spec that uses anything else fails when the harness starts, naming the keyword and where it is. Extend the subset deliberately, with a test, when a vendor spec needs more.
+
 ## Key environment variables
 
 - `PORT`

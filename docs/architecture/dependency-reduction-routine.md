@@ -210,6 +210,12 @@ deliberate, recorded decision — not a silent lockfile change.
   package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and
   whether an existing dependency already covers it. **The allowlist entry is the
   vetting record.**
+- **Retired names** live in the allowlist's `retired` map: packages a recorded
+  decision removed, each with a date and the reason (for example Stoplight
+  Prism, replaced by the harness's own OpenAPI runtime). The gate refuses a
+  retired name even when someone re-acknowledges it, and `--update-allowlist`
+  never adds one back. Reversing a retirement means deleting its `retired`
+  entry in the same PR and saying why.
 - Pure Node, network-free → safe as a required PR check.
 
 ### Why this shape (WWMD)
