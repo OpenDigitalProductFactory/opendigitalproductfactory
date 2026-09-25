@@ -63,22 +63,97 @@ export function inDpfWorkspace(startDir) {
   return false;
 }
 
+// ── Scope by the action's target (BI-77BE1389, WWMD DI-F11C21173A30) ─────────
+// The harness sends the folder the SESSION opened in. On an install host that
+// is the installed runtime (no checkout), so a guard keyed on it switched off
+// for the whole session, even for a push from a worktree or an edit inside one.
+// A guard now sees the folder the action targets: the checkout root of an edited
+// file, or the folder a shell command moves into (`cd` / `pushd` / `git -C`).
+// With no target, it is the session folder, exactly as before.
+
+const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "edit_file", "write_file", "create_file"]);
+
+/** Git Bash `/d/x` -> `D:/x`; backslashes -> slashes. */
+export function toNativePath(p) {
+  const s = String(p ?? "").replace(/\\/g, "/");
+  const drive = s.match(/^\/([a-zA-Z])(\/|$)(.*)$/);
+  return drive ? `${drive[1].toUpperCase()}:/${drive[3]}` : s;
+}
+
+const isAbsolutePath = (p) => /^[a-zA-Z]:\//.test(p) || p.startsWith("/");
+
+function resolveDir(base, target) {
+  const t = toNativePath(target);
+  if (isAbsolutePath(t)) return t.replace(/\/+$/, "") || t;
+  if (!base) return null;
+  return join(toNativePath(base), t).replace(/\\/g, "/");
+}
+
+const unquote = (s) => s.replace(/^(["'])(.*)\1$/, "$2");
+const DIR_ARG = String.raw`("[^"]+"|'[^']+'|[^\s;&|()]+)`;
+const DIR_CHANGE_RE = new RegExp(String.raw`(?:^|[;&|(]\s*|\bthen\s+|\bdo\s+)(?:cd|pushd)\s+${DIR_ARG}|\bgit\s+-C\s+${DIR_ARG}`, "g");
+
+/** The folder a shell command acts in: the last directory it moves into, relative moves chained. */
+export function shellTargetDir(command, sessionCwd) {
+  let dir = sessionCwd ?? null;
+  let moved = false;
+  for (const m of String(command ?? "").matchAll(DIR_CHANGE_RE)) {
+    const arg = unquote(m[1] ?? m[2] ?? "");
+    if (!arg || arg === "-" || arg.startsWith("~") || arg.startsWith("$")) continue;
+    const next = resolveDir(dir, arg);
+    if (next) {
+      dir = next;
+      moved = true;
+    }
+  }
+  return moved ? dir : sessionCwd;
+}
+
+/** The checkout root holding `file` (the folder with packages/dpf-skill-pack), else the file's folder. */
+export function checkoutRootOf(file) {
+  const start = dirname(toNativePath(file));
+  let dir = start;
+  for (let i = 0; i < 64; i++) {
+    if (existsSync(join(dir, "packages", "dpf-skill-pack"))) return dir.replace(/\\/g, "/");
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return start;
+}
+
+/** The folder a guard should judge this action by. */
+export function actionCwd(toolName, toolInput, sessionCwd) {
+  const input = toolInput && typeof toolInput === "object" ? toolInput : {};
+  if (FILE_EDIT_TOOLS.has(String(toolName))) {
+    const file = toNativePath(input.file_path ?? input.filePath ?? input.notebook_path ?? input.path ?? "");
+    if (file && isAbsolutePath(file)) return checkoutRootOf(file);
+    return sessionCwd;
+  }
+  if (isShellTool(toolName)) return shellTargetDir(shellCommandFromInput(input), sessionCwd);
+  return sessionCwd;
+}
+
 /**
- * Normalize a raw PreToolUse payload to a surface-agnostic shape.
+ * Normalize a raw PreToolUse payload to a surface-agnostic shape. `cwd` is the
+ * folder the action targets (see actionCwd); `sessionCwd` is what the harness sent.
  * @param {any} raw
- * @returns {{ toolName: string|undefined, toolInput: Record<string, any>, cwd: string|undefined }}
+ * @returns {{ toolName: string|undefined, toolInput: Record<string, any>, cwd: string|undefined, sessionCwd: string|undefined }}
  */
 export function normalizePayload(raw) {
   const p = raw && typeof raw === "object" ? raw : {};
   const toolName = p.toolName ?? p.tool_name;
-  const toolInput = p.toolInput ?? p.tool_input ?? {};
+  const rawInput = p.toolInput ?? p.tool_input ?? {};
+  const toolInput = rawInput && typeof rawInput === "object" ? rawInput : {};
   // Both surfaces send the working dir at top level (Claude: cwd; Grok: cwd + workspaceRoot).
-  const cwd = p.cwd ?? p.workspaceRoot;
-  return {
-    toolName,
-    toolInput: toolInput && typeof toolInput === "object" ? toolInput : {},
-    cwd,
-  };
+  const sessionCwd = p.cwd ?? p.workspaceRoot;
+  let cwd = sessionCwd;
+  try {
+    cwd = actionCwd(toolName, toolInput, sessionCwd) ?? sessionCwd;
+  } catch {
+    // fail open to the session folder
+  }
+  return { toolName, toolInput, cwd, sessionCwd };
 }
 
 /**
