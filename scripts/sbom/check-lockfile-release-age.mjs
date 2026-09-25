@@ -30,6 +30,7 @@
 //                                                    [--require-online]
 //                                                    [--json <path>]
 
+import { LOCKFILE_ROOTS, rootFile } from "./lockfile-roots.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve, dirname } from "node:path";
@@ -155,12 +156,14 @@ function parseArgs(argv) {
   return out;
 }
 
-function baseLockfile(baseRef) {
+function baseLockfile(baseRef, path = "pnpm-lock.yaml") {
   try {
-    return execFileSync("git", ["show", `${baseRef}:pnpm-lock.yaml`], {
+    return execFileSync("git", ["show", `${baseRef}:${path}`], {
       cwd: ROOT,
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
+      // A root added by this change has no base lockfile; that is expected.
+      stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
     return null;
@@ -237,7 +240,20 @@ async function run() {
     process.exit(1);
   }
 
-  const headKeys = parseLockfilePackages(readFileSync(join(ROOT, "pnpm-lock.yaml"), "utf8"));
+  for (const root of LOCKFILE_ROOTS) {
+    if (root.dir === ".") continue;
+    const own = parseReleaseAgePolicy(readFileSync(join(ROOT, rootFile(root, "pnpm-workspace.yaml")), "utf8"));
+    if (own.minutes < minutes) {
+      process.stderr.write(
+        `::error::${rootFile(root, "pnpm-workspace.yaml")} sets minimumReleaseAge ${own.minutes}, below the platform floor of ${minutes}. Every lockfile root resolves under the same floor.\n`,
+      );
+      process.exit(1);
+    }
+  }
+
+  // Every lockfile root is gated (scripts/sbom/lockfile-roots.mjs). An entry is
+  // new only if NO root's base lockfile had it, so a workspace moving into its
+  // own lockfile does not re-litigate packages the platform already carried.
   const baseYaml = baseLockfile(args.base);
   if (baseYaml === null) {
     process.stdout.write(
@@ -245,8 +261,16 @@ async function run() {
     );
     process.exit(0);
   }
+  const headKeys = new Set();
+  const baseKeys = new Set();
+  for (const root of LOCKFILE_ROOTS) {
+    const lockPath = rootFile(root, "pnpm-lock.yaml");
+    for (const key of parseLockfilePackages(readFileSync(join(ROOT, lockPath), "utf8"))) headKeys.add(key);
+    const rootBase = root.dir === "." ? baseYaml : baseLockfile(args.base, lockPath);
+    if (rootBase !== null) for (const key of parseLockfilePackages(rootBase)) baseKeys.add(key);
+  }
 
-  const entries = newRegistryEntries(parseLockfilePackages(baseYaml), headKeys);
+  const entries = newRegistryEntries(baseKeys, headKeys);
   if (entries.length === 0) {
     process.stdout.write(`Release-age gate: no new lockfile entries vs ${args.base}. Floor ${minutes} min.\n`);
     process.exit(0);

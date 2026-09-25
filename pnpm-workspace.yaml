@@ -1,22 +1,21 @@
 packages:
   - "apps/*"
+  # apps/mobile resolves in its own workspace and lockfile (plan 2026-09-08 M6):
+  # apps/mobile/pnpm-workspace.yaml.
+  - "!apps/mobile"
   - "packages/*"
   - "services/adp"
   - "services/edge-node"
   - "services/integration-test-harness"
 overrides:
-  # react / react-dom pinned to 19.2.3 (BI-E5E72FE3 mobile-runtime repair).
-  # React enforces a RUNTIME invariant that the standalone `react` package
-  # version EXACTLY equals the reconciler that react-native embeds. RN 0.85.3
-  # (Expo SDK 56) embeds React 19.2.3's renderer, so a hoisted react 19.2.8
-  # (pulled up by apps/web / Next 16) crashes the mobile app at boot with
-  # "Incompatible React versions: react 19.2.8 vs react-native-renderer 19.2.3".
-  # One hoisted copy serves both apps, so both must sit on 19.2.3. This is a
-  # patch-level move within 19.2.x — Next 16 (^19.2.0) is unaffected; the web
-  # production build gate on this PR proves it. Re-pin in lockstep whenever
-  # react-native's bundled renderer version changes on an SDK bump.
-  react: 19.2.3
-  react-dom: 19.2.3
+  # One React for the platform tree. apps/web declares ^19.2.8; the Prisma CLI's
+  # studio-core would otherwise pull a second copy (19.3.0), a dual-package
+  # hazard for anything that shares a React context. Not a CVE floor. The mobile
+  # renderer pin that used to hold this at 19.2.3 moved to
+  # apps/mobile/pnpm-workspace.yaml with the workspace split (plan 2026-09-08 M6).
+  # Move to 19.3 as its own change, with the web build and UX sweep as proof.
+  react: 19.2.8
+  react-dom: 19.2.8
   # brace-expansion <= 5.0.8: GHSA-mh99-v99m-4gvg / CVE-2026-14257, then
   # GHSA-rgw5-rvv9-x895 / CVE-2026-69152 (unbounded intermediate arrays,
   # bypassing the 5.0.8 mitigation — found on PR #3893's OSV scan). Floor
@@ -30,10 +29,6 @@ overrides:
   # 8.0.0 is a clean upstream fix with zero runtime dependencies and the same
   # `node >=16` engine, so floor it instead of accepting the finding.
   deepmerge-ts: '^8.0.0'
-  # GHSA-vcc3-ghjq-m6fr (Dependabot #156): malformed percent-encoded input
-  # stalls decode-uri-component <=0.4.2. Keep the patched algorithm on 0.5.0;
-  # its module-format-only patch preserves query-string 7's CommonJS contract.
-  'decode-uri-component@<0.5.0': '0.5.0'
   # @types/node: first-party workspaces declare ^26, but @inngest/ai (22),
   # @types/net-snmp (24) and docx (25) each pin an older major, so the tree
   # resolved FOUR copies of a types-only package. Floor every older range to
@@ -64,56 +59,6 @@ overrides:
   # them as octal, an SSRF-adjacent parser confusion (found on PR #3893's
   # OSV scan). Was floored at ^10.2.0 for an earlier issue; raised to ^10.3.1.
   ip-address: '^10.3.1'
-  # --- jest 30 unification (apps/mobile) ---
-  # Force the ENTIRE jest family to a single major (30) so apps/mobile runs a
-  # unified jest 30 install. jest-expo@~56 (Expo SDK 55/56) still *declares* jest
-  # 29 transitive deps; without these overrides a jest 30 bump produces a MIXED
-  # 29/30 tree (jest-runtime@30 + jest-mock@29) that breaks every mobile suite at
-  # load with "clearMocksOnScope is not a function" (see reverted PRs #1053, #1288).
-  # jest-expo's code already tolerates jest 30, so a unified 30 tree works.
-  # Keep in sync with scripts/check-mobile-jest-pin.mjs (REQUIRED_MAJOR).
-  jest: '^30.0.0'
-  jest-cli: '^30.0.0'
-  jest-config: '^30.0.0'
-  jest-runner: '^30.0.0'
-  jest-runtime: '^30.0.0'
-  jest-circus: '^30.0.0'
-  jest-snapshot: '^30.0.0'
-  jest-mock: '^30.0.0'
-  jest-each: '^30.0.0'
-  jest-util: '^30.0.0'
-  jest-message-util: '^30.0.0'
-  jest-resolve: '^30.0.0'
-  jest-resolve-dependencies: '^30.0.0'
-  jest-haste-map: '^30.0.0'
-  jest-environment-node: '^30.0.0'
-  jest-environment-jsdom: '^30.0.0'
-  jest-validate: '^30.0.0'
-  jest-watcher: '^30.0.0'
-  jest-worker: '^30.0.0'
-  jest-regex-util: '^30.0.0'
-  jest-docblock: '^30.0.0'
-  jest-changed-files: '^30.0.0'
-  jest-leak-detector: '^30.0.0'
-  babel-jest: '^30.0.0'
-  expect: '^30.0.0'
-  pretty-format: '^30.0.0'
-  '@jest/globals': '^30.0.0'
-  '@jest/types': '^30.0.0'
-  '@jest/core': '^30.0.0'
-  '@jest/reporters': '^30.0.0'
-  '@jest/transform': '^30.0.0'
-  '@jest/test-sequencer': '^30.0.0'
-  '@jest/console': '^30.0.0'
-  '@jest/environment': '^30.0.0'
-  '@jest/fake-timers': '^30.0.0'
-  '@jest/source-map': '^30.0.0'
-  '@jest/test-result': '^30.0.0'
-  '@jest/expect': '^30.0.0'
-  '@jest/expect-utils': '^30.0.0'
-  '@jest/schemas': '^30.0.0'
-  '@jest/create-cache-key-function': '^30.0.0'
-  jest-watch-typeahead: '^3.0.0'
 # Supply-chain hardening: a release-age floor on DEPENDENCY RESOLUTION. pnpm
 # refuses to resolve a version published less than this many minutes ago, so no
 # install path can adopt a package the ecosystem has not had a chance to look at
@@ -136,8 +81,6 @@ overrides:
 # Use minimumReleaseAgeExclude for a package that must be adopted inside the
 # window (e.g. an embargoed security fix); keep it empty by default.
 minimumReleaseAge: 1440
-patchedDependencies:
-  decode-uri-component@0.5.0: patches/decode-uri-component@0.5.0.patch
 allowBuilds:
   # 2.6.0 loads optional prebuilt binaries on supported Windows/macOS/Linux.
   # Its install hook only runs node-gyp for npm_config_build_from_source=true.
@@ -146,7 +89,8 @@ allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
   # Telemetry-only postinstall: report.js sends install/dependency/platform data
-  # to scarf.sh. Stoplight Prism has no runtime import or generated artifact need.
+  # to scarf.sh. Nothing in the tree pulls it since Stoplight Prism left
+  # (2026-09-25); the deny stays so a future transitive cannot phone home on install.
   '@scarf/scarf': false
   esbuild: true
   msw: true

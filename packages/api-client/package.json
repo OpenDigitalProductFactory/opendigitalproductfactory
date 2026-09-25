@@ -9,11 +9,13 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@dpf/types": "workspace:*",
-    "@dpf/validators": "workspace:*"
+  "peerDependencies": {
+    "@dpf/types": "*",
+    "@dpf/validators": "*"
   },
   "devDependencies": {
+    "@dpf/types": "workspace:*",
+    "@dpf/validators": "workspace:*",
     "typescript": "^6.0.3"
   }
 }

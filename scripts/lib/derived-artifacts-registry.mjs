@@ -287,7 +287,7 @@ export const DERIVED_ARTIFACTS = [
   {
     id: "sbom-baseline",
     description: "SBOM dependency-shape drift baseline (first-party version splits)",
-    sourceGlobs: ["pnpm-lock.yaml", "pnpm-workspace.yaml"],
+    sourceGlobs: ["pnpm-lock.yaml", "pnpm-workspace.yaml", "apps/mobile/pnpm-lock.yaml", "apps/mobile/pnpm-workspace.yaml"],
     artifactPaths: ["sbom/baseline.json"],
     generate: ["node", "scripts/sbom/check-sbom-drift.mjs", "--update-baseline"],
     check: ["node", "scripts/sbom/check-sbom-drift.mjs"],

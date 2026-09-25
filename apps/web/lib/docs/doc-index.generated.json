@@ -1456,6 +1456,7 @@
         "sbom-generation",
         "axis-1-reduction-efficiency",
         "shape-budgets-the-surface-only-shrinks",
+        "lockfile-roots",
         "pruning-overrides",
         "axis-2-vulnerability-lifecycle-the-local-dependabot-equivalent",
         "the-remediation-ladder-when-a-floor-wont-work",

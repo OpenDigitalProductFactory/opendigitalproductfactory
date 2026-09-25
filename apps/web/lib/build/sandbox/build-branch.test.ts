@@ -287,6 +287,15 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     expect(cmd).not.toContain("pnpm install");
   });
 
+  it("replaces a real node_modules directory with the shared link, and excludes node_modules repo-wide", () => {
+    const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
+    const reuseBranch = cmd.slice(cmd.indexOf("; then "), cmd.indexOf("; else "));
+    expect(reuseBranch).toContain(
+      "{ [ -L /workspace/.builds/FB-ABCD1234/apps/web/node_modules ] || rm -rf /workspace/.builds/FB-ABCD1234/apps/web/node_modules; } && ln -sfn /workspace/apps/web/node_modules /workspace/.builds/FB-ABCD1234/apps/web/node_modules",
+    );
+    expect(reuseBranch).toContain('grep -qx node_modules "$(git rev-parse --git-common-dir)/info/exclude"');
+  });
+
   // BI-8C6AA60E (isolation-ON half): the destructive `worktree remove --force`
   // must be reachable ONLY when the worktree is absent or has drifted onto
   // another branch. A resume onto this build's own branch reuses the live tree.
@@ -319,7 +328,11 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     expect(recreateBranch.indexOf("worktree remove --force")).toBeLessThan(recreateBranch.indexOf("rm -rf"));
     expect(recreateBranch.indexOf("rm -rf")).toBeLessThan(recreateBranch.indexOf("git worktree add --force"));
     const reuseBranch = cmd.slice(cmd.indexOf("; then "), cmd.indexOf("; else "));
-    expect(reuseBranch).not.toContain("rm -rf");
+    // The only removal allowed on reuse is a real node_modules at a link path;
+    // the build's source tree is never touched.
+    const removals = reuseBranch.match(/rm -rf \S+/g) ?? [];
+    expect(removals.length).toBeGreaterThan(0);
+    for (const removal of removals) expect(removal).toMatch(/^rm -rf \/workspace\/\.builds\/FB-ABCD1234\/(?:[\w-]+\/)*node_modules;?$/);
   });
 
   // BI-82CB5A7D — smoke check so a hooksPath-override regression is caught

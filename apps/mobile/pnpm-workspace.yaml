@@ -1,0 +1,119 @@
+# apps/mobile is its own pnpm workspace (plan 2026-09-08 M6, founder-approved
+# 2026-09-25). The Expo / React Native / Jest toolchain resolves here, apart
+# from the platform lockfile, so the portal, its SBOM and its image never carry
+# it. Consumers: mobile-ci.yml, EAS builds, and `pnpm install` in this folder.
+#
+# The shared @dpf/types, @dpf/validators and @dpf/api-client packages come in
+# as injected `file:` copies (package.json dependenciesMeta), so this tree has
+# one resolution for each and never reaches into the repository root.
+packages:
+  - "."
+
+# Same release-age floor as the root workspace (BI-B175621A): no install path
+# here can adopt a package younger than a day.
+minimumReleaseAge: 1440
+
+# The root overrides do not reach this workspace. Every root floor whose target
+# is in this tree is repeated below with its provenance, and the Override
+# Provenance Guard scans this file too. Without them the tree resolves
+# brace-expansion 2.1.7, decode-uri-component 0.2.2 and uuid 7 (measured
+# 2026-09-25).
+overrides:
+  # react / react-dom pinned to 19.2.3 (BI-E5E72FE3 mobile-runtime repair).
+  # React enforces a RUNTIME invariant that the standalone `react` package
+  # version EXACTLY equals the reconciler that react-native embeds. RN 0.85.3
+  # (Expo SDK 56) embeds React 19.2.3's renderer, so a hoisted react 19.2.8
+  # (pulled up by apps/web / Next 16) crashes the mobile app at boot with
+  # "Incompatible React versions: react 19.2.8 vs react-native-renderer 19.2.3".
+  # One hoisted copy serves both apps, so both must sit on 19.2.3. This is a
+  # patch-level move within 19.2.x — Next 16 (^19.2.0) is unaffected; the web
+  # production build gate on this PR proves it. Re-pin in lockstep whenever
+  # react-native's bundled renderer version changes on an SDK bump.
+  react: 19.2.3
+  react-dom: 19.2.3
+  # brace-expansion <= 5.0.8: GHSA-mh99-v99m-4gvg / CVE-2026-14257, then
+  # GHSA-rgw5-rvv9-x895 / CVE-2026-69152 (unbounded intermediate arrays,
+  # bypassing the 5.0.8 mitigation — found on PR #3893's OSV scan). Floor
+  # every transitive line to the current patched release, 5.0.9.
+  'brace-expansion@<=5.0.8': '5.0.9'
+  # GHSA-vcc3-ghjq-m6fr (Dependabot #156): malformed percent-encoded input
+  # stalls decode-uri-component <=0.4.2. Keep the patched algorithm on 0.5.0;
+  # its module-format-only patch preserves query-string 7's CommonJS contract.
+  'decode-uri-component@<0.5.0': '0.5.0'
+  # @types/node: first-party workspaces declare ^26, but @inngest/ai (22),
+  # @types/net-snmp (24) and docx (25) each pin an older major, so the tree
+  # resolved FOUR copies of a types-only package. Floor every older range to
+  # the workspace major (plan 2026-09-08 M7, BI-5265CAD0). Types-only: no
+  # runtime behaviour changes; typecheck across all workspaces is the proof.
+  '@types/node@<26': '^26.2.0'
+  lodash: '4.18.0'
+  postcss: '^8.5.18'
+  uuid: '^14.0.0'
+  # --- jest 30 unification (apps/mobile) ---
+  # Force the ENTIRE jest family to a single major (30) so apps/mobile runs a
+  # unified jest 30 install. jest-expo@~56 (Expo SDK 55/56) still *declares* jest
+  # 29 transitive deps; without these overrides a jest 30 bump produces a MIXED
+  # 29/30 tree (jest-runtime@30 + jest-mock@29) that breaks every mobile suite at
+  # load with "clearMocksOnScope is not a function" (see reverted PRs #1053, #1288).
+  # jest-expo's code already tolerates jest 30, so a unified 30 tree works.
+  # Keep in sync with scripts/check-mobile-jest-pin.mjs (REQUIRED_MAJOR).
+  jest: '^30.0.0'
+  jest-cli: '^30.0.0'
+  jest-config: '^30.0.0'
+  jest-runner: '^30.0.0'
+  jest-runtime: '^30.0.0'
+  jest-circus: '^30.0.0'
+  jest-snapshot: '^30.0.0'
+  jest-mock: '^30.0.0'
+  jest-each: '^30.0.0'
+  jest-util: '^30.0.0'
+  jest-message-util: '^30.0.0'
+  jest-resolve: '^30.0.0'
+  jest-resolve-dependencies: '^30.0.0'
+  jest-haste-map: '^30.0.0'
+  jest-environment-node: '^30.0.0'
+  jest-environment-jsdom: '^30.0.0'
+  jest-validate: '^30.0.0'
+  jest-watcher: '^30.0.0'
+  jest-worker: '^30.0.0'
+  jest-regex-util: '^30.0.0'
+  jest-docblock: '^30.0.0'
+  jest-changed-files: '^30.0.0'
+  jest-leak-detector: '^30.0.0'
+  babel-jest: '^30.0.0'
+  expect: '^30.0.0'
+  pretty-format: '^30.0.0'
+  '@jest/globals': '^30.0.0'
+  '@jest/types': '^30.0.0'
+  '@jest/core': '^30.0.0'
+  '@jest/reporters': '^30.0.0'
+  '@jest/transform': '^30.0.0'
+  '@jest/test-sequencer': '^30.0.0'
+  '@jest/console': '^30.0.0'
+  '@jest/environment': '^30.0.0'
+  '@jest/fake-timers': '^30.0.0'
+  '@jest/source-map': '^30.0.0'
+  '@jest/test-result': '^30.0.0'
+  '@jest/expect': '^30.0.0'
+  '@jest/expect-utils': '^30.0.0'
+  '@jest/schemas': '^30.0.0'
+  '@jest/create-cache-key-function': '^30.0.0'
+  jest-watch-typeahead: '^3.0.0'
+
+patchedDependencies:
+  decode-uri-component@0.5.0: ../../patches/decode-uri-component@0.5.0.patch
+
+# Build-script decisions, carried from the root workspace so the split changes
+# nothing about what runs on install. The build-script policy guard reads this
+# file too.
+allowBuilds:
+  # 2.6.0 loads optional prebuilt binaries on supported Windows/macOS/Linux.
+  # Its install hook only runs node-gyp for npm_config_build_from_source=true.
+  # DPF uses the locked prebuilds; source-only targets need separate evaluation.
+  '@parcel/watcher': false
+  # Telemetry-only postinstall (scarf.sh). Not in this tree today; the deny
+  # stays so a future transitive cannot phone home on install.
+  '@scarf/scarf': false
+  esbuild: true
+  msw: true
+  unrs-resolver: false

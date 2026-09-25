@@ -10,8 +10,8 @@
  * broke every mobile suite at load with "clearMocksOnScope is not a function".
  *
  * The supported fix is the inverse of the old pin: force the WHOLE jest family
- * to 30 via the `overrides` block in pnpm-workspace.yaml so there is exactly one
- * jest version. (pnpm 10 reads overrides from pnpm-workspace.yaml, not the
+ * to 30 via the `overrides` block in apps/mobile/pnpm-workspace.yaml so there is exactly one
+ * jest version. (pnpm 10 reads overrides from apps/mobile/pnpm-workspace.yaml, not the
  * package.json "pnpm" field.) jest-expo's code already tolerates jest 30 even
  * though its declared ranges still say ^29, so a single unified jest 30 tree works.
  *
@@ -24,7 +24,7 @@
  *   1. If jest was bumped to a NEW major, confirm jest-expo tolerates it and the
  *      mobile suite still loads, then update REQUIRED_MAJOR here in the same PR.
  *   2. If jest regressed to 29, restore the jest 30 pin and the
- *      pnpm-workspace.yaml overrides block — do not bypass this guard.
+ *      apps/mobile/pnpm-workspace.yaml overrides block — do not bypass this guard.
  *
  * Exit codes
  * ----------
@@ -66,12 +66,12 @@ const major = Number(match[1]);
 if (major !== REQUIRED_MAJOR) {
   console.error(`ERROR: apps/mobile jest is pinned to "${declared}" (major ${major}).`);
   console.error(`The mobile suite requires a unified jest ^${REQUIRED_MAJOR}.x install`);
-  console.error("(enforced via the overrides block in pnpm-workspace.yaml).");
+  console.error("(enforced via the overrides block in apps/mobile/pnpm-workspace.yaml).");
   console.error("");
   console.error("If this is an intentional new-major bump, confirm jest-expo");
   console.error("tolerates it and the mobile suite still loads, then update");
   console.error("REQUIRED_MAJOR in scripts/check-mobile-jest-pin.mjs and the");
-  console.error("pnpm-workspace.yaml overrides in the SAME PR. Don't bypass — fix the guard.");
+  console.error("apps/mobile/pnpm-workspace.yaml overrides in the SAME PR. Don't bypass — fix the guard.");
   process.exit(1);
 }
 
