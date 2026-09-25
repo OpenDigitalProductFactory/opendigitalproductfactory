@@ -3,7 +3,13 @@ import { parseFileContent, capParsedContentSize, type ParsedFileContent } from "
 import { lazyFsPromises, lazyPath, lazyCrypto } from "./lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-const ALLOWED_EXTENSIONS = new Set(["csv", "xlsx", "pdf", "doc", "docx", "txt", "json", "md", "xml", "yaml", "yml", "tsv", "log", "ppt", "pptx", "rtf", "png", "jpg", "jpeg", "gif", "webp"]);
+// Legacy Excel and OpenDocument files are read through the document converter
+// (BI-81524041); the client picker mirrors this list (uploadAgentAttachment.ts).
+export const ALLOWED_UPLOAD_EXTENSIONS = [
+  "csv", "xlsx", "xls", "ods", "pdf", "doc", "docx", "odt", "txt", "json", "md", "xml", "yaml", "yml",
+  "tsv", "log", "ppt", "pptx", "odp", "rtf", "png", "jpg", "jpeg", "gif", "webp",
+] as const;
+const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set(ALLOWED_UPLOAD_EXTENSIONS);
 const DEFAULT_MAX_SIZE_MB = 10;
 const MAX_ATTACHMENTS_PER_THREAD = 20;
 const MAX_USER_STORAGE_BYTES = 200 * 1024 * 1024;
@@ -32,6 +38,10 @@ const MAGIC_BYTES: Record<string, number[][]> = {
   pptx: [ZIP],
   doc: [OLE, ZIP],
   ppt: [OLE],
+  xls: [OLE],
+  odt: [ZIP],
+  ods: [ZIP],
+  odp: [ZIP],
   // Image formats (screenshots / diagrams). webp is a RIFF container — we can
   // only check the RIFF prefix here; the "WEBP" fourcc at offset 8 is beyond
   // the prefix validator, but extension + RIFF + the downstream image decode

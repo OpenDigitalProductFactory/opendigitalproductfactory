@@ -1,3 +1,8 @@
+import type { ConversionResult } from "@/lib/documents/conversion/convert";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { conversionRouteFor, type ConversionFamily, type ConversionRoute } from "./office-conversion";
+
 export type ReadableFileContent = {
   type: "spreadsheet" | "document";
   summary: string;
@@ -20,7 +25,7 @@ export type UnsupportedFileContent = {
 
 export type ParsedFileContent = ReadableFileContent | UnsupportedFileContent;
 
-export type UnsupportedFileFormat = "legacy-word" | "legacy-excel" | "legacy-powerpoint" | "legacy-office" | "rtf" | "opendocument";
+export type UnsupportedFileFormat = "legacy-word" | "legacy-excel" | "legacy-powerpoint" | "legacy-office" | "rtf" | "opendocument" | "presentation";
 
 /** What the bytes say the file is, whatever its name claims. */
 export type OfficeContainer =
@@ -81,6 +86,7 @@ const UNSUPPORTED_REASONS: Record<UnsupportedFileFormat, string> = {
   "legacy-office": "This is an older Microsoft Office file (97-2003 format). DPF cannot read it yet, so its content was not extracted. Save it in a current format (.docx, .xlsx or PDF) and upload it again.",
   rtf: "This is a Rich Text (RTF) file. DPF cannot read RTF yet, so its text was not extracted. Save it as .docx, PDF or plain text and upload it again.",
   opendocument: "This is an OpenDocument file (.odt, .ods or .odp). DPF cannot read OpenDocument files yet, so its content was not extracted. Save it as .docx, .xlsx or PDF and upload it again.",
+  presentation: "This is a PowerPoint presentation (.pptx). DPF reads presentation text only through its document converter, which is not available right now, so its text was not extracted. Save it as PDF and upload it again.",
 };
 
 /** The plain-language reason for a recognised format DPF cannot read. */
@@ -127,7 +133,7 @@ function stringifySpreadsheetCell(value: unknown): string {
 }
 
 export async function parseXlsx(buffer: Buffer): Promise<ReadableFileContent> {
-  const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
+  const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/universal");
   const input = new ArrayBuffer(buffer.byteLength);
   new Uint8Array(input).set(buffer);
   const rows = await readSheet(input);
@@ -178,7 +184,7 @@ export async function parseDocx(buffer: Buffer): Promise<ReadableFileContent> {
   return base;
 }
 
-function parseTextFile(buffer: Buffer, fileName: string): ReadableFileContent {
+function parseTextFile(buffer: Buffer): ReadableFileContent {
   const text = buffer.toString("utf-8");
   return {
     type: "document",
@@ -187,14 +193,87 @@ function parseTextFile(buffer: Buffer, fileName: string): ReadableFileContent {
   };
 }
 
-export async function parseFileContent(buffer: Buffer, mimeType: string, fileName: string): Promise<ParsedFileContent | null> {
+/** The converter seam: convertDocument (S2) in production, a fake in tests. */
+export type ConvertForIngestion = (request: { input: Buffer; from: string; to: ConversionRoute["to"] }) => Promise<ConversionResult>;
+
+export type ParseFileDeps = { convert?: ConvertForIngestion };
+
+const defaultConvert: ConvertForIngestion = async (request) => {
+  const { convertDocument } = await import("@/lib/documents/conversion/convert");
+  return convertDocument(request);
+};
+
+const RESAVE_ADVICE: Record<ConversionFamily, string> = {
+  word: "Save it as .docx or PDF and upload it again.",
+  sheet: "Save it as .xlsx or CSV and upload it again.",
+  slides: "Save it as PDF and upload it again.",
+};
+
+function conversionFailedReason(route: ConversionRoute, why: string): string {
+  return `DPF could not convert this file${why}. ${RESAVE_ADVICE[route.family]}`;
+}
+
+function unsupportedWithReason(format: UnsupportedFileFormat, reason: string): UnsupportedFileContent {
+  return { type: "unsupported", format, reason, summary: reason };
+}
+
+/**
+ * Run one routed file through the converter: the converted bytes, or the
+ * plain-language reason it could not be read. With no converter that reason is
+ * S0's; any other failure is named, and the technical detail goes to the log,
+ * never to the person (BI-81524041).
+ */
+export async function convertForIngestion(
+  buffer: Buffer,
+  route: ConversionRoute,
+  convert: ConvertForIngestion = defaultConvert,
+): Promise<ActionResult<Buffer>> {
+  let result: ConversionResult;
+  try {
+    result = await convert({ input: buffer, from: route.from, to: route.to });
+  } catch (error) {
+    result = { ...err(getErrorMessage(error)), reason: "conversion-failed" };
+  }
+  if (result.ok) return ok(result.data.bytes);
+  if (result.reason !== "converter-unavailable") {
+    console.warn(`[file-parsers] ${route.from} -> ${route.to} conversion failed (${result.reason}): ${result.error}`);
+  }
+  switch (result.reason) {
+    case "converter-unavailable":
+      return err(describeUnsupportedFormat(route.fallback));
+    case "input-too-large":
+      return err(conversionFailedReason(route, " because it is larger than the document converter accepts"));
+    case "timeout":
+      return err(conversionFailedReason(route, " because the conversion took too long"));
+    default:
+      return err(conversionFailedReason(route, "; it may be damaged or password-protected"));
+  }
+}
+
+async function parseConverted(buffer: Buffer, route: ConversionRoute, convert?: ConvertForIngestion): Promise<ParsedFileContent> {
+  const converted = await convertForIngestion(buffer, route, convert);
+  if (!converted.ok) return unsupportedWithReason(route.fallback, converted.error);
+  try {
+    if (route.to === "docx") return await parseDocx(converted.data);
+    if (route.to === "xlsx") return await parseXlsx(converted.data);
+    return parseTextFile(converted.data);
+  } catch (error) {
+    console.warn(`[file-parsers] converted ${route.from} -> ${route.to} could not be parsed: ${getErrorMessage(error)}`);
+    return unsupportedWithReason(route.fallback, conversionFailedReason(route, "; it may be damaged or password-protected"));
+  }
+}
+
+export async function parseFileContent(buffer: Buffer, mimeType: string, fileName: string, deps: ParseFileDeps = {}): Promise<ParsedFileContent | null> {
   const ext = fileName.split(".").pop()?.toLowerCase();
   // The bytes decide before the name does: a real .doc is an OLE file mammoth
   // cannot read, RTF would otherwise be stored as control words, and a .docx
-  // renamed .doc is still a .docx (BI-65D65EC0).
+  // renamed .doc is still a .docx (BI-65D65EC0). Legacy, RTF, OpenDocument and
+  // presentation files are converted to a format an existing parser reads
+  // first; with no converter they keep S0's unsupported result (BI-81524041).
   const container = sniffOfficeContainer(buffer);
+  const route = conversionRouteFor(container, buffer, fileName);
+  if (route) return parseConverted(buffer, route, deps.convert);
   if (container.kind === "ole") return unsupportedFileContent(container.format);
-  if (container.kind === "rtf") return unsupportedFileContent("rtf");
   if (container.kind === "odf") return unsupportedFileContent("opendocument");
   if (container.kind === "ooxml" && container.part === "word") return parseDocx(buffer);
   if (mimeType === "text/csv" || ext === "csv" || ext === "tsv") return parseCsv(buffer);
@@ -202,8 +281,8 @@ export async function parseFileContent(buffer: Buffer, mimeType: string, fileNam
   if (mimeType === "application/pdf" || ext === "pdf") return parsePdf(buffer);
   if (ext === "docx" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return parseDocx(buffer);
   // Text-based formats
-  if (ext && ["txt", "json", "md", "xml", "yaml", "yml", "log"].includes(ext)) return parseTextFile(buffer, fileName);
-  if (mimeType?.startsWith("text/")) return parseTextFile(buffer, fileName);
+  if (ext && ["txt", "json", "md", "xml", "yaml", "yml", "log"].includes(ext)) return parseTextFile(buffer);
+  if (mimeType?.startsWith("text/")) return parseTextFile(buffer);
   return null;
 }
 
