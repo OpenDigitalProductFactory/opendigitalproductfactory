@@ -155,7 +155,45 @@ describe("mint + consume", () => {
     if (!minted.issued) throw new Error("expected a link");
     const token = decodeURIComponent(minted.path.split("token=")[1]!);
     await expect(consumeAutomationSignIn(token, deps)).resolves.toMatchObject({ accepted: true });
-    await expect(consumeAutomationSignIn(token, deps)).resolves.toEqual({ accepted: false, reason: "token-already-used" });
+    await expect(consumeAutomationSignIn(token, deps)).resolves.toMatchObject({ accepted: false, reason: "token-already-used" });
+  });
+
+  it("tells the caller which session an already-used link belongs to, so the redirect can be replayed", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn(
+      { nextPath: "/platform/federation-links", baseUrl: "http://portal:3000", requestedBy: "mcp:test" },
+      deps,
+    );
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+
+    const first = await consumeAutomationSignIn(token, deps);
+    if (!first.accepted) throw new Error("expected the first exchange to be accepted");
+
+    const second = await consumeAutomationSignIn(token, deps);
+    expect(second).toMatchObject({
+      accepted: false,
+      reason: "token-already-used",
+      replay: { sub: first.claims.sub, nextPath: "/platform/federation-links" },
+    });
+  });
+
+  it("offers no replay for any refusal other than an already-used link", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+
+    const expired = await consumeAutomationSignIn(token, { ...deps, now: () => new Date(at.getTime() + 11 * 60 * 1000) });
+    const tampered = await consumeAutomationSignIn(`${token}x`, deps);
+    const production = await consumeAutomationSignIn(token, { ...deps, readText: installState("production") });
+    for (const refusal of [expired, tampered, production]) {
+      expect(refusal.accepted).toBe(false);
+      if (refusal.accepted) continue;
+      expect(refusal.replay).toBeUndefined();
+    }
   });
 
   it("refuses an expired link, a tampered link and a link for a production installation", async () => {

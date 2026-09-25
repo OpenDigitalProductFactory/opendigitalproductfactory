@@ -219,9 +219,21 @@ export interface AutomationSessionClaims {
   contactId: null;
 }
 
+/**
+ * What a refused exchange still knows about the token it refused. Present only
+ * for `token-already-used`, where the token was well-formed and single use is
+ * the only thing standing in the way: the caller may replay the redirect for a
+ * browser that already holds the session this token created (BI-D146D071).
+ * Absent for every other refusal, so no other reason can be replayed.
+ */
+export interface AutomationSignInReplay {
+  sub: string;
+  nextPath: string;
+}
+
 export type ConsumeAutomationSignInResult =
   | { accepted: true; claims: AutomationSessionClaims; nextPath: string }
-  | { accepted: false; reason: string };
+  | { accepted: false; reason: string; replay?: AutomationSignInReplay };
 
 /**
  * Exchange a one-time token for session claims. Verifies signature, purpose and
@@ -254,7 +266,13 @@ export async function consumeAutomationSignIn(
   if (!permission.permitted) return { accepted: false, reason: permission.because };
 
   const consumed = await markConsumed(db, jti, exp, now);
-  if (!consumed) return { accepted: false, reason: "token-already-used" };
+  if (!consumed) {
+    return {
+      accepted: false,
+      reason: "token-already-used",
+      replay: { sub: userId, nextPath: sanitizeNextPath(typeof payload["next"] === "string" ? payload["next"] : undefined) },
+    };
+  }
 
   const user = await db.user.findUnique({
     where: { id: userId },
