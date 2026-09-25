@@ -18,7 +18,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { demandScoringPack } from "./demand-scoring-pack";
-import { BUILD_WIP_CAP } from "@/lib/build/wip-cap";
+import { sandboxPoolSize } from "@/lib/build/wip-cap";
 
 const setBudget = demandScoringPack.handlers["set_backlog_delivery_budget"]!;
 
@@ -50,7 +50,7 @@ describe("set_backlog_delivery_budget", () => {
       dailyBudget: 7,
       enabled: true,
       activeBuilds: 1,
-      buildWipCap: BUILD_WIP_CAP,
+      sandboxPoolSize: sandboxPoolSize(),
     });
     expect(result.message).toMatch(/^Backlog delivery budget is 7\/day/);
   });
@@ -107,30 +107,19 @@ describe("set_backlog_delivery_budget", () => {
     expect(result.data).toMatchObject({ dailyBudget: 3, enabled: false });
   });
 
-  it("warns when the shared Build Studio sandbox is already at its WIP cap", async () => {
+  it("separates intake, admission and execution in its parallelism note (BI-3430B3A4)", async () => {
     db.platformDevConfigFindUnique.mockResolvedValue({
       backlogTeeUpDailyCap: 20,
       governedBacklogEnabled: true,
     });
-    db.featureBuildCount.mockResolvedValue(BUILD_WIP_CAP);
+    db.featureBuildCount.mockResolvedValue(5);
 
     const result = await setBudget({ dailyBudget: 20 }, "user-1", undefined);
 
-    expect(result.message).toMatch(/already at its.*execution limit/);
-    expect(result.message).toMatch(/external worktree builds/);
-  });
-
-  it("does not report a saturation warning with headroom under the WIP cap", async () => {
-    db.platformDevConfigFindUnique.mockResolvedValue({
-      backlogTeeUpDailyCap: 10,
-      governedBacklogEnabled: true,
-    });
-    db.featureBuildCount.mockResolvedValue(BUILD_WIP_CAP - 1);
-
-    const result = await setBudget({ dailyBudget: 10 }, "user-1", undefined);
-
-    expect(result.message).not.toMatch(/already at its/);
-    expect(result.message).toMatch(new RegExp(`${BUILD_WIP_CAP - 1}/${BUILD_WIP_CAP} of Build Studio's shared-sandbox`));
+    expect(result.message).toMatch(/5 Build Studio build\(s\) are active/);
+    expect(result.message).toMatch(new RegExp(`sandbox pool executes ${sandboxPoolSize()} at a time`));
+    expect(result.message).toMatch(/admitted by its portfolio's points in flight/);
+    expect(result.message).not.toMatch(/WIP cap|BUILD_WIP_CAP/);
   });
 });
 

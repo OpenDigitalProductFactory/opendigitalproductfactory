@@ -30,7 +30,6 @@ import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 
 import type { EndpointTestRunRequest, ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-import type { UnifiedWipDb } from "@/lib/build/unified-wip-query";
 
 const definitions: ToolDefinition[] = [
   {
@@ -163,7 +162,11 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
-async function promoteToBuildStudioHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+async function promoteToBuildStudioHandler(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: { agentId?: string; threadId?: string; taskRunId?: string; apiTokenId?: string },
+): Promise<ToolResult> {
   const itemId = String(params["itemId"] ?? "");
   const force = params["force"] === true;
   const governedConfig = await prisma.platformDevConfig.findUnique({
@@ -201,22 +204,23 @@ async function promoteToBuildStudioHandler(params: Record<string, unknown>, user
     }
   }
 
-  // WIP cap (BI-937128F6; shared with the createFeatureBuild start path): refuse
-  // to promote another build into Build Studio while the shared BS sandbox pool
-  // is saturated. Pressure is now the unified, pool-aware count across ALL
-  // surfaces' active WIP — a promote contends on the bs-sandbox pool, so it gates
-  // on that pool (capacity BUILD_WIP_CAP, unchanged), not a BS-only build count.
+  // Admission by points in flight (BI-3430B3A4) replaces the count cap: the
+  // item's portfolio must have room for its points. A person promoting past the
+  // allowance proceeds with a recorded warning; an autonomous caller is refused.
+  // The sandbox pool stays the machine's physical limit, enforced on acquire.
+  let admissionWarning: string | null = null;
   {
-    const { decideUnifiedWip, BuildWipCapError } = await import("@/lib/build/wip-cap");
-    const { loadActiveUnifiedWip, poolPressure } = await import(
-      "@/lib/build/unified-wip-query"
-    );
-    const wip = await loadActiveUnifiedWip(prisma as unknown as UnifiedWipDb);
-    const decision = decideUnifiedWip("bs-sandbox", poolPressure(wip, "bs-sandbox"));
-    if (!decision.admitted) {
-      const err = new BuildWipCapError(decision.pressure, decision.capacity);
-      return { success: false, error: "wip_cap_reached", message: err.message };
+    const { evaluateItemAdmission, recordAdmissionOutcome } = await import("@/lib/build/investment-admission");
+    const { isAutonomousCaller } = await import("@/lib/portfolio/budget-reservation");
+    const admission = await evaluateItemAdmission(prisma as never, {
+      itemId,
+      startKind: isAutonomousCaller(context) ? "autonomous" : "human",
+    });
+    await recordAdmissionOutcome(prisma as never, admission, { source: "promote_to_build_studio", userId, agentId: context?.agentId ?? null });
+    if (admission.verdict === "refuse") {
+      return { success: false, error: "wip_allowance_reached", message: admission.reason, data: { admission } };
     }
+    if (admission.verdict === "warn") admissionWarning = admission.reason;
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -260,13 +264,14 @@ async function promoteToBuildStudioHandler(params: Record<string, unknown>, user
   return {
     success: true,
     entityId: result.build.buildId,
-    message: result.autoApprovedDispatchEligible
+    message: (result.autoApprovedDispatchEligible
       ? `Promoted ${itemId} to Build Studio (auto-approved under governed flow — Ideate research dispatched)`
-      : `Promoted ${itemId} to Build Studio`,
+      : `Promoted ${itemId} to Build Studio`) + (admissionWarning ? ` Warning: ${admissionWarning}` : ""),
     data: {
       buildId: result.build.buildId,
       backlogItemId: itemId,
       autoApprovedDispatchEligible: result.autoApprovedDispatchEligible,
+      admissionWarning,
     },
   };
 }
@@ -555,7 +560,7 @@ async function generateCodeHandler(): Promise<ToolResult> {
 }
 
 const handlers: Record<string, ToolPackHandler> = {
-  promote_to_build_studio: (params, userId) => promoteToBuildStudioHandler(params, userId),
+  promote_to_build_studio: (params, userId, context) => promoteToBuildStudioHandler(params, userId, context),
   abandon_stalled_build: (params, userId) => abandonStalledBuildHandler(params, userId),
   update_lifecycle: (params) => updateLifecycleHandler(params),
   verify_live_install_readiness: (params) => verifyLiveInstallReadinessHandler(params),

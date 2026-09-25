@@ -136,17 +136,20 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
     select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true },
   });
 
-  const { BUILD_WIP_CAP, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
+  const { sandboxPoolSize, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
   const activeBuilds = await prisma.featureBuild.count({
     where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
   });
 
   const dailyBudget = fresh?.backlogTeeUpDailyCap ?? 3;
   const enabled = fresh?.governedBacklogEnabled === true;
+  // Intake budget, admission and execution are three different limits: this
+  // budget sets intake per day; each start is admitted by its portfolio's points
+  // in flight (BI-3430B3A4); the sandbox pool is the physical execution limit.
+  const poolSize = sandboxPoolSize();
   const parallelismNote =
-    activeBuilds >= BUILD_WIP_CAP
-      ? ` Build Studio's shared sandbox is already at its ${BUILD_WIP_CAP}-build execution limit (${activeBuilds} active) — new intake will queue behind it, not run in parallel. For more parallel throughput, use external worktree builds (unbounded — AGENTS.md §17), not a bigger budget.`
-      : ` ${activeBuilds}/${BUILD_WIP_CAP} of Build Studio's shared-sandbox execution slots are in use.`;
+    ` ${activeBuilds} Build Studio build(s) are active; the sandbox pool executes ${poolSize} at a time and queues the rest.` +
+    " Each start is admitted by its portfolio's points in flight, not by this budget. For more parallel throughput, use external worktree builds, not a bigger budget.";
 
   return {
     success: true,
@@ -155,7 +158,7 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
       Object.keys(data).length > 0
         ? `Backlog delivery budget set to ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`
         : `Backlog delivery budget is ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`,
-    data: { dailyBudget, enabled, activeBuilds, buildWipCap: BUILD_WIP_CAP },
+    data: { dailyBudget, enabled, activeBuilds, sandboxPoolSize: poolSize },
   };
 }
 
@@ -336,7 +339,7 @@ export async function approveDemandForFundingHandler(
   const reservationPlan = await budgetReservation.planFundingReservation(prisma as never, {
     itemId,
     now: new Date(),
-    autonomous: budgetReservation.isAutonomousFundingCaller(context),
+    autonomous: budgetReservation.isAutonomousCaller(context),
     overrideReason: typeof params["overrideReason"] === "string" ? params["overrideReason"] : null,
   });
   if (reservationPlan.kind === "refuse") {

@@ -332,22 +332,15 @@ describe("governed build start approvals", () => {
     expect(mockPrisma.buildPhaseRun.upsert).not.toHaveBeenCalled();
   });
 
-  it("createFeatureBuild RETURNS (not throws) the WIP-cap error so its message reaches the client", async () => {
-    // In production, a thrown Server-Action error has its message stripped to a
-    // generic digest, so the operator would never see "you already have 3 builds
-    // in progress" — they'd see a scary render error. Locking in the returned-value
-    // contract keeps the plain-English message intact across the RSC boundary.
-    mockPrisma.featureBuild.count.mockResolvedValue(3); // at the cap (BUILD_WIP_CAP)
+  it("createFeatureBuild no longer refuses on a count of active builds (BI-3430B3A4)", async () => {
+    // The count cap is retired. A build started from a title has no backlog item,
+    // so there is no investment to admit; the sandbox pool stays the physical
+    // limit on acquire. Many active builds do not stop a start.
+    mockPrisma.featureBuild.count.mockResolvedValue(99);
 
-    const result = await createFeatureBuild({ title: "One build too many" });
+    const result = await createFeatureBuild({ title: "Started past the old cap" });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected the WIP cap to reject the build");
-    expect(result.code).toBe("BUILD_WIP_CAP_REACHED");
-    expect(result.error).toContain("3 builds in progress");
-    // Rejected before any DB write — no build row, no work capsule.
-    expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
-    expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
+    expect(result.ok === false && result.code === "BUILD_WIP_CAP_REACHED").toBe(false);
   });
 
   it("updateBusinessBuildBrief persists business edits and accepts a complete brief", async () => {

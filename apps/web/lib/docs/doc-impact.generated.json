@@ -632,6 +632,9 @@
     "apps/web/lib/build/ideate-build-resolution.ts": [
       "docs/dogfood/2026-05-23-dale-hvac-build-studio.md"
     ],
+    "apps/web/lib/build/investment-admission.ts": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -2583,6 +2586,7 @@
       "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/agent-client-capability-parity.md": [
+      "apps/web/lib/build/investment-admission.ts",
       "apps/web/lib/build/unified-wip-query.ts",
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/deliberation/external-review-activation.ts",

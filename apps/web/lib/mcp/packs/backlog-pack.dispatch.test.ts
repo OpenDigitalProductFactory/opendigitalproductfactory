@@ -73,6 +73,11 @@ vi.mock("@/lib/queue/inngest-client", () => ({
 // "Closing rpc while \"onUserConsoleLog\" was pending" EnvironmentTeardownError.
 // Stubbing the dispatch makes the detached promise resolve quietly so nothing
 // logs during teardown.
+// Admission by points in flight (BI-3430B3A4) has its own tests; admit here.
+vi.mock("@/lib/build/investment-admission", () => ({
+  evaluateItemAdmission: async () => ({ verdict: "admit", reason: "fits" }),
+  recordAdmissionOutcome: async () => undefined,
+}));
 vi.mock("@/lib/build/ideate-on-approval", () => ({
   dispatchIdeateForApprovedBuild: vi.fn().mockResolvedValue(undefined),
 }));
