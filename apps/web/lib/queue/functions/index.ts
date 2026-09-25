@@ -11,6 +11,7 @@ import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
 import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
+import { documentRenditionBackfill, documentRenditionGenerate } from "./document-renditions";
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
 import { agentTaskDispatch } from "./agent-task-dispatch";
@@ -256,6 +257,8 @@ export const eventFunctions = [
   deliberationRun,
   governedBacklogTeeUpRequested,
   issueReportProjectOnCreate,
+  documentRenditionGenerate, // BI-9D43CBEF: office file saved -> PDF + text renditions, indexed
+  documentRenditionBackfill, // BI-9D43CBEF: bounded sweep when the converter becomes available
   contributorInventorySyncOnDemand,
   gitPromotionSandboxVerification,
   postgresBackupRequested,

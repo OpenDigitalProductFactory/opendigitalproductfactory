@@ -2383,6 +2383,14 @@
     "longSentences": 0,
     "textMass": 4
   },
+  "apps/web/app/(shell)/workspace/documents/[documentId]/DocumentFilePanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
   "apps/web/app/(shell)/workspace/documents/[documentId]/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

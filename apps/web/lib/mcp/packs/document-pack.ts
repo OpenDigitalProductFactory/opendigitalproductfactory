@@ -34,10 +34,28 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
   return userPrincipal?.id ?? null;
 }
 
+/** Largest binary doc_save accepts inline as contentBase64 (BI-9D43CBEF). */
+export const DOCUMENT_BINARY_SAVE_LIMIT_BYTES = 20 * 1024 * 1024;
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+
+type DecodedBinary = { ok: true; bytes: Buffer } | { ok: false; error: string };
+
+function decodeContentBase64(value: string): DecodedBinary {
+  const compact = value.replace(/\s+/g, "");
+  if (compact.length === 0 || compact.length % 4 !== 0 || !BASE64_PATTERN.test(compact)) {
+    return { ok: false, error: "contentBase64 is not valid base64." };
+  }
+  const bytes = Buffer.from(compact, "base64");
+  if (bytes.byteLength > DOCUMENT_BINARY_SAVE_LIMIT_BYTES) {
+    return { ok: false, error: `contentBase64 decodes to ${bytes.byteLength} bytes; the limit is ${DOCUMENT_BINARY_SAVE_LIMIT_BYTES}.` };
+  }
+  return { ok: true, bytes };
+}
+
 const definitions: ToolDefinition[] = [
   {
     name: "doc_save",
-    description: "Create a managed document or append a new version. Use for coworker-authored briefs, policies, plans, and other durable non-code artifacts that need stable references, lifecycle, search, and version history.",
+    description: "Create a managed document or append a new version. Use for coworker-authored briefs, policies, plans, and other durable non-code artifacts that need stable references, lifecycle, search, and version history. An office file (Word, Excel, PowerPoint, OpenDocument, RTF) saved as contentBase64 with its MIME type gets PDF and plain-text renditions in the background, which make its body text searchable.",
     inputSchema: {
       type: "object",
       properties: {
@@ -47,6 +65,7 @@ const definitions: ToolDefinition[] = [
         contentFormat: { type: "string", description: "MIME-ish format, e.g. text/markdown, text/plain, text/html, application/pdf." },
         contentText: { type: "string", description: "Inline content for text documents under the inline storage limit." },
         contentBlobId: { type: "string", description: "DocumentBlob id for larger or binary content." },
+        contentBase64: { type: "string", description: `Binary content (for example a .docx or .pptx), base64-encoded, up to ${DOCUMENT_BINARY_SAVE_LIMIT_BYTES / (1024 * 1024)} MB. Stored as a DocumentBlob; set contentFormat to the file's MIME type. Use instead of contentText and contentBlobId.` },
         contentSha256: { type: "string", description: "SHA-256 of the content when known." },
         summary: { type: "string", description: "Version change summary or abstract." },
         tags: { type: "array", items: { type: "string" }, description: "Searchable tags." },
@@ -186,6 +205,21 @@ async function docSave(
   const {
     saveManagedDocument,
   } = await import("@/lib/documents/document-store");
+  const contentBase64 = optionalString(params["contentBase64"]);
+  let contentBlobId = optionalString(params["contentBlobId"]);
+  let contentSha256 = optionalString(params["contentSha256"]);
+  if (contentBase64) {
+    if (optionalString(params["contentText"]) || contentBlobId) {
+      const error = "Provide only one of contentText, contentBlobId or contentBase64.";
+      return { success: false, message: error, error };
+    }
+    const decoded = decodeContentBase64(contentBase64);
+    if (!decoded.ok) return { success: false, message: decoded.error, error: decoded.error };
+    const { storeDocumentBlob } = await import("@/lib/documents/blob-storage");
+    const blob = await storeDocumentBlob({ content: decoded.bytes, mimeType: optionalString(params["contentFormat"]) });
+    contentBlobId = blob.id;
+    contentSha256 = blob.sha256;
+  }
   const actorPrincipalId = await resolveDocumentActorPrincipalId(userId, context?.agentId);
   const references = Array.isArray(params["references"])
     ? params["references"].flatMap((entry) => {
@@ -208,8 +242,8 @@ async function docSave(
     documentKind: String(params["documentKind"] ?? ""),
     contentFormat: String(params["contentFormat"] ?? ""),
     contentText: optionalString(params["contentText"]),
-    contentBlobId: optionalString(params["contentBlobId"]),
-    contentSha256: optionalString(params["contentSha256"]),
+    contentBlobId,
+    contentSha256,
     summary: optionalString(params["summary"]),
     tags: stringArray(params["tags"]),
     references,
@@ -242,7 +276,12 @@ async function docLoad(params: Record<string, unknown>): Promise<ToolResult> {
     success: true,
     entityId: document.documentId,
     message: `Loaded document ${document.documentId}.`,
-    data: { document: document as unknown as Record<string, unknown> },
+    // Renditions of the loaded version (BI-9D43CBEF): a PDF and a plain-text
+    // projection of an office file, once the rendition job has run.
+    data: {
+      document: document as unknown as Record<string, unknown>,
+      renditions: document.currentVersion?.renditions ?? [],
+    },
   };
 }
 
