@@ -15,6 +15,7 @@
 
 import { prisma } from "@dpf/db";
 import { ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
+import { isRecord } from "@/lib/shared/coerce";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { renderDocument, type RenderDocumentRequest, type RenderResult, type RenderedDocument } from "./render";
 import { saveRenderedDocument, type SavedRender } from "./render-store";
@@ -149,10 +150,6 @@ export function outlineToDeckSpec(outline: PresentationOutline): DeckSpec {
     fields: Object.keys(fields).length > 0 ? fields : undefined,
     slides: (outline.slides ?? []).map((slide, index) => toDeckSlide(slide, index, outline)),
   }) as DeckSpec;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** The outline's own shape; each slide's content is checked by the deck spec. */

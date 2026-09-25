@@ -1,6 +1,6 @@
 ---
 name: create-presentation
-description: "Draft a branded presentation from the organization's marketing playbook and brand, then revise it on feedback by regenerating."
+description: "Produce and revise branded presentations."
 # Agent Skills standard fields (Surface A: Claude Code)
 disable-model-invocation: false
 user-invocable: true

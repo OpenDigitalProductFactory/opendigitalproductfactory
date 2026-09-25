@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-38FCA318FC23",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/workspace/documents/[documentId]/DocumentPagePreviews.tsx",
-      "apps/web/app/(shell)/workspace/documents/[documentId]/page.tsx"
+      "apps/web/app/(shell)/workspace/documents/[documentId]/DocumentPagePreviews.tsx"
     ]
   },
   "evidence": {
