@@ -409,26 +409,12 @@ describe("governed backlog tee-up", () => {
     );
   });
 
-  it("refuses a candidate past its portfolio's points-in-flight allowance and returns the reason (BI-3430B3A4 AC-2)", async () => {
-    mockPrisma.backlogItem.findMany.mockResolvedValue([
-      {
-        id: "backlog-large", itemId: "BI-LARGE-1", title: "Large work", body: "b", status: "open",
-        triageOutcome: "build", effortSize: "large", activeBuildId: null, digitalProductId: null,
-        portfolioId: "portfolio-1", epicId: null, createdAt: new Date("2026-04-24T10:00:00.000Z"), epic: null,
-      },
-    ]);
+  it("refuses a candidate past its portfolio's points-in-flight allowance with the reason (BI-3430B3A4 AC-2)", async () => {
+    mockPrisma.backlogItem.findMany.mockResolvedValue([{ id: "r", itemId: "BI-LARGE-1", title: "t", body: "b", status: "open", triageOutcome: "build", effortSize: "large", activeBuildId: null, digitalProductId: null, portfolioId: "p1", epicId: null, createdAt: new Date("2026-04-24T10:00:00.000Z"), epic: null }]);
     const { runGovernedBacklogTeeUp } = await import("./governed-backlog-tee-up");
-    const result = await runGovernedBacklogTeeUp({
-      prisma: mockPrisma,
-      userId: "user-1",
-      trigger: "daily",
-      admit: async () => ({ verdict: "refuse" as const, reason: "Starting this takes the portfolio to 16 of 8 points in flight (8 over)." }),
-    });
-    expect(result).toMatchObject({
-      createdCount: 0,
-      skippedCount: 1,
-      refused: [{ backlogItemId: "BI-LARGE-1", reason: expect.stringContaining("16 of 8 points") }],
-    });
+    const reason = "Starting this takes the portfolio to 16 of 8 points in flight (8 over).";
+    const result = await runGovernedBacklogTeeUp({ prisma: mockPrisma, userId: "user-1", trigger: "daily", admit: async () => ({ verdict: "refuse" as const, reason }) });
+    expect(result).toMatchObject({ createdCount: 0, skippedCount: 1, refused: [{ backlogItemId: "BI-LARGE-1", reason }] });
     expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
   });
 

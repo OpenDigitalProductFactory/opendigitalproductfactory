@@ -71,16 +71,10 @@ vi.mock("@/lib/queue/inngest-client", () => ({
 // console.error *after* the test has returned — surfacing during worker
 // teardown as the intermittent
 // "Closing rpc while \"onUserConsoleLog\" was pending" EnvironmentTeardownError.
+vi.mock("@/lib/build/investment-admission", () => ({ evaluateItemAdmission: async () => ({ verdict: "admit", reason: "fits" }), recordAdmissionOutcome: async () => undefined })); // BI-3430B3A4
 // Stubbing the dispatch makes the detached promise resolve quietly so nothing
 // logs during teardown.
-// Admission by points in flight (BI-3430B3A4) has its own tests; admit here.
-vi.mock("@/lib/build/investment-admission", () => ({
-  evaluateItemAdmission: async () => ({ verdict: "admit", reason: "fits" }),
-  recordAdmissionOutcome: async () => undefined,
-}));
-vi.mock("@/lib/build/ideate-on-approval", () => ({
-  dispatchIdeateForApprovedBuild: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/lib/build/ideate-on-approval", () => ({ dispatchIdeateForApprovedBuild: vi.fn().mockResolvedValue(undefined) }));
 
 // Same detached-async hazard as above: every backlog status transition now fires
 // a fire-and-forget `void (async () => …)()` that bridges the item to a WorkItem
