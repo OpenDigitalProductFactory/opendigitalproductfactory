@@ -62,9 +62,45 @@ The analysis tiers duplicate package versions so signal separates from noise:
   `^4`, `undici` `^8`, `@types/node` `^26`); extra versions are transitive.
 
 `scripts/sbom/check-sbom-drift.mjs` (`pnpm check:sbom-drift`) **hard-fails a PR**
-that introduces a *new* Tier-1 split (`SBOM Divergence Guard` job in `ci.yml`),
-and reports deltas for the rest. Accepted splits live in `sbom/baseline.json`;
-ratchet down as they're fixed (`--update-baseline` to accept intentionally).
+that introduces a *new* Tier-1 split (`SBOM Divergence Guard` job in `ci.yml`).
+Accepted splits live in `sbom/baseline.json`; ratchet down as they're fixed
+(`--update-baseline` to accept intentionally).
+
+### Shape budgets (the surface only shrinks)
+
+The same guard also **hard-fails a PR that pushes the dependency shape above its
+budget**. `sbom/baseline.json` carries `budgets` for four totals: resolved
+components, duplicated names, excess instances and multi-major names. Before
+the budgets, the totals were informational only. Between 2026-09-08 and
+2026-09-25 they regrew by 34 components and 19 duplicated names while every
+other gate was green.
+
+- **Lowering is automatic.** `--update-baseline` moves each budget down to the
+  current total and never up. Run it in any PR that removes or dedupes packages.
+- **Raising is a recorded decision.** `--raise-budget "<reason>"` moves the
+  budgets to the current totals and writes the reason into `lastBudgetRaise`,
+  so reviewers see it in the diff. Name what the growth retires, or why nothing
+  can ([absorb, don't adopt](../founder-kernel/wiki/principles/absorb-dont-adopt.md)).
+- **Try `pnpm dedupe` first.** A routine Dependabot bump often leaves a
+  same-major duplicate behind, and dedupe clears it without new packages.
+
+### Pruning overrides
+
+An override that no longer changes resolution is dead weight in the control
+surface. The per-floor prune screen is empirical: drop one entry, resolve with
+`pnpm install --lockfile-only` against a fresh store, and compare the resolved
+`name@version` set with the committed lockfile. If the set is identical, the
+floor is redundant, because every consumer's range already selects a version at
+or above it. Confirm the candidates by removing them *together*, then regenerate
+with `pnpm regen:lockfile`.
+
+Do not compare lockfile bytes. Re-resolution rewrites registry deprecation text
+and peer suffixes even when no version moves.
+
+The Jest 30 unification block passes the one-at-a-time screen but fails the
+joint one: without it, jest-expo and the React Native toolchain bring Jest 29
+back. It leaves with the mobile workspace split (plan 2026-09-08 M6).
+`pnpm audit:stale-overrides` remains the advisory-side cross-check.
 
 ## Axis 2 — vulnerability & lifecycle (the local Dependabot-equivalent)
 

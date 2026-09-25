@@ -257,3 +257,95 @@ Filed 2026-09-08 under `EP-8DC217EB` (they decompose BI-C0CEB377, BET-14):
 - It does not revisit the rent-versus-own default. Nothing here vendors a library; it removes roots whose job the platform already does, and it packages what remains correctly.
 - It does not touch the CVE override floors. Those are the fix for the transitive advisories, and M8 prunes only what the audit proves redundant.
 - It does not claim compile-time gains from dependency removal. The measurement says the gain is in program shape, and M11 is scoped accordingly.
+
+## 10. Progress and re-measurement, 2026-09-25
+
+_Founder direction, 2026-09-25: too many dependencies, too much complexity, too many versions of the same component; compress, eliminate and de-risk the supply chain, and amalgamate our own source where it duplicates itself._ This section extends the plan. It does not replace it.
+
+### 10.1 Where each move stands
+
+| Move | State | Evidence |
+|---|---|---|
+| M1 production dependency set in the image | done | #5267 |
+| M2 diagram toolchain out of the workspace | mermaid half done; `docx` is still a root devDependency for four `docs:*` generators | #5253 |
+| M3 durable jobs onto Postgres | open, needs WWMD | none since 2026-09-08 |
+| M4 Prism replaced in the harness | open, needs WWMD | none |
+| M5 document cluster | partly absorbed by the office-document engine; its S9 retires mammoth, read-excel-file and pdf-parse | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md) |
+| M6 mobile workspace split | open, needs a founder decision | none |
+| M7 multi-version cleanup | first pass done (#5289); second pass in this branch | this branch |
+| M8 override prune | done in this branch | this branch |
+| M9 retired-substrate sweep | backup engines deleted | #5285 |
+| M11 step 1 separate test program | done | #5268, #5292 |
+| §7 budgets ratchet | done in this branch | this branch |
+
+### 10.2 The totals regrew because nothing held them
+
+Between the M7 pass and 2026-09-25 the lockfile grew back to 1,907 resolved components (+34 on the baseline), 216 duplicated names (+19) and 261 excess instances (+22). Every gate stayed green, because `sbom/baseline.json` totals were informational. The §7 ratchet was the missing piece. It now lands: `check-sbom-drift.mjs` fails a PR whose resolved components, duplicated names, excess instances or multi-major names exceed their budget. `--update-baseline` only lowers budgets, and raising one needs `--raise-budget "<reason>"`, recorded in the baseline for review.
+
+### 10.3 What this branch removed
+
+| Change | Effect |
+|---|---|
+| 21 overrides proven redundant by the per-floor prune screen, then jointly (resolved set identical without them): `@types/react`, `find-my-way`, `@expo/cli@0.24.24>picomatch` (the target version is no longer in the tree), `lodash-es` and `dompurify` (not in the tree at all), `node-forge`, both `protobufjs` entries, `nanoid@<3.3.18`, `ws`, `fast-uri`, `hono`, both `js-yaml` and both `@xmldom/xmldom` ranges, `qs`, `sharp`, `body-parser`, `valibot`, and `@hono/node-server` (its only consumer left with the MCP SDK below) | overrides 79 → 58 |
+| `@modelcontextprotocol/sdk` removed from `services/adp`: declared, never imported (the server writes its own JSON-RPC) | 11 packages out of the production closure |
+| `@types/pino` removed from the harness: a deprecated stub, since `pino` 10 ships its own types | 1 package |
+| `apps/mobile` `@types/react` aligned to `^19.2.18`. The `@types/react` override had hidden a real first-party split (mobile 19.2.18, web 19.3.0), because the analysis does not report override-governed names as splits | one `@types/react` |
+| `pnpm dedupe`: 27 surplus versions collapsed onto versions already in the tree, none added, among them `glob@7` and the deprecated `inflight` | see totals |
+
+| Measure | 2026-09-08 | 2026-09-25 before | After this branch |
+|---|---|---|---|
+| Resolved components | 2000 | 1907 | 1869 |
+| Duplicated names | 227 | 216 | 195 |
+| Excess instances | 291 | 261 | 235 |
+| Multi-major names | — | 124 | 121 |
+| Override entries | 78 | 79 | 58 |
+| Production closure (portal + adp + edge) | 825 | 835 | 822 |
+
+Lesson for the commons: an override can mask what the guard exists to see. Prune overrides with the empirical screen, not by reading comments, and treat a split that appears when an override leaves as a finding, not as a regression of the prune.
+
+### 10.4 What the remaining moves are worth, measured today
+
+Counterfactual: drop the named direct dependencies from the resolved graph and recount. Each row is independent. The last row drops all of them together.
+
+| Move | Resolved components | Duplicated names | Excess instances |
+|---|---|---|---|
+| now (before this branch) | 1911 | 216 | 260 |
+| M6 mobile split | 1247 (−664) | 122 (−94) | 132 |
+| M5 react-pdf + react-markdown + remark-gfm | 1772 (−139) | 210 (−6) | 251 |
+| M3 inngest | 1783 (−128) | 207 (−9) | 251 |
+| M4 Prism | 1801 (−110) | 185 (−31) | 225 |
+| M3 + M4 + M5 + M6 + docx | 797 | 65 | 67 |
+
+Most of the "too many versions of the same component" complaint traces to two roots. The Expo, React Native and Jest toolchain holds 94 of the 216 duplicated names; Prism holds 31, including three `@stoplight/types` majors and `pino@6`. M6 is the single largest lever in the plan and needs only a founder decision. M4 is the cheapest per duplicate removed.
+
+The Jest 30 block (42 of the 58 remaining overrides) passes the one-at-a-time screen but fails the joint one: with it gone, jest-expo 57 and the React Native toolchain bring Jest 29 back. A minimal subset also fails. It leaves with M6.
+
+### 10.5 New track: amalgamate first-party source (S-moves)
+
+The founder direction extends past packages to our own source. A read-only survey on 2026-09-25 counted definition sites outside test files; the S1 and S2 counts were re-measured as top-level definitions in `scripts/` and `scripts/lib/` only, so they are floors. The ranked candidates:
+
+| Move | Concern | Sites | Single home | Effort |
+|---|---|---|---|---|
+| S1 | git exec wrappers in `scripts/` with three argument orders | at least 37 files define their own top-level `git` or `runGit` | `scripts/lib/git.mjs`, from `runGit` in `scripts/lib/git-changed-files.mjs` | M, mechanical |
+| S2 | CLI argument parsing in `scripts/` | at least 22 files define their own top-level `parseArgs` | `node:util` `parseArgs` | M, mechanical |
+| S3 | hand-written `pnpm-lock.yaml` parsers | 4 (`sbom/runtime-surface`, `sbom/generate-platform-sbom`, `sbom/check-lockfile-release-age`, `lib/load-pinned-guard-typescript`) | `scripts/lib/pnpm-lock.mjs` | S |
+| S4 | canonical JSON for hashing and signing | 22 copies beside `apps/web/lib/shared/canonical-json.ts` | `@dpf/integration-shared`, so db, web and scripts share one | M. The copies differ (key collation, non-finite handling), so a switch changes hashes and needs a migration note per call site |
+| S5 | `isRecord` / `isPlainObject` | 35 | widen `check-no-local-isrecord.mjs` from `apps/web/lib` to `components/`, `packages/` and `scripts/lib` | S |
+| S6 | date, money, byte and duration formatters | 41 + 34 (12 identical `formatDateTime` in integration panels, 11 identical `formatMoney` in finance tables) | `lib/org-locale` for money and dates; `lib/shared/format.ts` for the rest | S to M |
+| S7 | `slugify` | 14 beside `lib/shared/slugify.ts` | the existing home, plus a local-copy ratchet | S |
+| S8 | hand-written MCP JSON-RPC clients in `scripts/` and packages | 7 beside `scripts/lib/mcp-client.mjs` | the existing client | S to M |
+| S9 | types redeclared outside `@dpf/types` | 13 pairs. `MeResponse` has already drifted (`platformRole: string \| null` vs `string`) | `@dpf/types`, with routes using `satisfies` | S |
+| S10 | two graph-layout engines | `dagre` in `lib/graph`, `elkjs` in `lib/ea` | one engine (elkjs already covers layered layout); a dependency removal | M, WWMD |
+| S11 | first-party range drift | `net-snmp` `^3.26.3` vs `^3.14.0`; `dotenv` `^17.2.3` vs `^17.4.2`; `@prisma/client` `^7.9.0` vs `prisma` `^7.9.1`; exact `typescript` in `repo-guard-runtime`; `bcryptjs`, `read-excel-file` and `undici` declared in several workspaces | one specifier per package, then a pnpm `catalog:` so the next drift cannot happen | S |
+
+Each S-move ships its ratchet in the same PR, in the shape the `check-no-local-*` guards already use. S1 to S3 and S5 are hygiene with no decision. S10 is an own-versus-rent call.
+
+### 10.6 Order from here
+
+1. **Decisions (no code blocked on them for long):** M6 founder yes or no; M4 and S10 `principle_decide`; M3 `principle_decide` once its research section is written.
+2. **Hygiene, no decisions, one PR each:** S11 plus a `catalog:`, S3, S5, S7, S9, then S1 and S2.
+3. **Structural:** M6 execution if approved, M4, then M3 behind BET-11, and M5 through the office-document engine's S9.
+
+### 10.7 Backlog coverage
+
+The DPF MCP server was unreachable from the session that wrote this section, so M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8), already filed. The S-moves need backlog items under `EP-8DC217EB` before they are implemented, and the next session with MCP access files them.
