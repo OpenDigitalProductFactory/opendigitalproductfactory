@@ -5575,6 +5575,14 @@
     "longSentences": 0,
     "textMass": 13
   },
+  "apps/web/components/ea/DiagramImportPanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 47
+  },
   "apps/web/components/ea/EaCanvas.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

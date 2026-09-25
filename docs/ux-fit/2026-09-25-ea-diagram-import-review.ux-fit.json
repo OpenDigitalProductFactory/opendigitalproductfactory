@@ -4,7 +4,6 @@
   "decisionInteractionId": "DI-123855D2B3FC",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/ea/views/page.tsx",
       "apps/web/components/ea/DiagramImportPanel.tsx"
     ]
   },

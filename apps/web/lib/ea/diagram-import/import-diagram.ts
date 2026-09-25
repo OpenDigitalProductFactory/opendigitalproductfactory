@@ -15,6 +15,7 @@
 import { createHash } from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ConversionResult, ConvertRequest } from "@/lib/documents/conversion/convert";
 import { parseFlatOdg, type ParsedDrawing } from "./parse-flat-odg";
 
@@ -157,7 +158,7 @@ export async function importDiagramFile(
   try {
     drawing = parseFlatOdg(flat.data.bytes.toString("utf8"));
   } catch (error) {
-    return err(`The diagram could not be read: ${error instanceof Error ? error.message : String(error)}`);
+    return err(`The diagram could not be read: ${getErrorMessage(error)}`);
   }
   const elementCount = drawing.pages.reduce((sum, page) => sum + page.elements.length, 0);
   if (elementCount === 0) return err("No labelled shapes were found in this diagram.");

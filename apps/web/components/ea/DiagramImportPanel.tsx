@@ -8,31 +8,47 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { importEaDiagram } from "@/lib/actions/ea-diagram-import";
 import { reviewReferenceProposal } from "@/lib/actions/ea";
+import { Button } from "@/components/ui/Button";
+import { Surface } from "@/components/ui/Surface";
+import { DataTable, type Column } from "@/components/ui/report-kit";
 import type { DiagramImportView } from "@/lib/ea/diagram-import/load-imports";
 
-type Props = { imports: Array<Omit<DiagramImportView, "importedAt"> & { importedAt: string }>; canManage: boolean };
+type ImportItem = Omit<DiagramImportView, "importedAt"> & { importedAt: string };
+type Props = { imports: ImportItem[]; canManage: boolean };
+type Review = (id: string, status: "approved" | "rejected") => void;
 
 const STATUS_LABEL: Record<string, string> = { proposed: "To review", approved: "Accepted", rejected: "Rejected" };
 
-function ReviewButtons({ id, status, disabled, onReview }: {
-  id: string;
-  status: string;
-  disabled: boolean;
-  onReview: (id: string, status: "approved" | "rejected") => void;
-}) {
-  const button = "rounded border px-2 py-0.5 text-[11px] disabled:opacity-50";
+function ReviewButtons({ id, status, disabled, onReview }: { id: string; status: string; disabled: boolean; onReview: Review }) {
   return (
     <span className="flex gap-1">
-      <button type="button" disabled={disabled || status === "approved"} onClick={() => onReview(id, "approved")}
-        className={`${button} border-[var(--dpf-border)] text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]`}>
+      <Button size="sm" variant="secondary" disabled={disabled || status === "approved"} onClick={() => onReview(id, "approved")}>
         Accept
-      </button>
-      <button type="button" disabled={disabled || status === "rejected"} onClick={() => onReview(id, "rejected")}
-        className={`${button} border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:border-[var(--dpf-error)]`}>
+      </Button>
+      <Button size="sm" variant="ghost" disabled={disabled || status === "rejected"} onClick={() => onReview(id, "rejected")}>
         Reject
-      </button>
+      </Button>
     </span>
   );
+}
+
+function withReview<T extends { id: string; status: string }>(
+  columns: Column<T>[],
+  canManage: boolean,
+  pending: boolean,
+  onReview: Review,
+): Column<T>[] {
+  const status: Column<T> = { key: "status", header: "Status", cell: (row) => STATUS_LABEL[row.status] ?? row.status };
+  if (!canManage) return [...columns, status];
+  return [
+    ...columns,
+    status,
+    {
+      key: "review",
+      header: <span className="sr-only">Review</span>,
+      cell: (row) => <ReviewButtons id={row.id} status={row.status} disabled={pending} onReview={onReview} />,
+    },
+  ];
 }
 
 export function DiagramImportPanel({ imports, canManage }: Props) {
@@ -61,7 +77,7 @@ export function DiagramImportPanel({ imports, canManage }: Props) {
     });
   }
 
-  function review(id: string, status: "approved" | "rejected") {
+  const review: Review = (id, status) => {
     startTransition(async () => {
       try {
         await reviewReferenceProposal({ proposalId: id, status });
@@ -70,10 +86,47 @@ export function DiagramImportPanel({ imports, canManage }: Props) {
         setMessage({ tone: "error", text: "The review was not saved. Try again." });
       }
     });
-  }
+  };
+
+  const elementColumns = withReview<ImportItem["elements"][number]>(
+    [
+      {
+        key: "label",
+        header: "Shape",
+        cell: (row) => (
+          <>
+            {row.label}
+            {row.suggestedLayer && <span className="text-[var(--dpf-muted)]"> · {row.suggestedLayer} layer</span>}
+          </>
+        ),
+      },
+      { key: "page", header: "Page", cell: (row) => row.page },
+    ],
+    canManage,
+    pending,
+    review,
+  );
+  const relationshipColumns = withReview<ImportItem["relationships"][number]>(
+    [
+      {
+        key: "connection",
+        header: "Connection",
+        cell: (row) => (
+          <>
+            {row.fromLabel} → {row.toLabel}
+            {row.label && <span className="text-[var(--dpf-muted)]"> ({row.label})</span>}
+          </>
+        ),
+      },
+      { key: "page", header: "Page", cell: (row) => row.page },
+    ],
+    canManage,
+    pending,
+    review,
+  );
 
   return (
-    <section aria-labelledby="diagram-imports" className="mt-8 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+    <Surface as="section" aria-labelledby="diagram-imports" className="mt-8">
       <h2 id="diagram-imports" className="text-sm font-semibold text-[var(--dpf-text)]">Imported diagrams</h2>
       <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">
         Shapes and connectors from a Visio or Draw file become candidates to review. Nothing is added to the model.
@@ -84,10 +137,9 @@ export function DiagramImportPanel({ imports, canManage }: Props) {
           <label htmlFor="diagram-file" className="text-xs text-[var(--dpf-text)]">Diagram file</label>
           <input ref={input} id="diagram-file" name="file" type="file" accept=".vsd,.vsdx,.odg" required
             className="text-xs text-[var(--dpf-muted)]" />
-          <button type="submit" disabled={pending}
-            className="rounded bg-[var(--dpf-accent)] px-3 py-1 text-xs font-medium text-[var(--dpf-on-accent)] disabled:opacity-60">
+          <Button type="submit" size="sm" disabled={pending}>
             {pending ? "Importing…" : "Import diagram"}
-          </button>
+          </Button>
         </form>
       )}
       {message && (
@@ -115,45 +167,14 @@ export function DiagramImportPanel({ imports, canManage }: Props) {
               {item.truncated && "The diagram was larger than one import holds; only the first part is listed."}
             </p>
           )}
-          <table className="mt-3 w-full text-left text-xs">
-            <caption className="sr-only">Candidate elements from {item.fileName}</caption>
-            <thead className="text-[var(--dpf-muted)]">
-              <tr><th className="py-1 font-normal">Shape</th><th className="font-normal">Page</th><th className="font-normal">Status</th>{canManage && <th />}</tr>
-            </thead>
-            <tbody>
-              {item.elements.map((element) => (
-                <tr key={element.id} className="border-t border-[var(--dpf-border)] text-[var(--dpf-text)]">
-                  <td className="py-1">{element.label}{element.suggestedLayer && <span className="text-[var(--dpf-muted)]"> · {element.suggestedLayer} layer</span>}</td>
-                  <td>{element.page}</td>
-                  <td>{STATUS_LABEL[element.status] ?? element.status}</td>
-                  {canManage && <td><ReviewButtons id={element.id} status={element.status} disabled={pending} onReview={review} /></td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable className="mt-3" dense ariaLabel={`Candidate elements from ${item.fileName}`}
+            columns={elementColumns} rows={item.elements} getRowKey={(row) => row.id} />
           {item.relationships.length > 0 && (
-            <table className="mt-3 w-full text-left text-xs">
-              <caption className="sr-only">Candidate relationships from {item.fileName}</caption>
-              <thead className="text-[var(--dpf-muted)]">
-                <tr><th className="py-1 font-normal">Connection</th><th className="font-normal">Page</th><th className="font-normal">Status</th>{canManage && <th />}</tr>
-              </thead>
-              <tbody>
-                {item.relationships.map((relationship) => (
-                  <tr key={relationship.id} className="border-t border-[var(--dpf-border)] text-[var(--dpf-text)]">
-                    <td className="py-1">
-                      {relationship.fromLabel} → {relationship.toLabel}
-                      {relationship.label && <span className="text-[var(--dpf-muted)]"> ({relationship.label})</span>}
-                    </td>
-                    <td>{relationship.page}</td>
-                    <td>{STATUS_LABEL[relationship.status] ?? relationship.status}</td>
-                    {canManage && <td><ReviewButtons id={relationship.id} status={relationship.status} disabled={pending} onReview={review} /></td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable className="mt-3" dense ariaLabel={`Candidate relationships from ${item.fileName}`}
+              columns={relationshipColumns} rows={item.relationships} getRowKey={(row) => row.id} />
           )}
         </details>
       ))}
-    </section>
+    </Surface>
   );
 }
