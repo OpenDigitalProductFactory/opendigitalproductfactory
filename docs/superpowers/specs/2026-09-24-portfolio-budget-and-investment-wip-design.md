@@ -299,4 +299,23 @@ Every slice ends at something observable on this install.
 
 Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Slice 6 may start after slices 1 and 3,
 because its default allowance needs throughput. Until slice 5 lands, the floor
-applies.
+applies. The implementation plan is
+[2026-09-24-portfolio-budget-and-investment-wip.md](../plans/2026-09-24-portfolio-budget-and-investment-wip.md).
+
+## 9. Objectives and acceptance
+
+- **OBJ-BUDGET-1:** Every live item resolves to investment points or visibly to unsized, and to a portfolio or visibly to unallocated.
+- **OBJ-BUDGET-2:** Each portfolio holds a quarterly budget in points, set only by an attributable person, and funding approval reserves against it.
+- **OBJ-BUDGET-3:** Budget ties out with measured throughput per portfolio, and every total states its traced share.
+- **OBJ-BUDGET-4:** Work in progress is admitted by points in flight, not by a count, at every start including the tee-up.
+- **OBJ-BUDGET-5:** AI tokens, spend and latency are reported beside points and never converted into them.
+
+| AC | Objectives | Acceptance |
+| --- | --- | --- |
+| AC-BUDGET-1 | OBJ-BUDGET-1 | The read model's portfolio, unallocated and unsized rows reconcile to the live-item count on this install (slice 1). |
+| AC-BUDGET-2 | OBJ-BUDGET-1 | After the high-confidence epic proposals are confirmed, the unallocated share is reported before and after (slice 2). |
+| AC-BUDGET-3 | OBJ-BUDGET-2 | This quarter's budgets are set from a proposal, and a missing budget reads "no budget set", never zero (slice 3). |
+| AC-BUDGET-4 | OBJ-BUDGET-2 | Reserved plus consumed points reconcile per portfolio, and an autonomous over-budget approval is refused (slice 4). |
+| AC-BUDGET-5 | OBJ-BUDGET-3 | The tie-out shows over- or under-commitment in points and weeks with traced share, verified live (slice 5). |
+| AC-BUDGET-6 | OBJ-BUDGET-4 | No caller reads the count cap; ten small and two large items admit alike; the tee-up is refused at the allowance (slice 6). |
+| AC-BUDGET-7 | OBJ-BUDGET-5 | Subscription use is never shown as zero cost, and no figure converts to or from points (slice 7). |
