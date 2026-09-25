@@ -1,3 +1,8 @@
+---
+status: superseded
+supersededBy: docs/superpowers/specs/2026-09-24-localization-and-multi-currency-architecture-design.md
+---
+
 # Platform Localization Infrastructure — Design & Research
 
 - **Status:** **Superseded 2026-09-24** by [`2026-09-24-localization-and-multi-currency-architecture-design.md`](2026-09-24-localization-and-multi-currency-architecture-design.md) (framework choice reversed to an owned catalog per WWMD `DI-ADAE8489B6A2`; scope widened to multi-currency, external audiences, seeded content, RTL). Kept for history.

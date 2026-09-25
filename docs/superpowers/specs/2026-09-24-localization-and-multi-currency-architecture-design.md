@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Localization & Multi-Currency Architecture: Research, Gap Analysis, Design
 
 - **Status:** Design. Research and gap analysis are complete. The epic and backlog are filed.
@@ -368,5 +372,5 @@ L0.1 through L0.3 are the "core design up front" slice. Once they land, every ne
 
 ## 10. Superseded and absorbed
 
-- `2026-08-06-platform-localization-infrastructure-design.md` is superseded by this document. Its epic id is reused. Its BI ids (`BI-7E54AA3A`, `BI-156058AA`, `BI-0530BB74`, `BI-520958A8`, `BI-90813F65`, `BI-5DEAC272`, `BI-AC01D10D`, `BI-F05DD74D`) do not resolve in this backlog, and their scope maps to L0.2, L0.4, L0.5, L0.3, L3.1, L3.1, L3.1 and L3.2.
+- `2026-08-06-platform-localization-infrastructure-design.md` is superseded by this document. Its epic id is reused. Its eight BI ids never landed in this backlog. Their scope maps to L0.2 (framework), L0.4 (externalize), L0.5 (formatting), L0.3 (guard), L3.1 (coverage, process, paved road) and L3.2 (Spanish).
 - `2026-07-18-org-locale-currency-spine.md`: Phase 1 is delivered and kept. Phase 2 moves to L0.5, and Phase 3 (re-denomination) moves to L1.2 under the "never silently" rule.

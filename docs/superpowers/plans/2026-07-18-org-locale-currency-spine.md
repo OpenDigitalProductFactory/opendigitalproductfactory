@@ -3,7 +3,7 @@
 - **Epic:** EP-ORG-LOCALE-CURRENCY
 - **Backlog item:** BI-0530BB74
 - **Kernel decision ledger:** DI-92BCDA20FB94
-- **Status:** Phase 1 implemented; Phases 2–3 absorbed into `EP-6B33A840` (L0.5 `BI-EE2859C5`, L1.2 `BI-AEB08F6B`) — see `docs/superpowers/specs/2026-09-24-localization-and-multi-currency-architecture-design.md`.
+- **Status:** Phase 1 implemented (this PR); Phases 2–3 follow-up.
 
 ## Problem
 
