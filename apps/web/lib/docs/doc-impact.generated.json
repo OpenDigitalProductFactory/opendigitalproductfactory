@@ -733,6 +733,9 @@
       "docs/architecture/ai-routing-document-map.md",
       "docs/maintenance/staleness-report.md"
     ],
+    "apps/web/lib/ea/diagram-import/parse-flat-odg.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
@@ -2748,6 +2751,7 @@
       "apps/web/lib/documents/generation/render-store.ts",
       "apps/web/lib/documents/generation/render.ts",
       "apps/web/lib/documents/generation/spec.ts",
+      "apps/web/lib/ea/diagram-import/parse-flat-odg.ts",
       "apps/web/lib/ea/view-drawing.ts",
       "tools/doctools/smoke.sh"
     ],

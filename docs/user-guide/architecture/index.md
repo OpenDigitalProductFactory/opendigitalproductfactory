@@ -49,6 +49,7 @@ The overview room count is a real total. The plan list and the Coordination list
 - Map value streams to the products and capabilities that support them
 - Use the AI coworker to generate a draft architecture view from a description
 - Export a view as a Draw (.odg), SVG, PDF or PNG drawing (see below)
+- Import a Visio or Draw diagram as candidate elements and relationships to review
 - Select an element to open its **Architecture context**, then follow the shortest
   available links to the same concern in related ArchiMate, BPMN, or SysML views
 - For projected AI routing elements, open the matching operational evidence and
@@ -80,6 +81,31 @@ You can also ask the Enterprise Architect coworker to export a view. It saves th
 drawing as a document (the .odg, with its PDF and SVG kept alongside) and gives
 you the link. This is a picture of the view, not a model exchange: to move the
 model itself into another ArchiMate tool, use the ArchiMate exchange export.
+
+## Importing a Visio or Draw diagram
+
+If your organization already keeps architecture diagrams in Visio (.vsd, .vsdx)
+or LibreOffice Draw (.odg), you can bring what they show into review. Open
+**Architecture > Views & Viewpoints** (`/ea/views`) and use **Imported
+diagrams** at the bottom of the page:
+
+1. Choose the file and select **Import diagram**. Files up to 900 KB are accepted.
+2. The platform's document engine reads the drawing. Each labelled shape becomes
+   a candidate element, and each connector that joins two shapes becomes a
+   candidate relationship, with the connector's label if it has one.
+3. Open the import to see a picture of the diagram beside the candidates. Accept
+   or reject each one.
+
+Nothing is added to your model by an import or by accepting a candidate. Accepting
+records that the candidate is right; adding it to a view is still done on the
+canvas. Shapes with no text and connectors whose ends do not reach two shapes are
+not listed; the import says how many connectors were left out. A diagram DPF
+exported (see above) imports with its layer shown for each shape.
+
+Importing the same file twice shows the first import again instead of making
+duplicates. You need permission to edit the architecture model to import or
+review; anyone who can see the views can see the candidates. If the document
+engine is not set up on your install, the import says so and nothing is saved.
 
 ## AI Coworker Identity
 

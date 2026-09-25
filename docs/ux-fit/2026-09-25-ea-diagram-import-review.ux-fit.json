@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "views-page-import-section",
+  "decisionInteractionId": "DI-123855D2B3FC",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ea/views/page.tsx",
+      "apps/web/components/ea/DiagramImportPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "views-page-import-section",
+      "new-imports-route",
+      "reference-model-proposal-queue"
+    ]
+  }
+}

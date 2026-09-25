@@ -27,7 +27,7 @@ die() { local code="$1"; shift; printf 'dpf-convert: %s\n' "$*" >&2; exit "$code
 
 usage() {
   cat >&2 <<'EOF'
-usage: dpf-convert --to <pdf|txt|docx|odt|rtf|doc|xlsx|ods|csv|xls|pptx|odp|ppt> [--from <ext>]
+usage: dpf-convert --to <pdf|txt|docx|odt|rtf|doc|xlsx|ods|csv|xls|pptx|odp|ppt|odg|fodg|svg> [--from <ext>]
 Reads the document on stdin and writes the converted document on stdout.
 EOF
 }
@@ -51,6 +51,11 @@ filter_for() {
     doc)  printf '%s' 'doc:MS Word 97' ;;
     xls)  printf '%s' 'xls:MS Excel 97' ;;
     ppt)  printf '%s' 'ppt:MS PowerPoint 97' ;;
+    # Drawings (BI-4C17BF51): a diagram as Draw, as flat XML the portal parses
+    # for shape and connector text, or as an SVG preview.
+    odg)  printf '%s' 'odg:draw8' ;;
+    fodg) printf '%s' 'fodg:OpenDocument Drawing Flat XML' ;;
+    svg)  printf '%s' 'svg:draw_svg_Export' ;;
     *)    return 1 ;;
   esac
 }

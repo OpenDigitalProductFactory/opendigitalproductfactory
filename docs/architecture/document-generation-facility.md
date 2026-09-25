@@ -55,6 +55,7 @@ conversion, [watchlist](../install/platform-support-watchlist.md) row D18.
 
 - **Previews.** S4 owns `DocumentRenditionKind` (`pdf`, `plain_text`) and defines no preview kind. Previews are therefore content-addressed DocumentBlobs, returned by `saveRenderedDocument` in page order. S7 (`BI-543819B1`) shows them on the document page, and a `preview` kind belongs there.
 - **Callers.** S7 adds `create_presentation`. S8 (`BI-4C17BF51`) adds the EA drawing export: `apps/web/lib/ea/view-drawing.ts` maps an EA view to a `drawing` spec, and `view-drawing-export.ts` renders it for the view's **Export** menu (one file per download) and for the `export_ea_view_drawing` coworker tool (stored with `saveRenderedDocument`).
+- **Diagram import.** The S8 import runs the other direction on `dpf-convert`, not `dpf-render`: `--to fodg` turns a .vsd, .vsdx or .odg into flat XML that `apps/web/lib/ea/diagram-import/parse-flat-odg.ts` reads for shape and connector text, and `--to svg` gives the reviewer a picture. `odg`, `fodg` and `svg` are in the converter's filter table and in `CONVERTER_TARGET_MIME`, which `RENDER_FORMAT_MIME` now reads too. The candidates are EA review proposals, never model writes.
 - **Drawing shapes keep their box.** `dpf-render` turns off Draw's auto-grow on labelled shapes and centres the label, so a shape is exactly the size the spec asks for.
 
 ## Verification
