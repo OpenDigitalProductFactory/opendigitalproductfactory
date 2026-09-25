@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { saveRenderedDocument, type RenderStoreDeps } from "./render-store";
 import type { RenderedDocument } from "./render";
+import { PREVIEW_MANIFEST_MIME, parsePreviewManifest } from "@/lib/documents/preview-manifest";
 
-vi.mock("@dpf/db", () => ({ prisma: {}, DocumentRenditionKind: { pdf: "pdf", plain_text: "plain_text" } }));
+vi.mock("@dpf/db", () => ({ prisma: {}, DocumentRenditionKind: { pdf: "pdf", plain_text: "plain_text", preview: "preview" } }));
 
 function rendered(overrides: Partial<RenderedDocument> = {}): RenderedDocument {
   return {
@@ -73,6 +74,26 @@ describe("saveRenderedDocument", () => {
       { page: 2, blobId: "blob-4", sha256: "sha-png-2" },
     ]);
     expect(saved.files.map((file) => file.format)).toEqual(["pptx", "pdf"]);
+  });
+
+  it("records the previews as the version's preview rendition: a manifest of the page images in order", async () => {
+    const { deps, storeBlob, upsertRendition } = harness();
+    await saveRenderedDocument(rendered(), { organizationId: "org-1" }, deps);
+    const manifestCall = storeBlob.mock.calls.find(([, mime]) => mime === PREVIEW_MANIFEST_MIME);
+    expect(manifestCall).toBeDefined();
+    expect(parsePreviewManifest(manifestCall![0])).toEqual({
+      pages: [
+        { page: 1, blobId: "blob-3", sha256: "sha-png-1" },
+        { page: 2, blobId: "blob-4", sha256: "sha-png-2" },
+      ],
+    });
+    expect(upsertRendition).toHaveBeenCalledWith({ versionId: "ver-1", kind: "preview", blobId: "blob-5", mimeType: PREVIEW_MANIFEST_MIME });
+  });
+
+  it("writes no preview rendition when the engine returned no previews", async () => {
+    const { deps, upsertRendition } = harness();
+    await saveRenderedDocument(rendered({ previews: [] }), { organizationId: "org-1" }, deps);
+    expect(upsertRendition).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "preview" }));
   });
 
   it("adds a version to an existing document instead of creating another", async () => {

@@ -3,8 +3,8 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 414,
-      "reason": "export_ea_view_drawing (BI-4C17BF51) lets the Enterprise Architect coworker hand a person an EA view as a file they can open without DPF (.odg for Draw, .svg, .pdf). No existing tool can: export_archimate emits the ArchiMate model-exchange XML, which is a model, not a picture, and needs an ArchiMate tool to read; describe_ea_view returns statistics. It is not folded into export_archimate because the two answer different requests (move my model vs. show my diagram) with different outputs and a different side effect (this one stores a document), and a coworker choosing between them should see two clearly named tools, not one tool with a mode flag.",
+      "value": 415,
+      "reason": "export_ea_view_drawing (BI-4C17BF51) lets the Enterprise Architect coworker hand a person an EA view as a file they can open without DPF (.odg for Draw, .svg, .pdf). No existing tool can: export_archimate emits the ArchiMate model-exchange XML, which is a model, not a picture, and needs an ArchiMate tool to read; describe_ea_view returns statistics; create_presentation makes decks, not diagrams. It is not folded into export_archimate because the two answer different requests (move my model vs. show my diagram) with different outputs and a different side effect (this one stores a document), and a coworker choosing between them should see two clearly named tools, not one tool with a mode flag.",
       "recordedAt": "2026-09-25"
     },
     "registry.packFiles": {

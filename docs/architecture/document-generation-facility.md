@@ -26,7 +26,8 @@ content spec ──▶ spec.ts (validate) ──▶ render.ts ──docker run (
 | Runtime | `apps/web/lib/documents/generation/render.ts` | `renderDocument({ templateRef, content, formats, previews })`. It runs on the S2 runtime: the same containment flags as `dpf-convert` (`hardenedRunArgs` in `conversion/command.ts` is their one home), the same concurrency cap (`sharedDoctoolsLimiter`) and a 240 s budget. Failures are typed: `invalid-spec`, `converter-unavailable`, `input-too-large`, `timeout`, `render-failed`. |
 | Engine | `tools/doctools/dpf-render` (+ `dpf_render_uno.py`, `dpf_render_families.py`) | Python on the image's `python3-uno` bridge. It opens a blank document or a flat-ODF template, fills it, and exports each format. Previews come from `pdftoppm` and the text layer from `pdftotext`. Output is a tar stream with every entry dated 0. Exit codes: 2 bad request, 3 failed, 4 too large or empty, 124 timeout. |
 | Brand masters | `apps/web/lib/documents/generation/brand-master.ts`, `brand-master-xml.ts` | One flat-ODF master per family, built from `Organization` only (name, address, logo, `designSystem` palette and fonts), with neutral defaults where the record is silent. Each master is the Document `BRANDMASTER-<org id>-<family>`. Its bytes are deterministic, so their SHA-256 is the brand fingerprint: a render reuses the current version and writes a new one the first time the brand has changed. |
-| Store | `apps/web/lib/documents/generation/render-store.ts` | Saves the office file as a DocumentVersion's content with the text layer inline, so full-text and vector search find it. It writes `pdf` and `plain_text` renditions the way S4's rendition job does. That job, which the version save also requests, then finds both kinds already present and skips a second engine run. Previews and any extra formats are stored as blobs and returned (see Seams). |
+| Store | `apps/web/lib/documents/generation/render-store.ts` | Saves the office file as a DocumentVersion's content with the text layer inline, so full-text and vector search find it. It writes `pdf` and `plain_text` renditions the way S4's rendition job does. That job, which the version save also requests, then finds both kinds already present and skips a second engine run. Previews are stored as blobs and recorded as the version's `preview` rendition (see Previews). Extra formats are stored as blobs and returned. |
+| Presentations | `apps/web/lib/documents/generation/create-presentation.ts` | The `create_presentation` tool (document pack, `document_write`). A coworker's outline maps to a deck spec, one outline slide per slide, with the layout inferred from what each slide carries. It renders in the organization's brand master as `.pptx` + PDF with one preview per slide. A revision passes the presentation's `documentId` and becomes the next DocumentVersion; only a `generated-deck` document can be revised this way. The marketing strategist holds the grant and the `create-presentation` skill. |
 
 ## Templates and placeholders
 
@@ -51,10 +52,22 @@ With no docker socket or no pinned `doctoolsImage`, `renderDocument` returns
 `converter-unavailable` without spawning anything. This is the same contract as
 conversion, [watchlist](../install/platform-support-watchlist.md) row D18.
 
+## Previews
+
+`DocumentRenditionKind` has a `preview` member (S7, `BI-543819B1`). A version
+holds one rendition per kind, and a deck has one preview per slide, so the
+`preview` rendition's blob is a small JSON manifest
+(`apps/web/lib/documents/preview-manifest.ts`) listing the page PNGs, each a
+content-addressed DocumentBlob, in page order. The manifest carries no
+`contentText`, so it adds nothing to full-text search. The document page lists
+the pages and `GET /api/documents/:documentId/previews/:page` serves one image
+(`apps/web/lib/documents/document-previews.ts`), checking the blob's digest
+against the manifest. Only generated documents have previews; an uploaded
+office file gets S4's PDF and text.
+
 ## Seams
 
-- **Previews.** S4 owns `DocumentRenditionKind` (`pdf`, `plain_text`) and defines no preview kind. Previews are therefore content-addressed DocumentBlobs, returned by `saveRenderedDocument` in page order. S7 (`BI-543819B1`) shows them on the document page, and a `preview` kind belongs there.
-- **Callers.** S7 adds `create_presentation`. S8 (`BI-4C17BF51`) adds the EA drawing export: `apps/web/lib/ea/view-drawing.ts` maps an EA view to a `drawing` spec, and `view-drawing-export.ts` renders it for the view's **Export** menu (one file per download) and for the `export_ea_view_drawing` coworker tool (stored with `saveRenderedDocument`).
+- **Callers.** `create_presentation` (S7) is the first caller. S8 (`BI-4C17BF51`) adds the EA drawing export: `apps/web/lib/ea/view-drawing.ts` maps an EA view to a `drawing` spec, and `view-drawing-export.ts` renders it for the view's **Export** menu (one file per download) and for the `export_ea_view_drawing` coworker tool (stored with `saveRenderedDocument`).
 - **Drawing shapes keep their box.** `dpf-render` turns off Draw's auto-grow on labelled shapes and centres the label, so a shape is exactly the size the spec asks for.
 
 ## Verification
@@ -62,3 +75,4 @@ conversion, [watchlist](../install/platform-support-watchlist.md) row D18.
 - `apps/web/lib/documents/generation/*.test.ts` covers spec validation, the tar reader, the runner contract with an injected runner, brand masters and storage.
 - `render.docker.test.ts` needs `DPF_DOCTOOLS_TEST_IMAGE` set to a pinned local image, and reports SKIPPED otherwise. It renders a branded deck (a title slide and five content slides, including a chart and an image) to pptx, pdf and six previews. It renders every other family and checks determinism.
 - `tools/doctools/smoke.sh` section 5 runs the engine under the release containment flags.
+- `create-presentation.docker.test.ts` (same gate) runs a six-slide outline through `create_presentation` to a stored `.pptx`, a PDF and a six-page preview manifest, then revises it as version 2.
