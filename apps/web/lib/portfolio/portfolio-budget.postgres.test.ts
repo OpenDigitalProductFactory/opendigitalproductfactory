@@ -1,12 +1,18 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { quarterBounds } from "./investment-points";
 import { loadInvestmentItems, summarizePortfolioInvestment } from "./investment-read-model";
-import { previousQuarter, proposePortfolioBudgets } from "./portfolio-budget";
+import { loadPortfolioBudgets, previousQuarter, proposePortfolioBudgets } from "./portfolio-budget";
+
+const MIGRATION = resolve(__dirname, "../../../../packages/db/prisma/migrations/20260925190000_portfolio_budget_period/migration.sql");
 
 // Explicit opt-in to a governed PostgreSQL target. The proposal test is
-// read-only; the chain test writes inside a transaction and always rolls back.
+// read-only; the chain test writes inside a transaction that always rolls back,
+// and applies this branch's migration inside it when the target lacks it.
 const url = process.env.DPF_SQL_TEST_DATABASE_URL
   ?? (process.env.CI === "true" ? process.env.DATABASE_URL : undefined);
 const databaseSuite = url ? describe : describe.skip;
@@ -39,24 +45,29 @@ databaseSuite("portfolio budgets on PostgreSQL (BI-9EC60FE0)", () => {
   });
 
   it("allows one chain per portfolio and period, and one successor per row (AC-1)", async () => {
-    const { rows: [portfolio] } = await client.query<{ id: string }>(`SELECT "id" FROM "Portfolio" LIMIT 1`);
-    const { rows: [user] } = await client.query<{ id: string }>(`SELECT "id" FROM "User" LIMIT 1`);
-    if (!portfolio || !user) return;
-    const q = quarterBounds(new Date("2099-02-01T00:00:00Z")); // far from any real budget
-    const insert = (id: string, supersedesId: string | null) => client.query(
-      `INSERT INTO "PortfolioBudgetPeriod" ("id","portfolioId","periodStart","periodEnd","allocatedPoints","setById","reason","supersedesId")
-       VALUES ($1,$2,$3,$4,10,$5,'test',$6)`, [id, portfolio.id, q.start, q.end, user.id, supersedesId]);
-    const expectRefused = async (run: () => Promise<unknown>) => {
-      await client.query("SAVEPOINT s");
-      await expect(run()).rejects.toMatchObject({ code: "23505" });
-      await client.query("ROLLBACK TO SAVEPOINT s");
-    };
     await client.query("BEGIN");
     try {
+      const { rows: [present] } = await client.query(`SELECT to_regclass('"PortfolioBudgetPeriod"') IS NOT NULL AS ok`);
+      if (!present.ok) await client.query(readFileSync(MIGRATION, "utf8"));
+      const { rows: [portfolio] } = await client.query<{ id: string }>(
+        `INSERT INTO "Portfolio" ("id","slug","name","updatedAt") VALUES ('p-budget-test','budget-test','Budget test',now()) RETURNING "id"`);
+      const { rows: [user] } = await client.query<{ id: string }>(
+        `INSERT INTO "User" ("id","email","passwordHash") VALUES ('u-budget-test','budget-test@example.invalid','x') RETURNING "id"`);
+      const q = quarterBounds(new Date("2099-02-01T00:00:00Z"));
+      const insert = (id: string, supersedesId: string | null) => client.query(
+        `INSERT INTO "PortfolioBudgetPeriod" ("id","portfolioId","periodStart","periodEnd","allocatedPoints","setById","reason","supersedesId")
+         VALUES ($1,$2,$3,$4,10,$5,'test',$6)`, [id, portfolio!.id, q.start, q.end, user!.id, supersedesId]);
+      const expectRefused = async (run: () => Promise<unknown>) => {
+        await client.query("SAVEPOINT s");
+        await expect(run()).rejects.toMatchObject({ code: "23505" });
+        await client.query("ROLLBACK TO SAVEPOINT s");
+      };
       await insert("t-root", null);
       await expectRefused(() => insert("t-second-root", null));
       await insert("t-next", "t-root");
       await expectRefused(() => insert("t-fork", "t-root"));
+      const budgets = await loadPortfolioBudgets(db, q);
+      expect(budgets.find((b) => b.id === portfolio!.id)?.budget).toMatchObject({ id: "t-next", supersedesId: "t-root" });
     } finally {
       await client.query("ROLLBACK");
     }
