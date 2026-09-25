@@ -1212,7 +1212,7 @@ class CodexHookTrustTest(unittest.TestCase):
     def test_plugin_plane_trust_requires_plugin_hook_trust_not_stale_user_file_trust(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            managed = self._plugin_plane_home(home)
+            self._plugin_plane_home(home)
             config = home / ".codex" / "config.toml"
             base = config.read_text(encoding="utf-8")
             config.write_text(
