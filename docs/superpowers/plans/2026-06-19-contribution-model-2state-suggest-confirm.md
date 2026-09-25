@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Plan — Contribution Model Refactor: 2 States + Suggest-Then-Confirm
 
 **Date:** 2026-06-19
