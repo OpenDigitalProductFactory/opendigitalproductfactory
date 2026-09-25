@@ -718,7 +718,7 @@ describe("runAgenticLoop", () => {
     // first and said "nothing is misconfigured / wait a minute" — wrong (BI-AUDIT-003).
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
-      'All endpoints failed for onboarding. Attempts: [{"endpointId":"codex","error":"No credential for \\"codex\\". Configure via Admin > AI Workforce > External Services."},{"endpointId":"local","error":"skipped local fallback: 80 tools exceeds threshold for small local models"}]',
+      'All endpoints failed for onboarding. Attempts: [{"endpointId":"codex","error":"No credential for \\"codex\\". Configure via External Services (/platform/ai/providers/codex)."},{"endpointId":"local","error":"skipped local fallback: 80 tools exceeds threshold for small local models"}]',
     ));
 
     const result = await runAgenticLoop({

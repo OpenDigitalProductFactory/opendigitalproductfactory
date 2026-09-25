@@ -236,7 +236,14 @@ if [ "$MODE" = "join" ] && [ -n "$JOIN_PACKAGE" ]; then
 fi
 
 compose() {
-  local compose_files=(-f "$REPO_ROOT/docker-compose.yml" -f "$REPO_ROOT/docker-compose.organization-trust.yml")
+  local compose_files=(-f "$REPO_ROOT/docker-compose.yml")
+  # A consumer (release) install ships docker-compose.release.yml and no
+  # Dockerfile; without the release overlay compose tries to BUILD portal-init
+  # (BI-6DC1CD5B).
+  if [ -f "$REPO_ROOT/docker-compose.release.yml" ] && [ ! -f "$REPO_ROOT/Dockerfile" ]; then
+    compose_files+=( -f "$REPO_ROOT/docker-compose.release.yml" )
+  fi
+  compose_files+=( -f "$REPO_ROOT/docker-compose.organization-trust.yml" )
   if [ "$MODE" = "authority" ] || [ "$MODE" = "issue-join" ]; then
     compose_files+=( -f "$REPO_ROOT/docker-compose.pki.yml" )
   fi
@@ -337,8 +344,16 @@ ensure_installer_provisioner_claims() {
   wait_for_step_ca
 }
 # True when the host copy of the portal leaf was issued for less than
-# PORTAL_CERT_DURATION (a legacy 24h leaf) or has under 30 days left: such a
-# leaf must be re-issued, because `step ca renew` preserves its lifetime.
+# PORTAL_CERT_DURATION (a legacy 24h leaf), has under 30 days left, or names a
+# different host set than requested: such a leaf must be re-issued, because
+# `step ca renew` preserves its lifetime and its names.
+# Reads comma/space separated host names on stdin; prints them lower-cased,
+# de-duplicated and sorted as one comma-joined line, so two name sets compare
+# as strings regardless of order or case.
+normalized_name_set() {
+  tr ', ' '\n\n' | tr 'A-Z' 'a-z' | sed '/^$/d' | sort -u | paste -sd, -
+}
+
 portal_leaf_needs_reissue() {
   [ -f "$AUTHORITY_CERT" ] || return 0
   start="$(openssl x509 -in "$AUTHORITY_CERT" -noout -startdate 2>/dev/null | sed 's/^notBefore=//')"
@@ -352,6 +367,12 @@ portal_leaf_needs_reissue() {
   remaining_s="$(( end_s - $(date +%s) ))"
   [ "$lifetime_s" -lt "$(( wanted_s - 3600 ))" ] && return 0
   [ "$remaining_s" -lt "$(( 30 * 24 * 3600 ))" ] && return 0
+  # `step ca renew` keeps the old subject alternative names, so a changed
+  # canonical host or alias set must be re-issued, not renewed (BI-6DC1CD5B).
+  current_names="$(openssl x509 -in "$AUTHORITY_CERT" -noout -ext subjectAltName 2>/dev/null \
+    | tail -n +2 | sed -E 's/(DNS|IP Address)://g' | normalized_name_set)"
+  wanted_names="$(printf '%s,%s' "$HOSTNAME_VALUE" "$SANS" | normalized_name_set)"
+  [ "$current_names" != "$wanted_names" ] && return 0
   return 1
 }
 
@@ -408,7 +429,7 @@ if [ "$MODE" = "authority" ]; then
     # issue fresh for the full lifetime instead of renewing a 24h certificate.
     # shellcheck disable=SC2086 # Values passed by word splitting were validated above.
     token="$(compose exec -T step-ca step ca token "$HOSTNAME_VALUE" $san_args \
-      --provisioner dpf-installer --password-file /run/secrets/step-ca-password)"
+      --provisioner dpf-installer --password-file /run/secrets/step-ca-password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
     # shellcheck disable=SC2086
     compose exec -T step-ca step ca certificate "$HOSTNAME_VALUE" \
       /home/step/certs/dpf-portal.crt /home/step/secrets/dpf-portal.key \
@@ -426,7 +447,7 @@ if [ "$MODE" = "authority" ]; then
   else
     edge_token="$(compose exec -T step-ca step ca token "$edge_subject" \
       --not-after 15m --cert-not-after 720h --provisioner dpf-edge-client \
-      --password-file /run/secrets/step-ca-password)"
+      --password-file /run/secrets/step-ca-password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
     run_local_step_client \
       ca certificate "$edge_subject" /work/edge-client.crt /work/edge-client.key \
       --token "$edge_token" --ca-url https://127.0.0.1:9000 \
@@ -447,11 +468,11 @@ elif [ "$MODE" = "issue-join" ]; then
   IFS="$old_ifs"
   # shellcheck disable=SC2086 # Values passed by word splitting were validated above.
   token="$(compose exec -T step-ca step ca token "$HOSTNAME_VALUE" $san_args \
-    --not-after "${PACKAGE_TTL_SECONDS}s" --provisioner dpf-installer --password-file /run/secrets/step-ca-password)"
+    --not-after "${PACKAGE_TTL_SECONDS}s" --provisioner dpf-installer --password-file /run/secrets/step-ca-password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
   edge_subject="dpf-edge-$(printf '%s' "$HOSTNAME_VALUE" | tr ':' '-')"
   edge_token="$(compose exec -T step-ca step ca token "$edge_subject" \
     --not-after "${PACKAGE_TTL_SECONDS}s" --cert-not-after 720h --provisioner dpf-edge-client \
-    --password-file /run/secrets/step-ca-password)"
+    --password-file /run/secrets/step-ca-password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
   package_id="$(openssl rand -hex 16)"
   expires_at="$(( $(date +%s) + PACKAGE_TTL_SECONDS ))"
   umask 077

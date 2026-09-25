@@ -252,6 +252,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // tool above.
   get_queue_status: ["work_capsule_read"],
   list_at_risk_queues: ["work_capsule_read"],
+  // Surface readiness (G9, multi-client governance parity, BI-6AC65187): a
+  // client surface's self-reported heartbeat rides the same tier as the other
+  // heartbeats; the fleet rollup is an ops read like the coordination map.
+  record_surface_readiness: ["work_capsule_write"],
+  get_fleet_readiness: ["work_capsule_read"],
   register_runtime_target: ["work_capsule_write"],
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],

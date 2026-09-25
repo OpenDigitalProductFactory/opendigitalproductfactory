@@ -83,3 +83,21 @@ test("the allowlist is not stale — every entry still hand-rolls a client", () 
 test("the canonical home is not itself allowlisted (it is the sanctioned source)", () => {
   assert.equal(ALLOWLIST.has(CANONICAL), false);
 });
+
+// BI-3D75FE47 (live, 2026-09-25): in Build Studio worktree /workspace/.builds/FB-D671B016 the
+// walker stat()ed a dangling packages/dpf-skill-pack/node_modules link before
+// checking its name, threw ENOENT, and failed the Repo Guard Loop for a build
+// whose code never touched this guard's surface.
+test("a dangling node_modules link is skipped, not fatal", async () => {
+  const { mkdtempSync, mkdirSync, symlinkSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = mkdtempSync(join(tmpdir(), "guard-walk-"));
+  try {
+    mkdirSync(join(root, "packages", "pkg"), { recursive: true });
+    symlinkSync(join(root, "does-not-exist"), join(root, "packages", "pkg", "node_modules"), "junction");
+    assert.deepEqual(scanRepo(root), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

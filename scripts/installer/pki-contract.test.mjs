@@ -343,3 +343,60 @@ test("Bash bootstrap rejects public binds and argument injection before Docker",
   assert.equal(injected.status, 64);
   assert.match(injected.stderr, /unsupported characters/i);
 });
+
+// BI-6DC1CD5B: canonical https on every install (design §12).
+function stepTokenCommands(source) {
+  const commands = [];
+  const bash = /step ca token[\s\S]*?\)"/g;
+  const powershell = /"step", "ca", "token"[^\n]*/g;
+  for (const match of source.matchAll(bash)) commands.push(match[0]);
+  for (const match of source.matchAll(powershell)) commands.push(match[0]);
+  return commands;
+}
+
+test("every organization-CA enrollment token names the local CA explicitly (BI-6DC1CD5B)", async () => {
+  // Without --ca-url, `step ca token` falls back to the CA's defaults.json,
+  // which carries the name the CA was FIRST initialised under. On DEV that was
+  // an unresolvable host, and every token request failed (no such host).
+  for (const path of ["scripts/bootstrap-organization-pki.sh", "scripts/bootstrap-organization-pki.ps1"]) {
+    const commands = stepTokenCommands(await read(path));
+    assert.ok(commands.length >= 4, `${path}: expected the portal, edge and join token requests`);
+    for (const command of commands) {
+      assert.match(command, /--ca-url"?,? "?https:\/\/127\.0\.0\.1:9000/, `${path}: token request without --ca-url: ${command.slice(0, 120)}`);
+    }
+  }
+});
+
+test("the PKI bootstrap composes with the install's own file set, never a source build (BI-6DC1CD5B)", async () => {
+  // A consumer install ships docker-compose.release.yml and no Dockerfile.
+  // Composing without the release overlay made `up portal portal-tls` try to
+  // BUILD portal-init ("open Dockerfile: no such file or directory").
+  for (const path of ["scripts/bootstrap-organization-pki.sh", "scripts/bootstrap-organization-pki.ps1"]) {
+    const source = await read(path);
+    assert.match(source, /docker-compose\.release\.yml/, `${path}: release overlay never considered`);
+    assert.match(source, /Dockerfile/, `${path}: release install not detected by the absence of a build context`);
+  }
+});
+
+test("a changed certificate name set reissues the portal leaf instead of renewing old names (BI-6DC1CD5B)", async () => {
+  // `step ca renew` keeps the subject alternative names of the old leaf, so
+  // adding a canonical host or alias would otherwise never reach the certificate.
+  const [shell, powershell] = await Promise.all([
+    read("scripts/bootstrap-organization-pki.sh"),
+    read("scripts/bootstrap-organization-pki.ps1"),
+  ]);
+  const shellReissue = shell.match(/portal_leaf_needs_reissue\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const powershellReissue = powershell.match(/function Test-DpfPortalLeafNeedsReissue \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(shellReissue, /subjectAltName/, "bash reissue check ignores the certificate names");
+  assert.match(powershellReissue, /subject_alt_name|dns_names/, "PowerShell reissue check ignores the certificate names");
+});
+
+test("portal-tls publishes its ports through the install bind address (BI-6DC1CD5B)", async () => {
+  const tlsCompose = await read("docker-compose.tls.yml");
+  for (const port of ["DPF_TLS_HTTP_PORT:-80", "DPF_TLS_HTTPS_PORT:-443", "DPF_EDGE_ACTION_HTTPS_PORT:-8443"]) {
+    assert.ok(
+      tlsCompose.includes(`"\${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:\${${port}}`),
+      `docker-compose.tls.yml publishes ${port} on every interface`,
+    );
+  }
+});
