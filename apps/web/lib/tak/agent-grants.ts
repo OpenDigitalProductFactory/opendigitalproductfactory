@@ -435,6 +435,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   doc_version_list: ["document_read", "registry_read"],
   doc_state_change: ["document_publish", "registry_write"],
   doc_list_references: ["document_read", "registry_read"],
+  // A branded deck from an outline, stored as a managed document (BI-543819B1).
+  create_presentation: ["document_write"],
 
   // EP-WIKI-001 Phase 3b2: Founder kernel + per-org overlay wiki
   wiki_query: ["registry_read"],

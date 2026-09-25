@@ -8,10 +8,14 @@
 // handlers attribute the actor through the shared principal-linking façade.
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
+//
+// create_presentation (BI-543819B1) produces a branded deck from an outline on
+// the document generation facility and stores it here as a managed document.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import type { PresentationOutline } from "@/lib/documents/generation/create-presentation";
 
 // Local coercion helpers — copies of the mcp-tools.ts module helpers so the pack
 // owns its inputs without depending on that module's internals.
@@ -50,6 +54,53 @@ function decodeContentBase64(value: string): ActionResult<Buffer> {
   }
   return ok(bytes);
 }
+
+const OUTLINE_SLIDE_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string", description: "Slide title." },
+    layout: {
+      type: "string",
+      enum: ["title", "section", "bullets", "chart", "image", "table"],
+      description: "Optional. Inferred from what the slide carries: chart, table, image, bullets; otherwise the first slide is the title slide and later ones are section dividers.",
+    },
+    subtitle: { type: "string", description: "Subtitle for a title or section slide." },
+    bullets: { type: "array", items: { type: "string" }, description: "Up to 12 short points." },
+    notes: { type: "string", description: "Speaker notes for the presenter." },
+    chart: {
+      type: "object",
+      description: "{ type: bar|column|line|pie|area, title?, categories: string[], series: [{ name, values: number[] }] } with one value per category.",
+    },
+    table: { type: "object", description: "{ columns: string[], rows: (string|number|boolean|null)[][] }." },
+    image: {
+      type: "object",
+      description: "{ documentId, alt } for an image stored as a document, or { data (base64), mimeType: image/png|image/jpeg|image/gif, alt }. Alt text is required.",
+    },
+    caption: { type: "string", description: "Caption under an image." },
+  },
+  required: ["title"],
+};
+
+const CREATE_PRESENTATION_DEFINITION: ToolDefinition = {
+  name: "create_presentation",
+  description:
+    "Produce a branded presentation from an outline: a PowerPoint (.pptx) file, a PDF and a preview image of every slide, laid out in the organization's brand and saved as a managed document. To revise, send the whole corrected outline again with the presentation's documentId; that saves a new version of the same document. Never edit the file itself.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Presentation title." },
+      subtitle: { type: "string", description: "Shown on the title slide when it has no subtitle of its own." },
+      audience: { type: "string", description: "Who the deck is for." },
+      goal: { type: "string", description: "What the audience should decide or do." },
+      documentId: { type: "string", description: "An existing presentation to revise, such as DOC-1234ABCD. Omit to create a new one." },
+      slides: { type: "array", items: OUTLINE_SLIDE_SCHEMA, description: "The slides, in order. One outline slide is one slide in the deck." },
+    },
+    required: ["title", "slides"],
+  },
+  requiredCapability: null,
+  executionMode: "immediate",
+  sideEffect: true,
+};
 
 const definitions: ToolDefinition[] = [
   {
@@ -92,6 +143,7 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
   },
+  CREATE_PRESENTATION_DEFINITION,
   {
     name: "doc_load",
     description: "Load a managed document by stable document id, optionally pinned to a version.",
@@ -264,6 +316,33 @@ async function docSave(
   };
 }
 
+async function createPresentationTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
+  const { createPresentation } = await import("@/lib/documents/generation/create-presentation");
+  const actorPrincipalId = await resolveDocumentActorPrincipalId(userId, context?.agentId);
+  const result = await createPresentation({
+    outline: params as unknown as PresentationOutline,
+    actorPrincipalId,
+  });
+  if (!result.ok) {
+    return { success: false, message: result.error, error: result.error, data: { reason: result.reason } };
+  }
+  const created = result.data;
+  const verb = created.revised ? "Revised" : "Created";
+  const warnings = created.warnings.length > 0 ? ` Engine notes: ${created.warnings.join("; ")}.` : "";
+  return {
+    success: true,
+    entityId: created.documentId,
+    message:
+      `${verb} presentation ${created.documentId} v${created.version}: ${created.slideCount} slides as ${created.formats.join(" and ")}, ` +
+      `with ${created.previewCount} slide previews. Review it at ${created.route}.${warnings}`,
+    data: { ...created },
+  };
+}
+
 async function docLoad(params: Record<string, unknown>): Promise<ToolResult> {
   const { loadManagedDocument } = await import("@/lib/documents/document-store");
   const document = await loadManagedDocument({
@@ -382,8 +461,10 @@ export const documentPack: ToolPack = {
     doc_version_list: (params) => docVersionList(params),
     doc_state_change: (params, userId, context) => docStateChange(params, userId, context),
     doc_list_references: (params) => docListReferences(params),
+    create_presentation: (params, userId, context) => createPresentationTool(params, userId, context),
   },
   grants: {
+    create_presentation: ["document_write"],
     doc_save: ["document_write", "registry_write"],
     doc_load: ["document_read", "registry_read"],
     doc_search: ["document_read", "registry_read"],
