@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Harness-Enforced Decision-Routing & Lease-Punt Gates
 
 **Date:** 2026-07-03
