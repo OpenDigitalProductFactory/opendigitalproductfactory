@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "portfolio-spine-with-activity-labels",
+  "decisionInteractionId": "DI-3CAD53D55BC5",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/area/[key]/page.tsx",
+      "apps/web/app/(shell)/coworker-decisions/page.tsx",
+      "apps/web/app/(shell)/ops/page.tsx",
+      "apps/web/app/(shell)/ops/patches/page.tsx",
+      "apps/web/app/(shell)/ops/workrooms/page.tsx",
+      "apps/web/app/(shell)/storefront/layout.tsx",
+      "apps/web/components/ops/workrooms/WorkroomActivitySection.tsx",
+      "apps/web/components/platform/coworker-record/panels.tsx",
+      "apps/web/components/shell/AppRail.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["labels-only", "portfolio-spine-with-activity-labels", "pure-activity-rail"]
+  }
+}
