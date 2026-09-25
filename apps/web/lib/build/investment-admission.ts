@@ -8,6 +8,9 @@
 // - Human starts proceed past it with a warning, and the warning is recorded.
 // - Break-fix work is counted but never blocked; work already in flight is not
 //   a new start.
+// - Shadow first (WWMD DI-D83D9C13686B): until PlatformDevConfig.wipAdmissionMode
+//   is "enforce", a refusal is recorded as what enforcement would have done and
+//   the start proceeds. blocksStart() is the one place that decides.
 // - The Build Studio sandbox pool is the machine's physical limit. It is
 //   enforced where a sandbox is acquired and reported here, never counted into
 //   the investment limit.
@@ -73,7 +76,16 @@ export type ItemAdmission = {
   allowanceSource: "override" | "throughput" | "floor";
   /** The machine's separate physical limit, reported beside the investment limit. */
   sandboxPoolSize: number;
+  /** shadow records decisions without blocking; enforce blocks refused autonomous starts. */
+  mode: WipAdmissionMode;
 };
+
+export type WipAdmissionMode = "shadow" | "enforce";
+
+/** Whether this admission stops the start. Only an enforced refusal does. */
+export function blocksStart(admission: { verdict: AdmissionVerdict; mode?: WipAdmissionMode }): boolean {
+  return admission.verdict === "refuse" && admission.mode !== "shadow";
+}
 
 /**
  * Evaluate a start for one backlog item against its portfolio's allowance. The
@@ -118,6 +130,8 @@ export async function evaluateItemAdmission(db: ReadDb, input: {
     alreadyInFlight,
   });
   const [row] = await db.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "BacklogItem" WHERE "itemId" = ${input.itemId}`;
+  const [config] = await db.$queryRaw<Array<{ mode: string | null }>>`
+    SELECT "wipAdmissionMode"::text AS "mode" FROM "PlatformDevConfig" WHERE "id" = 'singleton'`;
   return {
     ...decision,
     itemId: input.itemId,
@@ -128,6 +142,7 @@ export async function evaluateItemAdmission(db: ReadDb, input: {
     allowance: allowance.points,
     allowanceSource: allowance.source,
     sandboxPoolSize: sandboxPoolSize(),
+    mode: config?.mode === "enforce" ? "enforce" : "shadow",
   };
 }
 
@@ -139,14 +154,18 @@ export async function recordAdmissionOutcome(
 ): Promise<void> {
   if (admission.verdict === "admit" || !admission.backlogItemRowId) return;
   const now = context.now ?? new Date();
-  const summary = admission.verdict === "refuse"
-    ? `Start refused by the points-in-flight allowance (${context.source})`
-    : `Started past the points-in-flight allowance (${context.source})`;
+  const summary = admission.verdict === "warn"
+    ? `Started past the points-in-flight allowance (${context.source})`
+    : admission.mode === "shadow"
+      ? `Would have been refused by the points-in-flight allowance; shadow mode let it start (${context.source})`
+      : `Start refused by the points-in-flight allowance (${context.source})`;
   await db.$executeRaw`
     INSERT INTO "BacklogItemActivity" ("id", "backlogItemId", "kind", "summary", "payload", "recordedAt", "recordedById")
     VALUES (${`wip-admission-${admission.backlogItemRowId}-${now.getTime()}`}, ${admission.backlogItemRowId}, 'wip_admission', ${summary},
             ${JSON.stringify({
               verdict: admission.verdict,
+              mode: admission.mode,
+              blocked: blocksStart(admission),
               reason: admission.reason,
               source: context.source,
               portfolioId: admission.portfolioId,

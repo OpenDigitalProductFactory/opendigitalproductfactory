@@ -42,7 +42,10 @@ const admission = vi.hoisted(() => ({
   evaluateItemAdmission: vi.fn(),
   recordAdmissionOutcome: vi.fn(async () => undefined),
 }));
-vi.mock("@/lib/build/investment-admission", () => admission);
+vi.mock("@/lib/build/investment-admission", async (importOriginal) => ({
+  blocksStart: (await importOriginal<typeof import("@/lib/build/investment-admission")>()).blocksStart,
+  ...admission,
+}));
 vi.mock("@/lib/portfolio/budget-reservation", () => ({
   isAutonomousCaller: (context?: { taskRunId?: string }) => Boolean(context?.taskRunId),
 }));
@@ -298,6 +301,16 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
     expect(res.error).toBe("wip_allowance_reached");
     expect(admission.evaluateItemAdmission).toHaveBeenCalledWith(expect.anything(), { itemId: "BI-1", startKind: "autonomous" });
     expect(teeUp.promoteBacklogItemToBuildDraft).not.toHaveBeenCalled();
+  });
+
+  it("promote_to_build_studio lets a refused autonomous start proceed in shadow mode, recording the refusal (WWMD DI-D83D9C13686B)", async () => {
+    db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
+    db.backlogItemFindFirst.mockResolvedValue({ title: "Add invoice CSV export", body: "Customer feature", workType: "feature" });
+    const shadow = { verdict: "refuse", mode: "shadow", reason: "Starting this takes the portfolio to 11 of 8 points in flight (3 over)." };
+    admission.evaluateItemAdmission.mockResolvedValue(shadow);
+    const res = await buildOpsPack.handlers.promote_to_build_studio({ itemId: "BI-1" }, "u1", { taskRunId: "TR-1" });
+    expect(res.error).not.toBe("wip_allowance_reached");
+    expect(admission.recordAdmissionOutcome).toHaveBeenCalledWith(expect.anything(), shadow, expect.objectContaining({ source: "promote_to_build_studio" }));
   });
 
   it("promote_to_build_studio lets a person start past the allowance with a recorded warning (BI-3430B3A4 AC-3)", async () => {

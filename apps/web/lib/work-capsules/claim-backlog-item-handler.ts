@@ -143,13 +143,13 @@ export async function claimBacklogItemForWork(args: {
   if (((requestedIntent as WorkIntent | null) ?? "implementation") === "implementation") {
     const unattended = UNATTENDED_EXECUTORS.has(executorKind) || Boolean(args.context?.taskRunId);
     const { prisma } = await import("@dpf/db");
-    const { evaluateItemAdmission, recordAdmissionOutcome } = await import("@/lib/build/investment-admission");
+    const { evaluateItemAdmission, recordAdmissionOutcome, blocksStart } = await import("@/lib/build/investment-admission");
     const admission = await evaluateItemAdmission(prisma as never, { itemId, startKind: unattended ? "autonomous" : "human" });
     await recordAdmissionOutcome(prisma as never, admission, { source: "claim_backlog_item_for_work", userId: args.userId, agentId: args.context?.agentId ?? null });
-    if (admission.verdict === "refuse") {
+    if (blocksStart(admission)) {
       return { success: false, error: "wip_allowance_reached", message: admission.reason, data: { admission, attentionRequired: true, executorKind } };
     }
-    if (admission.verdict === "warn") admissionWarning = admission.reason;
+    if (admission.verdict !== "admit") admissionWarning = admission.reason;
   }
   try {
     const governed = await claimGovernedBacklogWorkspace({

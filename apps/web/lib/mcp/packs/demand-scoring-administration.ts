@@ -104,7 +104,7 @@ const MAX_BACKLOG_DELIVERY_BUDGET = 50;
  * ideate/plan/review; it does not raise execution parallelism.
  */
 export async function setBacklogDeliveryBudgetHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const data: { backlogTeeUpDailyCap?: number; governedBacklogEnabled?: boolean } = {};
+  const data: { backlogTeeUpDailyCap?: number; governedBacklogEnabled?: boolean; wipAdmissionMode?: "shadow" | "enforce" } = {};
 
   const rawBudget = params["dailyBudget"];
   if (typeof rawBudget === "number" && Number.isFinite(rawBudget)) {
@@ -123,6 +123,14 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
     data.governedBacklogEnabled = rawEnabled;
   }
 
+  const rawMode = params["wipAdmissionMode"];
+  if (rawMode !== undefined) {
+    if (rawMode !== "shadow" && rawMode !== "enforce") {
+      return { success: false, error: "invalid_input", message: "wipAdmissionMode must be shadow or enforce." };
+    }
+    data.wipAdmissionMode = rawMode;
+  }
+
   if (Object.keys(data).length > 0) {
     await prisma.platformDevConfig.upsert({
       where: { id: "singleton" },
@@ -133,7 +141,7 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
 
   const fresh = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
-    select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true },
+    select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true, wipAdmissionMode: true },
   });
 
   const { sandboxPoolSize, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
@@ -147,9 +155,11 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
   // budget sets intake per day; each start is admitted by its portfolio's points
   // in flight (BI-3430B3A4); the sandbox pool is the physical execution limit.
   const poolSize = sandboxPoolSize();
+  const admissionMode = fresh?.wipAdmissionMode === "enforce" ? "enforce" : "shadow";
   const parallelismNote =
     ` ${activeBuilds} Build Studio build(s) are active; the sandbox pool executes ${poolSize} at a time and queues the rest.` +
-    " Each start is admitted by its portfolio's points in flight, not by this budget. For more parallel throughput, use external worktree builds, not a bigger budget.";
+    ` Each start is admitted by its portfolio's points in flight, not by this budget (admission is in ${admissionMode} mode${admissionMode === "shadow" ? ": decisions are recorded, nothing is blocked" : ""}).` +
+    " For more parallel throughput, use external worktree builds, not a bigger budget.";
 
   return {
     success: true,
@@ -158,7 +168,7 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
       Object.keys(data).length > 0
         ? `Backlog delivery budget set to ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`
         : `Backlog delivery budget is ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`,
-    data: { dailyBudget, enabled, activeBuilds, sandboxPoolSize: poolSize },
+    data: { dailyBudget, enabled, activeBuilds, sandboxPoolSize: poolSize, wipAdmissionMode: admissionMode },
   };
 }
 

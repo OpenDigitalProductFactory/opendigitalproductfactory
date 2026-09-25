@@ -1,3 +1,4 @@
+import { blocksStart } from "@/lib/build/investment-admission";
 import * as crypto from "crypto";
 import { generateBuildId, mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import {
@@ -634,7 +635,7 @@ export async function runGovernedBacklogTeeUp(input: {
    * start, so a candidate past its portfolio's allowance is refused and the
    * reason is recorded on the item. Injected in tests; defaults to the live check.
    */
-  admit?: (itemId: string) => Promise<{ verdict: "admit" | "warn" | "refuse"; reason: string }>;
+  admit?: (itemId: string) => Promise<{ verdict: "admit" | "warn" | "refuse"; reason: string; mode?: "shadow" | "enforce" }>;
 }): Promise<{
   trigger: GovernedBacklogTeeUpTrigger;
   requestedLimit: number;
@@ -706,7 +707,8 @@ export async function runGovernedBacklogTeeUp(input: {
 
   for (const item of selected) {
     const admission = await admit(item.itemId);
-    if (admission.verdict === "refuse") {
+    // Shadow mode records the refusal and lets the start proceed (WWMD DI-D83D9C13686B).
+    if (blocksStart(admission)) {
       refused.push({ backlogItemId: item.itemId, reason: admission.reason });
       skippedCount += 1;
       continue;
