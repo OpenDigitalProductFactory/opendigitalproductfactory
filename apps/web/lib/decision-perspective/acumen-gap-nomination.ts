@@ -1,5 +1,9 @@
 // Acumen corpus-gap nomination (W16 — BI-18519A73, EP-413F2602).
 //
+// Since BI-F6FD946F the profession gate itself calls this for EVERY caller —
+// Build Studio phase consults, the architecture advisory, the MCP tool and the
+// TAK alignment delegation — so a craft miss anywhere teaches the corpus.
+//
 // Closes the nomination half of the enforcement loop: when a Build Studio
 // phase gate consults an impacted acumen and the craft cannot answer — the
 // consult defers/escalates with no applicable material, or the profession's
@@ -58,6 +62,16 @@ export type AcumenGapConsultOutcome = {
   coverageGap: boolean;
   domainClass: string;
   question: string;
+  /**
+   * The coworker that asked, when the consult came from a coworker's own
+   * identity rather than a declared borrow (BI-F6FD946F). Used only when the
+   * profession has no registered acumen: the enterprise-architecture advisory
+   * consults as `ea-architect`, which the acumen registry does not list, so
+   * without this every one of its misses resolved to "unknown-acumen".
+   */
+  fallbackAgentId?: string | null;
+  /** Where the consult originated; defaults to the Build Studio phase gates. */
+  routeContext?: string | null;
 };
 
 export type AcumenGapNominationResult = {
@@ -89,8 +103,22 @@ export function shouldNominateAcumenGap(consult: AcumenGapConsultOutcome): boole
 }
 
 /** Stable need text — the dedupe fingerprint keys on this, so it must NOT
- *  contain per-consult ids or scores. Those go in blocks/evidence instead. */
-function needTextFor(professionKey: string, domainClass: string): string {
+ *  contain per-consult ids or scores. Those go in blocks/evidence instead.
+ *
+ *  The topic leads the text because `capabilityNeedOriginId` fingerprints only
+ *  the first 120 characters: the previous wording put the domain class past
+ *  that cut for any long profession key, so two classes collapsed into one
+ *  need (BI-F6FD946F). */
+export function acumenGapNeedText(professionKey: string, domainClass: string): string {
+  return (
+    `Craft corpus gap (${professionKey} / ${domainClass}): the profession has no `
+    + `decision material strong enough to answer these consults`
+  );
+}
+
+/** The wording needs were filed under before BI-F6FD946F. Still matched as a
+ *  duplicate so the open needs filed under it are not filed a second time. */
+function legacyNeedTextFor(professionKey: string, domainClass: string): string {
   return (
     `Craft corpus gap: the ${professionKey} profession has no decision material `
     + `strong enough to answer ${domainClass} consults from Build Studio phase gates`
@@ -110,13 +138,24 @@ export async function nominateAcumenCorpusGap(
       return { nominated: false, reason: "not-a-gap" };
     }
 
-    const acumen = getAcumenRoomShape(consult.professionKey);
-    if (!acumen) {
+    // The acumen's resident coworker owns the corpus when one is registered;
+    // otherwise the coworker that asked does.
+    const agentId =
+      getAcumenRoomShape(consult.professionKey)?.coworkerAgentId
+      ?? consult.fallbackAgentId?.trim()
+      ?? null;
+    if (!agentId) {
       return { nominated: false, reason: "unknown-acumen" };
     }
-    const agentId = acumen.coworkerAgentId;
-    const need = needTextFor(consult.professionKey, consult.domainClass);
-    const fingerprint = capabilityNeedOriginId(agentId, CORPUS_GAP_NEED_KIND, need);
+    const need = acumenGapNeedText(consult.professionKey, consult.domainClass);
+    const fingerprints = new Set([
+      capabilityNeedOriginId(agentId, CORPUS_GAP_NEED_KIND, need),
+      capabilityNeedOriginId(
+        agentId,
+        CORPUS_GAP_NEED_KIND,
+        legacyNeedTextFor(consult.professionKey, consult.domainClass),
+      ),
+    ]);
 
     const listNeeds = deps.listNeeds ?? listCoworkerCapabilityNeeds;
     const existing = (await listNeeds({
@@ -126,17 +165,19 @@ export async function nominateAcumenCorpusGap(
     const openDuplicate = existing.find(
       (row) =>
         OPEN_NEED_STATUSES.has(String(row.status ?? ""))
-        && capabilityNeedOriginId(agentId, CORPUS_GAP_NEED_KIND, String(row.need ?? "")) === fingerprint,
+        && fingerprints.has(capabilityNeedOriginId(agentId, CORPUS_GAP_NEED_KIND, String(row.need ?? ""))),
     );
     if (openDuplicate) {
       return { nominated: false, reason: "duplicate-open-need", needId: openDuplicate.needId };
     }
 
+    const routeContext = consult.routeContext?.trim() || "/build";
+    const fromBuildStudio = routeContext === "/build";
     const submit = deps.submitAssessment ?? submitCoworkerSelfAssessment;
     const result = await submit({
       agentId,
-      trigger: "build-studio-acumen-consult",
-      routeContext: "/build",
+      trigger: fromBuildStudio ? "build-studio-acumen-consult" : "profession-gate-consult",
+      routeContext,
       verdict: "gaps",
       confidence: "low",
       missionSummary: null,
@@ -147,10 +188,10 @@ export async function nominateAcumenCorpusGap(
           severity: "important",
           need,
           blocks:
-            `Build Studio acumen consult ${consult.interactionId ?? "(unrecorded)"} returned `
+            `Craft consult ${consult.interactionId ?? "(unrecorded)"} from ${routeContext} returned `
             + `${consult.outcomeType} at confidence ${consult.confidenceScore} for domain class `
-            + `${consult.domainClass}. Until the corpus is consolidated, this acumen cannot `
-            + `advise phase decisions in this class.`,
+            + `${consult.domainClass}. Until the corpus is consolidated, this craft cannot `
+            + `decide questions in this class on its own.`,
           evidenceJson: {
             source: "acumen-gap-nomination",
             professionKey: consult.professionKey,
@@ -160,6 +201,7 @@ export async function nominateAcumenCorpusGap(
             professionProfileSelected: consult.professionProfileSelected,
             coverageGap: consult.coverageGap,
             domainClass: consult.domainClass,
+            routeContext,
             question: consult.question,
           },
         },

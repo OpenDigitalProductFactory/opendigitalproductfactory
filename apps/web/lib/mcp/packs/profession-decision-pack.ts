@@ -25,7 +25,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "evaluate_profession_decision",
     description:
-      "Weigh a craft or professional-practice decision against your profession's recorded techniques and standards (your role's how-should-I-do-this corpus), returning a confidence-scored recommendation and recording the outcome to the decision ledger. Falls back to platform defaults only as advisory when your profession has no recorded guidance for this kind of decision, and escalates to a human when confidence is low. Use this to ground a technique/approach call in your profession's craft rather than deciding unaided.",
+      "Weigh a craft or professional-practice decision against your profession's recorded techniques and standards (your role's how-should-I-do-this corpus), returning a confidence-scored recommendation and recording the outcome to the decision ledger. Falls back to platform defaults only as advisory when your profession has no recorded guidance for this kind of decision. When confidence is low, the gap is nominated for corpus growth rather than put to a person as a decision; only critical-risk calls go to an owner. Use this to ground a technique/approach call in your profession's craft rather than deciding unaided.",
     inputSchema: {
       type: "object",
       properties: {

@@ -71,8 +71,9 @@ export type RunAcumenPhaseConsultsInput = {
   professionGate?: ProfessionGateFn;
   /**
    * Injectable corpus-gap nomination hook. Tests pass a stub (no DB); gate
-   * call sites register the real nominateAcumenCorpusGap. Failures are
-   * swallowed with a structured log — audit-only, same as the shadow hooks.
+   * call sites register the real nominateAcumenCorpusGap. Forwarded into the
+   * profession gate, which owns nomination for every caller (BI-F6FD946F);
+   * absent means none, and failures are swallowed there.
    */
   nominateGap?: NominateGapFn | null;
 };
@@ -111,6 +112,7 @@ export async function runAcumenPhaseConsults(
         phaseFrom: input.phaseFrom ?? null,
         phaseTo: input.phaseTo ?? null,
         triggeredByUserId: input.triggeredByUserId,
+        nominateGap: input.nominateGap ?? null,
       });
 
       results.push({
@@ -121,28 +123,6 @@ export async function runAcumenPhaseConsults(
         rationale: consult.evaluation.rationale,
         professionProfileSelected: consult.professionProfileSelected,
       });
-
-      if (input.nominateGap) {
-        try {
-          await input.nominateGap({
-            professionKey,
-            interactionId: consult.interactionId,
-            outcomeType: consult.evaluation.outcomeType,
-            confidenceScore: consult.evaluation.confidenceScore,
-            professionProfileSelected: consult.professionProfileSelected,
-            coverageGap: consult.evaluation.coverageGap,
-            domainClass: ACUMEN_CONSULT_DOMAIN_CLASS,
-            question: input.question,
-          });
-        } catch (error) {
-          console.warn(
-            `[tool-trace] acumen.gap.nomination-failed ${JSON.stringify({
-              professionKey,
-              error: getErrorMessage(error),
-            })}`,
-          );
-        }
-      }
     } catch (error) {
       // Fail-open per consult: record the failure and keep consulting.
       console.warn(
