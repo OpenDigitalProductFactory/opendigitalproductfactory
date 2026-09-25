@@ -78,6 +78,23 @@ export type ResolvedLocalCiPoolPolicy = {
    * evidence. Present whenever the canonical broker contributed.
    */
   decidedHostPressure?: LocalCiHostPressure;
+  /**
+   * The arithmetic behind a headroom refusal (BI-D3BF53A9): what was
+   * available, the floor kept back, the per-slot reserve, and the shortfall.
+   * A closed pool that only says "headroom-low" cannot be told apart from a
+   * wall, and sessions reached for host maintenance that could not help.
+   */
+  headroom?: LocalCiHeadroomShortfall;
+};
+
+export type LocalCiHeadroomShortfall = {
+  /** Which machine was measured: the Docker VM (builder) or the host (stage). */
+  measuredOn: "docker-vm" | "host";
+  availableBytes: number;
+  floorBytes: number;
+  reserveBytes: number;
+  /** reserve - (available - floor); positive when the pool is closed on it. */
+  shortfallBytes: number;
 };
 
 /**
@@ -296,6 +313,33 @@ export function localCiHostStageHeadroomCapacity(input: {
   );
 }
 
+/** The shortfall behind a headroom refusal, or nothing when it is unmeasured. */
+export function localCiHeadroomShortfall(input: {
+  measuredOn: LocalCiHeadroomShortfall["measuredOn"];
+  availableBytes: number | undefined;
+  floorBytes: number;
+  reserveBytes: number;
+}): LocalCiHeadroomShortfall | undefined {
+  if (
+    !Number.isFinite(input.availableBytes)
+    || !Number.isFinite(input.floorBytes)
+    || !Number.isFinite(input.reserveBytes)
+  ) {
+    return undefined;
+  }
+  const availableBytes = input.availableBytes as number;
+  return {
+    measuredOn: input.measuredOn,
+    availableBytes,
+    floorBytes: input.floorBytes,
+    reserveBytes: input.reserveBytes,
+    shortfallBytes: Math.max(
+      0,
+      input.reserveBytes - Math.max(0, availableBytes - input.floorBytes),
+    ),
+  };
+}
+
 type PolicyEnv = Record<string, string | undefined>;
 type PlatformConfigReader = {
   findUnique: (args: {
@@ -418,8 +462,10 @@ function unavailable(input: {
   manifestCapacity: number;
   reason: string;
   config: LocalCiPoolConfig;
+  headroom?: LocalCiHeadroomShortfall;
 }): ResolvedLocalCiPoolPolicy {
   return {
+    ...(input.headroom ? { headroom: input.headroom } : {}),
     policyVersion: LOCAL_CI_POOL_POLICY_VERSION,
     source: input.source,
     requestedCapacity: input.requestedCapacity,
@@ -569,16 +615,23 @@ export function resolveLocalCiPoolPolicy(input: {
         manifestCapacity,
         reason: "host-build-headroom-low",
         config,
+        headroom: localCiHeadroomShortfall({
+          measuredOn: "docker-vm",
+          availableBytes: input.host.dockerAvailableMemoryBytes,
+          floorBytes: config.ceilings.minAvailableMemoryBytes,
+          reserveBytes: builderMemoryBytes,
+        }),
       });
     }
+    const hostStageMemoryBytes = localCiHostStageAdmissionReserveBytes({
+      hardCeilingBytes: localCiSlotResources.hostStagePolicy.memoryBytes,
+      calibratedReserveBytes:
+        localCiSlotResources.hostStagePolicy.admissionReserveBytes,
+    });
     const hostStageCapacity = localCiHostStageHeadroomCapacity({
       availableMemoryBytes: input.host.availableMemoryBytes ?? Number.NaN,
       minAvailableMemoryBytes: config.ceilings.minAvailableMemoryBytes,
-      hostStageMemoryBytes: localCiHostStageAdmissionReserveBytes({
-        hardCeilingBytes: localCiSlotResources.hostStagePolicy.memoryBytes,
-        calibratedReserveBytes:
-          localCiSlotResources.hostStagePolicy.admissionReserveBytes,
-      }),
+      hostStageMemoryBytes,
       manifestCapacity,
     });
     if (hostStageCapacity === 0) {
@@ -588,6 +641,12 @@ export function resolveLocalCiPoolPolicy(input: {
         manifestCapacity,
         reason: "host-stage-headroom-low",
         config,
+        headroom: localCiHeadroomShortfall({
+          measuredOn: "host",
+          availableBytes: input.host.availableMemoryBytes,
+          floorBytes: config.ceilings.minAvailableMemoryBytes,
+          reserveBytes: hostStageMemoryBytes,
+        }),
       });
     }
     if (hostBuildCapacity === 1 && requestedCapacity === 2) {
