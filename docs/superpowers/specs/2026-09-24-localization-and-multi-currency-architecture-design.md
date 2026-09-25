@@ -8,7 +8,10 @@ status: active
 - **Date:** 2026-09-24
 - **Epic:** `EP-6B33A840`, *Localization & multi-currency architecture*. The id is reused from the 2026-08-06 draft; that epic never landed in this backlog.
 - **Scope:** `platform`
-- **Kernel decision ledger:** `DI-ADAE8489B6A2`. This is the UI message layer decision: absorb an owned catalog over native `Intl`. The alternatives were adopting next-intl or AI translate-at-render. The decision was high confidence, margin 2.92.
+- **Kernel decision ledger:**
+  - `DI-ADAE8489B6A2`: the UI message layer. Absorb an owned catalog over native `Intl`, rather than adopting next-intl or translating with AI at render time. High confidence, margin 2.92.
+  - `DI-685582FAB30C`: functional currency on a staged `LegalEntity` (§9.1).
+  - `DI-38049EA347F8`: Arabic is the first RTL locale (§9.4).
 - **Supersedes:** `docs/superpowers/specs/2026-08-06-platform-localization-infrastructure-design.md`. That draft picked next-intl, did not cover multi-currency, and had no model for external audiences or seeded content.
 - **Absorbs:** the deferred Phases 2–3 of `docs/superpowers/plans/2026-07-18-org-locale-currency-spine.md`, whose Phase 1 is delivered.
 
@@ -199,7 +202,7 @@ A single `format` surface beside `org-locale` provides `money`, `number`, `perce
 - **Currency authority:** every currency column is constrained to ISO-4217 (§5.3). Normalization of existing strings is part of the same migration. Unknown values are flagged, never guessed.
 - **Three currencies:**
   - **Transaction** currency is on every money document.
-  - **Functional** currency is `OrgSettings.baseCurrency`. It may later move per legal entity (§9).
+  - **Functional** currency belongs to the document's `LegalEntity` (§9.1, L1.0). Each install starts with one primary entity. `OrgSettings.baseCurrency` becomes the org's presentation currency.
   - **Presentment** currency is what the payer saw. For the storefront it equals the transaction currency. Missing presentment is the root cause of `BI-3921EBF6`.
 - **Posting:** `JournalLine` gains functional debit and credit, `rate`, `rateDate` and `rateSource`, taken from effective-dated `ExchangeRate` rows. If no rate exists, posting is held; the rate is never silently 1.0. Revaluation uses the already-declared `fx-revaluation` source.
 - **Aggregation:** totals across currencies either convert with a cited rate or show a per-currency breakdown, never "Unavailable" (`BI-685ADDCD`).
@@ -248,10 +251,7 @@ The baseline counts in §3 are the starting point. Progress is the counts reachi
 2. **AI draft.** A coworker drafts from the English catalog plus key context (route, description, maximum length) and a glossary.
 3. **Human review.** A named language reviewer approves each namespace. Approvals are recorded as evidence.
 4. **Coverage.** Coverage is reported per locale, namespace and tier-1 surface.
-5. **Activation gate:**
-   - `planned` → `beta` requires tier-1 legal, money and outbound namespaces at 100%.
-   - `beta` → `supported` requires 95% or more elsewhere, plus native review.
-   - Until a locale passes, it falls back per key and shows a "partial translation" notice.
+5. **Activation gate:** tiered by namespace. Only reviewed strings count. The thresholds are in §9.3.
 6. **Delivery process.** A new string ships in `en` only, and missing translations queue automatically. The English PR is never blocked. This extends documentation-impact discipline; it is not a new gate.
 
 **Per-region budget template** (what "add region X" costs):
@@ -320,6 +320,7 @@ Storage always stays Gregorian UTC.
 
 | Id | BI | Item |
 |---|---|---|
+| L1.0 | `BI-9BD41BE1` | `LegalEntity` (one primary per install); functional currency, tax profile and ledger scoped to it |
 | L1.1 | `BI-BAC971B2` | ISO-4217 authority with minor units (existing, linked) |
 | L1.2 | `BI-AEB08F6B` | Transaction, functional and presentment currency; functional journal amounts; rate provenance |
 
@@ -339,7 +340,7 @@ Storage always stays Gregorian UTC.
 |---|---|---|
 | L3.1 | `BI-344F6DA6` | Add-a-locale road, supply chain, activation gate, budget template |
 | L3.2 | `BI-8D832CF1` | Spanish (es-419 + es-MX/es-US) |
-| L3.3 | `BI-4FDFE20C` | RTL scoping pack; first RTL locale decision |
+| L3.3 | `BI-4FDFE20C` | RTL pack: Arabic first (§9.4), PDF shaping spike, budget sheets |
 | L3.4 | `BI-3CD41DCA` | Addresses, phones, units per country |
 | L3.5 | `BI-59CBBBB1` | Mobile shares catalogs and RTL |
 
@@ -348,6 +349,8 @@ Storage always stays Gregorian UTC.
 - `BI-1C8B56DA`: mileage and units.
 - `BI-4EC1D572`: market footprint "language fit" layer. It reads the locale registry's status.
 - `BI-50DF2A92`, `EP-A47377D1`, `EP-6F60DB83`: jurisdiction.
+- `BI-9D4A5D22` (BET-9, `EP-8DC217EB`): the canonical Money convention. L1.0 and L1.2 coordinate with it, so there is one convention.
+- `BI-4D1139DA`: the legal-entity admin surface. L1.0 absorbs it.
 
 **Order:** L0.1 → L0.2 → L0.3 → L0.5 → L0.6 → L0.7 → L0.4 waves (continuous) → L1 → L2 → L3.
 
@@ -363,12 +366,138 @@ L0.1 through L0.3 are the "core design up front" slice. Once they land, every ne
 - **RTL regressions after the codemod.** Use the `ar-XB` visual check on sampled routes, plus the guard.
 - **Our MF2 subset diverges from the standard.** Keep a conformance test subset taken from the Unicode MF2 test suite, and swap to native `Intl.MessageFormat` when it is available.
 
-## 9. Open questions
+## 9. Resolved decisions (2026-09-25)
 
-1. **Functional currency per legal entity versus per org.** Multi-plant manufacturers in two countries likely need per entity. The L1.2 columns are designed so they can move. *Decide at L1.2 plan time, after verifying the legal-entity substrate.*
-2. **Default external languages proposed per country.** Should they come from CLDR population data (e.g. US → offer `es`) or from the operator only? *Proposed: offer, never enable, without confirmation.*
-3. **Activation thresholds.** 100% on tier-1 and 95% elsewhere is proposed. *Ratify at L3.1.*
-4. **First RTL locale.** This is a demand-evidence decision, made at L3.3.
+These were the four open questions. Each one was researched against the relevant standards, comparable products and live DPF substrate. Q1 and Q4 were also scored through WWMD.
+
+### 9.1 Functional currency belongs to a legal entity, introduced in stages (`DI-685582FAB30C`, high, margin 2.65)
+
+**Evidence**
+- IAS 21 and ASC 830 both define functional currency **per reporting entity**. Presentation currency is a separate choice. Translating a foreign operation creates a translation reserve (CTA) held in equity.
+- Odoo (`res.company.currency_id`), ERPNext (company currency), NetSuite OneWorld (subsidiary base currency plus consolidated exchange rates) and Business Central (per-company local currency plus a consolidation company) all scope currency to the entity, never to the database.
+- A Mexican plant keeps books in Spanish and in MXN (SAT electronic accounting, RCFF Art. 33), so it is its own entity. A US nonprofit with no foreign entity needs only one entity and remeasures foreign transactions (ASC 830-20).
+- DPF today has no `LegalEntity`. `Organization` is the install (install-is-the-tenant, pending ratification). `LedgerAccount` is unique per org. Yet the Mexico payroll backlog already assumes per-entity MXN.
+
+**Decision**
+- **Stage 0 (L1.0, `BI-9BD41BE1`):**
+  - Add `LegalEntity`, with exactly one primary entity per install seeded from `OrgSettings`.
+  - Functional currency lives on the entity and is locked after the first posting.
+  - Ledger, fiscal periods, `OrganizationTaxProfile` and `TaxRegistration` are scoped by `legalEntityId`.
+  - `OrgSettings.baseCurrency` becomes the org presentation currency, the only org-level currency.
+  - No behaviour changes for one-entity installs.
+- **Stage 1:** a second entity with its own books.
+- **Stage 2:** consolidation (closing, average and historical rates; a CTA account; intercompany eliminations).
+- **Rejected:** org-level-only, because it cannot represent a Mexican subsidiary; and full multi-entity now, because the blast radius and effort are too large for today's demand.
+
+### 9.2 External languages are suggested by country, never auto-enabled
+
+**Evidence**
+- CLDR `territoryInfo` (Unicode-3.0 licence) gives each country's languages with `populationPercent` and `officialStatus`. It exists precisely to say which languages are useful where.
+- Comparable products (Shopify Markets, Wix, Odoo) leave language choice fully manual, so suggestions add value.
+- Legal drivers vary by place:
+  - Quebec: the Charter of the French Language / Bill 96 requires French at parity.
+  - US healthcare: Section 1557 (2024 rule) requires a language-assistance notice in the state's top 15 languages.
+  - EU: member states set their own consumer-language rules.
+- Risks of auto-enabling: half-translated pages, customers writing in languages staff cannot answer, and machine-translated binding terms.
+
+**Decision (L0.7 `BI-6982F7D9`, L2.1 `BI-56ECBA05`)**
+- **Suggest** every official or de facto official language, plus any language at **≥ 5%** of the population.
+  - Regional-official languages are suggested by region.
+  - Dialect codes are folded into their written language or dropped.
+  - Only languages with a DPF locale entry are offered.
+- **Why 5%:** it keeps US Spanish (9.6%), Mexican English (13%), Israeli Russian (11%) and UAE Malayalam (7%). It drops long tails around 3% that a small org cannot staff.
+- **Flag required languages** from the jurisdiction layer: Quebec French, the US-healthcare 1557 notice, and national languages where required.
+- **Never auto-enable.** Enabling needs:
+  - the L3.1 T1 gate
+  - reviewed legal text
+  - a named person who can respond in that language
+- **Optional later refinement:** US county-level ACS data (table C16001).
+
+**Expected suggestions**
+
+| Country | Suggested languages |
+|---|---|
+| US | en + es |
+| CA (Quebec) | fr (required) + en |
+| CA (elsewhere) | en + fr |
+| MX | es + en |
+| BE | nl, fr or de by region, + en |
+| CH | de, fr, it + en |
+| IL | he, ar, en, ru |
+| AE | ar, en, ml |
+
+### 9.3 Activation thresholds are tiered by namespace; only reviewed strings count
+
+**Evidence**
+
+| Project | Threshold |
+|---|---|
+| WordPress core | front-end ≥ 90%, admin ≥ 75% |
+| WordPress plugin/theme packs | ≥ 90% |
+| KDE | about 90% frameworks, 75% workspace |
+| GNOME | "supported" at ≥ 80% |
+| Firefox | Nightly at ≥ 30%; Release needs 4- and 5-star strings at ~100% plus active reviewers |
+| translatewiki | export at about 13% |
+| Microsoft Language Interface Packs | partial UI, with parent-language fallback |
+| ISO 18587 | defines full post-editing of machine translation |
+
+UX guidance says mixed-language screens are tolerable in low-stakes UI and damaging at payment, consent and failure moments.
+
+**Decision (L3.1 `BI-344F6DA6`)**
+
+| Tier | Namespaces | Beta | Supported | Per-key fallback |
+|---|---|---|---|---|
+| **T1** legal, money, outbound | terms and consents, prices, invoices, payments, receipts, outbound email/SMS/PDF, account security | 100% reviewed, or the flow stays whole in English with a notice | 100%, native review to ISO 18587 full post-edit; legal text also reviewed for the jurisdiction | **Never.** Whole-flow English fallback |
+| **T2** external-facing UI | storefront, portal, public forms, customer-visible errors | ≥ 60% plus 100% of critical-path keys | ≥ 90%, native review | Allowed, except critical-path keys |
+| **T3** internal UI | back office, settings, reports | ≥ 30% | ≥ 80% | Allowed, with a notice |
+
+**Gates**
+- **Planned → beta:** a named native reviewer, and the T1 flows done or hidden. The locale is labelled "Beta".
+- **Beta → supported:** every tier at its supported bar, a reviewer plus a backup, and one clean release cycle.
+- **Regression:**
+  - T1 below 100% forces whole-flow English for that flow.
+  - T2 or T3 below the supported bar for more than one release demotes the locale to beta.
+- Unreviewed AI drafts never count toward "supported".
+
+This replaces the earlier proposal of 100% on tier 1 and 95% elsewhere. A single 95% bar was stricter than any precedent for internal UI, and less specific than the precedents for critical paths.
+
+### 9.4 Arabic is the first RTL locale; Urdu second (`DI-38049EA347F8`, high, margin 1.59)
+
+**Evidence** (scored 1–5 on reach, market fit, legal risk, technical de-risking and US-diaspora demand)
+
+| Language | Total | Rationale |
+|---|---|---|
+| Arabic | 25 | About 480M speakers. 1.39M US home speakers (ACS). On several state Section 1557 top-15 lists. GCC data-residency law (Saudi PDPL enforced since 2024-09; UAE due 2027-01) favours self-hosted software. Hardest mainstream case (6 plurals, shaping, two digit systems, Hijri), so it de-risks the rest. |
+| Urdu | 18 | 246M speakers, 508k in the US. Reuses the Arabic script work. |
+| Persian | 13 | OFAC Iran sanctions cloud the market (GL D-2 does not cover a business back office). Ship only after sanctions screening exists. |
+| Hebrew | 11 | Proves direction flipping only. Least demand. Cheap to add at any time. |
+
+**Decision (L3.3 `BI-4FDFE20C`)**
+- **Base locale:** `ar`, Modern Standard Arabic. Regional files (ar-SA, ar-EG, ar-AE) carry formats only.
+- **Digits:** Latin by default via `ar-u-nu-latn`, because CLDR's bare `ar` defaults to Arabic-Indic digits. Arabic-Indic digits are a user preference.
+- **Calendar:** Gregorian by default, with Hijri (`-u-ca-islamic-umalqura`) as a display option.
+- **Font:** Noto Sans Arabic.
+- **Urdu** ships second, in Naskh first, with Nastaliq later.
+- **Blocking spike before committing Arabic:** `@react-pdf/renderer` has known Arabic shaping and RTL issues (#2638, #3007, #1636, #1571).
+  - Prove the path first: a registered Noto font plus bidi control marks.
+  - If it fails, route RTL PDFs through a headless-browser or dpf-doctools renderer.
+
+**Sources**
+- [IFRS IAS 21](https://www.ifrs.org/issued-standards/list-of-standards/ias-21-the-effects-of-changes-in-foreign-exchange-rates/)
+- [PwC ASC 830](https://viewpoint.pwc.com/dt/us/en/pwc/accounting_guides/foreign_currency/foreign_currency__2_US/chapter_1_framework__US/13_framework_for_the_US.html)
+- [Odoo multi-currency](https://www.odoo.com/documentation/18.0/applications/finance/accounting/get_started/multi_currency.html)
+- [NetSuite consolidated rates](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4847555414.html)
+- [SAT Art. 33](https://sat.gob.mx/articulo/52512/articulo-33)
+- [CLDR territory-language chart](https://www.unicode.org/cldr/charts/48/supplemental/territory_language_information.html)
+- [HHS 1557 taglines FAQ](https://www.hhs.gov/civil-rights/for-individuals/section-1557/1557faqs/aggregation_tagline/index.html)
+- [McCarthy Tétrault on Bill 96](https://www.mccarthy.ca/en/insights/blogs/consumer-markets-perspectives/french-language-requirements-bill-96-and-june-1-2025-common-misconceptions)
+- [WordPress Polyglots FAQ](https://make.wordpress.org/polyglots/handbook/frequently-asked-questions/)
+- [Firefox release locales](https://mozilla-l10n.github.io/documentation/products/firefox_desktop/adding_release.html)
+- [KDE l10n](https://l10n.kde.org/docs/translation-howto/gui-todo-lists.html)
+- [ISO 18587](https://www.iso.org/standard/62970.html)
+- [Saudi PDPL transfers (Dentons)](https://www.dentons.com/en/insights/alerts/2025/may/15/saudi-arabias-framework-for-cross-border-data-transfers)
+- [OFAC GL D-2](https://www.federalregister.gov/documents/2022/10/13/2022-22233/publication-of-iranian-transactions-and-sanctions-regulations-web-general-license-d-2)
+- [react-pdf #3007](https://github.com/diegomura/react-pdf/issues/3007)
 
 ## 10. Superseded and absorbed
 
