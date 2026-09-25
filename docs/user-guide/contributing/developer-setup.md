@@ -97,14 +97,14 @@ pnpm --filter @dpf/db seed                       # Seed roles, agents, taxonomy,
 docker build -f Dockerfile.promoter -t dpf-promoter .
 ```
 
-**Build the document engine image** (optional, for office document conversion). The portal runs it one-shot; compose never starts it. The smoke test exercises it offline and read-only:
+**Build the document engine image** (optional, for office document conversion). An install made with the installer does not need this step: a Customizable install pins the `dpf-doctools` image published for the release tag its clone descends from (the `git describe` baked into the portal as `DPF_PLATFORM_VERSION`), by digest, and builds `Dockerfile.doctools` from the clone only when no published image is reachable. That pin is stored in `self_upgrade.doctoolsImage` and resolved again after every upgrade. Build it by hand only for a bare `pnpm dev` portal, or to test changes to the image. The portal runs it one-shot; compose never starts it. The smoke test exercises it offline and read-only:
 
 ```bash
 docker build -f Dockerfile.doctools -t dpf-doctools .
 bash tools/doctools/smoke.sh dpf-doctools
 ```
 
-The portal only runs a digest-pinned image. To point a dev portal at a local build, set `DPF_DOCTOOLS_IMAGE` to its image id (`docker image inspect -f '{{.Id}}' dpf-doctools`). The docker-gated converter test uses the same reference and is skipped without it:
+The portal only runs a digest-pinned image. To point a dev portal at a local build, set `DPF_DOCTOOLS_IMAGE` (compose passes it to `portal` and `portal-init`) to its image id (`docker image inspect -f '{{.Id}}' dpf-doctools`). The docker-gated converter test uses the same reference and is skipped without it:
 
 ```bash
 DPF_DOCTOOLS_TEST_IMAGE="$(docker image inspect -f '{{.Id}}' dpf-doctools)"   pnpm --filter web exec vitest run lib/documents/conversion/convert.docker.test.ts

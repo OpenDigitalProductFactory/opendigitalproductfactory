@@ -103,6 +103,9 @@ services:
       DPF_HOST_PROFILE: ${DPF_HOST_PROFILE:-}
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
+      # Operator override for the document converter image, seeded into the
+      # self_upgrade row. Leave unset: the portal pins dpf-doctools itself.
+      DPF_DOCTOOLS_IMAGE: ${DPF_DOCTOOLS_IMAGE:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme123}
     depends_on:
       postgres:
@@ -220,6 +223,10 @@ services:
       # Consumer self-upgrade needs this identity to resolve and launch the
       # immutable promoter image instead of falling back to the Git path.
       GHCR_OWNER: ${GHCR_OWNER:-opendigitalproductfactory}
+      # Operator override for the digest-pinned dpf-doctools image (name@sha256
+      # or a local image id). Unset is normal: release and source-built installs
+      # resolve the pin themselves (BI-9A2EC54A, BI-4E18BC28).
+      DPF_DOCTOOLS_IMAGE: ${DPF_DOCTOOLS_IMAGE:-}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}
