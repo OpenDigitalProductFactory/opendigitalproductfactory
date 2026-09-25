@@ -27,6 +27,20 @@ not reopen them.
 | 6 | BI-3430B3A4 | Admission by points in flight at every start, tee-up included | §5.6 | 1, 3 (5 for the Little's-Law default; 8-point floor until then) |
 | 7 | BI-0CA5DA2B | AI tokens, spend and latency beside points | §5.7 | 5 |
 
+### Traceability
+
+Objectives and acceptance ids are the design's §9 baseline.
+
+| Slice | Objective | Acceptance | Contract | Flow |
+|---|---|---|---|---|
+| 1 | OBJ-BUDGET-1 | AC-BUDGET-1 | design §5.1, design §5.2 | Slice 1 |
+| 2 | OBJ-BUDGET-1 | AC-BUDGET-2 | design §5.2 | Slice 2 |
+| 3 | OBJ-BUDGET-2 | AC-BUDGET-3 | design §5.3 | Slice 3 |
+| 4 | OBJ-BUDGET-2 | AC-BUDGET-4 | design §5.4 | Slice 4 |
+| 5 | OBJ-BUDGET-3 | AC-BUDGET-5 | design §5.5, design §5.7, design §6 | Slice 5 |
+| 6 | OBJ-BUDGET-4 | AC-BUDGET-6 | design §5.6 | Slice 6 |
+| 7 | OBJ-BUDGET-5 | AC-BUDGET-7 | design §5.7 | Slice 7 |
+
 Every design section maps to a slice. Every slice is independently shippable and
 ends at something observable on this install. The coverage receipt is recorded
 against `BI-EA3859C9` with `record_plan_backlog_coverage` once this file is
