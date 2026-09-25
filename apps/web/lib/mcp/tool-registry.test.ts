@@ -412,16 +412,11 @@ describe("executeTool inline-case ratchet", () => {
 // This sweep is registry-driven rather than hand-listed, so it covers packs
 // that do not exist yet.
 describe("tool-pack grant coverage (registry-wide)", () => {
-  // Two host-surface telemetry tools remain outside coworker identity scope.
   // Self-scoped coworker tools must carry an explicit [] mapping: present and
   // intentionally universal, rather than absent and denied by default.
-  const KNOWN_UNGATED_BI_F998BCE8 = [
-    // BI-D6DFC0E7: benign self-report telemetry — a surface reporting its OWN
-    // toolchain readiness (and reading the fleet roll-up) cannot exceed its
-    // authority or affect anyone else, mirroring propose_improvement.
-    "surface-readiness:get_fleet_readiness",
-    "surface-readiness:record_surface_readiness",
-  ];
+  // BI-6AC65187 retired the two surface-readiness entries: the heartbeat upserts
+  // on a caller-supplied surfaceKey, so it is gated like the other heartbeats.
+  const KNOWN_UNGATED_BI_F998BCE8: string[] = [];
 
   it("gives every registered pack tool a TOOL_TO_GRANTS entry", () => {
     const ungated = TOOL_PACK_REGISTRY.packs.flatMap((pack) =>

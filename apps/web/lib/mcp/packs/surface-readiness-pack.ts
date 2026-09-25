@@ -152,6 +152,10 @@ export const surfaceReadinessPack: ToolPack = {
     record_surface_readiness: (params) => recordSurfaceReadinessHandler(params),
     get_fleet_readiness: (params) => getFleetReadinessHandler(params),
   },
-  // Ungated: self-report of the caller's own toolchain state + read-only telemetry.
-  grants: {},
+  // Mirrors TOOL_TO_GRANTS (BI-6AC65187): the heartbeat upserts on a
+  // caller-supplied surfaceKey, so it rides the heartbeat tier.
+  grants: {
+    record_surface_readiness: ["work_capsule_write"],
+    get_fleet_readiness: ["work_capsule_read"],
+  },
 };
