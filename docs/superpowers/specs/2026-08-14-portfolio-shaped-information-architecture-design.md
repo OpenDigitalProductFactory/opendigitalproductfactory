@@ -203,12 +203,23 @@ The template works on today's data, and each gap below shows as an honest empty 
 - **BI-2DBC4D2D:** coworker surface consolidation. Team links to its one directory.
 - **BI-30AB0979:** Business administration's portfolio placement.
 
-### 9.7 Acceptance for this amendment
+### 9.7 Objectives and acceptance for this amendment
 
-- Every portfolio section shows Work, Team and Setup through the existing `SectionNav`, with no new renderer, registry or table.
-- Work is a filtered view of `/ops/workrooms` (a test asserts that the same rooms appear in both for a given portfolio).
-- Team lists coworkers from route and work-shape bindings and room participants, and people from owner roles and room participants. Every row links to its canonical record. No directory rows are duplicated.
-- Each setting has one home. A test maps every settings panel to exactly one area, or to Run the platform with the areas that link to it.
-- The Admin rail entry and the Advanced tab are gone; their pages are reachable from their area's Setup or from Run the platform.
-- Operations to outcome, measured on the running portal, go down for the review's activity map. For example, rail to Connect GitHub goes from 5+ to at most 3.
-- The §3 coherence guarantees and the UX Route Budget Sweep hold. The shell word count goes down, and the baseline is re-frozen deliberately in the PR that changes the rail.
+**OBJ-AREA-SPINE:** The rail is the portfolio spine with activity labels: at most 18 Full-mode entries, each traceable to one FPAW portfolio key or a declared cross-cut.
+
+**OBJ-AREA-WORK:** Each portfolio section shows the work going on in it as a filtered view of the one workroom inventory.
+
+**OBJ-AREA-TEAM:** Each portfolio section shows the humans and AI coworkers who work there, and what they may do, as a projection of existing bindings, participants and roles.
+
+**OBJ-AREA-SETUP:** Each setting has one home: the area whose runtime reads it, or Run the platform when it is cross-cutting.
+
+**OBJ-AREA-NO-REGRESSION:** The §3 coherence guarantees and the UX surface budgets hold while the rail changes.
+
+| Acceptance | Objectives | Statement |
+|---|---|---|
+| AC-AREA-SPINE | OBJ-AREA-SPINE | A nav-model test resolves every `shellNav` entry to one portfolio key or a declared cross-cut, and Full mode has at most 18 rail entries. |
+| AC-AREA-WORK | OBJ-AREA-WORK | Each portfolio section's Work entry opens `/ops/workrooms` scoped to that portfolio, and a test asserts both views list the same rooms. |
+| AC-AREA-TEAM | OBJ-AREA-TEAM | Team reads only route and work-shape `AuthorityBinding` rows, `WorkroomParticipant` rows and owner roles, and every row links to its canonical record without copying it. |
+| AC-AREA-SETUP | OBJ-AREA-SETUP | A test maps every settings panel to exactly one area, or to Run the platform with its linking areas; the Admin rail entry and Advanced tab are retired. |
+| AC-AREA-OUTCOME | OBJ-AREA-SPINE, OBJ-AREA-SETUP | Operations to outcome measured on the running portal go down for the review's activity map; rail to Connect GitHub is at most 3. |
+| AC-AREA-GUARDS | OBJ-AREA-NO-REGRESSION | Section-scoped nav, breadcrumb and the one-SectionNav ratchet pass, and the route budget sweep shows lower shell word counts with a deliberately re-frozen baseline. |
