@@ -27,6 +27,28 @@ function isAnthropicHost(rawUrl: string): boolean {
   }
 }
 
+// OpenAI issues a refresh token only when the authorize request asks for
+// offline_access (BI-46461599). The codex/chatgpt providers use the Codex CLI's
+// public client, whose own login requests
+// "openid profile email offline_access api.connectors.read api.connectors.invoke"
+// (codex-cli 0.130.0); DPF needs none of the connector scopes. Exact-host match,
+// same reasoning as isAnthropicHost above.
+const OPENAI_AUTH_HOST = "auth.openai.com";
+const OPENAI_DEFAULT_OAUTH_SCOPE = "openid profile email offline_access";
+
+function defaultOAuthScope(authorizeUrl: string): string | null {
+  try {
+    return new URL(authorizeUrl).hostname.toLowerCase() === OPENAI_AUTH_HOST
+      ? OPENAI_DEFAULT_OAUTH_SCOPE
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+// codex and chatgpt share one OpenAI OAuth token.
+const OPENAI_PAIR: Record<string, string> = { codex: "chatgpt", chatgpt: "codex" };
+
 // ─── PKCE ─────────────────────────────────────────────────────────────────────
 
 function base64url(buffer: Buffer): string {
@@ -94,7 +116,8 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
   });
 
   const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
-  if (cred?.scope) params.set("scope", cred.scope);
+  const scope = cred?.scope || defaultOAuthScope(provider.authorizeUrl);
+  if (scope) params.set("scope", scope);
 
   return { authorizeUrl: `${provider.authorizeUrl}?${params.toString()}` };
 }
@@ -185,21 +208,24 @@ export async function exchangeOAuthCode(
   }
 
   const expiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000);
+  // A response without a refresh token must not erase one already stored.
+  const newRefreshToken = tokenResponse.refresh_token ? encryptSecret(tokenResponse.refresh_token) : null;
+  const credentialUpdate = {
+    cachedToken: encryptSecret(tokenResponse.access_token),
+    ...(newRefreshToken ? { refreshToken: newRefreshToken } : {}),
+    tokenExpiresAt: expiresAt,
+    status: "ok",
+  };
   await prisma.credentialEntry.upsert({
     where: { providerId: flow.providerId },
     create: {
       providerId: flow.providerId,
       cachedToken: encryptSecret(tokenResponse.access_token),
-      refreshToken: tokenResponse.refresh_token ? encryptSecret(tokenResponse.refresh_token) : null,
+      refreshToken: newRefreshToken,
       tokenExpiresAt: expiresAt,
       status: "ok",
     },
-    update: {
-      cachedToken: encryptSecret(tokenResponse.access_token),
-      refreshToken: tokenResponse.refresh_token ? encryptSecret(tokenResponse.refresh_token) : null,
-      tokenExpiresAt: expiresAt,
-      status: "ok",
-    },
+    update: credentialUpdate,
   });
 
   // Activate the provider: set status/clearance/authMethod, run model discovery,
@@ -214,7 +240,6 @@ export async function exchangeOAuthCode(
   // Bidirectional credential sync: codex and chatgpt share the same OpenAI OAuth
   // token. The credential upsert stays here because activateProvider doesn't
   // handle credential storage (that's the caller's responsibility).
-  const OPENAI_PAIR: Record<string, string> = { codex: "chatgpt", chatgpt: "codex" };
   const sibling = OPENAI_PAIR[flow.providerId];
   if (sibling) {
     const siblingProvider = await prisma.modelProvider.findUnique({ where: { providerId: sibling } });
@@ -224,16 +249,11 @@ export async function exchangeOAuthCode(
         create: {
           providerId: sibling,
           cachedToken: encryptSecret(tokenResponse.access_token),
-          refreshToken: tokenResponse.refresh_token ? encryptSecret(tokenResponse.refresh_token) : null,
+          refreshToken: newRefreshToken,
           tokenExpiresAt: expiresAt,
           status: "ok",
         },
-        update: {
-          cachedToken: encryptSecret(tokenResponse.access_token),
-          refreshToken: tokenResponse.refresh_token ? encryptSecret(tokenResponse.refresh_token) : null,
-          tokenExpiresAt: expiresAt,
-          status: "ok",
-        },
+        update: credentialUpdate,
       });
       // Sibling's status/clearance/discovery already handled by activateLinked
     }
@@ -254,7 +274,19 @@ export async function refreshOAuthToken(
   }
 
   const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
-  if (!cred?.refreshToken) return { error: "Re-authentication required" };
+  if (!cred?.refreshToken) {
+    // Nothing can renew this token. Once it is past expiry, say so on the row
+    // (and its codex/chatgpt sibling, which holds the same token) instead of
+    // leaving status "ok" on a dead credential.
+    if (cred?.tokenExpiresAt && cred.tokenExpiresAt.getTime() <= Date.now()) {
+      const sibling = OPENAI_PAIR[providerId];
+      await prisma.credentialEntry.updateMany({
+        where: { providerId: { in: sibling ? [providerId, sibling] : [providerId] } },
+        data: { status: "expired" },
+      });
+    }
+    return { error: "Re-authentication required" };
+  }
 
   const decryptedRefresh = decryptSecret(cred.refreshToken);
   if (!decryptedRefresh) return { error: "Re-authentication required — credential key may have changed" };
