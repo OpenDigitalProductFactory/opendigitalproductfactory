@@ -6,7 +6,7 @@
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import type { ActionResult } from "@/lib/shared/action-result";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { EA_DRAWING_FORMATS, exportEaViewDrawingFile, type EaDrawingFormat } from "@/lib/ea/view-drawing-export";
 
 export async function exportEaViewDrawing(input: {
@@ -16,13 +16,13 @@ export async function exportEaViewDrawing(input: {
   const session = await auth();
   const user = session?.user;
   if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_ea_modeler")) {
-    return { ok: false, error: "You do not have access to EA views." };
+    return err("You do not have access to EA views.");
   }
   if (!EA_DRAWING_FORMATS.includes(input.format)) {
-    return { ok: false, error: `Unsupported export format: ${String(input.format)}` };
+    return err(`Unsupported export format: ${String(input.format)}`);
   }
   const result = await exportEaViewDrawingFile({ viewId: input.viewId, format: input.format });
   if (!result.ok) return result;
   const { fileName, mimeType, bytes } = result.data;
-  return { ok: true, data: { fileName, mimeType, base64: bytes.toString("base64") } };
+  return ok({ fileName, mimeType, base64: bytes.toString("base64") });
 }

@@ -25,7 +25,7 @@
 import { buildValueStreamGroupLayout } from "@/components/ea/value-stream-layout";
 import { buildStructuredViewElements } from "@/lib/ea-structure";
 import { LAYER_COLOURS, layerFromNeoLabel, type CanvasState, type SerializedEdge, type SerializedViewElement } from "@/lib/ea-types";
-import { ok, type ActionResult } from "@/lib/shared/action-result";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { ContentSpec } from "@/lib/documents/generation/spec";
 import { EA_NODE_H, EA_NODE_W, dedupeRenderEdges, placeIncremental, type EaLayoutEdge } from "./canvas-layout";
 
@@ -107,9 +107,9 @@ function topLevelPositions(ids: string[], saved: Record<string, { x: number; y: 
 
 /** Build the drawing spec for one EA view. Fails (never throws) for a view a drawing cannot hold. */
 export function buildEaViewDrawingSpec(view: EaViewForDrawing, tokens: DrawingTokens): ActionResult<DrawingSpec> {
-  if (view.elements.length === 0) return { ok: false, error: "This view has no elements to draw." };
+  if (view.elements.length === 0) return err("This view has no elements to draw.");
   if (view.elements.length > MAX_DRAWING_SHAPES) {
-    return { ok: false, error: `This view has ${view.elements.length} elements; a drawing page holds at most ${MAX_DRAWING_SHAPES}.` };
+    return err(`This view has ${view.elements.length} elements; a drawing page holds at most ${MAX_DRAWING_SHAPES}.`);
   }
 
   const byId = new Map(view.elements.map((element) => [element.viewElementId, element]));

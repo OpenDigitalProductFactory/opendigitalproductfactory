@@ -13,7 +13,8 @@
 // app/globals.css. A drawing is printed on white, so it takes the light values.
 
 import { prisma } from "@dpf/db";
-import type { ActionResult } from "@/lib/shared/action-result";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import { isRecord } from "@/lib/shared/coerce";
 import { contentFilename } from "@/lib/documents/document-content";
 import type { RenderDocumentRequest, RenderResult, RenderedDocument } from "@/lib/documents/generation/render";
 import type { SavedRender } from "@/lib/documents/generation/render-store";
@@ -41,10 +42,6 @@ export type EaDrawingExportDeps = {
   ) => Promise<SavedRender>;
   loadOrganizationId?: () => Promise<string>;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function hex(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -102,14 +99,14 @@ async function renderView(
   deps: EaDrawingExportDeps,
 ): Promise<ActionResult<{ view: EaViewForDrawing; rendered: RenderedDocument; shapeCount: number; connectorCount: number }>> {
   const view = await (deps.loadView ?? loadView)(viewId);
-  if (!view) return { ok: false, error: `EA view ${viewId} was not found.` };
+  if (!view) return err(`EA view ${viewId} was not found.`);
   const tokens = await (deps.loadTokens ?? loadTokens)();
   const spec = buildEaViewDrawingSpec(view, tokens);
   if (!spec.ok) return spec;
   const result = await (deps.render ?? render)({ content: spec.data, formats, previews });
-  if (!result.ok) return { ok: false, error: `The drawing could not be rendered: ${result.error}` };
+  if (!result.ok) return err(`The drawing could not be rendered: ${result.error}`);
   const page = spec.data.pages[0]!;
-  return { ok: true, data: { view, rendered: result.data, shapeCount: page.shapes.length, connectorCount: page.connectors.length } };
+  return ok({ view, rendered: result.data, shapeCount: page.shapes.length, connectorCount: page.connectors.length });
 }
 
 export type EaDrawingFile = { fileName: string; mimeType: string; bytes: Buffer };
@@ -132,12 +129,12 @@ export async function exportEaViewDrawingFile(
   const fileName = contentFilename(view.name, input.format);
   if (png) {
     const first = rendered.previews[0];
-    if (!first) return { ok: false, error: "The engine returned no page preview for the PNG." };
-    return { ok: true, data: { fileName, mimeType: "image/png", bytes: first } };
+    if (!first) return err("The engine returned no page preview for the PNG.");
+    return ok({ fileName, mimeType: "image/png", bytes: first });
   }
   const file = rendered.files.find((candidate) => candidate.format === input.format);
-  if (!file) return { ok: false, error: `The engine returned no .${input.format} file.` };
-  return { ok: true, data: { fileName, mimeType: file.mime, bytes: file.bytes } };
+  if (!file) return err(`The engine returned no .${input.format} file.`);
+  return ok({ fileName, mimeType: file.mime, bytes: file.bytes });
 }
 
 export type SavedEaViewDrawing = SavedRender & { href: string; title: string; shapeCount: number; connectorCount: number };
@@ -157,14 +154,11 @@ export async function saveEaViewDrawing(
     tags: ["ea-view", `ea-view:${input.viewId}`],
     actorPrincipalId: input.actorPrincipalId ?? null,
   });
-  return {
-    ok: true,
-    data: {
-      ...saved,
-      title: view.name,
-      href: `/workspace/documents/${encodeURIComponent(saved.documentId)}`,
-      shapeCount,
-      connectorCount,
-    },
-  };
+  return ok({
+    ...saved,
+    title: view.name,
+    href: `/workspace/documents/${encodeURIComponent(saved.documentId)}`,
+    shapeCount,
+    connectorCount,
+  });
 }
