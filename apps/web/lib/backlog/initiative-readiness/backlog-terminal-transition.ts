@@ -102,6 +102,32 @@ function deliveryReasons(result: ResolveCompletionEvidenceResult): string[] {
 }
 
 /**
+ * BI-9D327C32. A `verified` ux or migration disposition is a PROMISE of an
+ * evidence row: `validateApplicability` adds that dimension to the required set,
+ * and citing no `ux_verified` / `migration_pass` activity fails the manifest.
+ *
+ * That failure used to disappear. A merge through branch protection passes the
+ * DELIVERY dimension on its own (BI-B04A0203), so `deliveryReasons` was dropped,
+ * and `smallShapeAcceptance` — which needs `verdict.allowed` — silently went
+ * false. What the author saw was ACCEPTANCE_EVIDENCE_REQUIRED and "a medium item
+ * owes an independent acceptance receipt… a coworker qualifies", alongside
+ * `reviewerRoutes: []`: told to dispatch a reviewer for a defect only they could
+ * fix, and given no route to dispatch one. Measured on BI-1F69D3F8, two refusals,
+ * and cleared by adding one `ux_verified` row with nothing else changed.
+ *
+ * The merge may excuse the delivery dimension. It must never silence a manifest
+ * the author can correct, so the manifest's own blockers are carried onto the
+ * requirement the author is actually being asked about.
+ */
+function unreadManifestReasons(result: ResolveCompletionEvidenceResult): string[] {
+  if (result.kind !== "evaluated" || result.verdict.allowed) return [];
+  return [
+    "The completion manifest did not pass, so acceptance could not read its evidence. This is the author's to correct, not a reviewer's:",
+    ...deliveryReasons(result),
+  ];
+}
+
+/**
  * BI-B04A0203 (EP-4614F35E): a PR merged THROUGH the code gates — CI + the merge
  * queue — is the strongest possible delivery evidence. Branch protection means it
  * could not have reached the trunk without passing them, so a direct-merge item
@@ -529,9 +555,9 @@ export async function completeBacklogItemTransition(args: {
           },
           requirementReasons: {
             DELIVERY_EVIDENCE_REQUIRED: mergedThroughGates === "merged"
-              ? []
+              ? unreadManifestReasons(completion)
               : [...mergeSignalReasons, ...deliveryReasons(completion)],
-            ACCEPTANCE_EVIDENCE_REQUIRED: mergeSignalReasons,
+            ACCEPTANCE_EVIDENCE_REQUIRED: [...mergeSignalReasons, ...unreadManifestReasons(completion)],
             OBJECTIVE_RECONCILIATION_REQUIRED: mergeSignalReasons,
           },
         },

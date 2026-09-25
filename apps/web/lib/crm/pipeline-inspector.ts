@@ -311,7 +311,7 @@ export function buildPipelineInspectorView(input: {
         statusLabel: latestQuoteMeta.label,
         statusTone: latestQuoteMeta.tone,
         totalLabel: latestQuoteTotal !== null
-          ? formatRevenueAmount(latestQuoteTotal, latestQuoteInput.currency ?? "GBP")
+          ? formatRevenueAmount(latestQuoteTotal, latestQuoteInput.currency ?? undefined)
           : null,
       }
     : null;
@@ -339,7 +339,7 @@ export function buildPipelineInspectorView(input: {
     staleLabel: stale ? "Stale stage" : null,
     probabilityLabel: `${opportunity.probability}%`,
     expectedValueLabel: expectedValue !== null
-      ? formatRevenueAmount(expectedValue, opportunity.currency ?? "GBP")
+      ? formatRevenueAmount(expectedValue, opportunity.currency ?? undefined)
       : null,
     expectedCloseLabel: formatDateLabel(opportunity.expectedClose),
     sourceEngagement: opportunity.engagement

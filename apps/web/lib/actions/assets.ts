@@ -6,6 +6,7 @@ import {
   INVENTORY_ENTITY_CANONICAL_WHERE,
   prisma,
 } from "@dpf/db";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import type { CreateAssetInput, DisposeAssetInput } from "@/lib/asset-validation";
 import { periodKeyOf } from "@/lib/finance/ledger";
@@ -97,7 +98,7 @@ export async function createAsset(input: CreateAssetInput) {
       category: input.category,
       purchaseDate: new Date(input.purchaseDate),
       purchaseCost: input.purchaseCost,
-      currency: input.currency ?? "USD",
+      currency: input.currency ?? (await getOrgBaseCurrency()),
       depreciationMethod: input.depreciationMethod ?? "straight_line",
       usefulLifeMonths: input.usefulLifeMonths,
       residualValue: input.residualValue ?? 0,

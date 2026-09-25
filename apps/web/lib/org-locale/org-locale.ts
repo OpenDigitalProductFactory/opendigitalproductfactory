@@ -91,6 +91,10 @@ export function localeForCurrency(currency: string | null | undefined): string {
  * hand-rolled symbol maps). `locale` defaults to the currency's own locale so a
  * USD amount never renders with en-GB grouping. When the currency is unknown we
  * emit a bare, locale-neutral grouped number rather than guessing a symbol.
+ *
+ * Precision defaults to the currency's own ISO-4217 minor units (USD 2, JPY 0,
+ * BHD 3), which Intl applies when no fraction digits are given. A headline tile
+ * that wants whole units passes `maximumFractionDigits: 0` (BI-6030131C).
  */
 export function formatMoney(
   amount: number,
@@ -98,20 +102,25 @@ export function formatMoney(
   locale?: string | null,
   opts?: { maximumFractionDigits?: number },
 ): string {
-  const maximumFractionDigits = opts?.maximumFractionDigits ?? 0;
-  const value = maximumFractionDigits === 0 ? Math.round(amount) : amount;
+  const maximumFractionDigits = opts?.maximumFractionDigits;
+  const digits =
+    maximumFractionDigits === undefined
+      ? {}
+      : { maximumFractionDigits };
   if (currency) {
     try {
       return new Intl.NumberFormat(locale ?? localeForCurrency(currency), {
         style: "currency",
         currency,
-        maximumFractionDigits,
-      }).format(value);
+        ...digits,
+      }).format(amount);
     } catch {
       // Unknown ISO currency code — fall through to a bare number.
     }
   }
-  return value.toLocaleString(locale ?? "en-US", { maximumFractionDigits });
+  return amount.toLocaleString(locale ?? "en-US", {
+    maximumFractionDigits: maximumFractionDigits ?? 2,
+  });
 }
 
 // ─────────────────────────── the org resolver ───────────────────────────────
@@ -165,4 +174,40 @@ export async function resolveOrgLocale(
     locale: settings.locale || derived.locale,
     countryCode,
   };
+}
+
+/**
+ * The base currency from an already-loaded `OrgSettings` row (or none), with the
+ * same precedence as `resolveOrgLocale`: `baseCurrency`, then the currency of
+ * `countryCode`, then USD. For callers that already hold the row.
+ */
+export function orgCurrencyFromSettings(
+  settings: { baseCurrency?: string | null; countryCode?: string | null } | null | undefined,
+): string {
+  return settings?.baseCurrency || deriveLocaleCurrencyFromCountry(settings?.countryCode).currency;
+}
+
+/**
+ * The org's base currency: the answer for every "no currency was given" path,
+ * so no install has a currency invented for it (BI-6030131C — this replaced a
+ * dozen `?? "GBP"` fallbacks). Same precedence as `resolveOrgLocale`: the
+ * operator-set `baseCurrency`, then derivation from `countryCode`, then USD.
+ */
+export async function resolveOrgBaseCurrency(db: OrgLocaleClient): Promise<string> {
+  return (await resolveOrgLocale(db)).currency;
+}
+
+/**
+ * The currency to prefill in finance setup. Once the operator's own country has
+ * reached `OrgSettings` (setup's business-context step), the org's currency is
+ * the answer; a website-import guess only fills in before that, so finance setup
+ * never writes a guess (or USD) over a currency the country already set
+ * (BI-6030131C).
+ */
+export function setupCurrencyPrefill(
+  settings: { baseCurrency?: string | null; countryCode?: string | null } | null | undefined,
+  suggestedCurrency: string | null | undefined,
+): string | null {
+  if (settings?.countryCode) return orgCurrencyFromSettings(settings);
+  return suggestedCurrency ?? null;
 }

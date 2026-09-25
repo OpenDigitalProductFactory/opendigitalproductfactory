@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { orgCurrencyFromSettings } from "@/lib/org-locale/org-locale";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import { seedDefaultDunningSequence } from "@/lib/actions/dunning";
 import { resolveInvoiceDefaultTaxRate } from "@/lib/finance/invoice-default-tax";
@@ -17,10 +18,13 @@ export async function applyFinancialProfile(
     throw new Error(`Financial profile not found: ${profileSlug}`);
   }
 
-  const baseCurrency = overrides?.baseCurrency ?? profile.defaultCurrency;
-
   // Upsert OrgSettings
   const existing = await prisma.orgSettings.findFirst();
+
+  // No explicit choice keeps the org's own currency. The profile's
+  // `defaultCurrency` is a template default (GBP in most profiles) and must not
+  // override the currency the operator's country set (BI-6030131C).
+  const baseCurrency = overrides?.baseCurrency ?? orgCurrencyFromSettings(existing);
   if (existing) {
     await prisma.orgSettings.update({
       where: { id: existing.id },

@@ -16,7 +16,7 @@ apps/web/components/ops/SelfUpgradeClient.tsx	1139
 apps/web/components/platform/EffectivePermissionsPanel.tsx	844
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	923
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
-apps/web/components/workbooks/Grid.tsx	1830
+apps/web/components/workbooks/Grid.tsx	1812
 apps/web/instrumentation.test.ts	979
 apps/web/instrumentation.ts	1485
 apps/web/lib/actions/agent-coworker-external.test.ts	901
@@ -34,7 +34,7 @@ apps/web/lib/actions/platform-dev-config.ts	1254
 apps/web/lib/actions/promotions.self-upgrade.test.ts	1096
 apps/web/lib/actions/promotions.ts	982
 apps/web/lib/actions/tax-remittance.test.ts	1084
-apps/web/lib/actions/tax-remittance.ts	971
+apps/web/lib/actions/tax-remittance.ts	962
 apps/web/lib/ai-operations-map/load-map-data.test.ts	915
 apps/web/lib/explore/build-process-matrix.ts	842
 apps/web/lib/explore/feature-build-types.ts	1102

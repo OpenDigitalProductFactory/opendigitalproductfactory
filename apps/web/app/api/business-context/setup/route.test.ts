@@ -7,7 +7,10 @@ const { mockAuth, mockOrg, mockBusinessContext } = vi.hoisted(() => ({
   mockBusinessContext: { upsert: vi.fn() },
 }));
 
+const { mockApplyOrgCountry } = vi.hoisted(() => ({ mockApplyOrgCountry: vi.fn() }));
+
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
+vi.mock("@/lib/actions/currency", () => ({ applyOrgCountry: mockApplyOrgCountry }));
 vi.mock("@dpf/db", () => ({
   prisma: { organization: mockOrg, businessContext: mockBusinessContext },
 }));
@@ -27,6 +30,8 @@ beforeEach(() => {
   mockOrg.findFirst.mockReset();
   mockOrg.update.mockReset();
   mockBusinessContext.upsert.mockReset();
+  mockApplyOrgCountry.mockReset();
+  mockApplyOrgCountry.mockResolvedValue(null);
 
   mockAuth.mockResolvedValue({ user: { type: "admin" } });
   mockOrg.findFirst.mockResolvedValue({ id: "org_1" });
@@ -67,5 +72,18 @@ describe("POST /api/business-context/setup", () => {
     const call = mockBusinessContext.upsert.mock.calls[0]?.[0];
 
     expect(call?.update).not.toHaveProperty("sourceSystem");
+  });
+
+  // Setup captured the country into Organization.address but only tax setup
+  // passed it to OrgSettings, so an org that chose Mexico here stayed USD/en-US
+  // (BI-6030131C).
+  it("syncs the org's currency and locale from the country captured in setup", async () => {
+    await POST(makeReq({ address: { line1: "Av. Reforma 1", city: "CDMX", countryCode: "MX" } }));
+    expect(mockApplyOrgCountry).toHaveBeenCalledWith("MX");
+  });
+
+  it("leaves the currency alone when no country was sent", async () => {
+    await POST(makeReq({ description: "Hello" }));
+    expect(mockApplyOrgCountry).not.toHaveBeenCalled();
   });
 });
