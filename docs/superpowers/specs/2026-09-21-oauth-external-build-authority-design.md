@@ -480,6 +480,26 @@ is a lookup over existing rows:
 3. The alphabetically first eligible coworker, so the outcome is total and
    deterministic.
 
+**Rule 1b, the external profile (amendment 2026-09-25).** When the
+eligible set is wider than the source-approved external development roles
+(`APPROVED_EXTERNAL_ROLES`: `AGT-EXT-CLAUDE`, `AGT-EXT-CODEX`,
+`AGT-EXT-GROK`), which only an administrator's set is, and those roles
+share one signature, the outcome is `resolved` on that class: rules 2 and 3
+run inside it, and the wider set stays under `Change`. An external AI
+client's connection is the external development profile every builder
+already gets; an administrator's extra reach (room coordinators such as the
+Mailroom) is theirs to opt into, not a question put to them on every
+connect. Live finding: an administrator connecting the Claude desktop app
+(a new name and a `claude://` redirect, so no prior consent matched) was
+shown a choice with the Mailroom coordinator preselected as least
+authority. `choice` still results when the external roles themselves
+differ, or when none is eligible.
+
+The consequence line names whichever assistant is selected under `Change`.
+The page has no script; the line holds one name per candidate and CSS
+`:has()` shows the one matching the selected option. Without `:has()` the
+line keeps the default, as before.
+
 A self-asserted name therefore picks a **label within a class the server
 has already proven authority-equivalent**. It can never select a coworker
 outside that class, never widen a scope, and never bypass eligibility,

@@ -40,12 +40,28 @@ describe("consent rendering", () => {
   // BI-05E0EA33: one Connect action, no role decision in the default flow.
   it("states the resolved assistant as a consequence and offers Change as a closed disclosure", () => {
     const html = renderConsentPage(base);
-    expect(html).toContain("It will work as <strong>Claude Code (external CLI)</strong>");
+    expect(html).toContain('It will work as <strong class="who default" data-agent="AGT-EXT-CLAUDE">Claude Code (external CLI)</strong>');
     expect(html).toMatch(/<details[^>]*>\s*<summary>Change<\/summary>/);
     expect(html).not.toMatch(/<details[^>]*open[^>]*>\s*<summary>Change/);
     expect(html).toContain('name="default_coworker" value="AGT-EXT-CLAUDE"');
     expect(html).toMatch(/<option value="AGT-EXT-CLAUDE" selected>/);
     expect(html).not.toContain("Choose the assistant you authorize");
+  });
+  it("keeps the consequence line naming whichever assistant is picked under Change", () => {
+    // Live finding 2026-09-25: the line kept naming the default while the
+    // picker showed another assistant. The page has no script; CSS follows the
+    // selected option.
+    const html = renderConsentPage(base);
+    expect(html).toContain('<strong class="who" data-agent="AGT-EXT-CODEX">Codex (external CLI)</strong>');
+    expect(html).toContain('form:has(select[name="acting_coworker"] option[value="AGT-EXT-CODEX"]:checked) .who[data-agent="AGT-EXT-CODEX"]{display:inline}');
+    expect(html).toContain('option:checked:not([value="AGT-EXT-CLAUDE"])) .who.default{display:none}');
+  });
+  it("leaves an agent id that is not a plain token out of the stylesheet", () => {
+    const html = renderConsentPage({ ...base, assistant: { ...assistant,
+      candidates: [...assistant.candidates, { agentId: 'X"]{} body{display:none', displayName: "Odd" }] } });
+    const style = html.match(/<style>\.who\{[^<]*<\/style>/)?.[0] ?? "";
+    expect(style).toContain("AGT-EXT-CODEX");
+    expect(style).not.toContain("body{display:none");
   });
   it("renders one primary Connect button named for the client and no Approve button", () => {
     const html = renderConsentPage(base);

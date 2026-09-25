@@ -215,13 +215,37 @@ ${view.nextAssistantsUrl ? `<p><a href="${esc(view.nextAssistantsUrl)}">More app
     `<option value="${esc(c.agentId)}"${c.agentId === selected.agentId ? " selected" : ""}>${esc(c.displayName)}${c.detail ? ` — ${esc(c.detail)}` : ""}</option>`,
   ).join("");
   const note = `<p class="scope-detail">This assigns a role to this connection. It does not verify the app's name or grant access to a workroom.</p>`;
-  return `${consequence}
+  return `${followingConsequence(assistant)}
 <input type="hidden" name="default_coworker" value="${esc(selected.agentId)}">
 <details><summary>Change</summary>
 ${note}
 <select name="acting_coworker" aria-label="Assistant role">${options}</select>
 ${view.nextAssistantsUrl ? `<p><a href="${esc(view.nextAssistantsUrl)}">More approved assistants</a></p>` : ""}
 </details>`;
+}
+
+/**
+ * The consequence line for a resolved default, kept truthful when the person
+ * picks a different assistant under Change. The page carries no script, so
+ * the line holds one name per candidate and CSS shows the one whose option is
+ * selected; without `:has()` support the default name stays, as before.
+ * Agent ids are server-owned; any id that is not a plain token is left out of
+ * the stylesheet rather than escaped into a selector.
+ */
+function followingConsequence(assistant: ConsentAssistant): string {
+  const safe = assistant.candidates.filter((c) => /^[A-Za-z0-9_-]+$/.test(c.agentId));
+  const names = safe.map((c) =>
+    `<strong class="who${c.agentId === assistant.selected.agentId ? " default" : ""}" data-agent="${c.agentId}">${esc(c.displayName)}</strong>`,
+  ).join("");
+  const rules = [
+    `.who{display:none}.who.default{display:inline}`,
+    `form:has(select[name="acting_coworker"] option:checked:not([value="${assistant.selected.agentId}"])) .who.default{display:none}`,
+    ...safe.map((c) => `form:has(select[name="acting_coworker"] option[value="${c.agentId}"]:checked) .who[data-agent="${c.agentId}"]{display:inline}`),
+  ].join("");
+  if (!safe.some((c) => c.agentId === assistant.selected.agentId)) {
+    return `<p class="consequence">It will work as <strong>${esc(assistant.selected.displayName)}</strong> under your account.</p>`;
+  }
+  return `<style>${rules}</style><p class="consequence">It will work as ${names} under your account.</p>`;
 }
 
 export function htmlResponse(body: string, status = 200): Response {
