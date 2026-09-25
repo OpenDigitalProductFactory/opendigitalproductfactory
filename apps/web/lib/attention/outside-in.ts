@@ -95,6 +95,7 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   "ai-readiness-blocker": "foundational", // platform readiness gap
   "platform-health": "foundational", // platform health alert — infra posture
   "provider-credential": "foundational", // an AI provider's saved sign-in expired
+  "contribution-setup": "manufacturing-and-delivery", // how built changes reach the DPF project
   "compliance-source-freshness": "foundational", // governed compliance evidence lapsing — platform posture
 };
 
