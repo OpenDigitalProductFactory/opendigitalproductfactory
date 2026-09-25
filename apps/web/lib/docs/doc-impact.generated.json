@@ -301,6 +301,9 @@
     ".github/workflows/policy-guards-recheck.yml": [
       "docs/testing/pre-pr-gate.md"
     ],
+    ".github/workflows/publish-image.yml": [
+      "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
+    ],
     ".github/workflows/refresh-docs-staleness.yml": [
       "docs/maintenance/README.md"
     ],
@@ -800,6 +803,9 @@
     "apps/web/lib/govern/auth-redirect.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "apps/web/lib/govern/auth.ts": [
+      "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
+    ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -1078,6 +1084,9 @@
     "apps/web/lib/routing/pipeline-v2.ts": [
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
+    "apps/web/lib/routing/provider-suitability/openrouter-policy.ts": [
+      "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
     ],
     "apps/web/lib/routing/provider-suitability/provider-compliance-advisory.ts": [
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
@@ -1400,7 +1409,8 @@
     ],
     "docker-compose.linux.yml": [
       "docs/install/linux.md",
-      "docs/install/platform-support-watchlist.md"
+      "docs/install/platform-support-watchlist.md",
+      "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
     ],
     "docker-compose.local-ci.yml": [
       "docs/testing/pre-pr-gate.md"
@@ -3346,6 +3356,12 @@
       "apps/web/lib/actions/compliance.ts",
       "apps/web/lib/change-management/register-change.ts",
       "packages/db/scripts/seed-dora-regulation.ts"
+    ],
+    "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md": [
+      ".github/workflows/publish-image.yml",
+      "apps/web/lib/govern/auth.ts",
+      "apps/web/lib/routing/provider-suitability/openrouter-policy.ts",
+      "docker-compose.linux.yml"
     ],
     "docs/testing/archetype-audit-plan.md": [
       "packages/storefront-templates/src/archetypes/index.ts",
