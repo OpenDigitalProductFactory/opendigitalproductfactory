@@ -1880,6 +1880,9 @@
     "scripts/check-no-local-slugify.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "scripts/check-no-manual-vm-cache-drop.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/check-no-native-dialogs.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md"
@@ -3469,6 +3472,7 @@
       "scripts/check-label-association.mjs",
       "scripts/check-live-blocker-references.mjs",
       "scripts/check-mobile-jest-pin.mjs",
+      "scripts/check-no-manual-vm-cache-drop.mjs",
       "scripts/check-no-unreachable-room-links.mjs",
       "scripts/ci-change-scope.mjs",
       "scripts/ci-policy-guards.test.mjs",
