@@ -172,8 +172,4 @@ The objective and acceptance ids are defined in `docs/superpowers/specs/2026-09-
   - `L0.1-locale-context` → `BI-6EA9E25A`. Depends on: none. Precondition: `BI-6030131C`.
   - `L0.2-message-catalog` → `BI-9A44B227`. Depends on: `L0.1-locale-context`.
   - `L0.3-ratchet-guard` → `BI-4690CB37`. Depends on: none.
-- Receipt: blocked-by: plan-phase initiative readiness for BI-6EA9E25A is unmet (IRD-832698B5AD65: RESEARCH_REQUIRED, CANONICAL_DESIGN_REQUIRED, SPEC_APPROVAL_REQUIRED, REVIEW_REQUIRED). The spec needs independent design-checklist (AGT-WS-REVIEW) and architecture (AGT-WS-EA) review before coverage can be minted.
-- **Before implementation starts:**
-  - Add OBJ/AC markers to the spec.
-  - Drive the reviewer chain.
-  - Record coverage with `record_plan_backlog_coverage` and replace the line above with the receipt id.
+- Receipt: `cmuh94b2c0il701pc33gpdyr6` (record_plan_backlog_coverage, decomposed, 2026-09-25; plan blob `ff92faa1` at `70910d82`). Design gates passed: spec-approval (AGT-WS-REVIEW) and architecture-review (AGT-WS-EA, receipt `initiative-8846972a-c753-420a-a152-1a26137249f1`) on `docs/superpowers/specs/2026-09-25-localization-foundation-design.md`.
