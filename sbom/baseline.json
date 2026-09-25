@@ -1,5 +1,5 @@
 {
-  "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.",
+  "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each package our workspaces deliberately declare with different specifiers to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.",
   "totals": {
     "resolvedComponents": 1059,
     "uniqueNames": 988,
@@ -20,6 +20,9 @@
     "multiMajorNames": 31
   },
   "firstPartyDivergent": [],
+  "acceptedSpecifierDrift": {
+    "typescript": "packages/repo-guard-runtime pins the exact compiler (6.0.3) that the repo guard AST runtime loads and verifies against the lockfile (scripts/lib/load-pinned-guard-typescript.mjs); every other workspace uses ^6.0.3 and resolves to the same version."
+  },
   "roots": {
     "mobile": {
       "lockfile": "apps/mobile/pnpm-lock.yaml",

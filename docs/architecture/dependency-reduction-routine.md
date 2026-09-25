@@ -66,6 +66,25 @@ that introduces a *new* Tier-1 split (`SBOM Divergence Guard` job in `ci.yml`).
 Accepted splits live in `sbom/baseline.json`; ratchet down as they're fixed
 (`--update-baseline` to accept intentionally).
 
+### Specifier drift (one specifier per package)
+
+Tier 1 fires only once our declarations *resolve* apart. Before that they drift in
+text: `net-snmp` was `^3.26.3` in `packages/db` and `^3.14.0` in `services/edge-node`,
+both resolving to 3.26.3 until the next lockfile refresh would have split them. The
+same guard therefore also fails a PR in which two workspaces declare one registry
+package with different specifiers (plan 2026-09-08 S11). `workspace:`, `link:`,
+`file:` and `catalog:` specifiers are exempt.
+
+A deliberate difference goes in `sbom/baseline.json` `acceptedSpecifierDrift` as
+name → reason; today that is only the exact `typescript` pin in
+`packages/repo-guard-runtime`. An entry that no longer drifts fails as stale, so the
+map only shrinks.
+
+We do not use a pnpm `catalog:` yet. `services/adp` and
+`services/integration-test-harness` build their images from their own
+`package.json` without the workspace file, and `catalog:` cannot resolve there.
+Revisit once those images install from the workspace lockfile.
+
 ### Shape budgets (the surface only shrinks)
 
 The same guard also **hard-fails a PR that pushes the dependency shape above its

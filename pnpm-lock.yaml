@@ -236,7 +236,7 @@ importers:
         specifier: ^10.5.5
         version: 10.5.5(postcss@8.5.28)
       dotenv:
-        specifier: ^17.2.3
+        specifier: ^17.4.2
         version: 17.4.2
       jsdom:
         specifier: ^30.0.1
@@ -287,8 +287,8 @@ importers:
         specifier: ^7.9.1
         version: 7.9.1
       '@prisma/client':
-        specifier: ^7.9.0
-        version: 7.9.0(prisma@7.9.1(@types/node@26.5.1)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3))(typescript@6.0.3)
+        specifier: ^7.9.1
+        version: 7.9.1(prisma@7.9.1(@types/node@26.5.1)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3))(typescript@6.0.3)
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -460,7 +460,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/validators
       net-snmp:
-        specifier: ^3.14.0
+        specifier: ^3.26.3
         version: 3.26.3
       undici:
         specifier: ^8.10.0
@@ -1736,11 +1736,11 @@ packages:
   '@prisma/adapter-pg@7.9.1':
     resolution: {integrity: sha512-Ho2RK1KanQxLNSC0sR5bpiiVep10sWPLXCcxK+KXfI/Q69TMRbiafSvLPv3V9snimX72rMCqGlyJ4sBO4lKTAw==}
 
-  '@prisma/client-runtime-utils@7.9.0':
-    resolution: {integrity: sha512-kMVmS4ZEy3xlkca+TfxOEm/ToVVlOS2x1Tc6/wIRf/HfczBqENtSPcKszy4ZpFNzjJ8SRKvlU5V0rrpoFw2KOg==}
+  '@prisma/client-runtime-utils@7.9.1':
+    resolution: {integrity: sha512-mVIBGYdO5CFmK0HvjxrtfIyQQcPdb88pSCeVQriVQPVZyDovIWblpHfOgcS8QO187j3QF0ePArH8qPhp0AU2vg==}
 
-  '@prisma/client@7.9.0':
-    resolution: {integrity: sha512-BTG/mB+WL/1sD2gWwdNc2uuVJjNNBgCDlPFdjco6jJArgbg4IAChtzVeW4debFa/NKBbsGedCjET316sjllWTQ==}
+  '@prisma/client@7.9.1':
+    resolution: {integrity: sha512-+xgrh2EhJVF79wC0yX5G4PI1Rdcm7Qn/nekNQ+t/O153wtNggruHal+fXHSa0QE+Tp/Cw5wvxeCEhZZ59xGm8Q==}
     engines: {node: ^20.19 || ^22.12 || >=24.0}
     peerDependencies:
       prisma: '*'
@@ -6409,11 +6409,11 @@ snapshots:
     transitivePeerDependencies:
       - pg-native
 
-  '@prisma/client-runtime-utils@7.9.0': {}
+  '@prisma/client-runtime-utils@7.9.1': {}
 
-  '@prisma/client@7.9.0(prisma@7.9.1(@types/node@26.5.1)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3))(typescript@6.0.3)':
+  '@prisma/client@7.9.1(prisma@7.9.1(@types/node@26.5.1)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3))(typescript@6.0.3)':
     dependencies:
-      '@prisma/client-runtime-utils': 7.9.0
+      '@prisma/client-runtime-utils': 7.9.1
     optionalDependencies:
       prisma: 7.9.1(@types/node@26.5.1)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3)
       typescript: 6.0.3

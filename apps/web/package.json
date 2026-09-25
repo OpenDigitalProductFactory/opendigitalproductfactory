@@ -95,7 +95,7 @@
     "@vitejs/plugin-react": "^6.0.4",
     "@vitest/coverage-v8": "^4.1.11",
     "autoprefixer": "^10.5.5",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.4.2",
     "jsdom": "^30.0.1",
     "postcss": "^8.5.24",
     "tailwindcss": "^4.3.3",
