@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 
 import {
@@ -24,6 +32,47 @@ import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 // re-claiming against a server that has been torn down. The spawn decision
 // itself is covered with an injected spawn in lib/durable-wait-resumer.test.mjs.
 process.env.DPF_DURABLE_RESUMER = "off";
+
+// BI-53B189C8. Every gate this file spawns must write into a temp repository.
+// Three tests once passed `--worktree process.cwd()`, so each run left stub
+// PASS records, bound to the caller's real HEAD, in the git dir of the checkout
+// running the suite. `pregate:status` then quoted a fixture's evidence id as
+// that worktree's gate. The stamps are taken before any test runs, and the last
+// test in this file compares them.
+const GATE_ARTIFACT_NAME = /^dpf-(local-ci-|sandbox-freshness|pre-admission-)/;
+
+function callerGateDirectory() {
+  const result = spawnSync("git", ["rev-parse", "--git-path", "dpf-local-ci-gate.json"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  if (result.status !== 0 || !result.stdout.trim()) return null;
+  return dirname(resolve(process.cwd(), result.stdout.trim()));
+}
+
+function gateArtifactStamps(directory) {
+  const stamps = new Map();
+  if (!directory) return stamps;
+  let names = [];
+  try {
+    names = readdirSync(directory);
+  } catch {
+    return stamps;
+  }
+  for (const name of names) {
+    if (!GATE_ARTIFACT_NAME.test(name)) continue;
+    try {
+      const stat = statSync(join(directory, name));
+      stamps.set(name, `${stat.mtimeMs}:${stat.size}`);
+    } catch {
+      // Removed between the listing and the stat; it is not a write.
+    }
+  }
+  return stamps;
+}
+
+const CALLER_GATE_DIRECTORY = callerGateDirectory();
+const CALLER_GATE_ARTIFACTS_BEFORE = gateArtifactStamps(CALLER_GATE_DIRECTORY);
 
 const TEST_HOST_PRESSURE = {
   observedAt: "2026-07-30T05:00:00.000Z",
@@ -1068,7 +1117,7 @@ test("canonical local-CI claims request no more than the admitted-owner recovery
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/admitted-owner-recovery",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
     ], {
@@ -1144,7 +1193,7 @@ test("slot-1 metadata is bound through renewal before the canonical gate runs", 
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "feat/two-slot-binding",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
@@ -1244,7 +1293,7 @@ test("an admitted owner renews authority while a live host fence delays the run"
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/admitted-owner-recovery",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.05",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
@@ -2066,4 +2115,98 @@ test("a gate launch sweeps observer records leaked by a killed run (BI-2C7F51BA)
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("a DPF_ALLOW_LOCAL_CI_STUB run leaves a record no push reader accepts", async () => {
+  const worktree = makeTempWorktree();
+  const gitIn = (args) => spawnSync("git", args, { cwd: worktree, encoding: "utf8" }).stdout.trim();
+  const branch = gitIn(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const evidence = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "record_local_integration_result") evidence.push(payload.params.arguments);
+      const lease = { leaseId: "NPEL-STUB-RUN", expiresAt: new Date(Date.now() + 10_000).toISOString() };
+      const result = tool === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: lease.leaseId,
+          data: { lease, admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 1 } },
+        }
+        : tool === "renew_nonprod_environment_lease"
+          ? { success: true, entityId: lease.leaseId, data: { lease } }
+          : tool === "record_local_integration_result"
+            ? { success: true, entityId: "EVIDENCE-STUB-RUN" }
+            : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+  const address = server.address();
+  const env = {
+    ...process.env,
+    DPF_MCP_BEARER_TOKEN: "test-token",
+    DPF_ALLOW_LOCAL_CI_STUB: "1",
+    DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+  };
+  delete env.DPF_LOCAL_CI_SLOT_KEY;
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", branch,
+      "--worktree", worktree,
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], { cwd: process.cwd(), env });
+
+    // The stub still drives the full pass-path plumbing; that is its job.
+    assert.equal(result.code, 0, result.output);
+    const state = JSON.parse(readFileSync(join(worktree, ".git", "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(state.branch, branch);
+    assert.equal(state.testStub, true, JSON.stringify(state));
+    assert.equal(evidence.length, 1);
+    assert.equal(evidence[0].evidence.testStub, true);
+
+    // Same branch, same SHA: the worst case. The canonical reader, which is
+    // also the pre-push hook's verdict, must refuse it.
+    const status = spawnSync(process.execPath, [resolve("scripts/pregate-status.mjs"), "--json"], {
+      cwd: worktree,
+      encoding: "utf8",
+    });
+    const verdict = JSON.parse(status.stdout);
+    assert.notEqual(verdict.verdict, "PASS", status.stdout);
+    assert.equal(status.status, 1);
+    assert.match(verdict.reason, /DPF_ALLOW_LOCAL_CI_STUB/);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolveClose) => server.close(resolveClose));
+    rmSync(worktree, { recursive: true, force: true });
+  }
+});
+
+// Keep this test LAST: it reads the stamps taken before the first test ran.
+test("no test in this file wrote gate artifacts into the checkout running it", (t) => {
+  if (!CALLER_GATE_DIRECTORY) {
+    t.skip("not running inside a git checkout");
+    return;
+  }
+  const after = gateArtifactStamps(CALLER_GATE_DIRECTORY);
+  const written = [...after]
+    .filter(([name, stamp]) => CALLER_GATE_ARTIFACTS_BEFORE.get(name) !== stamp)
+    .map(([name]) => name)
+    .sort();
+  assert.deepEqual(
+    written,
+    [],
+    `gate records were written into ${CALLER_GATE_DIRECTORY}; a test spawned gate-worktree.mjs against the real checkout instead of a temp repository`,
+  );
 });

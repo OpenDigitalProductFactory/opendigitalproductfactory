@@ -1155,6 +1155,11 @@ async function main() {
   let gateKey = "";
   const deadline = Date.now() + options.leaseWaitSeconds * 1000;
   const commandSpec = resolveGateCommand({ branch, allowStub, gitBin });
+  // BI-53B189C8: the stub builds nothing, yet it walks the whole pass path and
+  // records "passed". Every record and evidence payload it writes carries
+  // testStub, and no push reader (pregate:status, the pre-push hook, the publish
+  // guard, pr:health) accepts a record that does.
+  const testStubRun = !commandSpec && allowStub;
 
   if (options.dryRun) {
     process.stdout.write("gate-worktree dry-run\n");
@@ -1318,6 +1323,7 @@ async function main() {
         resilience: state.resilience ?? null,
         leaseEvents: state.leaseEvents ?? [],
         evidencePending: false,
+        testStub: state.testStub === true,
       });
       retireLosingSiblings();
       process.stdout.write(`finalized existing local-CI evidence: ${state.evidenceRecordId}\n`);
@@ -1353,6 +1359,7 @@ async function main() {
       resilience: evidence.resilience ?? null,
       leaseEvents: evidence.leaseEvents ?? [],
       evidencePending: false,
+      testStub: evidence.testStub === true || pendingState?.testStub === true,
     });
     rmSync(pendingEvidenceFile, { force: true });
     retireLosingSiblings();
@@ -2177,6 +2184,7 @@ async function main() {
     ],
     evidencePending: false,
     queueObserver: queueObserverState(),
+    testStub: testStubRun,
   });
 
   // The preflight executes in the shared scratch integration worktree, whose
@@ -2328,6 +2336,7 @@ async function main() {
       // it needs no migration and can grow without touching the lease contract.
       originBi: "BI-3A34D7A9",
       origin: buildAttributionEvidence(identity),
+      ...(testStubRun ? { testStub: true } : {}),
       slotManifest: {
         schemaVersion: slotManifest.schemaVersion,
         slotKey: slotManifest.slotKey,
@@ -2471,6 +2480,7 @@ async function main() {
         leaseEvents,
         evidencePending: true,
         evidencePendingReason: evidenceError,
+        testStub: testStubRun,
       });
       process.stderr.write("gate-worktree: local-CI gate passed but evidence recording is pending because the portal is quiescing.\n");
       process.stderr.write(`gate-worktree: the lease is released; rerun pnpm run pregate -- --finalize-evidence --branch "${branch}" --sha "${sha}" --worktree "${worktreePath}" after quiescence clears.\n`);
@@ -2515,6 +2525,7 @@ async function main() {
     failureReason: persistedReason,
     failureSummary,
     childExitCode: runResult.status,
+    testStub: testStubRun,
     ...(outcome.gatePassed ? { onPassWritten: retireLosingSiblings } : {}),
   });
 
@@ -2536,6 +2547,11 @@ async function main() {
   };
 
   if (outcome.gatePassed) {
+    if (testStubRun) {
+      process.stderr.write(
+        "gate-worktree: TEST STUB — DPF_ALLOW_LOCAL_CI_STUB=1 built nothing. This record is marked testStub; no push reader accepts it as evidence.\n",
+      );
+    }
     process.stdout.write(`${formatGateSummary({ ...summaryInput, verdictLine: "gate passed" }).join("\n")}\n`);
     process.exit(0); // exit-0: gate passed; the PASS record for this sha was written above
   }
@@ -2580,6 +2596,7 @@ function writeState(stateFile, {
   failureReason = "",
   failureSummary = null,
   childExitCode = null,
+  testStub = false,
   onPassWritten = null,
 }) {
   const result = writeLocalCiGateState(stateFile, {
@@ -2603,6 +2620,7 @@ function writeState(stateFile, {
     failureReason,
     failureSummary,
     childExitCode,
+    testStub,
   });
   // BI-5529B5AC: only a committed, non-pending PASS may retire sibling losers.
   if (typeof onPassWritten === "function" && gatePassed === true && !evidencePending) {

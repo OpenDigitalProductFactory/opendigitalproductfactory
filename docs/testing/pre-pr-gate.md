@@ -573,7 +573,14 @@ ref and evidence is labeled `offline-accepted`. `--fetch-base` and
 `DPF_LOCAL_CI_FETCH_BASE=1` remain compatibility aliases for the default
 required online refresh. `DPF_LOCAL_CI_COMMAND` remains an explicit override. The
 old Phase 1 stub is only reachable via `DPF_ALLOW_LOCAL_CI_STUB=1` for contract
-tests and must never be used as release evidence.
+tests and must never be used as release evidence. It still walks the whole pass
+path and records `status: "passed"`, so every record it writes and the evidence
+it sends carry `testStub: true` (BI-53B189C8). No push reader accepts a marked
+record: `pregate:status` reports it as INCONCLUSIVE and names the stub, and the
+pre-push hook, the agent publish guard and `pr:health` all refuse it. Tests that
+spawn `scripts/gate-worktree.mjs` must pass a temp repository as `--worktree`,
+never the checkout running the suite; `gate-worktree-lease.test.mjs` ends with a
+test that fails if any of its gates wrote into the caller's git dir.
 
 The command plan carries required process environment as `env NAME=value ...`
 prefixes, and the Node runner interprets those prefixes directly instead of
@@ -861,8 +868,12 @@ Claude / Codex / Grok PreToolUse runs
 **denies** `git push` and `gh pr create` when the worktree has no unexpired
 SHA-bound `dpf-local-ci-gate.json` for HEAD (or an allowlisted skip). This is
 the mechanical stop that prevents a surface from “finishing too fast” with only
-worktree vitest. Emergency: `DPF_ALLOW_UNGATED_PUSH=1` (still subject to
-`pr:health` / merge-readiness).
+worktree vitest. When the worktree carries `scripts/pregate-status.mjs`, that
+reader's verdict is final for gate records; the guard's own per-slot scan may
+add only a recorded override on top of it. Without the reader, the scan refuses
+a record bound to another branch and any `testStub` record (BI-53B189C8).
+Emergency: `DPF_ALLOW_UNGATED_PUSH=1` (still subject to `pr:health` /
+merge-readiness).
 
 ### Keep internal identifiers out of the PR body
 

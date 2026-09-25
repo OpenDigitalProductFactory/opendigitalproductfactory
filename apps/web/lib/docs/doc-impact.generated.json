@@ -2085,7 +2085,8 @@
       "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/pregate-status.mjs": [
-      "docs/architecture/build-gate-runbook.md"
+      "docs/architecture/build-gate-runbook.md",
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/pregate.mjs": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
@@ -3351,6 +3352,7 @@
       "scripts/lib/local-integration-status.mjs",
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",
+      "scripts/pregate-status.mjs",
       "scripts/set-hooks-path.mjs",
       "tests/release/local-ci-gate-contract.test.mjs"
     ],

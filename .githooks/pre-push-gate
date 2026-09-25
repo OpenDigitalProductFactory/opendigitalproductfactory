@@ -105,7 +105,8 @@ for (const name of entries) {
   const file = path.join(dir, name);
   let state;
   try { state = JSON.parse(fs.readFileSync(file, "utf8")); } catch { continue; }
-  if (state.branch === branch && state.sha === sha && state.gatePassed === true) {
+  // BI-53B189C8: a DPF_ALLOW_LOCAL_CI_STUB record (testStub) built nothing.
+  if (state.branch === branch && state.sha === sha && state.gatePassed === true && state.testStub !== true) {
     process.stdout.write(file);
     break;
   }
@@ -369,6 +370,11 @@ if (state.branch !== branch || state.sha !== sha || state.gatePassed !== true) {
   console.error(`[pre-push-gate] expected ${branch}@${sha}`);
   console.error(`[pre-push-gate] found ${state.branch || "(none)"}@${state.sha || "(none)"} gatePassed=${state.gatePassed}${state.skipped ? " (recorded override, not a pass)" : ""}`);
   console.error("[pre-push-gate] Run: pnpm run pregate   (or a recorded override — see above)");
+  process.exit(1);
+}
+if (state.testStub === true) {
+  console.error("[pre-push-gate] The latest local-CI gate record was written by the DPF_ALLOW_LOCAL_CI_STUB=1 test stub; no sandbox build ran, so it is not evidence.");
+  console.error("[pre-push-gate] Run: pnpm run pregate");
   process.exit(1);
 }
 if (state.evidencePending === true) {
