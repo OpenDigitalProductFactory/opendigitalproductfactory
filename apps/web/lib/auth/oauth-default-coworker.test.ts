@@ -95,12 +95,36 @@ describe("server-resolved default assistant (BI-05E0EA33)", () => {
     expect(out.candidates.every((c) => typeof c.detail === "string")).toBe(true);
   });
 
-  it("still presents a choice for a mixed set when this human has no prior consent", async () => {
+  it("lands an administrator's first connect on the external profile, not the fewest-grant coworker", async () => {
+    // Live finding 2026-09-25: the Claude desktop app ("Claude Code (dpf)",
+    // claude:// redirect, no prior consent) preselected the Mailroom
+    // coordinator for an administrator.
     const mailroom = { id: "row-AGT-WS-MAILROOM", agentId: "AGT-WS-MAILROOM", displayName: "Mailroom coordinator" };
     db.agent.findMany.mockResolvedValue([agent("AGT-EXT-CLAUDE"), agent("AGT-EXT-CODEX"), agent("AGT-EXT-GROK"),
       agent("AGT-WS-MAILROOM", { grants: ["work_room_read", "work_room_write", "mailroom_read"] })]);
     db.principalAlias.findMany.mockResolvedValue([...eligible, mailroom].map((a) => ({ aliasValue: a.agentId, principal: { sensitivityClearance: ["public"] } })));
+    const desktop = { rowId: "client-desktop", clientName: "Claude Code (dpf)", redirectUris: ["claude://claude.ai/mcp-auth-callback/sdk"] };
+    const out = await resolveDefaultOAuthCoworker({ userId: "human", client: desktop, resource, eligible: [...eligible, mailroom] });
+    expect(out).toMatchObject({ kind: "resolved", reason: "external_profile", selected: { agentId: "AGT-EXT-CLAUDE" } });
+    expect(out.candidates.map((c) => c.agentId)).toContain("AGT-WS-MAILROOM");
+    const unnamed = await resolveDefaultOAuthCoworker({ userId: "human", client: { ...desktop, clientName: "Some client" }, resource, eligible: [...eligible, mailroom] });
+    expect(unnamed).toMatchObject({ kind: "resolved", reason: "external_profile", selected: { agentId: "AGT-EXT-CLAUDE" } });
+  });
+
+  it("still presents a choice when the external roles themselves differ in authority", async () => {
+    const mailroom = { id: "row-AGT-WS-MAILROOM", agentId: "AGT-WS-MAILROOM", displayName: "Mailroom coordinator" };
+    db.agent.findMany.mockResolvedValue([agent("AGT-EXT-CLAUDE"), agent("AGT-EXT-CODEX", { grants: [...grants, "admin_read"] }), agent("AGT-EXT-GROK"),
+      agent("AGT-WS-MAILROOM", { grants: ["work_room_read", "work_room_write", "mailroom_read"] })]);
+    db.principalAlias.findMany.mockResolvedValue([...eligible, mailroom].map((a) => ({ aliasValue: a.agentId, principal: { sensitivityClearance: ["public"] } })));
     const out = await resolveDefaultOAuthCoworker({ userId: "human", client, resource, eligible: [...eligible, mailroom] });
+    expect(out.kind).toBe("choice");
+  });
+
+  it("presents a choice for a mixed set with no external role in it", async () => {
+    const mailroom = { id: "row-AGT-WS-MAILROOM", agentId: "AGT-WS-MAILROOM", displayName: "Mailroom coordinator" };
+    const other = { id: "row-AGT-WS-OTHER", agentId: "AGT-WS-OTHER", displayName: "Other coordinator" };
+    db.agent.findMany.mockResolvedValue([agent("AGT-WS-OTHER"), agent("AGT-WS-MAILROOM", { grants: ["work_room_read", "work_room_write", "mailroom_read"] })]);
+    const out = await resolveDefaultOAuthCoworker({ userId: "human", client, resource, eligible: [other, mailroom] });
     expect(out).toMatchObject({ kind: "choice", selected: { agentId: "AGT-WS-MAILROOM" } });
   });
 
