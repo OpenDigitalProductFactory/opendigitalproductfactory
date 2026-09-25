@@ -170,10 +170,17 @@ single-tree mode persists — current behavior, full back-compat.
 10. **Release image availability** (customer mode only) — probes the GHCR
     portal image and, if it's gated behind early-access auth, points you at
     `docker login ghcr.io` before bring-up.
-11. **`docker compose up -d`** on the macOS overlay.
-12. **Health check** — polls `http://localhost:3000/api/health` for up
+11. **HTTPS at the canonical address** — the install becomes its own
+    certificate authority and serves the portal over https at one address:
+    `https://localhost` when it serves only this machine, or the machine's
+    DNS name when the network resolves it here. It writes `PUBLIC_URL` and
+    trusts the certificate for your user (macOS asks for your keychain password once). AI clients such as
+    Claude Code sign in with OAuth only over https. If this step fails, the
+    portal stays at `http://localhost:3000` and the installer says so.
+12. **`docker compose up -d`** on the macOS overlay.
+13. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
-13. **Edge Node bootstrap** (only with `--with-edge`) — mints a single-use
+14. **Edge Node bootstrap** (only with `--with-edge`) — mints a single-use
     auto-approve token and installs the checksum-verified Go Edge Node as
     `local.dpf-edge-node`, a launchd-supervised host process. It enrolls as a
     trusted `native` node and owns the Mac's physical multicast interfaces, so
@@ -188,7 +195,7 @@ single-tree mode persists — current behavior, full back-compat.
     same-organization. Otherwise pairing proceeds through the short code both
     operators confirm, and the screen names the condition that could not be
     proved.
-14. **Voice / TTS sidecar** (Apple Silicon only) — runs
+15. **Voice / TTS sidecar** (Apple Silicon only) — runs
     `scripts/tts/setup-chatterbox-tts-macos.sh` to provision the
     native-host text-to-speech sidecar (port `8771`) and wire its
     `TTS_PROVIDER` / `DPF_TTS_URL` / `DPF_TTS_REFERENCE_HOST_ROOT`
@@ -196,9 +203,9 @@ single-tree mode persists — current behavior, full back-compat.
     and non-fatal (warns and continues if it fails); skipped on
     Linux/Windows, which use the bundled `dpf-tts` container. See
     [Voice (STT + TTS)](#voice-stt--tts).
-15. **Persist state** — records `lastSuccessfulInstallVersion` and
+16. **Persist state** — records `lastSuccessfulInstallVersion` and
     `lastHealthCheck`.
-16. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
+17. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
     so the stack auto-starts at login (skip with `--no-autostart`).
 
 Total wall time: ~10 minutes including the AI-model download (varies

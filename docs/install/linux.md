@@ -124,12 +124,19 @@ single-tree mode — the current default and fully back-compat.
    fresh installs do not auto-provision mutable third-party model references.
 9. **`.env` generation** — only on first install; existing `.env` is
    preserved.
-10. **`docker compose up -d`** on the Linux overlay (which adds the
+10. **HTTPS at the canonical address** — the install becomes its own
+    certificate authority and serves the portal over https at one address:
+    `https://localhost` when it serves only this machine, or the machine's
+    DNS name when the network resolves it here. It writes `PUBLIC_URL` and
+    trusts the certificate for your user (`sudo` asks for your password once). AI clients such as
+    Claude Code sign in with OAuth only over https. If this step fails, the
+    portal stays at `http://localhost:3000` and the installer says so.
+11. **`docker compose up -d`** on the Linux overlay (which adds the
     `ollama` service for local LLM hosting, cAdvisor, node-exporter,
     and the matching Prometheus scrape config).
-11. **Health check** — polls `http://localhost:3000/api/health` for up
+12. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
-12. **Edge Node bootstrap** (only with `--with-edge`) — mints a single-use
+13. **Edge Node bootstrap** (only with `--with-edge`) — mints a single-use
     auto-approve bootstrap token via
     `apps/web/scripts/issue-edge-bootstrap-token.ts --auto-approve`,
     writes it to `.env` as `DPF_BOOTSTRAP_TOKEN`, restarts the
@@ -138,9 +145,9 @@ single-tree mode — the current default and fully back-compat.
     the operator running `install-dpf.sh` has already proven host
     access, so the Approve click in `/platform/edge-nodes` would be
     ceremonial. The node appears in the admin UI within ~10 seconds.
-13. **Persist state** — records `lastSuccessfulInstallVersion` and
+14. **Persist state** — records `lastSuccessfulInstallVersion` and
     `lastHealthCheck`.
-14. **systemd user unit** — installs
+15. **systemd user unit** — installs
     `~/.config/systemd/user/dpf.service` and runs
     `loginctl enable-linger $USER` so the stack auto-starts at boot
     (skip with `--no-autostart`).
