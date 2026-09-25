@@ -19,8 +19,8 @@ not reopen them.
 
 | # | Item | Scope | Design | Depends on |
 |---|---|---|---|---|
-| 1 | BI-298A7202 | Points and portfolio resolvers; read model with unallocated and unsized rows | §5.1–5.2 | — |
-| 2 | BI-A73A7DA3 | Epic-to-portfolio proposal per epic, confirmed by a person | §5.2 | 1 |
+| 1 | BI-298A7202 | Points and portfolio resolvers; read model with unallocated and unsized rows | §5.1–5.2 | — (merged #5668) |
+| 2 | BI-A73A7DA3 | Epic-to-portfolio proposal per epic, confirmed by a person | §5.2 | 1 (merged #5674; its operator control moved to slice 5) |
 | 3 | BI-9EC60FE0 | `PortfolioBudgetPeriod`, `set_portfolio_budget`, `propose_portfolio_budgets` | §5.3 | 1 |
 | 4 | BI-EF265C9A | `BudgetReservation` written by `approve_demand_for_funding` | §5.4 | 1, 3 |
 | 5 | BI-CBF5D708 | Throughput capacity range and the tie-out surface with traced share | §5.5, §5.7, §6 | 1, 3, 4 |
@@ -129,10 +129,10 @@ test against local-CI Postgres; `pregate`.
    the epic write path.
 3. **Re-attribution.** After a write, `attributeBacklogPortfolio` runs for the
    epic's items, so the cache follows.
-4. **Operator control.** A confirm/correct list on the host that slice 5's
-   UX-Fit picks. If slice 2 ships first, the control ships on Ops > Demand under
-   its own UX-Fit propose-n-pick manifest, and a `ux_verified` row is recorded
-   from a live check.
+4. **Operator control.** Moved to slice 5. The item places the control "on the
+   tie-out surface", which slice 5 builds, so one UX-Fit decision and one
+   `ux_verified` check cover both rather than a throwaway control on Ops > Demand.
+   Until then, the governed write is reachable as `confirm_epic_portfolios`.
 5. **Observable.** Confirm the high-confidence batch on this install, and report
    the unallocated share of live points before and after from slice 1's read
    model.
@@ -212,6 +212,10 @@ test against local-CI Postgres; `pregate`.
    `docs/ux-fit/<date>-portfolio-budget-tie-out.ux-fit.json`. Over-commitment is
    shown as numbers, never only as a colour, and uses `--dpf-*` tokens. The
    surface reports and never dispatches.
+   It also carries slice 2's attribution control: the unconfirmed epics from
+   `propose_epic_portfolios`, a one-step confirm for the high-confidence batch,
+   and confirm/correct one at a time for the rest, all through
+   `confirmEpicPortfolios` with a required reason.
 5. **Docs.** A user-guide page for budgets and the tie-out, per the design
    commit's Docs-Impact-Decision.
 6. **Observable.** A live check on this install, recorded as `ux_verified`
