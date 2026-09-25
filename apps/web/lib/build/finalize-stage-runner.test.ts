@@ -62,6 +62,7 @@ describe("runBuildStudioFinalize", () => {
     const d = deps({ runGauntlet: vi.fn().mockResolvedValue({ ran: true, passed: false, failedGuards: ["Module Size Guard"], output: "x", recordId: "g1", binding }) });
     const out = await runBuildStudioFinalize("FB-X", d);
     expect(out).toMatchObject({ status: "gauntlet-failed", failedGuards: ["Module Size Guard"] });
+    expect(d.runGauntlet).toHaveBeenCalledTimes(2);
     expect(d.commitDecisions).not.toHaveBeenCalled();
     expect(d.saved).toHaveLength(0);
   });
@@ -76,5 +77,14 @@ describe("runBuildStudioFinalize", () => {
     const d = deps({ runGauntlet: vi.fn().mockResolvedValue({ ran: true, passed: false, failedGuards: ["Docs Impact Gate"], output: "x", recordId: "g", binding }) });
     expect(await runBuildStudioFinalize("FB-X", d)).toMatchObject({ status: "decisions-exhausted" });
     expect(d.runGauntlet).toHaveBeenCalledTimes(3);
+  });
+
+  it("re-runs a non-decision failure once and continues when the re-run passes", async () => {
+    const d = deps({ runGauntlet: vi.fn()
+      .mockResolvedValueOnce({ ran: true, passed: false, failedGuards: ["Janitor Tests"], output: "Could not read 7e3f", recordId: "g1", binding })
+      .mockResolvedValueOnce({ ran: true, passed: true, failedGuards: [], output: "all clean", recordId: "g2", binding }) });
+    const out = await runBuildStudioFinalize("FB-D671B016", d);
+    expect(out).toMatchObject({ status: "ready", evidenceIds: ["g2", "t1"] });
+    expect(d.log).toHaveBeenCalledWith(expect.stringContaining("re-running once"));
   });
 });

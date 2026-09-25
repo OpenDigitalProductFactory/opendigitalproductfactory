@@ -41,10 +41,21 @@ export type FinalizeOutcome =
 export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps): Promise<FinalizeOutcome> {
   let captured = await deps.capture();
   let gauntlet = await deps.runGauntlet(captured.diffPatch);
+  let rerunForFlake = false;
   for (let round = 0; ; round++) {
     if (!gauntlet.ran) return done(deps, buildId, { status: "gauntlet-not-run", reason: gauntlet.reason });
     if (gauntlet.passed) break;
     const keys = trailerKeysForFailedGuards(gauntlet.failedGuards);
+    if (!keys && !rerunForFlake) {
+      // A real guard failure is deterministic and fails again on the same tree;
+      // one re-run separates it from an environmental flake (FB-D671B016 lost
+      // four finalizes to a git fixture in Janitor Tests that passes on re-run).
+      // Both runs are recorded as evidence, and only the passing one is cited.
+      rerunForFlake = true;
+      deps.log(`Guard gauntlet failed on ${gauntlet.failedGuards.join(", ")}; re-running once to separate a flake from a real failure.`);
+      gauntlet = await deps.runGauntlet(captured.diffPatch);
+      continue;
+    }
     if (!keys) return done(deps, buildId, { status: "gauntlet-failed", failedGuards: gauntlet.failedGuards });
     if (round >= FINALIZE_DECISION_ROUNDS) return done(deps, buildId, { status: "decisions-exhausted", failedGuards: gauntlet.failedGuards });
     const decisions = await authorGateDecisions({
