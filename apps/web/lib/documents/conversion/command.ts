@@ -70,12 +70,36 @@ export function buildConverterCommand(params: ConverterCommandParams): { command
   }
 
   const args = [
+    ...hardenedRunArgs(params.containerName),
+    "-e",
+    `DPF_CONVERT_MAX_BYTES=${params.maxInputBytes}`,
+    "-e",
+    `DPF_CONVERT_TIMEOUT_SECONDS=${params.engineTimeoutSeconds}`,
+    params.image,
+    // The image's ENTRYPOINT is dpf-convert; these are its arguments.
+    "--to",
+    params.to,
+  ];
+  if (from !== undefined) args.push("--from", from);
+  return { command: "docker", args };
+}
+
+/**
+ * Every containment flag of a one-shot dpf-doctools container, up to (not
+ * including) its environment and image. The one home for them: dpf-convert
+ * (above) and dpf-render (generation/command.ts) both start from this list.
+ */
+export function hardenedRunArgs(containerName: string): string[] {
+  if (!CONTAINER_NAME.test(containerName)) {
+    throw new Error(`invalid converter container name: ${containerName}`);
+  }
+  return [
     "run",
     "--rm",
     // stdin carries the document in; stdout carries the result out.
     "-i",
     "--name",
-    params.containerName,
+    containerName,
     "--network",
     "none",
     "--read-only",
@@ -94,15 +118,5 @@ export function buildConverterCommand(params: ConverterCommandParams): { command
     CONVERTER_MEMORY_LIMIT,
     "--pids-limit",
     String(CONVERTER_PIDS_LIMIT),
-    "-e",
-    `DPF_CONVERT_MAX_BYTES=${params.maxInputBytes}`,
-    "-e",
-    `DPF_CONVERT_TIMEOUT_SECONDS=${params.engineTimeoutSeconds}`,
-    params.image,
-    // The image's ENTRYPOINT is dpf-convert; these are its arguments.
-    "--to",
-    params.to,
   ];
-  if (from !== undefined) args.push("--from", from);
-  return { command: "docker", args };
 }

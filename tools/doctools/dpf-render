@@ -1,0 +1,294 @@
+#!/usr/bin/env python3
+"""dpf-render: fill an office template from a JSON content spec, stdin to stdout.
+
+Second entry point of the dpf-doctools image (BI-3A0E5413, slice S6 of
+BI-815D40C6), beside dpf-convert. It runs on the distribution's python3-uno
+bridge, so nothing is added to the portal. The portal runs it one-shot, exactly
+as it runs dpf-convert (no network, read-only root, stdin/stdout only):
+
+  docker run --rm -i --network none --read-only --tmpfs /tmp ... \
+    --entrypoint /usr/local/bin/dpf-render dpf-doctools@sha256:... < request.json > result.tar
+
+Request (validated first by apps/web/lib/documents/generation/spec.ts):
+  { "template": null | { "ext": "fodp|otp|odp|fodt|ott|odt|fods|ots|ods|fodg|otg|odg",
+                         "data": "<base64>" },
+    "content":  { "family": "deck|report|letter|sheet|drawing", ... },
+    "formats":  ["pptx", "pdf", ...],
+    "previews": { "maxPages": 20, "dpi": 48 },
+    "theme":    { "chartColours": ["#rrggbb", ...],         (optional, brand colours)
+                  "shapeFill": "#rrggbb", "shapeStroke": "#rrggbb", "shapeText": "#rrggbb" },
+    "issuedAt": "2026-09-25T12:00:00Z" }                   (optional)
+
+Result on stdout: an uncompressed tar stream, entries in this order, every
+entry dated 0 so the same request yields the same archive layout:
+  document.<format>   one per requested format
+  preview-NNN.png     one per page/slide, up to previews.maxPages
+  text.txt            the PDF text layer (UTF-8)
+  manifest.json       {"family", "formats", "pageCount", "previews", "warnings"}
+
+Exit codes (callers depend on them; they match dpf-convert where they overlap):
+  0    rendered; the tar stream is on stdout
+  2    bad request (not JSON, unknown family, a format the family cannot make)
+  3    rendering failed
+  4    request too large (more than DPF_RENDER_MAX_BYTES), or empty
+  124  timed out (DPF_RENDER_TIMEOUT_SECONDS)
+
+Templates are opened with macro execution NEVER and link updates off, on top of
+the hardened profile dpf-convert also uses. Diagnostics go to stderr only.
+"""
+
+import base64
+import datetime
+import io
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import traceback
+
+EXIT_OK, EXIT_BAD_REQUEST, EXIT_FAILED, EXIT_TOO_LARGE, EXIT_TIMEOUT = 0, 2, 3, 4, 124
+
+MAX_BYTES = int(os.environ.get("DPF_RENDER_MAX_BYTES", "67108864"))
+TIMEOUT_SECONDS = int(os.environ.get("DPF_RENDER_TIMEOUT_SECONDS", "200"))
+
+FAMILY = {
+    # family: (blank factory, {format: export filter}, pdf filter)
+    "deck": ("private:factory/simpress", {"pptx": "Impress MS PowerPoint 2007 XML", "odp": "impress8"}, "impress_pdf_Export"),
+    "report": ("private:factory/swriter", {"docx": "MS Word 2007 XML", "odt": "writer8"}, "writer_pdf_Export"),
+    "letter": ("private:factory/swriter", {"docx": "MS Word 2007 XML", "odt": "writer8"}, "writer_pdf_Export"),
+    "sheet": ("private:factory/scalc", {"xlsx": "Calc MS Excel 2007 XML", "ods": "calc8"}, "calc_pdf_Export"),
+    "drawing": ("private:factory/sdraw", {"odg": "draw8", "svg": "draw_svg_Export"}, "draw_pdf_Export"),
+}
+# Templates are flat ODF only: plain XML the portal generates (brand-master.ts)
+# and this script can screen before the engine opens it.
+TEMPLATE_EXTENSIONS = {"deck": "fodp", "report": "fodt", "letter": "fodt", "sheet": "fods", "drawing": "fodg"}
+# The import filter is named, never guessed: a template opens in its family's
+# module or not at all.
+TEMPLATE_FILTER = {
+    "fodp": "OpenDocument Presentation Flat XML",
+    "fodt": "OpenDocument Text Flat XML",
+    "fods": "OpenDocument Spreadsheet Flat XML",
+    "fodg": "OpenDocument Drawing Flat XML",
+}
+
+# Content a template may not carry: embedded or linked objects, DDE, scripts and
+# event bindings, and links that leave the document. Brand masters never need
+# any of these; a template that has one is refused before the engine sees it.
+TEMPLATE_FORBIDDEN = re.compile(
+    r"<(draw:object|draw:object-ole|draw:plugin|draw:applet|draw:floating-frame|office:dde-source|"
+    r"table:dde-link|text:dde-connection|office:script|script:event-listener|office:event-listeners)\b"
+    r"|xlink:href=\"(?!#|Pictures/)[^\"]*\"",
+    re.I,
+)
+
+class RequestError(Exception):
+    """The request itself is wrong: exit 2."""
+
+
+def log(message):
+    sys.stderr.write("dpf-render: %s\n" % message)
+    sys.stderr.flush()
+
+
+def die(code, message):
+    log(message)
+    sys.exit(code)
+
+
+# The UNO plumbing and the family builders live beside this script
+# (/opt/dpf-doctools/lib in the image) to keep each part readable.
+sys.path.insert(0, os.environ.get("DPF_RENDER_LIB", "/opt/dpf-doctools/lib"))
+
+from dpf_render_uno import ENGINES, Engine, file_url, placeholder_values, prop, replace_in_calc_headers, replace_in_replaceable, replace_in_shapes  # noqa: E402
+from dpf_render_families import BUILDERS  # noqa: E402
+import uno  # noqa: E402  (the distribution bridge, present only inside the image)
+
+
+def read_request():
+    raw = sys.stdin.buffer.read(MAX_BYTES + 1)
+    if not raw:
+        die(EXIT_TOO_LARGE, "empty request")
+    if len(raw) > MAX_BYTES:
+        die(EXIT_TOO_LARGE, "request exceeds DPF_RENDER_MAX_BYTES (%d)" % MAX_BYTES)
+    try:
+        request = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as error:
+        raise RequestError("the request is not UTF-8 JSON: %s" % error)
+    if not isinstance(request, dict) or not isinstance(request.get("content"), dict):
+        raise RequestError("the request needs a content object")
+    family = request["content"].get("family")
+    if family not in FAMILY:
+        raise RequestError("unknown family: %r" % (family,))
+    formats = request.get("formats")
+    allowed = set(FAMILY[family][1]) | {"pdf"}
+    if not isinstance(formats, list) or not formats or any(f not in allowed for f in formats):
+        raise RequestError("formats must be a non-empty list drawn from %s" % sorted(allowed))
+    template = request.get("template")
+    if template is not None:
+        if not isinstance(template, dict) or template.get("ext") != TEMPLATE_EXTENSIONS[family]:
+            raise RequestError("a %s template must be flat ODF (.%s)" % (family, TEMPLATE_EXTENSIONS[family]))
+        try:
+            xml = base64.b64decode(template.get("data") or "", validate=True).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            raise RequestError("the template is not base64 of UTF-8 flat ODF")
+        found = TEMPLATE_FORBIDDEN.search(xml)
+        if found:
+            raise RequestError("the template carries content templates may not have: %s" % found.group(0)[:60])
+        template["xml"] = xml
+    return request
+
+
+def set_properties(doc, request):
+    content = request["content"]
+    props = doc.getDocumentProperties()
+    props.Title = content.get("title", "")
+    props.Subject = content.get("subject") or ""
+    props.Author = content.get("author") or ""
+    props.Generator = "dpf-render"
+    issued = request.get("issuedAt")
+    if issued:
+        moment = datetime.datetime.fromisoformat(issued.replace("Z", "+00:00"))
+        stamp = uno.createUnoStruct("com.sun.star.util.DateTime")
+        stamp.Year, stamp.Month, stamp.Day = moment.year, moment.month, moment.day
+        stamp.Hours, stamp.Minutes, stamp.Seconds = moment.hour, moment.minute, moment.second
+        props.CreationDate = stamp
+        props.ModificationDate = stamp
+
+
+def export(doc, path, filter_name):
+    doc.storeToURL(file_url(path), (prop("FilterName", filter_name), prop("Overwrite", True)))
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        raise RuntimeError("the engine wrote no output for %s" % filter_name)
+
+
+def pdf_pages(pdf):
+    info = subprocess.run(["pdfinfo", pdf], capture_output=True, text=True, check=True).stdout
+    match = re.search(r"^Pages:\s+(\d+)", info, re.M)
+    return int(match.group(1)) if match else 0
+
+
+def previews(pdf, out_dir, max_pages, dpi):
+    if max_pages <= 0:
+        return []
+    os.makedirs(out_dir, exist_ok=True)
+    subprocess.run(
+        ["pdftoppm", "-png", "-r", str(dpi), "-l", str(max_pages), pdf, os.path.join(out_dir, "p")],
+        check=True, stdout=sys.stderr, stderr=sys.stderr,
+    )
+    produced = sorted(os.listdir(out_dir), key=lambda n: int(re.search(r"(\d+)\.png$", n).group(1)))
+    return [os.path.join(out_dir, name) for name in produced]
+
+
+def add_entry(archive, name, data):
+    info = tarfile.TarInfo(name)
+    info.size = len(data)
+    info.mtime = 0
+    info.mode = 0o644
+    info.uid = info.gid = 0
+    info.uname = info.gname = ""
+    archive.addfile(info, io.BytesIO(data))
+
+
+def render(request, work):
+    family = request["content"]["family"]
+    factory, filters, pdf_filter = FAMILY[family]
+    engine = Engine(work)
+    warnings = []
+    try:
+        template = request.get("template")
+        if template:
+            path = os.path.join(work, "template." + template["ext"])
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(template["xml"])
+            doc = engine.open(file_url(path), TEMPLATE_FILTER[template["ext"]])
+        else:
+            doc = engine.open(factory)
+        BUILDERS[family](engine, doc, request, warnings)
+        values = placeholder_values(request)
+        if family in ("report", "letter"):
+            replace_in_replaceable(doc, values)
+        elif family == "sheet":
+            sheets = doc.getSheets()
+            for index in range(sheets.getCount()):
+                replace_in_replaceable(sheets.getByIndex(index), values)
+            replace_in_calc_headers(doc, values)
+        else:
+            replace_in_shapes(doc.getDrawPages(), values)
+            replace_in_shapes(doc.getMasterPages(), values)
+        set_properties(doc, request)
+
+        outputs = []
+        for fmt in request["formats"]:
+            path = os.path.join(work, "out", "document." + fmt)
+            export(doc, path, pdf_filter if fmt == "pdf" else filters[fmt])
+            outputs.append(("document." + fmt, path))
+        pdf = os.path.join(work, "out", "document.pdf")
+        if "pdf" not in request["formats"]:
+            pdf = os.path.join(work, "preview-source.pdf")
+            export(doc, pdf, pdf_filter)
+        doc.close(True)
+    finally:
+        engine.close()
+
+    settings = request.get("previews") or {}
+    pngs = previews(pdf, os.path.join(work, "previews"), int(settings.get("maxPages", 20)), int(settings.get("dpi", 48)))
+    text = subprocess.run(["pdftotext", "-enc", "UTF-8", "-layout", pdf, "-"], capture_output=True, check=True).stdout
+    manifest = {
+        "family": family,
+        "formats": request["formats"],
+        "pageCount": pdf_pages(pdf),
+        "previews": ["preview-%03d.png" % (i + 1) for i in range(len(pngs))],
+        "warnings": warnings,
+    }
+
+    archive = tarfile.open(fileobj=sys.stdout.buffer, mode="w|", format=tarfile.USTAR_FORMAT)
+    for name, path in outputs:
+        with open(path, "rb") as handle:
+            add_entry(archive, name, handle.read())
+    for index, path in enumerate(pngs):
+        with open(path, "rb") as handle:
+            add_entry(archive, "preview-%03d.png" % (index + 1), handle.read())
+    add_entry(archive, "text.txt", text)
+    add_entry(archive, "manifest.json", json.dumps(manifest, sort_keys=True).encode("utf-8"))
+    archive.close()
+    sys.stdout.buffer.flush()
+
+
+def main():
+    def on_timeout(signum, frame):
+        raise TimeoutError()
+
+    signal.signal(signal.SIGALRM, on_timeout)
+    signal.alarm(TIMEOUT_SECONDS)
+    work = tempfile.mkdtemp(prefix="dpf-render.", dir="/tmp")
+    os.makedirs(os.path.join(work, "out"))
+    home = os.path.join(work, "home")
+    os.makedirs(home)
+    os.environ.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_CACHE_HOME": home + "/.cache"})
+    try:
+        request = read_request()
+        render(request, work)
+    except RequestError as error:
+        die(EXIT_BAD_REQUEST, str(error))
+    except TimeoutError:
+        for proc in ENGINES:
+            proc.kill()
+        die(EXIT_TIMEOUT, "rendering timed out after %ds" % TIMEOUT_SECONDS)
+    except Exception as error:  # every engine or tool failure is one typed exit
+        if os.environ.get("DPF_RENDER_DEBUG"):
+            traceback.print_exc()
+        die(EXIT_FAILED, "rendering failed: %s: %s" % (type(error).__name__, error))
+    finally:
+        signal.alarm(0)
+        shutil.rmtree(work, ignore_errors=True)
+    sys.exit(EXIT_OK)
+
+
+if __name__ == "__main__":
+    main()
