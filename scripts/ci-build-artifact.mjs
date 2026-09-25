@@ -23,6 +23,7 @@ import {
   validateArchiveEntries,
   validateBuildArtifactReceipt,
 } from "./lib/ci-build-artifact.mjs";
+import { gitText } from "./lib/git.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_ARTIFACT_PREFIX = "web-production-build";
@@ -41,9 +42,7 @@ function parseArgs(argv) {
   return { mode, options };
 }
 
-function git(...args) {
-  return execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
-}
+const git = (...args) => gitText(args, { cwd: ROOT });
 
 function collectToolchain() {
   const rootPackage = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));

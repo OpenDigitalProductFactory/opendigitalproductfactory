@@ -150,6 +150,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("guard-diff-honesty", "Guard Diff Honesty", [
       node("--test", "scripts/check-guard-diff-honesty.test.mjs"),
       node("scripts/check-guard-diff-honesty.mjs"),
+      // One git runner for every script, failure behaviour chosen by name
+      // (plan 2026-09-08 §10.5 S1).
+      node("--test", "scripts/lib/git.test.mjs"),
+      conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
+      node("scripts/check-no-direct-git-spawn.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),

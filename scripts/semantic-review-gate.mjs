@@ -1,19 +1,15 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION, readGitDiffDigest, validateLocalSemanticReviewGate } from "./lib/semantic-review-gate.mjs";
+import { gitText } from "./lib/git.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const policy = JSON.parse(readFileSync(join(here, "semantic-review-policy.json"), "utf8"));
 
-function git(...args) {
-  const result = spawnSync("git", args, { encoding: "utf8" });
-  if (result.status !== 0) throw new Error(result.stderr.trim() || `git ${args.join(" ")} failed`);
-  return result.stdout.trim();
-}
+const git = (...args) => gitText(args, { cwd: process.cwd() });
 
 function option(name) {
   const index = process.argv.indexOf(name);
