@@ -1,5 +1,6 @@
 import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
-import { type BoundWorkShapeDb, readBoundWorkShapeRef } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
 
@@ -156,19 +157,22 @@ export async function enforceBuildInitiativeReadiness(args: {
       : Promise.resolve(null),
   ]);
   // BI-0E2E3BC5: sensitivity raises the shape here exactly as it does at the
-  // claim and at closure (item-text sensitivity), and the build's own reviewed
-  // design is handed to the projector: for small and medium it is the recorded
-  // research and, absent body criteria, the baseline.
-  const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+  // claim and at closure (read from the change, BI-243BC956), and the build's own
+  // reviewed design is handed to the projector: for small and medium it is the
+  // recorded research and, absent body criteria, the baseline.
+  const declaredPaths = db.workroom
+    ? await readBoundEditPaths(db as BoundWorkShapeDb, build.originator.itemId).catch(() => [])
+    : [];
   const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
     item: {
       ...build.originator,
       activeBuildKind: build.kind,
       workShape,
-      deliverySensitivity: deriveDeliverableSensitivity({
-        text: `${build.originator.title ?? ""}
-${build.originator.body ?? ""}`,
-        workType: build.originator.workType ?? null,
+      deliverySensitivity: assessDeliverySensitivity({
+        title: build.originator.title,
+        body: build.originator.body,
+        workType: build.originator.workType,
+        declaredPaths,
       }),
     },
     buildDesign: {

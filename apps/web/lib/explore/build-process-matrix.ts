@@ -25,6 +25,8 @@ import { checkVerificationDepthRequirement } from "./verification-depth-requirem
 import {
   FEATURE_BUILD_KIND_VALUES,
 } from "./feature-build-types";
+import { matchDeliverableSensitivityKeyword } from "./sensitivity-keywords";
+
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
 
@@ -461,22 +463,13 @@ function escalatePolicy(
  * to keep this module decoupled from govern/risk-posture; an unknown value is
  * treated as the balanced (no-floor) default.
  */
-// Bare "card"/"charge"/"token" are deliberately excluded — they over-match benign
-// prose ("dashboard card", "charge up", LLM "token/cost"). Payment and credential
-// exposure are caught by the billing/PCI/card and auth/api/bearer-token terms.
-const HIGH_SENSITIVITY_PATTERN =
-  /\b(auth|authn|authz|authentication|authorization|login|sign[- ]?in|password|credential|secret|(?:auth|access|bearer|refresh|session|oauth|api)[- ]?tokens?|api[- ]?key|billing|payment|invoice|pci|cardholder|credit[- ]?card|debit[- ]?card|customer[- ]?data|pii|personal[- ]?data|gdpr|hipaa|security|vulnerab|encrypt|crypto|kernel|governance|rbac|permission|access[- ]?control|compliance)\b/i;
-const ELEVATED_SENSITIVITY_PATTERN =
-  /\b(database|migration|schema|prisma|integration|external|webhook|email|outbound|federation|edge|endpoint|deploy|infrastructure)\b/i;
+export { matchDeliverableSensitivityKeyword };
 
 export function deriveDeliverableSensitivity(
   input: { text?: string | null; workType?: string | null },
   riskPosture?: string | null,
 ): DeliverableSensitivity {
-  const text = input.text ?? "";
-  let keyword: DeliverableSensitivity = "low";
-  if (HIGH_SENSITIVITY_PATTERN.test(text)) keyword = "high";
-  else if (ELEVATED_SENSITIVITY_PATTERN.test(text)) keyword = "elevated";
+  const keyword: DeliverableSensitivity = matchDeliverableSensitivityKeyword(input.text).level;
   // Org posture is a floor that can only RAISE caution: a conservative org
   // starts everything at least "elevated". Balanced/progressive add no floor.
   const postureFloor: DeliverableSensitivity = riskPosture === "conservative" ? "elevated" : "low";

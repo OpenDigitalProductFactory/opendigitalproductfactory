@@ -12,8 +12,8 @@ import { isReachableFromTrunk, trunkHasMergedPullRequest, trunkRefCommittedAt, t
 
 import { projectBacklogItemReadiness, readinessShapeFromWorkShape, type InitiativeReadinessActivity } from "./entry-adapter";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
-import { type BoundWorkShapeDb, readBoundWorkShapeRef } from "./bound-work-shape";
-import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
+import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "./bound-work-shape";
+import { assessDeliverySensitivity } from "./delivery-sensitivity";
 import {
   reconcileInitiativeObjectives,
   type ObjectiveReconciliationActivity,
@@ -529,7 +529,11 @@ export async function completeBacklogItemTransition(args: {
           ...lockedItem,
           activeBuildKind: lockedItem.activeBuild?.kind ?? null,
           workShape: boundWorkShape,
-          deliverySensitivity: deriveDeliverableSensitivity({ text: `${lockedItem.title ?? ""}\n${lockedItem.body ?? ""}`, workType: lockedItem.workType }),
+          // BI-243BC956: completion re-reads the room's declared edit scope.
+          deliverySensitivity: assessDeliverySensitivity({
+            ...lockedItem,
+            declaredPaths: await readBoundEditPaths(tx as unknown as BoundWorkShapeDb, lockedItem.itemId).catch(() => []),
+          }),
         },
         activities: activities as InitiativeReadinessActivity[],
         inheritedScope,

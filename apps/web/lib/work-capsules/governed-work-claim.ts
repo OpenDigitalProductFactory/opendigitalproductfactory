@@ -13,7 +13,8 @@ import {
   type WorkIntent,
 } from "@/lib/work-capsules";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
-import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
+import { type BoundWorkShapeDb, readBoundEditPaths } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   resolveInitiativeReviewerRecovery,
@@ -438,7 +439,12 @@ export async function claimGovernedBacklogWorkspace(args: {
           activeBuildKind: item.activeBuild?.kind ?? null,
           // v3: the shape resolved for this claim keys the gates; sensitivity raises them.
           workShape: args.input.workShape ?? null,
-          deliverySensitivity: deriveDeliverableSensitivity({ text: `${item.title ?? ""}\n${item.body ?? ""}`, workType: item.workType ?? null }),
+          // BI-243BC956: read from what the change touches — a re-claimed room's
+          // declared edit scope, else the paths the body cites — not its prose.
+          deliverySensitivity: assessDeliverySensitivity({
+            ...item,
+            declaredPaths: await readBoundEditPaths(tx as unknown as BoundWorkShapeDb, item.itemId).catch(() => []),
+          }),
         },
         activities,
         inheritedScope,

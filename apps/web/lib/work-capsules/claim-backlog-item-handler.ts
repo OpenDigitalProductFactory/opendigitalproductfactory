@@ -1,6 +1,6 @@
 import { adoptionScopePatch, scopeWriteWhere } from "./scope-input";
 import type { ToolResult } from "@/lib/mcp-tools";
-import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
+import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { WORK_INTENTS, type WorkIntent } from "@/lib/work-capsules";
 import {
   DELIVERY_SHAPE_PICK_LIST,
@@ -47,7 +47,7 @@ async function resolveClaimShape(args: {
   const signals = {
     effortSize: item?.effortSize ?? null,
     workType: item?.workType ?? null,
-    sensitivity: deriveDeliverableSensitivity({ text: `${item?.title ?? ""}\n${item?.body ?? ""}`, workType: item?.workType ?? null }),
+    sensitivity: assessDeliverySensitivity({ title: item?.title, body: item?.body, workType: item?.workType }).level,
   };
   const resolution = resolveDeliveryShape({ declared: args.declared, signals });
   if (resolution.kind === "invalid") {

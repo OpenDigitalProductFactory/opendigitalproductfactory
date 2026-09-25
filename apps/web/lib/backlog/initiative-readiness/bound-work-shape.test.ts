@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { readBoundWorkShapeRef } from "./bound-work-shape";
+import { readBoundEditPaths, readBoundWorkShapeRef } from "./bound-work-shape";
 
 const CLAIM = [{ workShape: "delivery-small@1.0.0", recordedAt: "2026-09-23T00:00:00.000Z" }];
 
@@ -46,5 +46,33 @@ describe("readBoundWorkShapeRef", () => {
   it("returns null when no room carries a shape", async () => {
     const db = { workroom: { findFirst: vi.fn(async () => null) } };
     expect(await readBoundWorkShapeRef(db, "row-2")).toBeNull();
+  });
+});
+
+// BI-243BC956: the declared edit scope is the change fact sensitivity reads.
+describe("readBoundEditPaths", () => {
+  const at = "2026-09-25T00:00:00.000Z";
+  const claim = (kind: string, value: string, intent: string) => ({ kind, value, intent, recordedAt: at, recordedByPrincipalId: "p" });
+
+  it("returns the live room's edit path claims, ignoring reads and the shape entry", async () => {
+    const scopeClaims = [
+      { workShape: "delivery-small@1.0.0", recordedAt: at },
+      claim("path", "packages/db/prisma/schema.prisma", "edit"),
+      claim("path", "apps/web/lib/auth.ts", "read"),
+      claim("module", "apps/web/lib/finance", "edit"),
+    ];
+    const db = { workroom: { findFirst: vi.fn(async () => ({ scopeClaims })) } };
+    expect(await readBoundEditPaths(db, "row-1")).toEqual(["packages/db/prisma/schema.prisma", "apps/web/lib/finance"]);
+  });
+
+  it("falls back to the newest closed room when the live one declared no edits", async () => {
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce({ scopeClaims: [{ workShape: "delivery-small@1.0.0", recordedAt: at }] })
+      .mockResolvedValueOnce({ scopeClaims: [claim("path", "scripts/pregate.mjs", "edit")] });
+    expect(await readBoundEditPaths({ workroom: { findFirst } }, "row-1")).toEqual(["scripts/pregate.mjs"]);
+  });
+
+  it("is empty when no room declared any edit scope", async () => {
+    expect(await readBoundEditPaths({ workroom: { findFirst: vi.fn(async () => null) } }, "row-2")).toEqual([]);
   });
 });

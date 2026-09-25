@@ -46,6 +46,16 @@ work owes and who signs them.
 - **Sensitivity raises, never lowers.** High sensitivity takes a small or
   medium item to the large gates; elevated raises one step. Lowering a shape
   is a recorded override, visible on the item and in the gate decision.
+- **Sensitivity is read from the change, not the prose.** What the change
+  touches decides it: the declared edit scope, else the paths the item cites.
+  Schema, migrations, routes and external surfaces elevate; the access-control
+  boundary is high; a domain word in a module name is not substrate. Prose
+  keywords raise only when no change fact exists, and every raise names its
+  trigger. A precise defect report must never cost more gates than a vague one.
+- **A raise stops at the ceiling the work can satisfy.** A fix, or a
+  behavior-preserving refactor, is raised at most to medium; the part of a
+  raise that would owe a gate with no reachable route is refused on the
+  record, never owed.
 - **Delivery evidence is the trunk.** A SHA reachable from main with green
   required checks is delivery for every shape; no manifest is built to prove
   what git already knows.
@@ -60,3 +70,6 @@ Design: `docs/superpowers/specs/2026-09-02-work-shape-taxonomy-and-proportional-
 Registry: `apps/web/lib/work-management/delivery-shapes.ts`. Policy:
 `apps/web/lib/backlog/initiative-readiness/shape-requirements.ts`
 (`initiative-readiness.v3`). Kernel rulings 2026-09-03 and DI-C0989B8514AF.
+Sensitivity source: `apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts`
+(`docs/superpowers/specs/2026-09-25-shape-raise-reads-the-change-design.md`,
+DI-52BAAB9E6835, DI-B9DCC3F456F9).
