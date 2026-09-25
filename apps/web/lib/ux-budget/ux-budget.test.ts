@@ -545,7 +545,10 @@ describe("generated route-shell registry", () => {
     // 213 -> 214: /workspace/mailroom (design 2026-09-09, BI-727D5FD9) — the Mailroom
     // reads declared mailboxes and routed items from route-owned read models; with no
     // mailbox it renders the education state, so its output is stable and measurable.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(214);
+    // 214 -> 213: /delivery is now a redirect to the Improve & deliver area home
+    // (EP-2FB6C0CC), so there is nothing to measure there. The area home itself is
+    // a dynamic ([key]) route, excluded until the fixture mints one.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(213);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
@@ -560,7 +563,7 @@ describe("generated route-shell registry", () => {
     // 120 -> 119: the mirror of the eligibility gain above — /workspace/cases/[caseKey]
     // left the excluded set when the fixture began minting its id.
     // 120 -> 121: /workspace/mailroom/items/[inboundId] — dynamic, fixture-required.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(121);
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(122); // 121 -> 122: /delivery became a redirect (EP-2FB6C0CC).
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

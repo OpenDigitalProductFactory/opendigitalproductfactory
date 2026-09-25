@@ -492,7 +492,7 @@ describe("getRouteDataContext", () => {
     expect(context).toContain("158 kernel principles, 33 heuristics, 23 active role families");
     // The coworker can now NAME a specific review and deep-link it — no "paste the screen".
     expect(context).toContain("Should we prioritize the migration or the new feature?");
-    expect(context).toContain("/platform/ai/decisions/DI-ABC123");
+    expect(context).toContain("/coworker-decisions/decisions/DI-ABC123");
     expect(context).toContain("list_open_decision_reviews");
   });
 
