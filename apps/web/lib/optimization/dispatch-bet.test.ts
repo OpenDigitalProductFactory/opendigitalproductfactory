@@ -22,7 +22,8 @@ vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/governed-backlog-tee-up", () => ({
   promoteBacklogItemToBuildDraft: mocks.promoteBacklogItemToBuildDraft,
 }));
-vi.mock("@/lib/build/investment-admission", () => ({
+vi.mock("@/lib/build/investment-admission", async (importOriginal) => ({
+  blocksStart: (await importOriginal<typeof import("@/lib/build/investment-admission")>()).blocksStart,
   evaluateItemAdmission: mocks.evaluateItemAdmission,
   recordAdmissionOutcome: mocks.recordAdmissionOutcome,
 }));

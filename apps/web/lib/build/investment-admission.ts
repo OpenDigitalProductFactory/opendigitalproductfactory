@@ -21,6 +21,7 @@ import { quarterBounds } from "@/lib/portfolio/investment-points";
 import { loadInvestmentItems, summarizePortfolioInvestment } from "@/lib/portfolio/investment-read-model";
 import { loadPortfolioBudgets } from "@/lib/portfolio/portfolio-budget";
 import { resolveInvestmentPoints } from "@/lib/portfolio/investment-points";
+import { deliveredPointsFrom, loadThroughput, measureThroughput, measuredWeeklyThroughput } from "@/lib/portfolio/throughput";
 import { resolveBacklogPortfolioWithPath } from "@dpf/db/backlog-portfolio";
 
 import { sandboxPoolSize } from "./wip-cap";
@@ -97,7 +98,7 @@ export async function evaluateItemAdmission(db: ReadDb, input: {
   startKind: StartKind;
   breakFix?: boolean;
   now?: Date;
-  /** Weekly delivered points for the portfolio, once throughput is measured (slice 5). */
+  /** Weekly delivered points for the portfolio; measured from delivery history when omitted. */
   weeklyThroughput?: number | null;
 }): Promise<ItemAdmission> {
   const now = input.now ?? new Date();
@@ -120,7 +121,12 @@ export async function evaluateItemAdmission(db: ReadDb, input: {
   const override = portfolioId
     ? (await loadPortfolioBudgets(db, period)).find((b) => b.id === portfolioId)?.budget?.wipAllowancePoints ?? null
     : null;
-  const allowance = wipAllowance({ override, weeklyThroughput: input.weeklyThroughput ?? null });
+  let weeklyThroughput = input.weeklyThroughput;
+  if (weeklyThroughput === undefined) {
+    const { windowItems, historyStart } = await loadThroughput(db, now);
+    weeklyThroughput = measuredWeeklyThroughput(measureThroughput(deliveredPointsFrom(windowItems, now), { now, historyStart }), portfolioId);
+  }
+  const allowance = wipAllowance({ override, weeklyThroughput });
   const decision = decideInvestmentAdmission({
     inFlightPoints,
     itemPoints,

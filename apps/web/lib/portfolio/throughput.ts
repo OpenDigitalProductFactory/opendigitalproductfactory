@@ -9,7 +9,7 @@
 
 import { percentile } from "@/lib/queue/flow-metrics";
 
-import type { DeliverySurface } from "./investment-read-model";
+import { loadInvestmentItems, resolveInvestmentItem, type DeliverySurface, type InvestmentItemRow } from "./investment-read-model";
 
 export const THROUGHPUT_WINDOW_WEEKS = 6;
 export const MEASURED_MIN_WEEKS = 4;
@@ -67,4 +67,33 @@ export function measureThroughput(
     };
   }
   return { weeksOfHistory, portfolios: [...byPortfolio.values()] };
+}
+
+/** Points delivered in the throughput window, each item attributed to its portfolio. Pure. */
+export function deliveredPointsFrom(windowItems: InvestmentItemRow[], now: Date): DeliveredPoints[] {
+  const window = { start: new Date(now.getTime() - THROUGHPUT_WINDOW_WEEKS * WEEK_MS), end: new Date(now.getTime() + 1) };
+  return windowItems.flatMap((item) => {
+    const { resolution, itemClass, points } = resolveInvestmentItem(item, window);
+    return itemClass === "delivered" && points !== null && item.completedAt
+      ? [{ portfolioId: resolution.portfolioId, points, completedAt: new Date(item.completedAt), surface: item.deliverySurface }]
+      : [];
+  });
+}
+
+type ReadDb = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]) => Promise<T> };
+
+/** Measured throughput from the install's own delivery history. */
+export async function loadThroughput(db: ReadDb, now: Date = new Date()) {
+  const window = { start: new Date(now.getTime() - THROUGHPUT_WINDOW_WEEKS * WEEK_MS), end: new Date(now.getTime() + 1) };
+  const [windowItems, [history]] = await Promise.all([
+    loadInvestmentItems(db, window),
+    db.$queryRaw<Array<{ start: Date | null }>>`SELECT MIN("completedAt") AS "start" FROM "BacklogItem" WHERE "status" = 'done'`,
+  ]);
+  return { windowItems, historyStart: history?.start ? new Date(history.start) : null };
+}
+
+/** A portfolio's median weekly points, once measured; null while the forecast is still estimated. */
+export function measuredWeeklyThroughput(throughput: ReturnType<typeof measureThroughput>, portfolioId: string | null): number | null {
+  const row = throughput.portfolios.find((p) => p.portfolioId === portfolioId);
+  return row && row.label === "measured" ? row.range.median : null;
 }
