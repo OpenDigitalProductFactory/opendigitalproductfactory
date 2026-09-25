@@ -246,7 +246,6 @@
     "DocumentLifecycleEvent.toState",
     "DocumentReference.refType",
     "DocumentRendition.mimeType",
-    "DocumentRendition.renditionKind",
     "DynamicView.type",
     "EaAssessmentScope.scopeType",
     "EaAssessmentScope.status",

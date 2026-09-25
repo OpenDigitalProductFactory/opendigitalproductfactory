@@ -168,16 +168,28 @@ model DocumentLifecycleEvent {
   @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
+/// The closed set of derived renditions of a DocumentVersion (BI-9D43CBEF).
+/// Widening it is a migration plus the writers in apps/web/lib/documents/renditions.ts.
+enum DocumentRenditionKind {
+  pdf
+  plain_text
+}
+
+/// A derived projection of a DocumentVersion's content (office file -> PDF and
+/// plain text), regenerable from the version's blob. Written by the rendition
+/// job in apps/web/lib/documents/renditions.ts; its text is full-text indexed
+/// through the unmodeled generated "searchVector" column (migration
+/// 20260925060000_document_rendition_kind_enum).
 model DocumentRendition {
-  id                String          @id @default(cuid())
+  id                String                @id @default(cuid())
   documentVersionId String
-  renditionKind     String
-  contentText       String?         @db.Text
+  renditionKind     DocumentRenditionKind
+  contentText       String?               @db.Text
   blobId            String?
   mimeType          String?
-  createdAt         DateTime        @default(now())
-  documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
-  blob              DocumentBlob?   @relation(fields: [blobId], references: [id], onDelete: SetNull)
+  createdAt         DateTime              @default(now())
+  documentVersion   DocumentVersion       @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  blob              DocumentBlob?         @relation(fields: [blobId], references: [id], onDelete: SetNull)
 
   @@unique([documentVersionId, renditionKind])
   @@index([documentVersionId])

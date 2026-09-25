@@ -3,6 +3,8 @@ import { prisma, type Prisma } from "@dpf/db";
 import { syncDocumentReference } from "@dpf/db/graph-sync";
 import { DOCUMENT_TEXT_INLINE_LIMIT_BYTES } from "./blob-storage";
 import { searchDocumentVectors, storeDocumentVector } from "./embeddings";
+import { requestDocumentRenditions } from "./rendition-trigger";
+import { needsRenditions } from "./rendition-rules";
 
 export const DOCUMENT_STATES = ["draft", "published", "archived"] as const;
 export type DocumentState = typeof DOCUMENT_STATES[number];
@@ -81,6 +83,16 @@ export type ManagedDocumentVersion = {
   summary: string | null;
   sizeBytes: number | null;
   createdAt: Date;
+  /** Derived renditions (BI-9D43CBEF), without their text. */
+  renditions: ManagedDocumentRendition[];
+};
+
+export type ManagedDocumentRendition = {
+  id: string;
+  kind: "pdf" | "plain_text";
+  mimeType: string | null;
+  blobId: string | null;
+  createdAt: Date;
 };
 
 export type ManagedDocumentLifecycleEvent = {
@@ -94,9 +106,18 @@ export type ManagedDocumentLifecycleEvent = {
 
 type DocumentStoreDb = typeof prisma;
 
+// Rendition text can run to the inline limit, so projections carry the
+// rendition's identity and never its text.
+const VERSION_RENDITIONS = {
+  renditions: {
+    select: { id: true, renditionKind: true, mimeType: true, blobId: true, createdAt: true },
+    orderBy: { renditionKind: "asc" as const },
+  },
+};
+
 const DOCUMENT_INCLUDE = {
-  currentVersion: true,
-  versions: { orderBy: { version: "desc" as const } },
+  currentVersion: { include: VERSION_RENDITIONS },
+  versions: { orderBy: { version: "desc" as const }, include: VERSION_RENDITIONS },
   tags: true,
   ownerPrincipal: { select: { id: true, displayName: true } },
   createdByPrincipal: { select: { id: true, displayName: true } },
@@ -181,6 +202,13 @@ function projectVersion(row: any): ManagedDocumentVersion {
     summary: row.summary ?? null,
     sizeBytes: row.sizeBytes ?? null,
     createdAt: row.createdAt,
+    renditions: (row.renditions ?? []).map((rendition: any) => ({
+      id: rendition.id,
+      kind: rendition.renditionKind,
+      mimeType: rendition.mimeType ?? null,
+      blobId: rendition.blobId ?? null,
+      createdAt: rendition.createdAt,
+    })),
   };
 }
 
@@ -203,13 +231,26 @@ async function searchDocumentIdsByFullText(
   if (!query.trim()) return new Map();
   try {
     const rows = await db.$queryRawUnsafe<Array<{ documentId: string; rank: number | string | null }>>(
+      // Version text (title, summary, inline content) and, for office files,
+      // the plain-text rendition's text (BI-9D43CBEF).
       `
-        SELECT d."documentId",
-               MAX(ts_rank_cd(v."searchVector", websearch_to_tsquery('english', $1)))::float AS rank
-        FROM "Document" d
-        JOIN "DocumentVersion" v ON v."documentId" = d."id"
-        WHERE v."searchVector" @@ websearch_to_tsquery('english', $1)
-        GROUP BY d."documentId"
+        SELECT hits."documentId", MAX(hits.rank)::float AS rank
+        FROM (
+          SELECT d."documentId",
+                 ts_rank_cd(v."searchVector", websearch_to_tsquery('english', $1)) AS rank
+          FROM "Document" d
+          JOIN "DocumentVersion" v ON v."documentId" = d."id"
+          WHERE v."searchVector" @@ websearch_to_tsquery('english', $1)
+          UNION ALL
+          SELECT d."documentId",
+                 ts_rank_cd(r."searchVector", websearch_to_tsquery('english', $1)) AS rank
+          FROM "Document" d
+          JOIN "DocumentVersion" v ON v."documentId" = d."id"
+          JOIN "DocumentRendition" r ON r."documentVersionId" = v."id"
+          WHERE r."renditionKind" = 'plain_text'
+            AND r."searchVector" @@ websearch_to_tsquery('english', $1)
+        ) hits
+        GROUP BY hits."documentId"
         ORDER BY rank DESC
         LIMIT $2
       `,
@@ -401,6 +442,12 @@ export async function saveManagedDocument(input: SaveManagedDocumentInput, db: D
 
   await projectDocumentReferencesToGraph(projected.id, db).catch(() => null);
 
+  // An office file is a blob nothing can search or preview until the rendition
+  // job derives its PDF and text (BI-9D43CBEF). Best effort: never fails the save.
+  if (projected.currentVersion && needsRenditions(projected.currentVersion)) {
+    await requestDocumentRenditions(projected.currentVersion.id);
+  }
+
   return projected;
 }
 
@@ -452,6 +499,7 @@ export async function searchManagedDocuments(input: DocumentSearchInput, db: Doc
       { tags: { some: { tag: { contains: query, mode: "insensitive" } } } },
       { versions: { some: { contentText: { contains: query, mode: "insensitive" } } } },
       { versions: { some: { summary: { contains: query, mode: "insensitive" } } } },
+      { versions: { some: { renditions: { some: { renditionKind: "plain_text", contentText: { contains: query, mode: "insensitive" } } } } } },
       ...(fullTextRank.size > 0 ? [{ documentId: { in: [...fullTextRank.keys()] } }] : []),
       ...(semanticResults.length > 0 ? [{ documentId: { in: semanticResults.map((result) => result.documentId) } }] : []),
     ];

@@ -4,6 +4,9 @@ import ReactMarkdown from "react-markdown";
 import { Archive, ArchiveRestore, ArrowLeft, CheckCircle2, FileText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listManagedDocumentReferences, loadManagedDocument } from "@/lib/documents/document-store";
+import { loadRenditionTextPreview, renditionFailureMessage } from "@/lib/documents/document-content";
+import { officeSourceExtension } from "@/lib/documents/conversion/formats";
+import { DocumentFilePanel } from "./DocumentFilePanel";
 import { changeDocumentStateAction } from "../actions";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -37,6 +40,9 @@ export default async function DocumentDetailPage({ params }: Props) {
   if (!document) notFound();
 
   const content = document.currentVersion?.contentText ?? document.currentVersion?.summary ?? "";
+  const storedFile = document.currentVersion?.contentBlobId ? document.currentVersion : null;
+  const isOfficeFile = storedFile ? officeSourceExtension(storedFile.contentFormat) !== null : false;
+  const textPreview = storedFile && isOfficeFile ? await loadRenditionTextPreview(storedFile.id).catch(() => null) : null;
 
   return (
     <div className="space-y-6">
@@ -79,7 +85,15 @@ export default async function DocumentDetailPage({ params }: Props) {
             <FileText className="h-4 w-4" aria-hidden="true" />
             Current Version
           </div>
-          {document.contentFormat === "text/markdown" ? (
+          {storedFile ? (
+            <DocumentFilePanel
+              documentId={document.documentId}
+              version={storedFile}
+              isOfficeFile={isOfficeFile}
+              textPreview={textPreview}
+              failureMessage={renditionFailureMessage(document.lifecycleEvents, storedFile.version)}
+            />
+          ) : document.contentFormat === "text/markdown" ? (
             <div className="prose prose-sm max-w-none text-[var(--dpf-text)] prose-headings:text-[var(--dpf-text)] prose-p:text-[var(--dpf-text)] prose-strong:text-[var(--dpf-text)]">
               <ReactMarkdown>{content}</ReactMarkdown>
             </div>

@@ -37,3 +37,42 @@ export function isConverterTarget(value: string): value is ConverterTarget {
 export function normalizeSourceExtension(value: string): string {
   return value.trim().toLowerCase().replace(/^\./, "");
 }
+
+/**
+ * The office MIME list: the one home for "is this stored content an office
+ * file the engine can render?" (BI-9D43CBEF). Each MIME type maps to the
+ * dpf-convert `--from` extension. Text, markdown, HTML and PDF are absent on
+ * purpose: the document store already reads them without the engine.
+ */
+const OFFICE_SOURCE_EXTENSION_BY_MIME: Readonly<Record<string, string>> = {
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-word.document.macroenabled.12": "docm",
+  "application/vnd.oasis.opendocument.text": "odt",
+  "application/rtf": "rtf",
+  "text/rtf": "rtf",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.ms-excel.sheet.macroenabled.12": "xlsm",
+  "application/vnd.oasis.opendocument.spreadsheet": "ods",
+  "application/vnd.ms-powerpoint": "ppt",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+  "application/vnd.ms-powerpoint.presentation.macroenabled.12": "pptm",
+  "application/vnd.oasis.opendocument.presentation": "odp",
+  "application/vnd.oasis.opendocument.graphics": "odg",
+  "application/vnd.visio": "vsd",
+  "application/vnd.ms-visio.drawing.main+xml": "vsdx",
+};
+
+/** Every office MIME type, lower-case, for store queries such as the rendition backfill. */
+export const OFFICE_SOURCE_MIME_TYPES: readonly string[] = Object.keys(OFFICE_SOURCE_EXTENSION_BY_MIME);
+
+/** Lower-case a MIME type and drop its parameters (`; charset=...`). */
+export function normalizeMimeType(value: string): string {
+  return value.split(";")[0]!.trim().toLowerCase();
+}
+
+/** The dpf-convert source extension for an office MIME type, or null for anything else. */
+export function officeSourceExtension(contentFormat: string): string | null {
+  return OFFICE_SOURCE_EXTENSION_BY_MIME[normalizeMimeType(contentFormat)] ?? null;
+}
