@@ -5,6 +5,7 @@ import {
   backfillBacklogPortfolios,
   getBacklogByPortfolio,
   resolveBacklogPortfolio,
+  resolveBacklogPortfolioWithPath,
   type BacklogPortfolioClient,
 } from "./backlog-portfolio";
 
@@ -117,5 +118,40 @@ describe("getBacklogByPortfolio", () => {
 
     const open = await getBacklogByPortfolio({ db, statuses: ["open"] });
     expect(open.find((g) => g.portfolioId === "pf-b")).toBeUndefined();
+  });
+});
+
+describe("resolveBacklogPortfolioWithPath (BI-298A7202)", () => {
+  const links = {
+    digitalProduct: { portfolioId: "p-prod" },
+    taxonomyNode: { portfolioId: "p-tax" },
+    coworkerNeeds: [{ agent: { portfolioId: "p-need" } }],
+    epic: { portfolios: [{ portfolioId: "p-epic" }] },
+  };
+
+  it("reports the stored portfolioId first, then each link in precedence order", () => {
+    expect(resolveBacklogPortfolioWithPath({ ...links, portfolioId: "p-stored" }))
+      .toMatchObject({ portfolioId: "p-stored", path: "stored" });
+    expect(resolveBacklogPortfolioWithPath(links)).toMatchObject({ portfolioId: "p-prod", path: "digital-product" });
+    expect(resolveBacklogPortfolioWithPath({ ...links, digitalProduct: null }))
+      .toMatchObject({ portfolioId: "p-tax", path: "taxonomy-node" });
+    expect(resolveBacklogPortfolioWithPath({ coworkerNeeds: links.coworkerNeeds, epic: links.epic }))
+      .toMatchObject({ portfolioId: "p-need", path: "coworker-need" });
+    expect(resolveBacklogPortfolioWithPath({ epic: links.epic })).toMatchObject({ portfolioId: "p-epic", path: "epic" });
+  });
+
+  it("returns unallocated, never a guess, when nothing carries a portfolio", () => {
+    expect(resolveBacklogPortfolioWithPath({ digitalProduct: { portfolioId: null }, epic: { portfolios: [] } }))
+      .toEqual({ portfolioId: null, path: "unallocated", disagreesWithLinks: false });
+  });
+
+  it("says when the stored value disagrees with the links rather than hiding it", () => {
+    expect(resolveBacklogPortfolioWithPath({ ...links, portfolioId: "p-stored" }).disagreesWithLinks).toBe(true);
+    expect(resolveBacklogPortfolioWithPath({ ...links, portfolioId: "p-prod" }).disagreesWithLinks).toBe(false);
+    expect(resolveBacklogPortfolioWithPath({ portfolioId: "p-stored" }).disagreesWithLinks).toBe(false);
+  });
+
+  it("leaves resolveBacklogPortfolio link-only, so the cache it writes still follows the links", () => {
+    expect(resolveBacklogPortfolio(links)).toBe("p-prod");
   });
 });
