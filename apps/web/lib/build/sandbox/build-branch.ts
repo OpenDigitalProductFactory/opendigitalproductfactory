@@ -34,8 +34,13 @@ const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
 const WORKSPACE = "/workspace";
 const GIT_INDEX_LOCK = `${WORKSPACE}/.git/index.lock`;
+// `**/node_modules` (the entry itself) as well as its contents: a build
+// worktree shares each package's node_modules by SYMLINK, and git sees a
+// symlink as a file, so `**/node_modules/**` never matched it and the WIP
+// commit tracked packages/dpf-skill-pack/node_modules (FB-D671B016, 2026-09-25).
 const SANDBOX_GIT_STAGE_EXCLUDES = [
   ":!node_modules",
+  ":!**/node_modules",
   ":!**/node_modules/**",
   ":!.next",
   ":!**/.next/**",
@@ -52,6 +57,7 @@ const SANDBOX_GIT_STAGE_EXCLUDES = [
 ] as const;
 const SANDBOX_GIT_CLEAN_EXCLUDES = [
   ":!node_modules",
+  ":!**/node_modules",
   ":!**/node_modules/**",
   ":!.pnpm-store",
   ":!**/.pnpm-store/**",
@@ -72,6 +78,9 @@ function quoteGitPathspec(pathspec: string): string {
 export function buildSandboxGitAddCommand(): string {
   const excludes = SANDBOX_GIT_STAGE_EXCLUDES.map(quoteGitPathspec).join(" ");
   return [
+    // Untrack a node_modules symlink an earlier commit already captured, so
+    // `git add -u` cannot keep carrying it and the next commit removes it.
+    "git ls-files -z -- ':(glob)**/node_modules' | xargs -0 -r git rm -q --cached --",
     "git add -u",
     `git ls-files -z --others --exclude-standard -- . ${excludes} | xargs -0 -r git add --`,
   ].join(" && ");

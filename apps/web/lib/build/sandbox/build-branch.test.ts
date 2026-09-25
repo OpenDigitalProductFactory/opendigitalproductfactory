@@ -146,6 +146,18 @@ describe("wrapSandboxGitCommand", () => {
     expect(command).not.toContain("tsbuildinfo");
   });
 
+  // FB-D671B016 (2026-09-25): worktrees share node_modules by SYMLINK; git sees
+  // a symlink as a file, so `**/node_modules/**` and a `node_modules/` ignore
+  // rule both missed it and the WIP commit tracked it. The entry itself must be
+  // excluded, and one an earlier commit captured must be untracked.
+  it("never stages a node_modules symlink and untracks one already committed", () => {
+    const command = buildSandboxGitAddCommand();
+
+    expect(command).toContain("':!**/node_modules'");
+    expect(command).toMatch(/^git ls-files -z -- ':\(glob\)\*\*\/node_modules' \| xargs -0 -r git rm -q --cached -- && git add -u/);
+    expect(buildSandboxGitCleanCommand()).toContain("':!**/node_modules'");
+  });
+
   it("commits a build branch's in-flight work before the pre-checkout scrub (BI-98B723C0)", () => {
     const command = buildSandboxCommitInFlightWorkCommand();
 
