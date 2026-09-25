@@ -4,6 +4,7 @@ import { deriveGateKey } from "@/lib/gates/gate-run-identity";
 import {
   IN_PLATFORM_PREFLIGHT_GATE_KIND,
   buildGauntletEvidence,
+  resolveInPlatformEvidenceBinding,
   deriveGauntletGateKey,
   summarizeGauntlet,
   toolchainFingerprintFrom,
@@ -91,6 +92,30 @@ describe("buildGauntletEvidence", () => {
     expect(evidence.gateKey).toBe(deriveGauntletGateKey(identity));
   });
 
+  // BI-AF531123: a failure analysis can cite this record only if it names the
+  // exact head, tree and diff it checked, the command it ran, and how long it
+  // stays valid. Without them it was unciteable by construction.
+  it("binds to the exact head, tree and diff when a binding is supplied", () => {
+    const evidence = buildGauntletEvidence({
+      ...base, passed: true,
+      binding: { sha: "c".repeat(40), headTreeHash: TREE, diffDigest: "d".repeat(64) },
+    });
+    expect(evidence).toMatchObject({
+      sha: "c".repeat(40),
+      headTreeHash: TREE,
+      diffDigest: "d".repeat(64),
+      commands: ["node scripts/pregate-preflight.mjs"],
+      completedAt: "2026-09-12T04:00:00.000Z",
+      evidenceValidity: { expiresAt: "2026-09-13T04:00:00.000Z" },
+    });
+  });
+
+  it("stays unbound without a binding, as before", () => {
+    const evidence = buildGauntletEvidence({ ...base, passed: true });
+    expect(evidence).not.toHaveProperty("sha");
+    expect(evidence).not.toHaveProperty("evidenceValidity");
+  });
+
   it("does not claim a pass when guards failed", () => {
     const evidence = buildGauntletEvidence({ ...base, passed: false, failedGuards: ["Module Size Guard"] });
     expect(evidence.passed).toBe(false);
@@ -125,5 +150,21 @@ describe("toolchainFingerprintFrom", () => {
 
   it("distinguishes different toolchains", () => {
     expect(toolchainFingerprintFrom({ node: "v24" })).not.toBe(toolchainFingerprintFrom({ node: "v22" }));
+  });
+});
+
+describe("resolveInPlatformEvidenceBinding", () => {
+  it("binds to the head, tree and the digest of the exact captured diff the semantic review hashes", async () => {
+    const { createHash } = await import("node:crypto");
+    const binding = resolveInPlatformEvidenceBinding({ headSha: "c".repeat(40), headTreeHash: TREE, diffPatch: "  diff --git a/x b/x\n+y\n  " });
+    expect(binding).toEqual({
+      sha: "c".repeat(40), headTreeHash: TREE,
+      diffDigest: createHash("sha256").update("diff --git a/x b/x\n+y").digest("hex"),
+    });
+  });
+  it("refuses to bind without a head, a tree or a diff", () => {
+    expect(resolveInPlatformEvidenceBinding({ headSha: null, headTreeHash: TREE, diffPatch: "d" })).toBeUndefined();
+    expect(resolveInPlatformEvidenceBinding({ headSha: "c".repeat(40), headTreeHash: null, diffPatch: "d" })).toBeUndefined();
+    expect(resolveInPlatformEvidenceBinding({ headSha: "c".repeat(40), headTreeHash: TREE, diffPatch: "   " })).toBeUndefined();
   });
 });

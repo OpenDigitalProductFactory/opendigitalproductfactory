@@ -7,7 +7,7 @@ export async function resolveFailureAnalysisEvidence(value: unknown, workroomId:
   const parsed = failureAnalysisSchema.safeParse(value);
   if (!parsed.success) return [];
   const ids = [...new Set([...parsed.data.eliminated, ...parsed.data.scenarios].flatMap(s => s.evidenceIds))];
-  const room = await prisma.workroom.findUnique({ where: { id: workroomId }, select: { capsuleId: true, headSha: true } });
+  const room = await prisma.workroom.findUnique({ where: { id: workroomId }, select: { capsuleId: true, headSha: true, executorKind: true } });
   if (!room?.headSha) return [];
   const rows = await prisma.externalEvidenceRecord.findMany({
     where: { id: { in: ids }, workCapsuleId: workroomId },
@@ -19,8 +19,15 @@ export async function resolveFailureAnalysisEvidence(value: unknown, workroomId:
     const evidence = isRecord(details.evidence) ? details.evidence : {};
     // Resolve an executed report, not the caller's narrative verification string.
     // Documentation uses the existing lightweight lane; runtime uses its lease.
+    // BI-E4E9BD73: a Build Studio sandbox has no Docker, so its executed
+    // in-platform guard and scoped-test runs are the evidence it can produce.
+    // They count only inside a Build Studio Workroom; every currency and
+    // content check below still applies.
+    const inPlatformRun = room.executorKind === "build-studio"
+      && (evidence.tier === "in-platform-preflight" || evidence.tier === "in-platform-scoped-tests");
     const governedRun = Boolean(details.gateKey && details.leaseId)
-      || evidence.phase === "pre-admission-documentation";
+      || evidence.phase === "pre-admission-documentation"
+      || inPlatformRun;
     const validity = isRecord(details.evidenceValidity) ? details.evidenceValidity
       : isRecord(evidence.evidenceValidity) ? evidence.evidenceValidity : null;
     if (!validity || typeof validity.expiresAt !== "string" || !Number.isFinite(Date.parse(validity.expiresAt))

@@ -121,6 +121,28 @@ export const buildReviewVerification = inngest.createFunction(
       }
     });
 
+    // The semantic review judges the assembled change: the exact diff and the
+    // committed head/base trees. The orchestrated build path advances to
+    // review without recording either (only the legacy pipeline's completion
+    // step did), so record them here from the build's own worktree — it is
+    // idempotent, and it also heals builds already stranded in review.
+    const assembled = await step.run("capture-assembled-change", async () => {
+      const { captureAssembledChange } = await import("@/lib/build/capture-assembled-change");
+      try {
+        const capture = await captureAssembledChange({
+          buildId,
+          containerId: build.sandboxId!,
+          persistSourceCurrency: true,
+        });
+        return { captured: true as const, diffPatch: capture.diffPatch, commits: capture.commitHashes.length };
+      } catch (err) {
+        const message = (err as Error)?.message?.slice(0, 300) ?? "unknown error";
+        console.warn(`[review-verification] ${buildId} assembled change could not be captured: ${message}`);
+        return { captured: false as const, error: message };
+      }
+    });
+
+
     await step.run("guard-gauntlet", async () => {
       const { runGuardGauntlet, guardPlanDigest } = await import("@/lib/build/sandbox/guard-gauntlet");
       const { buildGauntletEvidence, summarizeGauntlet, toolchainFingerprintFrom, resolveGauntletRepository } =
@@ -158,13 +180,33 @@ export const buildReviewVerification = inngest.createFunction(
         toolchainFingerprint: toolchainFingerprintFrom({ node, pnpm }),
       };
 
+      // BI-AF531123: bind the record to this build's Workroom and exact head so a
+      // failure analysis can cite it. The Workroom never carried a head for
+      // Build Studio builds, so the local-integration writer could not bind it.
+      const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+      const { resolveInPlatformEvidenceBinding } = await import("@/lib/build/sandbox/guard-gauntlet-evidence");
+      const state = await getSandboxStateForBuild(buildId).catch(() => null);
+      const branch = build.buildBranch ?? `build/${buildId}`;
+      const binding = resolveInPlatformEvidenceBinding({
+        headSha: state?.headSha,
+        headTreeHash: state?.sourceCurrency?.headTreeSha,
+        diffPatch: assembled.captured ? assembled.diffPatch : build.diffPatch,
+      });
+      if (binding) {
+        const { prisma } = await import("@dpf/db");
+        await prisma.workroom.updateMany({
+          where: { featureBuildId: build.id, archivedAt: null },
+          data: { headBranch: branch, headSha: binding.sha },
+        });
+      }
+
       await recordLocalIntegrationResult({
         actorUserId: build.createdById,
         provider: "build-studio",
         externalSessionId: buildId,
         routeContext: "/build",
         buildId,
-        candidateBranch: build.buildBranch ?? `build/${buildId}`,
+        candidateBranch: branch,
         mode: "single-branch",
         status: outcome.passed ? "passed" : "failed",
         summary: summarizeGauntlet({
@@ -179,6 +221,7 @@ export const buildReviewVerification = inngest.createFunction(
           failedGuards: outcome.failedGuards,
           output: outcome.output,
           durationMs: outcome.durationMs,
+          ...(binding ? { binding } : {}),
         }),
       });
 
@@ -189,27 +232,6 @@ export const buildReviewVerification = inngest.createFunction(
     // intact, then one surface-neutral review evaluates the assembled committed
     // change before UX verification or promotion. Shadow mode is the rollback
     // default until outcome telemetry calibrates deterministic enforcement.
-    // The semantic review judges the assembled change: the exact diff and the
-    // committed head/base trees. The orchestrated build path advances to
-    // review without recording either (only the legacy pipeline's completion
-    // step did), so record them here from the build's own worktree — it is
-    // idempotent, and it also heals builds already stranded in review.
-    const assembled = await step.run("capture-assembled-change", async () => {
-      const { captureAssembledChange } = await import("@/lib/build/capture-assembled-change");
-      try {
-        const capture = await captureAssembledChange({
-          buildId,
-          containerId: build.sandboxId!,
-          persistSourceCurrency: true,
-        });
-        return { captured: true as const, diffPatch: capture.diffPatch, commits: capture.commitHashes.length };
-      } catch (err) {
-        const message = (err as Error)?.message?.slice(0, 300) ?? "unknown error";
-        console.warn(`[review-verification] ${buildId} assembled change could not be captured: ${message}`);
-        return { captured: false as const, error: message };
-      }
-    });
-
     const semanticReview = await step.run("semantic-change-review", async () => {
       const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
       const { reviewBuildStudioAssembledChange } = await import(

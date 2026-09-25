@@ -36,6 +36,24 @@ describe("existing executed evidence adapter", () => {
     row.operationType = "manual-check";
     expect(await resolveFailureAnalysisEvidence(fixture.failureAnalysis, "room-row")).toEqual([]);
   });
+  // BI-E4E9BD73: a Build Studio sandbox cannot run the full gate (no Docker, by
+  // design), so its executed in-platform guard and scoped-test runs are the
+  // evidence it has. They count only for a Build Studio Workroom, only when
+  // passed, current, bound to this head, and carrying commands and output.
+  it.each(["in-platform-preflight", "in-platform-scoped-tests"])("resolves an executed %s record for a Build Studio Workroom", async tier => {
+    mocks.room.mockResolvedValue({ capsuleId: "room", headSha: "commit", executorKind: "build-studio" });
+    delete row.details.gateKey; delete row.details.leaseId; delete row.details.evidenceValidity;
+    Object.assign(row.details.evidence as Record<string, unknown>, {
+      tier, evidenceValidity: { expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    });
+    expect(await resolveFailureAnalysisEvidence(fixture.failureAnalysis, "room-row")).toHaveLength(1);
+  });
+  it("refuses in-platform evidence for a Workroom that is not Build Studio's", async () => {
+    mocks.room.mockResolvedValue({ capsuleId: "room", headSha: "commit", executorKind: "codex-desktop" });
+    delete row.details.gateKey; delete row.details.leaseId;
+    (row.details.evidence as Record<string, unknown>).tier = "in-platform-preflight";
+    expect(await resolveFailureAnalysisEvidence(fixture.failureAnalysis, "room-row")).toEqual([]);
+  });
   it("allows the existing lightweight documentation lane without a runtime lease", async () => {
     delete row.details.gateKey; delete row.details.leaseId;
     (row.details.evidence as Record<string, unknown>).phase = "pre-admission-documentation";
