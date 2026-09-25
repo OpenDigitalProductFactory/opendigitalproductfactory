@@ -41,7 +41,7 @@ const BASELINE_PATH = join(ROOT, "sbom", "baseline.json");
 export const BUDGETED_TOTALS = ["resolvedComponents", "duplicatedNames", "excessInstances", "multiMajorNames"];
 
 const BASELINE_NOTE =
-  "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.";
+  "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each package our workspaces deliberately declare with different specifiers to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.";
 
 /** Compare totals to budgets. A total with no numeric budget is not gated. */
 export function evaluateBudgets(totals, budgets = {}) {
@@ -70,6 +70,19 @@ export function nextBudgets(totals, budgets = {}, { raise = false } = {}) {
     out[key] = typeof prev !== "number" || raise ? current : Math.min(prev, current);
   }
   return out;
+}
+
+/**
+ * Specifier drift against the accepted map (name -> reason). Unaccepted drift
+ * fails; an accepted name that no longer drifts is stale and fails too, so the
+ * map only shrinks (plan 2026-09-08 S11).
+ */
+export function evaluateSpecifierDrift(specifierDrift = [], accepted = {}) {
+  const current = new Set(specifierDrift.map((x) => x.name));
+  return {
+    unaccepted: specifierDrift.filter((x) => !Object.hasOwn(accepted, x.name)),
+    stale: Object.keys(accepted).filter((name) => !current.has(name)).sort(),
+  };
 }
 
 function loadBaseline() {
@@ -132,6 +145,7 @@ function main() {
       budgets,
       ...(lastBudgetRaise ? { lastBudgetRaise } : {}),
       firstPartyDivergent: currentDivergent,
+      acceptedSpecifierDrift: baseline?.acceptedSpecifierDrift ?? {},
       roots,
     };
     writeFileSync(BASELINE_PATH, JSON.stringify(next, null, 2) + "\n");
@@ -187,6 +201,28 @@ function main() {
         "    node scripts/sbom/check-sbom-drift.mjs --update-baseline",
         "",
       ].join("\n"),
+    );
+    failed = true;
+  }
+
+  const drift = evaluateSpecifierDrift(analysis.specifierDrift, baseline.acceptedSpecifierDrift);
+  if (drift.unaccepted.length) {
+    process.stderr.write(
+      [
+        `::error::Our workspaces declare ${drift.unaccepted.map((x) => x.name).join(", ")} with different specifiers:`,
+        ...drift.unaccepted.map((x) => `    - ${x.name}: ${Object.entries(x.specifiers).map(([s, ws]) => `${s} in ${ws.join(", ")}`).join("; ")}`),
+        "",
+        "  Declare one specifier everywhere (pick the highest floor). If one workspace",
+        "  needs a different one on purpose, record why in sbom/baseline.json",
+        "  `acceptedSpecifierDrift` (name -> reason) in the same PR.",
+        "",
+      ].join("\n"),
+    );
+    failed = true;
+  }
+  if (drift.stale.length) {
+    process.stderr.write(
+      `::error::sbom/baseline.json acceptedSpecifierDrift lists names that no longer drift: ${drift.stale.join(", ")}. Delete them.\n`,
     );
     failed = true;
   }

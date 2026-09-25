@@ -1455,6 +1455,7 @@
         "the-two-axes-and-where-dependabot-fits",
         "sbom-generation",
         "axis-1-reduction-efficiency",
+        "specifier-drift-one-specifier-per-package",
         "shape-budgets-the-surface-only-shrinks",
         "lockfile-roots",
         "pruning-overrides",

@@ -75,6 +75,32 @@ function parseImporters(lockText) {
   return importers;
 }
 
+// Registry names our own workspaces declare with different specifiers, even when
+// they resolve to one version today. "^3.14.0" beside "^3.26.3" resolves alike
+// until a lockfile refresh, then silently splits (plan 2026-09-08 S11).
+// Workspace, link, file and catalog specifiers are first-party plumbing, not drift.
+export function findSpecifierDrift(importers) {
+  const bySpec = new Map();
+  for (const [ws, imp] of Object.entries(importers)) {
+    for (const kind of DEPENDENCY_KINDS) {
+      for (const d of imp[kind] ?? []) {
+        if (!d.specifier || /^(workspace|link|file|catalog):/.test(d.specifier)) continue;
+        if (!bySpec.has(d.name)) bySpec.set(d.name, new Map());
+        const specs = bySpec.get(d.name);
+        if (!specs.has(d.specifier)) specs.set(d.specifier, new Set());
+        specs.get(d.specifier).add(ws);
+      }
+    }
+  }
+  return [...bySpec.entries()]
+    .filter(([, specs]) => specs.size > 1)
+    .map(([name, specs]) => ({
+      name,
+      specifiers: Object.fromEntries([...specs.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([s, ws]) => [s, [...ws].sort()])),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // packages: the deduplicated resolved set (clean name@version keys)
 function parsePackages(lockText) {
   const pkgs = [];
@@ -247,6 +273,7 @@ function analyze({ packages, importers, overrideTargets }) {
     duplicates,
     multiMajor,
     firstPartyDivergent,
+    specifierDrift: findSpecifierDrift(importers),
     directButTransitive,
     dedupeCandidates,
   };
