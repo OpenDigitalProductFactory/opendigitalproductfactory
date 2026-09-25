@@ -18,6 +18,7 @@ exports[`shared barrel export > exports all public symbols 1`] = `
   "composeSignedConfirmationEmail",
   "deleteAttachmentsForThread",
   "describeAddressValidationSetup",
+  "describeUnsupportedFormat",
   "err",
   "escapeCsvField",
   "extractHeadings",
@@ -48,8 +49,11 @@ exports[`shared barrel export > exports all public symbols 1`] = `
   "safeRenderValue",
   "sendEmail",
   "slugify",
+  "sniffOfficeContainer",
   "suggestProviderForGeography",
   "toCsv",
+  "unsupportedFileContent",
   "validateAddress",
+  "validateMagicBytes",
 ]
 `;

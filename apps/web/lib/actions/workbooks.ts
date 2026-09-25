@@ -45,7 +45,7 @@ import {
   resolvePlatformReference,
   getReferenceTargetFields,
 } from "@/lib/workbooks/platform-tables";
-import { inferTableFromSheet, type SheetCell } from "@/lib/workbooks/sheet-import";
+import { inferTableFromSheet, unreadableSheetReason, type SheetCell } from "@/lib/workbooks/sheet-import";
 import { parseDelimitedGrid } from "@/lib/onboarding/roster-import";
 import { mapGridToEmployees } from "@/lib/onboarding/roster-from-grid";
 import { importRoster } from "@/lib/onboarding/roster-import-actions";
@@ -374,6 +374,8 @@ export async function importSheetAction(
       matrix = [columns, ...rows];
     } else {
       const buffer = await file.arrayBuffer();
+      const unreadable = unreadableSheetReason(new Uint8Array(buffer));
+      if (unreadable) throw new WorkbookError(unreadable, 415);
       const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
       matrix = (await readSheet(buffer)) as SheetCell[][];
     }

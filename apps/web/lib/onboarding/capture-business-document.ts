@@ -82,6 +82,9 @@ export async function captureBusinessDocument(
         `Upload a PDF, Word doc, or text/markdown file.`,
     );
   }
+  // A recognised format DPF cannot read (legacy .doc, RTF, OpenDocument): say
+  // so in the parser's words instead of storing an empty or garbled document.
+  if (parsed.type === "unsupported") throw new Error(parsed.reason);
 
   const capped = capParsedContentSize(parsed);
   const text = (capped.fullText ?? "").trim();

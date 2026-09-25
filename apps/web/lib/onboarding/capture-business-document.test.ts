@@ -1,4 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+
+import { parseFileContent } from "@/lib/shared/file-parsers";
 
 import type { ManagedDocument } from "@/lib/documents/document-store";
 import {
@@ -85,6 +89,18 @@ describe("captureBusinessDocument", () => {
         d,
       ),
     ).rejects.toThrow(/unsupported/i);
+    expect(d.save).not.toHaveBeenCalled();
+  });
+
+  it("refuses a real Word 97-2003 file with the parser's plain-language reason (BI-65D65EC0)", async () => {
+    const legacyDoc = readFileSync(resolve(__dirname, "../shared/__fixtures__/office/plan.doc"));
+    const d = deps({ parse: parseFileContent });
+    await expect(
+      captureBusinessDocument(
+        { organizationId: ORG, fileName: "plan.doc", mimeType: "application/msword", buffer: legacyDoc },
+        d,
+      ),
+    ).rejects.toThrow(/Word 97-2003/);
     expect(d.save).not.toHaveBeenCalled();
   });
 
