@@ -4,7 +4,7 @@ status: draft
 
 # Office document engine: absorb the LibreOffice engine, not an office suite
 
-**BI:** `BI-815D40C6` (umbrella) · S0 `BI-65D65EC0` · S1 `BI-15D69168` · S2 `BI-52E565DA` · S3 `BI-81524041` · S4 `BI-9D43CBEF` · S5 `BI-4865EB4D` · S6 `BI-3A0E5413` · S7 `BI-543819B1` · S8 `BI-4C17BF51` · S9 `BI-D1B40D43`
+**BI:** `BI-815D40C6` (umbrella) · S0 `BI-65D65EC0` · S1 `BI-15D69168` · S2 `BI-52E565DA` · S3 `BI-81524041` · S4 `BI-9D43CBEF` · S5 `BI-4865EB4D` · S6 `BI-3A0E5413` · S7 `BI-543819B1` · S8 `BI-4C17BF51` · S9 `BI-D1B40D43` · follow-up `BI-BFF142A1`
 **Epic:** `EP-8DC217EB` · **Decision:** `DI-3638BEF46CE9` · **Doctrine:** `absorb-dont-adopt` (commandment, `BI-1637FC89`)
 **Plan:** [2026-09-22-office-document-conversion-plan.md](../plans/2026-09-22-office-document-conversion-plan.md)
 
@@ -61,6 +61,22 @@ Applying the absorption ladder (`absorb-dont-adopt`): about 10 million lines of 
 - **S9 · Retire parsers.** Once S3 is proven on every install shape, `.docx`, `.xlsx` and `.pdf` also route through the engine, and mammoth, read-excel-file and pdf-parse are removed and added to the deny list. If any deployment target cannot run the engine, that is recorded as a finding and the parsers stay.
 
 People edit office files in their own office suite: download, edit, then upload a new version, which S4 indexes. A rented in-browser editor is rejected under the doctrine.
+
+### Follow-up: charts through the trusted renderer path (`BI-BFF142A1`)
+
+**Defect, reproduced on `c9fd3d7c126` (main, 2026-09-25).** The baked profile's `DisableActiveContent` (`tools/doctools/registrymodifications.xcu` line 23) makes the engine refuse any ODF file that embeds an object, and a chart is an embedded object. Built from that commit, `dpf-convert --to xlsx --from fods` exits 3 ("source file could not be loaded") for a flat ODS carrying one bar chart, and exits 0 for the same file without it. So S5 shipped the Workbook chart view only as a "Chart data" sheet (`apps/web/lib/workbooks/export-fods.ts` lines 251-258), and a customer `.ods`/`.odt` with a chart fails ingestion and renditions as a generic conversion failure.
+
+**Causes ruled out by running them.** In a per-run copy of the profile, relaxing only `DisableOLEAutomation` or only `BlockUntrustedRefererLinks` still exits 3. Relaxing only `DisableActiveContent` exits 0 and the `.xlsx` carries `xl/charts/chart1.xml`.
+
+**Founder decision (2026-09-25): trusted path only.** `dpf-convert` stays fully hardened for customer files. Only `dpf-render`, in its per-run profile copy, relaxes `DisableActiveContent`, and only for documents DPF generated and screened.
+
+**Deliverables, in order:**
+1. `dpf-render` gains a document mode: it takes a DPF-generated flat ODS or ODT, screens it (no scripts, event bindings, DDE, applets, plugins, OLE objects or external links; embedded objects only as inline chart sub-documents that pass the same screen), and exports it. `renderFlatDocument` (`apps/web/lib/documents/generation/render-flat.ts`) is the portal side.
+2. The Workbook export writes the bar chart object again (the "Chart data" sheet stays) and routes through that mode, so the chart appears in the `.xlsx` and `.ods` (AC-1, docker-gated test).
+3. `dpf-convert` is unchanged. The contract test still asserts `DisableActiveContent` is on, and `smoke.sh` proves the converter refuses the chart fixture that the renderer exports (AC-2).
+4. S3 ingestion and S4 renditions read an ODF package's manifest before converting. A package with an embedded object gets a plain-language "contains embedded objects (such as charts) that DPF does not open" result, not a generic conversion failure (AC-3).
+5. The macro probe runs against the render profile too, so macros are proven off on both paths.
+6. The LibreOffice tool evaluation and the document generation facility doc record the decision.
 
 ## Research and benchmarking
 
