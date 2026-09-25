@@ -28,6 +28,16 @@ A document can be a stored file: a Word, Excel, PowerPoint, OpenDocument or RTF 
 
 While the conversion runs, the page says it is preparing the PDF and searchable text. If the file cannot be converted, the page says why in plain words, and the reason is also recorded in the document's lifecycle history. On an install where document conversion is not set up, nothing is converted and **Download original** still works; the files are converted once conversion becomes available.
 
+## Export
+
+**Export** in the Current Version panel downloads the version as a Word (.docx), OpenDocument (.odt) or PDF file. It works for written documents (markdown, plain text, HTML) and for stored Word-processing files. Other office files, such as spreadsheets and presentations, export to PDF only.
+
+- Headings, tables, lists, links and embedded pictures carry over. A picture that the document only links to (a web address) appears as its description, because conversion never fetches anything from the internet.
+- The first export of a version takes a few seconds. The file is kept with that version, so exporting the same version again is immediate.
+- On an install where document conversion is not set up, the panel says so instead of offering the menu.
+
+An AI coworker can ask for the same file: `doc_load` accepts an `exportFormat` of `docx`, `odt` or `pdf`.
+
 ## Slide Previews
 
 A presentation a coworker produced (see [Marketing](../customers/marketing.md#ask-for-a-presentation)) shows a preview of every slide in the Current Version panel, so you can read the deck without downloading it. Select a slide to open it at full size. The previews belong to the version you are looking at: when the coworker revises the deck, the new version brings its own previews and the version history keeps the earlier ones.
