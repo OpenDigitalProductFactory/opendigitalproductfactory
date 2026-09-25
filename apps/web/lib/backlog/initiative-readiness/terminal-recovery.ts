@@ -602,7 +602,31 @@ export async function resolveTerminalInitiativeRecovery(args: {
     });
   }
 
+  const designPhase = designPhaseReviewDecision(args.decision); // BI-817556D8: before acceptance lanes fail closed
   const payloads = await ports.loadBaselinePayloads(args.decision.subject.id);
+  // BI-1D8E53D9: a passing spec-approval MINTS the objective baseline, so an item
+  // still owed its design reviews has none yet. Route those reviews against the
+  // room's discovered design, as the claim refusal does, before the baseline
+  // chain; otherwise this recovery (the only one the review lane accepts) answers
+  // baseline-not-found and no new item can ever request its spec review.
+  if (payloads.length === 0 && designPhase) {
+    const discovered = await ports.discoverArtifact({
+      repositoryFullName: room.repositoryFullName,
+      baseSha: room.baseSha,
+      headSha: room.headSha,
+    });
+    return ports.resolveRecovery({
+      decision: designPhase,
+      currentAgentId: args.currentAgentId,
+      db: prisma as never,
+      dispatchContext,
+      canonicalArtifact: discovered.resolved
+        ? { resolved: true, ...discovered.artifact }
+        : { resolved: false, nextAction: discovered.nextAction },
+      planArtifact: await ports.loadPlanArtifact({ itemId: designPhase.subject.id, repositoryFullName: room.repositoryFullName }),
+      expectedCurrentBaselineId: null,
+    });
+  }
   if (payloads.length === 0) {
     const effective = args.decision.shapeDecision?.effective;
     if (effective === "small" || effective === "medium") return bodyBaselineUnpersistedEscalation();
@@ -614,7 +638,6 @@ export async function resolveTerminalInitiativeRecovery(args: {
     return escalation("baseline-ambiguous", "The objective baseline chain has no unique valid head. Reconcile or supersede the conflicting baseline before dispatch.");
   }
 
-  const designPhase = designPhaseReviewDecision(args.decision); // BI-817556D8: before acceptance lanes fail closed
   const decision = designPhase ?? args.decision;
   const needsObjectiveMapping = [...decision.blockers, ...decision.unmet]
     .some((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED"

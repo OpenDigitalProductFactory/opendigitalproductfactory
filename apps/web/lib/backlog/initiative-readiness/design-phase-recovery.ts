@@ -17,6 +17,8 @@ import type { InitiativeReadinessDecision } from "./types";
 const DESIGN_REVIEW_CODES = new Set<string>([
   "CANONICAL_DESIGN_REQUIRED",
   "SPEC_APPROVAL_REQUIRED",
+  // BI-1D8E53D9: the architecture review of the design is owed before plan too.
+  "REVIEW_REQUIRED",
   "PLAN_REVIEW_REQUIRED",
 ]);
 
