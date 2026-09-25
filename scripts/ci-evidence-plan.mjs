@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
 import {
   appendFileSync,
   mkdirSync,
@@ -13,6 +12,7 @@ import {
   createEvidencePlan,
   loadEvidencePolicy,
 } from "./lib/ci-evidence-plan.mjs";
+import { gitText } from "./lib/git.mjs";
 
 function parseArgs(args) {
   const values = {};
@@ -31,13 +31,7 @@ function parseArgs(args) {
   return values;
 }
 
-function git(args, cwd = process.cwd()) {
-  return execFileSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-}
+const git = (args, cwd = process.cwd()) => gitText(args, { cwd });
 
 function readOptionalJson(path, label, inputErrors) {
   if (!path) return null;
