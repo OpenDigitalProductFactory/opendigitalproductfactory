@@ -2,6 +2,14 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    # apps/mobile has its own entry below. Dependabot does not honour the
+    # `!apps/mobile` negation in pnpm-workspace.yaml, so without this the root
+    # entry still reads apps/mobile/package.json and opens cross-SDK bumps
+    # (expo-location 58, expo-status-bar 57, react-native-worklets 0.13) that
+    # skip the mobile entry's Expo lockstep rules and leave apps/mobile's
+    # lockfile unchanged (#5683 merged that way and broke the frozen install).
+    exclude-paths:
+      - "apps/mobile/**"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
