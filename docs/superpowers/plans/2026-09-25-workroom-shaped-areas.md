@@ -44,6 +44,27 @@ Phases are ordered so each one ships on its own and the menu gets simpler at eve
 - A browser walk on the running portal of the review's activity map, counting operations to outcome before and after.
 - Section-scoped nav, breadcrumb and one-SectionNav ratchet unchanged.
 
+## Traceability
+
+Requirements are the spec's §9.7 objectives and verification is its acceptance rows. Contracts and flows name the code seam and the operator path each phase changes.
+
+| Deliverable | Requirements | Contracts | Flows | Verification |
+|---|---|---|---|---|
+| phase-0-label-truth | OBJ-AREA-SPINE | contract-nav-model-labels | flow-rail-to-page-heading | AC-AREA-SPINE, AC-AREA-GUARDS |
+| phase-1-dead-nav-and-legacy-links | OBJ-AREA-NO-REGRESSION | contract-redirect-alias-guard | flow-link-to-canonical-page | AC-AREA-GUARDS |
+| phase-2-contributing-and-github | OBJ-AREA-SETUP | contract-admin-nav-families | flow-rail-to-connect-github | AC-AREA-OUTCOME, AC-AREA-SETUP |
+| phase-3-workforce-unification | OBJ-AREA-SPINE, OBJ-AREA-TEAM | contract-shell-sections-trace-map | flow-rail-to-team-section | AC-AREA-SPINE, AC-AREA-GUARDS |
+| phase-4-area-work | OBJ-AREA-WORK | contract-workroom-inventory-loader | flow-area-to-rooms-and-back | AC-AREA-WORK |
+| phase-4-workrooms-one-home | OBJ-AREA-WORK | contract-ops-and-ea-nav | flow-rail-to-workrooms | AC-AREA-WORK, AC-AREA-GUARDS |
+| phase-5-area-setup | OBJ-AREA-SETUP | contract-settings-area-map | flow-area-to-setup | AC-AREA-SETUP, AC-AREA-OUTCOME |
+| phase-5-retire-advanced | OBJ-AREA-SETUP | contract-admin-nav-families | flow-area-to-setup | AC-AREA-SETUP |
+| phase-6-area-team | OBJ-AREA-TEAM | contract-bindings-and-participants | flow-area-to-team-to-record | AC-AREA-TEAM |
+| phase-7-upkeep-out-of-backlog | OBJ-AREA-SETUP, OBJ-AREA-SPINE | contract-ops-and-platform-nav | flow-rail-to-updates-and-health | AC-AREA-SETUP, AC-AREA-GUARDS |
+| phase-7-access-one-home | OBJ-AREA-SETUP | contract-access-surfaces | flow-rail-to-manage-user | AC-AREA-SETUP |
+| phase-8-spine-rollout | OBJ-AREA-SPINE, OBJ-AREA-NO-REGRESSION | contract-shell-sections-trace-map | flow-activity-map-top-tasks | AC-AREA-SPINE, AC-AREA-OUTCOME, AC-AREA-GUARDS |
+| phase-9-derived-tiles | OBJ-AREA-SPINE | contract-workspace-tiles | flow-workspace-launcher | AC-AREA-SPINE |
+| phase-9-advanced-disclosure | OBJ-AREA-NO-REGRESSION | contract-route-audience-registry | flow-section-first-row | AC-AREA-GUARDS |
+
 ## Rollback
 
 Each phase is one PR and reverts as one unit. Routes stay, or keep a redirect with an expiry, so bookmarks survive a revert.
