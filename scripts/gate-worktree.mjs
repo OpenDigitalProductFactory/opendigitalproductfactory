@@ -171,8 +171,9 @@ export function executionPressureFenceReason(poolPolicy) {
 // come back `admission.status === "queued"`, because a pool whose host rollback
 // contracted capacity to 0 has no slot to admit anyone into, so every claim is
 // parked. But they are different situations with different responses: behind a
-// queue you wait; behind a closed pool you free host memory (or wait for the
-// pressure to pass), and no amount of waiting in line helps. Observed live on
+// queue you wait your turn; behind a closed pool the wait is for host memory,
+// which no session action frees (BI-D3BF53A9), so position in line means
+// nothing. Observed live on
 // 2026-09-06: `effectiveCapacity: 0, rollbackReason: host-stage-headroom-low`
 // printed as "queued at position 1", which read as contention and cost a full
 // misdiagnosis. The policy carries the fact; the gate just never said it.
@@ -183,6 +184,30 @@ export function poolClosedReason(poolPolicy) {
     : "capacity-zero";
 }
 
+const GIB = 1024 ** 3;
+const gib = (bytes) => `${(bytes / GIB).toFixed(1)} GiB`;
+
+// BI-D3BF53A9: name the real shortfall. "host-build-headroom-low" alone read as
+// "the host is out of memory", and sessions ran host maintenance by hand that
+// could not change the figure (page cache already counts as available) and
+// wedged the Docker VM (BI-903FB5F9). The numbers make plain that this is the
+// admission reserve against what the machine has, which no session can move.
+export function describeHeadroomShortfall(headroom) {
+  if (
+    !headroom
+    || ![headroom.availableBytes, headroom.floorBytes, headroom.reserveBytes, headroom.shortfallBytes]
+      .every(Number.isFinite)
+  ) {
+    return null;
+  }
+  const machine = headroom.measuredOn === "docker-vm" ? "Docker VM" : "host";
+  const usable = Math.max(0, headroom.availableBytes - headroom.floorBytes);
+  return `${machine} has ${gib(headroom.availableBytes)} available; after the ${gib(headroom.floorBytes)} `
+    + `safety floor that leaves ${gib(usable)} against a ${gib(headroom.reserveBytes)} per-slot reserve, `
+    + `${gib(headroom.shortfallBytes)} short. Nothing a session does changes this: page cache already `
+    + "counts as available, so do not drop caches or run sync; the claim admits by itself when memory frees";
+}
+
 /** The one line an operator sees while a claim is parked. Says WHICH kind of wait. */
 export function describeQueuedAdmission({ admission, poolPolicy, delayMs }) {
   const position = admission?.queuePosition ?? "?";
@@ -191,8 +216,10 @@ export function describeQueuedAdmission({ admission, poolPolicy, delayMs }) {
     : "";
   const closed = poolClosedReason(poolPolicy);
   if (closed) {
+    const shortfall = describeHeadroomShortfall(poolPolicy?.headroom);
     return `local-CI pool is CLOSED (${closed}): no slot can admit anyone until the host recovers, `
-      + `so this claim is parked at position ${position} behind host pressure, not behind other work${again}`;
+      + `so this claim is parked at position ${position} behind host pressure, not behind other work`
+      + `${shortfall ? `. ${shortfall}` : ""}${again}`;
   }
   return `local-CI admission queued at position ${position}${again}`;
 }
@@ -2388,6 +2415,12 @@ async function main() {
       resilience,
       content: contentMetadata,
       controlPlane: controlPlaneEvidence,
+      // BI-D3BF53A9: the builder's measured end-of-build cgroup peak, lifted
+      // out of the control-plane evidence so calibration can read it without
+      // walking samples. The admission-time `builderMemoryUsageBytes` is
+      // sampled before any build runs and says nothing about the build.
+      builderMemory: controlPlaneEvidence?.builderMemory
+        ?? { bi: "BI-D3BF53A9", status: "unmeasured", reason: "no-production-build-ran", peakBytes: null },
       gatePassed: outcome.gatePassed,
       ...readFailureEvidenceBinding(sha, worktreePath),
       completedAt: new Date().toISOString(),

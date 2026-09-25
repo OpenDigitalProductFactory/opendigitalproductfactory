@@ -148,7 +148,20 @@ test("admission refuses the withdrawn build calibration's smaller reservation", 
 
 test("Docker admission retains a safety floor on small and large hosts", () => {
   const gib = 1024 ** 3;
-  for (const [available, expected] of [[23.47, 1], [40, 2], [20, 1], [19.99, 0], [undefined, 0]]) {
+  // Expressed against the calibrated builder reserve (BI-D3BF53A9) so a
+  // recalibration cannot silently turn a refusal into an admission.
+  const reserve = SLOT_RESOURCES.builderPolicy.admissionReserveBytes / gib;
+  for (const [available, expected] of [
+    [23.47, 1],
+    [40, 2],
+    [4 + reserve, 1],
+    [4 + reserve - 1 / gib, 0],
+    [4 + 2 * reserve, 2],
+    // The DEV host that sat closed on 2026-09-25 with 19.0-19.3 GiB available
+    // against the uncalibrated 16 GiB reserve admits one gate on evidence.
+    [19.0, 1],
+    [undefined, 0],
+  ]) {
     const policy = resolveLocalCiPoolPolicy({
       configValue: {
         ...PILOT_CONFIG,
@@ -313,10 +326,22 @@ test("builder admission calibration is capped by and falls back to the hard ceil
   }), 16 * gib);
 });
 
-test("builder reservation uses the full ceiling until a replacement calibration is measured", () => {
+// BI-D3BF53A9: the reserve is the measured cgroup peak of the gate's own
+// production build plus a documented margin, and the 16 GiB ceiling stays the
+// hard limit. Measured 2026-09-25 on the DEV host, three bounded builds of
+// 987adaa1fc2: 14,853,529,600 / 14,644,989,952 / 14,876,745,728 bytes.
+test("builder reservation is the measured high-water plus margin, under the ceiling", () => {
   const builder = SLOT_RESOURCES.builderPolicy;
-  assert.equal(builder.admissionCalibration, undefined);
-  assert.equal(builder.admissionReserveBytes, builder.memoryBytes);
+  const calibration = builder.admissionCalibration;
+  assert.equal(calibration.version, 1);
+  assert.ok(calibration.observedHighWaterBytes > 0);
+  assert.ok(calibration.safetyMarginBytes > 0);
+  assert.equal(
+    builder.admissionReserveBytes,
+    calibration.observedHighWaterBytes + calibration.safetyMarginBytes,
+  );
+  assert.ok(builder.admissionReserveBytes <= builder.memoryBytes);
+  assert.equal(builder.memoryBytes, 16 * 1024 ** 3);
 });
 
 test("host-stage headroom arithmetic keeps the configured floor unconsumed", () => {
@@ -511,4 +536,49 @@ test("a failed server probe closes the pool under its own name", () => {
   });
   assert.equal(resolved.effectiveCapacity, 0);
   assert.equal(resolved.rollbackReason, "host-probe-unreadable:builderMemoryUsageBytes");
+});
+
+// BI-D3BF53A9: a headroom closure carries the arithmetic it was decided on, so
+// the gate can name the real shortfall instead of an opaque reason code.
+test("a builder headroom closure carries available, floor, reserve and shortfall", () => {
+  const gib = 1024 ** 3;
+  const reserve = SLOT_RESOURCES.builderPolicy.admissionReserveBytes;
+  const policy = resolveLocalCiPoolPolicy({
+    configValue: {
+      ...PILOT_CONFIG,
+      ceilings: { ...PILOT_CONFIG.ceilings, minAvailableMemoryBytes: 4 * gib },
+    },
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 40 * gib,
+      dockerAvailableMemoryBytes: 4 * gib + reserve - gib,
+      builderMemoryUsageBytes: [0, 0],
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: true,
+  });
+  assert.equal(policy.rollbackReason, "host-build-headroom-low");
+  assert.deepEqual(policy.headroom, {
+    measuredOn: "docker-vm",
+    availableBytes: 4 * gib + reserve - gib,
+    floorBytes: 4 * gib,
+    reserveBytes: reserve,
+    shortfallBytes: gib,
+  });
+});
+
+test("an admitting policy carries no headroom shortfall", () => {
+  const gib = 1024 ** 3;
+  const policy = resolveLocalCiPoolPolicy({
+    configValue: PILOT_CONFIG,
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 40 * gib,
+      dockerAvailableMemoryBytes: 40 * gib,
+      builderMemoryUsageBytes: [0, 0],
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: true,
+  });
+  assert.equal(policy.headroom, undefined);
 });
