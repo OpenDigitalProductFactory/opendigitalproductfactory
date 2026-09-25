@@ -108,6 +108,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-D908DA0A: a parked claim says whether it waits behind work or behind
       // a closed pool; the two used to print identically.
       node("--test", "scripts/gate-worktree-pool-closed.test.mjs"),
+      // BI-D3BF53A9: every gate records the builder's measured cgroup peak, the
+      // evidence the admission reserve is calibrated from.
+      node("--test", "scripts/local-ci-builder-memory.test.mjs"),
       // BI-FFCFCCE0: --finalize-evidence resolved its record before admission
       // and so always read slot-0, while pregate:status reconciles every slot.
       // A real pending PASS on slot-1 was unfinalizable. Registered here for the

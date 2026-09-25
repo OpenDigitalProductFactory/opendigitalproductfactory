@@ -242,7 +242,7 @@ function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha }
       return {
         ...base,
         verdict: "INCONCLUSIVE",
-        reason: `gate record status ${status} — the local-CI pool was CLOSED (${closed}) when this claim was parked: no slot could admit anyone, so this is host pressure, not a queue and not a failure of the diff. Free host memory or wait for the pressure to pass, then re-run pregate.`,
+        reason: `gate record status ${status} — the local-CI pool was CLOSED (${closed}) when this claim was parked: no slot could admit anyone, so this is host pressure, not a queue and not a failure of the diff. No session action frees it (page cache already counts as available; never drop caches or run sync): wait for the pressure to pass, then re-run pregate.`,
       };
     }
     if (status === RUNNING_GATE_STATUS) {

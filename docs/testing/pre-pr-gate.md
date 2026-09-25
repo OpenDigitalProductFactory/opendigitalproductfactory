@@ -655,10 +655,16 @@ no slot can admit anyone, yet the claim is still parked with
 `local-CI pool is CLOSED (<rollbackReason>)` instead of `queued at position N`,
 the queued lease event and the durable-wait record carry `poolClosedReason`,
 and `pnpm run pregate:status` names host pressure rather than "the gate did not
-run". Behind a queue you wait; behind a closed pool you free host memory (on a
-Windows host, usually the WSL page cache held by `vmmemWSL`) or wait for the
-pressure to pass. Waiting in line does nothing for a closed pool
-(BI-D908DA0A). A fenced run likewise records *which* fence fired
+run". Behind a queue you wait your turn. Behind a closed pool you wait for host
+memory to free up, and your place in line does not matter (BI-D908DA0A). A
+headroom closure (`host-build-headroom-low`, `host-stage-headroom-low`) also
+prints the arithmetic it was decided on: available memory, the safety floor,
+the per-slot reserve and the shortfall (`poolPolicy.headroom`). No session
+action changes those numbers. Page cache already counts as available, so do
+not drop caches, and never run `sync` in the Docker VM, because it wedges the VM
+(BI-903FB5F9). The builder reserve is the measured peak of the gate's own
+production build plus a margin, not the builder's 16 GiB ceiling. Every gate
+record carries the measured peak as `evidence.builderMemory` (BI-D3BF53A9). A fenced run likewise records *which* fence fired
 (`fence reason: lease-authority-deadline`, ...) in its gate record, so a
 self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
 
