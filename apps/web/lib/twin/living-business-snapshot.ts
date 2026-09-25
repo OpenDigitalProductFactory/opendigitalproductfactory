@@ -252,7 +252,7 @@ export function financeToUtility(input: {
       label: "Bills due",
       value:
         input.billsDueCount > 0
-          ? `${input.billsDueCount} · ${formatMoney(input.billsDueAmount, input.currency, input.locale)}`
+          ? `${input.billsDueCount} · ${formatMoney(input.billsDueAmount, input.currency, input.locale, { maximumFractionDigits: 0 })}`
           : "None due",
       intent: input.billsDueCount > 0 ? "warning" : "success",
       hint: "Next 7 days",

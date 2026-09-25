@@ -9,7 +9,7 @@ export const createAssetSchema = z.object({
   category: z.enum(ASSET_CATEGORIES),
   purchaseDate: z.string().min(1),
   purchaseCost: z.number().positive(),
-  currency: z.string().length(3).default("GBP"),
+  currency: z.string().length(3).optional(), // absent = the org base currency, filled by the writer (BI-6030131C)
   depreciationMethod: z.enum(DEPRECIATION_METHODS).default("straight_line"),
   usefulLifeMonths: z.number().int().positive(),
   residualValue: z.number().min(0).default(0),

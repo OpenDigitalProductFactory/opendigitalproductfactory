@@ -94,12 +94,12 @@ describe("createRecurringScheduleSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("defaults currency to GBP when not provided", () => {
+  it("leaves currency unset when omitted, so the writer applies the org base currency (BI-6030131C)", () => {
     const { currency: _c, ...rest } = validInput;
     const result = createRecurringScheduleSchema.safeParse(rest);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.currency).toBe("GBP");
+      expect(result.data.currency).toBeUndefined();
     }
   });
 });
