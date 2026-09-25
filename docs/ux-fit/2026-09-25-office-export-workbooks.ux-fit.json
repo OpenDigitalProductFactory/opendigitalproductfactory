@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-32119188EA19",
   "scope": {
     "files": [
-      "apps/web/components/workbooks/GridExportMenu.tsx",
-      "apps/web/components/workbooks/Grid.tsx"
+      "apps/web/components/workbooks/GridExportMenu.tsx"
     ]
   },
   "evidence": {

@@ -12,6 +12,7 @@
 // (components/workbooks/grid-xlsx.ts), which needs no engine.
 
 import { CF_COLORS, CF_OPERATORS } from "@/components/workbooks/grid-conditional-format";
+import { isRecord } from "@/lib/shared/coerce";
 import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { convertDocument, type ConversionFailureReason } from "@/lib/documents/conversion/convert";
 import { CONVERTER_TARGET_MIME } from "@/lib/documents/conversion/formats";
@@ -47,10 +48,6 @@ export type WorkbookExportFile = { bytes: Buffer; mimeType: string; filename: st
 export type WorkbookExportResult = ActionSuccess<WorkbookExportFile> | WorkbookExportFailure;
 
 const invalid = (error: string): WorkbookExportFailure => ({ ...err(error), reason: "invalid-model" });
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isIndex(value: unknown, length: number): value is number {
   return Number.isInteger(value) && (value as number) >= 0 && (value as number) < length;

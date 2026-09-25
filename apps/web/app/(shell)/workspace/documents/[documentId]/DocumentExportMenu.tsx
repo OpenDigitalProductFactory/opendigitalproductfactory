@@ -4,6 +4,7 @@
 // on the install it shows one plain line instead of links that would fail.
 // UX fit: docs/ux-fit/2026-09-25-office-export-documents.ux-fit.json (DI-EECCCF15B277).
 import { Download } from "lucide-react";
+import { Surface } from "@/components/ui/Surface";
 import { DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_LABELS, type DocumentExportFormat } from "@/lib/documents/document-export";
 
 type Props = {
@@ -17,7 +18,7 @@ type Props = {
 export function DocumentExportMenu({ documentId, version, formats, converterAvailable }: Props) {
   if (formats.length === 0) return null;
   if (!converterAvailable) {
-    return <p className="text-xs text-[var(--dpf-muted)]">Export needs document conversion, which is not available on this install.</p>;
+    return <p className="text-xs text-[var(--dpf-muted)]">Export needs document conversion, not set up here.</p>;
   }
   const base = `/api/documents/${encodeURIComponent(documentId)}/content?version=${version}&export=`;
   return (
@@ -27,10 +28,7 @@ export function DocumentExportMenu({ documentId, version, formats, converterAvai
         Export
         <span aria-hidden="true">▾</span>
       </summary>
-      <div
-        role="menu"
-        className="absolute right-0 z-20 mt-1 flex w-52 flex-col gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-1 shadow-lg"
-      >
+      <Surface role="menu" rounded="md" padding="none" className="absolute right-0 z-20 mt-1 flex w-52 flex-col gap-1 p-1 shadow-lg">
         {DOCUMENT_EXPORT_FORMATS.filter((format) => formats.includes(format)).map((format) => (
           <a
             key={format}
@@ -42,7 +40,7 @@ export function DocumentExportMenu({ documentId, version, formats, converterAvai
             {DOCUMENT_EXPORT_LABELS[format]}
           </a>
         ))}
-      </div>
+      </Surface>
     </details>
   );
 }
