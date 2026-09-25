@@ -62,7 +62,7 @@ describe("one-click consent (BI-05E0EA33)", () => {
     const res = await GET(new Request("http://127.0.0.1:3000/api/oauth/authorize?client_id=dpfoc_x&redirect_uri=x"));
     const html = await res.text();
     expect(res.status).toBe(200);
-    expect(html).toContain("It will work as <strong>Codex (external CLI)</strong>");
+    expect(html).toContain('<strong class="who default" data-agent="AGT-EXT-CODEX">Codex (external CLI)</strong>');
     expect(html).toContain("Connect Codex</button>");
     expect(mock.resolveDefault).toHaveBeenCalledWith(expect.objectContaining({ userId: "human", resource: "http://127.0.0.1:3000/api/mcp/v1" }), expect.anything());
   });

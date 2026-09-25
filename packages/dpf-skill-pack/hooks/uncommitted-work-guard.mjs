@@ -19,20 +19,23 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   attributeWork,
   buildAttributedWarning,
   buildUnattributedWarning,
   findLosableWork,
   subtractBaseline,
-  workSignature,
+  warnedSetSignature,
 } from "./uncommitted-work-scan.mjs";
 
 const STATE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -78,17 +81,53 @@ function sessionIdOf(payload) {
   return id.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 128);
 }
 
+// BI-F4BE47B5: Claude Code registers this guard twice in a DPF checkout — from
+// the checkout's .claude/settings.json and from the dpf-platform plugin. The
+// plugin copy runs from ~/.claude/plugins/cache, which every checkout shares
+// and which holds whatever tree last ran `claude plugin install`; on 2026-09-24
+// that was a tree from before #5568 and #5592, so it warned on every Stop and
+// every re-entry. When the project registers its own copy, that copy matches
+// the checkout, so any other copy stands down. Codex and Grok set no
+// CLAUDE_PROJECT_DIR and keep running the plugin copy.
+const PROJECT_COPY = join("packages", "dpf-skill-pack", "hooks", "uncommitted-work-guard.mjs");
+
+function realOrNull(p) {
+  try {
+    return realpathSync(p);
+  } catch {
+    return null;
+  }
+}
+
+export function yieldsToProjectCopy(env = process.env, self = fileURLToPath(import.meta.url)) {
+  const projectDir = env.CLAUDE_PROJECT_DIR;
+  if (!projectDir) return false;
+  const projectCopy = realOrNull(join(projectDir, PROJECT_COPY));
+  if (!projectCopy || projectCopy === realOrNull(self)) return false;
+  try {
+    const settings = readFileSync(join(projectDir, ".claude", "settings.json"), "utf8");
+    return settings.includes(PROJECT_COPY.replace(/\\/g, "/"));
+  } catch {
+    return false;
+  }
+}
+
 // Per-repository, per-session state under the git common dir: never tracked,
-// shared by every worktree of the clone, gone with the clone.
+// shared by every worktree of the clone, gone with the clone. When git cannot
+// name that dir, fall back to the OS temp dir keyed by the repo path, so the
+// once-per-set promise does not silently lapse into warning on every Stop.
 function stateRoot(baseDir) {
   const r = spawnSync("git", ["-C", baseDir, "rev-parse", "--git-common-dir"], {
     encoding: "utf8",
     timeout: 10_000,
   });
-  if (r.status !== 0 || !r.stdout?.trim()) return null;
-  const common = r.stdout.trim();
-  const abs = isAbsolute(common) ? common : resolve(baseDir, common);
-  return join(abs, "dpf-hook-state", "uncommitted-work-guard");
+  if (r.status === 0 && r.stdout?.trim()) {
+    const common = r.stdout.trim();
+    const abs = isAbsolute(common) ? common : resolve(baseDir, common);
+    return join(abs, "dpf-hook-state", "uncommitted-work-guard");
+  }
+  const repoKey = createHash("sha256").update(resolve(baseDir)).digest("hex").slice(0, 16);
+  return join(tmpdir(), "dpf-hook-state", "uncommitted-work-guard", repoKey);
 }
 
 function sessionDir(baseDir, sessionId) {
@@ -150,11 +189,11 @@ function readBaseline(dir) {
   }
 }
 
-// True exactly once per session for a given set of paths-in-a-given-state.
+// True exactly once per session for a given dirty set (paths + status codes).
 // An exclusive create makes this race-free when two hooks files both run it.
 function claimFirstWarning(dir, hits) {
   if (!dir) return true;
-  const sig = createHash("sha256").update(workSignature(hits)).digest("hex").slice(0, 32);
+  const sig = createHash("sha256").update(warnedSetSignature(hits)).digest("hex").slice(0, 32);
   try {
     mkdirSync(dir, { recursive: true });
     closeSync(openSync(join(dir, `warned-${sig}`), "wx"));
@@ -164,15 +203,18 @@ function claimFirstWarning(dir, hits) {
   }
 }
 
+// Stop accepts `hookSpecificOutput.additionalContext`; SessionEnd does not —
+// Claude Code rejects it ("Hook JSON output validation failed"). SessionEnd
+// cannot reach the model anyway, so it tells the operator via `systemMessage`.
+function claudeHookOutput(warning, hookEventName) {
+  if (hookEventName === "Stop") {
+    return { hookSpecificOutput: { hookEventName, additionalContext: warning } };
+  }
+  return { systemMessage: warning };
+}
+
 function emitClaudeWarning(warning, hookEventName) {
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName,
-        additionalContext: warning,
-      },
-    }),
-  );
+  process.stdout.write(JSON.stringify(claudeHookOutput(warning, hookEventName)));
 }
 
 function main() {
@@ -180,6 +222,7 @@ function main() {
 
   const argv = process.argv.slice(2);
   const isGitHook = argv.includes("--git-hook");
+  if (!isGitHook && yieldsToProjectCopy()) process.exit(0);
   const isSnapshot = argv.includes("--snapshot");
   const rootArgIdx = argv.indexOf("--repo-root");
   const baseDir = repoRoot(rootArgIdx >= 0 ? argv[rootArgIdx + 1] : null);
@@ -242,9 +285,12 @@ function main() {
   // blocked the turn from ending 9 consecutive times").
   if (stopHookActive) process.exit(0);
 
-  // `stop_hook_active` resets every turn, so it alone still repeated the same
-  // list at the end of every turn. Say each distinct set once per session;
-  // a new or further-edited file changes the set and is reported.
+  // `stop_hook_active` resets every turn, and some hosts (the desktop Code tab,
+  // 2026-09-25) never set it at all, so it alone still repeated the same list
+  // at the end of every turn. Say each distinct set once per session, keyed on
+  // paths and status codes — not mtimes, which a regenerator such as the
+  // bootstrap's `.mcp.json` write changes without changing the set. A new
+  // path, or a path whose status changes, is a new set and is reported.
   if (!claimFirstWarning(dir, losable)) process.exit(0);
 
   emitClaudeWarning(warning, hookEventName);

@@ -201,7 +201,7 @@ describe("Stop hook re-entry (stop_hook_active)", () => {
 // now snapshots dirty paths at SessionStart and says each distinct set once.
 
 import { appendFileSync } from "node:fs";
-import { subtractBaseline, workSignature } from "./uncommitted-work-scan.mjs";
+import { subtractBaseline, warnedSetSignature } from "./uncommitted-work-scan.mjs";
 
 const stop = (session_id) => ({ hook_event_name: "Stop", stop_hook_active: false, session_id });
 
@@ -273,7 +273,68 @@ describe("once per distinct set, per session", () => {
   });
 });
 
-describe("subtractBaseline / workSignature", () => {
+// ── 2026-09-25: desktop Code tab, 7+ warnings in one session ─────────────────
+//
+// In the shared root clone the only dirty file was a `.mcp.json` the bootstrap
+// wrote, and the guard re-prompted on every Stop. That host does not mark a
+// re-entry pass with `stop_hook_active`, so the once-per-set memory is the only
+// thing between it and a loop — and it must not be reset by a rewrite that
+// leaves the dirty set unchanged.
+
+describe("once per session, without stop_hook_active", () => {
+  const plainStop = (session_id) => ({ hook_event_name: "Stop", session_id });
+
+  it("says nothing the second time for the same session and dirty set", () => {
+    const dir = dirtyRepo();
+    const first = runGuard(dir, plainStop("desk-1"));
+    assert.equal(first.status, 0);
+    assert.match(first.stdout, /a\.txt/);
+    const second = runGuard(dir, plainStop("desk-1"));
+    assert.equal(second.status, 0);
+    assert.equal(second.stdout, "");
+  });
+
+  it("stays silent when a file in the set is rewritten in place", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, plainStop("desk-2"));
+    writeFileSync(join(dir, "a.txt"), "rewritten by a generator, longer than before\n");
+    assert.equal(runGuard(dir, plainStop("desk-2")).stdout, "");
+  });
+
+  it("warns again when the dirty set changes", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, plainStop("desk-3"));
+    writeFileSync(join(dir, "c.txt"), "c\n");
+    const r = runGuard(dir, plainStop("desk-3"));
+    assert.match(r.stdout, /c\.txt/);
+  });
+
+  it("does not let one session's warning silence another's", () => {
+    const dir = dirtyRepo();
+    runGuard(dir, plainStop("desk-4"));
+    assert.match(runGuard(dir, plainStop("desk-5")).stdout, /a\.txt/);
+  });
+});
+
+describe("SessionEnd output shape", () => {
+  it("emits a systemMessage, not hookSpecificOutput.additionalContext", () => {
+    const r = runGuard(dirtyRepo(), { hook_event_name: "SessionEnd", session_id: "end-1" });
+    assert.equal(r.status, 0);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.hookSpecificOutput, undefined);
+    assert.match(out.systemMessage, /uncommitted-work-guard/);
+    assert.match(out.systemMessage, /a\.txt/);
+  });
+
+  it("keeps additionalContext for Stop", () => {
+    const r = runGuard(dirtyRepo(), { hook_event_name: "Stop", session_id: "end-2" });
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.hookSpecificOutput.hookEventName, "Stop");
+    assert.match(out.hookSpecificOutput.additionalContext, /a\.txt/);
+  });
+});
+
+describe("subtractBaseline / warnedSetSignature", () => {
   const hits = [
     { path: "a", xy: " M", fingerprint: "f1" },
     { path: "b", xy: "??", fingerprint: "f2" },
@@ -285,6 +346,92 @@ describe("subtractBaseline / workSignature", () => {
     assert.equal(subtractBaseline(hits, null).length, 2);
   });
   it("is order-independent", () => {
-    assert.equal(workSignature(hits), workSignature([...hits].reverse()));
+    assert.equal(warnedSetSignature(hits), warnedSetSignature([...hits].reverse()));
+  });
+  it("ignores fingerprints but not status", () => {
+    const rewritten = hits.map((h) => ({ ...h, fingerprint: "changed" }));
+    assert.equal(warnedSetSignature(hits), warnedSetSignature(rewritten));
+    const deleted = [{ ...hits[0], xy: " D" }, hits[1]];
+    assert.notEqual(warnedSetSignature(hits), warnedSetSignature(deleted));
+  });
+});
+
+// ── One live copy per event (BI-F4BE47B5) ────────────────────────────────────
+//
+// 2026-09-23/24, after #5568 and #5592: Claude Code ran the guard twice per
+// Stop, once from the checkout (.claude/settings.json) and once from the
+// dpf-platform plugin cache. That cache is shared by every checkout and holds
+// whatever tree last ran `claude plugin install`, which was a tree from before
+// both fixes. So it warned on every Stop and every re-entry. The checkout's copy
+// is the one that matches the checkout, so the plugin copy stands down when the
+// project registers its own.
+
+import { copyFileSync, mkdirSync } from "node:fs";
+
+const HOOKS_DIR = fileURLToPath(new URL(".", import.meta.url));
+
+function projectWithOwnGuard(dir, { registered = true } = {}) {
+  const hooks = join(dir, "packages", "dpf-skill-pack", "hooks");
+  mkdirSync(hooks, { recursive: true });
+  for (const f of ["uncommitted-work-guard.mjs", "uncommitted-work-scan.mjs", "durable-artifact-paths.mjs"]) {
+    copyFileSync(join(HOOKS_DIR, f), join(hooks, f));
+  }
+  mkdirSync(join(dir, ".claude"), { recursive: true });
+  const command = registered
+    ? 'node "${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/uncommitted-work-guard.mjs"'
+    : 'node "${CLAUDE_PROJECT_DIR}/scripts/something-else.mjs"';
+  writeFileSync(
+    join(dir, ".claude", "settings.json"),
+    JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command }] }] } }),
+  );
+  return join(hooks, "uncommitted-work-guard.mjs");
+}
+
+function runAs(script, dir, payload, projectDir, ...extra) {
+  return spawnSync(process.execPath, [script, "--repo-root", dir, ...extra], {
+    encoding: "utf8",
+    input: JSON.stringify(payload),
+    env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir, DPF_SKIP_UNCOMMITTED_WORK_GUARD: "" },
+  });
+}
+
+const PLUGIN_COPY = fileURLToPath(new URL("./uncommitted-work-guard.mjs", import.meta.url));
+
+describe("one live copy per event: the plugin copy stands down for the checkout's", () => {
+  it("the plugin copy is silent on Stop when the project registers its own guard", () => {
+    const dir = dirtyRepo();
+    projectWithOwnGuard(dir);
+    const r = runAs(PLUGIN_COPY, dir, stop("p1"), dir);
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, "");
+  });
+
+  it("the plugin copy writes no snapshot either, so it cannot claim the warning first", () => {
+    const dir = dirtyRepo();
+    const own = projectWithOwnGuard(dir);
+    runAs(PLUGIN_COPY, dir, { session_id: "p2" }, dir, "--snapshot");
+    runAs(PLUGIN_COPY, dir, stop("p2"), dir);
+    // The project copy has no baseline for p2 and has not warned yet: it warns once.
+    assert.match(runAs(own, dir, stop("p2"), dir).stdout, /a\.txt/);
+    assert.equal(runAs(own, dir, stop("p2"), dir).stdout, "");
+  });
+
+  it("the project's own copy still warns, once per set", () => {
+    const dir = dirtyRepo();
+    const own = projectWithOwnGuard(dir);
+    assert.match(runAs(own, dir, stop("p3"), dir).stdout, /a\.txt/);
+    assert.equal(runAs(own, dir, stop("p3"), dir).stdout, "");
+  });
+
+  it("the plugin copy still runs when the project does not register the guard", () => {
+    const dir = dirtyRepo();
+    projectWithOwnGuard(dir, { registered: false });
+    assert.match(runAs(PLUGIN_COPY, dir, stop("p4"), dir).stdout, /uncommitted-work-guard/);
+  });
+
+  it("the plugin copy still runs with no Claude project (Codex, Grok)", () => {
+    const dir = dirtyRepo();
+    projectWithOwnGuard(dir);
+    assert.match(runAs(PLUGIN_COPY, dir, stop("p5"), "").stdout, /uncommitted-work-guard/);
   });
 });
