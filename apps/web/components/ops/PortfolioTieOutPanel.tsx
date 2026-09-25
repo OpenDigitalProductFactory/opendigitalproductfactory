@@ -9,7 +9,9 @@
 
 import { useState, useTransition } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
+import { fieldControlClass, fieldErrorClass, fieldHintClass, fieldLabelClass } from "@/components/ui/form/styles";
 import { DataTable, Notice, StatusBadge, type Column } from "@/components/ui/report-kit";
 import { confirmEpicPortfoliosAction, setPortfolioBudgetAction } from "@/lib/actions/portfolio-budget";
 import type { PortfolioTieOut, TieOutRow } from "@/lib/portfolio/tie-out";
@@ -39,9 +41,9 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics 
         <span className="flex flex-wrap items-center gap-2">
           <span className={r.budget ? "" : "text-[var(--dpf-muted)]"}>{budgetText(r)}</span>
           {r.portfolioId ? (
-            <button type="button" className="text-xs text-[var(--dpf-accent)] underline" onClick={() => setEditing(r.portfolioId)}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(r.portfolioId)}>
               {r.budget ? "Change" : "Set budget"}
-            </button>
+            </Button>
           ) : null}
         </span>
       ),
@@ -121,19 +123,21 @@ function BudgetForm(props: { portfolioId: string; name: string; current: number 
     <Surface padding="sm" className="mt-3">
       <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); submit(); }}>
       <p className="text-sm font-semibold text-[var(--dpf-text)]">Budget for {props.name} this quarter</p>
-      <p className="text-xs text-[var(--dpf-muted)]">Proposed: {props.proposed} points, the points it delivered last quarter.</p>
-      <label className="block text-xs text-[var(--dpf-muted)]">
+      <p className={fieldHintClass}>Proposed: {props.proposed} points, what it delivered last quarter.</p>
+      <label className={`block ${fieldLabelClass}`}>
         Points
-        <input type="number" min={0} step={1} value={points} onChange={(e) => setPoints(e.target.value)} className="mt-1 block w-32 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]" />
+        <span className="mt-1 block w-32">
+          <input type="number" min={0} step={1} value={points} onChange={(e) => setPoints(e.target.value)} className={fieldControlClass} />
+        </span>
       </label>
-      <label className="block text-xs text-[var(--dpf-muted)]">
-        Why this figure (recorded with the budget)
-        <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 block w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]" />
+      <label className={`block ${fieldLabelClass}`}>
+        Why this figure
+        <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} className={`mt-1 ${fieldControlClass}`} />
       </label>
-      {message ? <p role="alert" className="text-xs text-[var(--dpf-error)]">{message}</p> : null}
+      {message ? <p role="alert" className={fieldErrorClass}>{message}</p> : null}
       <div className="flex gap-2">
-        <button type="submit" disabled={pending} className="rounded bg-[var(--dpf-accent)] px-3 py-1 text-sm text-[var(--dpf-on-accent)]">Save budget</button>
-        <button type="button" onClick={props.onDone} className="rounded border border-[var(--dpf-border)] px-3 py-1 text-sm text-[var(--dpf-text)]">Cancel</button>
+        <Button type="submit" size="sm" disabled={pending}>Save budget</Button>
+        <Button type="button" variant="secondary" size="sm" onClick={props.onDone}>Cancel</Button>
       </div>
       </form>
     </Surface>
@@ -145,7 +149,7 @@ function EpicAttribution({ epics }: { epics: UnconfirmedEpic[] }) {
   const [pending, start] = useTransition();
   if (epics.length === 0) return null;
   const high = epics.filter((e) => e.confidence === "high");
-  const confirm = (list: UnconfirmedEpic[], batch?: "high") =>
+  const confirmEpics = (list: UnconfirmedEpic[], batch?: "high") =>
     start(async () => {
       const result = await confirmEpicPortfoliosAction({
         confirmations: list.map((e) => ({ epicId: e.epicId, portfolioId: e.portfolioId })),
@@ -161,9 +165,9 @@ function EpicAttribution({ epics }: { epics: UnconfirmedEpic[] }) {
       </summary>
       <div className="mt-2 space-y-2">
         {high.length > 0 ? (
-          <button type="button" disabled={pending} onClick={() => confirm(high, "high")} className="rounded bg-[var(--dpf-accent)] px-3 py-1 text-sm text-[var(--dpf-on-accent)]">
+          <Button type="button" size="sm" disabled={pending} onClick={() => confirmEpics(high, "high")}>
             Confirm the {high.length} high-confidence proposal(s)
-          </button>
+          </Button>
         ) : null}
         {message ? <p role="status" className="text-xs text-[var(--dpf-muted)]">{message}</p> : null}
         <ul className="space-y-1">
@@ -172,7 +176,7 @@ function EpicAttribution({ epics }: { epics: UnconfirmedEpic[] }) {
               <span className="text-[var(--dpf-text)]">{e.epicId} · {e.title} → {e.portfolioName}</span>
               <span className="flex items-center gap-2">
                 <StatusBadge intent={e.confidence === "high" ? "success" : "warning"} label={e.confidence === "high" ? "High confidence" : "Check"} variant="soft" />
-                <button type="button" disabled={pending} onClick={() => confirm([e])} className="text-xs text-[var(--dpf-accent)] underline">Confirm</button>
+                <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => confirmEpics([e])}>Confirm</Button>
               </span>
             </li>
           ))}
