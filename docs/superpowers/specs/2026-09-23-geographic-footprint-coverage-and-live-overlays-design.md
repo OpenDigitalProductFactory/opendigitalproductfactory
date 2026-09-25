@@ -79,8 +79,9 @@ There is no honest source today. Options, in recommended order:
 
 A drawn layout is what the HOA plan's hierarchy-and-list first slice does not yet provide. Two paths, chosen by what the association has:
 
-- **Site-plan image (default).** Upload the community plat or site plan as the `underlayRef`; draw lots, buildings, common areas and amenities on it with the **cartesian** (React Flow) renderer. This needs no geocoding, no tiles and no parcel purchase, and it matches how HOAs already think about their community.
-- **Georeferenced (optional).** When lots need real-world position (a vendor navigating to a detention pond), import county parcel GeoJSON or a shapefile into a geographic scene, or pin the image's four corners so MapLibre draws it as an image source.
+- **Geocoded lot points (default for homes).** Each lot is one point on the geographic map, geocoded from its address and nudged by hand where the geocoder is off. Drive-by inspection (§3.3.2) needs real-world position so the inspector's phone can show which home it is passing, and one point per lot is enough: an incumbent HOA product works this way, with no parcel polygons. *Revised 2026-09-25 from operator evidence; WWMD `geocoded-points-plus-siteplan`, high confidence, margin 0.35.*
+- **Site-plan image (for common areas and boundaries).** Upload the plat or site plan as the `underlayRef` and draw common areas, amenities, lawn zones and pond boundaries on it with the **cartesian** (React Flow) renderer. This needs no geocoding and no parcel purchase, and it still suits communities without reliable address data.
+- **Parcel polygons (optional).** Import county parcel GeoJSON or a shapefile when lot boundaries matter, or pin the site plan's four corners so MapLibre draws it as an image source.
 - **Pinned work:** inspection findings, violations and maintenance work orders attach to a placement's `entityRef` (lot, common asset), so a subcontractor's view is "this lot, this spot, this photo". A placement references the work; it does not own it.
 
 #### 3.3.1 The map is where, not the workflow
@@ -100,7 +101,33 @@ The people involved are inspectors, who may be staff, board volunteers or a cont
 - **Flow.** Inspection round → finding (lot, rule cited, photo, note) → notice to homeowner → cure deadline → re-inspection → resolved, or escalated (fine or hearing). This is a Work Case in the HOA plan's `violation` / `inspection` categories, **not a new model**. The rule citation points at the association's governing documents.
 - **On the phone.** The inspector walks a round of lots in order, and each finding is captured in place. Photo and location capture depends on `EP-528CF32A` (camera, signature and location fields in mobile dynamic forms). The mobile photo seam is a stub today (`apps/mobile/src/features/job-evidence/imageSource.ts`). Rounds must work offline and sync later, because communities have dead spots.
 - **Re-inspection** is a scheduled follow-up on the same case at the cure deadline, not a fresh finding.
-- **Map role:** the round's lots in walking order, plus the lot a finding belongs to. Inspectors are the map's main field user.
+- **Map role:** this is the archetype's most important map. The inspector drives the community with the phone following their GPS position, and every home shows its standing at a glance.
+
+**Incumbent benchmark (operator screenshots, 2026-09-25).** The details are generic, because the screenshots show a real community and are not stored:
+
+- a street basemap with one house icon per lot at a geocoded point, labelled by house number;
+- a status colour per home (four colours, some two-toned), with extra markers for documents and a letter code;
+- phone controls: Tracking (GPS follow-me), Recenter, Legend, Filter and a compass;
+- tap a home to see its violation history.
+
+Zoomed out, its labels pile up unreadably.
+
+**DPF adopts:**
+
+- geocoded points per lot;
+- follow-me tracking;
+- filter and legend;
+- tap-through to the lot's case history.
+
+**DPF improves on:**
+
+- *Accessibility:* status carries colour **plus** a letter or shape, because colour alone fails WCAG. States map to the Work Case: open violation, in cure period, re-inspection due, escalated, clear.
+- *Density:* clustering and label collision at low zoom.
+- *Offline:* the community's region pack lives on the phone.
+
+**DPF rejects** a vendor basemap (the incumbent uses Apple Maps).
+
+- **Phone renderer.** The inspection runs in the Expo app, which the web renderer (`BI-814F86E1`) does not reach. Native `@maplibre/maplibre-react-native` uses the same style spec and the same PMTiles region pack (WWMD 2026-09-25, high confidence, margin 0.59; tool evaluation required). It is tracked as `BI-3DAE2169`.
 - **Care:** a violation is a dispute between neighbours. Findings, photos and the reporter's identity are visible to the board and the manager, never to other residents. A public report that becomes a violation does not expose its reporter to the homeowner.
 
 #### 3.3.3 Maintenance reports from residents and the public
@@ -178,7 +205,8 @@ Each phase is independently shippable, and P0 is the dependency every other phas
 | **P3** | Coverage: service-area zones, pure-TS point-in-polygon, "sites outside coverage" | Isochrones optional via a routing connector |
 | **P4** | HOA community layout on the cartesian renderer with site-plan underlay; work and inspections pinned to lots and common assets | Lands inside `BI-FE286C27` rather than as a parallel item |
 | **P4a** | Resident/public maintenance reports: 311-pattern intake with pin, photo, reference number and near-duplicate "+1"; phone intake via `spaces` / `visitor` | Web first; phone photo depends on `EP-528CF32A` |
-| **P4b** | Violation inspection rounds: phone round of lots, in-place finding capture, notice → cure → re-inspection on one case, offline sync | Depends on `EP-528CF32A`; benchmark HOA violation tools first |
+| **P0m** | Phone map renderer: native MapLibre, GPS follow-me, offline region pack, per-lot status markers | `BI-3DAE2169`; tool evaluation first |
+| **P4b** | Violation inspection rounds: drive-by map of lots with standing at a glance, in-place finding capture, notice → cure → re-inspection on one case, offline sync | Depends on P0m, P2 and `EP-528CF32A` |
 | **P4c** | Recurring common-area and tree maintenance: maintained features with point or boundary, `RecurrenceSchedule`-driven work, boundary snapshot sent to vendors | Substrate decision (§3.3.4) comes first |
 | **P5** | Server-side overlay connectors, NWS alerts first | On the integration substrate |
 | **P6** | Consented country-only deployment declaration over federation | Decided 2026-09-23 (§9); follows P1 |
@@ -200,7 +228,8 @@ Platform-direction choices were scored with WWMD `principle_decide` on 2026-09-2
 | Market footprint placement (§3.1) | `footprint` variant beside the TENANTS board | WWMD, high confidence, margin 2.67 |
 | First overlay connector (§4) | NWS alerts | WWMD, high confidence, margin 0.99 |
 | Backlog home | Create `EP-SPATIAL-OPERATIONAL-VIEWS` (done 2026-09-23) | WWMD, high confidence, margin 7.33 |
-| HOA layout default (§3.3) | Uploaded site-plan image | Operator; WWMD agrees (margin 1.79) |
+| HOA layout default (§3.3) | Geocoded point per lot for homes; site plan for common areas and boundaries | Revised 2026-09-25: the operator's incumbent evidence showed inspection needs real-world position. WWMD, high confidence, margin 0.35. Supersedes the 2026-09-23 site-plan-first answer |
+| Phone map renderer (§3.3.2) | Native MapLibre React Native | WWMD 2026-09-25, high confidence, margin 0.59 |
 | Deployment-footprint source (§3.1.1) | CRM first, then opt-in country-only federation | Operator; WWMD uncertain (margin 0.02), a human call |
 | Who may file public reports (§3.3.3) | **An org-level (WWWD) setting**; platform default **open** | Operator chose "anyone, rate-limited"; WWMD leaned residents-only on a thin margin (0.20) |
 | Vendor access (§3.3.4) | **Open** | Operator chose signed expiring link; WWMD leaned portal accounts on a thin margin (0.33) |
@@ -214,6 +243,7 @@ Epic `EP-SPATIAL-OPERATIONAL-VIEWS`, created 2026-09-23:
 | Phase | Item |
 |---|---|
 | P0 geographic renderer | `BI-814F86E1` |
+| P0m phone map renderer | `BI-3DAE2169` |
 | P1 market footprint | `BI-4EC1D572` |
 | P2 customer-map + geocoding | `BI-560128FB` |
 | P3 coverage | `BI-6CC10E4C` |
