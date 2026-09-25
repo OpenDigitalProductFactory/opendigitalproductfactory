@@ -163,9 +163,9 @@ async function ensurePulled(deps: DoctoolsReconcileDeps, image: string): Promise
 }
 
 export type DoctoolsPrePullResult =
-  | { ok: true; outcome: "pulled" | "present"; image: string }
-  | { ok: true; outcome: "not-published" | "not-release" }
-  | { ok: false; reason: string };
+  | { outcome: "pulled" | "present"; image: string }
+  | { outcome: "not-published" | "not-release" }
+  | { outcome: "failed"; reason: string };
 
 const tail = (result: DoctoolsDockerResult) => (result.stderr || result.stdout).trim().slice(-200);
 
@@ -192,22 +192,22 @@ export async function prePullReleaseDoctoolsImage(
 ): Promise<DoctoolsPrePullResult> {
   const identity = { imageTag: release.tag, ghcrOwner: release.ghcrOwner };
   const reference = doctoolsReleaseReference(identity);
-  if (!reference) return { ok: true, outcome: "not-release" };
+  if (!reference) return { outcome: "not-release" };
   const resolution = await resolveReleaseDoctoolsImage(identity, runDocker);
-  if (resolution.kind === "not-published") return { ok: true, outcome: "not-published" };
+  if (resolution.kind === "not-published") return { outcome: "not-published" };
   if (resolution.kind === "unavailable") {
-    return { ok: false, reason: `could not check the ${release.tag} document converter: ${resolution.detail}` };
+    return { outcome: "failed", reason: `could not check the ${release.tag} document converter: ${resolution.detail}` };
   }
   const image = resolution.image;
   const isPresent = async () =>
     (await tryDocker(runDocker, ["image", "inspect", "--format", "{{.Id}}", image], INSPECT_TIMEOUT_MS)).exitCode === 0;
-  if (await isPresent()) return { ok: true, outcome: "present", image };
+  if (await isPresent()) return { outcome: "present", image };
   let pull = await tryDocker(runDocker, ["pull", reference], PULL_TIMEOUT_MS);
-  if (pull.exitCode === 0 && (await isPresent())) return { ok: true, outcome: "pulled", image };
+  if (pull.exitCode === 0 && (await isPresent())) return { outcome: "pulled", image };
   // The tag did not land the recorded digest: pull the exact bytes instead.
   pull = await tryDocker(runDocker, ["pull", image], PULL_TIMEOUT_MS);
-  if (pull.exitCode === 0 && (await isPresent())) return { ok: true, outcome: "pulled", image };
-  return { ok: false, reason: `could not download the ${release.tag} document converter: ${tail(pull) || "the image is not present after the pull"}` };
+  if (pull.exitCode === 0 && (await isPresent())) return { outcome: "pulled", image };
+  return { outcome: "failed", reason: `could not download the ${release.tag} document converter: ${tail(pull) || "the image is not present after the pull"}` };
 }
 
 export async function reconcileReleaseDoctoolsImage(deps: DoctoolsReconcileDeps): Promise<DoctoolsReconcileOutcome> {

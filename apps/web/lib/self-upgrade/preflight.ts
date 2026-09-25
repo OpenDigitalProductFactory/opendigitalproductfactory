@@ -93,7 +93,7 @@ export async function runCandidatePreflight(params: {
     const prePull = params.prePullDoctools
       ?? (await import("./doctools-release-image")).prePullReleaseDoctoolsImage;
     const pulled = await prePull(params.release);
-    if (!pulled.ok) {
+    if (pulled.outcome === "failed") {
       await params.recordReadiness(params.runId, {
         stage: "preflight", owner: "portal", mode: "enforced", result: "failed",
         baselineSha: params.baselineSha ?? undefined, targetSha: params.targetSha,

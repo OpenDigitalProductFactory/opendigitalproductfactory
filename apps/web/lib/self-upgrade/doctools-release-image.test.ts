@@ -266,7 +266,7 @@ describe("prePullReleaseDoctoolsImage (BI-698B7F9A)", () => {
       if (args[0] === "pull") pulled = true;
       return { exitCode: 0 };
     });
-    expect(await prePullReleaseDoctoolsImage(RELEASE, docker.run)).toEqual({ ok: true, outcome: "pulled", image: PINNED });
+    expect(await prePullReleaseDoctoolsImage(RELEASE, docker.run)).toEqual({ outcome: "pulled", image: PINNED });
     // The tag, not the bare digest: a tagged image is never "dangling", so the
     // promoter's `docker image prune -f` cleanup cannot remove it before first boot.
     expect(docker.calls.filter((args) => args[0] === "pull")).toEqual([["pull", TAGGED]]);
@@ -275,7 +275,7 @@ describe("prePullReleaseDoctoolsImage (BI-698B7F9A)", () => {
 
   it("does not pull again when the digest is already present", async () => {
     const docker = fakeDocker((args) => (isInspectTag(args) ? { exitCode: 0, stdout: manifestJson(DIGEST) } : { exitCode: 0 }));
-    expect(await prePullReleaseDoctoolsImage(RELEASE, docker.run)).toEqual({ ok: true, outcome: "present", image: PINNED });
+    expect(await prePullReleaseDoctoolsImage(RELEASE, docker.run)).toEqual({ outcome: "present", image: PINNED });
     expect(docker.calls.some((args) => args[0] === "pull")).toBe(false);
   });
 
@@ -285,27 +285,27 @@ describe("prePullReleaseDoctoolsImage (BI-698B7F9A)", () => {
       if (isPresenceCheck(args)) return { exitCode: docker.calls.some((c) => c[1] === PINNED && c[0] === "pull") ? 0 : 1 };
       return { exitCode: 0 };
     });
-    expect(await prePullReleaseDoctoolsImage(RELEASE, docker.run)).toEqual({ ok: true, outcome: "pulled", image: PINNED });
+    expect(await prePullReleaseDoctoolsImage(RELEASE, docker.run)).toEqual({ outcome: "pulled", image: PINNED });
     expect(docker.calls.filter((args) => args[0] === "pull")).toEqual([["pull", TAGGED], ["pull", PINNED]]);
   });
 
   it("passes a release that never published dpf-doctools: that release is simply converter-less", async () => {
     const docker = fakeDocker(() => ({ exitCode: 1, stderr: `ERROR: ${TAGGED}: not found` }));
-    expect(await prePullReleaseDoctoolsImage(RELEASE, docker.run)).toEqual({ ok: true, outcome: "not-published" });
+    expect(await prePullReleaseDoctoolsImage(RELEASE, docker.run)).toEqual({ outcome: "not-published" });
     expect(docker.calls.some((args) => args[0] === "pull")).toBe(false);
   });
 
   it("skips a target that is not an immutable release tag, without touching docker", async () => {
     const docker = fakeDocker(() => ({ exitCode: 0 }));
-    expect(await prePullReleaseDoctoolsImage({ ...RELEASE, tag: "latest" }, docker.run)).toEqual({ ok: true, outcome: "not-release" });
+    expect(await prePullReleaseDoctoolsImage({ ...RELEASE, tag: "latest" }, docker.run)).toEqual({ outcome: "not-release" });
     expect(docker.calls).toEqual([]);
   });
 
   it("fails with a plain reason when the registry cannot say whether the release has a converter", async () => {
     const docker = fakeDocker(() => ({ exitCode: 1, stderr: "dial tcp: lookup ghcr.io: no such host" }));
     const result = await prePullReleaseDoctoolsImage(RELEASE, docker.run);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    expect(result.outcome).toBe("failed");
+    if (result.outcome !== "failed") return;
     expect(result.reason).toContain(`could not check the ${TAG} document converter`);
     expect(result.reason).toContain("no such host");
   });
@@ -317,8 +317,8 @@ describe("prePullReleaseDoctoolsImage (BI-698B7F9A)", () => {
       return { exitCode: 1, stderr: "toomanyrequests: rate limit exceeded" };
     });
     const result = await prePullReleaseDoctoolsImage(RELEASE, docker.run);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    expect(result.outcome).toBe("failed");
+    if (result.outcome !== "failed") return;
     expect(result.reason).toContain(`could not download the ${TAG} document converter`);
     expect(result.reason).toContain("toomanyrequests");
   });
