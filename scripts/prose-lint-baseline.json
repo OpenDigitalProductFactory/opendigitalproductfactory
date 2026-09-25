@@ -5597,7 +5597,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 2
+    "textMass": 20
   },
   "apps/web/components/ea/ElementInspector.tsx": {
     "vocabulary": 0,

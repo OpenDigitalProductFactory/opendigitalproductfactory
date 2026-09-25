@@ -72,11 +72,11 @@ export function EdgeVariantToggle({ value, onChange }: {
   );
 }
 
-const DRAWING_EXPORTS: Array<{ format: EaDrawingFormat; label: string; hint: string }> = [
-  { format: "odg", label: "Draw (.odg)", hint: "Editable in LibreOffice Draw" },
-  { format: "svg", label: "SVG (.svg)", hint: "Scalable image for web pages" },
-  { format: "pdf", label: "PDF (.pdf)", hint: "For printing and sharing" },
-  { format: "png", label: "PNG (.png)", hint: "Picture for slides and chat" },
+const DRAWING_EXPORTS: Array<{ format: EaDrawingFormat; label: string }> = [
+  { format: "odg", label: "Draw (.odg)" },
+  { format: "svg", label: "SVG (.svg)" },
+  { format: "pdf", label: "PDF (.pdf)" },
+  { format: "png", label: "PNG (.png)" },
 ];
 
 /** Export the view as a drawing (BI-4C17BF51). Renders the saved layout on the server. */
@@ -116,7 +116,7 @@ export function EaDrawingExportMenu({ viewId }: { viewId: string }) {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        title="Export this view as a drawing file (uses the saved layout)"
+        title="Export the saved layout as a drawing"
         style={{
           fontSize: 10, padding: "2px 9px", borderRadius: 3, cursor: "pointer", minHeight: 24,
           background: open ? "var(--dpf-surface-2)" : "transparent",
@@ -131,7 +131,7 @@ export function EaDrawingExportMenu({ viewId }: { viewId: string }) {
           role="menu"
           aria-label="Export view as"
           style={{
-            position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20, minWidth: 220, padding: 4,
+            position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20, minWidth: 160, padding: 4,
             background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 6,
             boxShadow: "var(--shadow-dpf-md)",
           }}
@@ -152,7 +152,6 @@ export function EaDrawingExportMenu({ viewId }: { viewId: string }) {
               <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--dpf-text)" }}>
                 {busy === item.format ? `Exporting ${item.label}…` : item.label}
               </span>
-              <span style={{ display: "block", fontSize: 10, color: "var(--dpf-muted)" }}>{item.hint}</span>
             </button>
           ))}
           {error && (
