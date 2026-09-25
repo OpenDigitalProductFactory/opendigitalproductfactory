@@ -544,3 +544,165 @@ or a read succeeded.
 Implementation owner: BI-A5307F9E. Coverage is pending the independent approval
 of this immutable amendment and its scope baseline. No implementation permission
 or passing coverage receipt is claimed by this text.
+
+## 12. Canonical install address: one origin, one connector, every client
+
+Amendment 2026-09-25. Backlog: BI-6DC1CD5B (S1), BI-2D545A0C (S2),
+BI-5201141C (S3), BI-8A562681 (S4), BI-60A85892 (S5), BI-5BCDB07C (S6).
+Baseline read: origin/main b763bddeeb0 and the live DEV install
+(DESKTOP-A290QNG) on 2026-09-25. Kernel decision for the connector shape:
+DI-D2EA5BE3E7D9. Plan: [canonical install address](../plans/2026-09-25-canonical-install-address.md).
+
+### 12.1 Operator requirement
+
+Founder, 2026-09-25: OAuth must work at installation, whatever the install;
+every client must be supported; prefer the most common approach; the process
+must be smooth, without clicks that add human cognitive load; an AI agent on a
+separate machine on the network must also work.
+
+### 12.2 Measured as-is
+
+- **Two connectors per Claude session.** The dpf-platform plugin ships
+  `claude.mcp.json` (`${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1?tier=full}`
+  plus a `Bearer ${DPF_MCP_BEARER_TOKEN}` header). The portal writes a second,
+  project `.mcp.json` (`apps/web/lib/auth/mcp-host-writer.ts:11-28`) on every
+  PAT issue, pointing at the request origin (`https://localhost/...`) with the
+  OAuth scope pin. Claude Code matches a plugin server against configured
+  servers by endpoint, not by name (Claude Code MCP documentation, "scope
+  hierarchy and precedence"), so different URLs load both. The plugin copy then
+  authenticates with the PAT, which lacks `dpf.work` grants such as
+  `initiative_evidence_write`, and the desktop app cannot sign it in
+  ("points at a different server URL"). Grok and Antigravity likewise receive
+  one connector from the plugin descriptor and one from a home-directory
+  config; the source repo tracks a third `.mcp.json`, enabled by
+  `.claude/settings.json:15-18`.
+- **No https by default.** `install-dpf.ps1:1716-1726` and `install-dpf.sh:941-948`
+  run the PKI bootstrap only for a join package; a standalone install's OAuth
+  issuer stays `http://127.0.0.1:3000` (BI-6DC1CD5B).
+- **Claude refuses OAuth over http, loopback included.** Measured on PROD
+  2026-09-16/17 (BI-46B636B0): "must be https". Codex accepts loopback http
+  (section 11). Grok has no OAuth client at all.
+- **The origin setting exists but is never written.** `PUBLIC_URL` and
+  `PUBLIC_URL_ALIASES` already drive the OAuth issuer and resource
+  (`oauth-metadata.ts:71-84`), cookies (`govern/auth.ts:116-137`) and the
+  canonical-host redirect (`canonical-host.ts:139-177`). No installer sets them.
+- **Tokens and consent bind one exact origin.** `resourceMatches`
+  (`oauth-metadata.ts:100-121`) and `AuthorityBinding.resourceRef` compare
+  scheme, host and port exactly; `localhost` and `127.0.0.1` are different
+  audiences.
+- **`.local` is not a dependable default on Windows.** On DEV,
+  `DESKTOP-A290QNG.local` resolves only to link-local IPv6 and the network
+  profile is Public, where Windows does not answer mDNS from peers. Docker
+  Desktop also blocks container mDNS (watchlist D11).
+- **Consent is already one click.** BI-05E0EA33 (PRs #5572, #5583) resolves
+  the assistant server-side and reuses prior consent; reconnect and refresh
+  need no click.
+
+### 12.3 Research and benchmarking
+
+| System | Canonical address | Client trust | DPF adopts or rejects |
+|---|---|---|---|
+| Gitea / Forgejo `ROOT_URL` | One configured origin; every link and OAuth redirect derives from it | Operator's certificate | Adopt: one origin, set once, everything derives. `PUBLIC_URL` is this; the gap is that setup never writes it. |
+| Home Assistant `internal_url` and `homeassistant.local` | Configured URL, mDNS name as a convenience | Self-signed or user certificate | Adopt the internal-URL pattern. Reject mDNS as the default on Windows (12.2). |
+| smallstep `step ca bootstrap --ca-url --fingerprint` | CA URL plus root fingerprint | Fetch the root, verify the fingerprint, install into trust stores | Adopt for remote agent machines (S5): the standard trust-on-first-use-with-pin pattern. |
+| Hosted MCP connectors (Linear, Notion, Sentry, GitHub) | URL-only connector entry | Public WebPKI | Adopt the connector shape: URL only, OAuth by RFC 9728 discovery, no token in config. |
+| Kubernetes / k3s join (`--token`, CA hash) | Server URL plus CA hash | Pinned CA hash | Confirms URL plus fingerprint as the common join contract. |
+
+Standards: RFC 9728 (protected resource metadata), RFC 8707 (resource
+indicators), RFC 8252 sections 7.3 and 8.3 (loopback redirects; prefer IP
+literals over `localhost` for redirect listeners), OAuth 2.1 (PKCE; https
+except loopback).
+
+### 12.4 Decisions
+
+1. **One canonical https origin per install, written at setup (S1).**
+   `PUBLIC_URL` is chosen without operator input in this order: an explicit
+   operator DNS name; the machine's DNS name when the network resolves it to
+   one of the machine's own addresses (forward lookup verified at setup);
+   otherwise `https://localhost`. `PUBLIC_URL_ALIASES` carries the loopback
+   spellings, so a browser that types `localhost` or `127.0.0.1` is redirected
+   rather than refused. The portal certificate's SANs are the canonical host
+   plus every alias, and a changed name set reissues the certificate.
+2. **https always.** Every install runs the organization CA and `portal-tls`
+   in authority mode by default. Claude refuses OAuth over http
+   (BI-46B636B0), and one origin cannot be http for one client and https for
+   another without splitting token audiences.
+3. **The machine trusts its own CA and knows its address (S2).** Setup adds
+   the root to the OS machine trust store without an interactive dialog and
+   persists `DPF_MCP_URL` and `NODE_EXTRA_CA_CERTS` for the installing user.
+4. **One connector per client, owned by the plugin (S3).** Every plugin
+   descriptor is URL-only, `${DPF_MCP_URL:-<loopback https default>}`, with
+   no bearer header on https; Claude keeps the scope pin. Writers of a second
+   connector (the portal host writer in OAuth mode, the bootstrap repo
+   `.mcp.json`, the worktree seed and sync scripts, the tracked repo
+   `.mcp.json`) stop writing one; explicit legacy mode keeps its snippets as a
+   compatibility output. Kernel decision DI-D2EA5BE3E7D9 chose a single
+   source over "match the URLs" and "warn only". The single source is the
+   plugin rather than the project file because a fresh OAuth install and 56
+   of 138 source worktrees have no project file.
+5. **The authorization server accepts the canonical origin (S4).** Dynamic
+   client registration is allowed on loopback and on the configured canonical
+   origin; any other host is still refused. Consent stays required for every
+   new client. Scripted MCP callers derive their allowed endpoint from
+   `PUBLIC_URL` or `DPF_MCP_URL` and pass the CA bundle.
+6. **Remote agent machines join by URL plus fingerprint (S5).** The portal
+   shows one copyable command carrying the canonical URL and the root
+   fingerprint. It fetches and pins the root, trusts it, persists
+   `DPF_MCP_URL` and installs the plugin. The first client call opens one
+   Connect click.
+7. **Grok gets its credential without a paste (S6).** Setup creates a
+   `client_credentials` client inside the portal container, and a refresher
+   rewrites Grok's bearer before expiry. No PAT is minted.
+8. **Consent keeps its one click.** Pre-authorising clients to skip consent
+   entirely is rejected. The kernel floor ("human in the loop at phase
+   boundaries", "show the consequence before the confirm") is one explicit
+   Connect action, which BI-05E0EA33 already delivers; prior consent removes
+   it on reconnect and refresh.
+
+### 12.5 Open operator decision
+
+**A name for remote agents on a network without DNS.** When neither an
+operator DNS name nor a network-resolved machine name exists, the canonical
+origin falls back to `https://localhost`, which only the install's own machine
+can use. Options: (a) the operator adds a DNS name (router DHCP reservation
+plus local DNS) before S5 applies; (b) canonicalise on the machine's LAN IPv4
+with an IP SAN, reissued on address change, where tokens break whenever DHCP
+moves the address; (c) run a host-side mDNS responder for `<install>.local`,
+which Docker Desktop cannot do and would need a host service per OS.
+Recommendation: (a), with a portal check that names the gap, until evidence
+justifies (c).
+
+### 12.6 Slices and order
+
+| Slice | BI | Depends on | Delivers |
+|---|---|---|---|
+| S1 | BI-6DC1CD5B | none | Canonical https origin and certificate at install and upgrade; two Windows PKI-script defects; `portal-tls` honours `DPF_HOST_BIND_ADDRESS`. |
+| S2 | BI-2D545A0C | S1 | Machine trust, plus `DPF_MCP_URL` and `NODE_EXTRA_CA_CERTS` persisted at setup. |
+| S3 | BI-5201141C | S2 | One plugin-owned URL-only connector per client; second writers retired; runbook corrected. |
+| S4 | BI-8A562681 | S1 | DCR on the canonical origin; scripted callers and health hooks follow `DPF_MCP_URL` with the CA bundle. |
+| S5 | BI-60A85892 | S1, S2, S4 | Remote agent join command. |
+| S6 | BI-5BCDB07C | S1 | Grok credential without a paste. |
+
+### 12.7 Acceptance for the whole
+
+- **AC-CANON-1:** on a fresh install (Windows, macOS, Linux), Claude Code,
+  Codex, VS Code and Antigravity each show exactly one `dpf` connector,
+  authenticated by OAuth after one Connect click, with no command, file edit
+  or pasted token.
+- **AC-CANON-2:** Grok connects with no pasted token.
+- **AC-CANON-3:** an existing install upgrades to the same state; each client
+  re-consents once, because the token audience changes.
+- **AC-CANON-4:** an agent machine on the network connects with one command
+  and one Connect click, subject to 12.5.
+- **AC-CANON-5:** the access token refreshes silently, and revocation in Admin
+  refuses the client and prompts it to reconnect.
+
+### 12.8 Security
+
+- The canonical origin widens DCR from loopback to one named origin only;
+  registration still yields no authority without consent.
+- Installing the root into the machine trust store makes every browser on that
+  machine trust certificates the install CA issues. The CA's provisioner policy
+  must restrict issuance to the install's own names; verify this in S1.
+- Remote join pins the root by fingerprint; a mismatch trusts nothing.
+- Revocation, resource binding and one-family refresh rotation are unchanged.
