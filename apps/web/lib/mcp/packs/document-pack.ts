@@ -35,6 +35,9 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
   return userPrincipal?.id ?? null;
 }
 
+/** Largest exported file doc_load returns inline as contentBase64 (BI-4865EB4D). */
+export const DOC_LOAD_EXPORT_INLINE_LIMIT_BYTES = 5 * 1024 * 1024;
+
 /** Largest binary doc_save accepts inline as contentBase64 (BI-9D43CBEF). */
 export const DOCUMENT_BINARY_SAVE_LIMIT_BYTES = 20 * 1024 * 1024;
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -94,12 +97,17 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "doc_load",
-    description: "Load a managed document by stable document id, optionally pinned to a version.",
+    description: "Load a managed document by stable document id, optionally pinned to a version. Pass exportFormat to also export that version as a Word (docx), OpenDocument (odt) or PDF file through the document engine; the export is kept as a rendition, so asking again is cheap.",
     inputSchema: {
       type: "object",
       properties: {
         documentId: { type: "string", description: "Stable document id, such as DOC-1234ABCD." },
         version: { type: "number", description: "Optional version number. Defaults to current version." },
+        exportFormat: {
+          type: "string",
+          enum: ["docx", "odt", "pdf"],
+          description: `Optional. Export the loaded version to this format. The result carries a download path, and the file as contentBase64 when it is at most ${DOC_LOAD_EXPORT_INLINE_LIMIT_BYTES / (1024 * 1024)} MB.`,
+        },
       },
       required: ["documentId"],
     },
@@ -266,21 +274,50 @@ async function docSave(
 
 async function docLoad(params: Record<string, unknown>): Promise<ToolResult> {
   const { loadManagedDocument } = await import("@/lib/documents/document-store");
-  const document = await loadManagedDocument({
-    documentId: String(params["documentId"] ?? ""),
-    version: typeof params["version"] === "number" ? params["version"] : null,
-  });
+  const documentId = String(params["documentId"] ?? "");
+  const pinnedVersion = typeof params["version"] === "number" ? params["version"] : null;
+  const document = await loadManagedDocument({ documentId, version: pinnedVersion });
   if (!document) return { success: false, message: "Document not found.", error: "Document not found." };
+  // Renditions of the loaded version (BI-9D43CBEF): a PDF and a plain-text
+  // projection of an office file, once the rendition job has run.
+  const data: Record<string, unknown> = {
+    document: document as unknown as Record<string, unknown>,
+    renditions: document.currentVersion?.renditions ?? [],
+  };
+
+  const exportFormat = params["exportFormat"];
+  if (exportFormat === undefined || exportFormat === null) {
+    return { success: true, entityId: document.documentId, message: `Loaded document ${document.documentId}.`, data };
+  }
+  // Export (BI-4865EB4D): the version as a .docx / .odt / .pdf file.
+  const { documentExportFailureMessage, exportDocumentVersion, isDocumentExportFormat } = await import("@/lib/documents/document-export");
+  if (!isDocumentExportFormat(exportFormat)) {
+    return { success: false, message: "exportFormat must be docx, odt or pdf.", error: "exportFormat must be docx, odt or pdf." };
+  }
+  const version = document.currentVersion?.version ?? null;
+  const exported = await exportDocumentVersion({ documentId: document.documentId, version, format: exportFormat });
+  if (!exported.ok) {
+    const message = documentExportFailureMessage(exported.reason);
+    data["export"] = { format: exportFormat, status: "failed", reason: exported.reason, message };
+    return { success: true, entityId: document.documentId, message: `Loaded document ${document.documentId}. ${message}`, data };
+  }
+  const { bytes, mimeType, filename } = exported.data;
+  const inline = bytes.byteLength <= DOC_LOAD_EXPORT_INLINE_LIMIT_BYTES;
+  data["export"] = {
+    format: exportFormat,
+    status: "exported",
+    version: exported.data.version,
+    filename,
+    mimeType,
+    sizeBytes: bytes.byteLength,
+    downloadPath: `/api/documents/${encodeURIComponent(document.documentId)}/content?version=${exported.data.version}&export=${exportFormat}`,
+    ...(inline ? { contentBase64: bytes.toString("base64") } : {}),
+  };
   return {
     success: true,
     entityId: document.documentId,
-    message: `Loaded document ${document.documentId}.`,
-    // Renditions of the loaded version (BI-9D43CBEF): a PDF and a plain-text
-    // projection of an office file, once the rendition job has run.
-    data: {
-      document: document as unknown as Record<string, unknown>,
-      renditions: document.currentVersion?.renditions ?? [],
-    },
+    message: `Loaded document ${document.documentId} and exported v${exported.data.version} as ${filename}.`,
+    data,
   };
 }
 

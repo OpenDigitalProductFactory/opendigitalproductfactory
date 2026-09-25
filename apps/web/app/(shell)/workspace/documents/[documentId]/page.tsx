@@ -6,6 +6,9 @@ import { auth } from "@/lib/auth";
 import { listManagedDocumentReferences, loadManagedDocument } from "@/lib/documents/document-store";
 import { loadRenditionTextPreview, renditionFailureMessage } from "@/lib/documents/document-content";
 import { officeSourceExtension } from "@/lib/documents/conversion/formats";
+import { getConverterAvailability } from "@/lib/documents/conversion/availability";
+import { exportableFormats } from "@/lib/documents/document-export";
+import { DocumentExportMenu } from "./DocumentExportMenu";
 import { DocumentFilePanel } from "./DocumentFilePanel";
 import { changeDocumentStateAction } from "../actions";
 import { LocalTime } from "@/components/ui/LocalTime";
@@ -43,6 +46,11 @@ export default async function DocumentDetailPage({ params }: Props) {
   const storedFile = document.currentVersion?.contentBlobId ? document.currentVersion : null;
   const isOfficeFile = storedFile ? officeSourceExtension(storedFile.contentFormat) !== null : false;
   const textPreview = storedFile && isOfficeFile ? await loadRenditionTextPreview(storedFile.id).catch(() => null) : null;
+  const currentVersion = document.currentVersion;
+  const exportFormats = currentVersion ? exportableFormats(currentVersion.contentFormat) : [];
+  const converterAvailable = exportFormats.length > 0
+    ? (await getConverterAvailability().catch(() => ({ available: false }))).available
+    : false;
 
   return (
     <div className="space-y-6">
@@ -81,9 +89,19 @@ export default async function DocumentDetailPage({ params }: Props) {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <article className="min-w-0 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-          <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
-            <FileText className="h-4 w-4" aria-hidden="true" />
-            Current Version
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+              <FileText className="h-4 w-4" aria-hidden="true" />
+              Current Version
+            </div>
+            {currentVersion && (
+              <DocumentExportMenu
+                documentId={document.documentId}
+                version={currentVersion.version}
+                formats={exportFormats}
+                converterAvailable={converterAvailable}
+              />
+            )}
           </div>
           {storedFile ? (
             <DocumentFilePanel

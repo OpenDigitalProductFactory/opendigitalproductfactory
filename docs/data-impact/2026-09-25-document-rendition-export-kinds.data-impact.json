@@ -1,0 +1,40 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "DocumentRendition rows of kind docx, odt and pdf written by the document export (apps/web/lib/documents/document-export.ts)",
+    "Exported file bytes stored as content-addressed DocumentBlob rows (apps/web/lib/documents/blob-storage.ts storeDocumentBlob)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "same as the source document",
+    "dataSubjectRights": "not-applicable: an export is a derived copy of a document version the organization already stores. It adds no new personal data; any personal data it carries was already held in that version, under the same Document access scope.",
+    "reviewDisposition": "Export renditions cascade-delete with their DocumentVersion and are served through the same signed-in document content route as the version itself. No new retention path is introduced."
+  },
+  "migration": {
+    "name": "20260925120000_document_rendition_export_kinds",
+    "backfill": "None. The migration only adds the enum members docx and odt (ALTER TYPE ... ADD VALUE IF NOT EXISTS) and touches no row, so it applies identically to an empty table and a populated one. Export renditions are written on demand when someone exports a version, never in bulk.",
+    "rollback": "Forward-only. Postgres cannot drop an enum member; older code never writes or reads the docx and odt kinds, and a version's rendition list projection ignores kinds it does not display."
+  },
+  "tests": [
+    "packages/db/src/document-rendition-export-kinds-migration.test.ts",
+    "apps/web/lib/documents/document-export.test.ts",
+    "apps/web/lib/documents/document-export.docker.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:documentrendition",
+      "prismaModel": "DocumentRendition",
+      "lifecycleDisposition": "Derived projection of a DocumentVersion, regenerable from its content; cascades with the version. This PR adds a second writer: the document export.",
+      "fields": [
+        {
+          "fieldId": "data:documentrendition#renditionKind",
+          "resolution": "governed",
+          "reason": "The DocumentRenditionKind enum gains docx and odt, the two export formats with no existing member; an exported PDF reuses pdf. Additive only.",
+          "provenance": "BI-4865EB4D; docs/superpowers/plans/2026-09-22-office-document-conversion-plan.md S5"
+        }
+      ]
+    }
+  ]
+}

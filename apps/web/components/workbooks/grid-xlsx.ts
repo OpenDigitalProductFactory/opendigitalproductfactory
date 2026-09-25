@@ -1,4 +1,10 @@
-// Universal Grid & Workbooks — native .xlsx export (EP-GRID-WORKBOOKS).
+// Universal Grid & Workbooks — data-only .xlsx fallback (EP-GRID-WORKBOOKS).
+//
+// Since BI-4865EB4D the grid exports .xlsx through the document engine
+// (grid-office-export.ts), with formats, formulas and rules. This writer stays
+// only as the fallback for an install with no engine (no docker socket, or a
+// watchlist target without the dpf-doctools image), so .xlsx export never
+// disappears there. Retire it once every install shape runs the engine.
 //
 // A dependency-free writer for the minimal subset of the Office Open XML
 // SpreadsheetML (.xlsx) format: a ZIP (stored / uncompressed) of a handful of XML

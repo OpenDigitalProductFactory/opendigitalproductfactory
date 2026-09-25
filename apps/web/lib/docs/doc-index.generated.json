@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 716,
+  "pageCount": 717,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -12614,6 +12614,7 @@
         "use-this-doc-for",
         "workflow",
         "office-files",
+        "export",
         "authoritative-state",
         "ai-coworker-support",
         "what-to-watch"
@@ -12663,6 +12664,16 @@
         "incomplete-or-unavailable-rooms",
         "who-is-accountable-and-who-is-working",
         "opening-a-workroom-that-has-no-work-item"
+      ]
+    },
+    "docs/user-guide/workspace/workbooks.md": {
+      "publicHref": "/user-guide/workspace/workbooks/",
+      "portalHref": "/docs/workspace/workbooks",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "export"
       ]
     },
     "docs/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding.md": {

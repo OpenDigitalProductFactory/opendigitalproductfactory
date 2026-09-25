@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "extend-existing-export-menu",
+  "decisionInteractionId": "DI-32119188EA19",
+  "scope": {
+    "files": [
+      "apps/web/components/workbooks/GridExportMenu.tsx",
+      "apps/web/components/workbooks/Grid.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "extend-existing-export-menu",
+      "separate-office-export-button"
+    ]
+  }
+}

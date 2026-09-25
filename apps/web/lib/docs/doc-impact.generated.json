@@ -479,6 +479,12 @@
     "apps/web/components/ui/report-kit/statusColors.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/components/workbooks/GridExportMenu.tsx": [
+      "docs/user-guide/workspace/workbooks.md"
+    ],
+    "apps/web/components/workbooks/grid-office-export.ts": [
+      "docs/user-guide/workspace/workbooks.md"
+    ],
     "apps/web/components/workspace/WorkCaseAttentionLens.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -1294,6 +1300,12 @@
     ],
     "apps/web/lib/workbooks/backlog-adapter-mapping.ts": [
       "docs/architecture/backlog-archetype-scope.md"
+    ],
+    "apps/web/lib/workbooks/export-fods.ts": [
+      "docs/user-guide/workspace/workbooks.md"
+    ],
+    "apps/web/lib/workbooks/export-workbook.ts": [
+      "docs/user-guide/workspace/workbooks.md"
     ],
     "apps/web/lib/workbooks/people-supplier-configs.ts": [
       "docs/testing/findings/run-1-phase-w-retest.md"
@@ -3462,6 +3474,12 @@
       "apps/web/lib/work-management/room-participation.ts",
       "apps/web/lib/work-management/workspace-case-loader.ts",
       "apps/web/lib/work-management/workspace-room-access.ts"
+    ],
+    "docs/user-guide/workspace/workbooks.md": [
+      "apps/web/components/workbooks/GridExportMenu.tsx",
+      "apps/web/components/workbooks/grid-office-export.ts",
+      "apps/web/lib/workbooks/export-fods.ts",
+      "apps/web/lib/workbooks/export-workbook.ts"
     ]
   }
 }

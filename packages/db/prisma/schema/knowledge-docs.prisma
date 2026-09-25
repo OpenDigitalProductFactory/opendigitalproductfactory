@@ -169,15 +169,22 @@ model DocumentLifecycleEvent {
 }
 
 /// The closed set of derived renditions of a DocumentVersion (BI-9D43CBEF).
-/// Widening it is a migration plus the writers in apps/web/lib/documents/renditions.ts.
+/// Widening it is a migration plus the writers: pdf and plain_text come from
+/// apps/web/lib/documents/renditions.ts; docx and odt (and pdf for text
+/// documents) come from the export in apps/web/lib/documents/document-export.ts
+/// (BI-4865EB4D).
 enum DocumentRenditionKind {
   pdf
   plain_text
+  docx
+  odt
 }
 
 /// A derived projection of a DocumentVersion's content (office file -> PDF and
-/// plain text), regenerable from the version's blob. Written by the rendition
-/// job in apps/web/lib/documents/renditions.ts; its text is full-text indexed
+/// plain text; any document -> an exported .docx/.odt/.pdf), regenerable from
+/// the version's content. Written by the rendition job in
+/// apps/web/lib/documents/renditions.ts and the export in
+/// apps/web/lib/documents/document-export.ts; its text is full-text indexed
 /// through the unmodeled generated "searchVector" column (migration
 /// 20260925060000_document_rendition_kind_enum).
 model DocumentRendition {
