@@ -7,10 +7,9 @@
 //
 // The fixture Workbook (formulas, number formats, a conditional format and one
 // chart view) exports through the real engine to .xlsx and .ods. Each file is
-// re-imported the way the platform imports a sheet: .xlsx through
-// read-excel-file (Workbooks' sheet import), .ods through the engine to .xlsx
-// first (the converter-backed ingestion route) and then the same reader. The
-// values must come back unchanged, and the file must carry the formulas,
+// re-imported through Workbooks' own sheet import (readSheetMatrix, which S3
+// BI-81524041 routes: .xlsx straight to the reader, .ods through the engine to
+// .xlsx first). The values must come back unchanged, and the file must carry the formulas,
 // formats, conditional format and chart-view data, not only the values.
 
 import { spawnSync } from "node:child_process";
@@ -20,6 +19,7 @@ import { isPinnedImageReference } from "@/lib/documents/conversion/command";
 import { convertDocument, createConversionLimiter } from "@/lib/documents/conversion/convert";
 import { WORKBOOK_EXPORT_FIXTURE } from "./export-fixture";
 import { exportWorkbook } from "./export-workbook";
+import { readSheetMatrix } from "./sheet-import";
 
 const IMAGE = process.env.DPF_DOCTOOLS_TEST_IMAGE?.trim() ?? "";
 
@@ -60,15 +60,11 @@ function unzip(bytes: Buffer): Map<string, Buffer> {
   return entries;
 }
 
-/** The first sheet's rows, read with read-excel-file (the reader behind Workbooks' sheet import). */
-async function readFirstSheet(xlsx: Buffer): Promise<unknown[][]> {
-  const { default: readXlsxFile } = await import("read-excel-file/node");
-  const parsed: unknown = await readXlsxFile(xlsx);
-  // read-excel-file@9 returns `[{ sheet, data }]`; unwrap to the row matrix.
-  if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === "object" && "data" in parsed[0]) {
-    return (parsed[0] as { data: unknown[][] }).data;
-  }
-  return parsed as unknown[][];
+/** Re-import a file exactly as Workbooks' "Import sheet" does. */
+async function reimport(bytes: Buffer, fileName: string): Promise<unknown[][]> {
+  const read = await readSheetMatrix(bytes, fileName, { convert });
+  if (!read.ok) throw new Error(`re-import of ${fileName} failed: ${read.error}`);
+  return read.data;
 }
 
 /** The fixture as a sheet reader returns it: header row, then values (dates as Date). */
@@ -89,7 +85,7 @@ describe.skipIf(!ready)("Workbook export against the real dpf-doctools image", (
     const xlsx = out.data.bytes;
     expect(out.data.filename).toBe("Orders.xlsx");
 
-    expect(await readFirstSheet(xlsx)).toEqual(expectedSheet());
+    expect(await reimport(xlsx, out.data.filename)).toEqual(expectedSheet());
 
     const parts = unzip(xlsx);
     const sheet = parts.get("xl/worksheets/sheet1.xml")!.toString("utf8");
@@ -106,7 +102,7 @@ describe.skipIf(!ready)("Workbook export against the real dpf-doctools image", (
     expect(parts.get("xl/worksheets/sheet2.xml")!.toString("utf8")).toMatch(/<v>47<\/v>/);
   }, 240_000);
 
-  it("exports .ods with the same content and re-imports the same values through the engine", async () => {
+  it("exports .ods with the same content and re-imports the same values through the sheet import", async () => {
     const out = await exportWorkbook(WORKBOOK_EXPORT_FIXTURE, "ods", { convert });
     if (!out.ok) throw new Error(`ods export failed: ${out.reason}: ${out.error}`);
     const parts = unzip(out.data.bytes);
@@ -116,8 +112,6 @@ describe.skipIf(!ready)("Workbook export against the real dpf-doctools image", (
     expect(content).toContain("calcext:conditional-format");
     expect(content).toContain('table:name="Chart data"');
 
-    const reimported = await convert({ input: out.data.bytes, from: "ods", to: "xlsx" });
-    if (!reimported.ok) throw new Error(`ods -> xlsx failed: ${reimported.reason}: ${reimported.error}`);
-    expect(await readFirstSheet(reimported.data.bytes)).toEqual(expectedSheet());
+    expect(await reimport(out.data.bytes, out.data.filename)).toEqual(expectedSheet());
   }, 240_000);
 });
