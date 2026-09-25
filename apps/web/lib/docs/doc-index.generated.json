@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 715,
+  "pageCount": 716,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9354,6 +9354,20 @@
         "integration-test",
         "what-dpf-should-harvest",
         "conditions-and-re-evaluation",
+        "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-24-libreoffice-headless/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-libreoffice-headless-dpf-doctools-image",
+        "cosai-security-findings",
+        "compliance-and-architecture-fit",
+        "integration-evidence",
+        "conditions",
         "sources"
       ]
     },

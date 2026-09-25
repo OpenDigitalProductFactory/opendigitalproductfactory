@@ -1,0 +1,6 @@
+# Build context for Dockerfile.doctools: only the doctools sources.
+# BuildKit reads <Dockerfile>.dockerignore in place of .dockerignore, so the
+# repository (node_modules, docs, apps) is never sent to the builder.
+*
+!tools/doctools/dpf-convert
+!tools/doctools/registrymodifications.xcu

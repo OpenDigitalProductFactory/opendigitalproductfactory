@@ -97,6 +97,13 @@ pnpm --filter @dpf/db seed                       # Seed roles, agents, taxonomy,
 docker build -f Dockerfile.promoter -t dpf-promoter .
 ```
 
+**Build the document engine image** (optional, for office document conversion). The portal runs it one-shot; compose never starts it. The smoke test exercises it offline and read-only:
+
+```bash
+docker build -f Dockerfile.doctools -t dpf-doctools .
+bash tools/doctools/smoke.sh dpf-doctools
+```
+
 **Start the dev server:**
 
 ```bash

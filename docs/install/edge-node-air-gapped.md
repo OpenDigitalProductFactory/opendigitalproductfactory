@@ -77,7 +77,7 @@ export DPF_IMAGE_TAG=v0.4.0   # example; use whichever release you're staging
 
 # Pull each release image and capture its digest.
 for img in \
-  dpf-portal dpf-sandbox dpf-promoter dpf-browser-use dpf-adp dpf-edge-node; do
+  dpf-portal dpf-sandbox dpf-promoter dpf-doctools dpf-browser-use dpf-adp dpf-edge-node; do
   docker pull "ghcr.io/opendigitalproductfactory/${img}:${DPF_IMAGE_TAG}"
 done
 
