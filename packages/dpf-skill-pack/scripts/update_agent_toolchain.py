@@ -1411,8 +1411,11 @@ def disable_competitive_grok_plugins(skill_pack: Optional[Path] = None, dry_run:
     return "; ".join(parts) if parts else "no competitive plugins present"
 
 
-# Bash-scoped blocking guards for Codex's user hook plane (~/.codex/hooks.json).
-# decision-routing-guard is wired separately on AskUserQuestion (Gate A).
+# Blocking guards Codex must run on each PreToolUse matcher. They serve two
+# purposes (BI-2B634E68): proving the installed plugin cache wires every guard
+# (codex_plugin_hooks_active), and recognising DPF-owned entries in
+# ~/.codex/hooks.json. Only when the plugin plane cannot be proven are they
+# written there as the fallback copy. decision-routing-guard is Gate A.
 CODEX_BASH_GUARDS = (
     "lease-guard.mjs",
     "root-clone-guard.mjs",
@@ -1474,15 +1477,12 @@ def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[di
     return groups
 
 
-def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_run: bool) -> dict[str, Any]:
-    """Upsert DPF plane-1 guards into ~/.codex/hooks.json without clobbering other hooks."""
-    hooks_dir = managed / "hooks"
+def prune_codex_hooks_payload(existing: dict[str, Any], hooks_dir: Path) -> dict[str, Any]:
+    """Drop DPF-owned PreToolUse entries; keep foreign hooks, drop emptied groups."""
     payload = dict(existing) if isinstance(existing, dict) else {}
-    events = payload.setdefault("hooks", {})
-    if not isinstance(events, dict):
-        events = {}
-        payload["hooks"] = events
-
+    events = payload.get("hooks")
+    events = dict(events) if isinstance(events, dict) else {}
+    payload["hooks"] = events
     pre_tool_use = events.get("PreToolUse")
     if not isinstance(pre_tool_use, list):
         pre_tool_use = []
@@ -1499,6 +1499,18 @@ def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_ru
         ]
         if kept:
             cleaned.append({**group, "hooks": kept})
+    if cleaned:
+        events["PreToolUse"] = cleaned
+    else:
+        events.pop("PreToolUse", None)
+    return payload
+
+
+def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_run: bool) -> dict[str, Any]:
+    """Fallback: upsert DPF guards into ~/.codex/hooks.json without clobbering other hooks."""
+    payload = prune_codex_hooks_payload(existing, managed / "hooks")
+    events = payload["hooks"]
+    cleaned: list[Any] = list(events.get("PreToolUse", []))
     dpf_groups = _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
     for dpf_group in dpf_groups:
         matcher = dpf_group.get("matcher")
@@ -1523,15 +1535,88 @@ def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_ru
     return payload
 
 
-def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
-    """Wire plane-1 guards into Codex's user hook plane (~/.codex/hooks.json).
+def codex_plugin_cache_hooks_path(managed: Path, home: Path) -> Optional[Path]:
+    """hooks/hooks.json in the Codex plugin cache for the delivered version.
 
-    Plugin-bundled hooks still require interactive HOOK TRUST (BI-66EBEA06).
-    Delivering the same guards via the user hook file ensures Codex discovers
-    them alongside plugin hooks and surfaces them in `/hooks` for a one-time
-    trust grant. We do NOT forge trusted_hash entries (openai/codex#21615).
+    Codex installs `dpf-platform@personal` into
+    ~/.codex/plugins/cache/personal/dpf-platform/<version>/, keyed by the
+    version this script writes into the managed .codex-plugin/plugin.json
+    (codex_content_version; install_codex_plugin verifies the match).
+    """
+    version = read_json(managed / ".codex-plugin" / "plugin.json", {}).get("version")
+    if not isinstance(version, str) or not version.strip():
+        return None
+    return home / ".codex" / "plugins" / "cache" / "personal" / PLUGIN_NAME / version / "hooks" / "hooks.json"
+
+
+def codex_plugin_hooks_active(managed: Path, home: Path) -> bool:
+    """True when Codex's installed, enabled DPF plugin wires every blocking guard.
+
+    Codex loads plugin-bundled hooks (only Grok ignores them, BI-883FC2FC), so
+    a user-file copy would run each guard twice and need trust twice
+    (BI-2B634E68). Anything short of proof -- plugin not enabled, no cache for
+    the delivered version, a cache missing a guard on its matcher -- is False
+    and keeps the ~/.codex/hooks.json fallback.
+    """
+    config = codex_config_path(home)
+    try:
+        text = config.read_text(encoding="utf-8-sig") if config.exists() else ""
+    except OSError:
+        return False
+    if toml_table_enabled(text, f"plugins.{CODEX_PLUGIN_ID}") is not True:
+        return False
+    cache_hooks = codex_plugin_cache_hooks_path(managed, home)
+    if cache_hooks is None:
+        return False
+    try:
+        data = json.loads(cache_hooks.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    groups = data.get("hooks", {}).get("PreToolUse") if isinstance(data, dict) else None
+    if not isinstance(groups, list):
+        return False
+    wired: dict[str, set[str]] = {}
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        names = wired.setdefault(str(group.get("matcher", "")), set())
+        for hook in group.get("hooks", []):
+            if isinstance(hook, dict):
+                base = hook_script_basename(str(hook.get("command", "")))
+                if base:
+                    names.add(base)
+    required = {
+        "Bash": CODEX_BASH_GUARDS,
+        "AskUserQuestion": CODEX_ASK_GUARDS,
+        "Write|Edit|MultiEdit": CODEX_WRITE_GUARDS,
+    }
+    return all(set(guards) <= wired.get(matcher, set()) for matcher, guards in required.items())
+
+
+def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
+    """Converge Codex on ONE active copy of the plane-1 guards (BI-2B634E68).
+
+    Codex loads the plugin-bundled hooks/hooks.json from its plugin cache. When
+    the enabled plugin's cache wires every guard, DPF-owned entries are PRUNED
+    from ~/.codex/hooks.json (foreign hooks kept, emptied groups dropped) so each
+    guard runs once and is trusted once, on the plugin hooks. Otherwise the
+    guards are merged into ~/.codex/hooks.json as a fallback. Either plane still
+    needs interactive HOOK TRUST (BI-66EBEA06); we never forge trusted_hash
+    entries (openai/codex#21615).
     """
     path = codex_hooks_file(home)
+    if codex_plugin_hooks_active(managed, home):
+        if not path.exists():
+            return "served by the dpf-platform plugin hooks (no user hook copy)"
+        existing = read_json(path, {"hooks": {}})
+        payload = prune_codex_hooks_payload(existing, managed / "hooks")
+        if dry_run:
+            return f"dry-run: would prune DPF guards from {path}; the dpf-platform plugin hooks carry them"
+        changed = write_json(path, payload)
+        return (
+            f"pruned DPF guards from {path}; the dpf-platform plugin hooks carry them"
+            + ("" if changed else " (unchanged)")
+        )
     existing = read_json(path, {"hooks": {}})
     payload = merge_codex_hooks_payload(existing, managed, dry_run=dry_run)
     dpf_groups = _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
@@ -1543,40 +1628,66 @@ def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
         write_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "Write|Edit|MultiEdit")
         return f"dry-run: would merge {bash_count} Bash + {ask_count} AskUserQuestion + {write_count} Write/Edit guard(s) into {path}"
     changed = write_json(path, payload)
-    return f"merged guards into {path}" + ("" if changed else " (unchanged)")
+    return f"merged guards into {path} (plugin hooks not proven active)" + ("" if changed else " (unchanged)")
 
 
-def codex_hook_trust_established(home: Path) -> bool:
-    """True when Codex has persisted at least one hook-trust entry.
+def codex_hook_trust_established(home: Path, *, plugin_plane: bool = False) -> bool:
+    """True when Codex has persisted hook-trust for the plane DPF relies on.
 
     Live-probed (BI-883FC2FC): absent `hooks.state` / `[hooks.state.*] trusted_hash`
     means every plugin + user hook is silently fail-open until the operator
-    reviews `/hooks` and trusts. We treat ANY persisted trust as "operator has
-    completed the flow at least once" — a coarse but non-forged signal.
+    reviews `/hooks` and trusts. On the user-file fallback we treat ANY persisted
+    trust as "operator has completed the flow at least once" -- a coarse but
+    non-forged signal. On the plugin plane (BI-2B634E68) only trust recorded for
+    the dpf-platform plugin hooks counts, so trust left over from the retired
+    ~/.codex/hooks.json copy cannot mask untrusted plugin guards.
     """
+    plugin_key = re.compile(
+        r"hooks\.state\.[\"']" + re.escape(f"{CODEX_PLUGIN_ID}:hooks/hooks.json:")
+        + r"[^\n]*\]\s*\n(?:[^\[\n][^\n]*\n|\s*\n)*?\s*trusted_hash\s*="
+    )
     config = codex_config_path(home)
     if config.exists():
         text = config.read_text(encoding="utf-8")
-        if "hooks.state" in text and "trusted_hash" in text:
+        if plugin_plane:
+            if plugin_key.search(text):
+                return True
+        elif "hooks.state" in text and "trusted_hash" in text:
             return True
     for name in ("hooks.state", "hooks.state.toml"):
         state_path = home / ".codex" / name
-        if state_path.exists() and state_path.stat().st_size > 0:
+        if not state_path.exists() or state_path.stat().st_size == 0:
+            continue
+        if not plugin_plane:
+            return True
+        if plugin_key.search(state_path.read_text(encoding="utf-8", errors="replace")):
             return True
     return False
 
 
-def codex_hook_trust_pending(home: Path, *, codex_present: bool) -> bool:
+def codex_hook_trust_pending(home: Path, *, codex_present: bool, plugin_plane: bool = False) -> bool:
     if not codex_present:
         return False
-    return not codex_hook_trust_established(home)
+    return not codex_hook_trust_established(home, plugin_plane=plugin_plane)
 
 
-def codex_hook_trust_blocking_notice() -> list[str]:
+def codex_hook_trust_blocking_notice(*, plugin_plane: bool = False) -> list[str]:
+    if plugin_plane:
+        where = [
+            "The guards run from the dpf-platform plugin's own hooks, once each. Trust is",
+            "granted once, on those plugin hooks (source dpf-platform@personal); DPF no",
+            "longer installs a second copy into ~/.codex/hooks.json (BI-2B634E68).",
+        ]
+    else:
+        where = [
+            "The plugin hooks could not be proven active, so the guards are installed in",
+            "~/.codex/hooks.json as a fallback. Trust them there, once.",
+        ]
     return [
         "",
         "ACTION REQUIRED — Codex hook trust not granted (BI-66EBEA06)",
         "Plane-1 governance guards are installed but will NOT run until you trust them.",
+        *where,
         "  1. Start Codex in this repo:  codex",
         "  2. Run:  /hooks",
         "  3. Review the hook roster below and choose 'Trust all and continue'",
@@ -1620,6 +1731,10 @@ def hook_roster(skill_pack: Path) -> list[str]:
     Printed so an operator granting hook-trust on Codex/Grok knows what each numbered
     "Hook N" actually is (BI-276EC984). Order follows hooks.json; clients may
     reorder it, so confirm the event and command before trusting a definition.
+    On Codex this roster IS what the operator trusts: once the plugin hooks are
+    proven active, DPF no longer installs a second ~/.codex/hooks.json copy with
+    its own numbering (BI-2B634E68). The "Hook N" label itself is upstream
+    (openai/codex#31469).
     """
     hooks_json = skill_pack / "hooks" / "hooks.json"
     try:
@@ -1657,11 +1772,13 @@ def guard_liveness_advisory() -> list[str]:
     section 11.
     """
     codex_line = (
-        "  Codex : guards are wired into ~/.codex/hooks.json and DENY correctly once trusted, "
-        + "but Codex gates every non-managed hook behind interactive HOOK TRUST. Until you "
-        + "open a Codex TUI session and choose 'Trust all and continue' in /hooks, every guard "
-        + "is silently fail-open. There is no non-interactive trust API (openai/codex#21615); "
-        + "'--dangerously-bypass-hook-trust' is per-invocation only."
+        "  Codex : guards run from the dpf-platform plugin's hooks, once each, and DENY correctly "
+        + "once trusted; ~/.codex/hooks.json carries them only as a fallback when the plugin "
+        + "hooks cannot be proven active (BI-2B634E68). Codex gates every non-managed hook "
+        + "behind interactive HOOK TRUST. Until you open a Codex TUI session and choose "
+        + "'Trust all and continue' in /hooks, every guard is silently fail-open. There is no "
+        + "non-interactive trust API (openai/codex#21615); '--dangerously-bypass-hook-trust' "
+        + "is per-invocation only."
     )
     grok_line = (
         "  Grok  : guards now DENY (live-probed, Grok 0.2.87). Grok DOES execute PreToolUse "
@@ -1854,9 +1971,10 @@ def main(argv: list[str]) -> int:
 
     exit_code = 1 if codex_install_failed else 0
     roster_printed = False
-    trust_pending = codex_hook_trust_pending(home, codex_present=codex_present)
+    plugin_plane = codex_plugin_hooks_active(codex_managed, home)
+    trust_pending = codex_hook_trust_pending(home, codex_present=codex_present, plugin_plane=plugin_plane)
     if trust_pending:
-        for line in codex_hook_trust_blocking_notice():
+        for line in codex_hook_trust_blocking_notice(plugin_plane=plugin_plane):
             print(line)
         for line in hook_roster(skill_pack):
             print(line)

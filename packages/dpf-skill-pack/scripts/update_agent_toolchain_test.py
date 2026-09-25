@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from unittest.mock import patch
 import sys
 
@@ -442,6 +442,8 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text())
             self.assertTrue(codex_config["plugins"]["dpf-platform@personal"]["enabled"])
             self.assertNotIn("bearer_token_env_var", codex_config["mcp_servers"]["dpf"])
+            # The Codex CLI install was skipped, so no plugin cache exists and the
+            # guards land in ~/.codex/hooks.json as the fallback (BI-2B634E68).
             codex_hooks = json.loads((home / ".codex" / "hooks.json").read_text())
             write_groups = [
                 group for group in codex_hooks["hooks"]["PreToolUse"]
@@ -452,6 +454,23 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 "plan-backlog-coverage-guard.mjs" in hook.get("command", "")
                 for group in write_groups for hook in group.get("hooks", [])
             ))
+
+            # Once Codex has installed the delivered version into its plugin
+            # cache, the next bootstrap retires the duplicate user-file copy.
+            version = json.loads((codex_managed / ".codex-plugin" / "plugin.json").read_text())["version"]
+            cached = home / ".codex" / "plugins" / "cache" / "personal" / "dpf-platform" / version / "hooks"
+            cached.mkdir(parents=True)
+            (cached / "hooks.json").write_text((skill_pack / "hooks" / "hooks.json").read_text(encoding="utf-8"), encoding="utf-8")
+            with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}, clear=False):
+                code = updater.main([
+                    "--skill-pack-path",
+                    str(skill_pack),
+                    "--skip-codex-cli-install",
+                    "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
+                ])
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads((home / ".codex" / "hooks.json").read_text()), {"hooks": {}})
 
             codex_marketplace = json.loads(
                 (home / ".agents" / "plugins" / "marketplace.json").read_text(),
@@ -939,13 +958,16 @@ class GrokCodexGuardSyncTest(unittest.TestCase):
     resolves. The REAL enforcement path for Grok is the global
     ~/.grok/hooks/dpf-guards.json this script writes with fully pre-resolved
     absolute paths (install_grok_hooks) -- so GROK_HOOK_GUARDS is the only
-    thing that wires a guard to Grok at all. Same shape for Codex's user hook
-    plane (~/.codex/hooks.json / install_codex_hooks), which the plugin-bundled
-    hooks.json also does not populate directly.
+    thing that wires a guard to Grok at all. Codex differs: it DOES load the
+    plugin-bundled hooks.json from its plugin cache, so the CODEX_* tuples are
+    the coverage proof install_codex_hooks checks that cache against before
+    pruning its ~/.codex/hooks.json copy, and the guard set it merges there only
+    as the fallback (BI-2B634E68).
 
     Because nothing type-checks these tuples against hooks.json, a new BLOCKING
     guard (one that calls emitDeny) added to hooks.json's PreToolUse wiring
-    without a matching addition here silently never reaches Grok or Codex --
+    without a matching addition here silently never reaches Grok, nor Codex's
+    fallback plane, and keeps Codex on the fallback --
     exactly the "guard hooks may silently not fire" failure mode this backlog
     item exists to close. These tests fail CI the moment that drift happens.
     """
@@ -1086,6 +1108,128 @@ class CodexHookTrustTest(unittest.TestCase):
             commands = [h["command"] for h in bash_group["hooks"]]
             self.assertIn("node /foreign/wrapper.js", commands)
             self.assertTrue(any("lease-punt-guard.mjs" in c for c in commands))
+
+    @staticmethod
+    def _plugin_plane_home(home: Path, *, enabled: Optional[str] = "true", cache: bool = True,
+                           cache_hooks: Optional[dict[str, Any]] = None) -> Path:
+        """Home with a managed copy, a plugin enablement toggle and an installed cache."""
+        skill_pack = Path(__file__).resolve().parents[1]
+        managed = home / "plugins" / "dpf-platform"
+        hooks_dir = managed / "hooks"
+        hooks_dir.mkdir(parents=True)
+        for guard in {*updater.CODEX_BASH_GUARDS, *updater.CODEX_ASK_GUARDS, *updater.CODEX_WRITE_GUARDS}:
+            (hooks_dir / guard).write_text("// stub\n", encoding="utf-8")
+        (managed / ".codex-plugin").mkdir()
+        (managed / ".codex-plugin" / "plugin.json").write_text(
+            json.dumps({"name": "dpf-platform", "version": "0.2.5+codex.test"}), encoding="utf-8"
+        )
+        (home / ".codex").mkdir()
+        if enabled is not None:
+            (home / ".codex" / "config.toml").write_text(
+                f'[plugins."dpf-platform@personal"]\nenabled = {enabled}\n', encoding="utf-8"
+            )
+        if cache:
+            cached = home / ".codex" / "plugins" / "cache" / "personal" / "dpf-platform" / "0.2.5+codex.test" / "hooks"
+            cached.mkdir(parents=True)
+            payload = cache_hooks if cache_hooks is not None else json.loads(
+                (skill_pack / "hooks" / "hooks.json").read_text(encoding="utf-8")
+            )
+            (cached / "hooks.json").write_text(json.dumps(payload), encoding="utf-8")
+        return managed
+
+    @staticmethod
+    def _duplicated_user_hooks(managed: Path) -> dict[str, Any]:
+        """Today's ~/.codex/hooks.json: DPF guards plus one foreign hook and one foreign event."""
+        payload = updater.merge_codex_hooks_payload({}, managed, dry_run=False)
+        bash = next(g for g in payload["hooks"]["PreToolUse"] if g.get("matcher") == "Bash")
+        bash["hooks"].append({"type": "command", "command": "node /foreign/wrapper.js"})
+        payload["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": "node /foreign/stop.js"}]}]
+        return payload
+
+    def test_prunes_dpf_entries_and_keeps_foreign_hooks_when_the_plugin_cache_carries_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = self._plugin_plane_home(home)
+            user_file = home / ".codex" / "hooks.json"
+            user_file.write_text(json.dumps(self._duplicated_user_hooks(managed)), encoding="utf-8")
+
+            status = updater.install_codex_hooks(managed, home, dry_run=False)
+
+            self.assertIn("pruned", status)
+            pruned = json.loads(user_file.read_text(encoding="utf-8"))
+            commands = [
+                hook["command"]
+                for groups in pruned["hooks"].values()
+                for group in groups
+                for hook in group["hooks"]
+            ]
+            self.assertEqual(sorted(commands), ["node /foreign/stop.js", "node /foreign/wrapper.js"])
+            # Groups left empty by the prune are dropped, not written as empty shells.
+            self.assertEqual([g["matcher"] for g in pruned["hooks"]["PreToolUse"]], ["Bash"])
+            # Trust is never forged: the updater does not touch Codex's trust state.
+            self.assertNotIn("trusted_hash", (home / ".codex" / "config.toml").read_text(encoding="utf-8"))
+            # Idempotent: a second bootstrap changes nothing.
+            again = updater.install_codex_hooks(managed, home, dry_run=False)
+            self.assertIn("unchanged", again)
+            self.assertEqual(json.loads(user_file.read_text(encoding="utf-8")), pruned)
+
+    def test_plugin_plane_writes_no_user_hook_file_when_none_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = self._plugin_plane_home(home)
+            status = updater.install_codex_hooks(managed, home, dry_run=False)
+            self.assertIn("plugin", status)
+            self.assertFalse((home / ".codex" / "hooks.json").exists())
+
+    def test_falls_back_to_merge_when_the_plugin_is_disabled_missing_or_stale(self) -> None:
+        stale = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+            {"type": "command", "command": 'node "${CLAUDE_PLUGIN_ROOT}/hooks/lease-guard.mjs"'}
+        ]}]}}
+        cases = {
+            "disabled": {"enabled": "false"},
+            "not configured": {"enabled": None},
+            "no cache": {"cache": False},
+            "cache missing guards": {"cache_hooks": stale},
+        }
+        for name, kwargs in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                managed = self._plugin_plane_home(home, **kwargs)
+                self.assertFalse(updater.codex_plugin_hooks_active(managed, home))
+                status = updater.install_codex_hooks(managed, home, dry_run=False)
+                self.assertIn("merged", status)
+                merged = json.loads((home / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+                wired = {
+                    updater.hook_script_basename(hook["command"])
+                    for group in merged["hooks"]["PreToolUse"]
+                    for hook in group["hooks"]
+                }
+                self.assertEqual(
+                    wired,
+                    {*updater.CODEX_BASH_GUARDS, *updater.CODEX_ASK_GUARDS, *updater.CODEX_WRITE_GUARDS},
+                )
+
+    def test_plugin_plane_trust_requires_plugin_hook_trust_not_stale_user_file_trust(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = self._plugin_plane_home(home)
+            config = home / ".codex" / "config.toml"
+            base = config.read_text(encoding="utf-8")
+            config.write_text(
+                base + "[hooks.state.'C:\\Users\\op\\.codex\\hooks.json:pre_tool_use:0:0']\n"
+                'trusted_hash = "sha256:old"\n',
+                encoding="utf-8",
+            )
+            self.assertTrue(updater.codex_hook_trust_pending(home, codex_present=True, plugin_plane=True))
+            config.write_text(
+                base + '[hooks.state."dpf-platform@personal:hooks/hooks.json:pre_tool_use:0:0"]\n'
+                'trusted_hash = "sha256:new"\n',
+                encoding="utf-8",
+            )
+            self.assertFalse(updater.codex_hook_trust_pending(home, codex_present=True, plugin_plane=True))
+            notice = "\n".join(updater.codex_hook_trust_blocking_notice(plugin_plane=True))
+            self.assertIn("once", notice)
+            self.assertIn("dpf-platform", notice)
 
     def test_main_exits_2_when_trust_required_and_pending(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
