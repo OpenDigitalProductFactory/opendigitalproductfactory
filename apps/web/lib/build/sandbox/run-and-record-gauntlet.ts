@@ -40,6 +40,10 @@ export async function runAndRecordGauntlet(build: GauntletBuild, diffPatch: stri
   const { prisma } = await import("@dpf/db");
 
   const workdir = resolveBuildWorkdir(build.buildId);
+  // The sandbox repo is shallow; without a merge base every guard runs unscoped
+  // and the diff guards judge changes this build never made.
+  const { ensureMergeBaseWithMain } = await import("./ensure-merge-base");
+  await ensureMergeBaseWithMain({ exec: execInSandbox, containerId: build.sandboxId, workdir });
   const outcome = await runGuardGauntlet({ exec: execInSandbox, containerId: build.sandboxId, workdir });
   // Could-not-run is not a failing verdict, and must not be recorded as one.
   if (!outcome.ran) return { ran: false, reason: outcome.reason };

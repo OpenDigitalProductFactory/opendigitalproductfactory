@@ -14,7 +14,12 @@
 #      PDF and to text, and the text carries the fixture's sentinel;
 #   4. the auto-run macro fixture never executes: a permissive control proves the
 #      fixture is live, then the hardened profile and dpf-convert must both leave
-#      the marker file absent.
+#      the marker file absent;
+#   5. dpf-render (BI-3A0E5413) fills a deck, report, letter, sheet and drawing from
+#      the render-*.json specs into every format with PNG previews, renders the deck
+#      twice to the same text layer, fills a clean flat-ODF template, refuses a
+#      template with scripts, and keeps its exit codes (2 bad request, 4 too large
+#      or empty, 124 timeout).
 # The binary fixtures are produced from the committed flat-ODF sources by the
 # image itself, so the repository carries no opaque office binaries.
 #
@@ -119,6 +124,70 @@ if [ "$via_convert" = "MARKER=absent" ]; then
 else
   fail "dpf-convert on the macro fixture: $via_convert"
 fi
+
+# 5. dpf-render (BI-3A0E5413): the same containment, the other entry point.
+render() {  # render <request-file> <output-tar> [docker env args...]
+  local request="$1" output="$2"; shift 2
+  "${RUN[@]}" "$@" --entrypoint /usr/local/bin/dpf-render "$IMAGE" < "$request" > "$output" 2>"$output.err"
+}
+with_template() {  # with_template <ext> <template-file> <request-file>: the request with a flat-ODF template spliced in
+  printf '{"template":{"ext":"%s","data":"%s"},%s' "$1" "$(base64 -w0 < "$2")" "$(tail -c +2 "$3")"
+}
+declare -A RENDERED=([deck]="pptx pdf" [report]="docx odt pdf" [letter]="docx pdf" [sheet]="xlsx ods pdf" [drawing]="odg svg pdf")
+declare -A RENDER_SENTINEL=([deck]=DPFRENDERDECK [report]=DPFRENDERREPORT [letter]=DPFRENDERLETTER [sheet]=DPFRENDERSHEET [drawing]=DPFRENDERDRAWING)
+for family in deck report letter sheet drawing; do
+  out="$WORK/render-$family"
+  mkdir -p "$out"
+  if ! render "$FIXTURES/render-$family.json" "$out.tar" || ! tar -xf "$out.tar" -C "$out"; then
+    fail "render $family: $(tail -3 "$out.tar.err")"; continue
+  fi
+  missing=""
+  for fmt in ${RENDERED[$family]}; do [ -s "$out/document.$fmt" ] || missing="$missing document.$fmt"; done
+  [ -s "$out/preview-001.png" ] || missing="$missing preview-001.png"
+  [ -s "$out/manifest.json" ] || missing="$missing manifest.json"
+  if [ -n "$missing" ]; then fail "render $family: missing$missing"; continue; fi
+  if ! head -c 4 "$out/document.pdf" | grep -q '%PDF'; then fail "render $family: document.pdf is not a PDF"; continue; fi
+  if grep -q "${RENDER_SENTINEL[$family]}" "$out/text.txt"; then
+    pass "render $family -> ${RENDERED[$family]} + $(ls "$out" | grep -c '^preview-') preview(s), sentinel in the text layer"
+  else
+    fail "render $family: sentinel ${RENDER_SENTINEL[$family]} missing from text.txt"
+  fi
+done
+# The deck acceptance shape: a title slide, five content slides, one chart, one image.
+if grep -q '"pageCount": 6' "$WORK/render-deck/manifest.json" 2>/dev/null; then
+  pass "render deck: six slides"
+else
+  fail "render deck: expected 6 slides, manifest says $(cat "$WORK/render-deck/manifest.json" 2>/dev/null)"
+fi
+# Determinism: the same spec renders to the same text layer and page count.
+mkdir -p "$WORK/render-deck-again"
+if render "$FIXTURES/render-deck.json" "$WORK/render-deck-again.tar" && tar -xf "$WORK/render-deck-again.tar" -C "$WORK/render-deck-again" \
+   && cmp -s "$WORK/render-deck/text.txt" "$WORK/render-deck-again/text.txt" \
+   && cmp -s "$WORK/render-deck/manifest.json" "$WORK/render-deck-again/manifest.json"; then
+  pass "render deck twice: identical text layer and manifest"
+else
+  fail "render deck twice: the outputs differ"
+fi
+# A clean flat-ODF template is filled; one that carries scripts or event bindings is refused.
+with_template fodt "$FIXTURES/sample.fodt" "$FIXTURES/render-report.json" > "$WORK/templated.json"
+mkdir -p "$WORK/render-templated"
+if render "$WORK/templated.json" "$WORK/render-templated.tar" && tar -xf "$WORK/render-templated.tar" -C "$WORK/render-templated" \
+   && grep -q DPFSENTINELWRITER "$WORK/render-templated/text.txt" && grep -q DPFRENDERREPORT "$WORK/render-templated/text.txt"; then
+  pass "render with a flat-ODF template keeps the template and adds the content"
+else
+  fail "render with a template: $(tail -3 "$WORK/render-templated.tar.err")"
+fi
+with_template fodt "$FIXTURES/macro.fodt" "$FIXTURES/render-report.json" > "$WORK/macro-template.json"
+render "$WORK/macro-template.json" "$WORK/macro-template.tar"; expect_exit "render refuses a template with scripts" 2 $?
+with_template fodp "$FIXTURES/sample.fodp" "$FIXTURES/render-report.json" > "$WORK/wrong-template.json"
+render "$WORK/wrong-template.json" "$WORK/wrong-template.tar"; expect_exit "render refuses a template of the wrong family" 2 $?
+printf 'not json' > "$WORK/bad.json"
+render "$WORK/bad.json" "$WORK/bad.tar"; expect_exit "render refuses a request that is not JSON" 2 $?
+printf '{"content":{"family":"deck"},"formats":["xlsx"]}' > "$WORK/bad-format.json"
+render "$WORK/bad-format.json" "$WORK/bad-format.tar"; expect_exit "render refuses a format the family cannot make" 2 $?
+render /dev/null "$WORK/empty.tar"; expect_exit "render refuses an empty request" 4 $?
+render "$FIXTURES/render-deck.json" "$WORK/big.tar" -e DPF_RENDER_MAX_BYTES=64; expect_exit "render input over DPF_RENDER_MAX_BYTES" 4 $?
+render "$FIXTURES/render-deck.json" "$WORK/slow.tar" -e DPF_RENDER_TIMEOUT_SECONDS=1; expect_exit "render timeout" 124 $?
 
 echo
 if [ "$FAILURES" -eq 0 ]; then echo "smoke: all checks passed for $IMAGE"; exit 0; fi

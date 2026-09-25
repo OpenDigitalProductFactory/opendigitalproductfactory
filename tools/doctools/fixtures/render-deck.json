@@ -1,0 +1,112 @@
+{
+ "formats": [
+  "pptx",
+  "pdf"
+ ],
+ "previews": {
+  "maxPages": 20,
+  "dpi": 48
+ },
+ "issuedAt": "2026-09-25T12:00:00Z",
+ "theme": {
+  "chartColours": [
+   "#2a6f97",
+   "#e07a5f"
+  ]
+ },
+ "content": {
+  "family": "deck",
+  "title": "DPFRENDERDECK Spring adoption drive",
+  "author": "dpf-render smoke",
+  "fields": {
+   "org.name": "Smoke Test Rescue"
+  },
+  "slides": [
+   {
+    "layout": "title",
+    "title": "DPFRENDERDECK Spring adoption drive",
+    "subtitle": "Board update for {{org.name}}"
+   },
+   {
+    "layout": "bullets",
+    "title": "Where we are",
+    "bullets": [
+     "42 adoptions this quarter",
+     "12 active foster homes",
+     "3 new volunteers"
+    ],
+    "notes": "Speaker note"
+   },
+   {
+    "layout": "chart",
+    "title": "Adoptions by month",
+    "chart": {
+     "type": "column",
+     "title": "Adoptions",
+     "categories": [
+      "Jan",
+      "Feb",
+      "Mar"
+     ],
+     "series": [
+      {
+       "name": "Dogs",
+       "values": [
+        10,
+        14,
+        18
+       ]
+      },
+      {
+       "name": "Cats",
+       "values": [
+        8,
+        9,
+        12
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "layout": "image",
+    "title": "Meet Biscuit",
+    "image": {
+     "data": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAYCAIAAAAUMWhjAAAAJElEQVR42mPQyp9OU8QwasGoBaMWjFowasGoBaMWjFowNCwAAHUGkC6iyGvjAAAAAElFTkSuQmCC",
+     "mimeType": "image/png",
+     "alt": "A blue square standing in for a photo"
+    },
+    "caption": "Biscuit, adopted in March"
+   },
+   {
+    "layout": "table",
+    "title": "Costs",
+    "table": {
+     "columns": [
+      "Item",
+      "Monthly cost"
+     ],
+     "rows": [
+      [
+       "Food",
+       1200
+      ],
+      [
+       "Vet care",
+       3000
+      ],
+      [
+       "Transport",
+       450
+      ]
+     ]
+    }
+   },
+   {
+    "layout": "section",
+    "title": "Next steps",
+    "subtitle": "Spring event on 12 April"
+   }
+  ]
+ }
+}

@@ -88,10 +88,33 @@ control.
    and must pin it by digest.
 2. Never add a compose service or profile for the engine.
 3. Never relax `registrymodifications.xcu`. A new document feature that needs
-   macros or links is a new evaluation.
+   macros or links is a new evaluation. The one evaluated exception is
+   `dpf-render` (see the addendum below).
 4. Keep `smoke.sh` and the size budget in the release path. A release that
    cannot run them does not publish the image.
 5. Re-evaluate before adopting unoserver or any warm, always-on listener.
+
+## Addendum 2026-09-25: dpf-render (BI-3A0E5413, slice S6)
+
+The image gains a second entry point, `tools/doctools/dpf-render`, which fills a
+template from a validated JSON content spec on the image's `python3-uno` bridge.
+Nothing is added to the image's package list.
+
+Charts are embedded chart objects, and `DisableActiveContent` refuses every
+embedded object: with it on, no chart can be created in a deck, report or
+sheet. `dpf-render` therefore sets `DisableActiveContent` to false in its own
+per-run copy of the profile, and only there. The baked
+`registrymodifications.xcu` and `dpf-convert` are unchanged.
+
+| # | Category | Severity | Finding | Required treatment |
+| --- | --- | --- | --- | --- |
+| 11 | Linked content | medium | With `DisableActiveContent` off, an embedded or linked object in an opened document would load. | `dpf-render` opens no untrusted document. It opens either a blank document or a flat-ODF template, and it refuses any template with an embedded object, an applet or plugin, DDE, a script or event binding, or an `xlink:href` that leaves the document (exit 2) before the engine sees it. Every chart is created by the script from validated numbers. Macro execution stays off (`MacroExecutionMode` NEVER on load, and the profile), OLE automation stays off, link updates stay never (`UpdateDocMode` NO_UPDATE), and the container still has no network. `smoke.sh` proves that a template carrying scripts is refused. |
+| 12 | Resource management | medium | A spec can ask for many pages, images and charts. | The portal validates every spec first (`apps/web/lib/documents/generation/spec.ts`: bounded slides, rows, series, image sizes). `DPF_RENDER_MAX_BYTES` refuses an oversized request (exit 4), `DPF_RENDER_TIMEOUT_SECONDS` stops the run (exit 124), and the container keeps the same memory and pid limits. |
+| 13 | Data/control boundary | low | Generated spreadsheets are opened later on people's own machines. | Formulas that reach outside the workbook (`WEBSERVICE`, `FILTERXML`, `DDE`, `HYPERLINK`, `INFO`, `CALL`, `REGISTER`, `RTD`, `EXEC`, URLs, other files) are refused in the spec. |
+
+Condition 3 now reads: `dpf-render` alone may lift `DisableActiveContent`, in its
+per-run profile, while the template screen above stands. Any other relaxation,
+or opening an uploaded document through `dpf-render`, is a new evaluation.
 
 ## Sources
 
