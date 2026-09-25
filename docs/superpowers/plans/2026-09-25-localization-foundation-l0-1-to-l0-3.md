@@ -161,4 +161,8 @@ English output stays byte-identical. Nothing is translated yet.
   - `L0.1-locale-context` → `BI-6EA9E25A`. Depends on: none. Precondition: `BI-6030131C`.
   - `L0.2-message-catalog` → `BI-9A44B227`. Depends on: `L0.1-locale-context`.
   - `L0.3-ratchet-guard` → `BI-4690CB37`. Depends on: none.
-- **Receipt:** recorded via `record_plan_backlog_coverage` after this plan's commit is pushed. The receipt id is carried in the PR description, and the backlog items reference this plan path.
+- Receipt: blocked-by: plan-phase initiative readiness for BI-6EA9E25A is unmet (IRD-832698B5AD65: RESEARCH_REQUIRED, CANONICAL_DESIGN_REQUIRED, SPEC_APPROVAL_REQUIRED, REVIEW_REQUIRED). The spec needs independent design-checklist (AGT-WS-REVIEW) and architecture (AGT-WS-EA) review before coverage can be minted.
+- **Before implementation starts:**
+  - Add OBJ/AC markers to the spec.
+  - Drive the reviewer chain.
+  - Record coverage with `record_plan_backlog_coverage` and replace the line above with the receipt id.
