@@ -48,6 +48,7 @@ The overview room count is a real total. The plan list and the Coordination list
 - Start from reference models and tailor them to your organization
 - Map value streams to the products and capabilities that support them
 - Use the AI coworker to generate a draft architecture view from a description
+- Export a view as a Draw (.odg), SVG, PDF or PNG drawing (see below)
 - Select an element to open its **Architecture context**, then follow the shortest
   available links to the same concern in related ArchiMate, BPMN, or SysML views
 - For projected AI routing elements, open the matching operational evidence and
@@ -55,6 +56,30 @@ The overview room count is a real total. The plan list and the Coordination list
   freshness, and implementation source
 - Use **Refresh live projections** when you are authorized to rebuild governed
   BPMN, SysML, and ArchiMate views from their canonical sources
+
+## Exporting a view as a drawing
+
+Open a view and choose **Export** at the top right of the canvas to download it
+as a drawing that people can open without DPF:
+
+- **Draw (.odg)** opens in LibreOffice Draw with one shape per element and a
+  connector for each relationship, so it can still be edited there.
+- **SVG (.svg)** is a scalable image for web pages and documents.
+- **PDF (.pdf)** is for printing and sharing.
+- **PNG (.png)** is a picture for slides and chat.
+
+The drawing uses the view's saved layout and the same layer colours as the
+canvas (business yellow, application blue, technology green). Relationship lines
+and label text use your organization's brand colours. Duplicate relationships
+are drawn once, as on the canvas. A single drawing holds up to 500 elements.
+
+The export runs on the platform's document engine. If the engine is not set up
+on your install, Export says so and nothing is downloaded.
+
+You can also ask the Enterprise Architect coworker to export a view. It saves the
+drawing as a document (the .odg, with its PDF and SVG kept alongside) and gives
+you the link. This is a picture of the view, not a model exchange: to move the
+model itself into another ArchiMate tool, use the ArchiMate exchange export.
 
 ## AI Coworker Identity
 

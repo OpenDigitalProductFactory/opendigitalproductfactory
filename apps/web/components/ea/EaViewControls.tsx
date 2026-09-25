@@ -1,5 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import { exportEaViewDrawing } from "@/lib/actions/ea-drawing";
+import type { EaDrawingFormat } from "@/lib/ea/view-drawing-export";
+
 export type PresentationMode = "diagram" | "table";
 export type EdgeVariant = "straight" | "bezier" | "step";
 
@@ -64,6 +68,100 @@ export function EdgeVariantToggle({ value, onChange }: {
           {EDGE_VARIANT_LABELS[variant]}
         </button>
       ))}
+    </div>
+  );
+}
+
+const DRAWING_EXPORTS: Array<{ format: EaDrawingFormat; label: string; hint: string }> = [
+  { format: "odg", label: "Draw (.odg)", hint: "Editable in LibreOffice Draw" },
+  { format: "svg", label: "SVG (.svg)", hint: "Scalable image for web pages" },
+  { format: "pdf", label: "PDF (.pdf)", hint: "For printing and sharing" },
+  { format: "png", label: "PNG (.png)", hint: "Picture for slides and chat" },
+];
+
+/** Export the view as a drawing (BI-4C17BF51). Renders the saved layout on the server. */
+export function EaDrawingExportMenu({ viewId }: { viewId: string }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<EaDrawingFormat | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function download(format: EaDrawingFormat) {
+    setBusy(format);
+    setError(null);
+    try {
+      const result = await exportEaViewDrawing({ viewId, format });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const bytes = Uint8Array.from(atob(result.data.base64), (char) => char.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: result.data.mimeType }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.data.fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+      setOpen(false);
+    } catch {
+      setError("The export did not finish. Try again in a moment.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        title="Export this view as a drawing file (uses the saved layout)"
+        style={{
+          fontSize: 10, padding: "2px 9px", borderRadius: 3, cursor: "pointer", minHeight: 24,
+          background: open ? "var(--dpf-surface-2)" : "transparent",
+          border: `1px solid ${open ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
+          color: open ? "var(--dpf-accent)" : "var(--dpf-muted)",
+        }}
+      >
+        {busy ? "Exporting…" : "Export ▾"}
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Export view as"
+          style={{
+            position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20, minWidth: 220, padding: 4,
+            background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 6,
+            boxShadow: "var(--shadow-dpf-md)",
+          }}
+        >
+          {DRAWING_EXPORTS.map((item) => (
+            <button
+              key={item.format}
+              type="button"
+              role="menuitem"
+              disabled={busy !== null}
+              onClick={() => void download(item.format)}
+              style={{
+                display: "block", width: "100%", textAlign: "left", padding: "6px 8px", borderRadius: 4, border: "none",
+                background: busy === item.format ? "var(--dpf-accent-soft)" : "transparent",
+                cursor: busy ? "wait" : "pointer",
+              }}
+            >
+              <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--dpf-text)" }}>
+                {busy === item.format ? `Exporting ${item.label}…` : item.label}
+              </span>
+              <span style={{ display: "block", fontSize: 10, color: "var(--dpf-muted)" }}>{item.hint}</span>
+            </button>
+          ))}
+          {error && (
+            <p role="alert" style={{ margin: "4px 8px", fontSize: 10, color: "var(--dpf-error)" }}>
+              {error}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

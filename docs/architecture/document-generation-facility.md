@@ -54,7 +54,8 @@ conversion, [watchlist](../install/platform-support-watchlist.md) row D18.
 ## Seams
 
 - **Previews.** S4 owns `DocumentRenditionKind` (`pdf`, `plain_text`) and defines no preview kind. Previews are therefore content-addressed DocumentBlobs, returned by `saveRenderedDocument` in page order. S7 (`BI-543819B1`) shows them on the document page, and a `preview` kind belongs there.
-- **Callers.** No coworker tool or page calls the facility yet. S7 adds `create_presentation`, and S8 (`BI-4C17BF51`) adds the EA drawing export.
+- **Callers.** S7 adds `create_presentation`. S8 (`BI-4C17BF51`) adds the EA drawing export: `apps/web/lib/ea/view-drawing.ts` maps an EA view to a `drawing` spec, and `view-drawing-export.ts` renders it for the view's **Export** menu (one file per download) and for the `export_ea_view_drawing` coworker tool (stored with `saveRenderedDocument`).
+- **Drawing shapes keep their box.** `dpf-render` turns off Draw's auto-grow on labelled shapes and centres the label, so a shape is exactly the size the spec asks for.
 
 ## Verification
 

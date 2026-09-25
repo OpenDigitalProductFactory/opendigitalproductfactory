@@ -21,6 +21,12 @@ vi.mock("@/lib/ea-data", () => eaData);
 const archimate = vi.hoisted(() => ({ importArchimateFile: vi.fn(), exportArchimateFile: vi.fn() }));
 vi.mock("@/lib/actions/ea-archimate", () => archimate);
 
+const drawing = vi.hoisted(() => ({ saveEaViewDrawing: vi.fn() }));
+vi.mock("@/lib/ea/view-drawing-export", () => drawing);
+
+const principals = vi.hoisted(() => ({ ensureAgentPrincipalIdentity: vi.fn(), syncUserPrincipal: vi.fn() }));
+vi.mock("@/lib/identity/principal-linking", () => principals);
+
 import { eaOntologyPack } from "./ea-ontology-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
@@ -33,6 +39,7 @@ const EXPECTED_TOOLS = [
   "import_archimate",
   "export_archimate",
   "describe_ea_view",
+  "export_ea_view_drawing",
 ];
 
 const WRITE_TOOLS = ["create_ea_element", "create_ea_relationship", "classify_ea_element", "import_archimate"];
@@ -43,7 +50,7 @@ beforeEach(() => {
 });
 
 describe("ea-ontology pack — registration", () => {
-  it("exposes exactly the eight EA / ontology tools", () => {
+  it("exposes exactly the nine EA / ontology tools", () => {
     expect(eaOntologyPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(eaOntologyPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -63,6 +70,11 @@ describe("ea-ontology pack — registration", () => {
       expect(eaOntologyPack.grants[t]).toEqual(["ea_graph_read"]);
       expect(isToolAllowedByGrants(t, ["ea_graph_read"])).toBe(true);
     }
+    // The drawing export stores a document, so it has its own grant: holding
+    // ea_graph_read alone does not let a coworker write documents.
+    expect(eaOntologyPack.grants.export_ea_view_drawing).toEqual(["ea_drawing_export"]);
+    expect(isToolAllowedByGrants("export_ea_view_drawing", ["ea_drawing_export"])).toBe(true);
+    expect(isToolAllowedByGrants("export_ea_view_drawing", ["ea_graph_read"])).toBe(false);
   });
 });
 
@@ -191,6 +203,29 @@ describe("ea-ontology pack — handler behavior (delegation preserved)", () => {
     const res = await eaOntologyPack.handlers.describe_ea_view({ viewId: "nope" }, "u1");
     expect(res.success).toBe(false);
     expect(res.error).toBe("ViewNotFound");
+  });
+
+  it("export_ea_view_drawing stores the drawing, attributed to the coworker, and returns its link", async () => {
+    principals.ensureAgentPrincipalIdentity.mockResolvedValue({ id: "pr-agent" });
+    drawing.saveEaViewDrawing.mockResolvedValue({
+      ok: true,
+      data: { documentId: "DOC-9", href: "/workspace/documents/DOC-9", title: "Order platform", shapeCount: 24, connectorCount: 23 },
+    });
+    const res = await eaOntologyPack.handlers.export_ea_view_drawing({ viewId: "view-1" }, "u1", { agentId: "AGT-WS-EA" } as never);
+    expect(drawing.saveEaViewDrawing).toHaveBeenCalledWith({ viewId: "view-1", actorPrincipalId: "pr-agent" });
+    expect(res).toMatchObject({ success: true, entityId: "DOC-9" });
+    expect(res.message).toContain("24 elements, 23 relationships");
+    expect(res.message).toContain("/workspace/documents/DOC-9");
+  });
+
+  it("export_ea_view_drawing reports a render failure and requires a viewId", async () => {
+    principals.syncUserPrincipal.mockResolvedValue({ id: "pr-user" });
+    drawing.saveEaViewDrawing.mockResolvedValue({ ok: false, error: "The drawing could not be rendered: timeout" });
+    const res = await eaOntologyPack.handlers.export_ea_view_drawing({ viewId: "view-1" }, "u1");
+    expect(drawing.saveEaViewDrawing).toHaveBeenCalledWith({ viewId: "view-1", actorPrincipalId: "pr-user" });
+    expect(res).toMatchObject({ success: false, error: "The drawing could not be rendered: timeout" });
+    const missing = await eaOntologyPack.handlers.export_ea_view_drawing({}, "u1");
+    expect(missing).toMatchObject({ success: false, error: "MissingViewId" });
   });
 
   it("import_archimate delegates to the import action and passes the acting user", async () => {

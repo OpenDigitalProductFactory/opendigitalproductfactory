@@ -739,6 +739,9 @@
     "apps/web/lib/ea/table-growth.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "apps/web/lib/ea/view-drawing.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/evidence/bounded-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -2745,6 +2748,7 @@
       "apps/web/lib/documents/generation/render-store.ts",
       "apps/web/lib/documents/generation/render.ts",
       "apps/web/lib/documents/generation/spec.ts",
+      "apps/web/lib/ea/view-drawing.ts",
       "tools/doctools/smoke.sh"
     ],
     "docs/architecture/dpf-patterns.md": [

@@ -3020,7 +3020,8 @@
           "decision_record_create",
           "registry_read",
           "web_search",
-          "initiative_architecture_review"
+          "initiative_architecture_review",
+          "ea_drawing_export"
         ]
       }
     },
