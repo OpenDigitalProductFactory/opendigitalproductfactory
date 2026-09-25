@@ -9,6 +9,7 @@ status: active
   - `BI-6EA9E25A` (L0.1): the umbrella for this plan
   - `BI-9A44B227` (L0.2)
   - `BI-4690CB37` (L0.3)
+- **Canonical design (objectives and acceptance criteria):** `docs/superpowers/specs/2026-09-25-localization-foundation-design.md`
 - **Spec:** `docs/superpowers/specs/2026-09-24-localization-and-multi-currency-architecture-design.md`, §5.1–5.4, §5.13 and §9.
 - **Kernel decisions:**
   - `DI-ADAE8489B6A2`: an owned catalog over native `Intl`, not next-intl.
@@ -153,6 +154,16 @@ English output stays byte-identical. Nothing is translated yet.
 - the docs-impact decision
 - the process-spine decision for new source modules, if prompted
 
+## Traceability to the canonical design
+
+The objective and acceptance ids are defined in `docs/superpowers/specs/2026-09-25-localization-foundation-design.md`.
+
+| Deliverable | Objectives | Contracts and acceptance | Flow |
+|---|---|---|---|
+| `L0.1-locale-context` (`BI-6EA9E25A`) | OBJ-LOCALE-RESOLVE, OBJ-PSEUDO, OBJ-ENGLISH-UNCHANGED | AC-LANG-DIR, AC-CHAIN, AC-PREFERENCE, AC-NO-DEPS, AC-ENGLISH | Phase 1: L0.1 |
+| `L0.2-message-catalog` (`BI-9A44B227`) | OBJ-CATALOG, OBJ-PSEUDO, OBJ-ENGLISH-UNCHANGED | AC-TYPED-KEYS, AC-MF2, AC-FALLBACK, AC-PILOTS, AC-NO-DEPS | Phase 2: L0.2 |
+| `L0.3-ratchet-guard` (`BI-4690CB37`) | OBJ-NO-REGRESSION | AC-GUARD, AC-NO-DEPS | Phase 3: L0.3 |
+
 ## Backlog coverage
 
 - **Decision:** `decomposed`
@@ -161,8 +172,4 @@ English output stays byte-identical. Nothing is translated yet.
   - `L0.1-locale-context` → `BI-6EA9E25A`. Depends on: none. Precondition: `BI-6030131C`.
   - `L0.2-message-catalog` → `BI-9A44B227`. Depends on: `L0.1-locale-context`.
   - `L0.3-ratchet-guard` → `BI-4690CB37`. Depends on: none.
-- Receipt: blocked-by: plan-phase initiative readiness for BI-6EA9E25A is unmet (IRD-832698B5AD65: RESEARCH_REQUIRED, CANONICAL_DESIGN_REQUIRED, SPEC_APPROVAL_REQUIRED, REVIEW_REQUIRED). The spec needs independent design-checklist (AGT-WS-REVIEW) and architecture (AGT-WS-EA) review before coverage can be minted.
-- **Before implementation starts:**
-  - Add OBJ/AC markers to the spec.
-  - Drive the reviewer chain.
-  - Record coverage with `record_plan_backlog_coverage` and replace the line above with the receipt id.
+- Receipt: `cmuh94b2c0il701pc33gpdyr6` (record_plan_backlog_coverage, decomposed, 2026-09-25; plan blob `ff92faa1` at `70910d82`). Design gates passed: spec-approval (AGT-WS-REVIEW) and architecture-review (AGT-WS-EA, receipt `initiative-8846972a-c753-420a-a152-1a26137249f1`) on `docs/superpowers/specs/2026-09-25-localization-foundation-design.md`.
