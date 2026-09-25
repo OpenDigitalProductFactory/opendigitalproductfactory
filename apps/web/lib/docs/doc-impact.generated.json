@@ -757,11 +757,17 @@
       "docs/architecture/ai-routing-document-map.md",
       "docs/maintenance/staleness-report.md"
     ],
+    "apps/web/lib/ea/diagram-import/parse-flat-odg.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
     "apps/web/lib/ea/table-growth.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/lib/ea/view-drawing.ts": [
+      "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/evidence/bounded-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -2790,6 +2796,8 @@
       "apps/web/lib/documents/generation/render.ts",
       "apps/web/lib/documents/generation/spec.ts",
       "apps/web/lib/documents/preview-manifest.ts",
+      "apps/web/lib/ea/diagram-import/parse-flat-odg.ts",
+      "apps/web/lib/ea/view-drawing.ts",
       "tools/doctools/smoke.sh"
     ],
     "docs/architecture/dpf-patterns.md": [
