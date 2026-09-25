@@ -590,7 +590,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/sbom/check-sbom-drift.mjs"),
     ]),
     guard("new-dependency-gate", "New Dependency Gate", [
-      node("--test", "scripts/sbom/check-new-dependencies.test.mjs"),
+      conformanceTest("scripts/sbom/check-new-dependencies.test.mjs"),
       node("scripts/sbom/check-new-dependencies.mjs"),
     ]),
     guard("singleton-safety-guard", "Singleton Safety Guard", [
