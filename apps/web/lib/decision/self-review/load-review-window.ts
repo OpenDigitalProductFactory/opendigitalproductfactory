@@ -61,8 +61,6 @@ export async function loadReviewWindow(
         outcomePayload: true,
         recommendedOptionId: true,
         chosenOptionId: true,
-        sensitivityUnstable: true,
-        sensitivity: true,
         createdAt: true,
       },
     }),
@@ -94,8 +92,12 @@ export async function loadReviewWindow(
     outcomePayload: r.outcomePayload ?? null,
     recommendedOptionId: (r.recommendedOptionId as string | null) ?? null,
     chosenOptionId: (r.chosenOptionId as string | null) ?? null,
-    sensitivityUnstable: (r.sensitivityUnstable as boolean | null) ?? null,
-    sensitivity: r.sensitivity ?? null,
+    // BI-19CEC4B4 fix: these are NOT columns. `kernel-consult-ledger.ts` writes
+    // them into outcomePayload via `outcomePayloadExtra`, so selecting them as
+    // scalars made every real run die on "Unknown field `sensitivityUnstable`"
+    // while the fixture-backed tests passed. Read them where they live.
+    sensitivityUnstable: sensitivityUnstableOf(r.outcomePayload),
+    sensitivity: sensitivityOf(r.outcomePayload),
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(String(r.createdAt)),
   }));
 
@@ -105,6 +107,28 @@ export async function loadReviewWindow(
   }
 
   return { rows, materialCountByProfile, since, until };
+}
+
+
+/**
+ * `sensitivityUnstable` and `sensitivity` live INSIDE outcomePayload, written by
+ * kernel-consult-ledger's `outcomePayloadExtra`. Only the principle_decide path
+ * records them, so most rows carry neither — absent is null, never false, so a
+ * measure cannot read "no sensitivity analysis ran" as "analysis said stable".
+ */
+function payloadObject(payload: unknown): Record<string, unknown> | null {
+  return payload && typeof payload === "object" && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>)
+    : null;
+}
+
+export function sensitivityUnstableOf(payload: unknown): boolean | null {
+  const value = payloadObject(payload)?.sensitivityUnstable;
+  return typeof value === "boolean" ? value : null;
+}
+
+export function sensitivityOf(payload: unknown): unknown {
+  return payloadObject(payload)?.sensitivity ?? null;
 }
 
 /** A profile kind the measures understand; anything else scores as platform. */
