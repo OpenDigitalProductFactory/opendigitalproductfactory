@@ -20,9 +20,7 @@
 //
 // After this, the Build Studio flow is:
 //   Approve Start → Ideate → Plan → Build → Review Verification → deploy_feature (diff extracted)
-//   → Operator reviews diff + clicks "Ship to GitHub" (the one remaining intentional human gate)
-// The PR creation requires an intentional human decision for the first iteration.
-// Once operators have reviewed a few cycles, this gate can be made opt-out.
+//   → Build Studio opens the PR itself (BI-D80F2EA0, founder decision 2026-09-25); checks, the merge queue and review still gate the merge
 
 import { prisma } from "@dpf/db";
 import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
@@ -90,7 +88,7 @@ export async function dispatchShipForVerifiedBuild(params: {
       // re-enters here every tick, hits this branch, and the build loops at
       // review forever, never shipping (observed live on FB-FD850A2C: a
       // ~20-min resume→review-verification→ship-dispatch-skip cycle).
-      return advanceReviewedBuildToShip(buildId, log, t0);
+      return openPrAfterAdvance(await advanceReviewedBuildToShip(buildId, log, t0), buildId, build.createdById ?? userId, log);
     }
     if (!build.sandboxId) {
       await log("Skipped — no sandbox (nothing to ship)");
@@ -127,15 +125,34 @@ export async function dispatchShipForVerifiedBuild(params: {
 
     // deploy_feature extracts the diff but does NOT advance the phase. Advance
     // review→ship here (the documented post-condition of this dispatcher) and
-    // attempt ship→complete. Pushing to GitHub stays a human gate, surfaced in
-    // the Review panel — unless the ship forks are already terminal + deployed,
+    // attempt ship→complete, then open the PR (BI-D80F2EA0) — a refusal is recorded
+    // unless the ship forks are already terminal + deployed,
     // in which case reconcileBuildCompletion finishes the build.
-    return advanceReviewedBuildToShip(buildId, log, t0);
+    return openPrAfterAdvance(await advanceReviewedBuildToShip(buildId, log, t0), buildId, actorUserId, log);
   } catch (err) {
     const msg = String(err instanceof Error ? err.message : err).slice(0, 300);
     try { await log(`Ship dispatch failed: ${msg}`); } catch (_) { /**/ }
     return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
   }
+}
+
+/**
+ * BI-D80F2EA0: after the advance, open the PR (founder decision 2026-09-25).
+ * Never changes the ship outcome: a refused or failed PR is recorded, not thrown.
+ */
+async function openPrAfterAdvance(
+  outcome: ShipDispatchOutcome,
+  buildId: string,
+  actorUserId: string,
+  log: (summary: string) => Promise<void>,
+): Promise<ShipDispatchOutcome> {
+  try {
+    const { openBuildStudioPrAfterShip } = await import("./auto-open-build-pr");
+    await openBuildStudioPrAfterShip({ buildId, actorUserId });
+  } catch (err) {
+    await log(`Automatic PR attempt failed: ${String(err instanceof Error ? err.message : err).slice(0, 300)}`).catch(() => {});
+  }
+  return outcome;
 }
 
 /**
@@ -152,7 +169,7 @@ export async function dispatchShipForVerifiedBuild(params: {
  * The review→ship advance is gated by the policy `checkPhaseGate` (the same
  * gate the admin advance-phase route enforces) and flipped with a phase-guarded
  * `updateMany`, so a concurrent reconciler/live-advance can never double-advance.
- * Pushing to GitHub remains a human gate; this only parks the build at ship —
+ * Opening the PR happens in openPrAfterAdvance (BI-D80F2EA0); this only parks the build at ship —
  * unless `reconcileBuildCompletion` finds the ship forks already terminal and
  * the merge SHA deployed, in which case it finishes the build (ship→complete).
  * Never throws.

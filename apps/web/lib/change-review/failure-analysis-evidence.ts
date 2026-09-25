@@ -6,7 +6,16 @@ import { failureAnalysisSchema, type FailureVerificationEvidence } from "./failu
 export async function resolveFailureAnalysisEvidence(value: unknown, workroomId: string): Promise<FailureVerificationEvidence[]> {
   const parsed = failureAnalysisSchema.safeParse(value);
   if (!parsed.success) return [];
-  const ids = [...new Set([...parsed.data.eliminated, ...parsed.data.scenarios].flatMap(s => s.evidenceIds))];
+  return resolveEvidenceByIds([...parsed.data.eliminated, ...parsed.data.scenarios].flatMap(s => s.evidenceIds), workroomId);
+}
+
+/**
+ * The same resolution for a known set of record ids. BI-A0521CB0: the Build
+ * Studio finalize stage resolves the evidence it just recorded before asking
+ * for an analysis, so the analysis can only cite what will resolve at review.
+ */
+export async function resolveEvidenceByIds(evidenceIds: readonly string[], workroomId: string): Promise<FailureVerificationEvidence[]> {
+  const ids = [...new Set(evidenceIds)];
   const room = await prisma.workroom.findUnique({ where: { id: workroomId }, select: { capsuleId: true, headSha: true, executorKind: true } });
   if (!room?.headSha) return [];
   const rows = await prisma.externalEvidenceRecord.findMany({
