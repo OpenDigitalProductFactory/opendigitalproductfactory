@@ -24,6 +24,7 @@ import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { extractToolCalls as sharedExtractToolCalls } from "./extract-tool-calls";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
+import { providerSetupLocation } from "@/lib/ai-provider-routes";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -176,7 +177,7 @@ export async function prepareCodexCliAuth(providerId: string): Promise<{ mode: "
   const credential = await getDecryptedCredential(providerId);
   if (!credential) {
     throw new InferenceError(
-      `No credential for "${providerId}". Configure via Admin > AI Workforce > External Services.`,
+      `No credential for "${providerId}". Configure via ${providerSetupLocation(providerId)}.`,
       "auth",
       providerId,
     );
@@ -192,7 +193,7 @@ export async function prepareCodexCliAuth(providerId: string): Promise<{ mode: "
   const tokenResult = await getProviderBearerToken(providerId);
   if ("error" in tokenResult) {
     throw new InferenceError(
-      `OAuth token error for "${providerId}": ${tokenResult.error}. Re-authenticate via Admin > AI Workforce > External Services.`,
+      `OAuth token error for "${providerId}": ${tokenResult.error}. Re-authenticate via ${providerSetupLocation(providerId)}.`,
       "auth",
       providerId,
     );
