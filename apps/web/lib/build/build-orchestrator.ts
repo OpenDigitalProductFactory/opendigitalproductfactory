@@ -1473,8 +1473,7 @@ async function runBuildOrchestratorInner(params: {
   if (qaResult) {
     try {
       const { executeTool } = await import("@/lib/mcp-tools");
-      const qaContent = qaResult.result.content;
-      const verification = parseQAVerification(qaContent);
+      const rawQaContent = qaResult.result.content;
 
       // Scope the gate verdict to the build's changed files. A QA specialist may
       // run a wider pass than the feature's own surface (a stray "run full test
@@ -1490,6 +1489,17 @@ async function runBuildOrchestratorInner(params: {
       } catch (err) {
         console.warn("[orchestrator] could not resolve changed files for gate scoping:", (err as Error)?.message);
       }
+      // An unread QA verdict is not a failing one: run the scoped checks instead.
+      const { resolveQaVerification, runDeterministicBuildVerificationFor } = await import("./deterministic-build-verification");
+      const resolved = await resolveQaVerification({
+        parsed: parseQAVerification(rawQaContent),
+        qaContent: rawQaContent,
+        changedFiles,
+        runDeterministic: (files) => runDeterministicBuildVerificationFor(buildId, files),
+      });
+      const verification = resolved.verification;
+      const qaContent = resolved.content;
+      changedFiles = resolved.changedFiles;
       const { scopeVerificationOutputForGate } = await import("@/lib/build/scoped-verification");
       const { normalizeVerificationOutput } = await import("@/lib/build/verification-output");
       const scoped = scopeVerificationOutputForGate({
@@ -1562,7 +1572,8 @@ async function runBuildOrchestratorInner(params: {
           },
           reverify: async () => {
             const { runSandboxTests } = await import("./coding-agent");
-            const r = await runSandboxTests(containerId, { changedFiles });
+            const { resolveBuildWorkdir } = await import("./sandbox/build-branch");
+            const r = await runSandboxTests(containerId, { changedFiles, workdir: resolveBuildWorkdir(buildId) });
             const fullOutput = `${r.typeCheckOutput}\n${r.testOutput}`;
             const reNorm = normalizeVerificationOutput({
               typecheckPassed: r.typeCheckPassed,
