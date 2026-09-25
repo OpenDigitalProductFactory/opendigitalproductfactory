@@ -32,6 +32,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generatePlatformSbom } from "./generate-platform-sbom.mjs";
+import { LOCKFILE_ROOTS } from "./lockfile-roots.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OSV_BASE = process.env.OSV_BASE_URL ?? "https://api.osv.dev";
@@ -184,10 +185,20 @@ function renderMarkdown({ findings, counts, generatedAt, scanned, gitRef, accept
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const gitRef = process.env.GITHUB_SHA ?? process.env.GIT_COMMIT ?? "unknown";
-  const { cyclonedx } = generatePlatformSbom({ root: ROOT, gitRef, generatedAt: new Date(0) });
-  const components = cyclonedx.components
-    .filter((c) => typeof c.purl === "string" && c.purl.startsWith("pkg:npm/") && c.version)
-    .map((c) => ({ name: c.name, version: c.version }));
+  // Every lockfile root ships or builds code, so every one is scanned
+  // (scripts/sbom/lockfile-roots.mjs). One query per distinct name@version.
+  const seen = new Set();
+  const components = [];
+  for (const root of LOCKFILE_ROOTS) {
+    const { cyclonedx } = generatePlatformSbom({ root: join(ROOT, root.dir), gitRef, generatedAt: new Date(0) });
+    for (const c of cyclonedx.components) {
+      if (typeof c.purl !== "string" || !c.purl.startsWith("pkg:npm/") || !c.version) continue;
+      const key = `${c.name}@${c.version}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      components.push({ name: c.name, version: c.version });
+    }
+  }
 
   let results;
   try {

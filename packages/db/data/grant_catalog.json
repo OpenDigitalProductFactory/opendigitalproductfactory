@@ -611,6 +611,16 @@
       ]
     },
     {
+      "key": "ea_drawing_export",
+      "description": "Render an EA view as a drawing (.odg, .svg, .pdf with a PNG preview) and store it as a managed document.",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "export_ea_view_drawing"
+      ],
+      "implies": []
+    },
+    {
       "key": "ea_graph_read",
       "description": "Read ea graph.",
       "category": "explore",

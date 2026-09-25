@@ -66,6 +66,25 @@ that introduces a *new* Tier-1 split (`SBOM Divergence Guard` job in `ci.yml`).
 Accepted splits live in `sbom/baseline.json`; ratchet down as they're fixed
 (`--update-baseline` to accept intentionally).
 
+### Specifier drift (one specifier per package)
+
+Tier 1 fires only once our declarations *resolve* apart. Before that they drift in
+text: `net-snmp` was `^3.26.3` in `packages/db` and `^3.14.0` in `services/edge-node`,
+both resolving to 3.26.3 until the next lockfile refresh would have split them. The
+same guard therefore also fails a PR in which two workspaces declare one registry
+package with different specifiers (plan 2026-09-08 S11). `workspace:`, `link:`,
+`file:` and `catalog:` specifiers are exempt.
+
+A deliberate difference goes in `sbom/baseline.json` `acceptedSpecifierDrift` as
+name → reason; today that is only the exact `typescript` pin in
+`packages/repo-guard-runtime`. An entry that no longer drifts fails as stale, so the
+map only shrinks.
+
+We do not use a pnpm `catalog:` yet. `services/adp` and
+`services/integration-test-harness` build their images from their own
+`package.json` without the workspace file, and `catalog:` cannot resolve there.
+Revisit once those images install from the workspace lockfile.
+
 ### Shape budgets (the surface only shrinks)
 
 The same guard also **hard-fails a PR that pushes the dependency shape above its
@@ -83,6 +102,31 @@ other gate was green.
   can ([absorb, don't adopt](../founder-kernel/wiki/principles/absorb-dont-adopt.md)).
 - **Try `pnpm dedupe` first.** A routine Dependabot bump often leaves a
   same-major duplicate behind, and dedupe clears it without new packages.
+
+### Lockfile roots
+
+The platform resolves in more than one lockfile. `apps/mobile` has its own
+workspace and lockfile (plan 2026-09-08 M6), so the Expo, React Native and Jest
+toolchain never enters the portal's tree, SBOM or image.
+`scripts/sbom/lockfile-roots.mjs` is the single list of lockfile roots, and
+every supply-chain gate iterates it:
+
+- the OSV scan (`scan-dependencies.mjs`) queries each distinct `name@version` across all roots;
+- the release-age gate checks every root's new entries, and requires each root's
+  `minimumReleaseAge` to be at least the platform floor;
+- the New Dependency Gate reads every root's direct dependencies, mapped to repo paths;
+- the shape budgets keep a separate section per root in `sbom/baseline.json` (`roots.<id>`);
+- the Override Provenance Guard and the build-script policy guard read every root's `pnpm-workspace.yaml`.
+
+Root overrides do not reach a separate workspace. When a root security floor
+targets a package in another root's tree, repeat it there with its advisory
+comment. Measure it, don't assume it: resolved without the floors, the mobile
+tree picked up `brace-expansion@2.1.7`, `decode-uri-component@0.2.2` and `uuid@7`.
+
+To add a lockfile root, register it in `lockfile-roots.mjs`, give its workspace
+file the release-age floor and the floors its tree needs, add a Dependabot entry
+for its directory, and run `check-sbom-drift.mjs --update-baseline` to create its
+budgets.
 
 ### Pruning overrides
 

@@ -30,6 +30,8 @@
 //                                                    [--require-online]
 //                                                    [--json <path>]
 
+import { parsePackageKeys, splitNameVersion } from "../lib/pnpm-lock.mjs";
+import { LOCKFILE_ROOTS, rootFile } from "./lockfile-roots.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve, dirname } from "node:path";
@@ -76,33 +78,14 @@ export function parseReleaseAgePolicy(workspaceYaml) {
  * Collect `name@version` keys from a pnpm lockfile's top-level `packages:` map.
  * `packages:` holds clean name@version keys; `snapshots:` holds the same
  * packages with peer-suffixed keys, so reading `packages:` alone is both
- * sufficient and unambiguous.
+ * sufficient and unambiguous. (Shared reader: scripts/lib/pnpm-lock.mjs.)
  */
 export function parseLockfilePackages(lockYaml) {
-  const lines = lockYaml.replace(/\r\n/g, "\n").split("\n");
-  const start = lines.indexOf("packages:");
-  if (start < 0) return new Set();
-  const out = new Set();
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^\S/.test(lines[i])) break; // next top-level key
-    const m = lines[i].match(/^ {2}'?(.+?)'?:\s*$/);
-    if (m) out.add(m[1]);
-  }
-  return out;
+  return new Set(parsePackageKeys(lockYaml));
 }
 
 /** Split `@scope/name@1.2.3` → { name, version }. Null for non-registry specs. */
-export function splitNameVersion(key) {
-  const at = key.lastIndexOf("@");
-  if (at <= 0) return null;
-  const name = key.slice(0, at);
-  const version = key.slice(at + 1);
-  if (!name || !version) return null;
-  // file:/link:/http: specs and git URLs are not registry releases — the floor
-  // does not apply and the registry has no publish time for them.
-  if (version.includes(":") || version.includes("/")) return null;
-  return { name, version };
-}
+export { splitNameVersion };
 
 /** Entries present in head but not in base, as {key,name,version}. */
 export function newRegistryEntries(baseKeys, headKeys) {
@@ -155,12 +138,14 @@ function parseArgs(argv) {
   return out;
 }
 
-function baseLockfile(baseRef) {
+function baseLockfile(baseRef, path = "pnpm-lock.yaml") {
   try {
-    return execFileSync("git", ["show", `${baseRef}:pnpm-lock.yaml`], {
+    return execFileSync("git", ["show", `${baseRef}:${path}`], {
       cwd: ROOT,
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
+      // A root added by this change has no base lockfile; that is expected.
+      stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
     return null;
@@ -237,7 +222,20 @@ async function run() {
     process.exit(1);
   }
 
-  const headKeys = parseLockfilePackages(readFileSync(join(ROOT, "pnpm-lock.yaml"), "utf8"));
+  for (const root of LOCKFILE_ROOTS) {
+    if (root.dir === ".") continue;
+    const own = parseReleaseAgePolicy(readFileSync(join(ROOT, rootFile(root, "pnpm-workspace.yaml")), "utf8"));
+    if (own.minutes < minutes) {
+      process.stderr.write(
+        `::error::${rootFile(root, "pnpm-workspace.yaml")} sets minimumReleaseAge ${own.minutes}, below the platform floor of ${minutes}. Every lockfile root resolves under the same floor.\n`,
+      );
+      process.exit(1);
+    }
+  }
+
+  // Every lockfile root is gated (scripts/sbom/lockfile-roots.mjs). An entry is
+  // new only if NO root's base lockfile had it, so a workspace moving into its
+  // own lockfile does not re-litigate packages the platform already carried.
   const baseYaml = baseLockfile(args.base);
   if (baseYaml === null) {
     process.stdout.write(
@@ -245,8 +243,16 @@ async function run() {
     );
     process.exit(0);
   }
+  const headKeys = new Set();
+  const baseKeys = new Set();
+  for (const root of LOCKFILE_ROOTS) {
+    const lockPath = rootFile(root, "pnpm-lock.yaml");
+    for (const key of parseLockfilePackages(readFileSync(join(ROOT, lockPath), "utf8"))) headKeys.add(key);
+    const rootBase = root.dir === "." ? baseYaml : baseLockfile(args.base, lockPath);
+    if (rootBase !== null) for (const key of parseLockfilePackages(rootBase)) baseKeys.add(key);
+  }
 
-  const entries = newRegistryEntries(parseLockfilePackages(baseYaml), headKeys);
+  const entries = newRegistryEntries(baseKeys, headKeys);
   if (entries.length === 0) {
     process.stdout.write(`Release-age gate: no new lockfile entries vs ${args.base}. Floor ${minutes} min.\n`);
     process.exit(0);

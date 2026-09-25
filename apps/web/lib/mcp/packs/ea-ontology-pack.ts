@@ -4,7 +4,8 @@
 // mcp-tools.ts executeTool switch: creating and classifying ontology elements
 // and typed relationships, querying the graph, running bounded traversal
 // patterns, describing an EA view (read-only graph analytics), and importing /
-// exporting .archimate XML files. Write handlers persist directly through the EA
+// exporting .archimate XML files, and exporting a view as a drawing
+// (export_ea_view_drawing, BI-4C17BF51). Write handlers persist directly through the EA
 // Prisma models; the traversal, view, and archimate handlers lazy-import their
 // dedicated EA domain services. Each handler reproduces the former switch case
 // verbatim, so behaviour is identical when the tool is invoked over MCP.
@@ -147,6 +148,19 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "view_ea_modeler",
     sideEffect: false,
+  },
+  {
+    name: "export_ea_view_drawing",
+    description: "Export an EA view as a drawing people can open without DPF: renders the view's saved layout (layer-coloured shapes, labelled relationship connectors) to .odg (editable in LibreOffice Draw), .svg and .pdf with a PNG preview, and stores it as a managed document. Returns the document link. Not an ArchiMate model exchange; use export_archimate for that.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        viewId: { type: "string", description: "EaView id to export" },
+      },
+      required: ["viewId"],
+    },
+    requiredCapability: "view_ea_modeler",
+    sideEffect: true,
   },
 ];
 
@@ -431,6 +445,27 @@ async function exportArchimateHandler(params: Record<string, unknown>, userId: s
   return { success: true, message: `Exported ${result.data!.elementCount} elements to ${result.data!.fileName}`, data: result.data as Record<string, unknown> };
 }
 
+async function exportEaViewDrawingHandler(params: Record<string, unknown>, userId: string, agentId?: string): Promise<ToolResult> {
+  const viewId = String(params["viewId"] ?? "");
+  if (!viewId) return { success: false, message: "viewId is required", error: "MissingViewId" };
+  const [{ saveEaViewDrawing }, { ensureAgentPrincipalIdentity, syncUserPrincipal }] = await Promise.all([
+    import("@/lib/ea/view-drawing-export"),
+    import("@/lib/identity/principal-linking"),
+  ]);
+  // Attribute the stored document the way doc_save does: the coworker's principal, else the user's.
+  const agentPrincipal = agentId ? await ensureAgentPrincipalIdentity(agentId).catch(() => null) : null;
+  const actorPrincipalId = agentPrincipal?.id ?? (await syncUserPrincipal(userId).catch(() => null))?.id ?? null;
+  const result = await saveEaViewDrawing({ viewId, actorPrincipalId });
+  if (!result.ok) return { success: false, message: result.error, error: result.error };
+  const saved = result.data;
+  return {
+    success: true,
+    entityId: saved.documentId,
+    message: `Exported "${saved.title}" (${saved.shapeCount} elements, ${saved.connectorCount} relationships) as .odg, .svg and .pdf: ${saved.href}`,
+    data: saved as unknown as Record<string, unknown>,
+  };
+}
+
 const handlers: Record<string, ToolPackHandler> = {
   create_ea_element: (params, userId) => createEaElementHandler(params, userId),
   create_ea_relationship: (params, userId) => createEaRelationshipHandler(params, userId),
@@ -440,6 +475,7 @@ const handlers: Record<string, ToolPackHandler> = {
   import_archimate: (params, userId) => importArchimateHandler(params, userId),
   export_archimate: (params, userId) => exportArchimateHandler(params, userId),
   describe_ea_view: (params) => describeEaViewHandler(params),
+  export_ea_view_drawing: (params, userId, context) => exportEaViewDrawingHandler(params, userId, context?.agentId),
 };
 
 export const eaOntologyPack: ToolPack = {
@@ -455,5 +491,6 @@ export const eaOntologyPack: ToolPack = {
     run_traversal_pattern: ["ea_graph_read"],
     export_archimate: ["ea_graph_read"],
     describe_ea_view: ["ea_graph_read"],
+    export_ea_view_drawing: ["ea_drawing_export"],
   },
 };

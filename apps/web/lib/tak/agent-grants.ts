@@ -624,8 +624,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Tool evaluation (EP-GOVERN-002)
   evaluate_tool: ["tool_evaluation_create"],
 
-  // EA / Ontology Graph
-  create_ea_element:      ["ea_graph_write"],
+  create_ea_element:      ["ea_graph_write"], // EA / Ontology Graph
   create_ea_relationship: ["ea_graph_write"],
   classify_ea_element:    ["ea_graph_write"],
   import_archimate:       ["ea_graph_write"],
@@ -633,6 +632,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_traversal_pattern:  ["ea_graph_read"],
   export_archimate:       ["ea_graph_read"],
   describe_ea_view:       ["ea_graph_read"],
+  export_ea_view_drawing: ["ea_drawing_export"], // BI-4C17BF51: renders + stores a drawing document
 
   // Customer / CRM (EP-CRM-COWORKER). The customer workspace (accounts,
   // engagements, pipeline, opportunities, quotes, orders) had a rich backend

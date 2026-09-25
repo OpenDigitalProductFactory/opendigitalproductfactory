@@ -169,6 +169,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "@jest/globals": {
+      "added": "2026-09-25",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "Acknowledged 2026-09-25 with the apps/mobile workspace split (plan 2026-09-08 M6). Mobile tests already imported it; it resolved only through the root workspace hoisting jest. Part of the Jest 30 family already in the tree (same major, same maintainers as jest), so no new package or publisher. Declared explicitly so the mobile workspace resolves it on its own."
+    },
     "@opentelemetry/api": {
       "added": "2026-06-21",
       "workspaces": [

@@ -34,6 +34,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listDirectDependencies } from "./generate-platform-sbom.mjs";
+import { LOCKFILE_ROOTS, repoWorkspacePath } from "./lockfile-roots.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ALLOWLIST_PATH = join(ROOT, "sbom", "dependency-allowlist.json");
@@ -54,8 +55,23 @@ export function findRetiredInUse(declaredNames, retired = {}) {
   return [...declaredNames].filter((name) => Object.hasOwn(retired, name)).sort();
 }
 
+/** Direct dependencies across every lockfile root, keyed by name, with repo-relative workspaces. */
+export function listAllDirectDependencies(repoRoot = ROOT) {
+  const merged = new Map();
+  for (const root of LOCKFILE_ROOTS) {
+    for (const [name, info] of listDirectDependencies(join(repoRoot, root.dir))) {
+      if (!merged.has(name)) merged.set(name, { workspaces: new Set(), kinds: new Set(), versions: new Set() });
+      const into = merged.get(name);
+      for (const ws of info.workspaces) into.workspaces.add(repoWorkspacePath(root, ws));
+      for (const k of info.kinds) into.kinds.add(k);
+      for (const v of info.versions) into.versions.add(v);
+    }
+  }
+  return merged;
+}
+
 function main() {
-  const current = listDirectDependencies(ROOT); // Map<name,{workspaces:Set,kinds:Set}>
+  const current = listAllDirectDependencies(); // Map<name,{workspaces:Set,kinds:Set}>
   const today = new Date().toISOString().slice(0, 10);
 
   if (update) {

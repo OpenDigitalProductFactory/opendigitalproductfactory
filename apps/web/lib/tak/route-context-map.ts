@@ -234,8 +234,8 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domain: "Enterprise Architecture",
     sensitivity: "internal",
     domainContext:
-      "This page hosts the EA modelling canvas using ArchiMate 4 notation. Users create views, add elements across business/application/technology layers, and map relationships. Models here are implementable, not illustrative. Note: EA canvas actions (create view, add element, link relationships) do not yet have agent tools — advise on structure and create backlog items to track modelling work.",
-    domainTools: [],
+      "This page hosts the EA modelling canvas using ArchiMate 4 notation. Users create views, add elements across business/application/technology layers, and map relationships. Models here are implementable, not illustrative. Note: EA canvas editing actions (create view, add element, link relationships) do not yet have agent tools — advise on structure and create backlog items to track modelling work. A view can be exported as a drawing (.odg/.svg/.pdf, stored as a document) with export_ea_view_drawing.",
+    domainTools: ["export_ea_view_drawing"],
     docsPath: "/docs/architecture/index",
     skills: [
       {

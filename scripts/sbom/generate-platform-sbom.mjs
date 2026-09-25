@@ -22,6 +22,14 @@
 //   node scripts/sbom/generate-platform-sbom.mjs
 //   node scripts/sbom/generate-platform-sbom.mjs --root <repoRoot> --out <dir> --git-ref <sha>
 
+import {
+  DEPENDENCY_KINDS,
+  parseImporters as parseLockImporters,
+  parsePackageKeys,
+  splitNameVersion,
+  topLevelSection,
+  unquote,
+} from "../lib/pnpm-lock.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -42,31 +50,6 @@ function parseArgs(argv) {
 }
 
 // ── lockfile parsing (line-based; mirrors pnpm-lock-parser.ts shape) ────
-function topLevelSection(lines, header) {
-  const start = lines.indexOf(header);
-  if (start < 0) return [];
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^[A-Za-z]/.test(lines[i])) { end = i; break; } // next col-0 key
-  }
-  return lines.slice(start + 1, end);
-}
-
-function unquote(s) {
-  return s.replace(/^['"]|['"]$/g, "");
-}
-
-// `@scope/name@1.2.3` → {name:'@scope/name', version:'1.2.3'}; strips any
-// trailing pnpm peer suffix `(react@19)` defensively.
-function splitNameVersion(key) {
-  const base = key.split("(")[0];
-  const at = base.lastIndexOf("@");
-  if (at <= 0) return null;
-  const version = base.slice(at + 1);
-  if (!version || version.includes("/")) return null; // e.g. `foo@github:...`
-  return { name: base.slice(0, at), version };
-}
-
 // importers: per-workspace DIRECT declarations (prod / dev / optional),
 // each with its resolved version so we can tell first-party divergence
 // (our own specifiers resolve to different versions) from transitive
@@ -77,36 +60,51 @@ function importerResolvedVersion(raw, specifier) {
   return v.split("(")[0]; // strip peer suffix
 }
 
-function parseImporters(lines) {
-  const section = topLevelSection(lines, "importers:");
+function parseImporters(lockText) {
   const importers = {};
-  let cur = null, kind = null, name = null, spec = null;
-  for (const line of section) {
-    const imp = line.match(/^ {2}(\S.*):$/);
-    if (imp) { cur = imp[1]; importers[cur] = { dependencies: [], devDependencies: [], optionalDependencies: [] }; kind = null; name = null; spec = null; continue; }
-    const k = line.match(/^ {4}(dependencies|devDependencies|optionalDependencies):$/);
-    if (k) { kind = k[1]; name = null; spec = null; continue; }
-    const nm = line.match(/^ {6}(\S.*):$/);
-    if (nm && kind) { name = unquote(nm[1]); spec = null; continue; }
-    const sp = line.match(/^ {8}specifier: (.+)$/);
-    if (sp && name) { spec = unquote(sp[1].trim()); continue; }
-    const ver = line.match(/^ {8}version: (.+)$/);
-    if (ver && cur && kind && name) {
-      importers[cur][kind].push({ name, specifier: spec, version: importerResolvedVersion(ver[1], spec) });
-      name = null; spec = null;
+  for (const [ws, entry] of Object.entries(parseLockImporters(lockText))) {
+    importers[ws] = {};
+    for (const kind of DEPENDENCY_KINDS) {
+      importers[ws][kind] = entry[kind].map((d) => ({
+        name: d.name,
+        specifier: d.specifier,
+        version: importerResolvedVersion(d.version, d.specifier),
+      }));
     }
   }
   return importers;
 }
 
+// Registry names our own workspaces declare with different specifiers, even when
+// they resolve to one version today. "^3.14.0" beside "^3.26.3" resolves alike
+// until a lockfile refresh, then silently splits (plan 2026-09-08 S11).
+// Workspace, link, file and catalog specifiers are first-party plumbing, not drift.
+export function findSpecifierDrift(importers) {
+  const bySpec = new Map();
+  for (const [ws, imp] of Object.entries(importers)) {
+    for (const kind of DEPENDENCY_KINDS) {
+      for (const d of imp[kind] ?? []) {
+        if (!d.specifier || /^(workspace|link|file|catalog):/.test(d.specifier)) continue;
+        if (!bySpec.has(d.name)) bySpec.set(d.name, new Map());
+        const specs = bySpec.get(d.name);
+        if (!specs.has(d.specifier)) specs.set(d.specifier, new Set());
+        specs.get(d.specifier).add(ws);
+      }
+    }
+  }
+  return [...bySpec.entries()]
+    .filter(([, specs]) => specs.size > 1)
+    .map(([name, specs]) => ({
+      name,
+      specifiers: Object.fromEntries([...specs.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([s, ws]) => [s, [...ws].sort()])),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // packages: the deduplicated resolved set (clean name@version keys)
-function parsePackages(lines) {
-  const section = topLevelSection(lines, "packages:");
+function parsePackages(lockText) {
   const pkgs = [];
-  for (const line of section) {
-    const m = line.match(/^ {2}(\S.*):$/); // 2-space key only (attrs are 4-space)
-    if (!m) continue;
-    const key = unquote(m[1]);
+  for (const key of parsePackageKeys(lockText)) {
     if (!key.includes("@")) continue;
     const nv = splitNameVersion(key);
     if (nv) pkgs.push(nv);
@@ -275,6 +273,7 @@ function analyze({ packages, importers, overrideTargets }) {
     duplicates,
     multiMajor,
     firstPartyDivergent,
+    specifierDrift: findSpecifierDrift(importers),
     directButTransitive,
     dedupeCandidates,
   };
@@ -360,8 +359,7 @@ function renderMarkdown({ analysis, images, gitRef, generatedAt }) {
 
 // ── reusable entry point (imported by check-sbom-drift.mjs) ─────────────
 export function generatePlatformSbom({ root, gitRef, generatedAt }) {
-  const lockText = readFileSync(join(root, "pnpm-lock.yaml"), "utf8").replace(/\r\n/g, "\n");
-  const lines = lockText.split("\n");
+  const lockText = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
   const workspaceYaml = readFileSync(join(root, "pnpm-workspace.yaml"), "utf8");
 
   let rootName = "dpf-platform";
@@ -377,8 +375,8 @@ export function generatePlatformSbom({ root, gitRef, generatedAt }) {
     images = parseImageNames(readFileSync(join(root, ".github/workflows/publish-image.yml"), "utf8"));
   } catch { /* workflow optional */ }
 
-  const importers = parseImporters(lines);
-  const packages = parsePackages(lines);
+  const importers = parseImporters(lockText);
+  const packages = parsePackages(lockText);
   const overrideTargets = parseOverrideTargets(workspaceYaml);
 
   const cyclonedx = buildCycloneDx({ packages, images, gitRef, generatedAt, rootName, rootVersion });
@@ -393,8 +391,7 @@ export function generatePlatformSbom({ root, gitRef, generatedAt }) {
 // Dependency Gate governs (transitives ride in via these and are covered by the
 // OSV scan + reduction guard).
 export function listDirectDependencies(root) {
-  const lockText = readFileSync(join(root, "pnpm-lock.yaml"), "utf8").replace(/\r\n/g, "\n");
-  const importers = parseImporters(lockText.split("\n"));
+  const importers = parseImporters(readFileSync(join(root, "pnpm-lock.yaml"), "utf8"));
   const byName = new Map();
   for (const [ws, imp] of Object.entries(importers)) {
     for (const kind of ["dependencies", "devDependencies", "optionalDependencies"]) {

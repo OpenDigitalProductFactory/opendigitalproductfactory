@@ -203,7 +203,7 @@ touched:
 ```bash
 pnpm --filter web test        # touched apps/web?
 pnpm --filter @dpf/db test    # touched packages/db?  (needs Postgres)
-pnpm --filter mobile test     # touched apps/mobile?
+(cd apps/mobile && pnpm install && pnpm test)  # touched apps/mobile? (its own workspace)
 ```
 
 To reproduce the full CI aggregate, run `pnpm test` against the **canonical
