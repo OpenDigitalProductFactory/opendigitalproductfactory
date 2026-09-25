@@ -154,6 +154,16 @@ English output stays byte-identical. Nothing is translated yet.
 - the docs-impact decision
 - the process-spine decision for new source modules, if prompted
 
+## Traceability to the canonical design
+
+The objective and acceptance ids are defined in `docs/superpowers/specs/2026-09-25-localization-foundation-design.md`.
+
+| Deliverable | Objectives | Contracts and acceptance | Flow |
+|---|---|---|---|
+| `L0.1-locale-context` (`BI-6EA9E25A`) | OBJ-LOCALE-RESOLVE, OBJ-PSEUDO, OBJ-ENGLISH-UNCHANGED | AC-LANG-DIR, AC-CHAIN, AC-PREFERENCE, AC-NO-DEPS, AC-ENGLISH | Phase 1: L0.1 |
+| `L0.2-message-catalog` (`BI-9A44B227`) | OBJ-CATALOG, OBJ-PSEUDO, OBJ-ENGLISH-UNCHANGED | AC-TYPED-KEYS, AC-MF2, AC-FALLBACK, AC-PILOTS, AC-NO-DEPS | Phase 2: L0.2 |
+| `L0.3-ratchet-guard` (`BI-4690CB37`) | OBJ-NO-REGRESSION | AC-GUARD, AC-NO-DEPS | Phase 3: L0.3 |
+
 ## Backlog coverage
 
 - **Decision:** `decomposed`
