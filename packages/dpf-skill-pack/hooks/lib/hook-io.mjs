@@ -135,6 +135,27 @@ export function actionCwd(toolName, toolInput, sessionCwd) {
 }
 
 /**
+ * A DPF checkout OR a DPF install folder (BI-310949BC). Agent sessions on an
+ * install host start in the installed runtime, which carries the installer's
+ * `.install-mode` marker (install-dpf.ps1) but no packages/. Guards about agent
+ * BEHAVIOUR (asking the operator a platform decision) must enforce there too;
+ * guards about source checkouts keep using inDpfWorkspace.
+ * @param {string|undefined} startDir @returns {boolean}
+ */
+export function inDpfAgentHost(startDir) {
+  if (inDpfWorkspace(startDir)) return true;
+  let dir = startDir && typeof startDir === "string" ? startDir : process.cwd();
+  const root = parse(dir).root;
+  for (let i = 0; i < 64; i++) {
+    if (existsSync(join(dir, ".install-mode"))) return true;
+    const parent = dirname(dir);
+    if (parent === dir || dir === root) break;
+    dir = parent;
+  }
+  return false;
+}
+
+/**
  * Normalize a raw PreToolUse payload to a surface-agnostic shape. `cwd` is the
  * folder the action targets (see actionCwd); `sessionCwd` is what the harness sent.
  * @param {any} raw
