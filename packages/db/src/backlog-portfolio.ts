@@ -23,15 +23,54 @@ export interface BacklogPortfolioLinks {
  * portfolio.
  */
 export function resolveBacklogPortfolio(links: BacklogPortfolioLinks): string | null {
+  return resolveLinkedPortfolio(links).portfolioId;
+}
+
+/** Which path attributed an item to its portfolio (BI-298A7202, design §5.2). */
+export type BacklogPortfolioPath =
+  | "stored"
+  | "digital-product"
+  | "taxonomy-node"
+  | "coworker-need"
+  | "epic"
+  | "unallocated";
+
+export interface BacklogPortfolioResolution {
+  portfolioId: string | null;
+  path: BacklogPortfolioPath;
+  /** The stored portfolioId names a different portfolio than the links do. */
+  disagreesWithLinks: boolean;
+}
+
+function resolveLinkedPortfolio(links: BacklogPortfolioLinks): { portfolioId: string | null; path: BacklogPortfolioPath } {
   const coworkerNeedPortfolio =
     links.coworkerNeeds?.find((need) => need.agent?.portfolioId)?.agent?.portfolioId ?? null;
-  return (
-    links.digitalProduct?.portfolioId ??
-    links.taxonomyNode?.portfolioId ??
-    coworkerNeedPortfolio ??
-    links.epic?.portfolios?.[0]?.portfolioId ??
-    null
-  );
+  if (links.digitalProduct?.portfolioId) return { portfolioId: links.digitalProduct.portfolioId, path: "digital-product" };
+  if (links.taxonomyNode?.portfolioId) return { portfolioId: links.taxonomyNode.portfolioId, path: "taxonomy-node" };
+  if (coworkerNeedPortfolio) return { portfolioId: coworkerNeedPortfolio, path: "coworker-need" };
+  const epicPortfolio = links.epic?.portfolios?.[0]?.portfolioId;
+  if (epicPortfolio) return { portfolioId: epicPortfolio, path: "epic" };
+  return { portfolioId: null, path: "unallocated" };
+}
+
+/**
+ * Resolve an item's portfolio and say which path did it. The stored
+ * `portfolioId` (an explicit `portfolioSlug` override, or the cache written by
+ * attributeBacklogPortfolio) wins, then the links in resolveBacklogPortfolio's
+ * order. A stored value the links contradict is reported, not hidden.
+ */
+export function resolveBacklogPortfolioWithPath(
+  links: BacklogPortfolioLinks & { portfolioId?: string | null },
+): BacklogPortfolioResolution {
+  const linked = resolveLinkedPortfolio(links);
+  if (links.portfolioId) {
+    return {
+      portfolioId: links.portfolioId,
+      path: "stored",
+      disagreesWithLinks: linked.portfolioId !== null && linked.portfolioId !== links.portfolioId,
+    };
+  }
+  return { ...linked, disagreesWithLinks: false };
 }
 
 /** Prisma read/write subset used here — satisfied by PrismaClient and test fakes. */
