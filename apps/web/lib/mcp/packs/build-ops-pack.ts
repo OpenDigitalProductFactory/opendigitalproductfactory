@@ -210,17 +210,17 @@ async function promoteToBuildStudioHandler(
   // The sandbox pool stays the machine's physical limit, enforced on acquire.
   let admissionWarning: string | null = null;
   {
-    const { evaluateItemAdmission, recordAdmissionOutcome } = await import("@/lib/build/investment-admission");
+    const { evaluateItemAdmission, recordAdmissionOutcome, blocksStart } = await import("@/lib/build/investment-admission");
     const { isAutonomousCaller } = await import("@/lib/portfolio/budget-reservation");
     const admission = await evaluateItemAdmission(prisma as never, {
       itemId,
       startKind: isAutonomousCaller(context) ? "autonomous" : "human",
     });
     await recordAdmissionOutcome(prisma as never, admission, { source: "promote_to_build_studio", userId, agentId: context?.agentId ?? null });
-    if (admission.verdict === "refuse") {
+    if (blocksStart(admission)) {
       return { success: false, error: "wip_allowance_reached", message: admission.reason, data: { admission } };
     }
-    if (admission.verdict === "warn") admissionWarning = admission.reason;
+    if (admission.verdict !== "admit") admissionWarning = admission.reason;
   }
 
   const result = await prisma.$transaction(async (tx) => {

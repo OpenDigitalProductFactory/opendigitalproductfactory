@@ -166,6 +166,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        wipAdmissionMode: { type: "string", enum: ["shadow", "enforce"], description: "Points-in-flight admission: shadow records every admit/warn/refuse decision without blocking (the default, per WWMD DI-D83D9C13686B); enforce refuses autonomous starts past a portfolio's allowance." },
         dailyBudget: {
           type: "integer",
           description: "Items/day funded for governed backlog→build promotion (0-50). Omit to leave unchanged (or, with enabled also omitted, to just read current state).",

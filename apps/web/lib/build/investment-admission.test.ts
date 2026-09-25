@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { LARGE_ITEM_FLOOR_POINTS, decideInvestmentAdmission, wipAllowance } from "./investment-admission";
+import { LARGE_ITEM_FLOOR_POINTS, blocksStart, decideInvestmentAdmission, wipAllowance } from "./investment-admission";
 
 const base = { inFlightPoints: 0, itemPoints: 3, allowance: 10, startKind: "autonomous" as const, breakFix: false, alreadyInFlight: false };
 
@@ -45,5 +45,14 @@ describe("wipAllowance", () => {
     expect(wipAllowance({ override: null, weeklyThroughput: 12 })).toEqual({ points: 24, source: "throughput" });
     expect(wipAllowance({ override: null, weeklyThroughput: 2 })).toEqual({ points: LARGE_ITEM_FLOOR_POINTS, source: "floor" });
     expect(wipAllowance({ override: null, weeklyThroughput: null })).toEqual({ points: 8, source: "floor" });
+  });
+});
+
+describe("blocksStart (shadow first, WWMD DI-D83D9C13686B)", () => {
+  it("only an enforced refusal stops a start", () => {
+    expect(blocksStart({ verdict: "refuse", mode: "enforce" })).toBe(true);
+    expect(blocksStart({ verdict: "refuse", mode: "shadow" })).toBe(false);
+    expect(blocksStart({ verdict: "warn", mode: "enforce" })).toBe(false);
+    expect(blocksStart({ verdict: "admit", mode: "enforce" })).toBe(false);
   });
 });

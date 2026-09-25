@@ -51,6 +51,7 @@ describe("set_backlog_delivery_budget", () => {
       enabled: true,
       activeBuilds: 1,
       sandboxPoolSize: sandboxPoolSize(),
+      wipAdmissionMode: "shadow",
     });
     expect(result.message).toMatch(/^Backlog delivery budget is 7\/day/);
   });
@@ -70,6 +71,15 @@ describe("set_backlog_delivery_budget", () => {
     });
     expect(result.success).toBe(true);
     expect(result.message).toMatch(/^Backlog delivery budget set to 15\/day/);
+  });
+
+  it("switches points-in-flight admission to enforce, and refuses an unknown mode", async () => {
+    db.platformDevConfigFindUnique.mockResolvedValue({ backlogTeeUpDailyCap: 3, governedBacklogEnabled: true, wipAdmissionMode: "enforce" });
+    const result = await setBudget({ wipAdmissionMode: "enforce" }, "user-1", undefined);
+    expect(db.platformDevConfigUpsert).toHaveBeenCalledWith(expect.objectContaining({ update: { wipAdmissionMode: "enforce" } }));
+    expect(result.data).toMatchObject({ wipAdmissionMode: "enforce" });
+    const bad = await setBudget({ wipAdmissionMode: "off" }, "user-1", undefined);
+    expect(bad.success).toBe(false);
   });
 
   it("sets enabled, leaving dailyBudget untouched", async () => {

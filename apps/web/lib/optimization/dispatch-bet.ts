@@ -109,10 +109,10 @@ export async function dispatchConsolidationBet(input: {
     // Admission by points in flight (BI-3430B3A4), re-checked per item because
     // each promotion adds points. dispatch-bet is autonomous: refused past the
     // allowance, with the reason recorded on the item.
-    const { evaluateItemAdmission, recordAdmissionOutcome } = await import("@/lib/build/investment-admission");
+    const { evaluateItemAdmission, recordAdmissionOutcome, blocksStart } = await import("@/lib/build/investment-admission");
     const admission = await evaluateItemAdmission(prisma as never, { itemId, startKind: "autonomous" });
     await recordAdmissionOutcome(prisma as never, admission, { source: "dispatch-bet", userId: input.userId });
-    if (admission.verdict === "refuse") {
+    if (blocksStart(admission)) {
       skipped.push({ itemId, reason: "promotion-error", detail: `wip_allowance_reached: ${admission.reason}` });
       continue;
     }
