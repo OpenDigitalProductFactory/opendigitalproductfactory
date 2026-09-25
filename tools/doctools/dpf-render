@@ -19,6 +19,18 @@ Request (validated first by apps/web/lib/documents/generation/spec.ts):
                   "shapeFill": "#rrggbb", "shapeStroke": "#rrggbb", "shapeText": "#rrggbb" },
     "issuedAt": "2026-09-25T12:00:00Z" }                   (optional)
 
+Document mode (BI-BFF142A1): a flat-ODF document DPF generated itself (the
+Workbook export's flat ODS, with its chart), exported as it is:
+  { "document": { "ext": "fods|fodt", "data": "<base64>" },
+    "formats":  ["xlsx", "ods", ...] }
+It is screened like a template, except that it may embed chart objects: each
+must be an inline chart sub-document (office:document of the chart media type)
+that itself passes the template screen. Nothing else embedded is accepted. The
+result is the same tar stream with only document.<format> entries and
+manifest.json ({"mode": "document", "formats", "charts"}): no previews, no text.
+dpf-convert never takes this path; it keeps DisableActiveContent on for
+customer files.
+
 Result on stdout: an uncompressed tar stream, entries in this order, every
 entry dated 0 so the same request yields the same archive layout:
   document.<format>   one per requested format
@@ -86,6 +98,24 @@ TEMPLATE_FORBIDDEN = re.compile(
     re.I,
 )
 
+# Document mode: what each flat-ODF family opens with and exports to.
+DOCUMENT_MODE = {
+    "fods": ("OpenDocument Spreadsheet Flat XML", "application/vnd.oasis.opendocument.spreadsheet",
+             {"xlsx": "Calc MS Excel 2007 XML", "ods": "calc8", "pdf": "calc_pdf_Export"}),
+    "fodt": ("OpenDocument Text Flat XML", "application/vnd.oasis.opendocument.text",
+             {"docx": "MS Word 2007 XML", "odt": "writer8", "pdf": "writer_pdf_Export"}),
+}
+# The one embedded object a DPF document may carry: an inline chart sub-document.
+# The frame's draw:object may name the ranges it follows and nothing else.
+CHART_OBJECT = re.compile(
+    r"<draw:object(?:\s+draw:notify-on-update-of-ranges=\"[^\"<>]*\")?\s*>\s*"
+    r"<office:document\b(?P<attrs>[^>]*)>(?P<body>.*?)</office:document>\s*</draw:object>",
+    re.S,
+)
+CHART_MIMETYPE = 'office:mimetype="application/vnd.oasis.opendocument.chart"'
+MAX_DOCUMENT_CHARTS = 16
+
+
 class RequestError(Exception):
     """The request itself is wrong: exit 2."""
 
@@ -109,6 +139,44 @@ from dpf_render_families import BUILDERS  # noqa: E402
 import uno  # noqa: E402  (the distribution bridge, present only inside the image)
 
 
+def screen_document(xml, mimetype):
+    """Refuse a DPF document unless its only embedded objects are clean inline charts."""
+    if not re.search(r"<office:document\b[^>]*office:mimetype=\"%s\"" % re.escape(mimetype), xml[:4096]):
+        raise RequestError("the document is not flat ODF of type %s" % mimetype)
+    charts = 0
+    for match in CHART_OBJECT.finditer(xml):
+        charts += 1
+        if CHART_MIMETYPE not in match.group("attrs"):
+            raise RequestError("an embedded object is not a chart")
+        body = match.group("body")
+        found = TEMPLATE_FORBIDDEN.search(body) or re.search(r"<office:document\b", body)
+        if found:
+            raise RequestError("an embedded chart carries content documents may not have: %s" % found.group(0)[:60])
+    if charts > MAX_DOCUMENT_CHARTS:
+        raise RequestError("the document embeds more than %d charts" % MAX_DOCUMENT_CHARTS)
+    found = TEMPLATE_FORBIDDEN.search(CHART_OBJECT.sub("", xml))
+    if found:
+        raise RequestError("the document carries content documents may not have: %s" % found.group(0)[:60])
+    return charts
+
+
+def read_document_request(request):
+    document = request["document"]
+    if not isinstance(document, dict) or document.get("ext") not in DOCUMENT_MODE:
+        raise RequestError("a document must be flat ODF (%s)" % ", ".join("." + ext for ext in sorted(DOCUMENT_MODE)))
+    _, mimetype, filters = DOCUMENT_MODE[document["ext"]]
+    formats = request.get("formats")
+    if not isinstance(formats, list) or not formats or any(f not in filters for f in formats):
+        raise RequestError("formats must be a non-empty list drawn from %s" % sorted(filters))
+    try:
+        xml = base64.b64decode(document.get("data") or "", validate=True).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        raise RequestError("the document is not base64 of UTF-8 flat ODF")
+    document["charts"] = screen_document(xml, mimetype)
+    document["xml"] = xml
+    return request
+
+
 def read_request():
     raw = sys.stdin.buffer.read(MAX_BYTES + 1)
     if not raw:
@@ -119,6 +187,8 @@ def read_request():
         request = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as error:
         raise RequestError("the request is not UTF-8 JSON: %s" % error)
+    if isinstance(request, dict) and "document" in request:
+        return read_document_request(request)
     if not isinstance(request, dict) or not isinstance(request.get("content"), dict):
         raise RequestError("the request needs a content object")
     family = request["content"].get("family")
@@ -194,6 +264,34 @@ def add_entry(archive, name, data):
     archive.addfile(info, io.BytesIO(data))
 
 
+def export_document(request, work):
+    """Document mode: open the screened DPF document and export it, nothing more."""
+    document = request["document"]
+    filter_name, _, filters = DOCUMENT_MODE[document["ext"]]
+    path = os.path.join(work, "document." + document["ext"])
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(document["xml"])
+    engine = Engine(work)
+    outputs = []
+    try:
+        doc = engine.open(file_url(path), filter_name, as_template=False)
+        for fmt in request["formats"]:
+            out = os.path.join(work, "out", "document." + fmt)
+            export(doc, out, filters[fmt])
+            outputs.append(("document." + fmt, out))
+        doc.close(True)
+    finally:
+        engine.close()
+    manifest = {"mode": "document", "formats": request["formats"], "charts": document["charts"]}
+    archive = tarfile.open(fileobj=sys.stdout.buffer, mode="w|", format=tarfile.USTAR_FORMAT)
+    for name, out in outputs:
+        with open(out, "rb") as handle:
+            add_entry(archive, name, handle.read())
+    add_entry(archive, "manifest.json", json.dumps(manifest, sort_keys=True).encode("utf-8"))
+    archive.close()
+    sys.stdout.buffer.flush()
+
+
 def render(request, work):
     family = request["content"]["family"]
     factory, filters, pdf_filter = FAMILY[family]
@@ -259,9 +357,15 @@ def render(request, work):
     sys.stdout.buffer.flush()
 
 
+class RenderTimeout(BaseException):
+    """The run's time budget ran out. A BaseException, so no cleanup handler's
+    `except Exception` (closing the engine, say) can swallow it and let a timed-out
+    run carry on to exit 0."""
+
+
 def main():
     def on_timeout(signum, frame):
-        raise TimeoutError()
+        raise RenderTimeout()
 
     signal.signal(signal.SIGALRM, on_timeout)
     signal.alarm(TIMEOUT_SECONDS)
@@ -272,10 +376,10 @@ def main():
     os.environ.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_CACHE_HOME": home + "/.cache"})
     try:
         request = read_request()
-        render(request, work)
+        (export_document if "document" in request else render)(request, work)
     except RequestError as error:
         die(EXIT_BAD_REQUEST, str(error))
-    except TimeoutError:
+    except RenderTimeout:
         for proc in ENGINES:
             proc.kill()
         die(EXIT_TIMEOUT, "rendering timed out after %ds" % TIMEOUT_SECONDS)

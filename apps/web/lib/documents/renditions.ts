@@ -19,6 +19,7 @@
 
 import { DocumentRenditionKind, prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { EMBEDDED_OBJECTS_REASON, odfEmbeddedObjects } from "@/lib/shared/odf-embedded-objects";
 import { DOCUMENT_TEXT_INLINE_LIMIT_BYTES, readDocumentBlob, storeDocumentBlob } from "./blob-storage";
 import { getConverterAvailability } from "./conversion/availability";
 import { convertDocument, type ConversionFailureReason } from "./conversion/convert";
@@ -35,7 +36,14 @@ export const DEFAULT_BACKFILL_LIMIT = 25;
 export const MAX_BACKFILL_LIMIT = 100;
 const MAX_FAILURE_DETAIL_CHARS = 500;
 
-export type RenditionFailureReason = ConversionFailureReason | "blob-unreadable";
+/**
+ * `embedded-objects`: the converter refused an OpenDocument file that embeds a
+ * chart or other object; its hardened profile does not open them (BI-BFF142A1).
+ */
+export type RenditionFailureReason = ConversionFailureReason | "blob-unreadable" | "embedded-objects";
+
+/** The OpenDocument sources (formats.ts extensions) whose manifest names embedded objects. */
+const ODF_SOURCES: ReadonlySet<string> = new Set(["odt", "ods", "odp", "odg"]);
 
 export type RenditionOutcome =
   | { status: "rendered"; kinds: DocumentRenditionKind[] }
@@ -210,6 +218,12 @@ export async function generateDocumentRenditions(
   for (const [kind, to] of missing) {
     const result = await deps.convert({ input: original, from, to });
     if (!result.ok) {
+      const objects = result.reason === "conversion-failed" && ODF_SOURCES.has(from) ? odfEmbeddedObjects(original) ?? [] : [];
+      if (objects.length > 0) {
+        const detail = `${EMBEDDED_OBJECTS_REASON} Embedded: ${objects.slice(0, 5).join(", ")}. ${result.error}`;
+        await recordFailure(deps, version, kind, "embedded-objects", detail);
+        return { status: "failed", reason: "embedded-objects", kind };
+      }
       await recordFailure(deps, version, kind, result.reason, result.error);
       return { status: "failed", reason: result.reason, kind };
     }

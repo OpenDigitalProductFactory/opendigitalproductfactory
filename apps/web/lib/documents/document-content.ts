@@ -118,6 +118,7 @@ const RENDITION_FAILURE_COPY: Readonly<Record<string, string>> = {
   timeout: "Converting this file took too long, so there is no PDF or searchable text.",
   "input-too-large": "This file is too large to convert to a PDF or searchable text.",
   "blob-unreadable": "The stored file could not be read, so it could not be converted.",
+  "embedded-objects": "This file contains embedded objects (such as charts) that DPF does not open, so there is no PDF or searchable text. Save a copy without them, or as PDF, and upload that as a new version.",
 };
 
 /**
