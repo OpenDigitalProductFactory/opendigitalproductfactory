@@ -10,6 +10,7 @@ import {
   type StoredReleaseDoctoolsImage,
 } from "./doctools-release-image";
 import type { ReleaseInstallContext } from "./release-target";
+import type { LocalDoctoolsBuildResult, SourceLineageContext } from "./doctools-source-lineage";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
 const OLD_DIGEST = `sha256:${"b".repeat(64)}`;
@@ -167,7 +168,7 @@ describe("reconcileReleaseDoctoolsImage", () => {
       },
     });
     expect(await reconcileReleaseDoctoolsImage(h.deps)).toEqual({ outcome: "resolved", image: PINNED, pulled: true });
-    expect(h.writes).toEqual([{ image: PINNED, releaseTag: TAG, resolvedAt: "2026-09-25T06:00:00.000Z" }]);
+    expect(h.writes).toEqual([{ image: PINNED, releaseTag: TAG, resolvedAt: "2026-09-25T06:00:00.000Z", origin: "published" }]);
     // The pull targets the digest, never the tag, so the bytes are the recorded ones.
     expect(h.docker.calls.at(-1)).toEqual(["pull", PINNED]);
   });
@@ -249,6 +250,123 @@ describe("reconcileReleaseDoctoolsImage", () => {
       throw new Error("db down");
     };
     expect(await reconcileReleaseDoctoolsImage(h.deps)).toMatchObject({ outcome: "error" });
+  });
+});
+
+describe("reconcileReleaseDoctoolsImage on a customizable, source-built install (BI-4E18BC28)", () => {
+  const present = (args: string[]) => args[0] === "image" && args[1] === "inspect";
+  const inspectTag = (args: string[]) => args[0] === "buildx";
+  const LINEAGE_TAG = "v2026.09.25-shape-raise.1";
+  const LINEAGE_PINNED = `ghcr.io/opendigitalproductfactory/dpf-doctools@${DIGEST}`;
+  const LOCAL_ID = `sha256:${"c".repeat(64)}`;
+  const LINEAGE: SourceLineageContext = Object.freeze({
+    imageTag: LINEAGE_TAG,
+    ghcrOwner: "opendigitalproductfactory",
+    sourceRoot: "/host-dpf",
+  });
+
+  function sourceHarness(opts: {
+    stored?: StoredReleaseDoctoolsImage | null;
+    docker: (args: string[]) => DockerReply;
+    build?: () => Promise<LocalDoctoolsBuildResult>;
+  }) {
+    const h = harness({ context: null, stored: opts.stored, docker: opts.docker });
+    const builds: SourceLineageContext[] = [];
+    h.deps.loadSourceLineage = async () => LINEAGE;
+    h.deps.buildLocal = async (lineage) => {
+      builds.push(lineage);
+      return opts.build ? opts.build() : { ok: true, data: LOCAL_ID };
+    };
+    return { ...h, builds };
+  }
+
+  it("pins the PUBLISHED image of the release the clone descends from, by digest, and pulls it (AC-1)", async () => {
+    const h = sourceHarness({
+      docker: (args) => {
+        if (inspectTag(args)) return { exitCode: 0, stdout: manifestJson(DIGEST) };
+        if (present(args)) return { exitCode: 1, stderr: "No such image" };
+        return { exitCode: 0 };
+      },
+    });
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toEqual({ outcome: "resolved", image: LINEAGE_PINNED, pulled: true });
+    expect(h.docker.calls[0]).toEqual([
+      "buildx", "imagetools", "inspect", `ghcr.io/opendigitalproductfactory/dpf-doctools:${LINEAGE_TAG}`, "--format", "{{json .Manifest}}",
+    ]);
+    expect(h.writes).toEqual([
+      { image: LINEAGE_PINNED, releaseTag: LINEAGE_TAG, resolvedAt: "2026-09-25T06:00:00.000Z", origin: "published" },
+    ]);
+    expect(h.builds).toEqual([]);
+  });
+
+  it("offline: builds Dockerfile.doctools from the clone and pins the local image id", async () => {
+    const h = sourceHarness({ docker: () => ({ exitCode: 1, stderr: "dial tcp: lookup ghcr.io: no such host" }) });
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toEqual({ outcome: "built-locally", image: LOCAL_ID });
+    expect(h.builds).toEqual([LINEAGE]);
+    expect(h.stored()).toEqual({ image: LOCAL_ID, releaseTag: LINEAGE_TAG, resolvedAt: "2026-09-25T06:00:00.000Z", origin: "local-build" });
+  });
+
+  it("a lineage whose release published no dpf-doctools also builds locally", async () => {
+    const h = sourceHarness({ docker: () => ({ exitCode: 1, stderr: "ERROR: manifest unknown" }) });
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toEqual({ outcome: "built-locally", image: LOCAL_ID });
+  });
+
+  it("a failed local build leaves conversion off without throwing, and keeps no stale pin", async () => {
+    const h = sourceHarness({
+      docker: () => ({ exitCode: 1, stderr: "i/o timeout" }),
+      build: async () => ({ ok: false, error: "no base image offline" }),
+    });
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toMatchObject({ outcome: "unavailable" });
+    expect(h.writes).toEqual([]);
+  });
+
+  it("a local pin is replaced by the published one once the registry is reachable", async () => {
+    const h = sourceHarness({
+      stored: { image: LOCAL_ID, releaseTag: LINEAGE_TAG, origin: "local-build" },
+      docker: (args) => (inspectTag(args) ? { exitCode: 0, stdout: manifestJson(DIGEST) } : { exitCode: 0 }),
+    });
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toMatchObject({ outcome: "resolved", image: LINEAGE_PINNED });
+    expect(h.stored()?.origin).toBe("published");
+    expect(h.builds).toEqual([]);
+  });
+
+  it("a local pin stays while still offline, and is rebuilt only when the image was removed", async () => {
+    const kept = sourceHarness({
+      stored: { image: LOCAL_ID, releaseTag: LINEAGE_TAG, origin: "local-build" },
+      docker: (args) => (present(args) ? { exitCode: 0 } : { exitCode: 1, stderr: "i/o timeout" }),
+    });
+    expect(await reconcileReleaseDoctoolsImage(kept.deps)).toEqual({ outcome: "unchanged", image: LOCAL_ID, pulled: false });
+    expect(kept.builds).toEqual([]);
+    expect(kept.docker.calls.some((args) => args[0] === "pull")).toBe(false);
+
+    const removed = sourceHarness({
+      stored: { image: LOCAL_ID, releaseTag: LINEAGE_TAG, origin: "local-build" },
+      docker: () => ({ exitCode: 1, stderr: "i/o timeout" }),
+    });
+    expect(await reconcileReleaseDoctoolsImage(removed.deps)).toEqual({ outcome: "built-locally", image: LOCAL_ID });
+    expect(removed.builds).toEqual([LINEAGE]);
+  });
+
+  it("a source upgrade to a new lineage re-resolves (the setting survives upgrade, AC-2)", async () => {
+    const h = sourceHarness({
+      stored: { image: `ghcr.io/opendigitalproductfactory/dpf-doctools@${OLD_DIGEST}`, releaseTag: "v2026.09.20-previous.1", origin: "published" },
+      docker: (args) => (inspectTag(args) ? { exitCode: 0, stdout: manifestJson(DIGEST) } : { exitCode: 0 }),
+    });
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toMatchObject({ outcome: "resolved", image: LINEAGE_PINNED });
+    expect(h.stored()?.releaseTag).toBe(LINEAGE_TAG);
+  });
+
+  it("a release install never takes the source path, and never builds locally", async () => {
+    const h = sourceHarness({ docker: () => ({ exitCode: 1, stderr: "i/o timeout" }) });
+    h.deps.loadContext = async () => CONTEXT;
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toMatchObject({ outcome: "unavailable" });
+    expect(h.builds).toEqual([]);
+  });
+
+  it("an install with no release lineage still does nothing", async () => {
+    const h = sourceHarness({ docker: () => ({ exitCode: 0 }) });
+    h.deps.loadSourceLineage = async () => null;
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toEqual({ outcome: "not-release-install" });
+    expect(h.docker.calls).toEqual([]);
   });
 });
 

@@ -12,6 +12,11 @@ model User {
   isActive                         Boolean                             @default(true)
   isSuperuser                      Boolean                             @default(false)
   createdAt                        DateTime                            @default(now())
+  /// Last time this person used the workforce portal: stamped at sign-in and,
+  /// at most hourly, on shell renders. Null = not seen since tracking began.
+  /// Tells an operator that approvals routed to this account have no reader
+  /// (BI-61DE8177). Not a security signal; sessions outlive it.
+  lastSeenAt                       DateTime?
   approvedProposals                AgentActionProposal[]               @relation("ProposalDecisions")
   agentThreads                     AgentThread[]
   apiTokens                        ApiToken[]
