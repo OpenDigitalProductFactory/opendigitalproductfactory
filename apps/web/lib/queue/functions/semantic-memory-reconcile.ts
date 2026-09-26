@@ -7,9 +7,9 @@
 // contracts": "reconciliation proves no orphan remains"). Idempotent, quiescence-
 // gated, and concurrency-limited to one in-flight run.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import { prisma, scrollPoints, QDRANT_COLLECTIONS } from "@dpf/db";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   reconcileOrphanConversationVectors,
@@ -61,7 +61,7 @@ export async function runSemanticMemoryReconcile(): Promise<
   });
 }
 
-export const semanticMemoryReconcileScheduled = inngest.createFunction(
+export const semanticMemoryReconcileScheduled = jobs.createFunction(
   {
     id: SEMANTIC_MEMORY_RECONCILE_SCHEDULED_INNGEST_ID,
     retries: 1,
@@ -76,7 +76,7 @@ export const semanticMemoryReconcileScheduled = inngest.createFunction(
 );
 
 // Operator "run now" trigger (same reconciliation, on demand).
-export const semanticMemoryReconcileRequested = inngest.createFunction(
+export const semanticMemoryReconcileRequested = jobs.createFunction(
   {
     id: SEMANTIC_MEMORY_RECONCILE_REQUESTED_INNGEST_ID,
     retries: 1,

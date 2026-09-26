@@ -4,8 +4,8 @@
 // single-flight: two overlapping sweeps would race for the same decisions and
 // spend panels twice on one question.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   CONCIERGE_SWEEP_CRON,
@@ -32,7 +32,7 @@ async function runPass(limitOverride?: number) {
   });
 }
 
-export const decisionConciergeSweepScheduled = inngest.createFunction(
+export const decisionConciergeSweepScheduled = jobs.createFunction(
   {
     id: CONCIERGE_SWEEP_SCHEDULED_INNGEST_ID,
     retries: 1,
@@ -46,7 +46,7 @@ export const decisionConciergeSweepScheduled = inngest.createFunction(
   },
 );
 
-export const decisionConciergeSweepRequested = inngest.createFunction(
+export const decisionConciergeSweepRequested = jobs.createFunction(
   {
     id: CONCIERGE_SWEEP_REQUESTED_INNGEST_ID,
     retries: 1,

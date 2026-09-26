@@ -1,4 +1,4 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -24,7 +24,7 @@ export function buildGitPromotionVerificationScript(input: {
   ].join("\n");
 }
 
-export const gitPromotionSandboxVerification = inngest.createFunction(
+export const gitPromotionSandboxVerification = jobs.createFunction(
   {
     id: "build/git-promotion-sandbox-verification",
     retries: 0,

@@ -104,7 +104,7 @@ const MAX_BACKLOG_DELIVERY_BUDGET = 50;
  * ideate/plan/review; it does not raise execution parallelism.
  */
 export async function setBacklogDeliveryBudgetHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const data: { backlogTeeUpDailyCap?: number; governedBacklogEnabled?: boolean } = {};
+  const data: { backlogTeeUpDailyCap?: number; governedBacklogEnabled?: boolean; wipAdmissionMode?: "shadow" | "enforce" } = {};
 
   const rawBudget = params["dailyBudget"];
   if (typeof rawBudget === "number" && Number.isFinite(rawBudget)) {
@@ -123,6 +123,14 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
     data.governedBacklogEnabled = rawEnabled;
   }
 
+  const rawMode = params["wipAdmissionMode"];
+  if (rawMode !== undefined) {
+    if (rawMode !== "shadow" && rawMode !== "enforce") {
+      return { success: false, error: "invalid_input", message: "wipAdmissionMode must be shadow or enforce." };
+    }
+    data.wipAdmissionMode = rawMode;
+  }
+
   if (Object.keys(data).length > 0) {
     await prisma.platformDevConfig.upsert({
       where: { id: "singleton" },
@@ -133,20 +141,25 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
 
   const fresh = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
-    select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true },
+    select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true, wipAdmissionMode: true },
   });
 
-  const { BUILD_WIP_CAP, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
+  const { sandboxPoolSize, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
   const activeBuilds = await prisma.featureBuild.count({
     where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
   });
 
   const dailyBudget = fresh?.backlogTeeUpDailyCap ?? 3;
   const enabled = fresh?.governedBacklogEnabled === true;
+  // Intake budget, admission and execution are three different limits: this
+  // budget sets intake per day; each start is admitted by its portfolio's points
+  // in flight (BI-3430B3A4); the sandbox pool is the physical execution limit.
+  const poolSize = sandboxPoolSize();
+  const admissionMode = fresh?.wipAdmissionMode === "enforce" ? "enforce" : "shadow";
   const parallelismNote =
-    activeBuilds >= BUILD_WIP_CAP
-      ? ` Build Studio's shared sandbox is already at its ${BUILD_WIP_CAP}-build execution limit (${activeBuilds} active) — new intake will queue behind it, not run in parallel. For more parallel throughput, use external worktree builds (unbounded — AGENTS.md §17), not a bigger budget.`
-      : ` ${activeBuilds}/${BUILD_WIP_CAP} of Build Studio's shared-sandbox execution slots are in use.`;
+    ` ${activeBuilds} Build Studio build(s) are active; the sandbox pool executes ${poolSize} at a time and queues the rest.` +
+    ` Each start is admitted by its portfolio's points in flight, not by this budget (admission is in ${admissionMode} mode${admissionMode === "shadow" ? ": decisions are recorded, nothing is blocked" : ""}).` +
+    " For more parallel throughput, use external worktree builds, not a bigger budget.";
 
   return {
     success: true,
@@ -155,7 +168,7 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
       Object.keys(data).length > 0
         ? `Backlog delivery budget set to ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`
         : `Backlog delivery budget is ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`,
-    data: { dailyBudget, enabled, activeBuilds, buildWipCap: BUILD_WIP_CAP },
+    data: { dailyBudget, enabled, activeBuilds, sandboxPoolSize: poolSize, wipAdmissionMode: admissionMode },
   };
 }
 
@@ -253,7 +266,7 @@ export async function sweepDuplicateDemandHandler(params: Record<string, unknown
 export async function approveDemandForFundingHandler(
   params: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string; agentId?: string; threadId?: string; callerClient?: string; apiTokenId?: string; authSource?: string },
+  context?: { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string; callerClient?: string; apiTokenId?: string; authSource?: string },
 ): Promise<ToolResult> {
   const itemId = String(params["itemId"] ?? "");
   const item = await prisma.backlogItem.findUnique({
@@ -330,6 +343,19 @@ export async function approveDemandForFundingHandler(
     };
   }
 
+  // Budget first (BI-EF265C9A): an approval past the portfolio's allocation is
+  // refused for an autonomous caller and needs a recorded reason from a person.
+  const budgetReservation = await import("@/lib/portfolio/budget-reservation");
+  const reservationPlan = await budgetReservation.planFundingReservation(prisma as never, {
+    itemId,
+    now: new Date(),
+    autonomous: budgetReservation.isAutonomousCaller(context),
+    overrideReason: typeof params["overrideReason"] === "string" ? params["overrideReason"] : null,
+  });
+  if (reservationPlan.kind === "refuse") {
+    return { success: false, error: reservationPlan.code, message: reservationPlan.message };
+  }
+
   const { evaluateOrgBusinessDecisionGate } = await import("@/lib/decision-perspective/org-business-gate");
   const rationale = typeof params["rationale"] === "string" ? (params["rationale"] as string).trim() : "";
   const decision = await evaluateOrgBusinessDecisionGate({
@@ -374,6 +400,9 @@ export async function approveDemandForFundingHandler(
         message: transition.message,
       };
     }
+    if (reservationPlan.kind === "reserve") {
+      await budgetReservation.commitFundingReservation(prisma as never, reservationPlan, { userId, agentId: context?.agentId ?? null });
+    }
     // AI-led execution (EP-DELIVERY-FLOW BI-A6648529): crossing the bet pulls a
     // coworker forward. Kernel decision (high conf) = ask-first — raise a
     // coworker-pickup offer for a human to approve, not an autonomous claim.
@@ -408,6 +437,7 @@ export async function approveDemandForFundingHandler(
         orgProfileSelected: decision.orgProfileSelected,
         demandScore: item.demandScore,
         investmentBucket: item.investmentBucket,
+        budget: budgetOutcome(reservationPlan, funded),
       },
       recordedById: userId,
       recordedByAgentId: context?.agentId ?? null,
@@ -433,8 +463,20 @@ export async function approveDemandForFundingHandler(
       interactionId: decision.interactionId,
       outcomeType: decision.evaluation.outcomeType,
       orgProfileSelected: decision.orgProfileSelected,
+      budget: budgetOutcome(reservationPlan, funded),
     },
   };
+}
+
+/** What funding did to the portfolio budget, for the decision record and the caller. */
+function budgetOutcome(
+  plan: Awaited<ReturnType<typeof import("@/lib/portfolio/budget-reservation").planFundingReservation>>,
+  funded: boolean,
+) {
+  if (plan.kind === "reserve") {
+    return { reserved: funded, points: plan.points, portfolioId: plan.portfolioId, overrideReason: plan.overrideReason, warning: plan.warning };
+  }
+  return { reserved: false, reason: plan.kind === "none" ? plan.reason : plan.code, message: plan.message };
 }
 
 export async function runCapacityDrainHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {

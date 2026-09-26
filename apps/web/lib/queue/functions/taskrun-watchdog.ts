@@ -16,8 +16,8 @@
  *
  * See docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md §5.7, §6.2.
  */
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import {
   decideStall,
   shouldSurfaceBuildFailure,
@@ -106,7 +106,7 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
         completedAt: now,
       });
       await setQuiescenceLevel("normal", null);
-      await inngest.send({
+      await jobs.send({
         name: "platform.quiescence-cleared",
         data: {
           runId: sc.runId,
@@ -229,7 +229,7 @@ export async function recoverStuckQuiescingTaskRuns(now: Date): Promise<number> 
   return recovered;
 }
 
-export const taskrunWatchdog = inngest.createFunction(
+export const taskrunWatchdog = jobs.createFunction(
   {
     id: "ops/taskrun-watchdog",
     retries: 0,
@@ -275,6 +275,8 @@ export const taskrunWatchdog = inngest.createFunction(
     // DPF_WORKCAPSULE_REAPER_ENABLED=1, and live actuation only when additionally
     // DPF_WORKCAPSULE_REAPER_AUTO_REAP=1 (mirrors the runtime-artifact / worktree
     // janitors). Best-effort. DB-only (junction-safe: never touches worktrees).
+    // BI-ED6EA694: AUTO_REAP guards abandoning UNMERGED work; merged rooms are
+    // archived whenever the reaper is enabled, or they pile up until they are held.
     let workCapsulesReapCandidates = 0;
     let workCapsulesReaped = 0;
     try {
@@ -287,6 +289,7 @@ export const taskrunWatchdog = inngest.createFunction(
           db: capsuleDb as never,
           now: new Date(),
           dryRun: !autoReap,
+          closeDelivered: true,
         });
         workCapsulesReapCandidates = result.candidates.length;
         workCapsulesReaped = result.reaped;

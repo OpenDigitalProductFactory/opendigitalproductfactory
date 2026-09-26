@@ -1,12 +1,12 @@
 import { prisma } from "@dpf/db";
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
 import {
   applyNonprodCapacityEvent,
   publishNonprodCapacityForHead,
   type NonprodCapacityEvent,
 } from "@/lib/nonprod/durable-wait";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 const RECONCILE_CRON = "3,8,13,18,23,28,33,38,43,48,53,58 * * * *";
@@ -36,7 +36,7 @@ export async function reconcileNonprodLeaseWaits(input: {
   return { environments: environments.length, notified };
 }
 
-export const nonprodCapacityAvailable = inngest.createFunction(
+export const nonprodCapacityAvailable = jobs.createFunction(
   {
     id: "nonprod/capacity-available",
     retries: 2,
@@ -50,7 +50,7 @@ export const nonprodCapacityAvailable = inngest.createFunction(
     })),
 );
 
-export const nonprodLeaseWaitReconciliation = inngest.createFunction(
+export const nonprodLeaseWaitReconciliation = jobs.createFunction(
   {
     id: "nonprod/lease-wait-reconciliation",
     retries: 1,

@@ -43,9 +43,9 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
   transitionState: (...a: unknown[]) => transitionStateMock(...a),
   setQuiescenceLevel: (...a: unknown[]) => setQuiescenceLevelMock(...a),
 }));
-vi.mock("../inngest-client", () => ({
-  inngest: {
-    // The module calls inngest.createFunction(config, handler) at import; expose
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
+    // The module calls jobs.createFunction(config, handler) at import; expose
     // the raw handler as `.fn` so the test can invoke it directly.
     createFunction: (_config: unknown, fn: unknown) => ({ fn }),
     send: (...a: unknown[]) => inngestSendMock(...a),

@@ -62,19 +62,44 @@ export function isAllowedMcpEndpoint(candidate) {
 }
 
 /**
- * Call an MCP tool and return its parsed result payload.
- *
- * Mirrors scripts/gate-worktree.sh's `mcp_call | extract_tool_result`: the
- * JSON-RPC response's `result.content` array is searched for a `text` entry
- * (the shape the DPF MCP server returns tool results in), which is itself
- * JSON and holds the actual `{ success, entityId, error, ... }` payload.
- * Falls back to `result.structuredContent` or `result` for other transports.
+ * Serialize one JSON-RPC 2.0 request. The only place in scripts/ that builds
+ * the envelope (plan 2026-09-08 §10.5 S8; ratchet
+ * scripts/check-no-hand-rolled-mcp-jsonrpc.mjs).
  */
-export async function mcpCall(toolName, args, {
+export function buildJsonRpcBody(method, params) {
+  callId += 1;
+  return JSON.stringify({
+    jsonrpc: "2.0",
+    id: callId,
+    method,
+    ...(params === undefined ? {} : { params }),
+  });
+}
+
+/**
+ * POST one JSON-RPC request to the MCP endpoint and return the raw reply as
+ * `{ status, text }`. The HTTP status is NOT interpreted: a caller that must
+ * fail open on a 401 or 5xx decides that itself. Throws on a missing URL or
+ * credential, a refused endpoint, a transport error and a timeout.
+ *
+ * Transport, first match wins:
+ *   - `fetchImpl`: a fetch-compatible function (tests; callers that already
+ *     inject one). It gets an AbortSignal for the deadline.
+ *   - DPF_GATE_CURL_BIN: the contract-test curl seam below.
+ *   - plain node:http/https with `agent: false` + `Connection: close` (see the
+ *     header comment for why not the global fetch).
+ *
+ * `label` names the call in the timeout message; it defaults to the tool name
+ * for tools/call and to the method otherwise.
+ */
+export async function mcpPost(method, params, {
   mcpUrl,
   bearerToken,
   timeoutMs = 10_000,
   allowNonLoopbackEndpoint = false,
+  accept,
+  fetchImpl,
+  label,
 } = {}) {
   if (!mcpUrl) throw new Error("mcpCall: mcpUrl is required");
   if (!bearerToken) throw new Error("mcpCall: bearerToken is required");
@@ -115,33 +140,44 @@ export async function mcpCall(toolName, args, {
     }
   }
 
-  callId += 1;
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    id: callId,
-    method: "tools/call",
-    params: { name: toolName, arguments: args },
-  });
+  const callLabel = label ?? (method === "tools/call" && params?.name ? params.name : method);
+  const body = buildJsonRpcBody(method, params);
+  const headers = {
+    Authorization: `Bearer ${bearerValue}`,
+    "Content-Type": "application/json",
+    ...(accept ? { Accept: accept } : {}),
+  };
 
-  const url = new URL(mcpUrl);
-  const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
+  if (fetchImpl) {
+    const response = await fetchImpl(mcpUrl, {
+      method: "POST",
+      headers,
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return { status: response.status, text: await response.text(), via: "fetch" };
+  }
 
   const injectedTransport = process.env.DPF_GATE_CURL_BIN;
-  const payload = injectedTransport
-    ? await callInjectedCurlTransport({
+  if (injectedTransport) {
+    const text = await callInjectedCurlTransport({
       command: injectedTransport,
       mcpUrl,
       bearerToken: bearerValue,
       body,
       timeoutMs,
-    })
-    : await new Promise((resolve, reject) => {
+    });
+    return { status: 200, text, via: "injected" };
+  }
+
+  const url = new URL(mcpUrl);
+  const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise((resolve, reject) => {
     const req = requestFn(url, {
       method: "POST",
       agent: false,
       headers: {
-        Authorization: `Bearer ${bearerValue}`,
-        "Content-Type": "application/json",
+        ...headers,
         "Content-Length": Buffer.byteLength(body),
         Connection: "close",
       },
@@ -149,23 +185,38 @@ export async function mcpCall(toolName, args, {
       let data = "";
       res.setEncoding("utf8");
       res.on("data", (chunk) => { data += chunk; });
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (error) {
-          reject(new Error(`mcpCall: invalid JSON response from ${mcpUrl} (status ${res.statusCode}): ${error.message}`));
-        }
-      });
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, text: data, via: "http" }));
     });
     req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`mcpCall: ${toolName} timed out after ${timeoutMs}ms`));
+      req.destroy(new Error(`mcpCall: ${callLabel} timed out after ${timeoutMs}ms`));
     });
     req.on("error", reject);
     req.write(body);
     req.end();
-    });
+  });
+}
 
-  return extractToolResult(payload);
+/**
+ * Call an MCP tool and return its parsed result payload.
+ *
+ * Mirrors scripts/gate-worktree.sh's `mcp_call | extract_tool_result`: the
+ * JSON-RPC response's `result.content` array is searched for a `text` entry
+ * (the shape the DPF MCP server returns tool results in), which is itself
+ * JSON and holds the actual `{ success, entityId, error, ... }` payload.
+ * Falls back to `result.structuredContent` or `result` for other transports.
+ * Throws on a reply that is not JSON; the HTTP status is not checked, so a
+ * JSON-RPC error envelope comes back through extractToolResult as before.
+ */
+export async function mcpCall(toolName, args, options = {}) {
+  const reply = await mcpPost("tools/call", { name: toolName, arguments: args }, options);
+  try {
+    return extractToolResult(JSON.parse(reply.text));
+  } catch (error) {
+    if (reply.via === "injected") {
+      throw new Error(`mcpCall: injected transport returned invalid JSON: ${error.message}`);
+    }
+    throw new Error(`mcpCall: invalid JSON response from ${options.mcpUrl} (status ${reply.status}): ${error.message}`);
+  }
 }
 
 // Contract-test seam retained while the POSIX gate converges on this canonical
@@ -194,7 +245,7 @@ async function callInjectedCurlTransport({
   ];
   const executable = process.platform === "win32" ? "sh" : command;
   const executableArgs = process.platform === "win32" ? [command, ...args] : args;
-  const output = await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const child = spawn(executable, executableArgs, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -209,14 +260,9 @@ async function callInjectedCurlTransport({
         reject(new Error(`mcpCall: injected transport exited ${code}: ${stderr.trim()}`));
         return;
       }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch (error) {
-        reject(new Error(`mcpCall: injected transport returned invalid JSON: ${error.message}`));
-      }
+      resolve(stdout);
     });
   });
-  return output;
 }
 
 export function extractToolResult(payload) {

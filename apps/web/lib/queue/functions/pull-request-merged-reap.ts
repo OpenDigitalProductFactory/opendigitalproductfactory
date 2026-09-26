@@ -29,7 +29,7 @@
 // into the root clone's node_modules and a recursive delete that follows one is
 // what wiped packages/* on 2026-08-15.
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { resolveManagedScriptPath } from "@/lib/operate/backups/managed-script-path";
 
@@ -65,7 +65,7 @@ export function assertTierAOnly(args: readonly string[]): void {
   }
 }
 
-export const pullRequestMergedReap = inngest.createFunction(
+export const pullRequestMergedReap = jobs.createFunction(
   {
     id: "build/pr-merged-reap",
     retries: 2,

@@ -139,6 +139,8 @@ export async function resolveNonprodPoolPolicy(input: {
   capacityBroker?: LocalCiCapacityBroker;
   manifestSlotCount: number;
   reserveAdmissionHeadroom?: boolean;
+  /** BI-3A14308C: false when the gate delegates its production build. */
+  reserveBuilderHeadroom?: boolean;
   now: Date;
 }): Promise<ResolvedLocalCiPoolPolicy> {
   if (input.environmentKey !== "local-integration-ci") {
@@ -184,6 +186,7 @@ export async function resolveNonprodPoolPolicy(input: {
     host: clientPressure,
     manifestSlotCount: input.manifestSlotCount,
     reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
+    reserveBuilderHeadroom: input.reserveBuilderHeadroom,
     env: process.env,
     now: input.now,
     installation,
@@ -230,6 +233,7 @@ export async function resolveNonprodPoolPolicy(input: {
       host: decidedHostPressure,
       manifestSlotCount: input.manifestSlotCount,
       reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
+      reserveBuilderHeadroom: input.reserveBuilderHeadroom,
       env: process.env,
       now: input.now,
       installation,
