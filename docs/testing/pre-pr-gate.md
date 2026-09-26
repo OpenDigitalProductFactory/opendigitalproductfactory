@@ -666,6 +666,16 @@ not drop caches, and never run `sync` in the Docker VM, because it wedges the VM
 production build plus a margin, not the builder's 16 GiB ceiling. Every gate
 record carries the measured peak as `evidence.builderMemory` (BI-D3BF53A9).
 
+**The production build is delegated to the merge queue (BI-3A14308C).** The
+local gate runs guards, typecheck and affected vitest, then stops. The merge
+queue's required `pnpm --filter web build` job is the binding production build
+(AGENTS.md §4), so a local gate reserves no builder memory in the Docker VM:
+admission needs only the host-stage reserve. The gate record says
+`productionBuild: delegated`, never that a local build passed. To build locally
+anyway, for example to reproduce a failure only the Docker image build shows,
+run the gate with `DPF_LOCAL_CI_BUILD_STRATEGY=local`. That run reserves the
+builder memory as before and records the builder's measured peak.
+
 The reserve keeps itself current (BI-903FB5F9):
 
 - Each leased gate result folds its measured peak into the

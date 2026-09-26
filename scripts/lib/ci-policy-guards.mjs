@@ -615,6 +615,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
+      // One home for the shared wire types (plan 2026-09-08 §10.5 S9).
+      conformanceTest("scripts/check-no-local-dpf-type-redeclaration.test.mjs"),
+      node("scripts/check-no-local-dpf-type-redeclaration.mjs"),
     ]),
     // BI-96033E25 — a vitest test must resolve repo paths from __dirname, not
     // process.cwd(), or `vitest run --root <pkg>` reads outside the repo and
@@ -884,6 +887,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/process-spine-conformance.test.mjs",
         "scripts/lib/ensure-post-checkout-hook.test.mjs",
+      ),
+      // BI-545943EE: the SessionStart process-spine verdict and the generated
+      // operating contract it carries when the spine is unproven. Moved off the
+      // test-inventory allowlist: unlisted = never run.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/process-spine-health.test.mjs",
+        "packages/dpf-skill-pack/scripts/generate-operating-contract.test.mjs",
       ),
       node(
         "--test",

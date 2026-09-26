@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { JobEvidence, JobEvidencePhoto } from "@dpf/types";
+import type { JobEvidence, JobEvidencePhoto, UploadResponse } from "@dpf/types";
 import { api } from "@/src/lib/apiClient";
 import { getServerUrl } from "@/src/lib/serverConfig";
 import { SecureStorage } from "@/src/repositories/SecureStorage";
@@ -29,11 +29,6 @@ interface JobEvidenceState {
 }
 
 const EMPTY_EVIDENCE: JobEvidence = { photos: [] };
-
-interface UploadResponse {
-  fileId: string;
-  url: string;
-}
 
 async function uploadCapturedImage(image: {
   uri: string;

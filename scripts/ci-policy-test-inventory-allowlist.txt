@@ -8,7 +8,6 @@ packages/dpf-skill-pack/hooks/governance-freshness-check.test.mjs
 packages/dpf-skill-pack/hooks/grok-skill-exposure-adapter.test.mjs
 packages/dpf-skill-pack/hooks/hook-io.test.mjs
 packages/dpf-skill-pack/hooks/pregate-evidence-guard.test.mjs
-packages/dpf-skill-pack/hooks/process-spine-health.test.mjs
 packages/dpf-skill-pack/hooks/tool-economy-precheck.test.mjs
 packages/dpf-skill-pack/hooks/worktree-session-hygiene.test.mjs
 scripts/agent-host-resource-charter.contract.test.mjs
