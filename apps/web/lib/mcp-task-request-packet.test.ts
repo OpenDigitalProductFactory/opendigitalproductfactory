@@ -37,7 +37,7 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
   resolveAutonomousWorkTools: (...args: unknown[]) => autonomous.resolveTools(...args),
 }));
 vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: vi.fn() }));
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: vi.fn() } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { send: vi.fn() } }));
 
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
 

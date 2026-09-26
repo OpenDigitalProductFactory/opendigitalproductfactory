@@ -20,6 +20,7 @@ import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { materialFreshnessDecay } from "./material-freshness-decay";
 import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
+import { budgetReservationSettle } from "./budget-reservation-settle";
 import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
@@ -188,6 +189,7 @@ export const scheduledFunctions = [
   researchScheduleScan,
   materialFreshnessDecay,
   prSubmitAwaitingAcceptanceReconcile,
+  budgetReservationSettle,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,

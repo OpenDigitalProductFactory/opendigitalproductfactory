@@ -1,6 +1,6 @@
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import { Pool } from "pg";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import type { ModelRevalidationSummary } from "@/lib/inference/model-revalidation";
 
@@ -37,7 +37,7 @@ export function scheduledModelDiscoveryStatus(summary: ModelRevalidationSummary)
   return summary.outcomes.some((outcome) => outcome.status === "failed") ? "partial" : "ok";
 }
 
-export const modelDiscoveryRefresh = inngest.createFunction(
+export const modelDiscoveryRefresh = jobs.createFunction(
   {
     id: "inference/model-discovery-refresh",
     retries: 2,

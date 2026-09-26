@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   LOCAL_ONLY_SWEEP_CRON,
@@ -19,7 +19,7 @@ import {
  * Server-side on purpose (AGENTS.md §1): a client hook could see more, but the
  * guarantee cannot live in a client, and every install inherits this one.
  */
-export const localOnlyKnowledgeSweep = inngest.createFunction(
+export const localOnlyKnowledgeSweep = jobs.createFunction(
   { id: LOCAL_ONLY_SWEEP_INNGEST_ID, retries: 1, triggers: [cron(LOCAL_ONLY_SWEEP_CRON)] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, LOCAL_ONLY_SWEEP_INNGEST_ID);

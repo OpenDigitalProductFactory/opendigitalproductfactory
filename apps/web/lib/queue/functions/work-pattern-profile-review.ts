@@ -1,8 +1,8 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
-export const workPatternProfileReview = inngest.createFunction(
+export const workPatternProfileReview = jobs.createFunction(
   {
     id: "quality/work-pattern-profile-review",
     retries: 1,

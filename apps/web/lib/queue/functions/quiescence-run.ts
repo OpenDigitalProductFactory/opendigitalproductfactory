@@ -27,7 +27,7 @@
  *
  * BI-QUIESCE-002.
  */
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import {
   captureActiveSessionBlockers,
   flipActiveTaskRunsToQuiescing,
@@ -57,7 +57,7 @@ const COORDINATOR_TIMEOUT_MS = 60 * 60 * 1000;
 // of ticks don't impact DB.
 const WAIT_TICK_MS = 5_000;
 
-export const quiescenceRun = inngest.createFunction(
+export const quiescenceRun = jobs.createFunction(
   {
     id: QUIESCENCE_RUN_FUNCTION_ID,
     retries: 0,
@@ -349,7 +349,7 @@ async function emitCleared(payload: {
     console.warn("[quiescence-run] broadcastSystem failed:", err);
   }
 
-  await inngest.send({
+  await jobs.send({
     name: QUIESCENCE_CLEARED_EVENT,
     data: {
       runId: payload.runId,

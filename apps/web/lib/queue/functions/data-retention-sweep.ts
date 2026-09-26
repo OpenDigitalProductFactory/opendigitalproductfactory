@@ -12,8 +12,8 @@
 // operator kill switch (ScheduledJob.enabled=false) is honored inside
 // executeScheduledRetentionSweep.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   DATA_RETENTION_CRON,
@@ -22,7 +22,7 @@ import {
   DATA_RETENTION_REQUESTED_INNGEST_ID,
 } from "@/lib/operate/retention/constants";
 
-export const dataRetentionSweepScheduled = inngest.createFunction(
+export const dataRetentionSweepScheduled = jobs.createFunction(
   {
     id: DATA_RETENTION_SCHEDULED_INNGEST_ID,
     retries: 1,
@@ -46,7 +46,7 @@ export const dataRetentionSweepScheduled = inngest.createFunction(
 
 // Manual one-shot trigger for the admin "run now" action. Supports a dry-run
 // (count-only) preview via `event.data.dryRun = true`.
-export const dataRetentionSweepRequested = inngest.createFunction(
+export const dataRetentionSweepRequested = jobs.createFunction(
   {
     id: DATA_RETENTION_REQUESTED_INNGEST_ID,
     retries: 1,

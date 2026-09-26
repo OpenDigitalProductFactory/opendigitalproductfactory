@@ -20,7 +20,8 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { parseFrontmatter, deriveSlug } from "../packages/db/src/seed-wiki-kernel";
+import { parseFrontmatter } from "../packages/db/src/seed-wiki-kernel";
+import { kernelWikiPageSlug } from "../packages/db/src/wiki-frontmatter";
 import type { WikiPageFrontmatter } from "../packages/db/src/seed-wiki-kernel";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -89,7 +90,7 @@ async function main(): Promise<void> {
   for (const file of files) {
     const raw = readFileSync(file, "utf8");
     const { frontmatter, body } = parseFrontmatter<WikiPageFrontmatter>(raw);
-    const slug = frontmatter.slug ?? deriveSlug(file, WIKI_DIR);
+    const slug = kernelWikiPageSlug(frontmatter, file, WIKI_DIR);
     const text = `${frontmatter.title}\n\n${frontmatter.abstract ?? ""}\n\n${body}`;
 
     process.stdout.write(`  ${slug} … `);

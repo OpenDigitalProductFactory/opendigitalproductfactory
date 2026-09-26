@@ -46,6 +46,8 @@ model User {
   pushDevices                      PushDeviceRegistration[]
   taskRequirementsApproved         TaskRequirement[]                   @relation("TaskRequirementApprover")
   epicPortfoliosConfirmed          EpicPortfolio[]                     @relation("EpicPortfolioConfirmedBy")
+  portfolioBudgetsSet              PortfolioBudgetPeriod[]             @relation("PortfolioBudgetSetBy")
+  budgetReservations               BudgetReservation[]                 @relation("BudgetReservationActor")
   taskRequirementsCreated          TaskRequirement[]                   @relation("TaskRequirementCreator")
   teamMemberships                  TeamMembership[]
   groups                           UserGroup[]
@@ -195,6 +197,10 @@ model Principal {
   sponsorPrincipalId                  String?
   authorityMode                       String?
   sensitivityClearance                PrincipalSensitivity[]              @default([public])
+  /// BCP-47 UI language the person chose (EP-6B33A840 L0.1). Null = follow the org default / browser.
+  preferredLanguage                   String?
+  /// IANA timezone the person chose. Null = the org's timezone.
+  timeZone                            String?
   aliases                             PrincipalAlias[]
   deferredBacklogItems                BacklogItem[]                       @relation("BacklogDeferralOwner")
   sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
