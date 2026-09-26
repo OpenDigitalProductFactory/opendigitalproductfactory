@@ -11,7 +11,9 @@ import {
   loadCleanupPolicy,
   renderCleanupPolicySummary,
   renderProcessSpineSummary,
+  run,
 } from "./process-spine-health-check.mjs";
+import { OPERATING_CONTRACT_LINES } from "./operating-contract.generated.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(here, "..");
@@ -92,7 +94,9 @@ test("flags generic superpowers brainstorming present while dpf-brainstorming is
   assert.equal(verdict.exposed.state, "verified");
   assert.deepEqual(verdict.conflicts.map((c) => c.dpfSkill), ["dpf-brainstorming"]);
   assert.equal(verdict.severity, "warn");
-  assert.match(renderProcessSpineSummary(verdict).join("\n"), /DPF-native replacement skills are not active/);
+  const summary = renderProcessSpineSummary(verdict);
+  assert.match(summary[0], /^Process spine: BROKEN/);
+  assert.match(summary.join("\n"), /DPF-native replacement skills are not active/);
 });
 
 test("warns when installed skills cannot be proven exposed in the active session", () => {
@@ -104,7 +108,12 @@ test("warns when installed skills cannot be proven exposed in the active session
   assert.equal(verdict.installed.ok, true);
   assert.equal(verdict.exposed.state, "unknown");
   assert.equal(verdict.severity, "warn");
-  const summary = renderProcessSpineSummary(verdict).join("\n");
+  const lines = renderProcessSpineSummary(verdict);
+  assert.equal(
+    lines[0],
+    "Process spine: UNPROVEN — this client cannot show DPF which skills are loaded, so DPF skills may be absent. The operating contract follows inline.",
+  );
+  const summary = lines.join("\n");
   assert.match(summary, /UNKNOWN/);
   assert.match(summary, /cannot prove replacements are loaded/);
 });
@@ -118,6 +127,7 @@ test("reports fully exposed DPF replacements as healthy", () => {
   assert.equal(verdict.installed.ok, true);
   assert.equal(verdict.exposed.state, "verified");
   assert.equal(verdict.severity, "ok");
+  assert.equal(renderProcessSpineSummary(verdict)[0], "Process spine: VERIFIED");
 });
 
 test("reports missing plugin files as installed-state failure", () => {
@@ -130,4 +140,70 @@ test("reports missing plugin files as installed-state failure", () => {
   assert.equal(verdict.exposed.state, "unknown");
   assert.ok(verdict.installed.missingDpfSkills.includes("dpf-writing-plans"));
   assert.equal(verdict.severity, "fail");
+  assert.match(renderProcessSpineSummary(verdict)[0], /^Process spine: BROKEN/);
+});
+
+// BI-545943EE: the SessionStart output itself, not only the renderer.
+
+const RESTART_ADVICE = /restart the client/i;
+
+function hookContext(result) {
+  assert.equal(result.exitCode, 0);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.hookSpecificOutput.hookEventName, "SessionStart");
+  return parsed.hookSpecificOutput.additionalContext;
+}
+
+test("--hook with no exposure evidence emits UNPROVEN and the inline contract, without restart advice", () => {
+  const context = hookContext(run(["--hook", "--skill-pack-root", makeSkillPack()], {}));
+  const lines = context.split("\n");
+  assert.match(lines[0], /^Process spine: UNPROVEN/);
+  assert.ok(!context.includes("Process spine: VERIFIED"));
+  assert.doesNotMatch(context, RESTART_ADVICE);
+  for (const line of OPERATING_CONTRACT_LINES) {
+    assert.ok(lines.includes(line), `contract line missing from SessionStart context: ${line}`);
+  }
+  for (const prefix of [
+    "- principles/decisions-belong-to-their-scope: ",
+    "- principles/escalation-is-a-gate-not-a-trust-tier: ",
+    "- principles/consult-scopes-before-asking: ",
+    "- AGENTS.md §11: ",
+  ]) {
+    assert.ok(lines.some((l) => l.startsWith(prefix) && l.length > prefix.length), `missing ${prefix}`);
+  }
+});
+
+test("--hook with skills missing on disk emits BROKEN, restart advice, and the contract", () => {
+  const context = hookContext(
+    run(["--hook", "--skill-pack-root", makeSkillPack(["dpf-brainstorming"])], {}),
+  );
+  assert.match(context.split("\n")[0], /^Process spine: BROKEN/);
+  assert.match(context, RESTART_ADVICE);
+  for (const line of OPERATING_CONTRACT_LINES) assert.ok(context.includes(line));
+});
+
+test("--hook with a session that verifiably lacks a DPF skill emits BROKEN", () => {
+  const context = hookContext(
+    run(
+      ["--hook", "--skill-pack-root", makeSkillPack(), "--exposed-skills", "superpowers:brainstorming"],
+      {},
+    ),
+  );
+  assert.match(context.split("\n")[0], /^Process spine: BROKEN/);
+  assert.match(context, RESTART_ADVICE);
+});
+
+test("--hook with every DPF skill verifiably exposed emits nothing", () => {
+  const result = run(
+    ["--hook", "--skill-pack-root", makeSkillPack(), "--exposed-skills", REQUIRED_REPLACEMENT_SLUGS.join(",")],
+    {},
+  );
+  assert.deepEqual(result, { exitCode: 0, stdout: "" });
+});
+
+test("the CLI path exits 2 only when skills are missing on disk", () => {
+  assert.equal(run(["--skill-pack-root", makeSkillPack(["dpf-brainstorming"])], {}).exitCode, 2);
+  const unproven = run(["--skill-pack-root", makeSkillPack()], {});
+  assert.equal(unproven.exitCode, 0);
+  assert.match(unproven.stdout, /^Process spine: UNPROVEN/);
 });
