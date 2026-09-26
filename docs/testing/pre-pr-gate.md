@@ -678,6 +678,16 @@ terminal window on every re-claim (BI-69178E02). The refusal is not a verdict on
 the diff. Re-running the same branch is refused again, and a stale resumer stops
 after the first refusal. Rebase onto `origin/main` and run `pregate` again.
 
+**A queued gate's waiter outlives the session that started it.** On Windows a
+process that node spawns stays inside its caller's job object, and the Claude
+Code client runs its whole tree in one job, so every durable-wait resumer died
+when its session closed (BI-27A37D27). The resumer is now started through WMI,
+outside that job. If WMI is unavailable, the queued payload says
+`resumerSurvivesSession: false` and the wait ends with the session. For a queued
+claim whose every waiter has ended, `pregate:status` says "no waiter is alive"
+instead of "queued". That is not a verdict on the diff: re-run `pregate`. A
+branch cut before this fix keeps the old resumer until it is rebased.
+
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
 bounded output tail, and records real compiler exits separately from opaque

@@ -211,7 +211,7 @@ function metadataDescribesAnotherRun(state, metadata) {
  * old ordering tested it first, so any of these outcomes carrying pending evidence
  * short-circuited into a PENDING headlined "gate passed".
  */
-function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha }) {
+function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha, queuedWaiter = null }) {
   // BI-51353470: a metadata candidateSha that is not HEAD is STALE in the
   // headline, not FAIL with a buried metadata line. Observed: FAIL quoting
   // a previous run's vitest command while gated claimed the current HEAD.
@@ -235,6 +235,16 @@ function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha }
     };
   }
   if (UNFINISHED_GATE_STATUSES.has(status)) {
+    // BI-27A37D27: a queued claim with no live waiter is not waiting for
+    // anything. Name that first; it is the one fact that changes what to do.
+    if (status === "queued" && queuedWaiter?.checked && !queuedWaiter.alive) {
+      const pids = queuedWaiter.pids?.length ? ` (last waiter pid ${queuedWaiter.pids.join(", ")})` : "";
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record status queued — but no waiter is alive for this claim${pids}, so nothing will run it and its queue row lapses within minutes. Not a failure of the diff. Re-run pregate.`,
+      };
+    }
     // BI-D908DA0A: a claim parked because the pool had NO admissible slot is
     // host pressure, not a queue. Say so, or the operator waits behind nobody.
     const closed = poolClosedReasonFromState(state);
@@ -293,7 +303,7 @@ function unpublishedEvidenceNote(state) {
   return ` Local evidence from this run is preserved on disk and still unpublished (${reason}) — that is a pending PUBLICATION, not a pass, and publishing it cannot produce one. Re-run pregate on this SHA.`;
 }
 
-export function classifySlotRecord({ state, metadata, headSha, headBranch = "", now = Date.now() }) {
+export function classifySlotRecord({ state, metadata, headSha, headBranch = "", now = Date.now(), queuedWaiter = null }) {
   const boundSha = String(state?.sha || "");
   const boundBranch = String(state?.branch || "");
   const candidateSha = String(metadata?.candidateSha || "");
@@ -345,7 +355,7 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
   // The gate did not pass. Classify what actually happened FIRST — `evidencePending`
   // qualifies a PASS and can never manufacture one (BI-41C3E303).
   if (state.gatePassed !== true) {
-    const unpassed = classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha });
+    const unpassed = classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha, queuedWaiter });
     if (state.evidencePending !== true) return unpassed;
     return { ...unpassed, reason: `${unpassed.reason}${unpublishedEvidenceNote(state)}` };
   }

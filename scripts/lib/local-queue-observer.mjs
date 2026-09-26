@@ -317,6 +317,27 @@ export function findDeadLocalQueueObservers({
   return dead;
 }
 
+/**
+ * BI-27A37D27. Is ANY waiter alive for the claim at this branch+sha? A queued
+ * gate record whose every observer is dead is not a queue: nothing will ever
+ * run it, and saying "queued" sent sessions to wait for hours.
+ */
+export function findQueueWaiter({
+  directory,
+  branch,
+  sha,
+  observerAlive = createObserverLivenessProbe(),
+}) {
+  const records = readObserverRecords(directory)
+    .map(({ record }) => record)
+    .filter((record) => record.branch === branch && record.sha === sha);
+  return {
+    checked: true,
+    alive: records.some((record) => observerAlive(record).alive),
+    pids: records.map((record) => record.pid),
+  };
+}
+
 export function releaseLocalQueueObserver({ path, token }) {
   const record = readObserver(path);
   if (!record) return { status: "absent" };

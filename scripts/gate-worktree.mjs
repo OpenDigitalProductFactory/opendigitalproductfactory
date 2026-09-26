@@ -1915,6 +1915,8 @@ async function main() {
           // item 1 asked to end.
           resumeOwner: resume.spawned ? "detached-resumer" : "caller",
           resumerPid: resume.pid,
+          // BI-27A37D27: false means the waiter dies with this client session.
+          resumerSurvivesSession: resume.spawned ? resume.survivesSession !== false : false,
           ...(resume.spawned ? {} : { resumeUnavailableReason: resume.reason }),
           ...(closedReason ? { poolClosedReason: closedReason } : {}),
         }) + "\n");
