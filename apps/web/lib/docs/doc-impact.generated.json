@@ -1914,6 +1914,9 @@
     "scripts/check-no-unattributable-deferral.mjs": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "scripts/check-no-unlocalized-ui.mjs": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "scripts/check-no-unreachable-room-links.mjs": [
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
       "docs/testing/pre-pr-gate.md"
@@ -2901,7 +2904,8 @@
       "apps/web/lib/i18n/locale-context.server.ts",
       "apps/web/lib/org-locale/locale-context.ts",
       "apps/web/lib/org-locale/org-locale.ts",
-      "packages/i18n/src/locales.ts"
+      "packages/i18n/src/locales.ts",
+      "scripts/check-no-unlocalized-ui.mjs"
     ],
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
