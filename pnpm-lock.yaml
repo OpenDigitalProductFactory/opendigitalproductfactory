@@ -48,6 +48,9 @@ importers:
       '@dpf/finance-templates':
         specifier: workspace:*
         version: link:../../packages/finance-templates
+      '@dpf/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@dpf/integration-shared':
         specifier: workspace:*
         version: link:../../packages/integration-shared
@@ -354,6 +357,18 @@ importers:
 
   packages/finance-templates:
     devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/coverage-v8@4.1.11)(jsdom@30.1.1(@noble/hashes@1.8.0))(msw@2.15.0(@types/node@26.6.2)(typescript@6.0.3))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/i18n:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.2
+        version: 26.6.2
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

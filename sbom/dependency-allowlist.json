@@ -42,6 +42,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "@dpf/i18n": {
+      "added": "2026-09-26",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "First-party workspace package (packages/i18n, BI-6EA9E25A / EP-6B33A840): locale registry, negotiation and direction over native Intl. No external dependencies; adds no third-party supply-chain surface."
+    },
     "@dpf/integration-shared": {
       "added": "2026-06-21",
       "workspaces": [

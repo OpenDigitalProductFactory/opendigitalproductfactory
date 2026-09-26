@@ -4,6 +4,8 @@ import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 import { SocialAuthPanel } from "@/components/admin/SocialAuthPanel";
 import { EmailSettingsPanel } from "@/components/admin/EmailSettingsPanel";
 import { ReadabilityPolicyPanel } from "@/components/admin/ReadabilityPolicyPanel";
+import { LocalePreferencesPanel } from "@/components/admin/LocalePreferencesPanel";
+import { getLocalePreferences } from "@/lib/actions/locale-preferences";
 import { getSmtpConfigStatus } from "@/lib/shared/smtp-config";
 import { loadReadabilityPolicy } from "@/lib/readability/policy";
 
@@ -57,6 +59,7 @@ export default async function AdminSettingsPage() {
       <SocialAuthPanel keyData={await getKeyData(SOCIAL_AUTH_KEYS)} />
       <EmailSettingsPanel status={await getSmtpConfigStatus()} />
       <ReadabilityPolicyPanel policy={await loadReadabilityPolicy()} />
+      <LocalePreferencesPanel {...await getLocalePreferences()} />
     </div>
   );
 }

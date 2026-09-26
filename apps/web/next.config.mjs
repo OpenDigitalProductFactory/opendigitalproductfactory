@@ -29,7 +29,7 @@ const config = {
   // typedRoutes is ever enabled, this needs revisiting — the Typecheck job would
   // then have to generate those types first.
   typescript: { ignoreBuildErrors: true },
-  transpilePackages: ["@dpf/db", "@dpf/storefront-templates", "@dpf/validators"],
+  transpilePackages: ["@dpf/db", "@dpf/i18n", "@dpf/storefront-templates", "@dpf/validators"],
   turbopack: {
     root: turbopackRoot,
   },

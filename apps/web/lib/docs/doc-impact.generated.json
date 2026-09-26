@@ -836,6 +836,9 @@
     "apps/web/lib/hooks/useResilientEventSource.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
+    "apps/web/lib/i18n/locale-context.server.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "apps/web/lib/identity/aidoc-resolver.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/ai-agent-meta-model.md"
@@ -984,6 +987,12 @@
     ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
+    ],
+    "apps/web/lib/org-locale/locale-context.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
+    "apps/web/lib/org-locale/org-locale.ts": [
+      "docs/architecture/localization-runbook.md"
     ],
     "apps/web/lib/performance/business-analysis-watch-run.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1692,6 +1701,9 @@
     ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh": [
       "docs/operations/install.md"
+    ],
+    "packages/i18n/src/locales.ts": [
+      "docs/architecture/localization-runbook.md"
     ],
     "packages/integration-shared/src/credential-crypto.ts": [
       "docs/architecture/2026-06-22-platform-adequacy-architecture-review.md"
@@ -2893,6 +2905,12 @@
       "apps/web/lib/work-capsules/governed-work-claim.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "packages/db/data/agent_registry.json"
+    ],
+    "docs/architecture/localization-runbook.md": [
+      "apps/web/lib/i18n/locale-context.server.ts",
+      "apps/web/lib/org-locale/locale-context.ts",
+      "apps/web/lib/org-locale/org-locale.ts",
+      "packages/i18n/src/locales.ts"
     ],
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
