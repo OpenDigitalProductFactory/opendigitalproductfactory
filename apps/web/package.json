@@ -46,7 +46,7 @@
     "@opentelemetry/api": "1.9.1",
     "@react-pdf/renderer": "^4.9.0",
     "@ricky0123/vad-web": "^0.0.31",
-    "@xyflow/react": "^12.11.2",
+    "@xyflow/react": "^12.11.6",
     "axe-core": "4.12.1",
     "bcryptjs": "^3.0.3",
     "elkjs": "^0.12.0",
