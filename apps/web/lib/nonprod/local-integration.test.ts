@@ -8,7 +8,7 @@ vi.mock("@/lib/actions/external-evidence", () => ({
   recordExternalEvidence: mockRecordExternalEvidence,
 }));
 
-import { recordLocalIntegrationResult } from "./local-integration";
+import { recordLocalIntegrationResult, TEST_STUB_EVIDENCE_REFUSED } from "./local-integration";
 
 describe("recordLocalIntegrationResult", () => {
   const platformConfig = {
@@ -463,7 +463,10 @@ describe("recordLocalIntegrationResult refuses test-stub evidence", () => {
           sha: "f".repeat(40),
           headTreeHash: "a".repeat(40),
         },
-      }, { platformConfig, environmentLease, builderCalibration })).rejects.toThrow(/DPF_ALLOW_LOCAL_CI_STUB/);
+      }, { platformConfig, environmentLease, builderCalibration })).rejects.toMatchObject({
+        code: TEST_STUB_EVIDENCE_REFUSED,
+        message: expect.stringMatching(/DPF_ALLOW_LOCAL_CI_STUB/),
+      });
 
       expect(mockRecordExternalEvidence).not.toHaveBeenCalled();
       expect(platformConfig.findUnique).not.toHaveBeenCalled();
