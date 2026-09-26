@@ -95,7 +95,7 @@ outvote the ledger.
 
 Fields are parsed by the YAML subset shared with `seed-skills.ts` and `seed-prompt-templates.ts`. Scalars, inline arrays (`[a, b]`), and block-style lists (`- item`) all work. **No nested objects.** Quotes are optional; surrounding `"`/`'` are stripped.
 
-The `slug` is derived from the file path relative to `wiki/` (e.g. `wiki/stances/portfolio-as-anchor.md` → slug `stances/portfolio-as-anchor`). To override, set `slug:` in the frontmatter.
+The `slug` is derived from the file path relative to `wiki/` (e.g. `wiki/stances/portfolio-as-anchor.md` → slug `stances/portfolio-as-anchor`). To override, set `slug:` in the frontmatter. The rule is `kernelWikiPageSlug` in `packages/db/src/wiki-frontmatter.ts`; profession pages use `professionCorpusPageSlug` there (`professions/<profession>/<name>`, frontmatter `slug:` not honoured). Code that cites a page by slug (a gate's `principleSlug`, `apps/web/lib/kernel/governing-principles.ts`) is tested to resolve by that same rule, so renaming a cited page or changing its `slug:` fails a test rather than silently breaking the citation.
 
 ---
 
