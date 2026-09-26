@@ -18,9 +18,10 @@
 //
 // Contract: exit 0 = clean, non-zero = violation (see check-guards.mjs).
 
-import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { runGit } from "./lib/git.mjs";
 
 const KNOB = ["drop", "caches"].join("_");
 const EXEMPT_PREFIXES = ["docs/superpowers/specs/"];
@@ -53,17 +54,14 @@ export function findManualCacheDrops(text) {
 }
 
 function trackedFilesMentioningKnob(repoRoot) {
-  try {
-    return execFileSync("git", ["grep", "-l", "-I", "-F", KNOB], {
-      cwd: repoRoot,
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-    }).split(/\r?\n/).filter(Boolean);
-  } catch (error) {
-    // git grep exits 1 when nothing matches.
-    if (error && error.status === 1) return [];
-    throw error;
-  }
+  const result = runGit(["grep", "-l", "-I", "-F", KNOB], {
+    cwd: repoRoot,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  if (result.ok) return result.stdout.split(/\r?\n/).filter(Boolean);
+  // git grep exits 1 when nothing matches; anything else is a real failure.
+  if (result.status === 1 && !result.stderr.trim()) return [];
+  throw new Error(`git grep failed: ${result.stderr.trim() || `status ${result.status}`}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
