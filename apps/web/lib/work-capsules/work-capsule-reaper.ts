@@ -10,7 +10,8 @@
 //
 // Governance (kernel: destructive-actions-require-explicit-go):
 //   - DRY-RUN IS THE DEFAULT. `reapStaleWorkCapsules` returns the candidate set
-//     and writes NOTHING unless the caller passes `dryRun: false`.
+//     and writes NOTHING unless the caller passes `dryRun: false`, or passes
+//     `closeDelivered` to archive MERGED rooms only (BI-ED6EA694).
 //   - The scheduled caller (taskrun-watchdog) gates live actuation behind
 //     DPF_WORKCAPSULE_REAPER_AUTO_REAP=1 (observe-only otherwise), mirroring the
 //     runtime-artifact / worktree janitors.
@@ -22,7 +23,10 @@
 // Worktree removal is a separate, explicitly-gated step (dpf-worktree-hygiene).
 
 import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
-import { selectLatestExactPullRequestObservation } from "../contributor-change-lanes/pull-request-observation";
+import {
+  parseVerifiedPullRequestObservation,
+  selectLatestExactPullRequestObservation,
+} from "../contributor-change-lanes/pull-request-observation";
 import {
   classifyWorkCapsuleLiveness,
   WORK_CAPSULE_OPEN_PR_FRESHNESS_MS,
@@ -389,7 +393,15 @@ export async function annotateProviderDeliverySignals(
   confirmedAt: Date | null = null,
 ): Promise<void> {
   for (const row of rows) {
-    if (!row.repositoryFullName || !row.pullRequestNumber || !row.headSha) continue;
+    if (!row.repositoryFullName || !row.pullRequestNumber) continue;
+    if (!row.headSha) {
+      // BI-ED6EA694: a room that never recorded its head is delivered only by its
+      // own PR merging from its own branch. An open PR proves nothing about it.
+      if (row.headBranch && headlessRoomMerged(payloads, row.repositoryFullName, row.pullRequestNumber, row.headBranch)) {
+        row.deliveredSignal = { merged: true };
+      }
+      continue;
+    }
     const observation = selectLatestExactPullRequestObservation(payloads, {
       repositoryFullName: row.repositoryFullName,
       pullRequestNumber: row.pullRequestNumber,
@@ -406,6 +418,24 @@ export async function annotateProviderDeliverySignals(
       row.pullRequestObservation = { state: "open", observedAt };
     }
   }
+}
+
+function headlessRoomMerged(
+  payloads: readonly unknown[],
+  repositoryFullName: string,
+  pullRequestNumber: number,
+  headBranch: string,
+): boolean {
+  return payloads.some((payload) => {
+    const row = parseVerifiedPullRequestObservation(payload);
+    return Boolean(
+      row &&
+        row.state === "merged" &&
+        row.number === pullRequestNumber &&
+        row.headBranch === headBranch &&
+        row.repositoryFullName.toLowerCase() === repositoryFullName.toLowerCase(),
+    );
+  });
 }
 
 type ProviderObservationBatch = {
@@ -490,6 +520,11 @@ export async function reapStaleWorkCapsules(args: {
   now?: Date;
   /** DEFAULT true. Pass false to actually transition dead capsules. */
   dryRun?: boolean;
+  /**
+   * Archive DELIVERED (merged) rooms even on a dry run (BI-ED6EA694). Dry-run
+   * guards abandoning unmerged work; closing merged work is DB-only and reversible.
+   */
+  closeDelivered?: boolean;
   idleMs?: number;
   actor?: WorkCapsuleActor;
 }): Promise<ReapResult> {
@@ -554,16 +589,12 @@ export async function reapStaleWorkCapsules(args: {
 
   const candidates = selectReapCandidates(capsules, buildsById, now, idleMs);
 
-  if (dryRun) {
-    // BI-62FB6505: observe-only governs REAPING rooms. Clearing an item's pointer
-    // at a build that is already terminal reaps nothing, so it runs either way.
-    const backlogRepair = await reconcileTerminalCapsuleBacklogs({ db: args.db, dryRun: false, now });
-    return { dryRun: true, scanned: capsules.length, candidates, reaped: 0, backlogReconciled: backlogRepair.reconciled };
-  }
-
+  const toClose = dryRun
+    ? args.closeDelivered ? candidates.filter((candidate) => candidate.disposition === "delivered") : []
+    : candidates;
   let reaped = 0;
   const actor = args.actor ?? SYSTEM_ACTOR;
-  for (const candidate of candidates) {
+  for (const candidate of toClose) {
     // Disposition decides the closeout, NOT a single blanket "abandoned":
     //   - delivered (merged) → ARCHIVE as delivered. The worktree + the merged
     //     branch are safe to reap (their commits are on the trunk); worktree
@@ -596,9 +627,11 @@ export async function reapStaleWorkCapsules(args: {
       console.warn(`[work-capsule-reaper] failed to close out ${candidate.capsuleId}:`, err);
     }
   }
+  // BI-62FB6505: observe-only governs REAPING rooms. Clearing an item's pointer
+  // at a build that is already terminal reaps nothing, so it runs either way.
   const backlogRepair = await reconcileTerminalCapsuleBacklogs({ db: args.db, dryRun: false, now });
   return {
-    dryRun: false,
+    dryRun,
     scanned: capsules.length,
     candidates,
     reaped,
