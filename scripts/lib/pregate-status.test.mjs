@@ -786,3 +786,17 @@ test("a queued claim with a live waiter keeps the queued wording", () => {
   });
   assert.doesNotMatch(r.reason, /no waiter is alive/i);
 });
+
+// BI-27A37D27: "admitted" is written when the slot is granted and stays while
+// the stages run. Headlining it as FAIL stopped callers mid-run (observed live:
+// a gate reported FAIL while its log was inside check-guards).
+test("an admitted record is an in-flight run, never a FAIL", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "admitted", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /has not recorded a verdict/);
+});
