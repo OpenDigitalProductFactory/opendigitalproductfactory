@@ -18,7 +18,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "ai-readiness-blocker": "How should we fix your intelligence setup?",
   "platform-health": "How should we handle this outage?",
   "provider-credential": "Reconnect this service?",
-  "contribution-setup": "Share what you build?",
+  "contribution-setup": "Share your changes?",
   "reservation-exception": "Handle this reservation?",
   "hospitality-capacity": "Resolve this capacity issue?",
   "storefront-inquiry": "Reply to this enquiry?",

@@ -9,9 +9,14 @@ describe("contributionSetupGap", () => {
     expect(contributionSetupGap({ contributionMode: "contributing", decidedByPerson: true, hasContributionCredential: false })).toBe("connect");
   });
 
-  it("asks for the decision when none was made, including the seed's private default", () => {
-    expect(contributionSetupGap({ contributionMode: null, decidedByPerson: false, hasContributionCredential: false })).toBe("decide");
-    expect(contributionSetupGap({ contributionMode: "private", decidedByPerson: false, hasContributionCredential: false })).toBe("decide");
+  it("asks for the decision on a platform-development install when none was made, including the seed's private default", () => {
+    expect(contributionSetupGap({ contributionMode: null, decidedByPerson: false, hasContributionCredential: false, installationPurpose: "evolve-dpf" })).toBe("decide");
+    expect(contributionSetupGap({ contributionMode: "private", decidedByPerson: false, hasContributionCredential: false, installationPurpose: "evolve-dpf" })).toBe("decide");
+  });
+
+  it("does not nag an install that does not develop the platform about an undecided default", () => {
+    expect(contributionSetupGap({ contributionMode: "private", decidedByPerson: false, hasContributionCredential: false, installationPurpose: "operate-organization" })).toBeNull();
+    expect(contributionSetupGap({ contributionMode: null, decidedByPerson: false, hasContributionCredential: false })).toBeNull();
   });
 
   it("stays quiet once a person kept changes private, or contribution is fully set up", () => {
