@@ -115,7 +115,8 @@ add new tokens.
 - **Time/date:** `components/ui/LocalTime.tsx`, `components/ui/DatePicker.tsx`
 - **Drawer/timeline:** `components/build/DetailsDrawer.tsx`, `components/build/UnifiedEvidenceTimeline.tsx`
 - **Existing libs sanctioned:** `@xyflow/react`, `@fullcalendar/*`, `react-day-picker`,
-  `papaparse` (CSV — currently unused), `@react-pdf/renderer` (PDF — finance only)
+  `papaparse` (CSV — currently unused). PDF output goes through the dpf-doctools engine
+  (`convertDocument`, HTML to PDF); `@react-pdf/renderer` was retired 2026-09-26 (plan 2026-09-08 M5)
 
 ### ADD (this spec) — new shared layer under `components/ui/report-kit/`
 1. **`statusColors.ts`** — central registry: intent model + helper to resolve a domain
@@ -129,7 +130,7 @@ add new tokens.
 ### FOLLOW-UP (not this phase)
 - `StatCard` (generalize `FinanceSummaryCard` cross-domain)
 - Business-data charts (decide recharts vs. extend monitoring SVG)
-- `ExportButton` (wire up the already-present `papaparse` / `@react-pdf/renderer`)
+- `ExportButton` (wire up the already-present `papaparse`; PDF through the dpf-doctools engine)
 - Server-rendered (URL-driven) `DataTable` mode
 
 ---

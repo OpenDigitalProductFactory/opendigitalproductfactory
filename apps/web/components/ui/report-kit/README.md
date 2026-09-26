@@ -329,5 +329,6 @@ import { Chart } from "@/components/ui/report-kit/Chart";
 - **Phase 2:** migrate reference surfaces (complaints, finance/payments), grow
   `STATUS_INTENT`, fold `ChangeLaneStatusBadge` onto `StatusBadge`.
 - **Phase 3:** ✅ `StatCard` + `ExportButton` (CSV via papaparse) + `Chart`
-  (recharts — charting decision resolved). Remaining: PDF export (`@react-pdf`),
+  (recharts — charting decision resolved). Remaining: PDF export (through the dpf-doctools engine, as invoices and
+  document export do; `@react-pdf/renderer` was retired 2026-09-26),
   server-rendered `DataTable` URL mode.
