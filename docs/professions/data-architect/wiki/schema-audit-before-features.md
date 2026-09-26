@@ -30,7 +30,7 @@ Schemas accrete. Each new feature that bolts on a parallel model instead of refa
 
 ## Applies To
 
-In-platform coworkers proposing schema changes, external coding agents writing migrations, and humans authoring data-model specs. Symmetric. Applies to Prisma models, derived projections (Neo4j, Qdrant payloads), and shared TypeScript types.
+In-platform coworkers proposing schema changes, external coding agents writing migrations, and humans authoring data-model specs. Symmetric. Applies to Prisma models, derived projections (the graph mirror, vector payloads), and shared TypeScript types.
 
 ## How To Apply
 

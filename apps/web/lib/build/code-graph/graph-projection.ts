@@ -1,13 +1,13 @@
-// apps/web/lib/build/code-graph/neo4j-projection.ts
-// BET-5 (BI-A1E864A5): the code-graph structural projection formerly ran Cypher MERGE
-// against Neo4j; it now UPSERTs into the Postgres graph mirror (`graph_node` /
-// `graph_edge`) that graph-queries.ts / code-graph-access.ts read. Node identity =
-// the namespaced key the extractors already mint (codeFileKey = `${graphKey}:${path}`,
-// codeSymbolKey = `${graphKey}:symbol:…`, etc.) → graph_node.key. Edge facts map
-// fromKey → src_key, toKey → dst_key, kind → rel_type (direction preserved from the
-// old MATCH (from)-[r]->(to)). `graphKey`, `path`, `filePath`, line/confidence/
-// extractor and any extractor attributes are carried in the jsonb `props`, which the
-// read side filters on (props->>'graphKey', props->>'name', props->>'path', …).
+// apps/web/lib/build/code-graph/graph-projection.ts
+// The code-graph structural projection UPSERTs into the Postgres graph mirror
+// (`graph_node` / `graph_edge`) that graph-queries.ts / code-graph-access.ts read.
+// Node identity = the namespaced key the extractors already mint (codeFileKey =
+// `${graphKey}:${path}`, codeSymbolKey = `${graphKey}:symbol:…`, etc.) →
+// graph_node.key. Edge facts map fromKey → src_key, toKey → dst_key, kind →
+// rel_type, direction preserved. `graphKey`, `path`, `filePath`,
+// line/confidence/extractor and any extractor attributes are carried in the jsonb
+// `props`, which the read side filters on (props->>'graphKey', props->>'name',
+// props->>'path', …).
 import { prisma } from "@dpf/db";
 import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 
@@ -128,12 +128,6 @@ export async function clearCodeGraph(graphKey: string): Promise<void> {
     `DELETE FROM graph_node WHERE props->>'graphKey' = $1`,
     graphKey,
   );
-}
-
-export async function ensureCodeGraphNeo4jSchema(): Promise<void> {
-  // No-op: the Postgres graph mirror (graph_node/graph_edge + its indexes) is
-  // provisioned by the 20260714120000_bet5_graph_mirror migration, so there is no
-  // per-run schema to create. Retained for call-site compatibility.
 }
 
 async function clearStructuralFactsForFile(graphKey: string, filePath: string): Promise<void> {

@@ -60,7 +60,7 @@ describe("getCustomerNetworkTopologyData", () => {
     getNetworkTopologyAtLayerMock.mockResolvedValue({ nodes: [], edges: [] });
   });
 
-  it("uses the scoped Neo4j query for customer-site topology", async () => {
+  it("uses the scoped graph query for customer-site topology", async () => {
     await getCustomerNetworkTopologyData({
       mode: "customer-site",
       customerAccountId: "cust_a",
@@ -75,7 +75,7 @@ describe("getCustomerNetworkTopologyData", () => {
     expect(getNetworkTopologyAtLayerMock).not.toHaveBeenCalled();
   });
 
-  it("uses the scoped Neo4j query for customer-account topology", async () => {
+  it("uses the scoped graph query for customer-account topology", async () => {
     await getCustomerNetworkTopologyData({
       mode: "customer-account",
       customerAccountId: "cust_a",

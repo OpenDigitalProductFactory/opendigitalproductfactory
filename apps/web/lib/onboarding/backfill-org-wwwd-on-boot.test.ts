@@ -152,7 +152,7 @@ describe("backfillOrgWwwdOnBoot", () => {
     prismaMock.organizationFindMany.mockResolvedValue([{ id: "org-1" }, { id: "org-2" }]);
     prismaMock.setupProgressFindFirst.mockResolvedValue({ id: "setup-1" });
     runSeedsMock
-      .mockRejectedValueOnce(new Error("qdrant down"))
+      .mockRejectedValueOnce(new Error("vector store down"))
       .mockResolvedValueOnce(undefined);
 
     const res = await backfillOrgWwwdOnBoot(silent);

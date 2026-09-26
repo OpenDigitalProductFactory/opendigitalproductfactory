@@ -218,7 +218,7 @@ async function createKnowledgeArticleHandler(params: Record<string, unknown>, us
       },
     });
 
-    // Index into Qdrant
+    // Index into the vector store
     await storeKnowledgeArticle({
       articleId,
       title,

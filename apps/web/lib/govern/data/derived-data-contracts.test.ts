@@ -14,7 +14,7 @@ function base(overrides: Partial<DerivedDataContract> = {}): DerivedDataContract
     id: "t",
     sourceAssetId: "data:agent-conversation",
     destination: "derived-index",
-    store: "qdrant:test",
+    store: "pgvector:test",
     payloadClass: "masked-content",
     transformation: "mask",
     transformDowngradesIdentifiability: true,
@@ -51,8 +51,8 @@ describe("derived-data contract invariants (spec §6.4)", () => {
 
 describe("seeded contracts", () => {
   it("registers the BI-DG-001 semantic-memory projection and validates it", () => {
-    const c = getDerivedDataContract("agent-conversation->qdrant-agent-memory");
-    expect(c?.store).toBe("qdrant:agent-memory");
+    const c = getDerivedDataContract("agent-conversation->pgvector-agent-memory");
+    expect(c?.store).toBe("pgvector:agent-memory");
     expect(c?.orphanReconciliation).toBe("source-anti-join");
     expect(contractsForSourceAsset("data:agent-conversation").length).toBeGreaterThan(0);
   });

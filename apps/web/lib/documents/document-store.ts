@@ -295,7 +295,7 @@ async function projectDocumentReferencesToGraph(documentDbId: string, db: Docume
       refType: reference.refType,
       anchor: reference.anchor,
     }).catch((err: unknown) => {
-      console.warn("[document-store] Neo4j document reference projection failed:", err);
+      console.warn("[document-store] graph document reference projection failed:", err);
     });
   }
 }

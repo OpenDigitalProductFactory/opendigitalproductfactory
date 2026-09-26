@@ -1,5 +1,5 @@
 // apps/web/lib/govern/data/derived-data-contracts.ts
-// BI-DG-002 (spec §6.4): typed contracts for every derived copy (Neo4j, Qdrant, cache,
+// BI-DG-002 (spec §6.4): typed contracts for every derived copy (graph mirror, vectors, cache,
 // export, backup, federation). PURE + declarative. A projection cannot self-declassify:
 // the strictest relevant source restriction propagates UNLESS a recorded transform
 // produces a less-identifying output that the PDP authorizes. Every content-bearing
@@ -20,7 +20,7 @@ export type DerivedDataContract = {
   id: string;
   sourceAssetId: DataAssetId;
   destination: DestinationClass;
-  /** Store/index the copy lives in (human label, e.g. "qdrant:agent-memory"). */
+  /** Store/index the copy lives in (human label, e.g. "pgvector:agent-memory"). */
   store: string;
   /** Most-identifying payload this copy may carry. */
   payloadClass: ProjectionClass;
@@ -80,10 +80,10 @@ export function assertDerivedDataContract(contract: DerivedDataContract): void {
 const CONTRACTS: readonly DerivedDataContract[] = [
   {
     // The BI-DG-001 semantic-memory projection, expressed as a governed contract.
-    id: "agent-conversation->qdrant-agent-memory",
+    id: "agent-conversation->pgvector-agent-memory",
     sourceAssetId: "data:agent-conversation",
     destination: "derived-index",
-    store: "qdrant:agent-memory",
+    store: "pgvector:agent-memory",
     payloadClass: "masked-content",
     transformation: "sensitivity-gate+deterministic-mask",
     transformDowngradesIdentifiability: true,

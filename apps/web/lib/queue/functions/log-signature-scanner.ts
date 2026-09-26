@@ -28,7 +28,7 @@ import type { MonitorIssueDb } from "@/lib/observability/monitor-issue-writer";
 
 const LOOKBACK_MIN = Number(process.env.DPF_LOG_SCAN_LOOKBACK_MIN ?? 20);
 // Only file for signatures seen at least this many times in the window. 1 =
-// surface even a single novel occurrence (the silent-Qdrant case). Operators
+// surface even a single novel occurrence (the silent vector-store case). Operators
 // can raise it to reduce noise. No hard pin.
 const MIN_COUNT = Number(process.env.DPF_LOG_SCAN_MIN_COUNT ?? 1);
 

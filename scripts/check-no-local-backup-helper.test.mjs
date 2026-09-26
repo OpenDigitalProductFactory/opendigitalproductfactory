@@ -108,7 +108,7 @@ test("flags a dpf_*_backup_* / dpf_*_restore_* registration", () => {
     1,
   );
   assert.equal(
-    findBodyPatternLines('name: "dpf_qdrant_restore_duration_seconds",', METRIC_NAME_PATTERN).length,
+    findBodyPatternLines('name: "dpf_vector_restore_duration_seconds",', METRIC_NAME_PATTERN).length,
     1,
   );
 });

@@ -1,7 +1,7 @@
-// packages/db/src/neo4j-rebuild-ea.ts
+// packages/db/src/rebuild-ea-graph.ts
 // Full rebuild of the EA graph projection from Postgres.
-// Run after Prisma migrations or when Neo4j EA data is suspected stale.
-// Usage: pnpm --filter @dpf/db neo4j:rebuild-ea
+// Run after Prisma migrations or when the EA graph mirror is suspected stale.
+// Usage: pnpm --filter @dpf/db graph:rebuild-ea
 
 import "./load-env.js";
 import { prisma } from "./client.js";

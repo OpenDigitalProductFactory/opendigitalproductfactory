@@ -1,6 +1,6 @@
-// packages/db/src/neo4j-rebuild-documents.ts
+// packages/db/src/rebuild-documents-graph.ts
 // Rebuild the managed-document reference graph projection from Postgres.
-// Usage: pnpm --filter @dpf/db neo4j:rebuild-documents
+// Usage: pnpm --filter @dpf/db graph:rebuild-documents
 
 import "./load-env.js";
 import { prisma } from "./client.js";

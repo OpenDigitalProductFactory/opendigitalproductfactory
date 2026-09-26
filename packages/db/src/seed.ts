@@ -2625,13 +2625,13 @@ async function main(): Promise<void> {
     if (wikiSeed.emptyKernel) {
       console.log("  founder-kernel: empty (no docs/founder-kernel/wiki/ or raw-sources/ content yet)");
     } else {
-      const qdrantSummary = wikiSeed.embeddingsSidecarPresent
-        ? `qdrant=${wikiSeed.qdrantPointsSeeded}`
-        : "qdrant=no-sidecar";
+      const vectorSummary = wikiSeed.embeddingsSidecarPresent
+        ? `vectors=${wikiSeed.vectorPointsSeeded}`
+        : "vectors=no-sidecar";
       console.log(
         `  founder-kernel: kernelVersion=${wikiSeed.kernelVersion} ` +
           `pages=${wikiSeed.pageCount} sources=${wikiSeed.sourceCount} ` +
-          `orphan-links=${wikiSeed.orphanLinks.length} ${qdrantSummary}`,
+          `orphan-links=${wikiSeed.orphanLinks.length} ${vectorSummary}`,
       );
     }
   });

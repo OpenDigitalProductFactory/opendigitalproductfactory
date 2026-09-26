@@ -135,7 +135,7 @@ export async function executeBootstrapDiscovery(
   });
 
   // Yield between every major pass (BI-9F106818 Phase 0): these passes are
-  // CPU-bound or fire many small DB/Neo4j awaits without naturally yielding
+  // CPU-bound or fire many small DB awaits without naturally yielding
   // between iterations, so a long sweep can starve the HTTP event loop.
   // yieldToEventLoop() (setImmediate) lets pending HTTP accepts and timer
   // callbacks run before we start the next pass.

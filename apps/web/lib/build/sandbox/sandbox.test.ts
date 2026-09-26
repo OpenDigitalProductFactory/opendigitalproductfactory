@@ -74,12 +74,12 @@ describe("buildSandboxCreateArgs", () => {
     const args = buildSandboxCreateArgs("FB-X", 3002, {
       envVars: {
         DATABASE_URL: "postgresql://dpf:dpf_sandbox@db:5432/dpf",
-        NEO4J_URI: "bolt://neo4j:7687",
+        REDIS_URL: "redis://redis:6379",
       },
     });
     expect(args).toContain("-e");
     expect(args).toContain("DATABASE_URL=postgresql://dpf:dpf_sandbox@db:5432/dpf");
-    expect(args).toContain("NEO4J_URI=bolt://neo4j:7687");
+    expect(args).toContain("REDIS_URL=redis://redis:6379");
   });
 });
 
