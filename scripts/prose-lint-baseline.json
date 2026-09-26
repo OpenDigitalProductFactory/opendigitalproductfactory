@@ -1941,7 +1941,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 86
+    "textMass": 73
   },
   "apps/web/app/(shell)/platform/schedule/page.tsx": {
     "vocabulary": 0,
@@ -5733,7 +5733,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 13
   },
   "apps/web/components/employee/AddressSection.tsx": {
     "vocabulary": 0,
@@ -8085,7 +8085,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 13
+    "textMass": 3
   },
   "apps/web/components/platform/operations-topology-layout.ts": {
     "vocabulary": 0,

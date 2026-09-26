@@ -12,11 +12,16 @@
       "apps/web/app/(shell)/storefront/layout.tsx",
       "apps/web/components/ops/workrooms/WorkroomActivitySection.tsx",
       "apps/web/components/platform/coworker-record/panels.tsx",
+      "apps/web/components/platform/identity/PrincipalDirectoryPanel.tsx",
       "apps/web/components/shell/AppRail.tsx"
     ]
   },
   "evidence": {
     "kind": "propose-n-pick",
-    "consideredOptions": ["labels-only", "portfolio-spine-with-activity-labels", "pure-activity-rail"]
+    "consideredOptions": [
+      "labels-only",
+      "portfolio-spine-with-activity-labels",
+      "pure-activity-rail"
+    ]
   }
 }
