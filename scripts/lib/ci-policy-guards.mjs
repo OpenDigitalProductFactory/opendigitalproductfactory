@@ -83,6 +83,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-3B6DC1DC: the TaskRun working-write guard now scopes by model, so its
       // own behaviour is under test rather than trusted.
       node("--test", "scripts/check-no-bare-working-write.test.mjs"),
+      // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
+      node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
@@ -828,6 +830,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
+      // BI-77BE1389: install-folder sessions get the source contract at start.
+      node("--test", "packages/dpf-skill-pack/hooks/install-folder-contract.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
       // SessionStart readiness banner. Both are hand-added here for the same
       // reason as every entry above — an unlisted test file never runs.

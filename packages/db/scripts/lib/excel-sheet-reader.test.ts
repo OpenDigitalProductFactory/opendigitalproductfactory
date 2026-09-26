@@ -4,7 +4,7 @@ import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
 
-import { readWorkbook, requireSheetData } from "./excel-sheet-reader.js";
+import { readWorkbook, readWorkbookBytes, requireSheetData } from "./excel-sheet-reader.js";
 
 function buildWorkbookWithEmptyInlineStringCell(): Uint8Array {
   return zipSync({
@@ -61,5 +61,34 @@ describe("readWorkbook", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("readWorkbookBytes (BI-D1B40D43: the in-house reader that replaced read-excel-file)", () => {
+  it("reads every sheet by name: shared strings, numbers, booleans, sparse cells and entities", () => {
+    const workbook = zipSync({
+      "xl/workbook.xml": strToU8(
+        '<workbook xmlns:r="r"><sheets><sheet name="Roster &amp; notes" sheetId="1" r:id="rId1"/><sheet name="Second" sheetId="2" r:id="rId2"/></sheets></workbook>',
+      ),
+      "xl/_rels/workbook.xml.rels": strToU8(
+        '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="/xl/worksheets/sheet2.xml"/></Relationships>',
+      ),
+      "xl/sharedStrings.xml": strToU8(
+        '<sst><si><t>Name</t></si><si><r><t>Fos</t></r><r><t xml:space="preserve">tered</t></r><rPh><t>X</t></rPh></si><si><t>A &lt;b&gt; &amp;amp;</t></si></sst>',
+      ),
+      "xl/worksheets/sheet1.xml": strToU8(
+        '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="C1" t="s"><v>1</v></c></row>' +
+          '<row r="3"><c r="A3" t="s"><v>2</v></c><c r="B3"><v>3.5</v></c><c r="C3" t="b"><v>1</v></c><c r="D3"/></row><row r="4"/></sheetData></worksheet>',
+      ),
+      "xl/worksheets/sheet2.xml": strToU8('<worksheet><sheetData><row r="1"><c r="A1" t="str"><v>ok</v></c></row></sheetData></worksheet>'),
+    });
+    const sheets = readWorkbookBytes(workbook);
+    expect(sheets.map((sheet) => sheet.sheet)).toEqual(["Roster & notes", "Second"]);
+    expect(requireSheetData(sheets, "Roster & notes")).toEqual([
+      ["Name", null, "Fostered"],
+      [null, null, null],
+      ["A <b> &amp;", 3.5, true],
+    ]);
+    expect(requireSheetData(sheets, "Second")).toEqual([["ok"]]);
   });
 });

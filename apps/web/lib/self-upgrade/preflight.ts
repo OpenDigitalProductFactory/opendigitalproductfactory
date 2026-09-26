@@ -41,6 +41,42 @@ export function resolveReadinessBackupHostPath(
   return root ? `${root}/backups` : undefined;
 }
 
+/**
+ * A customizable (source-built) install upgrades from source, so there is no
+ * release to name, but its target commit descends from one (BI-4E18BC28).
+ * Pull that release's dpf-doctools now, like the release path above. Unlike
+ * that path it never fails the run: a source install that cannot reach the
+ * registry builds the image itself after the swap.
+ */
+async function prePullSourceLineageDoctools(params: {
+  sourcePath: string;
+  targetSha: string;
+  prePullDoctools?: (release: { tag: string; ghcrOwner: string }) => Promise<Awaited<ReturnType<PrePullDoctools>>>;
+  sourceLineage?: () => Promise<{ imageTag: string; ghcrOwner: string } | null>;
+}): Promise<void> {
+  try {
+    const lineage = await (params.sourceLineage ?? (async () => {
+      const [{ describeSourceLineage }, { defaultGitRunner }] = await Promise.all([
+        import("./doctools-source-lineage"),
+        import("./prepare-source"),
+      ]);
+      return describeSourceLineage({
+        sourcePath: params.sourcePath, targetSha: params.targetSha,
+        ghcrOwner: process.env.GHCR_OWNER, runGit: defaultGitRunner,
+      });
+    }))();
+    if (!lineage) return;
+    const prePull = params.prePullDoctools
+      ?? (await import("./doctools-release-image")).prePullReleaseDoctoolsImage;
+    const pulled = await prePull({ tag: lineage.imageTag, ghcrOwner: lineage.ghcrOwner });
+    if (pulled.outcome === "failed") {
+      console.warn(`[self-upgrade] dpf-doctools for ${lineage.imageTag} was not pre-pulled; the new portal resolves or builds it after the swap: ${pulled.reason}`);
+    }
+  } catch (error) {
+    console.warn("[self-upgrade] dpf-doctools pre-pull for the source lineage skipped:", error);
+  }
+}
+
 export async function runCandidatePreflight(params: {
   dryRun?: boolean;
   readinessMode?: string;
@@ -68,7 +104,9 @@ export async function runCandidatePreflight(params: {
   runtimeTransitionSecret?: string;
   now?: () => Date;
   /** Test seam; defaults to prePullReleaseDoctoolsImage. */
-  prePullDoctools?: (release: VerifiedReleaseIdentity) => Promise<Awaited<ReturnType<PrePullDoctools>>>;
+  prePullDoctools?: (release: { tag: string; ghcrOwner: string }) => Promise<Awaited<ReturnType<PrePullDoctools>>>;
+  /** Test seam: the release a source upgrade's target descends from (BI-4E18BC28). */
+  sourceLineage?: () => Promise<{ imageTag: string; ghcrOwner: string } | null>;
 }): Promise<CandidatePreflightResult> {
   if (params.dryRun) return { ok: true };
   if (params.readinessMode === "legacy-bootstrap") {
@@ -105,6 +143,8 @@ export async function runCandidatePreflight(params: {
       await params.emitFailure(params.runId);
       return { ok: false, reason: "doctools-prepull-failed" };
     }
+  } else {
+    await prePullSourceLineageDoctools(params);
   }
   const runtime = await params.runtime();
   try {

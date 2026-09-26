@@ -1,18 +1,19 @@
-// Converter-backed ingestion routing (BI-81524041, slice S3 of BI-815D40C6).
+// Engine-backed ingestion routing (BI-81524041, slice S3, and BI-D1B40D43,
+// slice S9 of BI-815D40C6).
 //
 // One routing test per family, each with a fake converter: the format routing
-// table sends legacy Word, RTF and OpenDocument text to .docx, legacy Excel and
-// OpenDocument spreadsheets to .xlsx, and every presentation to plain text,
-// then the existing parser reads the result. With no converter, S0's honest
-// `unsupported` result stays.
+// table sends every Word-family file (.docx included) to .odt, every sheet
+// (.xlsx included) to .ods, every presentation and every PDF to plain text,
+// and DPF's own OpenDocument reader reads the result. With no converter, the
+// honest `unsupported` result stays.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ConversionResult } from "@/lib/documents/conversion/convert";
 import { parseFileContent, sniffOfficeContainer, type ConvertForIngestion } from "./file-parsers";
 import { conversionRouteFor } from "./office-conversion";
-import { CHART_OBJECT_PARTS, odfPackage } from "./__fixtures__/odf-package";
+import { CHART_OBJECT_PARTS, odfPackage, odsWithRows, odtWithBody } from "./__fixtures__/odf-package";
 import { readSheetMatrix } from "@/lib/workbooks/sheet-import";
 
 const fixture = (name: string) => readFileSync(resolve(__dirname, "__fixtures__/office", name));
@@ -20,13 +21,12 @@ const legacyDoc = fixture("plan.doc");
 const rtf = fixture("plan.rtf");
 const docx = fixture("plan.docx");
 const legacyXls = fixture("roster.xls");
+const xlsxBytes = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(26), Buffer.from("[Content_Types].xml xl/workbook.xml", "latin1")]);
+const pdfBytes = Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n", "latin1");
 
-vi.mock("read-excel-file/universal", () => ({
-  readSheet: vi.fn(async () => [
-    ["Name", "Breed"],
-    ["Biscuit", "Beagle"],
-  ]),
-}));
+/** What the engine returns for the plan document: a heading and one paragraph. */
+const PLAN_ODT = odtWithBody('<text:h text:outline-level="1">Rescue operations plan</text:h><text:p>Second Chance fosters twelve dogs this quarter.</text:p>');
+const ROSTER_ODS = odsWithRows([["Name", "Breed"], ["Biscuit", "Beagle"]]);
 
 function odfBytes(flavor: "text" | "spreadsheet" | "presentation" | "graphics"): Buffer {
   const name = Buffer.from("mimetype", "latin1");
@@ -49,7 +49,7 @@ const pptxBytes = Buffer.concat([
 ]);
 
 type Call = { from: string; to: string };
-function fakeConverter(outputs: Partial<Record<"docx" | "xlsx" | "txt", Buffer>>): { convert: ConvertForIngestion; calls: Call[] } {
+function fakeConverter(outputs: Partial<Record<"odt" | "ods" | "txt", Buffer>>): { convert: ConvertForIngestion; calls: Call[] } {
   const calls: Call[] = [];
   const convert: ConvertForIngestion = async ({ from, to }) => {
     calls.push({ from, to });
@@ -66,15 +66,21 @@ const failing = (reason: "converter-unavailable" | "input-too-large" | "timeout"
 describe("conversionRouteFor: the format routing table", () => {
   const route = (bytes: Buffer, name: string) => conversionRouteFor(sniffOfficeContainer(bytes), bytes, name);
 
-  it("sends legacy Word, RTF and OpenDocument text to .docx", () => {
-    expect(route(legacyDoc, "plan.doc")).toEqual({ family: "word", from: "doc", to: "docx", fallback: "legacy-word" });
-    expect(route(rtf, "plan.rtf")).toEqual({ family: "word", from: "rtf", to: "docx", fallback: "rtf" });
-    expect(route(odfBytes("text"), "plan.odt")).toEqual({ family: "word", from: "odt", to: "docx", fallback: "opendocument" });
+  it("sends .docx, legacy Word, RTF and OpenDocument text to .odt", () => {
+    expect(route(docx, "plan.docx")).toEqual({ family: "word", from: "docx", to: "odt", fallback: "word-document" });
+    expect(route(legacyDoc, "plan.doc")).toEqual({ family: "word", from: "doc", to: "odt", fallback: "legacy-word" });
+    expect(route(rtf, "plan.rtf")).toEqual({ family: "word", from: "rtf", to: "odt", fallback: "rtf" });
+    expect(route(odfBytes("text"), "plan.odt")).toEqual({ family: "word", from: "odt", to: "odt", fallback: "opendocument" });
   });
 
-  it("sends legacy Excel and OpenDocument spreadsheets to .xlsx", () => {
-    expect(route(legacyXls, "roster.xls")).toEqual({ family: "sheet", from: "xls", to: "xlsx", fallback: "legacy-excel" });
-    expect(route(odfBytes("spreadsheet"), "roster.ods")).toEqual({ family: "sheet", from: "ods", to: "xlsx", fallback: "opendocument" });
+  it("sends .xlsx, legacy Excel and OpenDocument spreadsheets to .ods", () => {
+    expect(route(xlsxBytes, "roster.xlsx")).toEqual({ family: "sheet", from: "xlsx", to: "ods", fallback: "workbook" });
+    expect(route(legacyXls, "roster.xls")).toEqual({ family: "sheet", from: "xls", to: "ods", fallback: "legacy-excel" });
+    expect(route(odfBytes("spreadsheet"), "roster.ods")).toEqual({ family: "sheet", from: "ods", to: "ods", fallback: "opendocument" });
+  });
+
+  it("sends a PDF to plain text, by its bytes whatever its name", () => {
+    expect(route(pdfBytes, "scan.bin")).toEqual({ family: "pdf", from: "pdf", to: "txt", fallback: "pdf" });
   });
 
   it("sends every presentation format to plain text", () => {
@@ -88,36 +94,36 @@ describe("conversionRouteFor: the format routing table", () => {
     expect(route(oleBytes(null), "mystery.bin")).toBeNull();
   });
 
-  it("leaves formats an existing parser already reads, and unknown bytes, alone", () => {
-    expect(route(docx, "plan.docx")).toBeNull();
+  it("leaves text formats, drawings and unknown bytes alone", () => {
     expect(route(odfBytes("graphics"), "drawing.odg")).toBeNull();
     expect(route(Buffer.from("hello"), "notes.txt")).toBeNull();
   });
 });
 
-describe("parseFileContent converts, then parses with the existing parsers", () => {
-  it("word family: a legacy .doc converts to .docx and mammoth reads it", async () => {
-    const { convert, calls } = fakeConverter({ docx });
+describe("parseFileContent converts once, then reads the OpenDocument result", () => {
+  it("word family: a legacy .doc converts to .odt and keeps its headings", async () => {
+    const { convert, calls } = fakeConverter({ odt: PLAN_ODT });
     const result = await parseFileContent(legacyDoc, "application/msword", "plan.doc", { convert });
-    expect(calls).toEqual([{ from: "doc", to: "docx" }]);
+    expect(calls).toEqual([{ from: "doc", to: "odt" }]);
     if (result?.type !== "document") throw new Error(`expected document, got ${JSON.stringify(result)}`);
     expect(result.fullText).toContain("Second Chance fosters twelve dogs this quarter.");
+    expect(result.sections).toEqual([{ heading: "Rescue operations plan", text: "" }]);
   });
 
-  it("word family: RTF and OpenDocument text convert the same way", async () => {
-    for (const [bytes, name, from] of [[rtf, "plan.rtf", "rtf"], [odfBytes("text"), "plan.odt", "odt"]] as const) {
-      const { convert, calls } = fakeConverter({ docx });
+  it("word family: .docx, RTF and OpenDocument text convert the same way", async () => {
+    for (const [bytes, name, from] of [[docx, "plan.docx", "docx"], [rtf, "plan.rtf", "rtf"], [odfBytes("text"), "plan.odt", "odt"]] as const) {
+      const { convert, calls } = fakeConverter({ odt: PLAN_ODT });
       const result = await parseFileContent(bytes, "", name, { convert });
-      expect(calls).toEqual([{ from, to: "docx" }]);
-      expect(result).toMatchObject({ type: "document" });
+      expect(calls).toEqual([{ from, to: "odt" }]);
+      expect(result).toMatchObject({ type: "document", summary: "1 section, 71 characters" });
     }
   });
 
-  it("sheet family: a legacy .xls and an .ods convert to .xlsx and the sheet reader reads them", async () => {
-    for (const [bytes, name, from] of [[legacyXls, "roster.xls", "xls"], [odfBytes("spreadsheet"), "roster.ods", "ods"]] as const) {
-      const { convert, calls } = fakeConverter({ xlsx: Buffer.from("converted xlsx") });
+  it("sheet family: .xlsx, a legacy .xls and an .ods convert to .ods and the sheet reader reads them", async () => {
+    for (const [bytes, name, from] of [[xlsxBytes, "roster.xlsx", "xlsx"], [legacyXls, "roster.xls", "xls"], [odfBytes("spreadsheet"), "roster.ods", "ods"]] as const) {
+      const { convert, calls } = fakeConverter({ ods: ROSTER_ODS });
       const result = await parseFileContent(bytes, "application/vnd.ms-excel", name, { convert });
-      expect(calls).toEqual([{ from, to: "xlsx" }]);
+      expect(calls).toEqual([{ from, to: "ods" }]);
       if (result?.type !== "spreadsheet") throw new Error("expected spreadsheet");
       expect(result.columns).toEqual(["Name", "Breed"]);
       expect(result.rowCount).toBe(1);
@@ -138,10 +144,32 @@ describe("parseFileContent converts, then parses with the existing parsers", () 
     }
   });
 
-  it("does not call the converter for a format an existing parser reads", async () => {
+  it("pdf: converts to text in the engine and counts its pages", async () => {
+    const { convert, calls } = fakeConverter({ txt: Buffer.from("Adoption day\fMeet the dogs\n\f", "utf8") });
+    const result = await parseFileContent(pdfBytes, "application/pdf", "flyer.pdf", { convert });
+    expect(calls).toEqual([{ from: "pdf", to: "txt" }]);
+    expect(result).toEqual({ type: "document", summary: "2 pages, 27 characters", fullText: "Adoption day\n\nMeet the dogs" });
+  });
+
+  it("routes a damaged .docx, .xlsx or .pdf by its name, and the engine's refusal is named plainly", async () => {
+    for (const [name, mime, from, to] of [
+      ["plan.docx", "", "docx", "odt"],
+      ["roster.xlsx", "", "xlsx", "ods"],
+      ["flyer", "application/pdf", "pdf", "txt"],
+    ] as const) {
+      const { convert, calls } = fakeConverter({});
+      const result = await parseFileContent(Buffer.from("damaged"), mime, name, { convert });
+      expect(calls).toEqual([{ from, to }]);
+      expect(result).toMatchObject({ type: "unsupported" });
+      if (result?.type !== "unsupported") throw new Error("expected unsupported");
+      expect(result.reason).toMatch(/could not convert this file; it may be damaged or password-protected/);
+    }
+  });
+
+  it("does not call the converter for CSV or plain text", async () => {
     const { convert, calls } = fakeConverter({});
-    await parseFileContent(docx, "", "plan.docx", { convert });
     await parseFileContent(Buffer.from("A,B\n1,2\n"), "text/csv", "t.csv", { convert });
+    await parseFileContent(Buffer.from("hello"), "text/plain", "notes.txt", { convert });
     expect(calls).toEqual([]);
   });
 });
@@ -155,6 +183,9 @@ describe("parseFileContent without a converter keeps S0's honest result", () => 
       [legacyXls, "roster.xls", "legacy-excel", /Excel 97-2003/],
       [odfBytes("spreadsheet"), "roster.ods", "opendocument", /OpenDocument/],
       [pptxBytes, "deck.pptx", "presentation", /PowerPoint/],
+      [docx, "plan.docx", "word-document", /Word document \(\.docx\)/],
+      [xlsxBytes, "roster.xlsx", "workbook", /Excel workbook \(\.xlsx\)/],
+      [pdfBytes, "flyer.pdf", "pdf", /This is a PDF/],
     ] as const;
     for (const [bytes, name, format, reason] of cases) {
       const result = await parseFileContent(bytes, "", name, { convert });
@@ -201,9 +232,9 @@ describe("parseFileContent without a converter keeps S0's honest result", () => 
   });
 
   it("reads an OpenDocument file with a chart when the converter accepts it, and keeps the generic reason without embedded objects", async () => {
-    const accepted = fakeConverter({ xlsx: docx });
+    const accepted = fakeConverter({ ods: ROSTER_ODS });
     const read = await parseFileContent(odfPackage("spreadsheet", CHART_OBJECT_PARTS), "", "budget.ods", { convert: accepted.convert });
-    expect(accepted.calls).toEqual([{ from: "ods", to: "xlsx" }]);
+    expect(accepted.calls).toEqual([{ from: "ods", to: "ods" }]);
     expect(read?.type).not.toBe("unsupported");
 
     const refused = await parseFileContent(odfPackage("spreadsheet"), "", "budget.ods", { convert: fakeConverter({}).convert });
@@ -215,7 +246,7 @@ describe("parseFileContent without a converter keeps S0's honest result", () => 
   });
 
   it("reports a converter that returns bytes the parser cannot read, instead of throwing", async () => {
-    const { convert } = fakeConverter({ docx: Buffer.from("not a docx") });
+    const { convert } = fakeConverter({ odt: Buffer.from("not an odt") });
     const result = await parseFileContent(legacyDoc, "application/msword", "plan.doc", { convert });
     expect(result).toMatchObject({ type: "unsupported", format: "legacy-word" });
   });

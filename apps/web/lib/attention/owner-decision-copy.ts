@@ -18,6 +18,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "ai-readiness-blocker": "How should we fix your intelligence setup?",
   "platform-health": "How should we handle this outage?",
   "provider-credential": "Reconnect this service?",
+  "contribution-setup": "Share your changes?",
   "reservation-exception": "Handle this reservation?",
   "hospitality-capacity": "Resolve this capacity issue?",
   "storefront-inquiry": "Reply to this enquiry?",
@@ -27,6 +28,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "coworker-envelope": "Authorize this coworker record?",
   "skill-proposal": "Approve this change to a coworker skill?",
   "workroom-stall": "Who should own this stuck work?",
+  "orphaned-approval": "Who should answer these AI approvals?",
 };
 
 const SPECIALIST: Record<AttentionSource, string> = {
@@ -44,6 +46,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "ai-readiness-blocker": "Technology",
   "platform-health": "Platform operations",
   "provider-credential": "Technology",
+  "contribution-setup": "Technology",
   "reservation-exception": "Front of house",
   "hospitality-capacity": "Hospitality operations",
   "storefront-inquiry": "Front of house",
@@ -53,6 +56,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "coworker-envelope": "Digital workforce",
   "skill-proposal": "Digital workforce",
   "workroom-stall": "Digital workforce",
+  "orphaned-approval": "Digital workforce",
 };
 
 export function specialistFor(source: AttentionSource): string {
