@@ -164,6 +164,7 @@ export async function claimBacklogItemForWork(args: {
         data: {
           workIntent: governed.data.workIntent,
           readiness: governed.data.readiness,
+          governingPrinciples: governed.data.governingPrinciples,
           recovery: governed.data.recovery,
         },
       };

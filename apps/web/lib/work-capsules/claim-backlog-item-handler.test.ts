@@ -114,6 +114,7 @@ describe("claimBacklogItemForWork MCP boundary", () => {
         code: "initiative_not_ready",
         workIntent: "implementation",
         readiness: { verdict: "input-required" },
+        governingPrinciples: { SPEC_APPROVAL_REQUIRED: "gates-proportional-to-shape" },
         recovery,
       },
     });
@@ -141,6 +142,8 @@ describe("claimBacklogItemForWork MCP boundary", () => {
       data: {
         workIntent: "implementation",
         readiness: { verdict: "input-required" },
+        // BI-DEDAC950: the governing principles reach the MCP caller.
+        governingPrinciples: { SPEC_APPROVAL_REQUIRED: "gates-proportional-to-shape" },
         recovery,
       },
     });

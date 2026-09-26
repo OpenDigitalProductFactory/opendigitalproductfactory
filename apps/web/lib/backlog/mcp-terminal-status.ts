@@ -1,6 +1,7 @@
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveTerminalInitiativeRecovery } from "@/lib/backlog/initiative-readiness/terminal-recovery";
+import { governingPrinciplesFor, withGoverningRules } from "@/lib/kernel/governing-principles";
 
 type TerminalBacklogItem = {
   status: string;
@@ -57,11 +58,13 @@ export async function completeBacklogItemTransitionTool(args: {
       currentAgentId: args.agentId ?? null,
       refusedWorkroomId: null,
     });
+    // BI-DEDAC950: beside the decision, never inside it (decisions replay by deep equality).
+    const governingPrinciples = governingPrinciplesFor(terminal.decision);
     return {
       success: false,
       error: "initiative_not_ready",
-      message: `Cannot complete ${args.itemId}: ${codes.join(", ")}.`,
-      data: { stableCode: terminal.code, readiness: terminal.decision, recovery },
+      message: withGoverningRules(`Cannot complete ${args.itemId}: ${codes.join(", ")}.`, governingPrinciples),
+      data: { stableCode: terminal.code, readiness: terminal.decision, governingPrinciples, recovery },
     };
   }
 
