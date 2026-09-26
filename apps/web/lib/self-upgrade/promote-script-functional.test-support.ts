@@ -15,7 +15,7 @@ export const REPO_ROOT = resolve(__dirname, "../../../..");
 const MIGRATOR = join(REPO_ROOT, "scripts", "installer", "migrate-install-state.mjs");
 const CATALOG = join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json");
 const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
-const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
+export const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
 export const BASH_OK = spawnSync(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
 export const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
 export const PROMOTE_TEST_TIMEOUT_MS = 30_000;
