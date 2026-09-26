@@ -1,4 +1,7 @@
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { getDemandItems } from "@/lib/demand/demand-data";
 import { resolveDemandPolicy } from "@/lib/demand/policy";
 import { DemandBoard } from "@/components/ops/DemandBoard";
@@ -25,7 +28,7 @@ export default async function DemandPage({
   }>;
 }) {
   const scope = (await searchParams) ?? {};
-  const [items, networkItems, shareContext, founderPortfolio, workSyncLinks, policyConfig, tieOutPanel] = await Promise.all([
+  const [items, networkItems, shareContext, founderPortfolio, workSyncLinks, policyConfig, tieOutPanel, locale] = await Promise.all([
     getDemandItems(scope),
     getNetworkDemandItems(),
     getDemandShareContext(),
@@ -36,6 +39,7 @@ export default async function DemandPage({
       select: { demandFramework: true, demandBucketTargets: true },
     }),
     loadPortfolioTieOutPanel(),
+    getLocaleContext(),
   ]);
   const policy = resolveDemandPolicy(policyConfig);
   return (
@@ -71,7 +75,9 @@ export default async function DemandPage({
         bucketTargets={policy.bucketTargets}
         activeFramework={policy.framework}
       />
-      <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} />
+      <MessagesProvider locale={locale.language} messages={{ portfolio: namespaceMessages(locale.language, "portfolio") }}>
+        <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} formatLocale={locale.formatLocale} />
+      </MessagesProvider>
     </div>
   );
 }

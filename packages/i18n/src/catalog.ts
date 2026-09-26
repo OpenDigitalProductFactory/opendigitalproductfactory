@@ -7,6 +7,7 @@
 // compile error (AC-TYPED-KEYS).
 
 import errors from "./messages/en-US/errors.json";
+import portfolio from "./messages/en-US/portfolio.json";
 import setup from "./messages/en-US/setup.json";
 import { DEFAULT_LOCALE } from "./locales";
 import type { MessageArgs } from "./mf2/format";
@@ -14,7 +15,7 @@ import { isPseudoLocale } from "./pseudo";
 import { formatSource } from "./runtime";
 
 /** The en-US source catalog, one entry per namespace. Add a namespace here and in messages/en-US/. */
-export const SOURCE_CATALOG = { errors, setup } as const;
+export const SOURCE_CATALOG = { errors, portfolio, setup } as const;
 
 export type Namespace = keyof typeof SOURCE_CATALOG;
 
