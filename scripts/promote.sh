@@ -637,17 +637,25 @@ if [[ $_dry_run -eq 0 ]]; then
     --write >/dev/null
 fi
 
+# safe.directory: the mounted source is owned by the host user, not root, so
+# git refuses to read it without this. Guarded: `--add` appends a duplicate on
+# every run, and the functional suites run this script on developer hosts
+# (BI-249EEA02 — one host's global gitconfig reached 18,495 copies).
+ensure_promote_safe_directory() {
+  git config --global --get-all safe.directory 2>/dev/null | grep -qxF '*' \
+    || git config --global --add safe.directory '*' 2>/dev/null || true
+}
+
 # Real platform version from the source's git release tags, baked into the new
 # image so the portal keeps showing a real version (not version.json) after a
-# self-upgrade. safe.directory: the mounted source is owned by the host user,
-# not root, so git refuses to read it without this.
+# self-upgrade.
 export DPF_PLATFORM_VERSION=""
 if [[ $_dry_run -eq 0 ]]; then
   if [[ $_release_mode -eq 1 ]]; then
     DPF_PLATFORM_VERSION="${DPF_RELEASE_TAG#v}"
     export DPF_PLATFORM_VERSION
   else
-  git config --global --add safe.directory '*' 2>/dev/null || true
+  ensure_promote_safe_directory
   # BI-145214F0 — refresh tags before describe (same root cause as
   # install-dpf.sh). PROMOTE_SOURCE is the host source mount inside the
   # dpf-promoter container; without this the promoter inherits whatever
