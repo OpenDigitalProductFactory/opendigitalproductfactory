@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-09-15T20:02:42.579Z",
-  "gitSha": "67c849b2cec43f0b08acddcf3bf9c8337e8ed8c4",
+  "generatedAt": "2026-09-25T18:41:51.303Z",
+  "gitSha": "831e182e27c097a4ea3980b25a3c5d86d6d30be6",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
+      "contraction": "EP-8B9B50D5",
       "direction": "non-increasing",
-      "value": 7,
-      "owner": "platform-architecture",
       "expiry": "2026-12-31",
-      "contraction": "EP-8B9B50D5"
+      "owner": "platform-architecture",
+      "value": 7
     },
     "directInngestImportCount": {
       "direction": "non-increasing",
@@ -19,16 +19,19 @@
       "value": 13
     },
     "prismaModelCount": {
+      "contraction": "BI-911840CB",
       "direction": "non-increasing",
-      "value": 628
+      "expiry": "2027-03-31",
+      "owner": "portfolio-management",
+      "value": 630
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 19804
+      "value": 19984
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
-      "value": 63
+      "value": 62
     },
     "providerConnectionStateProjectorCount": {
       "direction": "non-increasing",
@@ -36,7 +39,7 @@
     },
     "seedCoordinatorLines": {
       "direction": "informational",
-      "value": 2874
+      "value": 2879
     },
     "serviceCount": {
       "direction": "non-increasing",

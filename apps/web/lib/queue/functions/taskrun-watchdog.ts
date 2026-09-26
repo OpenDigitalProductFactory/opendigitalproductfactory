@@ -275,6 +275,8 @@ export const taskrunWatchdog = jobs.createFunction(
     // DPF_WORKCAPSULE_REAPER_ENABLED=1, and live actuation only when additionally
     // DPF_WORKCAPSULE_REAPER_AUTO_REAP=1 (mirrors the runtime-artifact / worktree
     // janitors). Best-effort. DB-only (junction-safe: never touches worktrees).
+    // BI-ED6EA694: AUTO_REAP guards abandoning UNMERGED work; merged rooms are
+    // archived whenever the reaper is enabled, or they pile up until they are held.
     let workCapsulesReapCandidates = 0;
     let workCapsulesReaped = 0;
     try {
@@ -287,6 +289,7 @@ export const taskrunWatchdog = jobs.createFunction(
           db: capsuleDb as never,
           now: new Date(),
           dryRun: !autoReap,
+          closeDelivered: true,
         });
         workCapsulesReapCandidates = result.candidates.length;
         workCapsulesReaped = result.reaped;

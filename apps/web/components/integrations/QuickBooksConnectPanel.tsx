@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatDateTime } from "@/lib/datetime";
 
 export interface QuickBooksConnectionState {
   status: "unconfigured" | "connected" | "error";
@@ -254,18 +255,4 @@ function FormField({
       {hint && <span className="block text-xs text-[var(--dpf-muted)]">{hint}</span>}
     </label>
   );
-}
-
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
 }

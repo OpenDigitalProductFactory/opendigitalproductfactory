@@ -24,6 +24,7 @@ import type {
 import { RestoreConfirmModal } from "./RestoreConfirmModal";
 import { RestoreHistorySection } from "./RestoreHistorySection";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { formatTimestamp } from "@/lib/datetime";
 
 interface AllReadiness {
   postgres: ReadinessSummary;
@@ -48,11 +49,6 @@ function formatDurationMs(ms: number | null): string {
   if (ms < 1000) return `${ms} ms`;
   if (ms < 60 * 1000) return `${(ms / 1000).toFixed(1)} s`;
   return `${(ms / 60000).toFixed(1)} min`;
-}
-
-function formatTimestamp(s: string | null): string {
-  if (!s) return "—";
-  return new Date(s).toLocaleString();
 }
 
 // BI-A8C149C1: age formatters + color-coded pills for the backup-health card.

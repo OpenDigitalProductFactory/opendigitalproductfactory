@@ -11,9 +11,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import type { Prisma, PrismaClient } from "../generated/client/client";
-import { deriveSlug, extractPrinciplePayload, parseFrontmatter } from "./seed-wiki-kernel";
+import { extractPrinciplePayload, parseFrontmatter } from "./seed-wiki-kernel";
 import { appendRevision, attachSource, linkPages, upsertWikiPage } from "./wiki-store";
-import { extractWikilinks } from "./wiki-frontmatter";
+import { extractWikilinks, professionCorpusPageSlug } from "./wiki-frontmatter";
 import type { WikiPageFrontmatter } from "./wiki-frontmatter";
 import { PROVIDER_COMPLIANCE_SOURCE_REGISTRY } from "./provider-compliance-source-registry";
 import {
@@ -1840,24 +1840,6 @@ function walkMarkdownFiles(dir: string): string[] {
   return out;
 }
 
-/**
- * Derive a wiki slug for a profession corpus page.
- *   docs/professions/data-architect/wiki/parameterized-queries-commandment.md
- *   -> professions/data-architect/parameterized-queries-commandment
- *
- * Strips the `wiki/` path segment and prefixes with `professions/` so
- * profession corpus pages are distinguishable from kernel pages by
- * their slug prefix, which the `detectUnsourcedProfessionPages` lint
- * detector uses as its identification mechanism.
- */
-function deriveCorpusSlug(absolutePath: string): string {
-  const rel = deriveSlug(absolutePath, PROFESSIONS_DIR);
-  // rel = "data-architect/wiki/parameterized-queries-commandment"
-  // Strip the wiki/ path segment: "data-architect/parameterized-queries-commandment"
-  const stripped = rel.replace(/^([^/]+)\/wiki\//, "$1/");
-  return `professions/${stripped}`;
-}
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export type SeedProfessionCorpusResult = {
@@ -2025,7 +2007,7 @@ export async function seedProfessionCorpus(
   for (const file of wikiFiles) {
     const raw = readFileSync(file, "utf8");
     const { frontmatter, body } = parseFrontmatter<WikiPageFrontmatter>(raw);
-    const slug = deriveCorpusSlug(file);
+    const slug = professionCorpusPageSlug(file, PROFESSIONS_DIR);
     const status = frontmatter.status ?? "published";
 
     const { jurisdictions, competencyLevel, archetypes, basis } = tallyVariantCoverage(
