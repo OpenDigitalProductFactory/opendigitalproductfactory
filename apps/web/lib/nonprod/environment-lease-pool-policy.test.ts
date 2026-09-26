@@ -215,12 +215,13 @@ describe("resolveNonprodPoolPolicy measured builder reserve (BI-903FB5F9)", () =
     };
   }
 
-  async function decide(rows: Record<string, unknown>) {
+  async function decide(rows: Record<string, unknown>, reserveBuilderHeadroom?: boolean) {
     return resolveNonprodPoolPolicy({
       platformConfig: store(rows),
       environmentKey: "local-integration-ci",
       manifestSlotCount: 2,
       reserveAdmissionHeadroom: true,
+      reserveBuilderHeadroom,
       now,
       hostPressure: pressure,
       // The portal reads the Docker VM, so its available figure is the VM's.
@@ -253,5 +254,15 @@ describe("resolveNonprodPoolPolicy measured builder reserve (BI-903FB5F9)", () =
     });
     expect(policy.rollbackReason).toBe("host-build-headroom-low");
     expect(policy.builderReserve).toMatchObject({ source: "ceiling", bytes: 16 * GiB });
+
+    // BI-3A14308C: a gate that delegates its production build to the merge
+    // queue reserves no builder memory, so the same host admits it. Both the
+    // preliminary (client) and the decided (server) evaluations must waive it.
+    const delegated = await decide({
+      "local_ci.sandbox_pool": poolConfig,
+      "local_ci.builder_memory_calibration": withOom,
+    }, false);
+    expect(delegated.rollbackReason).not.toBe("host-build-headroom-low");
+    expect(delegated.effectiveCapacity).toBeGreaterThanOrEqual(1);
   });
 });
