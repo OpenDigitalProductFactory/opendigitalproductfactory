@@ -747,10 +747,7 @@ async function ensureWorkspaceSafeDirectory(
   gitOpts: ExecUpdateOptions,
   workspace: string,
 ): Promise<void> {
-  await execUpdate(
-    ensureGlobalSafeDirectoryCommand(shellQuote(workspace)),
-    gitOpts,
-  );
+  await execUpdate(ensureGlobalSafeDirectoryCommand(shellQuote(workspace)), gitOpts);
 }
 
 /**
