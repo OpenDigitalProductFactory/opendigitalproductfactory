@@ -12,7 +12,6 @@
 // legacy baseline; every NEW/CHANGED persistent surface must satisfy the full contract.
 
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { listChangedFiles } from "./lib/git-changed-files.mjs";
 
 // ── Persistent-surface classification (kept conservative for the first ship) ──
@@ -134,9 +133,6 @@ export function validateException(exception, { now } = {}) {
 }
 
 // ── CI entrypoint ──
-function git(args) {
-  return execFileSync("git", args, { encoding: "utf8" });
-}
 
 export function runGate({
   base = process.env.BASE_SHA || "origin/main",

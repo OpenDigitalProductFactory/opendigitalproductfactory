@@ -35,6 +35,7 @@ import { fileURLToPath } from "node:url";
 import { DERIVED_ARTIFACTS, affectedEntries, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { availableMermaidRenderer } from "./lib/mermaid-renderer.mjs";
+import { gitText } from "./lib/git.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -138,9 +139,7 @@ export function evaluateCheckAll(registry = DERIVED_ARTIFACTS, runCheck = () => 
 
 // ── IO-touching implementations used by the CLI ────────────────────────────
 
-function git(args) {
-  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" }).trim();
-}
+const git = (args) => gitText(args, { cwd: REPO_ROOT });
 
 function stagedFiles() {
   const out = git(["diff", "--cached", "--name-only", "--diff-filter=ACMR"]);

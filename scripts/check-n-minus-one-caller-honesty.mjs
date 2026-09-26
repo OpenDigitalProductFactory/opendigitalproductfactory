@@ -29,10 +29,10 @@
 //
 // Exit 0 = honest, 1 = violation, 2 = could not evaluate (missing base ref).
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { gitText } from "./lib/git.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -53,9 +53,7 @@ const HARNESS_SCAFFOLDING = new Map([
   ["COMPOSE_PARALLEL_LIMIT", "bounds hosted-runner concurrency; not part of the promoter contract"],
 ]);
 
-function git(args) {
-  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 1e8 });
-}
+const git = (args) => gitText(args, { cwd: REPO_ROOT, trim: false, maxBuffer: 1e8 });
 
 function readAtRef(ref, path) {
   try {

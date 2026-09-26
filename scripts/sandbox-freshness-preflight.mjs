@@ -42,6 +42,7 @@ import {
   shouldEscalateConvergence,
   stalePackagePathsForRelink,
 } from "./lib/sandbox-freshness.mjs";
+import { gitTextOrNull } from "./lib/git.mjs";
 
 
 function valueAfter(flag) {
@@ -63,10 +64,7 @@ function log(message) {
   if (!quiet) console.log(`[sandbox-freshness] ${message}`);
 }
 
-function git(dir, args) {
-  const result = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
-  return result.status === 0 ? result.stdout.trim() : "";
-}
+const git = (dir, args) => gitTextOrNull(args, { cwd: dir }) ?? "";
 
 let rootDir = valueAfter("--dir");
 if (!rootDir) rootDir = git(process.cwd(), ["rev-parse", "--show-toplevel"]) || process.cwd();
