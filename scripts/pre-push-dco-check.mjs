@@ -24,22 +24,25 @@
 //       the PR range must not silently pass, but neither should it hard-fail a
 //       genuine offline fork. The pre-push gate treats exit 2 as a loud warning.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { findUnsignedCommits, resolvePushRange } from "./lib/dco-signoff.mjs";
 
 export function parseArgs(argv) {
-  const opts = { base: undefined, head: "HEAD", range: undefined };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--base") opts.base = argv[++i];
-    else if (arg === "--head") opts.head = argv[++i];
-    else if (arg === "--range") opts.range = argv[++i];
-    else if (arg.startsWith("--base=")) opts.base = arg.slice("--base=".length);
-    else if (arg.startsWith("--head=")) opts.head = arg.slice("--head=".length);
-    else if (arg.startsWith("--range=")) opts.range = arg.slice("--range=".length);
-  }
-  return opts;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: { base: { type: "string" }, head: { type: "string" }, range: { type: "string" } },
+  });
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  return {
+    base: text(values.base),
+    head: values.head === undefined ? "HEAD" : text(values.head),
+    range: text(values.range),
+  };
 }
 
 /**

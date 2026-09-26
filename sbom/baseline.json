@@ -1,23 +1,23 @@
 {
   "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each package our workspaces deliberately declare with different specifiers to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.",
   "totals": {
-    "resolvedComponents": 1059,
-    "uniqueNames": 988,
-    "duplicatedNames": 67,
-    "excessInstances": 71,
-    "multiMajorNames": 31,
+    "resolvedComponents": 1054,
+    "uniqueNames": 984,
+    "duplicatedNames": 66,
+    "excessInstances": 70,
+    "multiMajorNames": 30,
     "firstPartyDivergentNames": 0,
     "directButTransitiveNames": 4,
     "dedupeCandidateNames": 36,
     "directProdNames": 59,
-    "directDevNames": 30,
+    "directDevNames": 29,
     "workspaces": 15
   },
   "budgets": {
-    "resolvedComponents": 1059,
-    "duplicatedNames": 67,
-    "excessInstances": 71,
-    "multiMajorNames": 31
+    "resolvedComponents": 1054,
+    "duplicatedNames": 66,
+    "excessInstances": 70,
+    "multiMajorNames": 30
   },
   "firstPartyDivergent": [],
   "acceptedSpecifierDrift": {

@@ -1170,6 +1170,9 @@
     "apps/web/lib/shared/org-address.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "apps/web/lib/shared/slugify.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/shared/use-save-state.test.ts": [
       "docs/platform-usability-standards.md"
     ],
@@ -1742,6 +1745,9 @@
     "packages/validators/src/field-dispatch.ts": [
       "docs/architecture/field-service-work-item.md"
     ],
+    "packages/validators/src/guards.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "packages/validators/src/readability.ts": [
       "docs/platform-usability-standards.md"
     ],
@@ -1876,6 +1882,9 @@
       "docs/platform-usability-standards.md"
     ],
     "scripts/check-no-local-isrecord.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/check-no-local-slugify.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-no-native-dialogs.mjs": [
@@ -2072,6 +2081,9 @@
     ],
     "scripts/lib/host-available-memory.mjs": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/lib/is-record.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/lib/junction-safe-worktree-remove.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -2752,15 +2764,19 @@
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
       "apps/web/lib/shared/org-address.ts",
+      "apps/web/lib/shared/slugify.ts",
       "apps/web/scripts/offload-evidence-output.ts",
       "packages/db/prisma/schema/resource-scheduling.prisma",
       "packages/db/scripts/apply-model-metadata-comments.ts",
       "packages/db/src/model-metadata.ts",
       "packages/db/src/seed-retention-floor-obligations.ts",
+      "packages/validators/src/guards.ts",
       "scripts/check-model-metadata-tags.mjs",
       "scripts/check-no-local-isrecord.mjs",
+      "scripts/check-no-local-slugify.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
       "scripts/check-no-new-notactive-conventions.mjs",
+      "scripts/lib/is-record.mjs",
       "scripts/portal-migrate-boot.sh"
     ],
     "docs/architecture/decision-vectors.md": [

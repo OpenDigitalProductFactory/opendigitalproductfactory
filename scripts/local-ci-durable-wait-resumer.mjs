@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -108,32 +109,36 @@ function makeLogger(directory, token) {
 }
 
 export function parseResumerArgs(argv) {
+  const option = { type: "string" };
+  // strict: false keeps the old tolerance: unknown flags are ignored. Everything
+  // after the first `--` is the gate's own argv, passed through untouched.
+  const { values, tokens } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+    options: {
+      "interval-ms": option,
+      "deadline-ms": option,
+      "observer-dir": option,
+      branch: option,
+      sha: option,
+      "owner-session-id": option,
+      "gate-cwd": option,
+    },
+  });
+  const terminator = tokens.find((token) => token.kind === "option-terminator");
+  const text = (value) => (typeof value === "string" ? value : undefined);
   const options = {
-    intervalMs: DEFAULT_RESUME_INTERVAL_MS,
-    deadlineMs: DEFAULT_RESUME_DEADLINE_MS,
-    observerDirectory: "",
-    branch: "",
-    sha: "",
-    ownerSessionId: "",
-    gateCwd: "",
-    gateArgv: [],
+    intervalMs: values["interval-ms"] === undefined ? DEFAULT_RESUME_INTERVAL_MS : Number(text(values["interval-ms"])),
+    deadlineMs: values["deadline-ms"] === undefined ? DEFAULT_RESUME_DEADLINE_MS : Number(text(values["deadline-ms"])),
+    observerDirectory: values["observer-dir"] === undefined ? "" : text(values["observer-dir"]),
+    branch: values.branch === undefined ? "" : text(values.branch),
+    sha: values.sha === undefined ? "" : text(values.sha),
+    ownerSessionId: values["owner-session-id"] === undefined ? "" : text(values["owner-session-id"]),
+    gateCwd: values["gate-cwd"] === undefined ? "" : text(values["gate-cwd"]),
+    gateArgv: terminator === undefined ? [] : argv.slice(terminator.index + 1),
   };
-  const separator = argv.indexOf("--");
-  const flags = separator === -1 ? argv : argv.slice(0, separator);
-  options.gateArgv = separator === -1 ? [] : argv.slice(separator + 1);
-  for (let index = 0; index < flags.length; index += 2) {
-    const value = flags[index + 1];
-    switch (flags[index]) {
-      case "--interval-ms": options.intervalMs = Number(value); break;
-      case "--deadline-ms": options.deadlineMs = Number(value); break;
-      case "--observer-dir": options.observerDirectory = value; break;
-      case "--branch": options.branch = value; break;
-      case "--sha": options.sha = value; break;
-      case "--owner-session-id": options.ownerSessionId = value; break;
-      case "--gate-cwd": options.gateCwd = value; break;
-      default: break;
-    }
-  }
   if (!Number.isFinite(options.intervalMs) || options.intervalMs <= 0) {
     options.intervalMs = DEFAULT_RESUME_INTERVAL_MS;
   }

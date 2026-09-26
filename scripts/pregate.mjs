@@ -14,6 +14,7 @@
 // entry point remains a compatibility wrapper and can be forced only for
 // focused debugging. This keeps lease/fence safety in one implementation.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { readFileSync } from "node:fs";
@@ -221,9 +222,15 @@ export function shouldUseShell({ env = process.env, cwd = process.cwd(), spawnSy
 }
 
 function argValue(args, flag) {
-  const index = args.indexOf(flag);
-  if (index < 0) return "";
-  return args[index + 1] || "";
+  // strict: false keeps the old tolerance: flags pregate does not read are ignored.
+  const { values } = utilParseArgs({
+    args,
+    strict: false,
+    allowPositionals: true,
+    options: Object.fromEntries(["lease-wait-seconds", "worktree", "branch", "sha"].map((name) => [name, { type: "string" }])),
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return typeof value === "string" ? value : "";
 }
 
 function leaseWaitSeconds(args, env) {

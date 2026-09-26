@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFileSync } from "node:fs";
 import { hostname, freemem, totalmem } from "node:os";
 import { resolve } from "node:path";
@@ -31,24 +32,25 @@ export const HEAVY_PROCESS_CLASSES = Object.freeze([
 ]);
 
 export function parseHostResourceArgs(argv) {
-  const args = [...argv];
-  let resourceClass = "";
-  while (args.length > 0 && args[0] !== "--") {
-    const flag = args.shift();
-    if (flag === "--class") resourceClass = args.shift() ?? "";
-    else throw new Error(`unknown argument: ${flag}`);
-  }
+  const options = { class: { type: "string" } };
+  const { values, tokens } = utilParseArgs({ args: argv, options, strict: false, allowPositionals: true, tokens: true });
+  const terminator = tokens.find((token) => token.kind === "option-terminator");
+  const stray = tokens.find((token) => token !== terminator && (terminator === undefined || token.index < terminator.index)
+    && (token.kind !== "option" || !Object.hasOwn(options, token.name)));
+  if (stray) throw new Error(`unknown argument: ${stray.rawName ?? stray.value}`);
+  const resourceClass = typeof values.class === "string" ? values.class : "";
   if (!resourceClass) throw new Error("--class is required");
   if (!HEAVY_PROCESS_CLASSES.includes(resourceClass)) {
     throw new Error(`unsupported resource class: ${resourceClass}`);
   }
-  if (args.shift() !== "--" || args.length === 0) {
+  const command = terminator === undefined ? [] : argv.slice(terminator.index + 1);
+  if (command.length === 0) {
     throw new Error("a command is required after --");
   }
   return {
     resourceClass,
-    command: args.shift(),
-    commandArgs: args,
+    command: command[0],
+    commandArgs: command.slice(1),
   };
 }
 

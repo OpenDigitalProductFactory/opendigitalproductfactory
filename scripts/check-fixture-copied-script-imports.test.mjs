@@ -20,13 +20,20 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(new URL(import.meta.ur
 const FAKE_ROOT = "/repo";
 const TEST_FILE = "tests/release/fixture.test.mjs";
 
+// Keys go through path.resolve, as the guard's own paths do: on Windows
+// path.join("/repo", rel) gives "\repo\..." while path.resolve gives
+// "D:\repo\...", so a join-keyed map silently matched nothing there.
 /** In-memory repo: map of repo-relative path -> source (directories are implied). */
 function fakeIo(files) {
-  const abs = new Map(Object.entries(files).map(([rel, src]) => [path.join(FAKE_ROOT, rel), src]));
+  const repoRoot = path.resolve(FAKE_ROOT);
+  const abs = new Map(Object.entries(files).map(([rel, src]) => [path.resolve(repoRoot, rel), src]));
   return {
-    repoRoot: FAKE_ROOT,
-    readSource: (p) => abs.get(p) ?? null,
-    isDirectory: (p) => !abs.has(p) && [...abs.keys()].some((k) => k.startsWith(`${p}/`)),
+    repoRoot,
+    readSource: (p) => abs.get(path.resolve(p)) ?? null,
+    isDirectory: (p) => {
+      const dir = path.resolve(p);
+      return !abs.has(dir) && [...abs.keys()].some((k) => k.startsWith(dir + path.sep));
+    },
   };
 }
 
