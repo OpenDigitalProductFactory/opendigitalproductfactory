@@ -219,6 +219,9 @@ export function runPromote(opts: {
   const signature = createHmac("sha256", secret).update(canonical(envelope)).digest("hex");
   const exports = [
     "unset DPF_STATE_DIR",
+    // promote.sh writes `git config --global`; confine it to a scratch file so
+    // a test run never rewrites the developer's real ~/.gitconfig (BI-249EEA02).
+    `export GIT_CONFIG_GLOBAL=${shellQuote(toBashPath(join(opts.backup, "gitconfig")))}`,
     `export PATH=${shellQuote(toBashPath(opts.fakeBin))}:"$PATH"`,
     `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
     ...(opts.installRoot ? [`export PROMOTE_INSTALL_ROOT=${shellQuote(toBashPath(opts.installRoot))}`] : []),
