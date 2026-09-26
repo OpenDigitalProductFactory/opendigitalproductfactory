@@ -33,6 +33,7 @@ import {
   inferRouteToMarket,
   summarizeAddress,
 } from "@/lib/marketing/strategy-derivation";
+import { isRecord } from "@/lib/shared/coerce";
 // The closed vocabularies now live in lib/marketing/vocabulary.ts so that
 // modules deriving a strategy can read them without importing this module.
 // Re-exported here: every existing consumer imports them from "@/lib/marketing".
@@ -282,12 +283,6 @@ export type OutboundDraftRow = {
   createdByAgentId: string | null;
   createdAt: Date;
 };
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-
 
 function parseJsonArray<T>(value: Prisma.JsonValue | null | undefined): T[] {
   return Array.isArray(value) ? (value as T[]) : [];

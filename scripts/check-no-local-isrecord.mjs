@@ -2,71 +2,70 @@
 /**
  * BI-6A505BFF (EP-8DC217EB BET-6) — CI ratchet: no NEW local `isRecord` helper.
  *
- * The object-guard `isRecord(v): v is Record<string, unknown>` was hand-copied
- * verbatim into 20+ modules, each re-deriving the same
- * `typeof === "object" && !== null && !Array.isArray` predicate. It now has one
- * canonical home:
+ * The object guard `isRecord(v): v is Record<string, unknown>` (also spelled
+ * `isPlainObject`) was hand-copied into 35+ modules, each re-deriving the same
+ * `typeof === "object" && !== null && !Array.isArray` predicate. Each import
+ * boundary now has one sanctioned home:
  *
- *   import { isRecord } from "@/lib/shared/coerce";
+ *   apps/web            import { isRecord } from "@/lib/shared/coerce";
+ *                       (plain-Node callers: apps/web/lib/shared/is-record.mjs)
+ *   packages/*          import { isRecord } from "@dpf/validators";
+ *                       (packages cannot import from apps/web)
+ *   scripts/lib         import { isRecord } from "./is-record.mjs";
+ *                       (plain .mjs cannot import TypeScript)
  *
- * This guard freezes the copy count. Every file that ALREADY defines a local
- * `isRecord` at the baseline is in ALLOWLIST (a migration backlog — remove the
- * entry when the file switches to the shared import). Any NEW local definition
- * outside the allowlist fails CI, so fresh code imports the shared helper
- * instead of spawning copy #21.
+ * Any other local definition fails CI. ALLOWLIST is a closed migration backlog:
+ * it emptied when plan 2026-09-08 §10.5 S5 migrated the last copies. Do not add
+ * entries — import the home for your boundary instead.
  *
- * Scope: apps/web/lib (source only, tests excluded). The canonical definition
- * in lib/shared/coerce.ts is the single sanctioned home and is skipped by path.
+ * Scope (source only; test files, fixtures and build output excluded):
+ * apps/web/lib, apps/web/components, packages/<pkg>/ and scripts/lib.
  *
- * NOTE — this is a DUPLICATION ratchet, not a correctness gate: the allowlisted
- * copies are behaviourally identical to the shared helper. Some allowlisted
- * files live under lib/tak/* and lib/routing/* (a collision boundary this
- * refactor could not touch); they migrate in a follow-on. Listing their PATHS
- * here does not modify them.
+ * A predicate with DIFFERENT semantics must not reuse these names (for example
+ * a prototype check is `hasPlainPrototype`), so the names stay unambiguous.
  *
  * Run: node scripts/check-no-local-isrecord.mjs
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
-import { pathToFileURL } from "node:url";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-// The one sanctioned home for isRecord — never flagged.
-export const CANONICAL = "apps/web/lib/shared/coerce.ts";
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-// Files that ALREADY defined a local isRecord at the BI-6A505BFF baseline.
-// This is a migration backlog: delete an entry when its file adopts
-// `import { isRecord } from "@/lib/shared/coerce"`. Do NOT add new entries —
-// new code must import the shared helper.
-export const ALLOWLIST = new Set([
-  "apps/web/lib/actions/work-pattern-review.ts",
-  "apps/web/lib/brand/task-artifacts.ts",
-  "apps/web/lib/build/business-build-brief.ts",
-  "apps/web/lib/build/task-results.ts",
-  "apps/web/lib/build/verification-output.ts",
-  "apps/web/lib/build/sandbox/build-branch.ts",
-  "apps/web/lib/marketing.ts",
-  "apps/web/lib/release/branding.ts",
-  "apps/web/lib/routing/chat-adapter.ts",
-  "apps/web/lib/shared/org-address.ts",
-  "apps/web/lib/tak/pattern-observer-service.ts",
-  "apps/web/lib/tak/pattern-observer/observer.ts",
-  "apps/web/lib/tak/question-packet.ts",
-  "apps/web/lib/tak/task-stream-projection.ts",
-  "apps/web/lib/tak/work-pattern-case-json.ts",
-  "apps/web/lib/tak/work-pattern-profile-review.ts",
-  "apps/web/lib/tak/work-pattern-read-model.ts",
-  "apps/web/lib/tak/work-pattern-review.ts",
-  "apps/web/lib/tak/work-pattern-shadow-evaluation.ts",
-  "apps/web/lib/tak/work-pattern-types.ts",
+// The sanctioned homes, one per import boundary — never flagged.
+export const CANONICAL = new Set([
+  "apps/web/lib/shared/coerce.ts",
+  "apps/web/lib/shared/is-record.mjs",
+  "packages/validators/src/guards.ts",
+  "scripts/lib/is-record.mjs",
 ]);
 
-// A local isRecord DEFINITION (function decl or const arrow), not a call site
-// or an import. `\bisRecord\s*\(` after `function` is the decl; `const isRecord =`
-// is the arrow form.
+// Directories scanned, relative to the repo root. `packages` is walked whole
+// (every workspace package); the others are single trees.
+export const SCAN_ROOTS = ["apps/web/lib", "apps/web/components", "packages", "scripts/lib"];
+
+// Closed migration backlog — empty since S5. Do NOT add entries.
+export const ALLOWLIST = new Set([]);
+
+// A local isRecord / isPlainObject DEFINITION (function decl or const arrow),
+// not a call site or an import.
 export const DEFINITION_PATTERNS = [
-  /\b(?:export\s+)?function\s+isRecord\s*\(/,
-  /\b(?:export\s+)?const\s+isRecord\s*[:=]/,
+  /\b(?:export\s+)?function\s+(?:isRecord|isPlainObject)\s*[(<]/,
+  /\b(?:export\s+)?(?:const|let)\s+(?:isRecord|isPlainObject)\s*[:=]/,
 ];
+
+const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".mjs", ".js", ".cjs"];
+const SKIPPED_DIRS = new Set([
+  "node_modules", ".next", "__snapshots__", "dist", "coverage",
+  "generated", "__tests__", "__fixtures__", "fixtures", ".turbo",
+]);
+
+/** True for a test, spec or declaration file, which the guard never scans. */
+export function isExcludedFile(name) {
+  if (name.endsWith(".d.ts")) return true;
+  if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(name)) return true;
+  return !SOURCE_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
 
 function isCommentLine(line) {
   const t = line.trim();
@@ -91,43 +90,44 @@ export function findDefinitionLines(body) {
 
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
     // Skip excluded names BEFORE stat: a dangling node_modules link in a
     // worktree throws ENOENT on stat and used to fail the whole guard.
-    if (entry === "node_modules" || entry === ".next" || entry === "__snapshots__" || entry === "dist") continue;
+    if (SKIPPED_DIRS.has(entry)) continue;
+    const full = join(dir, entry);
     const s = statSync(full);
     if (s.isDirectory()) {
       yield* walk(full);
-    } else if (s.isFile()) {
-      if (full.endsWith(".test.ts") || full.endsWith(".test.tsx") || full.endsWith(".d.ts")) continue;
-      if (!full.endsWith(".ts") && !full.endsWith(".tsx")) continue;
+    } else if (s.isFile() && !isExcludedFile(entry)) {
       yield full;
     }
   }
 }
 
-/** Scan apps/web/lib under `root`; return definitions outside the allowlist. */
-export function scanRepo(root = process.cwd()) {
-  const scanDir = join(root, "apps", "web", "lib");
+/** Scan SCAN_ROOTS under `root`; return definitions outside the allowlist. */
+export function scanRepo(root = REPO_ROOT) {
   const violations = [];
-  for (const file of walk(scanDir)) {
-    const rel = relative(root, file).replace(/\\/g, "/");
-    if (rel === CANONICAL || ALLOWLIST.has(rel)) continue;
-    let body;
-    try {
-      body = readFileSync(file, "utf8");
-    } catch {
-      continue;
-    }
-    for (const h of findDefinitionLines(body)) {
-      violations.push({ file: rel, ...h });
+  for (const scanRoot of SCAN_ROOTS) {
+    const scanDir = join(root, scanRoot);
+    if (!existsSync(scanDir)) continue;
+    for (const file of walk(scanDir)) {
+      const rel = relative(root, file).replace(/\\/g, "/");
+      if (CANONICAL.has(rel) || ALLOWLIST.has(rel)) continue;
+      let body;
+      try {
+        body = readFileSync(file, "utf8");
+      } catch {
+        continue;
+      }
+      for (const h of findDefinitionLines(body)) {
+        violations.push({ file: rel, ...h });
+      }
     }
   }
   return violations;
 }
 
 /** Allowlisted files that no longer define isRecord — stale entries to prune. */
-export function findStaleAllowlist(root = process.cwd()) {
+export function findStaleAllowlist(root = REPO_ROOT) {
   const stale = [];
   for (const rel of ALLOWLIST) {
     let body;
@@ -148,10 +148,12 @@ function main() {
 
   if (violations.length > 0) {
     console.error("");
-    console.error("ERROR: BI-6A505BFF — a NEW local `isRecord` helper was added.");
+    console.error("ERROR: BI-6A505BFF — a NEW local `isRecord` / `isPlainObject` helper was added.");
     console.error("");
-    console.error("There is one canonical object-guard. Import it instead of copying:");
-    console.error('  import { isRecord } from "@/lib/shared/coerce";');
+    console.error("Each import boundary has one object guard. Import it instead of copying:");
+    console.error('  apps/web     import { isRecord } from "@/lib/shared/coerce";');
+    console.error('  packages/*   import { isRecord } from "@dpf/validators";');
+    console.error('  scripts/lib  import { isRecord } from "./is-record.mjs";');
     console.error("");
     console.error("Offending definitions:");
     for (const v of violations) console.error(`  ${v.file}:${v.line}  ${v.text}`);
@@ -170,7 +172,7 @@ function main() {
   }
 
   console.log(
-    `✓ No new local isRecord helpers (${ALLOWLIST.size} pre-existing copies pending migration to @/lib/shared/coerce).`,
+    `✓ No local isRecord / isPlainObject helpers outside the ${CANONICAL.size} sanctioned homes (${ALLOWLIST.size} allowlisted).`,
   );
 }
 

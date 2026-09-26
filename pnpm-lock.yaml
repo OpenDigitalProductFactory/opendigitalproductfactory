@@ -283,6 +283,9 @@ importers:
       '@dpf/storefront-templates':
         specifier: workspace:*
         version: link:../storefront-templates
+      '@dpf/validators':
+        specifier: workspace:*
+        version: link:../validators
       '@prisma/adapter-pg':
         specifier: ^7.9.1
         version: 7.9.1
@@ -396,6 +399,10 @@ importers:
         version: 6.0.3
 
   packages/storefront-templates:
+    dependencies:
+      '@dpf/validators':
+        specifier: workspace:*
+        version: link:../validators
     devDependencies:
       typescript:
         specifier: ^6.0.3

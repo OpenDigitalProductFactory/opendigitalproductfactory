@@ -2,6 +2,8 @@
 // Edge actions. This module is pure so the portal, dispatch gate, native-agent
 // fixtures, and future Connections preview all share one parser.
 
+import { isRecord } from "@dpf/validators";
+
 export const ORGANIZATION_JOIN_ACTION_TYPES = [
   "organization.join.issue",
   "organization.join.import",
@@ -52,10 +54,6 @@ const SAFE_TOKEN = /^[A-Za-z0-9._-]{1,4096}$/;
 const MAX_JOIN_PACKAGE_BYTES = 64 * 1024;
 const MIN_TTL_SECONDS = 5 * 60;
 const MAX_TTL_SECONDS = 15 * 60;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value).sort();
