@@ -58,7 +58,7 @@
     "inngest": "^4.13.0",
     "jose": "^6.2.12",
     "jsep": "^1.4.0",
-    "libphonenumber-js": "^1.13.9",
+    "libphonenumber-js": "^1.13.13",
     "lucide-react": "^1.26.0",
     "mailparser": "^3.9.23",
     "next": "^16.3.3",
