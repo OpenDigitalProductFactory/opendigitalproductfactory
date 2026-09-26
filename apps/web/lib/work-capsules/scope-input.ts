@@ -1,6 +1,6 @@
 import { normalizeWorkCapsuleScopeInput, parseScopeClaims, type ScopeClaim, type WorkCapsuleScopeInput } from "@/lib/work-capsules";
 import { readWorkShapeClaim, readWorkroomShapeClaim, resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 /** Persistence accepts only an executable, exact definition version. */
 export function normalizePersistedScope(input?: WorkCapsuleScopeInput | null) {

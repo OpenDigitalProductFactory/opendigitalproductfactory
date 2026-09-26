@@ -620,6 +620,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/check-no-local-slugify.test.mjs"),
       node("scripts/check-no-local-slugify.mjs"),
     ]),
+    // One canonical-JSON form for hashes and signatures per import boundary
+    // (plan 2026-09-08 §10.5 S4). Every remaining copy differs from it and
+    // feeds a persisted or signed value, so each stays allowlisted with its
+    // exact difference until a per-call-site migration decides otherwise.
+    guard("local-canonical-json-guard", "Local Canonical JSON Guard", [
+      conformanceTest("scripts/check-no-local-canonical-json.test.mjs"),
+      node("scripts/check-no-local-canonical-json.mjs"),
+    ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
       // One home for the shared wire types (plan 2026-09-08 §10.5 S9).

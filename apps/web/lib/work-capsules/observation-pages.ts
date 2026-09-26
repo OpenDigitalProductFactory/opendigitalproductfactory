@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { signCursor, equalSignature } from "@/lib/shared/signed-cursor";
 import { summarizeCapsuleLiveness, type CapsuleLivenessSummary } from "./liveness-inventory";
 

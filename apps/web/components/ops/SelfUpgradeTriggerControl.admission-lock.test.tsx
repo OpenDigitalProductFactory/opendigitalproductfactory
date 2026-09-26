@@ -89,6 +89,8 @@ describe("SelfUpgradeTriggerControl — an admitted upgrade cannot be triggered 
     render(<SelfUpgradeTriggerControl {...props} />);
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
     await waitFor(() => expect(screen.getByText(/Not admitted: already-running/)).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /upgrade now/i })).toBeEnabled();
+    // The refusal text is set inside the transition, while isPending (and
+    // therefore the button) can still be true for one more paint.
+    await waitFor(() => expect(screen.getByRole("button", { name: /upgrade now/i })).toBeEnabled());
   });
 });

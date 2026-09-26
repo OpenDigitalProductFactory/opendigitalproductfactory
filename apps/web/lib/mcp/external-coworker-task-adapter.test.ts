@@ -10,7 +10,7 @@ vi.mock("@/lib/mcp-task-submit", async (importOriginal) => ({
 
 import { dispatchExternalCoworkerTask } from "./external-coworker-task-adapter";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 const verifiedContext = {
   apiTokenId: "PAT-1",

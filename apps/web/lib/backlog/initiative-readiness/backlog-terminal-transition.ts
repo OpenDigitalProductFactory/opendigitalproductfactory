@@ -7,7 +7,7 @@ import {
   type CompletionEvidenceRuntimeDb,
   type ResolveCompletionEvidenceResult,
 } from "@/lib/backlog/completion-evidence-runtime";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isReachableFromTrunk, trunkHasMergedPullRequest, trunkRefCommittedAt, trunkRefExists } from "@/lib/work-capsules/git-scanner";
 
 import { projectBacklogItemReadiness, readinessShapeFromWorkShape, type InitiativeReadinessActivity } from "./entry-adapter";
