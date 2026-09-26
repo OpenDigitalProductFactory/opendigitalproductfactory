@@ -406,7 +406,7 @@ export function findCanonicalizers(source) {
   for (const fn of namedFunctions(code)) {
     const body = code.slice(fn.bodyStart, fn.bodyEnd);
     if (!sortsObjectKeys(body)) continue;
-    const name = fn.name.replace(/\$/g, "\\$");
+    const name = fn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (!new RegExp(`(?<![\\w$.])${name}(?![\\w$])`).test(body)) continue;
     // It must produce JSON: stringify inside the walker, or JSON.stringify(walker(...)).
     // A recursive key sort that renders Markdown or collects probes is not a serializer.
