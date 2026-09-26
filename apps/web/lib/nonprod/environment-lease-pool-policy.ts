@@ -11,6 +11,14 @@ import {
 } from "./local-ci-pool-policy";
 import { readLocalCiInstallationProfile } from "./local-ci-capacity-profile";
 import {
+  loadLocalCiBuilderMemoryCalibration,
+  measuredBuilderReserve,
+  type MeasuredBuilderReserve,
+} from "./local-ci-builder-memory-calibration";
+import localCiSlotResources from "./local-ci-slot-resources.json" with {
+  type: "json",
+};
+import {
   resolveHostResourceAdmission,
   type ActiveHeavyReservation,
   type HeavyResourceClass,
@@ -157,6 +165,19 @@ export async function resolveNonprodPoolPolicy(input: {
       platformConfig: input.platformConfig,
     }).catch(() => null)
     : null;
+  // BI-903FB5F9: the builder reserve follows measured gate peaks. An
+  // unreadable row is the same as no measurement: the checked-in calibration.
+  const builderReserve: MeasuredBuilderReserve | undefined = input.platformConfig
+    ? measuredBuilderReserve({
+      ceilingBytes: localCiSlotResources.builderPolicy.memoryBytes,
+      checkedInReserveBytes: localCiSlotResources.builderPolicy.admissionReserveBytes,
+      safetyMarginBytes:
+        localCiSlotResources.builderPolicy.admissionCalibration.safetyMarginBytes,
+      calibration: await loadLocalCiBuilderMemoryCalibration({
+        platformConfig: input.platformConfig,
+      }).catch(() => null),
+    })
+    : undefined;
   const clientPressure = input.hostPressure ?? {};
   const preliminary = resolveLocalCiPoolPolicy({
     configValue,
@@ -166,6 +187,7 @@ export async function resolveNonprodPoolPolicy(input: {
     env: process.env,
     now: input.now,
     installation,
+    builderReserveBytes: builderReserve?.bytes,
   });
   // A missing/malformed config keeps the compatibility singleton and has no
   // broker contract to enforce. A valid configured singleton still requires
@@ -211,7 +233,9 @@ export async function resolveNonprodPoolPolicy(input: {
       env: process.env,
       now: input.now,
       installation,
+      builderReserveBytes: builderReserve?.bytes,
     }),
+    ...(builderReserve ? { builderReserve } : {}),
     decidedHostPressure,
   };
 }
