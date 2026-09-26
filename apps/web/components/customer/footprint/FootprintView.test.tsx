@@ -16,7 +16,7 @@ const footprint = buildMarketFootprint({
 });
 
 describe("FootprintView", () => {
-  const html = renderToStaticMarkup(<FootprintView footprint={footprint} />);
+  const html = renderToStaticMarkup(<FootprintView footprint={footprint} peopleLabel="Customers" />);
 
   it("offers the four layers as a radio group with customers selected", () => {
     for (const label of ["Target markets", "Customers", "Deployments", "Language fit"]) {

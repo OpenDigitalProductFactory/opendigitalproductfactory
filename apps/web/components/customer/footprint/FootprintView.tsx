@@ -13,12 +13,14 @@ import { WORLD_COUNTRY_PATHS } from "@/lib/footprint/world-country-paths";
 
 export type FootprintLayer = "targets" | "customers" | "deployments" | "language";
 
-const LAYERS: Array<{ key: FootprintLayer; label: string; description: string }> = [
+function layersFor(people: string): Array<{ key: FootprintLayer; label: string; description: string }> {
+  return [
   { key: "targets", label: "Target markets", description: "Countries you sell to or operate in." },
-  { key: "customers", label: "Customers", description: "Customer accounts with a site in each country." },
+  { key: "customers", label: people, description: `${people} with a site in each country.` },
   { key: "deployments", label: "Deployments", description: "Customer sites running an installed node with an active fulfilment." },
   { key: "language", label: "Language fit", description: "Countries where English is an official language. The platform is English-only." },
-];
+  ];
+}
 
 const SHADE_PERCENT = [0, 22, 38, 55, 72, 90] as const;
 
@@ -56,12 +58,12 @@ function countryFill(
   }
 }
 
-function layerValue(layer: FootprintLayer, country: CountryFootprint): string {
+function layerValue(layer: FootprintLayer, country: CountryFootprint, people: string): string {
   switch (layer) {
     case "targets":
       return country.targetMarket ? "Target market" : "Not targeted";
     case "customers":
-      return `${country.customerCount} customer${country.customerCount === 1 ? "" : "s"}`;
+      return `${people}: ${country.customerCount}`;
     case "deployments":
       return `${country.deploymentCount} deployment${country.deploymentCount === 1 ? "" : "s"}`;
     case "language":
@@ -69,7 +71,8 @@ function layerValue(layer: FootprintLayer, country: CountryFootprint): string {
   }
 }
 
-export function FootprintView({ footprint }: { footprint: MarketFootprint }) {
+export function FootprintView({ footprint, peopleLabel }: { footprint: MarketFootprint; peopleLabel: string }) {
+  const LAYERS = layersFor(peopleLabel);
   const [layer, setLayer] = useState<FootprintLayer>("customers");
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -134,7 +137,7 @@ export function FootprintView({ footprint }: { footprint: MarketFootprint }) {
                 onClick={country ? () => setSelected(shape.isoA2) : undefined}
                 className={country ? "cursor-pointer" : undefined}
               >
-                <title>{country ? `${country.name}: ${layerValue(layer, country)}` : layer === "language" && shape.isoA2 ? `${shape.name}: ${hasEnglishAsOfficialLanguage(shape.isoA2) ? "English is official" : "English is not official"}` : shape.name}</title>
+                <title>{country ? `${country.name}: ${layerValue(layer, country, peopleLabel)}` : layer === "language" && shape.isoA2 ? `${shape.name}: ${hasEnglishAsOfficialLanguage(shape.isoA2) ? "English is official" : "English is not official"}` : shape.name}</title>
               </path>
             );
           })}
@@ -146,9 +149,9 @@ export function FootprintView({ footprint }: { footprint: MarketFootprint }) {
 
       {selectedCountry && (
         <p aria-live="polite" className="text-sm text-[var(--dpf-text)]">
-          <span className="font-semibold">{selectedCountry.name}</span>: {layerValue("targets", selectedCountry)} ·{" "}
-          {layerValue("customers", selectedCountry)} · {layerValue("deployments", selectedCountry)} ·{" "}
-          {layerValue("language", selectedCountry)}
+          <span className="font-semibold">{selectedCountry.name}</span>: {layerValue("targets", selectedCountry, peopleLabel)} ·{" "}
+          {layerValue("customers", selectedCountry, peopleLabel)} · {layerValue("deployments", selectedCountry, peopleLabel)} ·{" "}
+          {layerValue("language", selectedCountry, peopleLabel)}
         </p>
       )}
 
@@ -156,6 +159,7 @@ export function FootprintView({ footprint }: { footprint: MarketFootprint }) {
         countries={footprint.countries}
         unplacedCustomers={footprint.unplacedCustomers}
         unplacedDeployments={footprint.unplacedDeployments}
+        peopleLabel={peopleLabel}
         selected={selected}
         onSelect={setSelected}
       />
@@ -167,12 +171,14 @@ export function FootprintTable({
   countries,
   unplacedCustomers,
   unplacedDeployments,
+  peopleLabel,
   selected,
   onSelect,
 }: {
   countries: CountryFootprint[];
   unplacedCustomers: number;
   unplacedDeployments: number;
+  peopleLabel: string;
   selected: string | null;
   onSelect: (code: string) => void;
 }) {
@@ -184,7 +190,7 @@ export function FootprintTable({
           <tr>
             <th scope="col" className="px-3 py-2">Country</th>
             <th scope="col" className="px-3 py-2">Target market</th>
-            <th scope="col" className="px-3 py-2 text-right">Customers</th>
+            <th scope="col" className="px-3 py-2 text-right">{peopleLabel}</th>
             <th scope="col" className="px-3 py-2 text-right">Deployments</th>
             <th scope="col" className="px-3 py-2">English official</th>
           </tr>

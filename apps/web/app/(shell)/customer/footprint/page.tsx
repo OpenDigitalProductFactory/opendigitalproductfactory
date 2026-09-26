@@ -9,6 +9,9 @@ import { FootprintView } from "@/components/customer/footprint/FootprintView";
 import { auth } from "@/lib/auth";
 import { loadMarketFootprint } from "@/lib/footprint/market-footprint.server";
 import { can } from "@/lib/permissions";
+import { prisma } from "@dpf/db";
+import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
 
 export default async function MarketFootprintPage() {
   const session = await auth();
@@ -17,14 +20,21 @@ export default async function MarketFootprintPage() {
     notFound();
   }
 
-  const footprint = await loadMarketFootprint();
+  const [footprint, config, context] = await Promise.all([
+    loadMarketFootprint(),
+    prisma.storefrontConfig.findFirst({ select: { archetype: { select: { category: true } } } }),
+    prisma.businessContext.findFirst({ select: { industry: true } }),
+  ]);
+  const people = getVocabulary(
+    resolveVocabularyKey({ archetypeCategory: config?.archetype?.category ?? null, industry: context?.industry }),
+  ).stakeholderLabel;
 
   return (
     <div className="space-y-4">
       <header>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Market footprint</h1>
         <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">
-          Where you sell, where your customers are, and where you are deployed, by country.
+          Where you sell, where your {people.toLowerCase()} are, and where you are deployed, by country.
         </p>
       </header>
 
@@ -32,11 +42,11 @@ export default async function MarketFootprintPage() {
         <>
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Target markets" value={footprint.targetMarketCount} />
-            <Stat label="Customers placed" value={footprint.placedCustomers} />
+            <Stat label={`${people} placed`} value={footprint.placedCustomers} />
             <Stat label="Not placed" value={footprint.unplacedCustomers} />
             <Stat label="Deployments" value={footprint.deploymentCount} />
           </dl>
-          <FootprintView footprint={footprint} />
+          <FootprintView footprint={footprint} peopleLabel={people} />
         </>
       ) : (
         <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-sm text-[var(--dpf-text)]">
@@ -44,7 +54,7 @@ export default async function MarketFootprintPage() {
           <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--dpf-muted)]">
             <li>Add the countries you sell to or operate in to your business context.</li>
             <li>
-              Give your customers a site with an address — <Link href="/customer" className="underline">open customers</Link>.
+              Give each of your {people.toLowerCase()} a site with an address — <Link href="/customer" className="underline">open the Customer area</Link>.
             </li>
           </ul>
         </section>
