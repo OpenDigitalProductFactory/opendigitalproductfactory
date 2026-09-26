@@ -832,6 +832,93 @@ function Invoke-DPFEdgeNodeConvergence {
     return $false
 }
 
+# Insert each desired key into its .wslconfig section when the key is absent
+# from the whole file. Operator-authored values are never replaced or
+# duplicated, in either section. WSL reads memory/processors/maxCrashDumpCount
+# only under [wsl2] and autoMemoryReclaim only under [experimental]; a key in
+# the wrong section is silently ignored (BI-7371D444).
+function Add-WslConfigKeysIfMissing {
+    param(
+        [string]$Path,
+        [System.Collections.Specialized.OrderedDictionary]$Desired,
+        [string]$Section = "wsl2"
+    )
+    $changed = $false
+    $added = New-Object System.Collections.Generic.List[string]
+    if (Test-Path -LiteralPath $Path) {
+        $lines = @(Get-Content -LiteralPath $Path)
+    } else {
+        $lines = @()
+    }
+    $header = "[$Section]"
+    $headerPattern = "^\s*\[" + [regex]::Escape($Section) + "\]\s*$"
+
+    foreach ($key in $Desired.Keys) {
+        # NOTE: "-notmatch" against an array filters elements; use Count on -match.
+        if (@($lines -match ("^\s*" + [regex]::Escape($key) + "\s*=")).Count -gt 0) {
+            continue
+        }
+        $entry = "$key=$($Desired[$key])"
+        if (@($lines -match $headerPattern).Count -gt 0) {
+            $newLines = New-Object System.Collections.Generic.List[string]
+            $inserted = $false
+            foreach ($line in $lines) {
+                $newLines.Add($line)
+                if (-not $inserted -and $line -match $headerPattern) {
+                    $newLines.Add($entry)
+                    $inserted = $true
+                }
+            }
+            $lines = @($newLines)
+        } elseif ($lines.Count -eq 0) {
+            $lines = @($header, $entry)
+        } else {
+            $lines = @($lines) + @("", $header, $entry)
+        }
+        $added.Add($entry)
+        $changed = $true
+    }
+
+    if ($changed) {
+        Set-Content -LiteralPath $Path -Value $lines
+    }
+    return @{ Changed = $changed; Added = $added }
+}
+
+# Installers before BI-7371D444 wrote autoMemoryReclaim under [wsl2], where WSL
+# ignores it. Move such a key into [experimental], keeping its value, unless
+# [experimental] already declares it. Re-running the installer thereby repairs
+# an existing install; the change applies at the next 'wsl --shutdown'.
+function Move-WslConfigKeyToSection {
+    param(
+        [string]$Path,
+        [string]$Key,
+        [string]$FromSection,
+        [string]$ToSection
+    )
+    if (-not (Test-Path -LiteralPath $Path)) { return @{ Moved = $false } }
+    $lines = @(Get-Content -LiteralPath $Path)
+    $keyPattern = "^\s*" + [regex]::Escape($Key) + "\s*="
+    $section = $null
+    $fromIndex = -1
+    $inTarget = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match "^\s*\[([^\]]+)\]\s*$") { $section = $Matches[1]; continue }
+        if ($lines[$i] -match $keyPattern) {
+            if ($section -eq $ToSection) { $inTarget = $true }
+            elseif ($section -eq $FromSection -and $fromIndex -lt 0) { $fromIndex = $i }
+        }
+    }
+    if ($inTarget -or $fromIndex -lt 0) { return @{ Moved = $false } }
+    $entry = $lines[$fromIndex].Trim()
+    $remaining = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $lines.Count; $i++) { if ($i -ne $fromIndex) { $remaining.Add($lines[$i]) } }
+    Set-Content -LiteralPath $Path -Value @($remaining)
+    $value = ($entry -split "=", 2)[1].Trim()
+    $result = Add-WslConfigKeysIfMissing -Path $Path -Desired ([ordered]@{ $Key = $value }) -Section $ToSection
+    return @{ Moved = $result.Changed; Entry = $entry }
+}
+
 if ($LibraryOnly -or $env:DPF_INSTALLER_LIBRARY_ONLY -eq "1") {
     return
 }
@@ -1013,57 +1100,21 @@ $wslDesiredKeys = [ordered]@{
     "maxCrashDumpCount" = "$crashDumpCap"
     "memory"            = "${wslMemoryGb}GB"
     "processors"        = "$wslProcessors"
+}
+# gradual: WWMD DI-BC3B38A641C7 (measured on the DEV host since 2026-09-06).
+$wslExperimentalKeys = [ordered]@{
     "autoMemoryReclaim" = $wslAutoMemoryReclaim
 }
 
-function Add-WslConfigKeysIfMissing {
-    param(
-        [string]$Path,
-        [System.Collections.Specialized.OrderedDictionary]$Desired
-    )
-    $changed = $false
-    $added = New-Object System.Collections.Generic.List[string]
-    if (Test-Path -LiteralPath $Path) {
-        $lines = @(Get-Content -LiteralPath $Path)
-    } else {
-        $lines = @()
-    }
-
-    foreach ($key in $Desired.Keys) {
-        # NOTE: "-notmatch" against an array filters elements; use Count on -match.
-        if (@($lines -match ("^\s*" + [regex]::Escape($key) + "\s*=")).Count -gt 0) {
-            continue
-        }
-        $entry = "$key=$($Desired[$key])"
-        if (@($lines -match "^\s*\[wsl2\]\s*$").Count -gt 0) {
-            $newLines = New-Object System.Collections.Generic.List[string]
-            $inserted = $false
-            foreach ($line in $lines) {
-                $newLines.Add($line)
-                if (-not $inserted -and $line -match "^\s*\[wsl2\]\s*$") {
-                    $newLines.Add($entry)
-                    $inserted = $true
-                }
-            }
-            $lines = @($newLines)
-        } elseif ($lines.Count -eq 0) {
-            $lines = @("[wsl2]", $entry)
-        } else {
-            $lines = @($lines) + @("", "[wsl2]", $entry)
-        }
-        $added.Add($entry)
-        $changed = $true
-    }
-
-    if ($changed) {
-        Set-Content -LiteralPath $Path -Value $lines
-    }
-    return @{ Changed = $changed; Added = $added }
+$wslResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslDesiredKeys -Section "wsl2"
+$wslReclaimMove = Move-WslConfigKeyToSection -Path $wslConfigPath -Key "autoMemoryReclaim" -FromSection "wsl2" -ToSection "experimental"
+if ($wslReclaimMove.Moved) {
+    Write-OK ("Moved {0} from [wsl2], where WSL ignores it, to [experimental]" -f $wslReclaimMove.Entry)
 }
-
-$wslResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslDesiredKeys
-if ($wslResult.Changed) {
-    Write-OK ("Born-bounded WSL ceilings written to .wslconfig (host {0}GB RAM / {1} CPUs): {2}" -f $hostRamGb, $hostCpus, ($wslResult.Added -join ", "))
+$wslExperimentalResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslExperimentalKeys -Section "experimental"
+if ($wslResult.Changed -or $wslExperimentalResult.Changed) {
+    $wslAdded = @($wslResult.Added) + @($wslExperimentalResult.Added)
+    Write-OK ("Born-bounded WSL ceilings written to .wslconfig (host {0}GB RAM / {1} CPUs): {2}" -f $hostRamGb, $hostCpus, ($wslAdded -join ", "))
     Write-Host "  Note: .wslconfig is inert until the next 'wsl --shutdown' (stops containers)." -ForegroundColor Yellow
     Write-Host "  Sweep in-flight pregate/local-CI work before cycling WSL (BI-4F3AB6B3)." -ForegroundColor Yellow
 }
