@@ -43,10 +43,17 @@ export const documentRenditionBackfill = inngest.createFunction(
     const gate = await gateAtEntry(step, "documents/rendition-backfill");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    return step.run("backfill-renditions", async () => {
-      const { backfillDocumentRenditions } = await import("@/lib/documents/renditions");
-      const limit = typeof event.data.limit === "number" ? event.data.limit : undefined;
-      return backfillDocumentRenditions({ limit });
+    // BI-153EC72C: drain the queue in bounded passes, one durable step each.
+    const { drainRenditionBackfill } = await import("@/lib/documents/rendition-backfill-drain");
+    const limit = typeof event.data.limit === "number" ? event.data.limit : undefined;
+    const reason = typeof event.data.reason === "string" ? event.data.reason : undefined;
+    return drainRenditionBackfill({
+      runPass: (pass, cursor) =>
+        step.run(`backfill-renditions-pass-${pass}`, async () => {
+          const { backfillDocumentRenditions } = await import("@/lib/documents/renditions");
+          const outcome = await backfillDocumentRenditions({ limit, cursor, reason });
+          return { processed: outcome.processed, nextCursor: outcome.nextCursor };
+        }),
     });
   },
 );

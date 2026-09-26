@@ -61,8 +61,9 @@ export interface DocumentRenditionRequestedEvent {
   data: { documentVersionId: string };
 }
 
-/** BI-9D43CBEF: bounded rendition backfill, requested when the document
- *  converter becomes available (lib/documents/rendition-trigger.ts). */
+/** BI-9D43CBEF: bounded rendition backfill, requested at portal start, on a
+ *  doctools pin change (BI-153EC72C) and when the document converter becomes
+ *  available (lib/documents/rendition-trigger.ts). */
 export interface DocumentRenditionBackfillRequestedEvent {
   name: "documents/rendition.backfill-requested";
   data: { reason: string; limit?: number };

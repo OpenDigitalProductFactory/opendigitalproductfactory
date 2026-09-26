@@ -258,7 +258,7 @@ export const eventFunctions = [
   governedBacklogTeeUpRequested,
   issueReportProjectOnCreate,
   documentRenditionGenerate, // BI-9D43CBEF: office file saved -> PDF + text renditions, indexed
-  documentRenditionBackfill, // BI-9D43CBEF: bounded sweep when the converter becomes available
+  documentRenditionBackfill, // BI-9D43CBEF/BI-153EC72C: bounded, draining sweep at portal start, on a pin change, and when the converter becomes available
   contributorInventorySyncOnDemand,
   gitPromotionSandboxVerification,
   postgresBackupRequested,

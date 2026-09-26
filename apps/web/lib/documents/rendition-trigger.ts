@@ -1,15 +1,17 @@
 // When the rendition job runs (BI-9D43CBEF).
 //
-// Two wakes, both advisory: the durable job (queue/functions/
+// The wakes are advisory: the durable job (queue/functions/
 // document-renditions.ts) is idempotent, so a lost or duplicate event costs
 // nothing but a delay.
 //   - A version save asks for that version's renditions.
-//   - The converter becoming available asks for a bounded backfill. A converter
-//     that is off is retried on the next availability flip, not per minute:
-//     the flip is observed by the doctools dependency probe, which the metrics
-//     scrape already runs, so no new schedule is added. The first available
-//     answer after a restart counts as a flip, which also sweeps anything saved
-//     while the portal was down.
+//   - Portal start and a release change ask for a backfill directly, debounced
+//     (document-engine-boot.ts, BI-153EC72C). This is the wake every install
+//     gets: it also sweeps anything saved while the portal was down, or before
+//     the upgrade that brought the converter.
+//   - The converter becoming available asks for a backfill too. The flip is
+//     observed by the doctools dependency probe inside the /api/metrics scrape,
+//     so it fires only where something scrapes (the optional observability
+//     profile); it is a faster path there, not the guarantee.
 
 import { probeDoctools } from "./conversion/availability";
 
@@ -65,3 +67,36 @@ export function createRenditionResumeWatch(deps: {
 
 /** The doctools dependency probe, resuming renditions when the converter comes back. */
 export const probeDoctoolsAndResumeRenditions = createRenditionResumeWatch({ probe: probeDoctools });
+
+/** How long portal-start and release-change asks wait for one another (BI-153EC72C). */
+export const BACKFILL_REQUEST_DEBOUNCE_MS = 60_000;
+
+/**
+ * A debounced backfill request: asks inside one window send a single event
+ * whose reason names each distinct ask. Never throws.
+ */
+export function createDebouncedBackfillRequest(deps: {
+  send?: Send;
+  delayMs?: number;
+}): (reason: string) => void {
+  const delayMs = deps.delayMs ?? BACKFILL_REQUEST_DEBOUNCE_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let reasons: string[] = [];
+  const flush = async () => {
+    timer = undefined;
+    const reason = reasons.join("+");
+    reasons = [];
+    try {
+      await (deps.send ?? defaultSend)({ name: RENDITION_BACKFILL_EVENT, data: { reason } });
+      console.log(`[renditions] backfill requested (${reason})`);
+    } catch (err) {
+      console.warn("[renditions] could not request the rendition backfill:", err);
+    }
+  };
+  return (reason) => {
+    if (!reasons.includes(reason)) reasons.push(reason);
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => void flush(), delayMs);
+    (timer as { unref?: () => void }).unref?.();
+  };
+}

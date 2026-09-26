@@ -723,6 +723,9 @@
     "apps/web/lib/docs/doc-link-resolver.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "apps/web/lib/documents/document-engine-boot.test.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/lib/documents/document-previews.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
@@ -1126,6 +1129,9 @@
     ],
     "apps/web/lib/security/safe-log.ts": [
       "docs/security/codeql-advanced-setup.md"
+    ],
+    "apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "apps/web/lib/self-upgrade/doctools-release-image.test.ts": [
       "docs/install/platform-support-watchlist.md"
@@ -3149,8 +3155,10 @@
     "docs/install/platform-support-watchlist.md": [
       "apps/web/components/monitoring/health-summary.ts",
       "apps/web/components/monitoring/prometheus-config.test.ts",
+      "apps/web/lib/documents/document-engine-boot.test.ts",
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
+      "apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
       "apps/web/lib/self-upgrade/doctools-source-lineage.test.ts",
       "apps/web/lib/self-upgrade/preflight.test.ts",

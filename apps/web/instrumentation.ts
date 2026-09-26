@@ -1109,7 +1109,7 @@ export async function register() {
         await reconcileProviderConnectionState().catch(() => {});
         setInterval(() => void reconcileProviderConnectionState().catch(() => {}), 20 * 60 * 1000);
       })();
-      void import("@/lib/build/issue-bridge-sweep").then((m) => m.startUpstreamClosureSweep()); void import("@/lib/self-upgrade/doctools-release-image").then((m) => m.startDoctoolsReleaseImageReconciler()).catch((error) => console.error("[doctools-image] reconciler failed to start", error)); // BI-9A2EC54A: dpf-doctools release pin, boot + 20 min
+      void import("@/lib/build/issue-bridge-sweep").then((m) => m.startUpstreamClosureSweep()); void import("@/lib/documents/document-engine-boot").then((m) => m.startDocumentEngineOnBoot()).catch((error) => console.error("[doctools-image] document engine boot failed", error)); // BI-9A2EC54A/BI-903D22D0/BI-153EC72C: doctools pin at boot + 20 min, rendition backfill at start + on pin change
     }
 
     // Backfill the operational value stream (OVSM) EA view for any storefront
