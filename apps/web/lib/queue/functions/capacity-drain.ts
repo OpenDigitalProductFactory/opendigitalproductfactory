@@ -20,7 +20,7 @@ export const capacityDrainScheduled = inngest.createFunction(
 
     return step.run("evaluate-capacity-drain", async () => {
       const { prisma } = await import("@dpf/db");
-      const { evaluateAndDrainCapacity } = await import("@/lib/capacity/evaluate-drain");
+      const { evaluateAndDrainCapacity } = await import("@/lib/capacity/evaluate-capacity-drain");
       const { dispatchApprovedIdeateBuilds } = await import("@/lib/build/ideate-on-approval");
       const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
 

@@ -50,7 +50,7 @@ This was verified in code and against the live development install on
 | Concept | State | Where |
 | --- | --- | --- |
 | WIP limit | A hardcoded count of 3 active builds, blind to size | `lib/build/wip-cap.ts:40` (`BUILD_WIP_CAP`) |
-| Cap callers | Five callers | `createFeatureBuild`, `promote_to_build_studio`, `dispatch-bet`, `evaluate-drain`, `drain-policy` |
+| Cap callers | Five callers | `createFeatureBuild`, `promote_to_build_studio`, `dispatch-bet`, `evaluate-capacity-drain`, `drain-policy` |
 | Cap bypass | The governed daily tee-up never checks the cap | `governed-backlog-tee-up.ts:661-718` |
 | Size scale | small 1, medium 3, large 8, xlarge 20, relative points with no unit | `lib/demand/scoring.ts:20-25`, `resolveJobSize` |
 | Size coverage | 82% of live items carry an `effortSize`; 15 carry a `jobSize`; 3 carry an agreed estimate | `BacklogItem` |
