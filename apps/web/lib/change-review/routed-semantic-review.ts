@@ -135,6 +135,15 @@ export async function dispatchRoutedSemanticReview(
 
   const completed = settled.flatMap((branch) => branch.status === "fulfilled" ? [branch.value] : []);
   const rejected = settled.filter((branch) => branch.status === "rejected").length;
+  // A rejected branch used to vanish without a trace: FB-D671B016 reported
+  // "capacity" for a day while every branch was refused routing because the
+  // captured diff was 1.6 MB of unrelated changes. Name each failure.
+  settled.forEach((branch, index) => {
+    if (branch.status === "rejected") {
+      const reason = branch.reason instanceof Error ? branch.reason.message : String(branch.reason);
+      console.warn(`[semantic-review] branch ${branches[index]?.agentId ?? index} did not complete: ${reason.slice(0, 300)}`);
+    }
+  });
   if (rejected > 0) {
     completed.push({
       decision: "inconclusive",

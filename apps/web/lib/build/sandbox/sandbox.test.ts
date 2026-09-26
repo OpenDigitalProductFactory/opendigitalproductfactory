@@ -202,7 +202,7 @@ describe("buildSandboxListReleasableFilesCommand", () => {
     // both appear, which is what the PR #850 gate needs to recognize.
     const command = buildSandboxListReleasableFilesCommand("/workspace", "client/abc-123");
 
-    expect(command).toContain("git diff --cached 'client/abc-123' --name-only -- .");
+    expect(command).toContain(`git diff --cached "$(git merge-base HEAD 'client/abc-123' 2>/dev/null || echo 'client/abc-123')" --name-only -- .`);
     expect(command).toContain(":(exclude)**/.next/**");
     expect(command).toContain(":(exclude)apps/web/next-env.d.ts");
   });
@@ -227,7 +227,7 @@ describe("buildSandboxDiffForFilesCommand", () => {
       "client/abc-123",
     );
 
-    expect(command).toContain("git diff --cached 'client/abc-123' -- 'apps/web/lib/foo.ts'");
+    expect(command).toContain(`git diff --cached "$(git merge-base HEAD 'client/abc-123' 2>/dev/null || echo 'client/abc-123')" -- 'apps/web/lib/foo.ts'`);
   });
 });
 
