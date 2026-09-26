@@ -271,7 +271,9 @@ describe("SelfUpgradeTriggerControl – loading", () => {
     shared.isPending = true;
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain('data-upgrade-starting="true"');
-    expect(html).toContain("durable run will appear");
+    // BI-CE244260: the run is server-side; the page must not claim it needs to stay open.
+    expect(html).toContain("carries on at the server");
+    expect(html).not.toMatch(/keep this page open/i);
   });
 
   it("does not show the 'starting' hint once a run is already running", () => {
@@ -290,6 +292,9 @@ describe("SelfUpgradeTriggerControl – success feedback", () => {
     shared.triggerResult = { queued: true };
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Upgrade admitted");
+    // BI-CE244260: admitted means there is nothing left to press.
+    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toMatch(/do not click again/i);
   });
 });
 
