@@ -17,8 +17,6 @@ export type CapacityDrainResult = {
   decision: DrainDecision;
   windowResetAt: string;
   poolExhausted: boolean;
-  activeBuilds: number;
-  wipCap: number;
   /** Builds actually created this run (0 when not draining). */
   dispatched: number;
   /** Real remaining weekly allocation (0..1) when a fresh snapshot drove the run; null in proxy mode. */
@@ -86,17 +84,12 @@ export async function evaluateAndDrainCapacity(input: {
     },
   });
 
-  const { BUILD_WIP_CAP, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
   const { getAllCliPoolStatuses } = await import("@/lib/routing/cli-pool-status");
 
   // A pool is "exhausted" if any CLI adapter is currently rate-limited — the
   // allocation is already fully in use (or we're throttled), so we must not push.
   const pools = await getAllCliPoolStatuses();
   const poolExhausted = pools.some((p) => p.isExhausted);
-
-  const activeBuilds = await prisma.featureBuild.count({
-    where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
-  });
 
   // REAL signal: the most-restrictive fresh weekly-quota snapshot across adapters.
   // When present, its provider-authoritative resetAt wins over the fixed-DOW
@@ -114,8 +107,6 @@ export async function evaluateAndDrainCapacity(input: {
     windowResetAt,
     drainWindowHours: config?.capacityDrainWindowHours ?? 12,
     poolExhausted,
-    activeBuilds,
-    wipCap: BUILD_WIP_CAP,
     maxDispatch: config?.capacityDrainMaxDispatch ?? 3,
     weeklyRemainingRatio,
   });
@@ -124,8 +115,6 @@ export async function evaluateAndDrainCapacity(input: {
     decision,
     windowResetAt: windowResetAt.toISOString(),
     poolExhausted,
-    activeBuilds,
-    wipCap: BUILD_WIP_CAP,
     weeklyRemainingRatio: weeklyRemainingRatio ?? null,
     weeklySource: weekly?.source ?? null,
   };
@@ -140,7 +129,8 @@ export async function evaluateAndDrainCapacity(input: {
     userId,
     trigger: "capacity-drain",
     limit: decision.targetDispatch,
-    // Let the drain fill idle slots up to the WIP cap, past the normal daily cap.
+    // Let the drain try past the normal daily cap; the tee-up admits each start
+    // against its portfolio's points-in-flight allowance (BI-3430B3A4).
     capOverride: decision.targetDispatch,
   });
 

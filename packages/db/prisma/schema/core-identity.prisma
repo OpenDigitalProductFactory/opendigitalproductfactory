@@ -46,6 +46,8 @@ model User {
   pushDevices                      PushDeviceRegistration[]
   taskRequirementsApproved         TaskRequirement[]                   @relation("TaskRequirementApprover")
   epicPortfoliosConfirmed          EpicPortfolio[]                     @relation("EpicPortfolioConfirmedBy")
+  portfolioBudgetsSet              PortfolioBudgetPeriod[]             @relation("PortfolioBudgetSetBy")
+  budgetReservations               BudgetReservation[]                 @relation("BudgetReservationActor")
   taskRequirementsCreated          TaskRequirement[]                   @relation("TaskRequirementCreator")
   teamMemberships                  TeamMembership[]
   groups                           UserGroup[]

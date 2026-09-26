@@ -31,6 +31,12 @@ vi.mock("@/lib/product-management/product-management-playbook-refresh", () => ({
   queueProductManagementPlaybookRefreshForBacklogItem: mocks.refreshPlaybook,
 }));
 vi.mock("@/lib/governance-data", () => ({ createAuthorizationDecisionLog: mocks.authorizationLog }));
+// Budget reservation (BI-EF265C9A) has its own tests; here it stays out of the way.
+vi.mock("@/lib/portfolio/budget-reservation", () => ({
+  isAutonomousCaller: () => false,
+  planFundingReservation: async () => ({ kind: "none", reason: "unsized", message: "not under test" }),
+  commitFundingReservation: async () => ({ reservationId: "unused" }),
+}));
 vi.mock("@/lib/demand/volunteering.server", () => ({
   offerFundedItemToCoworker: vi.fn().mockResolvedValue({ offered: false, agentId: null }),
   recordVolunteeringAutonomyShadow: vi.fn().mockResolvedValue(undefined),

@@ -136,6 +136,21 @@ export async function claimBacklogItemForWork(args: {
       ? { ...shape.refusal, data: { ...(shape.refusal.data as Record<string, unknown>), attentionRequired: true, executorKind } }
       : shape.refusal;
   }
+  // Admission by points in flight (BI-3430B3A4): an implementation claim is a
+  // start. An unattended executor is refused past the allowance; a person
+  // proceeds with the warning recorded. An item already in flight is admitted.
+  let admissionWarning: string | null = null;
+  if (((requestedIntent as WorkIntent | null) ?? "implementation") === "implementation") {
+    const unattended = UNATTENDED_EXECUTORS.has(executorKind) || Boolean(args.context?.taskRunId);
+    const { prisma } = await import("@dpf/db");
+    const { evaluateItemAdmission, recordAdmissionOutcome, blocksStart } = await import("@/lib/build/investment-admission");
+    const admission = await evaluateItemAdmission(prisma as never, { itemId, startKind: unattended ? "autonomous" : "human" });
+    await recordAdmissionOutcome(prisma as never, admission, { source: "claim_backlog_item_for_work", userId: args.userId, agentId: args.context?.agentId ?? null });
+    if (blocksStart(admission)) {
+      return { success: false, error: "wip_allowance_reached", message: admission.reason, data: { admission, attentionRequired: true, executorKind } };
+    }
+    if (admission.verdict !== "admit") admissionWarning = admission.reason;
+  }
   try {
     const governed = await claimGovernedBacklogWorkspace({
       db: args.db,
@@ -187,11 +202,12 @@ export async function claimBacklogItemForWork(args: {
     return {
       success: true,
       entityId: result.capsuleId,
-      message: conflicts.length
+      message: (conflicts.length
         ? `${base} ADVISORY: ${conflicts.join("; ")}. Coordinate before pushing.`
-        : `${base} Claim-at-start recorded for this session.`,
+        : `${base} Claim-at-start recorded for this session.`) + (admissionWarning ? ` Warning: ${admissionWarning}` : ""),
       data: {
         ...result,
+        admissionWarning,
         workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived")
           ? { ref: shape.resolution.ref, source: shape.resolution.kind, ...(shape.resolution.kind === "derived" ? { reasonCode: shape.resolution.reasonCode, signals: shape.resolution.signals } : {}) }
           : null,

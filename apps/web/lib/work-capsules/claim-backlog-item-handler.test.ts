@@ -3,6 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   claimGovernedBacklogWorkspace: vi.fn(),
   ensureCapsuleWorkItemAnchorWithPrisma: vi.fn(),
+  evaluateItemAdmission: vi.fn(),
+  recordAdmissionOutcome: vi.fn(async () => undefined),
+}));
+
+// Admission by points in flight (BI-3430B3A4) admits by default here; its own
+// behaviour at the claim is tested below.
+vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("@/lib/build/investment-admission", async (importOriginal) => ({
+  blocksStart: (await importOriginal<typeof import("@/lib/build/investment-admission")>()).blocksStart,
+  evaluateItemAdmission: mocks.evaluateItemAdmission,
+  recordAdmissionOutcome: mocks.recordAdmissionOutcome,
 }));
 
 vi.mock("./governed-work-claim", () => ({
@@ -42,6 +53,7 @@ describe("claimBacklogItemForWork MCP boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.ensureCapsuleWorkItemAnchorWithPrisma.mockResolvedValue({});
+    mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "admit", reason: "fits" });
   });
 
   it("threads a deliberate co-claim and its audit reason", async () => {
@@ -155,6 +167,7 @@ describe("the claim asks for the delivery shape (BI-02470C7E, design §3.3)", ()
     vi.clearAllMocks();
     mocks.ensureCapsuleWorkItemAnchorWithPrisma.mockResolvedValue({});
     mocks.claimGovernedBacklogWorkspace.mockResolvedValue(okClaim());
+    mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "admit", reason: "fits" });
   });
 
   it("persists a declared shape on the Workroom as a workShape scope claim with source declared", async () => {
@@ -233,5 +246,42 @@ describe("the claim asks for the delivery shape (BI-02470C7E, design §3.3)", ()
     const db = shapeDb({ effortSize: "small", workType: "chore", title: "t", body: "" });
     const result = await claimBacklogItemForWork({ params: { ...base, workShape: "delivery-small" }, userId: "user-1", context: {}, db, resolveActor: actor });
     expect(result).toMatchObject({ success: false, error: "invalid_work_shape" });
+  });
+});
+
+describe("an implementation claim is a start, admitted by points in flight (BI-3430B3A4)", () => {
+  const actor = vi.fn().mockResolvedValue({ userId: "user-1", agentId: null, principalId: "PRN-1" });
+  const params = { itemId: "BI-ONE", worktreePath: "/two", branchName: "fix/two", sessionRef: "s", workShape: "delivery-medium@1.0.0" };
+  const over = "Starting this takes the portfolio to 11 of 8 points in flight (3 over).";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.ensureCapsuleWorkItemAnchorWithPrisma.mockResolvedValue({});
+    mocks.claimGovernedBacklogWorkspace.mockResolvedValue(okClaim());
+  });
+
+  it("refuses an unattended executor past the allowance and raises attention, without binding a Workroom", async () => {
+    mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "refuse", reason: over });
+    const db = shapeDb({ effortSize: "medium", workType: "feature", title: "t", body: "" });
+    const result = await claimBacklogItemForWork({ params: { ...params, provider: "build-studio" }, userId: "user-1", context: {}, db, resolveActor: actor });
+    expect(result).toMatchObject({ success: false, error: "wip_allowance_reached", data: { attentionRequired: true } });
+    expect(mocks.evaluateItemAdmission).toHaveBeenCalledWith(expect.anything(), { itemId: "BI-ONE", startKind: "autonomous" });
+    expect(mocks.claimGovernedBacklogWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("lets a person claim past the allowance and says so in the response (AC-3)", async () => {
+    mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "warn", reason: over });
+    const db = shapeDb({ effortSize: "medium", workType: "feature", title: "t", body: "" });
+    const result = await claimBacklogItemForWork({ params: { ...params, provider: "claude" }, userId: "user-1", context: {}, db, resolveActor: actor });
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("Warning: ");
+    expect((result.data as Record<string, unknown>).admissionWarning).toBe(over);
+    expect(mocks.recordAdmissionOutcome).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ verdict: "warn" }), expect.objectContaining({ source: "claim_backlog_item_for_work" }));
+  });
+
+  it("does not gate a plan or design claim, which starts no delivery", async () => {
+    const db = shapeDb({ effortSize: "medium", workType: "feature", title: "t", body: "" });
+    await claimBacklogItemForWork({ params: { ...params, provider: "claude", workIntent: "plan" }, userId: "user-1", context: {}, db, resolveActor: actor });
+    expect(mocks.evaluateItemAdmission).not.toHaveBeenCalled();
   });
 });

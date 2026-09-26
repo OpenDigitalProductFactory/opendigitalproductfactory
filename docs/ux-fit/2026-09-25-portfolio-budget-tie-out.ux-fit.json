@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "ops-demand-panel",
+  "decisionInteractionId": "DI-5DCFAEA03A6D",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/PortfolioTieOutPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "ops-demand-panel",
+      "portfolio-overview-section",
+      "new-ops-budget-tab"
+    ]
+  }
+}

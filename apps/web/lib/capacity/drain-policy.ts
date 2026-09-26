@@ -71,11 +71,11 @@ export type DrainPolicyInput = {
   drainWindowHours: number;
   /** CLI subscription pool currently rate-limited (429 in flight)? Hard stop. */
   poolExhausted: boolean;
-  /** Non-terminal Build Studio builds in flight. */
-  activeBuilds: number;
-  /** The WIP cap on concurrent builds. */
-  wipCap: number;
-  /** Max builds to dispatch in a single drain evaluation. */
+  /**
+   * Max builds to try in a single drain evaluation. Each start is still
+   * admitted one by one against its portfolio's points-in-flight allowance
+   * (BI-3430B3A4); the drain no longer sizes itself by a count of builds.
+   */
   maxDispatch: number;
   /**
    * REAL SIGNAL: remaining weekly allocation as a fraction 0..1 (1 = fully
@@ -141,17 +141,12 @@ export function evaluateDrain(input: DrainPolicyInput): DrainDecision {
     return { ...base, reason: `not in drain window (${hoursUntilReset.toFixed(1)}h > ${window}h until reset)` };
   }
 
-  const headroom = input.wipCap - input.activeBuilds;
-  if (headroom <= 0) {
-    return { ...base, reason: `WIP cap reached (${input.activeBuilds}/${input.wipCap}) — no free slots` };
-  }
-
   const capBound = Math.max(0, Math.floor(input.maxDispatch));
   // With the real signal, scale dispatch to how much is left — burn harder when
   // there's plenty of unused allocation, gently when it's nearly gone. In proxy
   // mode there is no remaining number, so dispatch up to the full cap.
   const scaled = hasRealSignal ? Math.ceil(capBound * remaining) : capBound;
-  const targetDispatch = Math.max(0, Math.min(headroom, capBound, scaled));
+  const targetDispatch = Math.max(0, Math.min(capBound, scaled));
   if (targetDispatch === 0) {
     return { ...base, reason: input.maxDispatch <= 0 ? "maxDispatch is 0" : "nothing to dispatch" };
   }
@@ -164,6 +159,6 @@ export function evaluateDrain(input: DrainPolicyInput): DrainDecision {
     targetDispatch,
     hoursUntilReset,
     signal,
-    reason: `draining (${signal}): ${hoursUntilReset.toFixed(1)}h to reset, ${detail}, ${headroom} of ${input.wipCap} build slots free`,
+    reason: `draining (${signal}): ${hoursUntilReset.toFixed(1)}h to reset, ${detail}; each start is admitted by points in flight`,
   };
 }

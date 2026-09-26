@@ -6,7 +6,7 @@ order: 1
 
 ## Overview
 
-Operations is the delivery backlog for the platform. It tracks the work items, epics, priorities, and deployments that make up your team's delivery commitments. It is designed for transparency — blockers are visible, WIP limits are enforced, and progress is always up to date.
+Operations is the delivery backlog for the platform. It tracks the work items, epics, priorities, and deployments that make up your team's delivery commitments. It is designed for transparency — blockers are visible, work in progress is limited by investment (each portfolio admits new work while its points in flight fit its allowance, so ten small items and two large ones that cost the same are treated alike), and progress is always up to date.
 
 ## Workroom Inventory
 

@@ -8,7 +8,7 @@ function row(overrides: Partial<InvestmentItemRow>): InvestmentItemRow {
   return {
     itemId: "BI-1", status: "open", effortSize: "medium", jobSize: null, estimateAgreed: null,
     storedPortfolioId: null, storedPortfolioDangling: false, productPortfolioId: null, taxonomyPortfolioId: null,
-    coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, completedAt: null,
+    coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasLiveWorkroom: false, deliverySurface: "other", traced: false, completedAt: null,
     ...overrides,
   };
 }
@@ -62,5 +62,10 @@ describe("summarizePortfolioInvestment (BI-298A7202)", () => {
     expect(summary.rows.find((r) => r.portfolioId === "gone")).toBeUndefined();
     expect(summary.rows.find((r) => r.portfolioId === "p1")).toMatchObject({ items: 1, danglingStoredItems: 1 });
     expect(summary.rows.find((r) => r.portfolioId === null)).toMatchObject({ items: 1, danglingStoredItems: 1 });
+  });
+
+  it("counts an item with a live Workroom as in flight, whatever its status (design §5.6)", () => {
+    const summary = summarizePortfolioInvestment([row({ epicPortfolioId: "p1", status: "open", hasLiveWorkroom: true })], now);
+    expect(summary.rows[0]).toMatchObject({ inFlightPoints: 3, readyPoints: 0 });
   });
 });

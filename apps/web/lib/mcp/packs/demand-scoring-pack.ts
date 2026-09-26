@@ -162,10 +162,11 @@ const definitions: ToolDefinition[] = [
   {
     name: "set_backlog_delivery_budget",
     description:
-      "View or set the operator-owned backlog delivery budget: how many backlog items the governed daily tee-up (and on-demand process_backlog_for_build_studio) is funded to promote into Build Studio per day, plus whether governed promotion is enabled at all. Called with no fields, it's a read: returns the current budget alongside live parallelism context. A bigger budget only affects INTAKE — it does not raise how many builds can execute at once (Build Studio's shared sandbox is hard-capped, separately, at BUILD_WIP_CAP=3; see buildWipCap/activeBuilds in the response). Every change is audited.",
+      "View or set the operator-owned backlog delivery budget: how many backlog items the governed daily tee-up (and on-demand process_backlog_for_build_studio) is funded to promote into Build Studio per day, plus whether governed promotion is enabled at all. Called with no fields, it's a read: returns the current budget alongside live parallelism context. A bigger budget only affects INTAKE: each start is still admitted by its portfolio's points in flight, and the Build Studio sandbox pool is the separate physical limit on builds executing at once (see sandboxPoolSize/activeBuilds in the response). Every change is audited.",
     inputSchema: {
       type: "object",
       properties: {
+        wipAdmissionMode: { type: "string", enum: ["shadow", "enforce"], description: "Points-in-flight admission: shadow records every admit/warn/refuse decision without blocking (the default, per WWMD DI-D83D9C13686B); enforce refuses autonomous starts past a portfolio's allowance." },
         dailyBudget: {
           type: "integer",
           description: "Items/day funded for governed backlog→build promotion (0-50). Omit to leave unchanged (or, with enabled also omitted, to just read current state).",
@@ -251,12 +252,13 @@ const definitions: ToolDefinition[] = [
   {
     name: "approve_demand_for_funding",
     description:
-      "Route a scored demand item's funding decision through the organization's own WWWD stance (governed, audited) and, if approved, advance it to the 'ready' funnel stage so it can be promoted to build. This is the investment-approval gate: the decision is recorded to the decision ledger and surfaces in the decision-review workspace. When the org's stance escalates or defers, the item stays at its current stage for a human call.",
+      "Route a scored demand item's funding decision through the organization's own WWWD stance (governed, audited) and, if approved, advance it to the 'ready' funnel stage so it can be promoted to build. This is the investment-approval gate: the decision is recorded to the decision ledger and surfaces in the decision-review workspace. When the org's stance escalates or defers, the item stays at its current stage for a human call. Funding reserves the item's points against its portfolio's budget for the quarter; past the allocation an autonomous caller is refused and a person must give overrideReason.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "The scored demand item to consider funding (must have a demandScore)." },
         rationale: { type: "string", description: "Optional short reason recorded with the funding decision." },
+        overrideReason: { type: "string", description: "Required only when this approval takes the portfolio past its quarterly budget; recorded with the reservation." },
       },
       required: ["itemId"],
     },

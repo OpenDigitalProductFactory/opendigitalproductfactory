@@ -21,6 +21,40 @@ model Portfolio {
   knowledgeArticles             KnowledgeArticlePortfolio[]
   valueStreamTeams              ValueStreamTeam[]
   workQueues                    WorkQueue[]
+  budgetPeriods                 PortfolioBudgetPeriod[]
+  budgetReservations            BudgetReservation[]
+}
+
+/// One portfolio's investment budget for one quarter, in points (BI-9EC60FE0,
+/// EP-PORTFOLIO-BUDGET-WIP). Rows are never edited: a change inserts a row that
+/// supersedes the current one, so the chain is the audit trail. The current
+/// budget is the row nothing supersedes. A portfolio with no row has no budget
+/// set, which is never read as zero.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=operational,financial owner=founder-business-owner steward=data-steward
+model PortfolioBudgetPeriod {
+  id                 String                 @id @default(cuid())
+  portfolioId        String
+  portfolio          Portfolio              @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  periodStart        DateTime
+  periodEnd          DateTime
+  allocatedPoints    Int
+  /// Optional $ per point for this period; the tie-out shows points x rate beside budgetKUsd.
+  usdPerPoint        Decimal?               @db.Decimal(12, 2)
+  /// Optional override of the Little's-Law WIP allowance for this period.
+  wipAllowancePoints Int?
+  setById            String
+  setBy              User                   @relation("PortfolioBudgetSetBy", fields: [setById], references: [id])
+  setByAgentId       String?
+  setByAgent         Agent?                 @relation("PortfolioBudgetSetByAgent", fields: [setByAgentId], references: [agentId], onDelete: SetNull)
+  reason             String
+  supersedesId       String?                @unique
+  supersedes         PortfolioBudgetPeriod? @relation("PortfolioBudgetSupersession", fields: [supersedesId], references: [id])
+  supersededBy       PortfolioBudgetPeriod? @relation("PortfolioBudgetSupersession")
+  createdAt          DateTime               @default(now())
+
+  @@index([portfolioId, periodStart])
+  @@index([setById])
+  @@index([setByAgentId])
 }
 
 model DigitalProduct {
@@ -914,4 +948,42 @@ model ServiceOffering {
 
   @@index([digitalProductId])
   @@index([status])
+}
+
+// BudgetReservation.state — where a funded item's points stand against its
+// portfolio's quarterly budget (BI-EF265C9A).
+enum BudgetReservationState {
+  reserved
+  consumed
+  released
+}
+
+/// Points a funding approval reserved against a portfolio's quarterly budget
+/// (BI-EF265C9A, EP-PORTFOLIO-BUDGET-WIP). Reserved on approval, consumed when
+/// the item is done, released when it is retired or deferred; a re-size adjusts
+/// the points and records the change. One open (reserved) row per item.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=operational,financial owner=founder-business-owner steward=data-steward
+model BudgetReservation {
+  id             String                 @id @default(cuid())
+  backlogItemId  String
+  backlogItem    BacklogItem            @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  portfolioId    String
+  portfolio      Portfolio              @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  periodStart    DateTime
+  periodEnd      DateTime
+  points         Int
+  state          BudgetReservationState @default(reserved)
+  /// The person's reason for approving past the allocation; null when within it.
+  overrideReason String?
+  actorId        String?
+  actor          User?                  @relation("BudgetReservationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorAgentId   String?
+  actorAgent     Agent?                 @relation("BudgetReservationActorAgent", fields: [actorAgentId], references: [agentId], onDelete: SetNull)
+  createdAt      DateTime               @default(now())
+  settledAt      DateTime?
+
+  @@index([backlogItemId])
+  @@index([portfolioId, periodStart, state])
+  @@index([actorId])
+  @@index([actorAgentId])
 }

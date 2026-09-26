@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 720,
+  "pageCount": 721,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -12296,6 +12296,20 @@
         "grafana-dashboards",
         "edge-node-fleet-metrics-push-not-scrape",
         "osi-layer-model"
+      ]
+    },
+    "docs/user-guide/operations/portfolio-budgets.md": {
+      "publicHref": "/user-guide/operations/portfolio-budgets/",
+      "portalHref": "/docs/operations/portfolio-budgets",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "overview",
+        "reading-the-panel",
+        "setting-a-budget",
+        "confirming-an-epics-portfolio",
+        "how-budgets-steer-work"
       ]
     },
     "docs/user-guide/operations/self-upgrade.md": {
