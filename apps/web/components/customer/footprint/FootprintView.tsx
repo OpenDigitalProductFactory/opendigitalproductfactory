@@ -10,6 +10,9 @@ import { useMemo, useState } from "react";
 import type { CountryFootprint, MarketFootprint } from "@/lib/footprint/market-footprint";
 import { customerShadeStep, languageFitFor, type LanguageFit } from "@/lib/footprint/market-footprint";
 import { WORLD_COUNTRY_PATHS } from "@/lib/footprint/world-country-paths";
+import { Button } from "@/components/ui/Button";
+import { Surface } from "@/components/ui/Surface";
+import { DataTable, type Column } from "@/components/ui/report-kit";
 
 export type FootprintLayer = "targets" | "customers" | "deployments" | "language";
 
@@ -106,25 +109,23 @@ export function FootprintView({ footprint, peopleLabel }: { footprint: MarketFoo
     <div className="space-y-4">
       <div role="radiogroup" aria-label="Map layer" className="flex flex-wrap gap-2">
         {LAYERS.map((entry) => (
-          <button
+          <Button
             key={entry.key}
             type="button"
             role="radio"
             aria-checked={layer === entry.key}
+            variant={layer === entry.key ? "primary" : "secondary"}
             onClick={() => setLayer(entry.key)}
-            className={`min-h-[44px] rounded-md border px-3 text-sm font-medium ${
-              layer === entry.key
-                ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)] text-[var(--dpf-text)]"
-                : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-muted)]"
-            }`}
+            className="min-h-[44px]"
           >
             {entry.label}
-          </button>
+          </Button>
         ))}
       </div>
       <p className="text-sm text-[var(--dpf-muted)]">{active.description}</p>
 
-      <figure className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2">
+      <Surface padding="sm">
+      <figure>
         <svg
           viewBox={WORLD_COUNTRY_PATHS.viewBox}
           role="img"
@@ -169,6 +170,7 @@ export function FootprintView({ footprint, peopleLabel }: { footprint: MarketFoo
           Country outlines: Natural Earth (public domain). Equal Earth projection.
         </figcaption>
       </figure>
+      </Surface>
 
       {selectedCountry && (
         <p aria-live="polite" className="text-sm text-[var(--dpf-text)]">
@@ -205,48 +207,46 @@ export function FootprintTable({
   selected: string | null;
   onSelect: (code: string) => void;
 }) {
+  const columns: Column<CountryFootprint>[] = [
+    {
+      key: "country",
+      header: "Country",
+      sortAccessor: (row) => row.name,
+      cell: (row) => (
+        <button
+          type="button"
+          aria-pressed={selected === row.isoA2}
+          onClick={() => onSelect(row.isoA2)}
+          className={`min-h-[32px] text-left underline-offset-2 hover:underline ${
+            selected === row.isoA2 ? "font-semibold underline" : ""
+          }`}
+        >
+          {row.name}
+        </button>
+      ),
+    },
+    { key: "target", header: "Target market", sortAccessor: (row) => (row.targetMarket ? 1 : 0), cell: (row) => (row.targetMarket ? "Yes" : "No") },
+    { key: "customers", header: peopleLabel, align: "right", sortAccessor: (row) => row.customerCount, cell: (row) => row.customerCount },
+    { key: "deployments", header: "Deployments", align: "right", sortAccessor: (row) => row.deploymentCount, cell: (row) => row.deploymentCount },
+    { key: "language", header: "Language", cell: (row) => languageFitText(row.languageFit, row.languages) },
+  ];
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-[var(--dpf-border)]">
-      <table className="w-full text-left text-sm text-[var(--dpf-text)]">
-        <caption className="sr-only">Market footprint by country</caption>
-        <thead className="bg-[var(--dpf-surface-2)] text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
-          <tr>
-            <th scope="col" className="px-3 py-2">Country</th>
-            <th scope="col" className="px-3 py-2">Target market</th>
-            <th scope="col" className="px-3 py-2 text-right">{peopleLabel}</th>
-            <th scope="col" className="px-3 py-2 text-right">Deployments</th>
-            <th scope="col" className="px-3 py-2">Language</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(unplacedCustomers > 0 || unplacedDeployments > 0) && (
-            <tr className="border-t border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-              <th scope="row" className="px-3 py-2 font-medium">Not placed</th>
-              <td className="px-3 py-2 text-[var(--dpf-muted)]">No site or no country on the address</td>
-              <td className="px-3 py-2 text-right">{unplacedCustomers}</td>
-              <td className="px-3 py-2 text-right">{unplacedDeployments}</td>
-              <td className="px-3 py-2">—</td>
-            </tr>
-          )}
-          {countries.map((country) => (
-            <tr
-              key={country.isoA2}
-              aria-selected={selected === country.isoA2}
-              className={`border-t border-[var(--dpf-border)] ${selected === country.isoA2 ? "bg-[var(--dpf-accent-soft)]" : ""}`}
-            >
-              <th scope="row" className="px-3 py-2 font-medium">
-                <button type="button" onClick={() => onSelect(country.isoA2)} className="min-h-[32px] text-left underline-offset-2 hover:underline">
-                  {country.name}
-                </button>
-              </th>
-              <td className="px-3 py-2">{country.targetMarket ? "Yes" : "No"}</td>
-              <td className="px-3 py-2 text-right">{country.customerCount}</td>
-              <td className="px-3 py-2 text-right">{country.deploymentCount}</td>
-              <td className="px-3 py-2">{languageFitText(country.languageFit, country.languages)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      {(unplacedCustomers > 0 || unplacedDeployments > 0) && (
+        <p className="text-sm text-[var(--dpf-text)]">
+          <span className="font-semibold">Not placed:</span> {peopleLabel}: {unplacedCustomers} · Deployments:{" "}
+          {unplacedDeployments} — no site, or no country on the site address.
+        </p>
+      )}
+      <DataTable
+        columns={columns}
+        rows={countries}
+        getRowKey={(row) => row.isoA2}
+        initialSort={{ key: "customers", dir: "desc" }}
+        ariaLabel="Market footprint by country"
+        empty="No countries to show yet."
+      />
     </div>
   );
 }

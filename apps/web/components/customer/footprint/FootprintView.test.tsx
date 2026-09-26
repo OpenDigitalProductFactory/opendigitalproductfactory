@@ -32,13 +32,14 @@ describe("FootprintView", () => {
     expect((html.match(/<path /g) ?? []).length).toBeGreaterThan(170);
   });
 
-  it("lists the same countries as the map in the table, with unplaced customers pinned", () => {
+  it("lists the same countries as the map in the table, with unplaced customers stated above it", () => {
     const table = html.slice(html.indexOf("<table"));
     for (const name of ["United States of America", "Germany", "United Kingdom"]) {
       expect(table).toContain(name);
     }
-    expect(table).toContain("Not placed");
-    expect(table.indexOf("Not placed")).toBeLessThan(table.indexOf("United States of America"));
+    const notPlaced = html.indexOf("Not placed:");
+    expect(notPlaced).toBeGreaterThan(-1);
+    expect(notPlaced).toBeLessThan(html.indexOf("<table"));
   });
 
   it("uses theme tokens and patterns, never a hard-coded colour", () => {

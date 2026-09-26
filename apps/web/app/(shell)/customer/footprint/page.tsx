@@ -6,6 +6,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { FootprintView } from "@/components/customer/footprint/FootprintView";
+import { Surface } from "@/components/ui/Surface";
+import { StatCard } from "@/components/ui/report-kit";
 import { auth } from "@/lib/auth";
 import { loadMarketFootprint } from "@/lib/footprint/market-footprint.server";
 import { can } from "@/lib/permissions";
@@ -40,16 +42,21 @@ export default async function MarketFootprintPage() {
 
       {footprint.hasAnyData ? (
         <>
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="Target markets" value={footprint.targetMarketCount} />
-            <Stat label={`${people} placed`} value={footprint.placedCustomers} />
-            <Stat label="Not placed" value={footprint.unplacedCustomers} />
-            <Stat label="Deployments" value={footprint.deploymentCount} />
-          </dl>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard label="Target markets" value={footprint.targetMarketCount} />
+            <StatCard label={`${people} placed`} value={footprint.placedCustomers} />
+            <StatCard
+              label="Not placed"
+              value={footprint.unplacedCustomers}
+              hint={footprint.unplacedCustomers > 0 ? "No site or no country on the address" : undefined}
+              intent={footprint.unplacedCustomers > 0 ? "warning" : undefined}
+            />
+            <StatCard label="Deployments" value={footprint.deploymentCount} />
+          </div>
           <FootprintView footprint={footprint} peopleLabel={people} />
         </>
       ) : (
-        <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-sm text-[var(--dpf-text)]">
+        <Surface as="section" className="text-sm text-[var(--dpf-text)]">
           <h2 className="font-semibold">Nothing to show on the map yet</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--dpf-muted)]">
             <li>Add the countries you sell to or operate in to your business context.</li>
@@ -57,17 +64,8 @@ export default async function MarketFootprintPage() {
               Give each of your {people.toLowerCase()} a site with an address — <Link href="/customer" className="underline">open the Customer area</Link>.
             </li>
           </ul>
-        </section>
+        </Surface>
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-      <dt className="text-xs uppercase tracking-wide text-[var(--dpf-muted)]">{label}</dt>
-      <dd className="mt-1 text-2xl font-semibold text-[var(--dpf-text)]">{value}</dd>
     </div>
   );
 }
