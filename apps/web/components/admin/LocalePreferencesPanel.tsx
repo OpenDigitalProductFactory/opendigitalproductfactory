@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { ExpandableCard } from "@/components/ui/report-kit/ExpandableCard";
 import { Surface } from "@/components/ui/Surface";
 import { saveLocalePreferences } from "@/lib/actions/locale-preferences";
 import { languageOptions } from "@/lib/i18n/locale-preferences";
@@ -11,7 +12,8 @@ import { languageOptions } from "@/lib/i18n/locale-preferences";
 // organization (and, for language, the browser). Only English is supported
 // today; admins also see the two pseudo-locales used to check a screen's
 // translation and right-to-left readiness. Copy moves into the message
-// catalog with L0.2.
+// catalog with L0.2. Collapsed on arrival: the time-zone list is ~400 options,
+// so it renders only once the person opens the card.
 
 const SELECT_CLASS =
   "shrink-0 max-w-full px-3 py-2 text-xs bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]";
@@ -26,6 +28,7 @@ export function LocalePreferencesPanel({
   viewerIsAdmin: boolean;
 }) {
   const saved = { language: preferredLanguage ?? "", timeZone: timeZone ?? "" };
+  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(saved);
   const [lastSaved, setLastSaved] = useState(saved);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +36,9 @@ export function LocalePreferencesPanel({
   const dirty = draft.language !== lastSaved.language || draft.timeZone !== lastSaved.timeZone;
 
   const languages = languageOptions(viewerIsAdmin);
-  const zones = useMemo(() => Intl.supportedValuesOf("timeZone"), []);
+  const zones = useMemo(() => (open ? Intl.supportedValuesOf("timeZone") : []), [open]);
+  const languageLabel = languages.find((l) => l.tag === lastSaved.language)?.englishName ?? "Organization default";
+  const zoneLabel = lastSaved.timeZone ? lastSaved.timeZone.replace(/_/g, " ") : "Organization default";
 
   function save() {
     setError(null);
@@ -48,8 +53,21 @@ export function LocalePreferencesPanel({
   }
 
   return (
-    <div className="mt-8">
-      <h2 className="text-lg font-semibold text-[var(--dpf-text)] mb-1">Language and region</h2>
+    <ExpandableCard
+      id="locale-preferences"
+      open={open}
+      onOpenChange={setOpen}
+      headingLevel={2}
+      className="mt-8"
+      summary={
+        <>
+          <span className="block text-lg font-semibold">Language and region</span>
+          <span className="block text-sm text-[var(--dpf-muted)]">
+            {languageLabel} · {zoneLabel}
+          </span>
+        </>
+      }
+    >
       <p className="text-sm text-[var(--dpf-muted)] mb-4">Your own settings. Leave them on the organization default.</p>
 
       <div className="space-y-3">
@@ -110,6 +128,6 @@ export function LocalePreferencesPanel({
           !dirty && !isPending && <span className="text-xs text-[var(--dpf-muted)]">Saved</span>
         )}
       </div>
-    </div>
+    </ExpandableCard>
   );
 }
