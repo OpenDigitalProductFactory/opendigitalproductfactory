@@ -38,6 +38,8 @@ import { applyWikiSlugMigrations } from "./wiki-slug-migrations";
 import {
   parseFrontmatter as parseFrontmatterShared,
   extractWikilinks as extractWikilinksShared,
+  deriveSlug as deriveSlugShared,
+  kernelWikiPageSlug,
   type RawSourceFrontmatter as RawSourceFrontmatterShared,
   type WikiPageFrontmatter as WikiPageFrontmatterShared,
 } from "./wiki-frontmatter";
@@ -49,6 +51,7 @@ import {
 // `__dirname`-based KERNEL_DIR constant).
 export const parseFrontmatter = parseFrontmatterShared;
 export const extractWikilinks = extractWikilinksShared;
+export const deriveSlug = deriveSlugShared;
 export type RawSourceFrontmatter = RawSourceFrontmatterShared;
 export type WikiPageFrontmatter = WikiPageFrontmatterShared;
 
@@ -351,24 +354,8 @@ function walkMarkdownFiles(dir: string): string[] {
   return out;
 }
 
-/**
- * Derive a slug from a kernel markdown path.
- * - `docs/founder-kernel/wiki/entities/digital-product.md`
- *   → `entities/digital-product`
- * - `docs/founder-kernel/raw-sources/papers/it4it-overview.md`
- *   → `papers/it4it-overview`
- *
- * The `wiki/` and `raw-sources/` prefixes are stripped because the slug
- * is namespaced by what kind of folder it lives in (subfolder name).
- */
-export function deriveSlug(absolutePath: string, baseDir: string): string {
-  const rel = absolutePath.startsWith(baseDir)
-    ? absolutePath.slice(baseDir.length).replace(/^[/\\]+/, "")
-    : absolutePath;
-  // Normalise Windows backslashes to forward slashes so slugs are
-  // consistent across platforms and the upsert key never duplicates.
-  return rel.replace(/\\/g, "/").replace(/\.md$/, "");
-}
+// `deriveSlug` / `kernelWikiPageSlug` live in `./wiki-frontmatter` (the
+// single home of the slug rules, BI-DEDAC950) and are re-exported above.
 
 // ─── Seed: Raw Sources ──────────────────────────────────────────────────────
 
@@ -451,7 +438,7 @@ async function seedWikiPages(
   for (const file of files) {
     const raw = readFileSync(file, "utf8");
     const { frontmatter, body } = parseFrontmatter<WikiPageFrontmatter>(raw);
-    const slug = frontmatter.slug ?? deriveSlug(file, wikiDir);
+    const slug = kernelWikiPageSlug(frontmatter, file, wikiDir);
     const status = frontmatter.status ?? "published";
 
     const principlePayload = extractPrinciplePayload(frontmatter, file);

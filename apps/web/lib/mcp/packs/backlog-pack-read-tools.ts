@@ -312,6 +312,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
   const { buildSpecPlanReferenceIndex, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
+  const { withReadinessGoverningPrinciples } = await import("@/lib/kernel/governing-principles");
   const refIndex = await buildSpecPlanReferenceIndex();
   const specPlanCaveat = specPlanCorpusCaveat(refIndex.corpus);
   const evaluatedAt = new Date().toISOString();
@@ -319,7 +320,8 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
     const semanticEpic = i.epic?.epicId ?? null;
     const hasSpec = refIndex.specs.has(i.itemId) || Boolean(semanticEpic && refIndex.specs.has(semanticEpic));
     const hasPlan = refIndex.plans.has(i.itemId) || Boolean(semanticEpic && refIndex.plans.has(semanticEpic));
-    const readiness = projectBacklogItemReadinessSummary({
+    // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
+    const readiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
       item: {
         id: i.id,
         itemId: i.itemId,
@@ -336,7 +338,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       hasSpec,
       hasPlan,
       evaluatedAt,
-    });
+    }));
     return ({
     itemId: i.itemId,
     title: i.title,
@@ -431,6 +433,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const demandView = mapDemandRows([item])[0]!;
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
   const { loadInheritedInitiativeScope } = await import("@/lib/backlog/initiative-readiness/parent-scope-inheritance");
+  const { withReadinessGoverningPrinciples } = await import("@/lib/kernel/governing-principles");
   const hasSpec = specPlanRefs.some((entry) => entry.kind === "spec");
   const hasPlan = specPlanRefs.some((entry) => entry.kind === "plan");
   const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
@@ -438,7 +441,8 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
   const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
   const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
-  const readiness = projectBacklogItemReadinessSummary({
+  // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
+  const readiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
     inheritedScope,
     item: {
       id: item.id,
@@ -461,7 +465,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     hasSpec,
     hasPlan,
     evaluatedAt: new Date().toISOString(),
-  });
+  }));
   const completion = readiness.decisions?.completion;
   const needsPirRecovery = completion && completion.verdict !== "allowed"
     && [...completion.blockers, ...completion.unmet]

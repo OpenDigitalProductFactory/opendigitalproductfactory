@@ -866,6 +866,10 @@
     "apps/web/lib/integrations/connectors/index.ts": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "apps/web/lib/kernel/governing-principles.ts": [
+      "docs/architecture/initiative-readiness-runbook.md",
+      "docs/founder-kernel/AUTHORING.md"
+    ],
     "apps/web/lib/kernel/runtime-gate.ts": [
       "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md"
     ],
@@ -1652,6 +1656,9 @@
     "packages/db/src/table-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "packages/db/src/wiki-frontmatter.ts": [
+      "docs/founder-kernel/AUTHORING.md"
     ],
     "packages/db/src/wiki-taxonomy.ts": [
       "docs/founder-kernel/AUTHORING.md",
@@ -2884,6 +2891,7 @@
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
       "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
       "apps/web/lib/backlog/initiative-readiness/types.ts",
+      "apps/web/lib/kernel/governing-principles.ts",
       "apps/web/lib/mcp/external-coworker-task-adapter.ts",
       "apps/web/lib/mcp/packs/coworker-pack.ts",
       "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
@@ -3070,7 +3078,9 @@
     "docs/founder-kernel/AUTHORING.md": [
       "apps/web/lib/decision/golden-decisions.baseline.json",
       "apps/web/lib/decision/golden-decisions.test.ts",
+      "apps/web/lib/kernel/governing-principles.ts",
       "packages/db/src/seed-wiki-kernel.ts",
+      "packages/db/src/wiki-frontmatter.ts",
       "packages/db/src/wiki-taxonomy.ts",
       "scripts/build-kernel-embeddings.ts",
       "scripts/check-authoring-cost-dimensions.mjs"

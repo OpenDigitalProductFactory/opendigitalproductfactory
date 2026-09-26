@@ -233,6 +233,11 @@ export type DecisionPerspectiveEvaluationResult = {
   /** Independent corpus checks; any rejected hard boundary vetoes aggregation. */
   constitutionalAlignment?: import("./alignment-criteria").ConstitutionalAlignmentResult;
   rationale: string;
+  /**
+   * On an escalation, the `WikiPage.slug` of the principle that governs it
+   * (BI-DEDAC950), for `wiki_query`. Absent when no page states the rule.
+   */
+  principleSlug?: string;
   materialScores: PerspectiveMaterialScore[];
   sources: Array<DecisionEvaluationSource>;
   gapReason?:

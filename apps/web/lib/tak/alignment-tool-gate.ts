@@ -12,6 +12,11 @@ export type AlignmentGateDecision = {
   specialistDelegation?: SpecialistAlignmentDelegationResult;
   policyVersion?: string;
   amendmentLineage?: string[];
+  /**
+   * On a refusal, the `WikiPage.slug` of the principle that governs it
+   * (BI-DEDAC950), for `wiki_query`. Set by enforceTakPreexecution.
+   */
+  principleSlug?: string;
 };
 export type AlignmentGate = (input: {
   organizationId?: string;
