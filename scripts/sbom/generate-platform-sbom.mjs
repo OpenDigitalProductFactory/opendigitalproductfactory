@@ -22,6 +22,7 @@
 //   node scripts/sbom/generate-platform-sbom.mjs
 //   node scripts/sbom/generate-platform-sbom.mjs --root <repoRoot> --out <dir> --git-ref <sha>
 
+import { parseArgs as utilParseArgs } from "node:util";
 import {
   DEPENDENCY_KINDS,
   parseImporters as parseLockImporters,
@@ -37,16 +38,21 @@ import { fileURLToPath } from "node:url";
 
 // ── args ──────────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const out = { root: process.cwd(), out: null, gitRef: null };
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--root") out.root = argv[++i];
-    else if (argv[i] === "--out") out.out = argv[++i];
-    else if (argv[i] === "--git-ref") out.gitRef = argv[++i];
-  }
-  out.root = resolve(out.root);
-  out.out = out.out ? resolve(out.out) : join(out.root, "sbom");
-  out.gitRef = out.gitRef ?? process.env.GITHUB_SHA ?? process.env.GIT_COMMIT ?? "unknown";
-  return out;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: { root: { type: "string" }, out: { type: "string" }, "git-ref": { type: "string" } },
+  });
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  const root = resolve(text(values.root) ?? process.cwd());
+  const out = text(values.out);
+  return {
+    root,
+    out: out ? resolve(out) : join(root, "sbom"),
+    gitRef: text(values["git-ref"]) ?? process.env.GITHUB_SHA ?? process.env.GIT_COMMIT ?? "unknown",
+  };
 }
 
 // ── lockfile parsing (line-based; mirrors pnpm-lock-parser.ts shape) ────

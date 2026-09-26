@@ -5,6 +5,7 @@ import {
   type RiskClass,
   type TrustRecommendation,
 } from "@/lib/autonomy/trust-graduation";
+import { isRecord } from "@/lib/shared/coerce";
 
 const RISK_CLASSES: readonly RiskClass[] = [
   "read-only",
@@ -56,10 +57,6 @@ export type WorkPatternShadowEvaluation = {
   improvementTotals: Record<DeltaField, number>;
   blockers: string[];
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function stringField(source: Record<string, unknown>, field: string): string | null {
   const value = source[field];

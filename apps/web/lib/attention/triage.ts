@@ -103,6 +103,7 @@ const RESIDUE_LABEL: Record<ResidueReason, string> = {
   "self-fix-exhausted": "Build Studio could not self-repair",
   "input-required": "a coworker needs your input to continue",
   "room-stalled": "a room keeps refusing to advance and needs an accountable owner",
+  "approver-absent": "only one account can answer these approvals, and it is not being used",
   "needs-credential": "a credential or authority is missing",
   "policy-approval": "an agent action is awaiting your approval",
   "new-memory-note": "a coworker gained a new working-memory note",

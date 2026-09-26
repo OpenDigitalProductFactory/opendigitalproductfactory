@@ -15,7 +15,7 @@
 // pregate exit code never was.
 
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { dirname, resolve as resolvePath } from "node:path";
 
 import {
@@ -30,12 +30,11 @@ import {
   reconcileSlots,
 } from "./lib/pregate-status.mjs";
 import { installBrokenPipeTolerance } from "./lib/pregate-console.mjs";
+import { findQueueWaiter } from "./lib/local-queue-observer.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 
 function gitText(args, cwd) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
-  if (result.error || result.status !== 0) return "";
-  return String(result.stdout || "").trim();
+  return gitTextOrNull(args, { cwd: cwd ?? process.cwd() }) ?? "";
 }
 
 function readJson(path) {
@@ -80,7 +79,20 @@ export function resolveWorktreeContext(cwd = process.cwd()) {
 }
 
 /** Read and classify every slot's records for this worktree. */
-export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = readJson } = {}) {
+export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = readJson, findWaiterImpl = findQueueWaiter } = {}) {
+  // BI-27A37D27: whether any waiter is alive for this claim, read from the same
+  // observer registry the gate and its resumer register in.
+  let queuedWaiter = null;
+  try {
+    queuedWaiter = findWaiterImpl({
+      directory: process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
+        || resolvePath(context.gitCommonDir, "dpf-local-ci-queue-observers"),
+      branch: context.headBranch,
+      sha: context.headSha,
+    });
+  } catch {
+    queuedWaiter = null;
+  }
   return LOCAL_CI_SLOT_KEYS.map((slotKey) => {
     const manifest = createLocalCiSlotManifest({
       slotKey,
@@ -102,6 +114,7 @@ export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = 
         headSha: context.headSha,
         headBranch: context.headBranch,
         now,
+        queuedWaiter,
       }),
     };
   }).filter(Boolean);

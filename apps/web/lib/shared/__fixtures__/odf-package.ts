@@ -57,7 +57,7 @@ export function zipPackage(entries: Array<{ name: string; data: Buffer }>, defla
 export function odfPackage(
   flavor: "text" | "spreadsheet" | "presentation",
   parts: PackagePart[] = [],
-  options: { deflate?: boolean; manifest?: boolean } = {},
+  options: { deflate?: boolean; manifest?: boolean; content?: string } = {},
 ): Buffer {
   const mimetype = `application/vnd.oasis.opendocument.${flavor}`;
   const listed = [{ path: "/", mediaType: mimetype }, { path: "content.xml", mediaType: "text/xml" }, ...parts];
@@ -69,7 +69,7 @@ export function odfPackage(
   ].join("\n");
   const files = [
     { name: "mimetype", data: Buffer.from(mimetype, "latin1") },
-    { name: "content.xml", data: Buffer.from('<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"/>') },
+    { name: "content.xml", data: Buffer.from(options.content ?? '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"/>') },
     ...parts.filter((part) => !part.path.endsWith("/")).map((part) => ({ name: part.path, data: Buffer.from(part.data) })),
     ...(options.manifest === false ? [] : [{ name: "META-INF/manifest.xml", data: Buffer.from(manifest, "utf8") }]),
   ];
@@ -82,3 +82,34 @@ export const CHART_OBJECT_PARTS: PackagePart[] = [
   { path: "Object 1/content.xml", data: "<office:document-content/>", mediaType: "text/xml" },
   { path: "ObjectReplacements/Object 1", data: "svm", mediaType: "application/x-openoffice-gdimetafile;windows_formatname=&quot;GDIMetaFile&quot;" },
 ];
+
+const CONTENT_NS = [
+  'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"',
+  'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"',
+  'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"',
+].join(" ");
+
+function escapeXml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** A .odt whose body is `bodyXml` (text:h / text:p elements), the shape the engine returns for a document (BI-D1B40D43). */
+export function odtWithBody(bodyXml: string): Buffer {
+  return odfPackage("text", [], {
+    content: `<?xml version="1.0" encoding="UTF-8"?><office:document-content ${CONTENT_NS}><office:body><office:text>${bodyXml}</office:text></office:body></office:document-content>`,
+  });
+}
+
+/** A .ods whose first sheet holds `rows`, the shape the engine returns for a spreadsheet (BI-D1B40D43). */
+export function odsWithRows(rows: Array<Array<string | number | null>>): Buffer {
+  const cell = (value: string | number | null) =>
+    value === null
+      ? "<table:table-cell/>"
+      : typeof value === "number"
+        ? `<table:table-cell office:value-type="float" office:value="${value}"><text:p>${value}</text:p></table:table-cell>`
+        : `<table:table-cell office:value-type="string"><text:p>${escapeXml(value)}</text:p></table:table-cell>`;
+  const table = `<table:table table:name="Sheet1">${rows.map((row) => `<table:table-row>${row.map(cell).join("")}</table:table-row>`).join("")}</table:table>`;
+  return odfPackage("spreadsheet", [], {
+    content: `<?xml version="1.0" encoding="UTF-8"?><office:document-content ${CONTENT_NS}><office:body><office:spreadsheet>${table}</office:spreadsheet></office:body></office:document-content>`,
+  });
+}

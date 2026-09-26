@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFile } from "node:fs/promises";
 import { platform, arch, homedir } from "node:os";
 import { resolve, join } from "node:path";
@@ -324,17 +325,23 @@ export async function runRuntimeMeasurement(options = {}) {
 
 function parseArgs(argv) {
   const options = { lease: { id: process.env.DPF_NONPROD_LEASE_ID, environmentKey: process.env.DPF_NONPROD_ENVIRONMENT_KEY, ownerSessionId: process.env.DPF_NONPROD_OWNER_SESSION_ID }, portalUrl: process.env.DPF_PORTAL_URL ?? "http://127.0.0.1:3000" };
-  const paths = { "--manifest": "manifestPath", "--baseline": "baselinePath", "--operational-state": "operationalStatePath", "--catalog": "catalogPath", "--install-state": "installStatePath", "--portal-url": "portalUrl", "--lease-id": "leaseId", "--environment-key": "environmentKey", "--owner-session-id": "ownerSessionId", "--mcp-url": "mcpUrl" };
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--json") options.json = true;
-    else if (argv[i] === "--update") options.update = true;
-    else if (paths[argv[i]] && argv[i + 1]) {
-      const key = paths[argv[i]], value = argv[++i];
-      if (key === "leaseId") options.lease.id = value;
-      else if (key === "environmentKey") options.lease.environmentKey = value;
-      else if (key === "ownerSessionId") options.lease.ownerSessionId = value;
-      else options[key] = key.endsWith("Path") ? resolve(value) : value;
-    } else throw new Error(`Unknown or incomplete argument: ${argv[i]}`);
+  const keys = { manifest: "manifestPath", baseline: "baselinePath", "operational-state": "operationalStatePath", catalog: "catalogPath", "install-state": "installStatePath", "portal-url": "portalUrl", "lease-id": "leaseId", "environment-key": "environmentKey", "owner-session-id": "ownerSessionId", "mcp-url": "mcpUrl" };
+  const { values } = utilParseArgs({
+    args: argv,
+    options: {
+      json: { type: "boolean" },
+      update: { type: "boolean" },
+      ...Object.fromEntries(Object.keys(keys).map((name) => [name, { type: "string" }])),
+    },
+  });
+  for (const [name, value] of Object.entries(values)) {
+    if (value === "") throw new Error(`Unknown or incomplete argument: --${name}`);
+    const key = keys[name];
+    if (!key) options[name] = value;
+    else if (key === "leaseId") options.lease.id = value;
+    else if (key === "environmentKey") options.lease.environmentKey = value;
+    else if (key === "ownerSessionId") options.lease.ownerSessionId = value;
+    else options[key] = key.endsWith("Path") ? resolve(value) : value;
   }
   return options;
 }

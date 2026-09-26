@@ -63,7 +63,7 @@ Domain-specific operating guides (admin, AI workforce, build studio, compliance,
 - [AI Coworker Development Principles](architecture/ai-coworker-development-principles.md) — the contract AI coworkers are expected to honor.
 - `ea-diagrams/`, `tak-diagrams/` — Mermaid sources used by the architecture docs.
 
-Regenerate the TAK Word document after edits with `pnpm docs:tak`.
+Regenerate the TAK Word document after edits with `pnpm docs:tak` (or all four publications with `pnpm docs:agent-standards`). It converts through the `dpf-doctools` image, so it needs Docker and `DPF_DOCTOOLS_IMAGE` set to a digest-pinned `dpf-doctools` reference.
 
 ## Other tooling docs
 

@@ -15,6 +15,7 @@ import {
 import { determineSocialAuthFlow, createTempToken } from "./social-auth";
 import { normalizeAuthRedirect } from "./auth-redirect";
 import { resolveWorkforcePlatformRole } from "./auth-utils";
+import { recordUserSeen } from "@/lib/identity/last-seen";
 
 /**
  * Load social auth credentials from PlatformConfig DB into process.env.
@@ -170,6 +171,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             console.warn(`[auth] workforce login refused by the principal spine: ${spine.reason}`);
             return null;
           }
+          await recordUserSeen(prisma, user.id);
           return {
             id: user.id,
             principalId: spine.principalId,

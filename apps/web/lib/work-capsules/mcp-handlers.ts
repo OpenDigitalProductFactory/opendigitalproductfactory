@@ -35,7 +35,7 @@ import {
   type WorkCapsuleEvidenceKind,
 } from "@/lib/work-capsules";
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
-import { adoptWorktree } from "./adopt-worktree-handler";
+import { adoptWorktree, establishNewRoomOwnership } from "./adopt-worktree-handler";
 import { reassignCapsuleExecutor } from "./reassign-executor-handler";
 import {
   adoptWorktreeCapsule,
@@ -475,10 +475,14 @@ export async function createWorkCapsuleTool(
   if (!bound.created) return bound.refusal;
   const capsule = bound.capsule;
   await ensureCapsuleWorkItemAnchorNonFatal(capsule, "created");
+  // BI-36FC2981: a created room is born owned, exactly as an adopted one is.
+  const ownership = capsule.backlogItemId
+    ? await establishNewRoomOwnership(workCapsuleDb(), capsule.id, resolvedActor, "create")
+    : null;
   return {
     success: true,
     entityId: capsule.capsuleId,
-    message: `Created Work Capsule ${capsule.capsuleId}.`,
+    message: [`Created Work Capsule ${capsule.capsuleId}.`, ownership ?? ""].filter(Boolean).join(" "),
     data: { capsule },
   };
 }

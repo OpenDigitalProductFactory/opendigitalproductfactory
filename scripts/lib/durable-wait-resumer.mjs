@@ -1,5 +1,11 @@
 import { spawn } from "node:child_process";
 
+import { spawnOutsideCallerJob } from "./win32-job-breakaway.mjs";
+
+// BI-27A37D27: on Windows a node child cannot leave its caller's job object, so
+// the default spawner there creates the resumer through WMI instead.
+const DEFAULT_SPAWN = process.platform === "win32" ? spawnOutsideCallerJob : spawn;
+
 // BI-D35B85BF. `gate-worktree.mjs` and `host-resource-runner.mjs` both exited 75
 // on a queued claim, each believing the comment it carried: "the event/reconciler
 // wakes this exact claimant, which then makes one fresh pressure-aware claim
@@ -165,7 +171,7 @@ export function spawnDurableWaitResumer({
   env = process.env,
   intervalMs = DEFAULT_RESUME_INTERVAL_MS,
   deadlineMs = DEFAULT_RESUME_DEADLINE_MS,
-  spawnFn = spawn,
+  spawnFn = DEFAULT_SPAWN,
 }) {
   if (!shouldSpawnResumer(env)) {
     return { spawned: false, reason: noResumeReason(env), pid: null };
@@ -194,7 +200,15 @@ export function spawnDurableWaitResumer({
     // Without unref the parent's event loop stays alive for the child and the
     // gate never actually exits 75.
     if (typeof child?.unref === "function") child.unref();
-    return { spawned: true, reason: null, pid: child?.pid ?? null };
+    // `survivesSession` is what the caller actually needs to know: a waiter
+    // that will die with the client session is not a durable wait.
+    return {
+      spawned: true,
+      reason: child?.breakawayError ? `session-bound: ${child.breakawayError}` : null,
+      pid: child?.pid ?? null,
+      via: child?.via ?? "detached",
+      survivesSession: child?.sessionBound !== true,
+    };
   } catch (error) {
     // A resumer that cannot start must never take the gate down with it: the
     // claim is already queued and a human or a later re-run can still drive it.

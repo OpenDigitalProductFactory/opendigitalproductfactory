@@ -22,7 +22,7 @@ import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   selectEligibleObjectiveEvidenceActivityIds,
 } from "./objective-reconciliation";
-import { bodyBaselineUnpersistedEscalation, researchLaneEscalation, smallShapeAcceptanceEscalation } from "./shape-lane-escalations";
+import { bodyBaselineEscalation, researchLaneEscalation, smallShapeAcceptanceEscalation } from "./shape-lane-escalations";
 import type { InitiativeReadinessDecision } from "./types";
 import { readRepositoryProviderBlob } from "./repository-artifact";
 
@@ -44,6 +44,7 @@ export type TerminalRecoveryEscalationReason =
   | "workroom-identity-incomplete"
   | "baseline-not-found"
   | "body-baseline-unpersisted"
+  | "acceptance-criteria-missing"
   | "baseline-ambiguous"
   | "eligible-evidence-not-found"
   | "eligible-evidence-unbounded"
@@ -57,8 +58,8 @@ type TerminalEscalation = {
   // design-author owns RESEARCH_REQUIRED on every shape that carries it
   // (shape-requirements.ts small() and medium()), so the research lane's
   // escalation is addressed to the author, not to a reviewer (BI-7876699F).
-  accountableRole: "acceptance-reviewer" | "delivery-coordinator" | "design-author";
-  toolName: "record_initiative_evidence" | "record_execution_evidence";
+  accountableRole: "acceptance-reviewer" | "delivery-coordinator" | "design-author" | "product-owner";
+  toolName: "record_initiative_evidence" | "record_execution_evidence" | "update_backlog_item";
   grant: "initiative_evidence_write" | "backlog_write";
   reason: TerminalRecoveryEscalationReason;
   nextAction: string;
@@ -607,7 +608,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
   if (payloads.length === 0) {
     if (designPhase) return routeDesignReviewsBeforeBaseline({ designPhase, currentAgentId: args.currentAgentId, baseSha: room.baseSha, dispatchContext, ports }); // BI-1D8E53D9
     const effective = args.decision.shapeDecision?.effective;
-    if (effective === "small" || effective === "medium") return bodyBaselineUnpersistedEscalation();
+    if (effective === "small" || effective === "medium") return bodyBaselineEscalation(args.decision);
     return escalation("baseline-not-found", "No current objective baseline exists. Complete independent spec approval before acceptance mapping.");
   }
   const baselineRows = parseBaselinePayloads(payloads);
@@ -639,7 +640,9 @@ export async function resolveTerminalInitiativeRecovery(args: {
     );
   }
 
-  const baselineArtifact = baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
+  // BI-D3E1F6D9: a design review reads the room's current design at its head,
+  // exactly as the refused claim issues it; only acceptance keeps the pinned commit.
+  const baselineArtifact = !designPhase && baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
       === room.repositoryFullName.toLocaleLowerCase("en-US")
     ? {
       commitSha: baseline.artifactRef.commitSha,
