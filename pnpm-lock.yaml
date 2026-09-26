@@ -127,8 +127,8 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0
       libphonenumber-js:
-        specifier: ^1.13.9
-        version: 1.13.9
+        specifier: ^1.13.13
+        version: 1.13.13
       lucide-react:
         specifier: ^1.26.0
         version: 1.26.0(react@19.2.8)
@@ -3435,8 +3435,8 @@ packages:
   libmime@5.4.4:
     resolution: {integrity: sha512-d3zZ2k8s6iO+8u9Vfkl6HfhD5lSVocGcmOViTz/i0CJcwhJADyubEJ/+TkBhuLDUSIBOiG+D8G5kJKwXwKbXXA==}
 
-  libphonenumber-js@1.13.9:
-    resolution: {integrity: sha512-VNS5vWMM7r0P66BYv+TQJATxExEgLxN+34hfHDVhDkUsGAE4cRg0shCNSLTXNKm7nIUscC7AfB51TjxEeF7msQ==}
+  libphonenumber-js@1.13.13:
+    resolution: {integrity: sha512-hV6SmWnyQ8U1QXhhqbqYBHIStNnscG7A5XbGodgdHhf/8N5PwhYpJA5U/yHDjYwPYTd8uNGXqq416XctuvK2PA==}
 
   libqp@2.1.1:
     resolution: {integrity: sha512-0Wd+GPz1O134cP62YU2GTOPNA7Qgl09XwCqM5zpBv87ERCXdfDtyKXvV7c9U22yWJh44QZqBocFnXN11K96qow==}
@@ -8068,7 +8068,7 @@ snapshots:
       libbase64: 1.3.0
       libqp: 2.1.1
 
-  libphonenumber-js@1.13.9: {}
+  libphonenumber-js@1.13.13: {}
 
   libqp@2.1.1: {}
 
