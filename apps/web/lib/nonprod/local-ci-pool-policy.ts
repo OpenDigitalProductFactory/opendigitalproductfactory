@@ -543,6 +543,13 @@ export function resolveLocalCiPoolPolicy(input: {
   host: LocalCiHostPressure;
   manifestSlotCount: number;
   reserveAdmissionHeadroom?: boolean;
+  /**
+   * BI-3A14308C (WWMD DI-ED547297DC9F): false when the gate builds no local
+   * production image because the merge queue owns that build. The host-stage
+   * reserve still applies; only the builder reserve is waived. Defaults to
+   * true, so a caller that does not say keeps today's admission.
+   */
+  reserveBuilderHeadroom?: boolean;
   env?: PolicyEnv;
   now?: Date;
   /**
@@ -610,12 +617,15 @@ export function resolveLocalCiPoolPolicy(input: {
   }
 
   if (input.reserveAdmissionHeadroom) {
+    const reserveBuilder = input.reserveBuilderHeadroom !== false;
     const builderMemoryBytes = localCiBuilderAdmissionReserveBytes({
       hardCeilingBytes: localCiSlotResources.builderPolicy.memoryBytes,
       calibratedReserveBytes: input.builderReserveBytes
         ?? localCiSlotResources.builderPolicy.admissionReserveBytes,
     });
-    const hostBuildCapacity = localCiBuildHeadroomCapacity({
+    // A delegated gate builds nothing in the Docker VM, so it reserves no
+    // builder memory there: its build capacity is the whole manifest.
+    const hostBuildCapacity = !reserveBuilder ? manifestCapacity : localCiBuildHeadroomCapacity({
       dockerAvailableMemoryBytes:
         Math.max(0, (input.host.dockerAvailableMemoryBytes ?? Number.NaN)
           - config.ceilings.minAvailableMemoryBytes),

@@ -1270,7 +1270,6 @@ apps/web/components/setup/CooNameSetupCard.tsx	jsx-copy	3
 apps/web/components/setup/CooNameSetupCard.tsx	physical-direction	1
 apps/web/components/setup/SetupActionButtons.tsx	jsx-copy	6
 apps/web/components/setup/SetupOverlay.tsx	physical-direction	1
-apps/web/components/setup/SetupProgressBar.tsx	jsx-copy	1
 apps/web/components/setup/SetupStepNav.tsx	jsx-copy	2
 apps/web/components/shell/AppRail.tsx	jsx-copy	2
 apps/web/components/shell/AppRail.tsx	physical-direction	1

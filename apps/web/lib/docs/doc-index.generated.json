@@ -2002,6 +2002,7 @@
       "anchors": [
         "localization-runbook",
         "where-things-live",
+        "authoring-ui-copy",
         "how-a-viewers-language-is-chosen",
         "locale-statuses",
         "checking-a-screen-for-right-to-left-readiness",

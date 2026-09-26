@@ -18,6 +18,46 @@ How DPF decides a viewer's language, text direction, time zone and currency, and
 
 Read the context with `await getLocaleContext()` in server code. It never throws. Never read `Accept-Language`, `OrgSettings.locale` or a `"en-US"` literal directly.
 
+## Authoring UI copy
+
+User-facing copy lives in the message catalog, not in JSX. Two rules:
+
+- **Catalogs.** They sit at `packages/i18n/src/messages/<locale>/<namespace>.json`, and **en-US is the source of truth**. Register a new namespace in `SOURCE_CATALOG` (`packages/i18n/src/catalog.ts`).
+- **Keys.** They are typed from the en-US JSON, so an unknown key fails typecheck.
+
+Use the translator that matches where the code runs:
+
+| Where | How |
+|---|---|
+| Server components and actions | `const t = await getT("errors"); t("notFound.storefront.heading")` |
+| Client components | `const t = useT("setup"); t("steps.branding")` |
+
+A client component's namespace must be provided by a `MessagesProvider` above it. The root layout provides `errors` and `setup`, and a page can add a provider for its own subtree.
+
+**Message syntax** is a subset of Unicode MessageFormat 2.0:
+
+```text
+Hello, {$name}!
+{$amount :currency currency=$code}
+{$when :date}
+.input {$count :number}
+.match $count
+0 {{No items}}
+one {{One item}}
+* {{{$count} items}}
+```
+
+The formatter handles `:number`, `:integer`, `:currency`, `:datetime`, `:date`, `:time` and `:string`, with `.input` / `.match` on exact, plural-category and `*` keys.
+
+Markup, `.local` and unknown functions are rejected when a catalog loads. A missing key falls back **per key**: regional, then macro-language, then en-US (`es-MX` → `es-419` → `es` → `en-US`). A key missing everywhere renders as the key itself, never as an empty string.
+
+**Pseudo-locales** are generated from en-US, never authored:
+
+| Locale | What it does | What it catches |
+|---|---|---|
+| `en-XA` | Accents the text, lengthens it by 35% and brackets it | Copy that escaped the catalog (it stays plain English) and truncation |
+| `ar-XB` | Mirrors the text and runs the page right-to-left | Right-to-left layout problems |
+
 ## How a viewer's language is chosen
 
 The first match wins:

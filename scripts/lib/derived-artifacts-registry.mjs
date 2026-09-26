@@ -71,6 +71,22 @@ export const DERIVED_ARTIFACTS = [
     check: ["node", "scripts/gen-doc-index.mjs", "--check"],
   },
   {
+    // BI-545943EE: the operating contract the process-spine SessionStart hook
+    // carries inline when a client cannot prove the DPF skills are loaded.
+    id: "operating-contract",
+    description: "Inline operating contract for an unproven process spine (kernel principleDirection + AGENTS.md doctrine-store rule)",
+    sourceGlobs: [
+      "docs/founder-kernel/wiki/principles/decisions-belong-to-their-scope.md",
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md",
+      "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md",
+      "AGENTS.md",
+      "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs",
+    ],
+    artifactPaths: ["packages/dpf-skill-pack/hooks/operating-contract.generated.mjs"],
+    generate: ["node", "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs"],
+    check: ["node", "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs", "--check"],
+  },
+  {
     id: "doc-impact",
     description: "Doc-impact manifest (route/code -> user-guide page edges)",
     sourceGlobs: [
