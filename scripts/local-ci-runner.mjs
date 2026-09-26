@@ -11,6 +11,7 @@
 // scripts/local-ci-runner.sh is a compatibility entry point that delegates
 // here so the lease/resource contract has one implementation source.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { runGit } from "./lib/git.mjs";
 import { X_OK } from "node:constants";
@@ -456,9 +457,16 @@ function cleanScratchWorkspace(workspace, manifest) {
 
 async function main() {
   const argv = process.argv.slice(2);
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: Object.fromEntries(["candidate", "base-ref", "slot-key", "workspace"].map((name) => [name, { type: "string" }])),
+  });
   const valueAfter = (flag) => {
-    const index = argv.indexOf(flag);
-    return index >= 0 ? argv[index + 1] : "";
+    const value = values[flag.replace(/^--/, "")];
+    return value === undefined ? "" : typeof value === "string" ? value : undefined;
   };
 
   if (argv.includes("--help") || argv.includes("-h")) {

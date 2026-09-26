@@ -53,6 +53,7 @@ const EXPECTED_LEGACY_JOBS = [
   "janitor-tests",
   "label-association-guard",
   "live-blocker-references",
+  "local-slugify-guard",
   "mcp-tool-pack-guard",
   "mobile-jest-pin-guard",
   "model-metadata-tags",

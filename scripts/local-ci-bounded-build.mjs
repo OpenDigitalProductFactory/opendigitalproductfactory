@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -47,8 +48,15 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const BUILDKIT_CONFIG = join(SCRIPT_DIR, "config", "local-ci-buildkitd.toml");
 
 function valueAfter(flag) {
-  const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] || "" : "";
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: process.argv.slice(2),
+    strict: false,
+    allowPositionals: true,
+    options: { "tag": { type: "string" }, "slot-key": { type: "string" }, "candidate": { type: "string" } },
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return typeof value === "string" ? value : "";
 }
 
 function usage() {

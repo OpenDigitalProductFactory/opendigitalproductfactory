@@ -29,6 +29,7 @@ import {
   shouldPreserveBuildBranchWork,
   type SandboxSourceCurrencySnapshot,
 } from "./sandbox-source-currency";
+import { isRecord } from "@/lib/shared/coerce";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
@@ -534,10 +535,6 @@ async function refreshCurrentBranchFromTarget(args: {
 
   await recordBuildSourceCurrency(args.buildId, before);
   return before;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 // ─── Client Identity ─────────────────────────────────────────────────────────

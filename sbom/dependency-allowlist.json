@@ -488,16 +488,6 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "docx": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "."
-      ],
-      "kinds": [
-        "dev"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "dotenv": {
       "added": "2026-06-21",
       "workspaces": [
@@ -1227,6 +1217,10 @@
     "@stoplight/prism-http": {
       "retired": "2026-09-25",
       "reason": "The integration-test harness validates vendor contracts with its own OpenAPI runtime (services/integration-test-harness/src/openapi-contract.ts); plan 2026-09-08 M4."
+    },
+    "docx": {
+      "retired": "2026-09-26",
+      "reason": "The architecture .docx publications convert through the portal's own export pipeline (markdown-to-html.ts, then dpf-convert in the dpf-doctools image) in docs/architecture/generate-docx-from-markdown.mjs; plan 2026-09-08 M2, BI-DBDB8C6D."
     }
   }
 }
