@@ -232,6 +232,7 @@ model BacklogItem {
   activities              BacklogItemActivity[]
   demandEvidenceLinks     DemandEvidenceLink[]
   coworkerNeeds           CoworkerCapabilityNeed[]      @relation("BacklogItemCoworkerCapabilityNeeds")
+  budgetReservations      BudgetReservation[]
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
   founderDemandClusters   FounderDemandCluster[]
   productObjectiveWork    ProductObjectiveWork[]

@@ -577,7 +577,10 @@ tests and must never be used as release evidence. It still walks the whole pass
 path and records `status: "passed"`, so every record it writes and the evidence
 it sends carry `testStub: true` (BI-53B189C8). No push reader accepts a marked
 record: `pregate:status` reports it as INCONCLUSIVE and names the stub, and the
-pre-push hook, the agent publish guard and `pr:health` all refuse it. Tests that
+pre-push hook, the agent publish guard and `pr:health` all refuse it. The portal
+refuses a marked payload outright with `test_stub_evidence_refused` (BI-F5344F65):
+it records no evidence row a PR could cite, changes no pool policy and adds no
+builder calibration, so a stub run against a real portal fails closed. Tests that
 spawn `scripts/gate-worktree.mjs` must pass a temp repository as `--worktree`,
 never the checkout running the suite; `gate-worktree-lease.test.mjs` ends with a
 test that fails if any of its gates wrote into the caller's git dir.

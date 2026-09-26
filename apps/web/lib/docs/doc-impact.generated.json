@@ -632,6 +632,9 @@
     "apps/web/lib/build/ideate-build-resolution.ts": [
       "docs/dogfood/2026-05-23-dale-hvac-build-studio.md"
     ],
+    "apps/web/lib/build/investment-admission.ts": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -678,6 +681,9 @@
     "apps/web/lib/coworker/authorized-surface-runtime.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
+    "apps/web/lib/datetime.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/decision-perspective/build-studio-gate.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -875,6 +881,10 @@
     "apps/web/lib/jobs/inngest-adapter.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
+    "apps/web/lib/kernel/governing-principles.ts": [
+      "docs/architecture/initiative-readiness-runbook.md",
+      "docs/founder-kernel/AUTHORING.md"
+    ],
     "apps/web/lib/kernel/runtime-gate.ts": [
       "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md"
     ],
@@ -998,6 +1008,7 @@
       "docs/architecture/localization-runbook.md"
     ],
     "apps/web/lib/org-locale/org-locale.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md",
       "docs/architecture/localization-runbook.md"
     ],
     "apps/web/lib/performance/business-analysis-watch-run.ts": [
@@ -1665,6 +1676,9 @@
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "packages/db/src/wiki-frontmatter.ts": [
+      "docs/founder-kernel/AUTHORING.md"
+    ],
     "packages/db/src/wiki-taxonomy.ts": [
       "docs/founder-kernel/AUTHORING.md",
       "docs/founder-kernel/SCHEMA.md"
@@ -1909,6 +1923,9 @@
     ],
     "scripts/check-no-local-dpf-type-redeclaration.mjs": [
       "docs/architecture/package-boundaries.md"
+    ],
+    "scripts/check-no-local-formatters.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-no-local-isrecord.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -2624,6 +2641,7 @@
       "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/agent-client-capability-parity.md": [
+      "apps/web/lib/build/investment-admission.ts",
       "apps/web/lib/build/unified-wip-query.ts",
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/deliberation/external-review-activation.ts",
@@ -2796,10 +2814,12 @@
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
       "apps/web/lib/compliance/format-retention-minimum.ts",
+      "apps/web/lib/datetime.ts",
       "apps/web/lib/ea/table-growth.ts",
       "apps/web/lib/evidence/bounded-evidence-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
       "apps/web/lib/operate/retention/obligation-floors.ts",
+      "apps/web/lib/org-locale/org-locale.ts",
       "apps/web/lib/routes.ts",
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
@@ -2812,6 +2832,7 @@
       "packages/db/src/seed-retention-floor-obligations.ts",
       "packages/validators/src/guards.ts",
       "scripts/check-model-metadata-tags.mjs",
+      "scripts/check-no-local-formatters.mjs",
       "scripts/check-no-local-isrecord.mjs",
       "scripts/check-no-local-slugify.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
@@ -2925,6 +2946,7 @@
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
       "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
       "apps/web/lib/backlog/initiative-readiness/types.ts",
+      "apps/web/lib/kernel/governing-principles.ts",
       "apps/web/lib/mcp/external-coworker-task-adapter.ts",
       "apps/web/lib/mcp/packs/coworker-pack.ts",
       "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
@@ -3123,7 +3145,9 @@
     "docs/founder-kernel/AUTHORING.md": [
       "apps/web/lib/decision/golden-decisions.baseline.json",
       "apps/web/lib/decision/golden-decisions.test.ts",
+      "apps/web/lib/kernel/governing-principles.ts",
       "packages/db/src/seed-wiki-kernel.ts",
+      "packages/db/src/wiki-frontmatter.ts",
       "packages/db/src/wiki-taxonomy.ts",
       "scripts/build-kernel-embeddings.ts",
       "scripts/check-authoring-cost-dimensions.mjs"

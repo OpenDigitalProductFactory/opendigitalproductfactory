@@ -25,8 +25,17 @@ export type InvestmentItemRow = {
   coworkerNeedPortfolioId: string | null;
   epicPortfolioId: string | null;
   activeBuildId: string | null;
+  /** A non-terminal Workroom is bound to the item (design §5.6: in flight). */
+  hasLiveWorkroom: boolean;
+  /** Where the item was delivered: Build Studio, an external coding agent, or other (design §5.5). */
+  deliverySurface: DeliverySurface;
+  /** The item carries Workroom or pull-request evidence (design §5.7: traced share). */
+  traced: boolean;
   completedAt: Date | null;
 };
+
+export const DELIVERY_SURFACES = ["build-studio", "external", "other"] as const;
+export type DeliverySurface = (typeof DELIVERY_SURFACES)[number];
 
 export type PortfolioInvestmentRow = {
   /** null is the unallocated row. */
@@ -60,7 +69,20 @@ function classify(item: InvestmentItemRow, period: { start: Date; end: Date }): 
     return at && at >= period.start && at < period.end ? "delivered" : null;
   }
   if (CLOSED_STATUSES.has(item.status)) return null;
-  return IN_FLIGHT_STATUSES.has(item.status) || item.activeBuildId ? "inFlight" : "ready";
+  return IN_FLIGHT_STATUSES.has(item.status) || item.activeBuildId || item.hasLiveWorkroom ? "inFlight" : "ready";
+}
+
+/** One item's portfolio (with path) and investment class for a period; null class = outside it. */
+export function resolveInvestmentItem(item: InvestmentItemRow, period: { start: Date; end: Date }) {
+  const resolution = resolveBacklogPortfolioWithPath({
+    // A stored id naming no portfolio would open a row no budget can match.
+    portfolioId: item.storedPortfolioDangling ? null : item.storedPortfolioId,
+    digitalProduct: { portfolioId: item.productPortfolioId },
+    taxonomyNode: { portfolioId: item.taxonomyPortfolioId },
+    coworkerNeeds: [{ agent: { portfolioId: item.coworkerNeedPortfolioId } }],
+    epic: { portfolios: item.epicPortfolioId ? [{ portfolioId: item.epicPortfolioId }] : [] },
+  });
+  return { resolution, itemClass: classify(item, period), points: resolveInvestmentPoints(item).points };
 }
 
 export function summarizePortfolioInvestment(items: InvestmentItemRow[], now: Date): PortfolioInvestmentSummary {
@@ -69,16 +91,8 @@ export function summarizePortfolioInvestment(items: InvestmentItemRow[], now: Da
   const totals = { liveItems: 0, deliveredThisQuarterItems: 0, unsizedItems: 0 };
 
   for (const item of items) {
-    const itemClass = classify(item, period);
+    const { resolution, itemClass, points } = resolveInvestmentItem(item, period);
     if (itemClass === null) continue;
-    const resolution = resolveBacklogPortfolioWithPath({
-      // A stored id naming no portfolio would open a row no budget can match.
-      portfolioId: item.storedPortfolioDangling ? null : item.storedPortfolioId,
-      digitalProduct: { portfolioId: item.productPortfolioId },
-      taxonomyNode: { portfolioId: item.taxonomyPortfolioId },
-      coworkerNeeds: [{ agent: { portfolioId: item.coworkerNeedPortfolioId } }],
-      epic: { portfolios: item.epicPortfolioId ? [{ portfolioId: item.epicPortfolioId }] : [] },
-    });
     const row = rows.get(resolution.portfolioId) ?? {
       portfolioId: resolution.portfolioId,
       items: 0, readyPoints: 0, inFlightPoints: 0, deliveredPoints: 0, unsizedItems: 0,
@@ -89,7 +103,6 @@ export function summarizePortfolioInvestment(items: InvestmentItemRow[], now: Da
     if (resolution.disagreesWithLinks) row.storedDisagreements++;
     if (item.storedPortfolioDangling) row.danglingStoredItems++;
 
-    const { points } = resolveInvestmentPoints(item);
     if (points === null) {
       row.unsizedItems++;
       totals.unsizedItems++;
@@ -131,6 +144,21 @@ export async function loadInvestmentItems(db: Db, period: { start: Date; end: Da
         ORDER BY n."needId" LIMIT 1) AS "coworkerNeedPortfolioId",
       (SELECT MIN(ep."portfolioId") FROM "EpicPortfolio" ep WHERE ep."epicId" = b."epicId") AS "epicPortfolioId",
       b."activeBuildId"  AS "activeBuildId",
+      EXISTS (SELECT 1 FROM "WorkCapsule" w
+               WHERE w."backlogItemId" IN (b."itemId", b."id") AND w."archivedAt" IS NULL
+                 AND w."status" NOT IN ('complete', 'abandoned', 'archived')) AS "hasLiveWorkroom",
+      CASE
+        WHEN EXISTS (SELECT 1 FROM "FeatureBuild" fb WHERE fb."originatingBacklogItemId" = b."id")
+          OR EXISTS (SELECT 1 FROM "WorkCapsule" w WHERE w."backlogItemId" IN (b."itemId", b."id") AND w."executorKind" = 'build-studio')
+          THEN 'build-studio'
+        WHEN EXISTS (SELECT 1 FROM "WorkCapsule" w WHERE w."backlogItemId" IN (b."itemId", b."id")
+                       AND w."executorKind" IN ('claude-desktop', 'codex-desktop', 'grok-desktop', 'antigravity-desktop'))
+          THEN 'external'
+        ELSE 'other'
+      END AS "deliverySurface",
+      (EXISTS (SELECT 1 FROM "WorkCapsule" w WHERE w."backlogItemId" IN (b."itemId", b."id"))
+        OR EXISTS (SELECT 1 FROM "BacklogItemActivity" a
+                    WHERE a."backlogItemId" = b."id" AND a."kind" = 'evidence' AND a."payload"->>'url' LIKE '%/pull/%')) AS "traced",
       b."completedAt"    AS "completedAt"
     FROM "BacklogItem" b
     LEFT JOIN "DigitalProduct" dp ON dp."id" = b."digitalProductId"
