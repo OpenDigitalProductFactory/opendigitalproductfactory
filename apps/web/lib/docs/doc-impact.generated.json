@@ -301,6 +301,9 @@
     ".github/workflows/policy-guards-recheck.yml": [
       "docs/testing/pre-pr-gate.md"
     ],
+    ".github/workflows/publish-image.yml": [
+      "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
+    ],
     ".github/workflows/refresh-docs-staleness.yml": [
       "docs/maintenance/README.md"
     ],
@@ -754,11 +757,17 @@
       "docs/architecture/ai-routing-document-map.md",
       "docs/maintenance/staleness-report.md"
     ],
+    "apps/web/lib/ea/diagram-import/parse-flat-odg.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
     "apps/web/lib/ea/table-growth.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/lib/ea/view-drawing.ts": [
+      "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/evidence/bounded-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -799,6 +808,9 @@
     ],
     "apps/web/lib/govern/auth-redirect.ts": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "apps/web/lib/govern/auth.ts": [
+      "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
     ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
@@ -1079,6 +1091,9 @@
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
+    "apps/web/lib/routing/provider-suitability/openrouter-policy.ts": [
+      "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
+    ],
     "apps/web/lib/routing/provider-suitability/provider-compliance-advisory.ts": [
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
     ],
@@ -1120,6 +1135,9 @@
     ],
     "apps/web/lib/self-upgrade/local-changes-ledger.ts": [
       "docs/architecture/branch-and-worktree-runbook.md"
+    ],
+    "apps/web/lib/self-upgrade/preflight.test.ts": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
@@ -1400,7 +1418,8 @@
     ],
     "docker-compose.linux.yml": [
       "docs/install/linux.md",
-      "docs/install/platform-support-watchlist.md"
+      "docs/install/platform-support-watchlist.md",
+      "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
     ],
     "docker-compose.local-ci.yml": [
       "docs/testing/pre-pr-gate.md"
@@ -1990,6 +2009,9 @@
     ],
     "scripts/install-worktree-janitor-schedule.sh": [
       "docs/install/worktree-janitor-schedule.md"
+    ],
+    "scripts/installer/doctools-prepull.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/installer/install-release-assets.mjs": [
       "docs/architecture/build-gate-runbook.md"
@@ -2780,6 +2802,8 @@
       "apps/web/lib/documents/generation/render.ts",
       "apps/web/lib/documents/generation/spec.ts",
       "apps/web/lib/documents/preview-manifest.ts",
+      "apps/web/lib/ea/diagram-import/parse-flat-odg.ts",
+      "apps/web/lib/ea/view-drawing.ts",
       "tools/doctools/smoke.sh"
     ],
     "docs/architecture/dpf-patterns.md": [
@@ -3103,12 +3127,14 @@
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
+      "apps/web/lib/self-upgrade/preflight.test.ts",
       "docker-compose.edge-actions.yml",
       "docker-compose.linux.yml",
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/check-no-url-pathname-fs.mjs",
       "scripts/hooks/run-hook.mjs",
+      "scripts/installer/doctools-prepull.test.mjs",
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
@@ -3346,6 +3372,12 @@
       "apps/web/lib/actions/compliance.ts",
       "apps/web/lib/change-management/register-change.ts",
       "packages/db/scripts/seed-dora-regulation.ts"
+    ],
+    "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md": [
+      ".github/workflows/publish-image.yml",
+      "apps/web/lib/govern/auth.ts",
+      "apps/web/lib/routing/provider-suitability/openrouter-policy.ts",
+      "docker-compose.linux.yml"
     ],
     "docs/testing/archetype-audit-plan.md": [
       "packages/storefront-templates/src/archetypes/index.ts",

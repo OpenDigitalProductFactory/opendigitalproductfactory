@@ -7,7 +7,7 @@ import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 const principalSelect = { id: true, principalId: true, kind: true, status: true, sensitivityClearance: true } as const;
 const denied: WorkroomAccessDecision = { level: "none", reason: "not-admitted" };
 type Principal = { id: string; principalId: string; sensitivityClearance: string[] };
-type Membership = { principalId: string; lifecycle: string; roles: string[] };
+type Membership = { principalId: string; lifecycle: string; roles: string[]; principal?: { kind: string } | null };
 
 /** Persisted narrowing/removal wins over historical creation and lease fields. */
 function admitted(principal: Principal, participants: Membership[], holders: (string | null)[], action: boolean) {
@@ -21,13 +21,15 @@ const OWNER_ROLES = ["coordinator", "accountable"];
 const owns = (row: Membership) => row.lifecycle === "active" && row.roles.some((role) => OWNER_ROLES.includes(role));
 
 /**
- * Whether a person owns a room: they oversee it, or (for a room nobody
- * oversees yet) they created, requested, or hold it.
+ * Whether a person owns a room: they oversee it, or (for a room no other
+ * person oversees) they created, requested, or hold it. An AI coworker
+ * appointed to coordinate acts for people and never displaces them
+ * (BI-A27B903D).
  */
 function ownsRoom(principal: Principal, participants: Membership[], holders: (string | null)[]) {
   const row = participants.find((entry) => entry.principalId === principal.id);
   if (row) return owns(row);
-  return !participants.some(owns) && holders.includes(principal.id);
+  return !participants.some((entry) => owns(entry) && entry.principal?.kind !== "agent") && holders.includes(principal.id);
 }
 
 /**
@@ -50,7 +52,7 @@ export async function resolveAgentWorkroomAccess(input: {
     db.agent.findUnique({ where: { agentId: input.agentId }, select: { status: true, archived: true } }),
     db.workroom.findUnique({ where: { id: input.workroomId }, select: {
       createdByPrincipalId: true, requestedByPrincipalId: true, leaseHolderPrincipalId: true, scopeClaims: true,
-      participants: { select: { principalId: true, lifecycle: true, roles: true } },
+      participants: { select: { principalId: true, lifecycle: true, roles: true, principal: { select: { kind: true } } } },
       workItem: { select: { evidence: true } },
     } }),
   ]);

@@ -97,6 +97,8 @@ export const PUBLIC_SCOPE_TO_GRANTS: Record<PublicScope, readonly string[]> = {
     "deliberation_create",
     "document_publish",
     "document_write",
+    // BI-4C17BF51. Renders an EA view and stores it as a document, so it is a write.
+    "ea_drawing_export",
     "ea_graph_write",
     "initiative_archetype_review",
     "initiative_architecture_review",

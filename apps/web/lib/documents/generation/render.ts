@@ -39,7 +39,7 @@ export const DEFAULT_RENDER_TIMEOUT_MS = 240_000;
 export const DEFAULT_MAX_REQUEST_BYTES = 64 * 1024 * 1024;
 export const DEFAULT_MAX_RENDER_OUTPUT_BYTES = 300 * 1024 * 1024;
 
-/** Office MIME types come from the converter's table (their one home); Draw's two are added here. */
+/** Office MIME types come from the converter's table, their one home. */
 export const RENDER_FORMAT_MIME: Record<RenderFormat, string> = {
   pptx: CONVERTER_TARGET_MIME.pptx,
   odp: CONVERTER_TARGET_MIME.odp,
@@ -48,8 +48,8 @@ export const RENDER_FORMAT_MIME: Record<RenderFormat, string> = {
   xlsx: CONVERTER_TARGET_MIME.xlsx,
   ods: CONVERTER_TARGET_MIME.ods,
   pdf: CONVERTER_TARGET_MIME.pdf,
-  odg: "application/vnd.oasis.opendocument.graphics",
-  svg: "image/svg+xml",
+  odg: CONVERTER_TARGET_MIME.odg,
+  svg: CONVERTER_TARGET_MIME.svg,
 };
 
 export type TemplateRef = { kind: "builtin" } | { kind: "brand-master"; organizationId: string };

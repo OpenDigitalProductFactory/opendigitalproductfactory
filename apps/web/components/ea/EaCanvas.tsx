@@ -28,7 +28,7 @@ import { ElementPalette } from "./ElementPalette";
 import { ElementInspector } from "./ElementInspector";
 import { ReferencePopup } from "./ReferencePopup";
 import { buildOperationalValueStreamRows, OperationalValueStreamTable } from "./OperationalValueStreamTable";
-import { EdgeVariantToggle, PresentationToggle, type EdgeVariant, type PresentationMode } from "./EaViewControls";
+import { EaDrawingExportMenu, EdgeVariantToggle, PresentationToggle, type EdgeVariant, type PresentationMode } from "./EaViewControls";
 import {
   addElementToView,
   createEaRelationship,
@@ -964,10 +964,10 @@ export function EaCanvas({
               </div>
             )}
 
-            {/* Edge style toggle */}
             <EdgeVariantToggle value={edgeVariant} onChange={handleSetEdgeVariant} />
               </>
             )}
+            <EaDrawingExportMenu viewId={viewId} />
           </div>
         </div>
 

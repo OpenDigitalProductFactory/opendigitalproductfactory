@@ -25,10 +25,15 @@
 // DPF_DOCTOOLS_IMAGE still take precedence (see documents/conversion/image.ts),
 // so a source/dev install keeps its override.
 //
-// Nothing here can fail an upgrade or a boot:
+// Nothing in the reconciler can fail an upgrade or a boot:
 //   - a release with no dpf-doctools manifest leaves the key unset (AC-3);
 //   - an unreachable registry keeps the prior state for the next tick;
 //   - a failed pull leaves the pin in place, and the next tick retries it.
+//
+// The reconciler is the safety net. The upgrade itself pulls the target
+// release's image before the swap (prePullReleaseDoctoolsImage, called from the
+// candidate preflight, BI-698B7F9A), and the installers pull it with the other
+// release images, so the reconciler normally finds the digest already present.
 
 import { isPinnedImageReference } from "@/lib/documents/conversion/command";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -48,6 +53,9 @@ const SHA_256 = /^sha256:[a-f0-9]{64}$/;
 const NOT_PUBLISHED = /not found|manifest unknown|name unknown/i;
 const INSPECT_TIMEOUT_MS = 60_000;
 const PULL_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** The two facts that name a release's images: its immutable tag and GHCR owner. */
+export type ReleaseImageIdentity = Pick<ReleaseInstallContext, "imageTag" | "ghcrOwner">;
 
 export type StoredReleaseDoctoolsImage = {
   image: string;
@@ -85,7 +93,7 @@ export type DoctoolsReconcileDeps = {
  * tag, or null. A moving tag (`latest`) is refused so the stored pin always
  * names exactly one release's bytes.
  */
-export function doctoolsReleaseReference(context: ReleaseInstallContext): string | null {
+export function doctoolsReleaseReference(context: ReleaseImageIdentity): string | null {
   if (!RELEASE_IMAGE_TAG.test(context.imageTag) || !REGISTRY_OWNER.test(context.ghcrOwner)) return null;
   return `${REGISTRY}/${context.ghcrOwner.toLowerCase()}/${DOCTOOLS_IMAGE_NAME}:${context.imageTag}`;
 }
@@ -122,7 +130,7 @@ async function tryDocker(run: DoctoolsDockerRunner, args: string[], timeoutMs: n
 
 /** Resolve the release's dpf-doctools tag to `name@sha256:…`, without pulling. */
 export async function resolveReleaseDoctoolsImage(
-  context: ReleaseInstallContext,
+  context: ReleaseImageIdentity,
   runDocker: DoctoolsDockerRunner,
 ): Promise<ReleaseDoctoolsResolution> {
   const reference = doctoolsReleaseReference(context);
@@ -152,6 +160,54 @@ async function ensurePulled(deps: DoctoolsReconcileDeps, image: string): Promise
   }
   deps.logger.log(`[doctools-image] pulled ${image}`);
   return true;
+}
+
+export type DoctoolsPrePullResult =
+  | { outcome: "pulled" | "present"; image: string }
+  | { outcome: "not-published" | "not-release" }
+  | { outcome: "failed"; reason: string };
+
+const tail = (result: DoctoolsDockerResult) => (result.stderr || result.stdout).trim().slice(-200);
+
+/**
+ * Make the TARGET release's dpf-doctools present before the swap
+ * (BI-698B7F9A), so the new portal's first availability check finds it.
+ *
+ * Runs in the candidate preflight, beside the promoter pull, and writes no pin:
+ * `self_upgrade.doctoolsImage` stays owned by the boot reconciler above, which
+ * resolves the same immutable tag to the same digest and then finds it present.
+ *
+ * It pulls the release TAG, then confirms the resolved digest is present. A
+ * tagged image is never "dangling", so the promoter's `docker image prune -f`
+ * cleanup cannot remove it between this pull and the new portal's first boot.
+ *
+ * A release that never published dpf-doctools is not a failure: that release
+ * is simply converter-less, and a missing optional image must never block an
+ * upgrade (BI-E6EF0B2C). Anything else is a plain reason for the caller to
+ * fail the run with, before the drain.
+ */
+export async function prePullReleaseDoctoolsImage(
+  release: { tag: string; ghcrOwner: string },
+  runDocker: DoctoolsDockerRunner = productionRunDocker,
+): Promise<DoctoolsPrePullResult> {
+  const identity = { imageTag: release.tag, ghcrOwner: release.ghcrOwner };
+  const reference = doctoolsReleaseReference(identity);
+  if (!reference) return { outcome: "not-release" };
+  const resolution = await resolveReleaseDoctoolsImage(identity, runDocker);
+  if (resolution.kind === "not-published") return { outcome: "not-published" };
+  if (resolution.kind === "unavailable") {
+    return { outcome: "failed", reason: `could not check the ${release.tag} document converter: ${resolution.detail}` };
+  }
+  const image = resolution.image;
+  const isPresent = async () =>
+    (await tryDocker(runDocker, ["image", "inspect", "--format", "{{.Id}}", image], INSPECT_TIMEOUT_MS)).exitCode === 0;
+  if (await isPresent()) return { outcome: "present", image };
+  let pull = await tryDocker(runDocker, ["pull", reference], PULL_TIMEOUT_MS);
+  if (pull.exitCode === 0 && (await isPresent())) return { outcome: "pulled", image };
+  // The tag did not land the recorded digest: pull the exact bytes instead.
+  pull = await tryDocker(runDocker, ["pull", image], PULL_TIMEOUT_MS);
+  if (pull.exitCode === 0 && (await isPresent())) return { outcome: "pulled", image };
+  return { outcome: "failed", reason: `could not download the ${release.tag} document converter: ${tail(pull) || "the image is not present after the pull"}` };
 }
 
 export async function reconcileReleaseDoctoolsImage(deps: DoctoolsReconcileDeps): Promise<DoctoolsReconcileOutcome> {
@@ -193,6 +249,13 @@ async function readStoredFromDb(): Promise<StoredReleaseDoctoolsImage | null> {
   return parseStoredReleaseDoctoolsImage(row?.value ?? null);
 }
 
+function productionRunDocker(args: string[], options?: { timeoutMs?: number }): Promise<DoctoolsDockerResult> {
+  return runProcessWithBudget("docker", args, {
+    timeoutMs: options?.timeoutMs ?? INSPECT_TIMEOUT_MS,
+    timeoutLabel: "doctools-image-timeout",
+  });
+}
+
 function productionDeps(): DoctoolsReconcileDeps {
   return {
     // The same host-source resolution the self-upgrade worker uses.
@@ -219,11 +282,7 @@ function productionDeps(): DoctoolsReconcileDeps {
       const { prisma } = await import("@dpf/db");
       await prisma.platformConfig.deleteMany({ where: { key: DOCTOOLS_RELEASE_IMAGE_KEY } });
     },
-    runDocker: (args, options) =>
-      runProcessWithBudget("docker", args, {
-        timeoutMs: options?.timeoutMs ?? INSPECT_TIMEOUT_MS,
-        timeoutLabel: "doctools-image-timeout",
-      }),
+    runDocker: productionRunDocker,
     now: () => new Date(),
     logger: console,
   };

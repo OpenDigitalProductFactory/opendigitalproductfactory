@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
   readFileSync,
@@ -20,6 +19,7 @@ import {
 } from "./lib/ci-evidence-receipt.mjs";
 import { sha256Bytes, sha256File } from "./lib/ci-build-artifact.mjs";
 import { parseAggregate } from "./merge-readiness-policy.mjs";
+import { gitText } from "./lib/git.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKFLOW_PATH = ".github/workflows/ci.yml";
@@ -57,9 +57,7 @@ function parseArgs(argv) {
   return { mode, options };
 }
 
-function git(...args) {
-  return execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
-}
+const git = (...args) => gitText(args, { cwd: ROOT });
 
 function appendOutput(values) {
   if (!process.env.GITHUB_OUTPUT) return;

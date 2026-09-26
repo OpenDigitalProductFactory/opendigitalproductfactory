@@ -143,6 +143,7 @@ DPF doesn't need to build sovereign infrastructure; it needs to **deploy cleanly
 - **CADA is a proposal.** Tier criteria can shift in trilogue; the sovereignty framework is "one of the central political battlegrounds." Nothing is "CADA-certified" yet.
 - **The DPF-vendor jurisdiction question.** For the strictest L4 test — "no third-country entity holds effective control over software design, development, maintenance, or evolution" — a US-domiciled DPF maintainer is a theoretical concern. **Mitigations (governance, not engineering):** open source + customer's right to fork/self-operate; an **EU support/steward entity**; **reproducible builds**; a **published, signed SBOM**. Decide and document the posture before claiming L4.
 - **SBOM + attestation pack** is the main engineering build-out for L2.
+- **The install and distribution path is still US-vendor-bound** (Docker Desktop on the only GA platform; GHCR / Docker Hub / GitHub for images, updates and contribution). Inventory, owning-epic map and gaps G1–G8: [US-dependency inventory & sovereign channel](2026-09-us-dependency-inventory-and-sovereign-channel.md).
 - **Silicon:** essentially everything runs on NVIDIA (US) GPUs, including Mistral's own DC and EuroHPC. **Disclose it** (L2 transparency) rather than chase hardware sovereignty no EU player can deliver at frontier scale.
 - **Confidential computing strengthens but does not substitute for EU ownership** — jurisdiction follows the corporate entity. Market it as an L1/L2 strengthener and partial-L3 mitigation, not an L4 guarantee.
 

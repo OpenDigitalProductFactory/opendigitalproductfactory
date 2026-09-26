@@ -17,6 +17,11 @@ export const CONVERTER_TARGET_MIME = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   odp: "application/vnd.oasis.opendocument.presentation",
   ppt: "application/vnd.ms-powerpoint",
+  // Draw targets (BI-4C17BF51): a diagram (.vsd, .vsdx, .odg) as an editable
+  // drawing, as flat XML the portal can read, or as an SVG picture.
+  odg: "application/vnd.oasis.opendocument.graphics",
+  fodg: "application/vnd.oasis.opendocument.graphics-flat-xml",
+  svg: "image/svg+xml",
 } as const;
 
 export type ConverterTarget = keyof typeof CONVERTER_TARGET_MIME;

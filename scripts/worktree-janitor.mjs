@@ -41,6 +41,7 @@ import {
   loadActiveWorkroomPaths,
   pathHasActiveClaim,
 } from "./lib/worktree-liveness.mjs";
+import { runGit as runGitShared } from "./lib/git.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GRACE = 14;
@@ -74,17 +75,8 @@ function parseArgs(argv) {
 }
 
 function runGit(args, cwd) {
-  const r = spawnSync("git", args, {
-    cwd: cwd || undefined,
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  return {
-    ok: r.status === 0,
-    stdout: (r.stdout || "").trim(),
-    stderr: (r.stderr || "").trim(),
-    status: r.status ?? 1,
-  };
+  const r = runGitShared(args, { cwd: cwd || process.cwd() });
+  return { ok: r.ok, stdout: r.stdout.trim(), stderr: r.ok ? "" : r.stderr.trim(), status: r.status };
 }
 
 function resolveRoot(explicit) {

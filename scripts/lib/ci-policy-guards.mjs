@@ -108,6 +108,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-D908DA0A: a parked claim says whether it waits behind work or behind
       // a closed pool; the two used to print identically.
       node("--test", "scripts/gate-worktree-pool-closed.test.mjs"),
+      // BI-D3BF53A9: every gate records the builder's measured cgroup peak, the
+      // evidence the admission reserve is calibrated from.
+      node("--test", "scripts/local-ci-builder-memory.test.mjs"),
       // BI-FFCFCCE0: --finalize-evidence resolved its record before admission
       // and so always read slot-0, while pregate:status reconciles every slot.
       // A real pending PASS on slot-1 was unfinalizable. Registered here for the
@@ -150,6 +153,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("guard-diff-honesty", "Guard Diff Honesty", [
       node("--test", "scripts/check-guard-diff-honesty.test.mjs"),
       node("scripts/check-guard-diff-honesty.mjs"),
+      // One git runner for every script, failure behaviour chosen by name
+      // (plan 2026-09-08 §10.5 S1).
+      node("--test", "scripts/lib/git.test.mjs"),
+      conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
+      node("scripts/check-no-direct-git-spawn.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
@@ -178,6 +186,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
+      // BI-698B7F9A: both installers pull the release's dpf-doctools with the
+      // other release images and never fail the install on it.
+      conformanceTest("scripts/installer/doctools-prepull.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -589,6 +600,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/sbom/check-sbom-drift.test.mjs"),
       conformanceTest("scripts/sbom/lockfile-roots.test.mjs"),
       node("scripts/sbom/check-sbom-drift.mjs"),
+      // One lockfile reader for every script (plan 2026-09-08 §10.5 S3).
+      node("--test", "scripts/lib/pnpm-lock.test.mjs"),
+      conformanceTest("scripts/check-no-local-lockfile-parser.test.mjs"),
+      node("scripts/check-no-local-lockfile-parser.mjs"),
     ]),
     guard("new-dependency-gate", "New Dependency Gate", [
       conformanceTest("scripts/sbom/check-new-dependencies.test.mjs"),

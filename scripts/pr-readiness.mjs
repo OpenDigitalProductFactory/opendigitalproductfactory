@@ -5,7 +5,7 @@
 // answers the earlier question: "is this local branch ready to become or re-enter
 // a PR without letting GitHub Actions discover the first obvious blocker?"
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { buildGatePlan, evaluateReadiness, formatReadinessReport } from "./pr-readiness/core.mjs";
@@ -15,18 +15,12 @@ import { buildGateContext } from "./lib/gate-context.mjs";
 import { fetchOriginMainSharedSafe, isShallowRepository } from "./lib/git-fetch-shared-safe.mjs";
 import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { GitCommandError, runGit } from "./lib/git.mjs";
 
 function git(args, { allowFail = false } = {}) {
-  try {
-    return execFileSync("git", args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      maxBuffer: 32 * 1024 * 1024,
-    });
-  } catch (error) {
-    if (allowFail) return error.stdout?.toString() ?? "";
-    throw error;
-  }
+  const result = runGit(args, { cwd: process.cwd(), maxBuffer: 32 * 1024 * 1024 });
+  if (result.ok || allowFail) return result.stdout;
+  throw new GitCommandError(args, result);
 }
 
 function parseArgs(argv) {

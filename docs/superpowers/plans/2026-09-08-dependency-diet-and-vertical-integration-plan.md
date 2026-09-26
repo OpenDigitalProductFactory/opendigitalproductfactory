@@ -150,8 +150,9 @@ Ranked by leverage ÷ effort ÷ risk. Effect numbers are from §1; "packages" me
 **Move:** an owned `@dpf/jobs` package on Postgres: a `FOR UPDATE SKIP LOCKED` run queue, a step-memo table giving the same `step.run` replay semantics, `LISTEN/NOTIFY` for `waitForEvent`, a cron scheduler folded into the existing `ScheduledJob` substrate (BET-11), and concurrency keys as advisory locks. Keep the `createFunction` / `step.*` facade so the 117 functions migrate mechanically, then retire the three containers and the `INNGEST_*` env surface. Sequence behind BET-11 so the scheduler lands once.
 **Research and benchmarking (required before the decision):** compare `pg-boss`, `graphile-worker` and `river` for queue and retry semantics, and Inngest self-hosting for what we lose (its dashboard, replay UI, and step-level observability, which `/ops` already reports from `TaskRun`). Record what DPF adopts and rejects with the reason.
 **Effect:** about 380 packages from the production closure, three containers, one HTTP hop per step, `typescript@5.9.3` and `@types/node@22` gone.
-**Risk:** the biggest blast radius in this plan (86 files, every background workflow). Mitigation: facade first, dual-run behind a flag with the existing poison-queue and stall detectors as the oracle, one queue domain at a time.
+**Risk:** the biggest blast radius in this plan (86 files, every background workflow). Mitigation: facade first, dual-run behind a flag with `TaskRun` outcomes and the `taskrun-watchdog` stall detector as the oracle, one queue domain at a time.
 **Decision:** `principle_decide` on `own_postgres_jobs` vs `keep_inngest` vs `rent_pg_boss`, scoring `operational_independence` and `vendor_lock_in` against `long_term_maintainability` and `blast_radius`.
+**Design (2026-09-25):** [durable jobs on Postgres](../specs/2026-09-25-postgres-durable-job-engine-design.md) holds the research and benchmarking section, the recommendation (`own_postgres_jobs`) and the decision inputs. A re-count on `main` found 125 functions in 93 files, not 117 in 86. It also found that the platform uses none of Inngest's flow-control features, and that neither pg-boss nor graphile-worker provides memoised steps, `waitForEvent` or `cancelOn`.
 
 ### M4 · Replace Prism in the integration-test harness with an owned contract validator · effort M · leverage M · **WWMD**
 
@@ -326,9 +327,9 @@ The founder direction extends past packages to our own source. A read-only surve
 
 | Move | Concern | Sites | Single home | Effort |
 |---|---|---|---|---|
-| S1 | git exec wrappers in `scripts/` with three argument orders | at least 37 files define their own top-level `git` or `runGit` | `scripts/lib/git.mjs`, from `runGit` in `scripts/lib/git-changed-files.mjs` | M, mechanical |
+| S1 | git exec wrappers in `scripts/` with three argument orders | at least 37 files define their own top-level `git` or `runGit` | `scripts/lib/git.mjs`, from `runGit` in `scripts/lib/git-changed-files.mjs` | M, mechanical. **Step 1 done 2026-09-25**: 29 of the 32 exec wrappers now delegate to `scripts/lib/git.mjs` (`runGit` / `gitText` / `gitTextOrNull`, failure behaviour chosen by name); every affected test file gives the same result as before. The ratchet `scripts/check-no-direct-git-spawn.mjs` holds the rest (31 files) as a closed backlog. Ten diff-scoped guards still read partial stdout on a failed git call; each is now marked `Fail-open as before` for review |
 | S2 | CLI argument parsing in `scripts/` | at least 22 files define their own top-level `parseArgs` | `node:util` `parseArgs` | M, mechanical |
-| S3 | hand-written `pnpm-lock.yaml` parsers | 4 (`sbom/runtime-surface`, `sbom/generate-platform-sbom`, `sbom/check-lockfile-release-age`, `lib/load-pinned-guard-typescript`) | `scripts/lib/pnpm-lock.mjs` | S |
+| S3 | hand-written `pnpm-lock.yaml` parsers | 5 (`sbom/runtime-surface`, `sbom/generate-platform-sbom`, `sbom/check-lockfile-release-age`, `lib/load-pinned-guard-typescript`, `lib/sandbox-freshness`) | `scripts/lib/pnpm-lock.mjs` | S. **Done 2026-09-25**: all five migrated; ratchet `scripts/check-no-local-lockfile-parser.mjs`. It fixed a latent bug: the release-age walk had emitted 107 junk keys from nested lines |
 | S4 | canonical JSON for hashing and signing | 22 copies beside `apps/web/lib/shared/canonical-json.ts` | `@dpf/integration-shared`, so db, web and scripts share one | M. The copies differ (key collation, non-finite handling), so a switch changes hashes and needs a migration note per call site |
 | S5 | `isRecord` / `isPlainObject` | 35 | widen `check-no-local-isrecord.mjs` from `apps/web/lib` to `components/`, `packages/` and `scripts/lib` | S |
 | S6 | date, money, byte and duration formatters | 41 + 34 (12 identical `formatDateTime` in integration panels, 11 identical `formatMoney` in finance tables) | `lib/org-locale` for money and dates; `lib/shared/format.ts` for the rest | S to M |
@@ -336,7 +337,8 @@ The founder direction extends past packages to our own source. A read-only surve
 | S8 | hand-written MCP JSON-RPC clients in `scripts/` and packages | 7 beside `scripts/lib/mcp-client.mjs` | the existing client | S to M |
 | S9 | types redeclared outside `@dpf/types` | 13 pairs. `MeResponse` has already drifted (`platformRole: string \| null` vs `string`) | `@dpf/types`, with routes using `satisfies` | S |
 | S10 | two graph-layout engines | `dagre` in `lib/graph`, `elkjs` in `lib/ea` | one engine (elkjs already covers layered layout); a dependency removal | M, WWMD |
-| S11 | first-party range drift | `net-snmp` `^3.26.3` vs `^3.14.0`; `dotenv` `^17.2.3` vs `^17.4.2`; `@prisma/client` `^7.9.0` vs `prisma` `^7.9.1`; exact `typescript` in `repo-guard-runtime`; `bcryptjs`, `read-excel-file` and `undici` declared in several workspaces | one specifier per package, then a pnpm `catalog:` so the next drift cannot happen | S |
+| S11 | first-party range drift | `net-snmp` `^3.26.3` vs `^3.14.0`; `dotenv` `^17.2.3` vs `^17.4.2`; `@prisma/client` `^7.9.0` vs `prisma` `^7.9.1`; exact `typescript` in `repo-guard-runtime`; `bcryptjs`, `read-excel-file` and `undici` declared in several workspaces | one specifier per package, then a pnpm `catalog:` so the next drift cannot happen | S. **Done 2026-09-25**: `dotenv`, `net-snmp` and `@prisma/client` aligned; the Prisma family now resolves to 7.9.1 together, where the client had been 7.9.0. `check-sbom-drift` now fails on specifier drift, with the accepted exceptions recorded in `sbom/baseline.json` (only the exact `typescript` pin). `catalog:` is deferred: the adp and harness images build without the workspace file |
+| S12 | service images installing without the lockfile | `services/adp` and `services/integration-test-harness` ran `pnpm install` against their own `package.json`: no lockfile, overrides, release-age floor or patches. Measured on 2026-09-25, the harness resolved 25 versions and adp 13 versions that the lockfile of the day did not have (adp shipped `undici` 8.11.2 and `zod` 4.6.5 against locked 8.10.0 and 4.4.3); every registry release reached the image unvetted. The adp image also could not start: since 2026-07-10 `@dpf/integration-shared` has exported extensionless TypeScript source that Node cannot load from `node_modules` | both install `--frozen-lockfile` from the workspace and ship a `pnpm deploy --prod` tree, as edge-node does; `integration-shared/scripts/prepare-dist.mjs` makes its `dist/` Node-loadable; the adp build fails if its runtime imports do not load | S. **Done 2026-09-25** |
 
 Each S-move ships its ratchet in the same PR, in the shape the `check-no-local-*` guards already use. S1 to S3 and S5 are hygiene with no decision. S10 is an own-versus-rent call.
 
@@ -345,6 +347,17 @@ Each S-move ships its ratchet in the same PR, in the shape the `check-no-local-*
 1. **Decisions (no code blocked on them for long):** M6 founder yes or no; M4 and S10 `principle_decide`; M3 `principle_decide` once its research section is written.
 2. **Hygiene, no decisions, one PR each:** S11 plus a `catalog:`, S3, S5, S7, S9, then S1 and S2.
 3. **Structural:** M6 execution if approved, M4, then M3 behind BET-11, and M5 through the office-document engine's S9.
+
+### 10.6.1 Founder decisions, 2026-09-26
+
+The founder decided the four open calls in the dependency-architecture thread on 2026-09-26, each on the recommended option. The DPF MCP server was unreachable from that session, so the `principle_decide` / decision-outcome records are still owed. This section is the durable record until they are filed.
+
+| Call | Decision | Consequence |
+|---|---|---|
+| M3 durable-job engine | `own_postgres_jobs` | [Durable jobs on Postgres](../specs/2026-09-25-postgres-durable-job-engine-design.md) moves from `draft` to `active`. Implementation follows its §6: facade first, then the engine behind a flag, then retirement. The §7 benchmarks gate the flag flip, not the facade. |
+| S10 graph layout | `elkjs` only | `dagre` retires; the three `lib/graph` layouts move to elkjs `layered`. |
+| M5 markdown | one `renderMarkdown()` on `markdown-it`, raw HTML off | `react-markdown` and `remark-gfm` retire behind one primitive. |
+| Delivery | one branch and one PR per move | Moves ship in parallel on `claude/<move>` branches. |
 
 ### 10.7 Backlog coverage
 

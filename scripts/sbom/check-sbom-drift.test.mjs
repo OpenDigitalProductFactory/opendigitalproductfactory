@@ -4,7 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { BUDGETED_TOTALS, evaluateBudgets, nextBudgets } from "./check-sbom-drift.mjs";
+import { BUDGETED_TOTALS, evaluateBudgets, evaluateSpecifierDrift, nextBudgets } from "./check-sbom-drift.mjs";
+import { findSpecifierDrift } from "./generate-platform-sbom.mjs";
 
 const totals = { resolvedComponents: 100, duplicatedNames: 10, excessInstances: 12, multiMajorNames: 5, uniqueNames: 90 };
 
@@ -46,4 +47,38 @@ test("a missing budget starts at the current total", () => {
 test("--raise-budget moves budgets to the current totals", () => {
   const next = nextBudgets(totals, { resolvedComponents: 90, duplicatedNames: 8, excessInstances: 20, multiMajorNames: 5 }, { raise: true });
   assert.deepEqual(next, { resolvedComponents: 100, duplicatedNames: 10, excessInstances: 12, multiMajorNames: 5 });
+});
+
+// Specifier drift (plan 2026-09-08 S11).
+
+const imp = (deps = [], dev = []) => ({ dependencies: deps, devDependencies: dev, optionalDependencies: [] });
+
+test("findSpecifierDrift reports a name declared with different registry specifiers", () => {
+  const drift = findSpecifierDrift({
+    "packages/db": imp([{ name: "net-snmp", specifier: "^3.26.3", version: "3.26.3" }]),
+    "services/edge-node": imp([{ name: "net-snmp", specifier: "^3.14.0", version: "3.26.3" }]),
+    "apps/web": imp([], [{ name: "zod", specifier: "^4.4.3", version: "4.4.3" }]),
+    "services/adp": imp([{ name: "zod", specifier: "^4.4.3", version: "4.4.3" }]),
+  });
+  assert.deepEqual(drift, [
+    { name: "net-snmp", specifiers: { "^3.14.0": ["services/edge-node"], "^3.26.3": ["packages/db"] } },
+  ]);
+});
+
+test("findSpecifierDrift ignores workspace, link, file and catalog specifiers", () => {
+  const drift = findSpecifierDrift({
+    a: imp([{ name: "@dpf/db", specifier: "workspace:*", version: null }]),
+    b: imp([{ name: "@dpf/db", specifier: "file:../db", version: null }]),
+    c: imp([{ name: "@dpf/db", specifier: "link:../db", version: null }]),
+    d: imp([{ name: "@dpf/db", specifier: "catalog:", version: null }]),
+  });
+  assert.deepEqual(drift, []);
+});
+
+test("evaluateSpecifierDrift fails unaccepted and stale names", () => {
+  const drift = [{ name: "typescript", specifiers: {} }, { name: "dotenv", specifiers: {} }];
+  const r = evaluateSpecifierDrift(drift, { typescript: "exact pin", "net-snmp": "old" });
+  assert.deepEqual(r.unaccepted.map((x) => x.name), ["dotenv"]);
+  assert.deepEqual(r.stale, ["net-snmp"]);
+  assert.deepEqual(evaluateSpecifierDrift(undefined, undefined), { unaccepted: [], stale: [] });
 });

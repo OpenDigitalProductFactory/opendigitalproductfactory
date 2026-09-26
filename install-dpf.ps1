@@ -516,6 +516,37 @@ function Export-DPFConsumerReleaseAssets {
     }
 }
 
+function Invoke-DPFDoctoolsPrePull {
+    # The document converter (dpf-doctools, BI-698B7F9A). It is not a compose
+    # service (AC-ODC-003), so compose pull never fetches it; pull it with the
+    # other release images so the portal reads Word, Excel and PDF files at
+    # first boot. Only an immutable release tag names one converter (the portal
+    # refuses a moving tag), so "latest" pulls nothing. It never fails the
+    # install: a release with no converter is simply converter-less, and any
+    # other failure is retried by the portal's own reconciler once it starts.
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [string]$Owner = "opendigitalproductfactory"
+    )
+    if ($Version -cnotmatch '^v\d+\.\d+\.\d+([-+][A-Za-z0-9.-]+)?$') { return "not-release" }
+    $image = "ghcr.io/$($Owner.ToLowerInvariant())/dpf-doctools:$Version"
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $output = (docker pull $image 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $pullExit = $LASTEXITCODE
+    $ErrorActionPreference = $oldEAP
+    if ($pullExit -eq 0) {
+        Write-OK "Document converter image ready ($image)"
+        return "pulled"
+    }
+    if ($output -match 'not found|manifest unknown|name unknown') {
+        Write-Host "  This release ships no document converter; Office files will not be converted." -ForegroundColor Gray
+        return "not-published"
+    }
+    Write-Warn "Could not download the document converter image; the platform retries after it starts."
+    return "failed"
+}
+
 function Set-DPFReleaseEnvIdentityAtomic {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -1811,6 +1842,7 @@ if (-not (Test-StepDone "started")) {
             Write-Warn "You can retry after fixing connectivity by running dpf-start."
             exit 1
         }
+        Invoke-DPFDoctoolsPrePull -Version $Version | Out-Null
     } else {
         # --- Docker VM memory preflight (customizer source-build only) --------
         # The Next.js production build needs ~4 GB of Node.js heap
