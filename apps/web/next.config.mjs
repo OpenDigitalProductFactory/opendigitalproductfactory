@@ -29,7 +29,7 @@ const config = {
   // typedRoutes is ever enabled, this needs revisiting — the Typecheck job would
   // then have to generate those types first.
   typescript: { ignoreBuildErrors: true },
-  transpilePackages: ["@dpf/db", "@dpf/storefront-templates", "@dpf/validators"],
+  transpilePackages: ["@dpf/db", "@dpf/i18n", "@dpf/storefront-templates", "@dpf/validators"],
   // Server-only document parsers loaded via dynamic `import()` in the upload
   // route (lib/shared/file-parsers.ts). They MUST stay external (not bundled)
   // so Next's standalone output traces them into the shipped node_modules —

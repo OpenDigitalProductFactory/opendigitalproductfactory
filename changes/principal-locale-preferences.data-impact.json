@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-6EA9E25A (EP-6B33A840 L0.1). Migration 20260926030000_principal_locale_preferences adds two nullable preference columns to Principal. Additive; existing rows stay NULL, which resolves to the org default and browser negotiation exactly as today. No backfill.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "Principal",
+      "lifecycleDisposition": "retain-with-principal",
+      "fields": [
+        {
+          "name": "preferredLanguage",
+          "resolution": "not-applicable",
+          "reason": "A display preference: a BCP-47 tag from the closed supported-locale registry in @dpf/i18n. Not personal data about a subject beyond a UI setting; retained and deleted with the Principal.",
+          "provenance": "Set by the person via setLocalePreferences, validated against the locale registry.",
+          "flags": []
+        },
+        {
+          "name": "timeZone",
+          "resolution": "not-applicable",
+          "reason": "A display preference: an IANA timezone name validated by Intl.DateTimeFormat. Retained and deleted with the Principal.",
+          "provenance": "Set by the person via setLocalePreferences.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

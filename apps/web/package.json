@@ -32,6 +32,7 @@
     "@axe-core/playwright": "^4.12.1",
     "@dpf/db": "workspace:*",
     "@dpf/finance-templates": "workspace:*",
+    "@dpf/i18n": "workspace:*",
     "@dpf/integration-shared": "workspace:*",
     "@dpf/storefront-templates": "workspace:*",
     "@dpf/types": "workspace:*",
