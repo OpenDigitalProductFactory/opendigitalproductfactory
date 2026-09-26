@@ -21,6 +21,7 @@
 //   7  deadline elapsed without ever reaching a verdict (ABANDONED_OR_UNRECORDED)
 //      — deliberately NOT 0 and NOT 1: nothing was established about the diff.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -127,13 +128,15 @@ export async function waitForGate({
 }
 
 function parseArgs(argv) {
+  const { values } = utilParseArgs({
+    args: argv,
+    options: { help: { type: "boolean", short: "h" }, json: { type: "boolean" }, deadline: { type: "string" } },
+  });
+  if (values.deadline === "") throw new Error("Unknown or incomplete argument: --deadline");
   const options = {};
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--help" || argv[i] === "-h") options.help = true;
-    else if (argv[i] === "--json") options.json = true;
-    else if (argv[i] === "--deadline" && argv[i + 1]) options.deadlineMinutes = Number(argv[++i]);
-    else throw new Error(`Unknown or incomplete argument: ${argv[i]}`);
-  }
+  if (values.help) options.help = true;
+  if (values.json) options.json = true;
+  if (values.deadline !== undefined) options.deadlineMinutes = Number(values.deadline);
   return options;
 }
 
