@@ -872,6 +872,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/process-spine-conformance.test.mjs",
         "scripts/lib/ensure-post-checkout-hook.test.mjs",
       ),
+      // BI-545943EE: the SessionStart process-spine verdict and the generated
+      // operating contract it carries when the spine is unproven. Moved off the
+      // test-inventory allowlist: unlisted = never run.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/process-spine-health.test.mjs",
+        "packages/dpf-skill-pack/scripts/generate-operating-contract.test.mjs",
+      ),
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/mcp-catalog-profile.test.mjs",

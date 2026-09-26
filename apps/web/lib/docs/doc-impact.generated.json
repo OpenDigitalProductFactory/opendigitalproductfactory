@@ -1666,6 +1666,9 @@
     "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "packages/dpf-skill-pack/hooks/operating-contract.generated.mjs": [
+      "docs/architecture/skill-surfaces-runbook.md"
+    ],
     "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -1686,6 +1689,9 @@
     ],
     "packages/dpf-skill-pack/hooks/worktree-create.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
+    ],
+    "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs": [
+      "docs/architecture/skill-surfaces-runbook.md"
     ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.ps1": [
       "docs/operations/install.md"
@@ -2978,7 +2984,9 @@
       "apps/web/lib/skills/skill-relevance.ts",
       "packages/db/src/mandated-skills.ts",
       "packages/db/src/seed-skills.ts",
-      "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs"
+      "packages/dpf-skill-pack/hooks/operating-contract.generated.mjs",
+      "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs",
+      "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs"
     ],
     "docs/architecture/tax-period-component-migration.md": [
       "packages/db/scripts/schema-regression-guard.mjs"

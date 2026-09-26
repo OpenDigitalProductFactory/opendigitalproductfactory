@@ -27,6 +27,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+// Static import of generated text: consumer installs carry no docs/, so the
+// hook never reads repo files for the contract at runtime.
+import { OPERATING_CONTRACT_LINES } from "./operating-contract.generated.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const defaultSkillPackRoot = resolve(here, "..");
 const contractPath = join(defaultSkillPackRoot, "process-spine-replacements.json");
@@ -165,8 +169,23 @@ export function assessProcessSpine({
   };
 }
 
+// BI-545943EE: one verdict leads the output, so UNKNOWN exposure never reads
+// as healthy. VERIFIED = every replacement installed and verifiably exposed;
+// BROKEN = a replacement is missing on disk or verifiably absent from the
+// session; UNPROVEN = installed, but the client cannot report what is loaded.
+export function processSpineVerdictLine(verdict) {
+  if (verdict.severity === "ok") return "Process spine: VERIFIED";
+  if (!verdict.installed.ok) {
+    return `Process spine: BROKEN — DPF skills are missing from the installed plugin (${verdict.installed.missingDpfSkills.join(", ")}). The operating contract follows inline.`;
+  }
+  if (verdict.exposed.state === "verified") {
+    return `Process spine: BROKEN — this client reports DPF skills are not loaded (${verdict.exposed.missingDpfSkills.join(", ")}). The operating contract follows inline.`;
+  }
+  return "Process spine: UNPROVEN — this client cannot show DPF which skills are loaded, so DPF skills may be absent. The operating contract follows inline.";
+}
+
 export function renderProcessSpineSummary(verdict) {
-  const lines = ["Process spine health:"];
+  const lines = [processSpineVerdictLine(verdict)];
   if (verdict.installed.ok) {
     lines.push(
       `  DPF-native replacement skills installed: OK (${verdict.installed.present}/${verdict.installed.total}).`,
@@ -202,11 +221,17 @@ export function renderProcessSpineSummary(verdict) {
     );
   }
 
-  if (verdict.severity !== "ok") {
+  if (verdict.severity === "ok") return lines;
+
+  // A restart can only change a BROKEN answer. For UNPROVEN the client still
+  // cannot report its skills after a restart, so the advice would mislead.
+  const broken = !verdict.installed.ok || verdict.exposed.state === "verified";
+  if (broken) {
     lines.push(
       "  Plain-language fix: restart the client after bootstrap; if the DPF replacements are still absent, repair the dpf-platform plugin exposure before project work begins.",
     );
   }
+  lines.push(...OPERATING_CONTRACT_LINES);
   return lines;
 }
 
@@ -227,7 +252,7 @@ export function renderCleanupPolicySummary(policy = loadCleanupPolicy()) {
   return lines;
 }
 
-function parseArgs(argv) {
+function parseArgs(argv, env) {
   const args = { skillPackRoot: defaultSkillPackRoot, exposedSkills: undefined, hook: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -238,12 +263,16 @@ function parseArgs(argv) {
       args.exposedSkills = raw.startsWith("[") ? JSON.parse(raw) : raw.split(/\r?\n/).filter(Boolean);
     } else if (arg === "--hook") args.hook = true;
   }
-  if (args.exposedSkills === undefined) args.exposedSkills = parseExposedSkillsFromEnv();
+  if (args.exposedSkills === undefined) args.exposedSkills = parseExposedSkillsFromEnv(env);
   return args;
 }
 
-function main() {
-  const args = parseArgs(process.argv.slice(2));
+/**
+ * The whole CLI as a pure-ish function, so tests drive the --hook path without
+ * spawning a process. Returns what main() writes and the code it exits with.
+ */
+export function run(argv, env = process.env) {
+  const args = parseArgs(argv, env);
   const verdict = assessProcessSpine({
     skillPackRoot: args.skillPackRoot,
     exposedSkills: args.exposedSkills,
@@ -254,20 +283,28 @@ function main() {
   ];
 
   if (args.hook) {
-    if (verdict.severity === "ok") process.exit(0);
-    process.stdout.write(
-      JSON.stringify({
+    if (verdict.severity === "ok") return { exitCode: 0, stdout: "" };
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify({
         hookSpecificOutput: {
           hookEventName: "SessionStart",
           additionalContext: lines.join("\n"),
         },
       }),
-    );
-    process.exit(0);
+    };
   }
 
-  for (const line of lines) console.log(line);
-  process.exit(verdict.severity === "fail" ? 2 : 0);
+  return {
+    exitCode: verdict.severity === "fail" ? 2 : 0,
+    stdout: lines.map((line) => `${line}\n`).join(""),
+  };
+}
+
+function main() {
+  const { exitCode, stdout } = run(process.argv.slice(2));
+  if (stdout) process.stdout.write(stdout);
+  process.exitCode = exitCode;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
