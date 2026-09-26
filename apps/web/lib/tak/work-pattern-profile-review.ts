@@ -8,6 +8,7 @@ import {
   type PatternObserverToolExecution,
   type PatternObserverTurnMetric,
 } from "./pattern-observer";
+import { isRecord } from "@/lib/shared/coerce";
 
 export const WORK_PATTERN_PROFILE_REVIEW_WINDOW_DAYS = 7;
 export const WORK_PATTERN_PROFILE_REVIEW_MIN_COMPLETED_RUNS = 10;
@@ -77,10 +78,6 @@ function createPublicTaskRunId(): string {
 
 function windowStart(now: Date): Date {
   return new Date(now.getTime() - WORK_PATTERN_PROFILE_REVIEW_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function fingerprintFromNeed(row: { evidenceJson?: unknown; readinessJson?: unknown }): string | null {

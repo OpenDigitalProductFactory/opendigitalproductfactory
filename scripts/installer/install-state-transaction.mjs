@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -232,7 +233,18 @@ export async function restoreInstallState(statePath, recoveryPath, options = {})
   } finally { await rm(tempPath, { force: true }); await lock.release(); }
 }
 
-function parseArgs(argv) { const result = { _: [] }; for (let i = 0; i < argv.length; i++) { if (argv[i].startsWith("--")) result[argv[i].slice(2)] = argv[++i]; else result._.push(argv[i]); } return result; }
+function parseArgs(argv) {
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values, positionals } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: Object.fromEntries(["state", "key", "value", "recovery-path"].map((name) => [name, { type: "string" }])),
+  });
+  const result = { _: positionals };
+  for (const [name, value] of Object.entries(values)) result[name] = typeof value === "string" ? value : undefined;
+  return result;
+}
 async function main() {
   const args = parseArgs(process.argv.slice(2)); const command = args._[0];
   if (!args.state) throw new Error("--state is required");

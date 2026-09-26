@@ -42,36 +42,47 @@ import {
   pathHasActiveClaim,
 } from "./lib/worktree-liveness.mjs";
 import { runGit as runGitShared } from "./lib/git.mjs";
+import { parseArgs as utilParseArgs } from "node:util";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GRACE = 14;
 
 function parseArgs(argv) {
-  let dryRun = true;
-  let tierAOnly = false;
-  /** Scope the scan to ONE branch's worktree (BI-848360EF). Default: every worktree. */
-  let branch = null;
-  let graceDays = DEFAULT_GRACE;
-  let json = false;
-  let root = process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "";
-  for (let i = 0; i < argv.length; i += 1) {
-    const a = argv[i];
-    if (a === "--dry-run") dryRun = true;
-    else if (a === "--live") dryRun = false;
-    else if (a === "--tier-a-only") tierAOnly = true;
-    else if (a === "--json") json = true;
-    else if (a === "--grace-days") graceDays = Number(argv[++i]);
-    else if (a.startsWith("--grace-days=")) graceDays = Number(a.split("=")[1]);
-    else if (a === "--root") root = argv[++i];
-    else if (a === "--branch") branch = argv[++i];
-    else if (a.startsWith("--branch=")) branch = a.slice("--branch=".length);
-    else if (a === "-h" || a === "--help") {
-      console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 35).join("\n"));
-      process.exit(0);
-    }
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values, tokens } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+    options: {
+      "dry-run": { type: "boolean" },
+      live: { type: "boolean" },
+      "tier-a-only": { type: "boolean" },
+      json: { type: "boolean" },
+      "grace-days": { type: "string" },
+      root: { type: "string" },
+      /** Scope the scan to ONE branch's worktree (BI-848360EF). Default: every worktree. */
+      branch: { type: "string" },
+      help: { type: "boolean", short: "h" },
+    },
+  });
+  if (values.help) {
+    console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 35).join("\n"));
+    process.exit(0);
   }
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  // --dry-run and --live toggle one mode; the last one given wins.
+  const mode = tokens.findLast((token) => token.kind === "option" && (token.name === "dry-run" || token.name === "live"));
+  let graceDays = values["grace-days"] === undefined ? DEFAULT_GRACE : Number(text(values["grace-days"]));
   if (!Number.isFinite(graceDays) || graceDays < 1) graceDays = DEFAULT_GRACE;
-  return { dryRun, tierAOnly, graceDays, json, root, branch };
+  return {
+    dryRun: mode?.name !== "live",
+    tierAOnly: values["tier-a-only"] === true,
+    graceDays,
+    json: values.json === true,
+    root: values.root === undefined ? process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "" : text(values.root),
+    branch: values.branch === undefined ? null : text(values.branch),
+  };
 }
 
 function runGit(args, cwd) {

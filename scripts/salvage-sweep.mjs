@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { gitTextOrNull } from "./lib/git.mjs";
@@ -59,27 +60,16 @@ export function inspectRepository(repositoryPath, operatorOwners = []) {
 }
 
 function parseArguments(argv) {
-  const paths = [];
-  const operatorOwners = [];
-  let json = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index];
-    if (value === "--operator-owner") {
-      const owner = argv[index + 1];
-      if (!owner) throw new Error("missing_operator_owner");
-      operatorOwners.push(owner);
-      index += 1;
-    } else if (value === "--json") {
-      json = true;
-    } else if (value === "--help" || value === "-h") {
-      return { help: true, paths, operatorOwners, json };
-    } else if (value.startsWith("-")) {
-      throw new Error(`unknown_argument:${value}`);
-    } else {
-      paths.push(value);
-    }
-  }
-  return { help: false, paths, operatorOwners, json };
+  const options = { "operator-owner": { type: "string", multiple: true }, json: { type: "boolean" }, help: { type: "boolean", short: "h" } };
+  // strict: false plus the token check below keeps the old error codes, and lets a
+  // repository path follow the flags as a positional.
+  const { values, positionals, tokens } = utilParseArgs({ args: argv, options, strict: false, allowPositionals: true, tokens: true });
+  const unknown = tokens.find((token) => token.kind === "option-terminator" || (token.kind === "option" && !Object.hasOwn(options, token.name)));
+  const help = values.help === true;
+  if (!help && unknown) throw new Error(`unknown_argument:${unknown.rawName ?? "--"}`);
+  const operatorOwners = values["operator-owner"] ?? [];
+  if (!help && operatorOwners.some((owner) => typeof owner !== "string" || !owner)) throw new Error("missing_operator_owner");
+  return { help, paths: positionals, operatorOwners, json: values.json === true };
 }
 
 function printUsage() {

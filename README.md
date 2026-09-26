@@ -82,12 +82,11 @@ This repository hosts a draft standards family for trustworthy AI-agent operatio
 - [Trusted AI Agent Governance White Paper](docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md) — market, policy, and implementation case
 - [DPF Standards Conformance Assessment](docs/architecture/agent-standards-dpf-conformance.md) — how the platform maps to the proposed controls today
 
-Publication outputs are generated from the Markdown sources of truth:
+Publication outputs (`.docx`) are generated from the Markdown sources of truth through the portal's document-export pipeline (the `dpf-doctools` converter image), so they need Docker and `DPF_DOCTOOLS_IMAGE` set to a digest-pinned `dpf-doctools` image:
 
 ```bash
-pnpm docs:tak
-node docs/architecture/generate-gaid-docx.mjs
-node docs/architecture/generate-agent-standards-white-paper-docx.mjs
+pnpm docs:agent-standards        # TAK, GAID, TAK-JSI and the white paper
+pnpm docs:tak                    # or one at a time: docs:gaid, docs:jsi
 ```
 
 ---
@@ -191,7 +190,7 @@ Full rule: [AGENTS.md §5](AGENTS.md) and [`worktree-is-source-control-not-runti
 | Start the dev server | `pnpm dev` |
 | Typecheck | `pnpm typecheck` |
 | Run tests | `pnpm test` (Vitest) |
-| Generate TAK Word doc | `pnpm docs:tak` |
+| Generate TAK Word doc | `pnpm docs:tak` (needs Docker and `DPF_DOCTOOLS_IMAGE`) |
 | Diagnostic bundle | `bash install-dpf.sh doctor` |
 | Verify the install | `bash scripts/verify-install-edge.sh` |
 | Stop / start the running stack | `bash dpf-stop.sh` · `bash dpf-start.sh` |

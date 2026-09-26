@@ -3,7 +3,7 @@
  *
  * Uses the Markdown source of truth and embeds high-resolution diagram assets.
  *
- * Usage: node docs/architecture/generate-agent-standards-white-paper-docx.mjs
+ * Usage: pnpm exec tsx docs/architecture/generate-agent-standards-white-paper-docx.mjs
  */
 
 import { publicationConfig } from "./agent-standard-publications.mjs";

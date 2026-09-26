@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -176,9 +177,14 @@ export async function installReleaseAssets(options) {
 }
 
 function parseArgs(argv) {
-  const result = {};
-  for (let i = 0; i < argv.length; i += 2) result[argv[i].replace(/^--/, "")] = argv[i + 1];
-  return result;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: Object.fromEntries(["source", "install", "state", "tag", "owner", "recovery"].map((name) => [name, { type: "string" }])),
+  });
+  return Object.fromEntries(Object.entries(values).map(([name, value]) => [name, typeof value === "string" ? value : undefined]));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

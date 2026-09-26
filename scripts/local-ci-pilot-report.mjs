@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { evaluateLocalCiPilot } from "./lib/local-ci-pilot-report.mjs";
 
 function inputPath(argv) {
-  const index = argv.indexOf("--input");
-  if (index < 0 || !argv[index + 1]) {
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args: argv, strict: false, allowPositionals: true, options: { input: { type: "string" } } });
+  if (typeof values.input !== "string" || !values.input) {
     throw new Error("usage: node scripts/local-ci-pilot-report.mjs --input <evidence.json>");
   }
-  return resolve(argv[index + 1]);
+  return resolve(values.input);
 }
 
 async function main() {

@@ -22,6 +22,7 @@
 //   node scripts/sandbox-freshness-preflight.mjs [--dir PATH] [--branch NAME]
 //     [--sha SHA] [--converge] [--report PATH] [--quiet]
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -46,8 +47,15 @@ import { gitTextOrNull } from "./lib/git.mjs";
 
 
 function valueAfter(flag) {
-  const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] : "";
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: process.argv.slice(2),
+    strict: false,
+    allowPositionals: true,
+    options: { "branch": { type: "string" }, "sha": { type: "string" }, "slot-key": { type: "string" }, "dir": { type: "string" }, "report": { type: "string" } },
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return value === undefined ? "" : typeof value === "string" ? value : undefined;
 }
 const hasFlag = (flag) => process.argv.includes(flag);
 

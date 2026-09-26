@@ -29,6 +29,7 @@
 //
 // Exit 0 = honest, 1 = violation, 2 = could not evaluate (missing base ref).
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -147,8 +148,9 @@ function resolveBaseRef(explicit) {
 
 function main(argv) {
   const asJson = argv.includes("--json");
-  const baseIndex = argv.indexOf("--base");
-  const baseRef = resolveBaseRef(baseIndex >= 0 ? argv[baseIndex + 1] : undefined);
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args: argv, strict: false, allowPositionals: true, options: { base: { type: "string" } } });
+  const baseRef = resolveBaseRef(typeof values.base === "string" ? values.base : undefined);
 
   if (!baseRef) {
     console.error("[n1-caller-honesty] no base ref (origin/main or main) — cannot establish the baseline caller.");

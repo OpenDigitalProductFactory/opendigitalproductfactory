@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Mock Prisma ──────────────────────────────────────────────────────────────
 vi.mock("@dpf/db", () => {
@@ -349,6 +349,17 @@ describe("formatWeeklyAllocationHint", () => {
 });
 
 describe("dated subscription cap (BI-38064739)", () => {
+  // BI-FC1B925E: the fixture's absolute reset (2026-09-26 08:57Z) must stay in
+  // the future, or recordCliRateLimit correctly records no cap and this block
+  // fails on every run after that date. Freeze only Date; vi.waitFor keeps real timers.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-25T20:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const CAP_TEXT = "banner\nERROR: You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 26th, 2026 8:57 AM.";
 
   it("parses an absolute 'try again at <date time>' phrase", () => {

@@ -1,4 +1,5 @@
 import { sortNewestFirst } from "./evidence-view-adapters";
+import { isRecord } from "../shared/coerce";
 
 /**
  * Digital product view model
@@ -145,12 +146,8 @@ export interface ToDigitalProductViewModelInput {
 
 // --- helpers -----------------------------------------------------------
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function projectObservationConfig(value: unknown): { classifyAs?: string } | null {
-  if (!isPlainObject(value)) return null;
+  if (!isRecord(value)) return null;
   const out: { classifyAs?: string } = {};
   if (typeof value.classifyAs === "string") {
     out.classifyAs = value.classifyAs;
@@ -173,7 +170,7 @@ function nonEmpty(value: unknown): string | null {
  * detail page renders the coworker section only when it applies (BI-8F9EDD6C).
  */
 function projectCoworker(value: unknown): CoworkerProductSummary | null {
-  if (!isPlainObject(value)) return null;
+  if (!isRecord(value)) return null;
   if (value.sourceKind !== "coworker_service") return null;
   return {
     agentId: nonEmpty(value.agentId),

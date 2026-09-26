@@ -1,3 +1,5 @@
+import { isRecord } from "../shared/coerce";
+
 export const QUESTION_PACKET_CONTEXT_KINDS = [
   "file",
   "route",
@@ -48,8 +50,6 @@ export type QuestionPacket = {
   expectedArtifact?: QuestionPacketExpectedArtifact;
 };
 
-type QuestionPacketRecord = Record<string, unknown>;
-
 const CONTEXT_KIND_SET = new Set<string>(QUESTION_PACKET_CONTEXT_KINDS);
 const PUSHBACK_PERMISSION_SET = new Set<string>(QUESTION_PACKET_PUSHBACK_PERMISSIONS);
 const EXPECTED_ARTIFACT_SET = new Set<string>(QUESTION_PACKET_EXPECTED_ARTIFACTS);
@@ -59,10 +59,6 @@ const PUSHBACK_DESCRIPTIONS: Record<QuestionPacketPushbackPermission, string> = 
   gentle: "raise concerns carefully when evidence points another way",
   direct: "challenge the operator thesis directly when evidence points another way",
 };
-
-function isRecord(value: unknown): value is QuestionPacketRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function cleanText(value: unknown, path: string): string | undefined {
   if (value === undefined || value === null) return undefined;

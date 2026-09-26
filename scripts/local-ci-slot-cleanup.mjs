@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -84,8 +85,10 @@ function runCleanup(plan) {
 }
 
 function valueAfter(args, flag) {
-  const index = args.indexOf(flag);
-  return index >= 0 ? args[index + 1] : "";
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args, strict: false, allowPositionals: true, options: { "slot-key": { type: "string" } } });
+  const value = values[flag.replace(/^--/, "")];
+  return value === undefined ? "" : typeof value === "string" ? value : undefined;
 }
 
 function main() {

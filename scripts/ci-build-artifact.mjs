@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync,
@@ -29,17 +30,27 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_ARTIFACT_PREFIX = "web-production-build";
 
 function parseArgs(argv) {
-  const [mode, ...rest] = argv;
-  const options = {};
-  for (let index = 0; index < rest.length; index += 1) {
-    const flag = rest[index];
-    if (!flag.startsWith("--")) throw new Error(`unexpected argument: ${flag}`);
-    const value = rest[index + 1];
-    if (!value || value.startsWith("--")) throw new Error(`missing value for ${flag}`);
-    options[flag.slice(2)] = value;
-    index += 1;
-  }
-  return { mode, options };
+  const option = { type: "string" };
+  const { values, positionals } = utilParseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      "artifact-name": option,
+      "artifact-prefix": option,
+      "input-dir": option,
+      "output-dir": option,
+      "producer-job-name": option,
+      "source-run-id": option,
+      "terminal-grace-seconds": option,
+      "wait-seconds": option,
+      workflow: option,
+    },
+  });
+  const [mode, ...extra] = positionals;
+  if (extra.length > 0) throw new Error(`unexpected argument: ${extra[0]}`);
+  const empty = Object.keys(values).find((name) => !values[name]);
+  if (empty) throw new Error(`missing value for --${empty}`);
+  return { mode, options: { ...values } };
 }
 
 const git = (...args) => gitText(args, { cwd: ROOT });

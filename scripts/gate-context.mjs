@@ -15,6 +15,7 @@
 // Studio injects prospective constraints at prompt-assembly time, before any
 // code exists (the plan's fileStructure is the intended diff).
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -95,8 +96,9 @@ export function parseStdinChanges(text) {
 
 export async function main() {
   const args = process.argv.slice(2);
-  const baseIndex = args.indexOf("--base");
-  const base = baseIndex >= 0 ? args[baseIndex + 1] : "origin/main";
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args, strict: false, allowPositionals: true, options: { base: { type: "string" } } });
+  const base = values.base === undefined ? "origin/main" : typeof values.base === "string" ? values.base : undefined;
 
   let changedFiles;
   let addedLinesByFile = new Map();

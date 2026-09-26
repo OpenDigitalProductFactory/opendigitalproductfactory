@@ -1,5 +1,5 @@
 import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
-import { slugify as kebab } from "@/lib/shared/slugify";
+import { slugify } from "@/lib/shared/slugify";
 
 // `targetPerspective: WikiPerspective | null` replaces the prior local
 // `targetPerspectiveMode` field. `null` represents "neither WWMD nor WWWD"
@@ -70,8 +70,9 @@ function asIso(value: Date | string | null | undefined): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function slugify(value: string): string {
-  return kebab(value) || "captured-source";
+/** The shared slug, or a fixed key when the input has no alphanumerics. */
+function sourceSlug(value: string): string {
+  return slugify(value) || "captured-source";
 }
 
 function compact(value: string): string {
@@ -156,7 +157,7 @@ export function captureResearchCandidate(input: ResearchCaptureInput): ResearchC
   const sourceType = sourceTypeFrom(input, parsed.metadata);
   const targetPerspective: WikiPerspective | null = input.targetPerspective ?? null;
   const excerpt = compact(body).slice(0, 800);
-  const sourceKey = `${slugify(url ?? title)}-${slugify(sourceType)}`;
+  const sourceKey = `${sourceSlug(url ?? title)}-${sourceSlug(sourceType)}`;
   const flags: ResearchCaptureCandidate["flags"] = detectSecret(input.content)
     ? ["secret-looking-content"]
     : [];
@@ -199,7 +200,7 @@ export function captureResearchCandidate(input: ResearchCaptureInput): ResearchC
     rawSource,
     wikiPageCandidate: {
       title,
-      slug: slugify(title),
+      slug: sourceSlug(title),
       pageKind: input.proposedPageKind ?? "summary",
       status: "review-needed",
       bodyPreview: body.slice(0, 2000),

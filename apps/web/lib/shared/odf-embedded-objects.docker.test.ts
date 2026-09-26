@@ -142,7 +142,7 @@ describe.skipIf(!ready)("embedded-object ODF files against the real dpf-doctools
     const refused = await convertDocument({ input: fods, from: "ods", to: "pdf" }, { resolveImage, limiter });
     expect(refused, "dpf-convert keeps DisableActiveContent on").toMatchObject({ ok: false, reason: "conversion-failed" });
 
-    const ingested = await convertForIngestion(fods, { family: "sheet", from: "ods", to: "xlsx", fallback: "opendocument" }, convert);
+    const ingested = await convertForIngestion(fods, { family: "sheet", from: "ods", to: "ods", fallback: "opendocument" }, convert);
     expect(ingested.ok).toBe(false);
     if (!ingested.ok) expect(ingested.error).toContain("contains embedded objects (such as charts) that DPF does not open");
 

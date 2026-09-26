@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
 vi.mock("./capsule-workitem-anchor.server", () => ({ ensureCapsuleWorkItemAnchorNonFatal: vi.fn() }));
 
-import { adoptWorktree } from "./adopt-worktree-handler";
+import { adoptWorktree, establishNewRoomOwnership } from "./adopt-worktree-handler";
 import type { CapsuleDb } from "./work-capsule-store-types";
 
 function database() {
@@ -77,5 +77,26 @@ describe("adopt_worktree for backlog work", () => {
     });
     expect(result.success).toBe(true);
     expect(db.workroomParticipant.create).not.toHaveBeenCalled();
+  });
+});
+
+// BI-36FC2981 residual (2026-09-26): create_workroom rooms were born with no
+// participants at all (WC-D73AC93B, WC-7BB9B3CD), and the drive's repair never
+// reaches a room without a work shape. Create now uses the same helper as adopt.
+describe("a created delivery room is born owned", () => {
+  it("appoints the person as owner, admits the assistant, and records the create", async () => {
+    const db = database();
+    const summary = await establishNewRoomOwnership(
+      db as unknown as CapsuleDb,
+      "row-1",
+      { userId: "user-1", agentId: "AGT-EXT-CLAUDE", principalId: "HUMAN", agentPrincipalId: "ASSISTANT" } as never,
+      "create",
+    );
+    expect(db.workroomParticipant.create).toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: "HUMAN", roles: ["coordinator"] }) });
+    expect(db.workroomParticipant.create).toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: "ASSISTANT", roles: ["contributor"] }) });
+    expect(db.workroomActivity.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ kind: "coworker-joined", payload: expect.objectContaining({ source: "create" }) }),
+    });
+    expect(summary).toContain("now owns the room");
   });
 });

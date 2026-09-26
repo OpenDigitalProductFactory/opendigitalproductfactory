@@ -16,6 +16,8 @@
 // lives in apps/web/lib/federation/work-sync.ts and the /api/v1/federation/work
 // route.
 
+import { isRecord } from "@dpf/validators";
+
 export const FEDERATED_WORK_SPEC_VERSION = "dpf.work-sync/1" as const;
 
 /** Sensitivity tiers that never cross an installation boundary, even inside one
@@ -155,10 +157,6 @@ export function withFederatedWorkOriginMarker(
     .join("\n")
     .trim();
   return trimmed ? `${trimmed}\n\n${marker}` : marker;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isString(value: unknown, max = 100_000): boolean {
   return typeof value === "string" && value.length <= max;

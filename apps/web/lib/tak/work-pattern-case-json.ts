@@ -1,10 +1,7 @@
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import type { WorkCaseActionVerb } from "@/lib/work-management/case-types";
 import type { WorkCaseStagedTransitionProjection } from "@/lib/work-management/staged-transition";
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+import { isRecord } from "@/lib/shared/coerce";
 
 export function stringField(source: Record<string, unknown>, field: string): string | null {
   const value = source[field];

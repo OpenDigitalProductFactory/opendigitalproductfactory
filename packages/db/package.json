@@ -115,6 +115,7 @@
   },
   "dependencies": {
     "@dpf/storefront-templates": "workspace:*",
+    "@dpf/validators": "workspace:*",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "bcryptjs": "^3.0.3",
@@ -123,7 +124,6 @@
     "i18n-iso-countries": "^7.14.0",
     "net-snmp": "^3.26.3",
     "pg": "^8.23.0",
-    "read-excel-file": "9.2.0",
     "undici": "^8.10.0"
   },
   "devDependencies": {

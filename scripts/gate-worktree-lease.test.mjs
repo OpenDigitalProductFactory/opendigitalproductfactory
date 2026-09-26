@@ -18,6 +18,7 @@ import test from "node:test";
 import {
   collectDescendantPids,
   createProcessTreeTracker,
+  fenceProcessTree,
   defaultDescendantPollMs,
   defaultProcessScanMs,
   findConflictingLocalCiMutatorPids,
@@ -1794,6 +1795,52 @@ test("hard host-pressure loss kills the real child process tree before later mut
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+// BI-C5ED24D9. A fence is a race against the fenced child. On Windows a
+// process scan is a ~1.5 s CIM query; run before taskkill, it let the child
+// write mid-scan, ~2 s after ownership was lost. These pin the order per
+// platform: kill first where the parent link survives the kill (Windows),
+// observe first where it does not (POSIX reparenting).
+function recordingFenceTracker(order) {
+  return {
+    sample: () => { order.push("sample"); return []; },
+    waitForQuiescence: async () => { order.push("quiesce"); return []; },
+  };
+}
+
+test("fenceProcessTree kills the Windows tree before any process scan", async () => {
+  const order = [];
+  await fenceProcessTree({
+    platform: "win32",
+    tracker: recordingFenceTracker(order),
+    childRunning: () => true,
+    killTree: () => order.push("kill"),
+  });
+  assert.equal(order[0], "kill", `a scan before the kill is time the fenced child can mutate: ${order.join(" > ")}`);
+  assert.deepEqual(order, ["kill", "quiesce"]);
+});
+
+test("fenceProcessTree observes before the kill on POSIX, where descendants reparent", async () => {
+  const order = [];
+  await fenceProcessTree({
+    platform: "linux",
+    tracker: recordingFenceTracker(order),
+    childRunning: () => true,
+    killTree: () => order.push("kill"),
+  });
+  assert.deepEqual(order, ["sample", "kill", "quiesce"]);
+});
+
+test("fenceProcessTree still reaps remembered descendants when the child already exited", async () => {
+  const order = [];
+  await fenceProcessTree({
+    platform: "win32",
+    tracker: recordingFenceTracker(order),
+    childRunning: () => false,
+    killTree: () => order.push("kill"),
+  });
+  assert.deepEqual(order, ["quiesce"]);
 });
 
 // BI-04AECD8A. The descendant scan used to be a 250ms setInterval calling a

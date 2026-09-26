@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -138,19 +139,31 @@ export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform,
 }
 
 function parseArgs(argv) {
-  const result = { overlays: [], aliases: [], migrate: false, write: false };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--state") result.statePath = argv[++index];
-    else if (arg === "--catalog") result.catalogPath = argv[++index];
-    else if (arg === "--host") result.hostPlatform = argv[++index];
-    else if (arg === "--overlay") result.overlays.push(argv[++index]);
-    else if (arg === "--alias") result.aliases.push(argv[++index]);
-    else if (arg === "--compose-profiles") result.composeProfiles = argv[++index] ?? "";
-    else if (arg === "--migrate") result.migrate = true;
-    else if (arg === "--write") result.write = true;
-    else throw new Error(`unknown_argument:${arg}`);
-  }
+  const options = {
+    state: { type: "string" },
+    catalog: { type: "string" },
+    host: { type: "string" },
+    overlay: { type: "string", multiple: true },
+    alias: { type: "string", multiple: true },
+    "compose-profiles": { type: "string" },
+    migrate: { type: "boolean" },
+    write: { type: "boolean" },
+  };
+  // strict: false plus the token check below keeps the old error code for unknown input.
+  const { values, tokens } = utilParseArgs({ args: argv, options, strict: false, allowPositionals: true, tokens: true });
+  const unknown = tokens.find((token) => token.kind !== "option" || !Object.hasOwn(options, token.name));
+  if (unknown) throw new Error(`unknown_argument:${unknown.rawName ?? unknown.value ?? "--"}`);
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  const result = {
+    overlays: (values.overlay ?? []).map(text),
+    aliases: (values.alias ?? []).map(text),
+    migrate: values.migrate === true,
+    write: values.write === true,
+  };
+  if (values.state !== undefined) result.statePath = text(values.state);
+  if (values.catalog !== undefined) result.catalogPath = text(values.catalog);
+  if (values.host !== undefined) result.hostPlatform = text(values.host);
+  if (values["compose-profiles"] !== undefined) result.composeProfiles = text(values["compose-profiles"]) ?? "";
   if (!result.statePath) throw new Error("missing_install_state");
   return result;
 }

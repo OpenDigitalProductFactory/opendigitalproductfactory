@@ -20,7 +20,7 @@
 // Exits 0 on successful removal, non-zero otherwise. Prints a one-line summary.
 
 import { lstatSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { runGit } from "./git.mjs";
 
 import { isEntryModule } from "./entry-module.mjs";
 
@@ -141,10 +141,8 @@ function safeReaddirDirs(dir) {
 }
 
 function defaultGit(args) {
-  const res = spawnSync("git", args, { encoding: "utf8" });
-  const ok = !res.error && res.status === 0;
-  const detail = (ok ? res.stdout : res.stderr || res.error?.message || "").trim();
-  return { ok, detail };
+  const res = runGit(args, { cwd: process.cwd() });
+  return { ok: res.ok, detail: (res.ok ? res.stdout : res.stderr).trim() };
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────

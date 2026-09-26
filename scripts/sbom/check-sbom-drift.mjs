@@ -28,6 +28,7 @@
 //   node scripts/sbom/check-sbom-drift.mjs --raise-budget "<reason>"
 //       # move budgets to the current totals and record why in sbom/baseline.json
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,10 +96,11 @@ function loadBaseline() {
 
 /** Value after a flag: null when the flag is absent, "" when it has no value. */
 function flagValue(argv, flag) {
-  const i = argv.indexOf(flag);
-  if (i === -1) return null;
-  const v = argv[i + 1];
-  return v && !v.startsWith("--") ? v.trim() : "";
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args: argv, strict: false, allowPositionals: true, options: { "raise-budget": { type: "string" } } });
+  const v = values[flag.replace(/^--/, "")];
+  if (v === undefined) return null;
+  return typeof v === "string" && v && !v.startsWith("--") ? v.trim() : "";
 }
 
 /** Totals for every lockfile root other than the platform one. */

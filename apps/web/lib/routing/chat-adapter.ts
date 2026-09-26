@@ -40,6 +40,7 @@ import {
   createInferenceTimeoutSignal,
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
+import { isRecord } from "@/lib/shared/coerce";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // The runtime-policy module separates the governed, deliberately slower 27B
@@ -127,10 +128,6 @@ const GEMINI_UNSUPPORTED_SCHEMA_KEYS = new Set([
   "uniqueItems",
   "writeOnly",
 ]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * Collapse a JSON Schema union type to the scalar Gemini's proto accepts.

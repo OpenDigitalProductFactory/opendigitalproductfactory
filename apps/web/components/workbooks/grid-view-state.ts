@@ -15,6 +15,7 @@ import {
   type FilterCondition,
   type FilterOp,
 } from "./grid-filter-builder";
+import { isRecord } from "../../lib/shared/coerce";
 
 export interface SortState {
   columnKey: string;
@@ -52,10 +53,6 @@ export function viewStorageKey(tableId: string): string {
 
 export function serializeViewState(state: GridViewState): string {
   return JSON.stringify(state);
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 function parseSort(raw: unknown): SortState[] {

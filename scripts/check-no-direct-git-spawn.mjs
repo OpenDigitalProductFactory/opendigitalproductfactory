@@ -10,10 +10,10 @@
  *
  * This guard flags any script outside scripts/lib/git.mjs that starts a git
  * process itself (execFileSync / spawnSync / execSync / execFile / spawn with
- * "git"). ALLOWLIST is the closed migration backlog measured when the guard
- * landed: delete an entry when its file moves to the shared runner. Do NOT add
- * entries. A script that genuinely cannot import (for example one that must
- * stay free of static imports) is migrated or documented here in review.
+ * "git"). ALLOWLIST started as the closed migration backlog (31 files); what
+ * is left are the files that cannot move without a behaviour change, each with
+ * its reason beside the entry. Delete an entry when its file moves to the
+ * shared runner. Do NOT add entries.
  *
  * Scope: scripts/**\/*.mjs, tests excluded.
  *
@@ -28,38 +28,18 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // The one sanctioned home for spawning git: never flagged.
 export const CANONICAL = "scripts/lib/git.mjs";
 
-// Closed migration backlog. Remove entries as files migrate; never add.
+// Files that cannot move to the runner without a behaviour change, each with its
+// reason. Remove an entry when its file moves to the shared runner; never add.
 export const ALLOWLIST = new Set([
-  "scripts/check-context-economy.mjs",
-  "scripts/check-golden-decisions.mjs",
-  "scripts/check-no-ambient-host-tests.mjs",
-  "scripts/check-no-private-identity.mjs",
-  "scripts/check-no-unattributable-deferral.mjs",
-  "scripts/check-published-image-freshness.mjs",
-  "scripts/check-single-worktree-base.mjs",
-  "scripts/check-tool-surface.mjs",
+  // Async promisified execFile; one call needs Buffer output (encoding: "buffer"). runGit is sync and utf8-only.
   "scripts/governed-teardown.mjs",
-  "scripts/host-resource-runner.mjs",
+  // Callers read `.error` to tell "git could not start" from a non-zero exit; runGit folds both into status 1.
   "scripts/lib/dco-signoff.mjs",
-  "scripts/lib/git-fetch-shared-safe.mjs",
-  "scripts/lib/git-shallow-preflight.mjs",
-  "scripts/lib/junction-safe-worktree-remove.mjs",
+  // Reads `.error.code === "ENOBUFS"`, hashes binary (encoding: null) output, and takes a spawnSync-shaped test seam.
   "scripts/lib/semantic-review-gate.mjs",
-  "scripts/lib/worktree-base.mjs",
-  "scripts/local-ci-bounded-build.mjs",
-  "scripts/local-ci-host-stage-calibration.mjs",
-  "scripts/local-ci-runner.mjs",
-  "scripts/local-ci-typecheck-runner.mjs",
-  "scripts/local-ci-vitest-runner.mjs",
-  "scripts/measure-platform-substrate.mjs",
-  "scripts/merge-readiness-policy.mjs",
-  "scripts/pregate-status.mjs",
-  "scripts/pregate.mjs",
-  "scripts/regen-lockfile.mjs",
-  "scripts/release/verify-compose-image-manifests.mjs",
-  "scripts/root-clone-refresh.mjs",
-  "scripts/sbom/check-lockfile-release-age.mjs",
+  // Root postinstall must keep zero static imports (set-hooks-path.no-static-imports.test.mjs).
   "scripts/set-hooks-path.mjs",
+  // Async execFile; reads `error.code === 1` so a spawn failure throws instead of reading as "not an ancestor".
   "scripts/test-n-minus-one-upgrade.mjs",
 ]);
 
@@ -135,7 +115,7 @@ function main() {
     console.error("");
     process.exit(1);
   }
-  console.log(`✓ No new direct git spawns (${ALLOWLIST.size} files pending migration to ${CANONICAL}).`);
+  console.log(`✓ No new direct git spawns (${ALLOWLIST.size} documented exceptions to ${CANONICAL}).`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
