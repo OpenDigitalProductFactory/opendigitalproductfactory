@@ -30,6 +30,11 @@ import {
   isNonprodOwnerProvider,
   NONPROD_OWNER_PROVIDERS,
 } from "@/lib/nonprod/nonprod-owner-provider";
+import {
+  isTestStubLocalIntegrationEvidence,
+  TEST_STUB_EVIDENCE_REFUSED,
+  TEST_STUB_EVIDENCE_REFUSED_MESSAGE,
+} from "@/lib/nonprod/local-ci-test-stub";
 
 /** Strip bearer tokens / MCP tokens / Anthropic keys out of operator-supplied failure text. */
 function redactFunctionalFailureText(text: string): string {
@@ -241,6 +246,9 @@ async function recordLocalIntegrationResultHandler(
   }
   if (!isLocalIntegrationStatus(status)) {
     return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
+  }
+  if (isTestStubLocalIntegrationEvidence(evidence)) {
+    return { success: false, error: TEST_STUB_EVIDENCE_REFUSED, message: TEST_STUB_EVIDENCE_REFUSED_MESSAGE };
   }
 
   const result = await recordLocalIntegrationResult({

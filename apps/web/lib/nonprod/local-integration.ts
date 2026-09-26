@@ -9,6 +9,10 @@ import {
   type BuilderCalibrationStore,
 } from "./local-ci-builder-memory-calibration";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
+import {
+  isTestStubLocalIntegrationEvidence,
+  TEST_STUB_EVIDENCE_REFUSED_MESSAGE,
+} from "./local-ci-test-stub";
 import type { LocalIntegrationStatus } from "../../../../scripts/lib/local-integration-status.mjs";
 
 export type LocalIntegrationResultInput = {
@@ -55,6 +59,10 @@ export async function recordLocalIntegrationResult(
     environmentLease: prisma.nonProductionEnvironmentLease,
   },
 ) {
+  // BI-F5344F65: first, before any lease, pool or evidence write.
+  if (isTestStubLocalIntegrationEvidence(input.evidence)) {
+    throw new Error(TEST_STUB_EVIDENCE_REFUSED_MESSAGE);
+  }
   const gateKey = input.gateKey?.trim().toLowerCase();
   const leaseId = input.leaseId?.trim();
   if (Boolean(gateKey) !== Boolean(leaseId)) {

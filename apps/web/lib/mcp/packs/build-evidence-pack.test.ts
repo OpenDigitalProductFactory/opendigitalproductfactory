@@ -197,6 +197,30 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     );
   });
 
+  // BI-F5344F65: a DPF_ALLOW_LOCAL_CI_STUB payload builds nothing. The caller
+  // gets a named refusal, so the gate fails closed instead of holding a PASS.
+  it("record_local_integration_result refuses a test-stub payload without delegating", async () => {
+    const res = await buildEvidencePack.handlers.record_local_integration_result(
+      {
+        provider: "claude",
+        externalSessionId: "s1",
+        routeContext: "/build",
+        candidateBranch: "fix/admitted-owner-recovery",
+        mode: "single-branch",
+        status: "passed",
+        summary: "local-CI lease gate passed.",
+        gateKey: "a".repeat(64),
+        leaseId: "NPEL-GATE",
+        evidence: { testStub: true, gatePassed: true, buildCommand: "sandbox checkout/build stub" },
+      },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("test_stub_evidence_refused");
+    expect(res.message).toMatch(/DPF_ALLOW_LOCAL_CI_STUB/);
+    expect(localIntegration.recordLocalIntegrationResult).not.toHaveBeenCalled();
+  });
+
   it("record_local_integration_result rejects an unsupported mode without delegating", async () => {
     const res = await buildEvidencePack.handlers.record_local_integration_result(
       {
