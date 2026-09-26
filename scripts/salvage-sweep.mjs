@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { gitTextOrNull } from "./lib/git.mjs";
 
 export const REPOSITORY_CLASS = Object.freeze({
   LOCAL_ONLY: "LOCAL-ONLY",
@@ -33,16 +33,8 @@ export function unreachableCommitArgs(branch) {
   return ["rev-list", "--count", branch, "--not", "--remotes"];
 }
 
-function git(repositoryPath, args, fallback = null) {
-  try {
-    return execFileSync("git", ["-C", repositoryPath, ...args], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return fallback;
-  }
-}
+const git = (repositoryPath, args, fallback = null) =>
+  gitTextOrNull(["-C", repositoryPath, ...args], { cwd: process.cwd() }) ?? fallback;
 
 export function inspectRepository(repositoryPath, operatorOwners = []) {
   const absolutePath = resolve(repositoryPath);

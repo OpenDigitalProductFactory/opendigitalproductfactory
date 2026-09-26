@@ -27,8 +27,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 import { requireChangedFiles } from "./lib/git-changed-files.mjs";
+import { runGit } from "./lib/git.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTE_MAP_TS = path.join(REPO_ROOT, "apps", "web", "lib", "docs-route-map.ts");
@@ -77,13 +77,8 @@ function assertSafePath(p) {
   if (!PATH_RE.test(p) || p.startsWith("-")) throw new Error(`[docs-impact-gate] refusing unsafe path: ${JSON.stringify(p)}`);
   return p;
 }
-function git(...args) {
-  try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (e) {
-    return (e.stdout && e.stdout.toString()) || "";
-  }
-}
+// Fail-open as before: partial stdout (or "") when git fails.
+const git = (...args) => runGit(args, { cwd: process.cwd() }).stdout;
 
 /** Parse DOCS_ROUTE_MAP entries straight from the TS source (a plain array literal). */
 export function parseRouteMap(tsSource) {

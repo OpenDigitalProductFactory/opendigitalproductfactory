@@ -65,11 +65,13 @@ tmp/
 .codex-runtime/
 docs/prompts/
 
-# MCP client configs contain live bearer tokens — must never be committed.
+# MCP client configs are local credential files — must never be committed.
 # .mcp.json (Claude Code CLI) and .vscode/mcp.json (Claude Code VS Code
-# extension via VS Code's native MCP store) both carry an Authorization
-# header in plaintext. Use the "Connect Claude Code" flow from
-# Admin > Platform Development to (re)generate these locally.
+# extension via VS Code's native MCP store) are written per host by
+# scripts/dpf-bootstrap-agent-toolchain.sh or the "Connect Claude Code" flow
+# in Admin > Platform Development, and copied into worktrees by
+# scripts/sync-mcp-worktrees.*. .mcp.json was tracked despite this rule until
+# BI-A5C757A2; the tracked http+header shape overrode every https bootstrap.
 .mcp.json
 .vscode/mcp.json
 

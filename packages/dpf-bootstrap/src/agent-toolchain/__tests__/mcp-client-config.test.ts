@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 import { planMcpClientConfig } from "../mcp-client-config";
@@ -50,12 +50,13 @@ describe("planMcpClientConfig", () => {
     expect("oauth" in mcp.mcpServers.dpf).toBe(false);
   });
 
-  it("the tracked .mcp.json is exactly what the planner writes for the default endpoint (no drift in either direction)", () => {
-    // #5416 hand-edited the tracked file; the planner then disagreed and the
-    // next bootstrap would have silently rewritten it. Pin them together.
-    const tracked = readFileSync(join(__dirname, "..", "..", "..", "..", "..", ".mcp.json"), "utf8");
-    const plan = planMcpClientConfig(REPO, ENDPOINT, tracked, null);
-    expect(plan.writes.map((w) => w.path)).toEqual(["/Users/dev/dpf/.vscode/mcp.json"]);
+  it(".mcp.json is a per-host file: ignored by git and never tracked (BI-A5C757A2)", () => {
+    // The tracked http+header shape used to override every https bootstrap
+    // and left a permanent diff in the root clone. The planner owns the file
+    // on each host; git must never carry one.
+    const root = join(__dirname, "..", "..", "..", "..", "..");
+    expect(execFileSync("git", ["ls-files", "--", ".mcp.json"], { cwd: root, encoding: "utf8" }).trim()).toBe("");
+    expect(execFileSync("git", ["check-ignore", "--no-index", ".mcp.json"], { cwd: root, encoding: "utf8" }).trim()).toBe(".mcp.json");
   });
 
   it(".vscode/mcp.json uses servers (not mcpServers) and the env: form", () => {

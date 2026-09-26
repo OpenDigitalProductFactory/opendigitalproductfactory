@@ -44,7 +44,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { requireChangedFiles } from "./lib/git-changed-files.mjs";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
@@ -152,13 +151,6 @@ function serializeBaseline(paths, budget = DEFAULT_BUDGET) {
 }
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-function git(...args) {
-  try {
-    return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (e) {
-    return (e.stdout && e.stdout.toString()) || "";
-  }
-}
 
 function main() {
   const files = listScopeFiles();

@@ -183,6 +183,8 @@ COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
 # unresolvable-diff helper; without this COPY the init image dies at
 # ERR_MODULE_NOT_FOUND (BI-20599979).
 COPY scripts/lib/git-changed-files.mjs ./scripts/lib/
+# The shared git runner every migrated script imports (plan 2026-09-08 S1).
+COPY scripts/lib/git.mjs ./scripts/lib/
 COPY scripts/lib/entry-module.mjs ./scripts/lib/
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/module-size-baseline.txt ./scripts/
@@ -466,6 +468,7 @@ COPY promoter-contract.json /promoter/promoter-contract.json
 COPY scripts/promote.sh /promoter/scripts/promote.sh
 COPY scripts/governed-teardown.mjs /promoter/scripts/governed-teardown.mjs
 COPY scripts/salvage-sweep.mjs /promoter/scripts/salvage-sweep.mjs
+COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY Dockerfile /promoter/Dockerfile
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs

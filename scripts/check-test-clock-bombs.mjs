@@ -39,12 +39,12 @@
 //      or a deliberately-expired fixture), annotate the line with
 //      `clock-bomb-guard: allow <reason>` so the exemption is stated, not silent.
 
-import { execFileSync } from "node:child_process";
 
 import { exitUnresolvable, listChangedFiles } from "./lib/git-changed-files.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runGit } from "./lib/git.mjs";
 
 const TEST_FILE = /\.(test|spec)\.[cm]?tsx?$/;
 
@@ -75,13 +75,8 @@ const CLOCK_PINNED =
 
 const ALLOW_MARKER = /clock-bomb-guard:\s*allow/;
 
-function git(...args) {
-  try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (error) {
-    return error.stdout?.toString() ?? "";
-  }
-}
+// Fail-open as before: partial stdout (or "") when git fails.
+const git = (...args) => runGit(args, { cwd: process.cwd() }).stdout;
 
 /** Reject anything that is not a plain ref, so a hostile BASE_SHA cannot inject args. */
 function safeRef(value, label) {

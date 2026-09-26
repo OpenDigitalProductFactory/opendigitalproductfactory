@@ -15,12 +15,12 @@
 // Studio injects prospective constraints at prompt-assembly time, before any
 // code exists (the plan's fileStructure is the intended diff).
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { gitText } from "./lib/git.mjs";
 
 // Same conservative ref/path pinning as the gate checkers
 // (js/indirect-command-line-injection): execFile arg arrays, no shell, and a
@@ -35,9 +35,7 @@ function assertSafeRef(ref) {
   return ref;
 }
 
-function git(args, cwd) {
-  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-}
+const git = (args, cwd) => gitText(args, { cwd: cwd ?? process.cwd(), trim: false });
 
 function safePath(path) {
   const normalized = String(path ?? "").trim().replace(/\\/g, "/");

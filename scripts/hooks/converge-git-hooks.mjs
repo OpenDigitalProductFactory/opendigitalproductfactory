@@ -33,12 +33,12 @@
 //     wrapped. A hook that breaks startup is a worse defect than the one it fixes.
 //   - Set DPF_SKIP_HOOK_CONVERGENCE=1 to opt out entirely.
 
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { convergeHooksDir, summarizeConvergence } from "../lib/converge-hooks-dir.mjs";
+import { gitTextOrNull } from "../lib/git.mjs";
 
 /** One sweep per repo per interval, however many sessions start. */
 export const SWEEP_THROTTLE_MS = 30 * 60 * 1000;
@@ -75,17 +75,7 @@ export function shouldSweep(markerMs, nowMs, throttleMs = SWEEP_THROTTLE_MS) {
 
 // ── git helpers ──────────────────────────────────────────────────────────────
 
-function git(cwd, args) {
-  try {
-    return execFileSync("git", ["-C", cwd, ...args], {
-      encoding: "utf8",
-      timeout: GIT_TIMEOUT_MS,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return null;
-  }
-}
+const git = (cwd, args) => gitTextOrNull(["-C", cwd, ...args], { cwd: process.cwd(), timeout: GIT_TIMEOUT_MS });
 
 function readMarkerMs(markerPath) {
   try {
