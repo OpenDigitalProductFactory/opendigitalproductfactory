@@ -439,7 +439,7 @@ export async function approveDemandForFundingHandler(
 
 export async function runCapacityDrainHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const dryRun = params["dryRun"] !== false; // default true (report only)
-  const { evaluateAndDrainCapacity } = await import("@/lib/capacity/evaluate-drain");
+  const { evaluateAndDrainCapacity } = await import("@/lib/capacity/evaluate-capacity-drain");
   const r = await evaluateAndDrainCapacity({ prisma, userId, dryRun });
   const suffix = r.drained
     ? ` — dispatched ${r.dispatched} build(s)`

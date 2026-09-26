@@ -71,7 +71,7 @@ export function ProductContextActionPreview({
           Cancel
         </button>
         <Link
-          href="/delivery?view=flow"
+          href="/ops/demand"
           className="rounded-dpf-md bg-[var(--dpf-accent)] px-dpf-md py-dpf-sm text-dpf-body font-dpf-medium text-[var(--dpf-surface-1)]"
         >
           Continue to Delivery

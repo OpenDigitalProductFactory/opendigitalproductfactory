@@ -80,7 +80,7 @@ describe("founder-review pack — list_open_decision_reviews", () => {
     expect(review.question).toContain("prioritize the migration");
     expect(review.outcomeType).toBe("escalate");
     expect(review.gapDetail).toBe("Needs a founder ruling on migration-vs-feature priority.");
-    expect(review.decisionCanvasHref).toBe("/platform/ai/decisions/DI-1");
+    expect(review.decisionCanvasHref).toBe("/coworker-decisions/decisions/DI-1");
     // deferralCapture.gapReason wins over escalationCapture.prompt when present.
     expect(review.suggestedAction).toBeTypeOf("string");
   });

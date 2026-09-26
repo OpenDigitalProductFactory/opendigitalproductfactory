@@ -294,7 +294,7 @@ export function ProfessionPanel({
         )}
       </Section>
 
-      <Section title="Runtime usage & gaps (30d)" action={deepLink("/platform/ai", "Workforce signals")}>
+      <Section title="Runtime usage & gaps (30d)" action={deepLink("/platform/ai/overview", "Workforce signals")}>
         {corpusSignals ? (
           <>
             <InfoGrid>

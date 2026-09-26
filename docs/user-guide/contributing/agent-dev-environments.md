@@ -134,7 +134,7 @@ After it finishes, **restart the client** (desktop app or CLI) so it reloads the
 | `ready` | Client(s) wired, MCP reachable, kernel principle fired | Start working |
 | `partial` | One client is ready; another needs setup | Repair toolchain (re-run bootstrap) |
 | `missing_cli` | No supported agent detected | Install Claude / Codex / Grok / Antigravity |
-| `missing_token` | No DPF MCP token | Issue a development token (Admin → Platform Development → MCP) |
+| `missing_token` | No DPF MCP token | Issue a development token (Improve & deliver › Setup › Contributing & GitHub (MCP tokens)) |
 | `needs_refresh` | Token exists but the running client hasn't picked it up | Restart the client / refresh the binding |
 | `failed_smoke` | Installed but did not apply a kernel principle | View evidence under `--show-substrate` |
 
@@ -299,17 +299,17 @@ authorization or a request for more permissions may require approval again.
 - **Least privilege is the default.** A client that asks for "everything advertised" gets read access only. Anything beyond read is a separate approval at the moment it is first needed.
 - **Needing more mid-task is a prompt, not a dead end.** When a client hits a tool it lacks permission for, it asks you to approve exactly that additional permission and retries. You are never asked to go and mint something by hand.
 - **Self-registered clients are labelled.** On a local installation a client may register itself, which means it chose its own display name. The approval screen says so. Approve it only if you started the connection.
-- **Revoke any time** in Admin → Platform Development → MCP. Revoking a client immediately revokes everything it holds.
+- **Revoke any time** in Improve & deliver › Setup › Contributing & GitHub (MCP tokens). Revoking a client immediately revokes everything it holds.
 
 #### Headless callers (CI, cron, containers)
 
-Anything with no browser cannot approve a screen, so an operator grants its permissions once, up front: create a client in Admin → Platform Development, choose its scopes, and give it the client id and secret. It exchanges those for short-lived access at the same endpoint every other client uses. Same permissions vocabulary, same revocation, same audit trail — a different way in, not a different system.
+Anything with no browser cannot approve a screen, so an operator grants its permissions once, up front: create a client in Improve & deliver › Setup › Contributing & GitHub, choose its scopes, and give it the client id and secret. It exchanges those for short-lived access at the same endpoint every other client uses. Same permissions vocabulary, same revocation, same audit trail — a different way in, not a different system.
 
 #### The legacy `dpfmcp_` token
 
 Older clients authenticate with a `DPF_MCP_BEARER_TOKEN` environment variable, referenced (never inlined) from each client's config. **This still works and nothing breaks.** It is being retired: new tokens stop being issued when the operator closes issuance, and existing ones keep working until the operator sets a horizon. Prefer connecting a client over the browser flow instead.
 
-- **Scopes.** Coarse `read` / `write` / `admin` plus granular per-tool grants. Default is `read` and cannot call side-effecting tools. Use **Issue write token** in Admin → Platform Development → MCP when an agent must create/update backlog items, evidence, workrooms, or coordination records.
+- **Scopes.** Coarse `read` / `write` / `admin` plus granular per-tool grants. Default is `read` and cannot call side-effecting tools. Use **Issue write token** in Improve & deliver › Setup › Contributing & GitHub (MCP tokens) when an agent must create/update backlog items, evidence, workrooms, or coordination records.
 - **Scope escalation.** If a tool returns `insufficient_token_scope`, *stop* — do not fall back to `psql`/Prisma/direct DB edits. Issue a scoped token in the portal, update the client, call `/api/mcp/token/refresh`, and retry through MCP. (A client connected over the browser flow never sees this; it gets the approval prompt described above.)
 - **Rotation** (no file edits): set the `DPF_MCP_BEARER_TOKEN` user environment variable to the new value, `POST /api/mcp/token/refresh` with the new token, then retry in the running session.
 - **Endpoint trust.** A gate script that falls back to reading the token out of `.mcp.json` checks the endpoint that file names first, and accepts only loopback (`127.0.0.1`, `localhost`, `[::1]`). A config naming any other host stops the run rather than sending your token there — set `DPF_MCP_BEARER_TOKEN` and `DPF_MCP_URL` to reach a portal deliberately fronted off loopback. Full rule: [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md).

@@ -12,4 +12,4 @@ this file; never retype them into prose, where they drift (Simplify & Strengthen
 | Prisma enums | 97 | `packages/db/prisma/schema/` |
 | Migrations | 598 | `packages/db/prisma/migrations/` |
 | Kernel principles | 111 | `docs/founder-kernel/wiki/principles/` |
-| App routes | 664 | `apps/web/lib/ea/route-manifest.json` |
+| App routes | 665 | `apps/web/lib/ea/route-manifest.json` |

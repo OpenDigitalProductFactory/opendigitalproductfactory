@@ -103,6 +103,8 @@ export type FinanceSurfaceModel = {
   subtype: FinanceSurfaceSubtype | null;
   mode: FinanceSurfaceMode;
   headline: string;
+  /** Rail and breadcrumb label when the archetype names finance differently (EP-2FB6C0CC label truth). */
+  shellLabel?: string;
   subhead: string;
   /** Foregrounded subtype money jobs (empty in standard mode). */
   moneyJobs: FinanceMoneyJob[];
@@ -511,6 +513,7 @@ export function resolveFinanceSurface(
       subtype: "pet-rescue",
       mode: "owner-first",
       headline: "Funding & stewardship",
+      shellLabel: "Funding & stewardship",
       subhead: "Donations and grants coming in, animal-care costs going out, and funds available for the mission.",
       moneyJobs: PET_RESCUE_MONEY_JOBS,
       invoiceEntryPoints: PET_RESCUE_ENTRY_POINTS,

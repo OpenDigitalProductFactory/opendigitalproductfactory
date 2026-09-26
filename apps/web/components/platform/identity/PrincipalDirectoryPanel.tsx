@@ -1,3 +1,4 @@
+import Link from "next/link";
 type PrincipalRow = {
   id: string;
   principalId: string;
@@ -18,6 +19,9 @@ export function PrincipalDirectoryPanel({ principals }: { principals: PrincipalR
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Principals</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
           Review the shared identity inventory for employees, AI coworkers, and future service identities.
+          {/* One home for changing access (DI-B8ED39DC1C11, BI-154E409C). */}
+          {" "}To add someone or change their access, use{" "}
+          <Link href="/admin" className="text-[var(--dpf-accent)] hover:underline">Users &amp; Roles</Link>.
         </p>
       </div>
 

@@ -116,7 +116,7 @@ Configure provider choices in **Admin > AI Workforce > Providers & Routing**; do
 
 ## Contributing from a running install
 
-DPF installs can ship features built in Build Studio back to the upstream repo through the platform's own contribution pipeline, once GitHub auth is configured in Admin > Platform Development. This is distinct from the manual fork -> branch -> PR flow documented above, which remains the supported path for human contributors who don't run a DPF install.
+DPF installs can ship features built in Build Studio back to the upstream repo through the platform's own contribution pipeline, once GitHub auth is configured in Improve & deliver › Setup › Contributing & GitHub. This is distinct from the manual fork -> branch -> PR flow documented above, which remains the supported path for human contributors who don't run a DPF install.
 
 **What the shipped pipeline actually does today, corrected 2026-09-12 (BI-D75B87B1).** This section previously said "fork, branch, commit, and PR all happen automatically". The fork half is not true of the shipped code, and the difference matters because it changes where your code lands and whose access carries it.
 
@@ -132,13 +132,13 @@ The setup below applies to anyone whose contributions originate from a running i
 
 | Tier | Method | When to choose |
 |------|--------|----------------|
-| **1** | OAuth Device Flow (recommended) | Default. One-click in Admin > Platform Development. GitHub handles 2FA inline. No token to manage. |
+| **1** | OAuth Device Flow (recommended) | Default. One-click in Improve & deliver › Setup › Contributing & GitHub. GitHub handles 2FA inline. No token to manage. |
 | **2** | Fine-grained PAT (advanced) | Policy-restricted environments; per-repo scope limits required. |
 | **3** | Classic PAT (emergency) | Air-gapped installs; legacy machine users; environments where browser-based OAuth isn't possible. |
 
 ### Tier 1 — OAuth Device Flow
 
-1. Open Admin > Platform Development in your DPF install.
+1. Open Improve & deliver › Setup › Contributing & GitHub in your DPF install.
 2. Click **Connect GitHub**.
 3. The platform displays a short user code (e.g. `WDJB-MJHT`) and a verification URL (`github.com/login/device`).
 4. Open the URL in a browser where you're already signed in to GitHub. Type the user code, click Authorize.
@@ -160,7 +160,7 @@ Notes:
    - **Repository access:** Only your fork (or the repo you're contributing to)
    - **Permissions → Contents:** Read and Write
 4. Generate. Copy the token (starts with `github_pat_`).
-5. In Admin > Platform Development, expand the **Advanced** disclosure.
+5. In Improve & deliver › Setup › Contributing & GitHub, expand the **Advanced** disclosure.
 6. Paste into the **Fine-grained PAT** field. Save.
 
 The platform reads the expiry from the GitHub probe response and surfaces an admin banner at 30/14/7 days remaining. Reconnect via Tier 1 or rotate the PAT before it expires.
@@ -190,7 +190,7 @@ The pre-existing **"I am using a dedicated machine-user GitHub account"** checkb
 
 ### Troubleshooting
 
-- **"Token revoked" error:** You revoked the OAuth App authorization at github.com/settings/applications, or the token was deleted. Reconnect via Admin > Platform Development.
+- **"Token revoked" error:** You revoked the OAuth App authorization at github.com/settings/applications, or the token was deleted. Reconnect via Improve & deliver › Setup › Contributing & GitHub.
 - **"Token expires in X days" banner:** Tier 2 only. Either reconnect via Tier 1 (Device Flow has no expiry) or generate a fresh fine-grained PAT.
 - **"This token can't access the fork repo" error:** Fine-grained PAT doesn't include the target repo or lacks Contents:Read+Write. Regenerate per the Tier 2 steps.
 - **"Wrong scope" error on classic PAT:** Token needs `public_repo` (or `repo` for private repos, though DPF only contributes to public). Regenerate with the right scope.

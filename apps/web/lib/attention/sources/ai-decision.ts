@@ -88,7 +88,7 @@ export function aiDecisionToAttentionItem(
   occurrences = 1,
 ): AttentionItem {
   const blast = row.buildId ? `build ${row.buildId}` : row.taskRunId ? "a coworker task" : undefined;
-  const decisionHref = `/platform/ai/decisions/${encodeURIComponent(row.interactionId)}`;
+  const decisionHref = `/coworker-decisions/decisions/${encodeURIComponent(row.interactionId)}`;
   return {
     id: `ai-decision:${row.interactionId}`,
     source: "ai-decision",

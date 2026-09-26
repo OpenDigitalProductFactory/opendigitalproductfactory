@@ -1,5 +1,5 @@
 // Shared copy source for the contribution-mode UX. Both the admin UI
-// (PlatformDevelopmentForm / ForkSetupPanel / ContributionModelBanner) and
+// (PlatformDevelopmentForm / ForkSetupPanel) and
 // CONTRIBUTING.md consume this module so token-scope guidance,
 // pseudonymity-tradeoff disclosure, and re-setup banner text never drift
 // between surfaces. A doc-sync test in Phase 7 will assert CONTRIBUTING.md

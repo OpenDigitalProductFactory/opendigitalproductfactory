@@ -50,7 +50,12 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700 }}>{vocabulary.portalLabel}</h1>
+        {/* The rail calls this internal management surface "Storefront"; the
+            archetype's name for the public site (e.g. "Supporter Hub") is what
+            customers see, so it is named here rather than borrowed as the
+            heading (EP-2FB6C0CC label truth; BI-1F0B4184). */}
+        <h1 style={{ fontSize: 20, fontWeight: 700 }}>Storefront</h1>
+        <p className="text-sm text-[var(--dpf-muted)]">Manage your public {vocabulary.portalLabel}.</p>
       </div>
       <StorefrontAdminTabNav
         vocabulary={vocabulary}

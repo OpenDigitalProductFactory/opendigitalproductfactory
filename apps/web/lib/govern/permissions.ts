@@ -1,5 +1,6 @@
 // apps/web/lib/permissions.ts
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
+import type { WorkPortfolioRoleKey } from "@/lib/navigation/area-portfolio";
 
 import { canAccessEmployeeScope } from "./manager-scope";
 import {
@@ -155,7 +156,7 @@ export type WorkspaceTile = {
   key: string;
   label: string;
   route: string;
-  capabilityKey: CapabilityKey;
+  capabilityKey: CapabilityKey | null;
   accentColor: string;
 };
 
@@ -185,31 +186,29 @@ export type ShellNavSection = {
   key: PortalShellSectionKey;
   label: string;
   description: string;
+  /** Set on portfolio sections, which are workroom-shaped areas (spec §9.3). */
+  portfolioRole: WorkPortfolioRoleKey | null;
   items: ShellNavItem[];
 };
 
 export type WorkspaceSection = {
-  key: "ai-control" | "product-oversight" | "business-operations";
+  key: PortalShellSectionKey;
   label: string;
   description: string;
   tiles: WorkspaceTile[];
 };
 
-const ALL_TILES: WorkspaceTile[] = [
-  { key: "ea_modeler",    label: "EA Modeler",    route: "/ea",           capabilityKey: "view_ea_modeler",  accentColor: "var(--dpf-accent)" },
-  { key: "ai_workforce", label: "AI Workforce",  route: "/platform/ai",  capabilityKey: "view_platform",    accentColor: "var(--dpf-info)" },
-  { key: "build",       label: "Build Studio", route: "/build",       capabilityKey: "view_platform",    accentColor: "var(--dpf-success)" },
-  { key: "documents",   label: "Documents",    route: "/workspace/documents", capabilityKey: "view_platform", accentColor: "var(--dpf-accent)" },
-  { key: "portfolio",  label: "Portfolio",  route: "/portfolio", capabilityKey: "view_portfolio",   accentColor: "var(--dpf-success)" },
-  { key: "employee",   label: "Employee",   route: "/employee",  capabilityKey: "view_employee",    accentColor: "var(--dpf-info)" },
-  { key: "customer",   label: "Customer",   route: "/customer",  capabilityKey: "view_customer",    accentColor: "var(--dpf-accent)" },
-  { key: "backlog",    label: "Backlog",    route: "/ops",       capabilityKey: "view_operations",  accentColor: "var(--dpf-info)" },
-  { key: "platform",   label: "Platform",   route: "/platform",  capabilityKey: "view_platform",    accentColor: "var(--dpf-warning)" },
-  { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "var(--dpf-muted)" },
-  { key: "compliance", label: "Compliance", route: "/compliance", capabilityKey: "view_compliance",  accentColor: "var(--dpf-error)" },
-  { key: "finance",    label: "Finance",    route: "/finance",    capabilityKey: "view_finance",     accentColor: "var(--dpf-success)" },
-  { key: "storefront", label: "Storefront", route: "/storefront", capabilityKey: "view_storefront",  accentColor: "var(--dpf-warning)" },
-];
+// EP-NAV-COHERENCE decision D4 / EP-2FB6C0CC (BI-DBA470FF): the workspace
+// launcher is derived from the rail, not a second hand-kept taxonomy. Each rail
+// section keeps one accent so a tile still reads as part of its area.
+const SECTION_ACCENT: Record<PortalShellSectionKey, string> = {
+  workspace: "var(--dpf-accent)",
+  business: "var(--dpf-success)",
+  team: "var(--dpf-info)",
+  delivery: "var(--dpf-warning)",
+  platform: "var(--dpf-muted)",
+  knowledge: "var(--dpf-accent)",
+};
 
 const SHELL_ITEMS: ShellNavItem[] = getShellNavEntries().map((entry) => ({
   key: entry.key,
@@ -221,32 +220,6 @@ const SHELL_ITEMS: ShellNavItem[] = getShellNavEntries().map((entry) => ({
   orgCapabilityKey: entry.orgCapabilityKey,
   audienceModes: entry.audienceModes,
 }));
-
-const WORKSPACE_SECTION_BLUEPRINTS: Array<{
-  key: WorkspaceSection["key"];
-  label: string;
-  description: string;
-  tileKeys: string[];
-}> = [
-  {
-    key: "ai-control",
-    label: "Direct AI coworkers",
-    description: "A small employee team can supervise specialists here while AI fills in deep expertise.",
-    tileKeys: ["ai_workforce", "build", "documents", "platform", "admin"],
-  },
-  {
-    key: "product-oversight",
-    label: "Shape products",
-    description: "Move work from strategy to delivery while keeping estate context inside the product flow.",
-    tileKeys: ["portfolio", "backlog", "ea_modeler"],
-  },
-  {
-    key: "business-operations",
-    label: "Run the business",
-    description: "Cover customer, people, compliance, finance, and portal work in one place.",
-    tileKeys: ["customer", "finance", "employee", "compliance", "storefront"],
-  },
-];
 
 function isAllowed(user: UserContext, capabilityKey: CapabilityKey | null): boolean {
   return capabilityKey === null || can(user, capabilityKey);
@@ -264,7 +237,7 @@ export function getDeniedCapabilities(user: UserContext): CapabilityKey[] {
 }
 
 export function getWorkspaceTiles(user: UserContext): WorkspaceTile[] {
-  return ALL_TILES.filter((t) => can(user, t.capabilityKey));
+  return getWorkspaceSections(user).flatMap((section) => section.tiles);
 }
 
 export function getShellNavSections(
@@ -317,16 +290,16 @@ export function getAccessibleSectionNavEntries(
 }
 
 export function getWorkspaceSections(user: UserContext): WorkspaceSection[] {
-  const visibleTiles = new Map(
-    getWorkspaceTiles(user).map((tile) => [tile.key, tile] as const),
-  );
-
-  return WORKSPACE_SECTION_BLUEPRINTS.map((section) => ({
+  return getShellNavSections(user, { mode: "operator" }).map((section) => ({
     key: section.key,
     label: section.label,
     description: section.description,
-    tiles: section.tileKeys
-      .map((tileKey) => visibleTiles.get(tileKey))
-      .filter((tile): tile is WorkspaceTile => tile !== undefined),
-  })).filter((section) => section.tiles.length > 0);
+    tiles: section.items.map((item) => ({
+      key: item.key,
+      label: item.label,
+      route: item.href,
+      capabilityKey: item.capabilityKey,
+      accentColor: SECTION_ACCENT[section.key],
+    })),
+  }));
 }

@@ -90,7 +90,7 @@ export default async function OpsPage({ searchParams }: Props) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Operations</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Requests</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {epicCount} epic{epicCount !== 1 ? "s" : ""} · {itemCount} item{itemCount !== 1 ? "s" : ""}
         </p>

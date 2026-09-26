@@ -16,6 +16,7 @@ import type {
 import type { INVOICE_STATUSES } from "@/lib/finance-validation";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { getOrgIdentity } from "@/lib/org-identity";
+import { tokenLinkUrl } from "@/lib/routes";
 import { sendEmail, composeSignedConfirmationEmail, isEmailConfigured } from "@/lib/email";
 import { postInvoiceIssued, postPaymentRecorded, reverseJournalEntry } from "@/lib/finance/ledger-service";
 import {
@@ -745,7 +746,7 @@ async function sendSignedConfirmation(invoiceId: string, token: string): Promise
       year: "numeric",
     }),
     orgName: issuer?.name ?? null,
-    payUrl: `${baseUrl}/s/pay/${token}`,
+    payUrl: tokenLinkUrl(baseUrl, "invoicePayment", token),
   });
 
   await sendEmail({
