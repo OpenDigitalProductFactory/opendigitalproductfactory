@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -8,7 +8,7 @@ import { gateAtEntry } from "../quiescence-gates";
  * the change. The status tools settle at once; this sweep covers every other
  * status writer, including the work-sync mirror. Idempotent.
  */
-export const budgetReservationSettle = inngest.createFunction(
+export const budgetReservationSettle = jobs.createFunction(
   {
     id: "portfolio/budget-reservation-settle",
     retries: 1,
